@@ -26,6 +26,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
+import { shouldSkillHoldout } from '../utils/skillHoldout';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, isBindingMarkdownPlan } from '../utils/analysisUtils';
 import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
 import { appendSessionUsage } from '../utils/sessionUsage';
@@ -69,7 +70,9 @@ import { generateWeightedVotingContext } from '../services/backtesting/ModelPerf
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { getMemoryFilesContext, writeModelNote, extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
+import { annotateVerdictCitations } from '../services/learning/MemoryInjectionService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
+import { threadForProvider } from '../utils/agentThreads';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
@@ -179,9 +182,26 @@ export interface UseAnalysisPipelineParams {
     // Ensemble mode: when off, messages are casual chat with the selected
     // model and the chart-analysis pipeline never runs.
     isEnsembleEnabled: boolean;
-    // Casual-chat model: used when ensemble is off; falls back to the first
+    // Casual-chat model: used when ensemble off; falls back to the first
     // ready provider's model when empty/stale.
     selectedChatModel: string;
+    /** ── Bot Mode (plan botmode-scan G1) ──
+     *  When a bot's 1:1 thread is open, casual sends run AS that bot:
+     *  persona system prompt, thread-scoped history, and the reply is
+     *  handed to onBotReply so the mailbox can dispatch [[dm:@…]] markers.
+     *  A GETTER (not a value) because App declares the roster below this
+     *  hook — read at send time, stable identity. Null outside bot threads
+     *  (Team/casual model chat keep old behavior). */
+    getActiveBot?: () => {
+        id: string;
+        name: string;
+        providerId: string;
+        modelId: string;
+        systemPrompt: string;
+    } | null;
+    /** Fired after a bot-thread casual reply settles (messageId + raw text
+     *  INCLUDING any DM markers — the mailbox strips + delivers them). */
+    onBotReply?: (messageId: string, rawText: string) => void;
 
     // Toast:
     toast: {
@@ -300,6 +320,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         customLensPrompts,
         isEnsembleEnabled,
         selectedChatModel,
+        getActiveBot,
+        onBotReply,
         toast,
         confirmDialog,
     } = params;
@@ -1298,7 +1320,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 similarSetupsContext,
                 regimeWeightingContext,
                 lossPrimingRows,
-            } = assemblePipelineMemoryContext(effectiveInput, loggedTrades, freshHybridData ?? null);
+            } = assemblePipelineMemoryContext(effectiveInput, loggedTrades, freshHybridData ?? null, userMessage.id);
 
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
@@ -3330,6 +3352,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             ));
                         }
                         processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
+                        // §8.3a citation stamp: annotate the newest verdict-stage
+                        // injection record with which skills the FINAL verdict
+                        // actually cited. Without this call the `cited` field is
+                        // never written, skillAdherenceForRun can only ever return
+                        // 'injected-unknown', and the OVERRIDDEN evidence state
+                        // (injected-but-ignored → amendment counter, not stat rot)
+                        // is dead. Fire-and-forget — telemetry must never break
+                        // the verdict commit.
+                        void annotateVerdictCitations(getActiveUsername(), fullResponseText, userMessage.id)
+                            .catch(() => { /* citation telemetry is best-effort */ });
                     }
 
                     // Veto falsification ledger — stamp the deferred
@@ -3405,6 +3437,11 @@ ${accuracyVerificationNote}`
 
                         // Per-run execution summary (compare mode + diagnostics).
                         updatedMessage.runStats = {
+                            // §8.3a: the run's identity — the user message that
+                            // triggered it, same id the injection records carry.
+                            // Trades copy it at log time so evidence attribution
+                            // joins exactly instead than by time window.
+                            runId: userMessage.id,
                             startedAt: new Date(runStartedAt).toISOString(),
                             finishedAt: new Date().toISOString(),
                             durationMs: Date.now() - runStartedAt,
@@ -3425,6 +3462,10 @@ ${accuracyVerificationNote}`
                             // Protocol lane attribution — on
                             // runStats itself so the signal card can chip it.
                             protocol: ensembleService.getLastDebateProtocol(),
+                            // §8.5a: ε-holdout classification for THIS run —
+                            // the same seeded decision the retrieval layer made
+                            // when it withheld skill injection.
+                            skillHoldout: shouldSkillHoldout(userMessage.id),
                             gateCap: capturedGateResult?.confidenceCap,
                             mcWinRate: perAIMC[0]?.result?.winRate,
                             mcEV: perAIMC[0]?.result?.expectedValue,
@@ -3769,11 +3810,24 @@ ${accuracyVerificationNote}`
                 // Casual chat: use the user-selected model when it maps to a
                 // ready provider; otherwise fall back to the first ready
                 // provider (previous behavior).
-                const chosen = providerConfigs.find(c =>
-                    isProviderReady(c) && (c.selectedModel === selectedChatModel || c.models.includes(selectedChatModel))
-                );
+                // ── Bot Mode G1: inside a bot's 1:1 thread, the send runs
+                // AS the bot — its exact provider+model, its persona system
+                // prompt, and only its own thread's history (threads are
+                // derived views; threadForProvider is the same slice the
+                // rail renders). Outside bot threads activeBot is null and
+                // behavior is unchanged.
+                const activeBot = getActiveBot?.() ?? null;
+                const botProvider = activeBot
+                    ? providerConfigs.find(c => c.id === activeBot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(activeBot.modelId))
+                    : undefined;
+                const useBotThread = Boolean(activeBot && botProvider);
+                const chosen = useBotThread && activeBot && botProvider
+                    ? botProvider
+                    : providerConfigs.find(c =>
+                        isProviderReady(c) && (c.selectedModel === selectedChatModel || c.models.includes(selectedChatModel))
+                    );
                 const provider = chosen
-                    ? { config: { ...chosen, selectedModel: selectedChatModel }, name: chosen.name, model: selectedChatModel, useImages: false, thoughtsKey: chosen.id }
+                    ? { config: { ...chosen, selectedModel: useBotThread && activeBot ? activeBot.modelId : selectedChatModel }, name: chosen.name, model: useBotThread && activeBot ? activeBot.modelId : selectedChatModel, useImages: false, thoughtsKey: chosen.id }
                     : enabledProviders[0];
                 setLoadingMessage("Thinking...");
                 setIsAnalysisInProgress(true);
@@ -3796,8 +3850,12 @@ ${accuracyVerificationNote}`
                 const responseText = await streamQuickResponse(
                     provider.config,
                     promptToSend,
-                    currentMessages,
-                    undefined,
+                    // Bot threads see ONLY their own thread (derived view);
+                    // ordinary casual chat keeps the full conversation.
+                    useBotThread && activeBot
+                        ? threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId)
+                        : currentMessages,
+                    useBotThread && activeBot ? activeBot.systemPrompt : undefined,
                     currentAbortController.signal,
                     reasoning => {
                         reasoningContent += reasoning;
@@ -3823,6 +3881,12 @@ ${accuracyVerificationNote}`
                     thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
                 } : m), requestConversationId);
                 throttledCasualStream.flush();
+                // ── Bot Mode G1: hand the settled reply (raw, markers
+                // included) to the mailbox — it strips [[dm:@…]] markers
+                // from the bubble and delivers the DMs. Fire-and-forget.
+                if (useBotThread && activeBot && onBotReply) {
+                    try { onBotReply(streamingMessageId, casualSplit.output || responseText); } catch { /* mailbox must never break the reply */ }
+                }
             }
         } catch (error: any) {
             // Runs for BOTH errors and user cancels. Previously the

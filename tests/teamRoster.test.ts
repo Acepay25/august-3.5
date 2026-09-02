@@ -107,12 +107,12 @@ describe('teamSlots (user-team render slots)', () => {
     });
 
     it('caps at TEAM_MAX_SEATS', () => {
-        const big = { ...team, seats: Array.from({ length: 8 }, (_, i) => ({ providerId: 'p1', modelId: `m${i}` })) };
+        const big = { ...team, seats: Array.from({ length: 12 }, (_, i) => ({ providerId: 'p1', modelId: `m${i}` })) };
         expect(teamSlots(big, [provider()])).toHaveLength(TEAM_MAX_SEATS);
     });
 
-    it('seat limits match the debate engine envelope (min 2, max 5)', () => {
+    it('seat limits match the debate engine envelope (min 2, max 10 — pods above 5)', () => {
         expect(TEAM_MIN_SEATS).toBe(2);
-        expect(TEAM_MAX_SEATS).toBe(5);
+        expect(TEAM_MAX_SEATS).toBe(10);
     });
 });

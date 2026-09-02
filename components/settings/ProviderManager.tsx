@@ -12,7 +12,7 @@ import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provid
 import { GOOGLE_GEMINI_DEFAULT_BASE } from '../../utils/googleGeminiFormat';
 import { testConnection } from '../../services/providers/GenericProviderService';
 import { discoverProviderModels } from '../../services/infrastructure/ProviderConfigService';
-import { resetProviderHealth } from '../../services/infrastructure/ProviderHealthService';
+import { resetProviderHealth, getProviderHealth, providerCooldownRemainingMs } from '../../services/infrastructure/ProviderHealthService';
 import { probeAndLearn } from '../../services/learning/harnessLessons';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
@@ -118,6 +118,61 @@ function getContextBadge(modelId: string): string {
     if (m.includes('32k') || m.includes('qwen3-32b')) return '32K';
     return '1M';
 }
+
+/**
+ * Live provider-health read-out (plan §9.2 read side — the Settings view the
+ * ProviderHealthService header comment always promised). Reads the in-memory
+ * telemetry fed by GenericProviderService on every call: requests/errors,
+ * rate limits, last error, latency, and whether the roster cooldown bench
+ * currently applies. Polls while mounted (cheap — a Map read).
+ */
+const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) => {
+    const [tick, setTick] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => setTick(t => t + 1), 5000);
+        return () => clearInterval(id);
+    }, []);
+    void tick; // re-render driver for the poll
+    const h = getProviderHealth(providerId);
+    const cooldownMs = providerCooldownRemainingMs(providerId);
+    if (!h || (h.requestCount === 0 && !h.lastError)) {
+        return (
+            <p className="text-[11px] text-zinc-600">
+                No live telemetry this session yet — health appears after the first call through this provider.
+            </p>
+        );
+    }
+    const fmtAgo = (iso?: string): string => {
+        if (!iso) return '—';
+        const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        return `${Math.round(mins / 60)}h ago`;
+    };
+    return (
+        <div className="status-surface rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Live health (this session)</p>
+                {cooldownMs > 0 && (
+                    <span className="rounded-full border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-400">
+                        benched · {Math.ceil(cooldownMs / 60000)}m left
+                    </span>
+                )}
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] tabular-nums text-zinc-400 sm:grid-cols-3">
+                <span>{h.requestCount} calls · {h.errorCount} errors</span>
+                <span>{h.rateLimitCount > 0 ? `${h.rateLimitCount} rate-limited` : 'no rate limits'}</span>
+                <span>{h.avgLatencyMs ? `avg ${h.avgLatencyMs}ms` : '—'}{h.lastLatencyMs ? ` · last ${h.lastLatencyMs}ms` : ''}</span>
+                <span className="col-span-2 sm:col-span-3">last success {fmtAgo(h.lastSuccessAt)}</span>
+                {h.lastError && (
+                    <span className="col-span-2 truncate text-rose-400 sm:col-span-3" title={h.lastError}>
+                        last error: {h.lastError}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+};
 
 const ProviderManager: React.FC<ProviderManagerProps> = ({
     configs,
@@ -640,6 +695,14 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     <TrashIcon className="h-4 w-4" />
                                 </button>
                             </div>
+
+                            {/* Live health (plan §9.2 read side): the
+                                per-provider telemetry GenericProviderService
+                                already feeds — last error, latency, rate
+                                limits, and the roster-cooldown bench state.
+                                In-memory by design (§14-10): it reflects THIS
+                                session's runs. */}
+                            <ProviderHealthBlock providerId={selected.id} />
 
                             <div>
                                 <FieldLabel>Base URI</FieldLabel>

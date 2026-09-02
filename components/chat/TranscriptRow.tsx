@@ -15,6 +15,10 @@ import RunContractPanel from '../analysis/RunContractPanel';
 import EvidencePackCard from '../analysis/EvidencePackCard';
 import ModelByline from '../shared/ModelByline';
 import InlineApprovalCard from './InlineApprovalCard';
+import { PreReadGate } from './PreReadGate';
+import { ContextDisclosure } from './ContextDisclosure';
+import { SkillCitationChips } from './SkillCitationChips';
+import { loadPreReadEnabled } from '../../utils/preRead';
 import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
@@ -54,6 +58,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
         onReplacementChoice,
         onForkDebate,
         sessionTradeCount,
+        onPreReadCommit,
         inlineApprovals,
         onApprovalAllow,
         onApprovalDeny,
@@ -151,6 +156,14 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
 
     const isSelected = selectedMessageIds?.has(message.id);
 
+    // Pre-read gate (§5a): the toggle is read once per mounted card; the
+    // gate only stands between the user and a SETTLED verdict that has no
+    // committed prior yet. Skip (local) reveals without committing; a
+    // committed prior (persisted on the message) reveals everywhere.
+    // (Hooks stay above the early return below.)
+    const [preReadEnabled] = React.useState(loadPreReadEnabled);
+    const [preReadSkipped, setPreReadSkipped] = React.useState(false);
+
     const handleSelectionClick = (e: React.MouseEvent) => {
         if (isSelectionMode && onToggleMessageSelection) {
             e.preventDefault();
@@ -161,6 +174,18 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
 
     if (!message.analysis) return null;
     const analysis = message.analysis;
+
+    // Pre-read gate (§5a): only the NEWEST message can be gated — older
+    // settled cards must stay readable (the gate is a before-the-reveal
+    // device; re-hiding history the user already read is not training,
+    // it's a wall). latestMessageId is the last message in the thread, so
+    // a follow-up send also releases the gate on the previous verdict.
+    const preReadGateOpen = preReadEnabled
+        && context.latestMessageId === message.id
+        && !message.isDebating
+        && !message.isPostMortem
+        && !message.userPriorCall
+        && !preReadSkipped;
 
     return (
         <div
@@ -321,7 +346,17 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
 
                             {/* The settled analysis transcript: summary + deep
                                 surfaces (Replay · Run log · Audit) + signal card
-                                + harness details. */}
+                                + harness details. Pre-read training mode
+                                (§5a, opt-in): while enabled and no prior is
+                                committed for this card, the verdict panel
+                                stays behind the gate — commit first, reveal
+                                after. Skip reveals without committing. */}
+                            {preReadGateOpen ? (
+                                <PreReadGate
+                                    onCommit={prior => { onPreReadCommit?.(message.id, prior); }}
+                                    onSkip={() => setPreReadSkipped(true)}
+                                />
+                            ) : (
                             <div className="ui-panel">
                                 <DebateSummary debateTurns={debateTurns} analysis={analysis} />
                                 {/* The settled run's deep surfaces live in one
@@ -440,6 +475,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                     </div>
                                 )}
                                 </div>
+                            )}
 
                             {/* Failed-run retry: rebuild the same prompt + charts. */}
                             {message.retryOf && onRetryFailedRun && (
@@ -503,6 +539,24 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                         >
                                             {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
                                         </button>
+                                        {/* Per-message context disclosure (§10.1):
+                                            the run's actual memory injections —
+                                            the trust surface for the learning
+                                            system itself. */}
+                                        <ContextDisclosure
+                                            messageCreatedAt={message.createdAt}
+                                            messageFinishedAt={message.runStats?.finishedAt}
+                                            isDebating={message.isDebating}
+                                        />
+                                        {/* Skill-citation chips (§10.1): the
+                                            skills actually injected into this
+                                            run — tap opens the card, ⚑ flags
+                                            negative evidence. */}
+                                        <SkillCitationChips
+                                            messageCreatedAt={message.createdAt}
+                                            messageFinishedAt={message.runStats?.finishedAt}
+                                            messageId={message.id}
+                                        />
                                         {message.text && (
                                             <button
                                                 type="button"

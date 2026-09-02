@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { Plus, X } from 'lucide-react';
+import { SelectMenu } from '../shared/SelectMenu';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { TEAM_MAX_SEATS, TEAM_MIN_SEATS } from '../../utils/teamRoster';
 import { AgentTeam, AgentTeamSeat } from '../../services/agents/agentRoster';
@@ -53,7 +54,6 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
             setHasModerator(false);
             setModerator(ready[0] ? { providerId: ready[0].id, modelId: ready[0].selectedModel || ready[0].models[0] || '' } : null);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, initial]);
 
     if (!open) return null;
@@ -128,31 +128,25 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
                         {seats.map((seat, i) => (
                             <div key={i} className="flex items-center gap-2" data-testid={`team-seat-${i}`}>
                                 <span className="w-5 shrink-0 text-center text-[11px] font-bold text-zinc-500">{i + 1}</span>
-                                <select
+                                <SelectMenu
                                     aria-label={`Seat ${i + 1} provider`}
-                                    value={seat.providerId}
-                                    onChange={e => {
-                                        const p = providers.find(x => x.id === e.target.value);
-                                        patchSeat(i, { providerId: e.target.value, modelId: p?.selectedModel || p?.models[0] || '' });
-                                    }}
                                     data-testid={`team-seat-provider-${i}`}
-                                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] text-zinc-100 outline-none"
-                                >
-                                    {providerOptions(seat.providerId).map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                                <select
+                                    value={seat.providerId}
+                                    onChange={v => {
+                                        const p = providers.find(x => x.id === v);
+                                        patchSeat(i, { providerId: v, modelId: p?.selectedModel || p?.models[0] || '' });
+                                    }}
+                                    options={providerOptions(seat.providerId).map(p => ({ value: p.id, label: p.name }))}
+                                    triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] hover:bg-zinc-800"
+                                />
+                                <SelectMenu
                                     aria-label={`Seat ${i + 1} model`}
-                                    value={seat.modelId}
-                                    onChange={e => patchSeat(i, { modelId: e.target.value })}
                                     data-testid={`team-seat-model-${i}`}
-                                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] text-zinc-100 outline-none"
-                                >
-                                    {(providers.find(p => p.id === seat.providerId)?.models ?? [seat.modelId]).map(m => (
-                                        <option key={m} value={m}>{formatModelDisplayName(m)}</option>
-                                    ))}
-                                </select>
+                                    value={seat.modelId}
+                                    onChange={v => patchSeat(i, { modelId: v })}
+                                    options={(providers.find(p => p.id === seat.providerId)?.models ?? [seat.modelId]).map(m => ({ value: m, label: formatModelDisplayName(m) }))}
+                                    triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] hover:bg-zinc-800"
+                                />
                                 <button
                                     type="button"
                                     onClick={() => setSeats(prev => prev.filter((_, idx) => idx !== i))}
@@ -194,31 +188,25 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
                     </label>
                     {hasModerator && moderator && (
                         <div className="mt-2 flex items-center gap-2">
-                            <select
+                            <SelectMenu
                                 aria-label="Moderator provider"
-                                value={moderator.providerId}
-                                onChange={e => {
-                                    const p = providers.find(x => x.id === e.target.value);
-                                    setModerator({ providerId: e.target.value, modelId: p?.selectedModel || p?.models[0] || '' });
-                                }}
                                 data-testid="team-moderator-provider"
-                                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] text-zinc-100 outline-none"
-                            >
-                                {providerOptions(moderator.providerId).map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                            </select>
-                            <select
+                                value={moderator.providerId}
+                                onChange={v => {
+                                    const p = providers.find(x => x.id === v);
+                                    setModerator({ providerId: v, modelId: p?.selectedModel || p?.models[0] || '' });
+                                }}
+                                options={providerOptions(moderator.providerId).map(p => ({ value: p.id, label: p.name }))}
+                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] hover:bg-zinc-800"
+                            />
+                            <SelectMenu
                                 aria-label="Moderator model"
-                                value={moderator.modelId}
-                                onChange={e => setModerator({ ...moderator, modelId: e.target.value })}
                                 data-testid="team-moderator-model"
-                                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] text-zinc-100 outline-none"
-                            >
-                                {(providers.find(p => p.id === moderator.providerId)?.models ?? [moderator.modelId]).map(m => (
-                                    <option key={m} value={m}>{formatModelDisplayName(m)}</option>
-                                ))}
-                            </select>
+                                value={moderator.modelId}
+                                onChange={v => setModerator({ ...moderator, modelId: v })}
+                                options={(providers.find(p => p.id === moderator.providerId)?.models ?? [moderator.modelId]).map(m => ({ value: m, label: formatModelDisplayName(m) }))}
+                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] hover:bg-zinc-800"
+                            />
                         </div>
                     )}
                 </div>

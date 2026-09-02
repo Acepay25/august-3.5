@@ -60,6 +60,12 @@ export interface AutomationConfig {
     lastRunAt?: number;
     /** Total runs attempted (including failures). */
     runCount: number;
+    /** G5 (plan botmode-scan): when set, the routine runs AS this bot —
+     *  its persona prompt + its own provider/model, a casual-chat reply in
+     *  its thread — instead of the ensemble debate pipeline. The bot must
+     *  stay on the roster; a dangling id disables the routine at fire time
+     *  (the run is marked skipped with the reason). */
+    botId?: string;
 }
 
 export type AutomationRunStatus = 'running' | 'complete' | 'error' | 'skipped';

@@ -77,6 +77,9 @@ export interface ChatContextProps {
     onApprovalNever?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
     onApprovalShow?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
     onFollowUpTicket?: (messageId: string, text: string) => void;
+    /** Pre-read capture (§5a): commit the user's prior call for a settled
+     *  verdict card (direction + confidence made BEFORE the reveal). */
+    onPreReadCommit?: (messageId: string, prior: { direction: 'Long' | 'Short' | 'Flat'; confidencePct: number }) => void;
     /** Edit a sent user message's text in place (persisted to history). */
     onEditUserMessage?: (messageId: string, text: string) => void;
     /** Mid-debate analyst replacement: pick a candidate (providerId) or pass
@@ -363,6 +366,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                 } ${isUserMessage ? '' : bubbleClass}`}>
 
                 <>
+                        {/* Bot Mode G1: a user-role row that is actually a
+                            teammate DM — badge it so it never reads as the
+                            trader speaking. */}
+                        {isUserMessage && message.dmFrom && (
+                            <div className="flex justify-end mb-1">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border border-zinc-700/70 rounded-full px-2 py-0.5">
+                                    DM · teammate
+                                </span>
+                            </div>
+                        )}
+
                         {/* Post-Mortem Collapsible Header */}
                         {message.isPostMortem && (
                             <button

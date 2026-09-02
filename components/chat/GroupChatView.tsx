@@ -61,7 +61,8 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
         [group.memberIds, bots],
     );
     const slice = React.useMemo(
-        () => threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId }))),
+        () => threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId })))
+            .filter(m => !m.hidden),
         [messages, members],
     );
     const threads = React.useMemo(() => splitGroupThreads(slice), [slice]);

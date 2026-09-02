@@ -9,7 +9,7 @@ import {
 import { ReinforcementSignalService, ReinforcementSignal } from '../../services/learning/ReinforcementSignalService';
 import { getCalibrationSummary, initializeCalibration } from '../../services/validation/ConfidenceCalibrationService';
 import { storageService } from '../../services/infrastructure/StorageService';
-import { getAttributedInsightsSummary } from '../../services/learning/InsightExtractionService';
+import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';
 import { recordInsightFeedback } from '../../services/learning/PatternMemorySynthesisService';
 import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Import JobQueue
 import { ConfidenceCalibration } from '../../types';
@@ -103,9 +103,11 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     // Insight quality feedback: records helpful/not-helpful so the store can
     // derive a real quality ratio (timesHelpful / timesUsed) instead of the
     // default 50. Reloads immediately so the counters update in place.
-    const handleInsightFeedback = (insightId: string | undefined, wasHelpful: boolean) => {
+    const handleInsightFeedback = async (insightId: string | undefined, wasHelpful: boolean) => {
         if (!insightId) return;
-        recordInsightFeedback(insightId, wasHelpful);
+        // Await the notebook write so the immediate reload observes the
+        // new counters (the store persists through the notebook write lock).
+        await recordInsightFeedback(insightId, wasHelpful);
         loadData();
     };
 

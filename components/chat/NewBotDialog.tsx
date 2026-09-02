@@ -13,6 +13,7 @@ import type { AgentBot } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { ROLE_ACCENTS } from '../desk/pixelAvatars';
+import { SelectMenu } from '../shared/SelectMenu';
 
 export interface NewBotDialogProps {
     open: boolean;
@@ -53,7 +54,6 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
             setProviderId(firstReadyProviderId(providers));
             setModelId('');
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     if (!open) return null;
@@ -236,32 +236,26 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                     {advancedOpen && (
                         <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
                             <div>
-                                <label htmlFor="bot-provider" className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Provider</label>
-                                <select
-                                    id="bot-provider"
-                                    value={providerId}
-                                    onChange={e => setProviderId(e.target.value)}
+                                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Provider</span>
+                                <SelectMenu
+                                    aria-label="Provider"
                                     data-testid="bot-provider"
-                                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 outline-none"
-                                >
-                                    {readyProviders.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
+                                    value={providerId}
+                                    onChange={setProviderId}
+                                    options={readyProviders.map(p => ({ value: p.id, label: p.name }))}
+                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] hover:bg-zinc-800"
+                                />
                             </div>
                             <div>
-                                <label htmlFor="bot-model" className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Model</label>
-                                <select
-                                    id="bot-model"
-                                    value={effectiveModel}
-                                    onChange={e => setModelId(e.target.value)}
+                                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Model</span>
+                                <SelectMenu
+                                    aria-label="Model"
                                     data-testid="bot-model"
-                                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 outline-none"
-                                >
-                                    {(provider?.models ?? []).map(m => (
-                                        <option key={m} value={m}>{formatModelDisplayName(m)}</option>
-                                    ))}
-                                </select>
+                                    value={effectiveModel}
+                                    onChange={setModelId}
+                                    options={(provider?.models ?? []).map(m => ({ value: m, label: formatModelDisplayName(m) }))}
+                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] hover:bg-zinc-800"
+                                />
                             </div>
                             <p className="text-[11px] leading-snug text-zinc-600">
                                 The bot thinks with this model. Give two bots different models to keep their chats separate.

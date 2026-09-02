@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import type { GlobalMemory, LearningRule } from '../types';
+import { sanitizePrediction } from '../utils/skillPrediction';
 
 // =============================================================================
 // GLOBAL MEMORY (updateGlobalMemory — previously zero validation)
@@ -115,15 +116,27 @@ export const CraftedSkillSchema = z.object({
   approval: z.string().min(4),
   ifCondition: z.string().min(8),
   thenAction: z.string().min(8),
+  // Birth certificate (plan §8.2a): the falsifiable claim the skill must
+  // pre-register. Optional at the schema edge (legacy crafts + refinements
+  // carry none) — the persistence layer fills a deterministic default so
+  // every NEW skill ships with a claim the eval scheduler can test.
+  prediction: z.unknown().optional(),
 });
 
-export type CraftedSkill = z.infer<typeof CraftedSkillSchema>;
+export type CraftedSkill = z.infer<typeof CraftedSkillSchema> & {
+  prediction?: import('../utils/skillPrediction').SkillPrediction;
+};
 
 export const parseCraftedSkill = (raw: unknown): CraftedSkill | null => {
   const obj = raw && typeof raw === 'object' && !Array.isArray(raw)
     ? (raw as Record<string, unknown>).skill ?? raw
     : raw;
   const result = CraftedSkillSchema.safeParse(obj);
-  return result.success ? result.data : null;
+  if (!result.success) return null;
+  const { prediction, ...rest } = result.data;
+  return {
+    ...rest,
+    prediction: sanitizePrediction(prediction) ?? undefined,
+  };
 };
 

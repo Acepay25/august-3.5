@@ -16,6 +16,7 @@ import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMis
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { runWeeklyRollupIfDue } from './services/learning/weeklyRollup';
 import { runWeeklyReviewIfDue } from './services/learning/weeklyReview';
+import { runMonthlyReportIfDue } from './services/learning/monthlyReport';
 import { hydrateRegimeLedger } from './services/learning/regimeLedger';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
@@ -36,6 +37,7 @@ import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
+import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
 import { useConversationLeverage } from './hooks/useConversationLeverage';
 import { useCatalogReconcile } from './hooks/useCatalogReconcile';
@@ -78,6 +80,7 @@ const FloorScene = React.lazy(() => import('./components/floor/FloorScene'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
+const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
 const TeamDialog = React.lazy(() => import('./components/chat/TeamDialog'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
@@ -88,7 +91,7 @@ import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
-import { type ThreadSelection } from './utils/agentThreads';
+import { type ThreadSelection, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
 import { buildTeamRoster, teamSlots } from './utils/teamRoster';
 import {
     getBots, getGroups, saveBot, saveGroup, removeBot, removeGroup, subscribeAgentRoster,
@@ -98,7 +101,12 @@ import {
     type AgentBot, type AgentGroup, type AgentTeam,
 } from './services/agents/agentRoster';
 import { useAgentGroups } from './hooks/useAgentGroups';
-import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils/skillDrafts';
+import { useBotMailbox, type UseBotMailboxResult } from './hooks/useBotMailbox';
+import { buildBotSystemPrompt } from './services/agents/botMailbox';
+import { classifyBotAttention } from './services/agents/botAttention';
+import { readBotSystemMarkdown, readBotMemoryMarkdown } from './services/bots/BotMemoryService';
+import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, type SkillDraft } from './utils/skillDrafts';
+import { listLearningProposals } from './utils/learningQueue';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
 import { reconstructOpenings } from './utils/debateResume';
@@ -119,13 +127,14 @@ import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
 import { getPreference, setPreference, removePreference, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
-import { storeInsights } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
 import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
-import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
+import { isProviderOnCooldown, providerCooldownRemainingMs, getProviderHealth } from './services/infrastructure/ProviderHealthService';
+import { deriveSeatWireStates } from './utils/floorSeatWire';
+import { listHarnessLessons } from './services/learning/harnessLessons';
 import { assessSession } from './services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
 import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
@@ -622,18 +631,40 @@ const App: React.FC = () => {
         }
     }, [selectedChatModel]);
 
-    // Knowledge base: post-mortem insight-extraction jobs complete in the
-    // background queue — fold their results into the per-profile KB so the
-    // "Lessons from your past trades" injection actually has data.
-    useEffect(() => {
-        const unsubscribe = jobQueue.onJobComplete(job => {
-            const insights = job.result?.data;
-            if (job.type === JobType.EXTRACT_INSIGHTS && job.result?.success && Array.isArray(insights) && insights.length > 0) {
-                setInsightKnowledgeBase(prev => storeInsights(insights, prev));
-            }
-        });
-        return unsubscribe;
-    }, [setInsightKnowledgeBase]);
+    // ─── Bot Mode (plan botmode-scan G1) — pipeline bridge ────────────────
+    // The pipeline is instantiated above the roster state, so it reads the
+    // active bot + dispatches replies through refs assigned during render
+    // (same pattern as handleSendMessageRef / loggedTradesRef).
+    const botThreadStateRef = useRef<{ thread: ThreadSelection; bots: AgentBot[] }>({
+        thread: { kind: 'team' },
+        bots: [],
+    });
+    const mailboxRef = useRef<UseBotMailboxResult | null>(null);
+    const getActiveBotForPipeline = useCallback(() => {
+        const { thread, bots: roster } = botThreadStateRef.current;
+        if (thread.kind !== 'bot') return null;
+        const bot = roster.find(b => b.id === thread.botId);
+        if (!bot) return null;
+        return {
+            id: bot.id,
+            name: bot.name,
+            providerId: bot.providerId,
+            modelId: bot.modelId,
+            systemPrompt: buildBotSystemPrompt(bot, {
+                persona: readBotSystemMarkdown(bot.id),
+                notes: readBotMemoryMarkdown(bot.id),
+                teammates: roster,
+            }),
+        };
+    }, []);
+    const handleBotReplyForPipeline = useCallback((messageId: string, rawText: string): void => {
+        const { thread, bots: roster } = botThreadStateRef.current;
+        if (thread.kind !== 'bot') return;
+        const bot = roster.find(b => b.id === thread.botId);
+        if (!bot) return;
+        // User-initiated turn: its DMs start a fresh chain at hop 0.
+        mailboxRef.current?.dispatchFromBotReply(bot, messageId, rawText, 0);
+    }, []);
 
     // Analysis pipeline state, refs, and handlers (extracted to hooks/useAnalysisPipeline.ts)
     const {
@@ -682,6 +713,8 @@ const App: React.FC = () => {
         customEnsemblePrompt,
         customLensPrompts,
         selectedChatModel,
+        getActiveBot: getActiveBotForPipeline,
+        onBotReply: handleBotReplyForPipeline,
         toast,
         confirmDialog,
     });
@@ -999,6 +1032,19 @@ const App: React.FC = () => {
         providerConfigs,
         isAnalysisInProgress,
         toast,
+        // G5: live roster snapshot getter — App's bot state is declared
+        // below this hook, and a cron fire must see the CURRENT roster.
+        bots: () => getBots(),
+        messagesRef,
+        // Routine replies may carry [[dm:@…]] markers (pre-validated by the
+        // pure half) — deliver them through the mailbox like any turn.
+        onBotRoutineDMs: envelopes => {
+            const roster = getBots();
+            for (const env of envelopes) {
+                const from = roster.find(b => b.id === env.fromBotId);
+                if (from) mailboxRef.current?.deliverDM(env, from);
+            }
+        },
     });
 
     // Model options for the automation editor (provider :: model pairs).
@@ -1099,6 +1145,10 @@ const App: React.FC = () => {
 
     // ─── Chat mode: named bots + group chats (Hermes Bot Mode layout) ──────
     const [activeThread, setActiveThread] = useState<ThreadSelection>({ kind: 'team' });
+    // Unread badges (plan §10.1): per-thread last-opened timestamps, keyed
+    // by bot.id / group.id. Focusing a thread marks it opened (effect below).
+    const [threadOpenedMap, setThreadOpenedMap] = useState<Record<string, string>>(
+        () => loadThreadOpenedMap(activeUsername ?? ''));
     const [bots, setBots] = useState<AgentBot[]>(() => getBots());
     const [groups, setGroups] = useState<AgentGroup[]>(() => getGroups());
     const [teams, setTeams] = useState<AgentTeam[]>(() => getTeams());
@@ -1138,6 +1188,22 @@ const App: React.FC = () => {
         [lensConfig, ensembleModelSelection, providerConfigs],
     );
     const selectGroupThread = useCallback((groupId: string) => setActiveThread({ kind: 'group', groupId }), []);
+    // Unread badges (§10.1): focusing a bot/group thread marks it opened
+    // (markThreadOpened + persist). The Team thread needs no badge — it is
+    // the default surface.
+    useEffect(() => {
+        if (activeThread.kind === 'team' || activeThread.kind === 'coach' || !activeUsername) return;
+        const key = activeThread.kind === 'bot' ? activeThread.botId : activeThread.groupId;
+        setThreadOpenedMap(prev => {
+            const next = markThreadOpened(prev, key);
+            saveThreadOpenedMap(activeUsername, next);
+            return next;
+        });
+    }, [activeThread, activeUsername]);
+    // User switch: reload that user's opened-map so badges are per-account.
+    useEffect(() => {
+        setThreadOpenedMap(loadThreadOpenedMap(activeUsername ?? ''));
+    }, [activeUsername]);
     const createBot = useCallback((draft: Omit<AgentBot, 'id' | 'createdAt'>) => {
         const bot: AgentBot = { ...draft, id: `bot-${Date.now()}`, createdAt: new Date().toISOString() };
         saveBot(bot);
@@ -1279,7 +1345,59 @@ const App: React.FC = () => {
         providerConfigs,
         appendMessage: appendGroupMessage,
         patchMessage: patchGroupMessage,
+        username: activeUsername,
     });
+    // ─── Bot Mode (plan botmode-scan G1) — teammate DMs ────────────────────
+    // Per-target serial queues; a DM runs the target bot's turn (persona +
+    // notes + teammate protocol) and its reply's [[dm:@…]] markers deliver
+    // the next hop or wake the sender with a notice. The pipeline bridge
+    // (getActiveBotForPipeline / handleBotReplyForPipeline) reads through
+    // these refs, which are assigned during render below.
+    const mailbox = useBotMailbox({
+        bots,
+        providerConfigs,
+        username: activeUsername,
+        messagesRef,
+        appendMessage: appendGroupMessage,
+        patchMessage: patchGroupMessage,
+    });
+    mailboxRef.current = mailbox;
+    botThreadStateRef.current = { thread: activeThread, bots };
+    // Rail working-pulse merge: the group runner owns the pulse first; a
+    // draining DM queue shows the (first) busy bot when nothing else runs.
+    const dmWorkingBotId = mailbox.dmBusyBotIds[0] ?? null;
+    // G3 (plan botmode-scan): needs-attention — classify each bot against
+    // the live configs + provider health so the rail row says WHY a bot
+    // can't work (missing key/model, auth, quota, benched) instead of the
+    // user discovering it through a silent failure.
+    const attentionMap = useMemo(() => {
+        const out: Record<string, string> = {};
+        for (const b of bots) {
+            const a = classifyBotAttention(b, providerConfigs);
+            if (a) out[b.id] = a.hint;
+        }
+        return out;
+    }, [bots, providerConfigs]);
+    // G5 (plan botmode-scan): wire the automations hook to the Bot Mode
+    // half — bot-scoped routines append their reply row through the same
+    // message store as DM turns (App's roster state lives below useAuto-
+    // mations, so bots are handed as a live getter instead of a value).
+    useEffect(() => {
+        automations.assignAutomationsBridge({ appendMessage: appendGroupMessage });
+    }, [automations.assignAutomationsBridge, appendGroupMessage]);
+    // G5: bot → its bot-scoped routines (rail disclosure), plus the Run-now
+    // handler that routes through the same engine as the scheduler.
+    const botRoutinesMap = useMemo(() => {
+        const out: Record<string, AutomationConfig[]> = {};
+        for (const c of automations.configs) {
+            if (!c.botId) continue;
+            (out[c.botId] ??= []).push(c);
+        }
+        return out;
+    }, [automations.configs]);
+    const runRoutineFromRail = useCallback((config: AutomationConfig) => {
+        automations.runNow(config);
+    }, [automations.runNow]);
     const sendGroupThread = useCallback((prompt: string) => {
         if (activeThread.kind !== 'group') return;
         const group = groups.find(g => g.id === activeThread.groupId);
@@ -1499,15 +1617,10 @@ const App: React.FC = () => {
         }).catch(e => {
             console.warn('[WeeklyRollup] boot pass failed:', e instanceof Error ? e.message : e);
         });
-        // Weekly review (Batch 5 §4.5): deterministic week-stats + ONE
-        // improvement impulse from a provider call, gated on >=7 days since
-        // the last digest AND >=3 closed trades. Fire-and-forget like the
-        // rollup — a missing provider or failed call leaves no digest.
-        void runWeeklyReviewIfDue(username, loggedTradesRef.current).then(res => {
-            if (res) console.log('[WeeklyReview] digest generated:', res.impulse.slice(0, 80));
-        }).catch(e => {
-            console.warn('[WeeklyReview] boot pass failed:', e instanceof Error ? e.message : e);
-        });
+        // NOTE: the weekly review + monthly report passes (below, after the
+        // profile load) need the trade log — loggedTradesRef.current only
+        // updates on the NEXT render, so reading it here would hand both
+        // passes an empty/stale array and silently skip them forever.
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't
@@ -1584,6 +1697,22 @@ const App: React.FC = () => {
             // Rebuild confluence historical stats from the loaded log (was
             // never wired — getConfluenceInsight always returned empty).
             syncConfluenceFromTradeLog(loadedTrades);
+            // Weekly review (Batch 5 §4.5) + monthly report card (§4.5
+            // remainder): deterministic rollups, gated on due-checks. Run
+            // AFTER the profile load with the freshly-read trade log —
+            // loggedTradesRef.current is still the pre-switch value at the
+            // top of loadUserData (it updates on the next render), so
+            // reading it there silently skipped both passes forever.
+            void runWeeklyReviewIfDue(username, loadedTrades).then(res => {
+                if (res) console.log('[WeeklyReview] digest generated:', res.impulse.slice(0, 80));
+            }).catch(e => {
+                console.warn('[WeeklyReview] boot pass failed:', e instanceof Error ? e.message : e);
+            });
+            void runMonthlyReportIfDue(username, loadedTrades).then(res => {
+                if (res) console.log('[MonthlyReport] card generated for period ending', res.generatedAt.slice(0, 10));
+            }).catch(e => {
+                console.warn('[MonthlyReport] boot pass failed:', e instanceof Error ? e.message : e);
+            });
             setSavedAnalyses(profile.savedAnalyses || []);
             setTradeSummaries((profile.tradeSummaries || []).slice(-MAX_TRADE_SUMMARIES));  // Keep most recent entries
             setFinalTradeSummary(profile.finalTradeSummary || null);
@@ -1950,11 +2079,11 @@ const App: React.FC = () => {
     };
 
     // Ordinary ensemble model selection (Lenses off) handler — persists the
-    // picked models that drive the cards and the debate (a trader team
-    // seats 2–5; Settings pickers offer 3).
+    // picked models that drive the cards and the debate (2–5 flat floor,
+    // 6–10 lens pods, plan §9.1; Settings pickers offer 3).
     const handleSetEnsembleModelSelection = useCallback((selection: EnsembleModelSelection) => {
-        setEnsembleModelSelection(selection.slice(0, 5));
-        saveEnsembleModelSelection(selection.slice(0, 5));
+        setEnsembleModelSelection(selection.slice(0, 10));
+        saveEnsembleModelSelection(selection.slice(0, 10));
     }, [setEnsembleModelSelection]);
 
     // Seed the ordinary (normal-mode) debate-model selection from the ready
@@ -2549,6 +2678,18 @@ const App: React.FC = () => {
         stableHandleSendMessage(text, [], hidden, { followUpFromMessageId: messageId });
     }, [stableHandleSendMessage]);
 
+    // Pre-read capture (Batch 5 §5a): persist the user's committed prior
+    // call onto the settled verdict's message BEFORE the card reveals.
+    // Rides conversation history (same path as the watch toggle), copied
+    // onto the LoggedTrade at log time by useTradeLogging.
+    const handlePreReadCommit = useCallback((messageId: string, prior: { direction: 'Long' | 'Short' | 'Flat'; confidencePct: number }) => {
+        const convId = activeConversationId;
+        if (!convId) return;
+        updateMessages(prev => prev.map(m => m.id === messageId
+            ? { ...m, userPriorCall: { ...prior, confidencePct: Math.min(100, Math.max(0, prior.confidencePct)), createdAt: new Date().toISOString() } }
+            : m), convId);
+    }, [activeConversationId, updateMessages]);
+
     const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
         handleLoadConversation(conversationId);
         setHighlightedAnalysisId(messageId);
@@ -3137,6 +3278,40 @@ const App: React.FC = () => {
         () => collectApprovalItems(messages, autopilotResolutions, activeUsername || undefined),
         [messages, autopilotResolutions, skillDraftNonce, activeUsername],
     );
+    // ─── Coach thread (§10.1) ───────────────────────────────────────────────
+    // The learning loop's inbox as a conversation: pending skill drafts +
+    // queue proposals. The badge counts both; the panel refreshes itself on
+    // the same window events, so App only needs the count + selection.
+    const [learningQueueNonce, setLearningQueueNonce] = useState(0);
+    useEffect(() => {
+        const bump = (): void => setLearningQueueNonce(n => n + 1);
+        window.addEventListener('august-learning-queue', bump);
+        return () => window.removeEventListener('august-learning-queue', bump);
+    }, []);
+    const coachCount = useMemo(
+        () => approvalItems.filter(i => i.kind === 'skill').length
+            + listLearningProposals(activeUsername || undefined).length,
+        [approvalItems, learningQueueNonce, activeUsername],
+    );
+    const selectCoachThread = useCallback(() => setActiveThread({ kind: 'coach' }), []);
+    const coachAllowDraft = useCallback((draft: SkillDraft): void => {
+        takeSkillDraft(draft.id, activeUsername || undefined);
+        const trade = loggedTradesRef.current.find(t => t.id === draft.tradeId);
+        if (trade) {
+            void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
+        } else {
+            void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default');
+        }
+        toast.success('Skill saved', draft.crafted.name);
+    }, [activeUsername]);
+    const coachDenyDraft = useCallback((draft: SkillDraft): void => {
+        takeSkillDraft(draft.id, activeUsername || undefined);
+        tombstoneSkillDraftKey(
+            draftTriggerKey(draft.coin, draft.crafted),
+            activeUsername || undefined,
+        );
+        toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
+    }, [activeUsername]);
     // Live task-flow stats for the office header gauges. The four
     // values are normalized inside CompanyRoom, so we feed raw counts
     // here. "Shipped" = total settled analyses; "Running" = in-flight
@@ -3179,6 +3354,19 @@ const App: React.FC = () => {
                 events.push({ id: `review-${m.id}`, time, text: 'REVIEW post-mortem filed' });
             }
         }
+        // Harness-lesson system lines (plan §10.2): what the harness learned
+        // about the wires prints on the tape — the floor is where you SEE it
+        // managing itself. Newest few, merged into time order.
+        for (const l of listHarnessLessons().slice(0, 5)) {
+            const at = Date.parse(l.at);
+            if (!Number.isFinite(at)) continue;
+            events.push({
+                id: `lesson-${l.id}`,
+                time: new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+                text: `LESSON ${l.kind} · ${l.scope}${l.provider ? ` · ${l.provider}` : ''}: ${l.lesson}`,
+            });
+        }
+        events.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0));
         return events;
     }, [messages]);
     // Day PnL for the floor top bar: today's settled tickets only.
@@ -3188,6 +3376,32 @@ const App: React.FC = () => {
             .filter(t => new Date(t.timestamp).toDateString() === today)
             .reduce((sum, t) => sum + (t.pnlAmount ?? 0), 0);
     }, [loggedTrades]);
+    // Skill-citation chip tap (plan §10.1): open Settings → Skills so the
+    // grid mounts and consumes the pending slug (SkillsGrid listens for the
+    // same event when already mounted).
+    useEffect(() => {
+        const onOpenSkill = (): void => {
+            setSettingsInitialTab('skills');
+            setIsSettingsMenuVisible(true);
+        };
+        window.addEventListener('august:open-skill', onOpenSkill);
+        return () => window.removeEventListener('august:open-skill', onOpenSkill);
+    }, []);
+    // Seat-wire observability (plan §10.2): per seat, what the harness sent
+    // the wire (thinking/effort/pin) + cooldown/fitness from §9.2 health.
+    // Derived from the projected run's P5 audit lines — no new state.
+    const floorSeatWire = useMemo(
+        () => deriveSeatWireStates({
+            runLog: deskSceneMessage?.debateRunLog,
+            providerNameToId,
+            healthFor: getProviderHealth,
+            cooldownFor: providerCooldownRemainingMs,
+            seatNames: deskSceneActors.map(a => a.name),
+        }),
+        // Re-derived per run-log growth; cooldown minutes refresh on any
+        // App re-render (the floor's own clock drives the Big Board).
+        [deskSceneMessage, deskSceneActors, providerNameToId],
+    );
     // Floor seat click → open that agent's 1:1 thread in chat mode.
     // Seat names match a named bot first; without one, land on Team
     // (the harness surface, ensemble re-armed).
@@ -3434,6 +3648,7 @@ const App: React.FC = () => {
         onReRunAnalysis: handleReRunAnalysis,
         onResumeDebate: handleResumeDebate,
         onFollowUpTicket: handleFollowUpTicket,
+        onPreReadCommit: handlePreReadCommit,
         onForkDebate: handleForkDebate,
         onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
         onReplacementChoice: handleReplacementChoice,
@@ -3464,7 +3679,7 @@ const App: React.FC = () => {
             tradesToday: sessionGuard.tradesToday,
             maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
         } : undefined,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handlePreReadCommit, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
         // The inline-approval surface reads these —
         // missing them froze cards on stale drafts/handlers.
         approvalItems, approvalHandlers, sessionGuard]);
@@ -3702,6 +3917,7 @@ const App: React.FC = () => {
                 initial={editingAutomation}
                 modelOptions={automationModelOptions}
                 providers={providerConfigs}
+                bots={bots}
                 onClose={() => automations.setEditor(null)}
                 onSave={(config) => {
                     void automations.saveAutomation(config);
@@ -3941,7 +4157,13 @@ const App: React.FC = () => {
                             onManageTeam={() => { setSettingsInitialTab('models'); setIsSettingsMenuVisible(true); }}
                             onNewBot={() => setIsNewBotOpen(true)}
                             onNewGroup={() => setIsNewGroupOpen(true)}
-                            workingBotId={workingBotId}
+                            onSelectCoach={selectCoachThread}
+                            coachCount={coachCount}
+                            workingBotId={workingBotId ?? dmWorkingBotId}
+                            lastOpenedMap={threadOpenedMap}
+                            attentionMap={attentionMap}
+                            botRoutines={botRoutinesMap}
+                            onRunRoutine={runRoutineFromRail}
                         />
                     </React.Suspense>
                 )}
@@ -3965,7 +4187,23 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     />
 
-            {activeGroup ? (
+            {activeThread.kind === 'coach' ? (
+                <div className="min-h-0 flex-1 overflow-y-auto chat-scroll">
+                    <React.Suspense fallback={null}>
+                        <CoachThreadPanel
+                            onAllowDraft={coachAllowDraft}
+                            onDenyDraft={coachDenyDraft}
+                            onOpenTrade={(tradeId) => {
+                                // Jump back to the Team transcript and highlight
+                                // the originating verdict card (trade ids are
+                                // message ids — see useTradeLogging).
+                                setActiveThread({ kind: 'team' });
+                                setHighlightedAnalysisId(tradeId);
+                            }}
+                        />
+                    </React.Suspense>
+                </div>
+            ) : activeGroup ? (
                 <React.Suspense fallback={null}>
                     <GroupChatView
                         group={activeGroup}
@@ -4213,6 +4451,13 @@ const App: React.FC = () => {
                         bots={bots}
                         workingBotId={workingBotId}
                         dayPnl={floorDayPnl}
+                        guardState={sessionGuard ? {
+                            dailyLossLimitUsd: getHarnessSettings().equityUsd * getSessionGuardConfig().dailyLossLimitPct,
+                            tradesToday: sessionGuard.tradesToday,
+                            maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
+                            level: sessionGuard.level,
+                        } : undefined}
+                        seatWire={floorSeatWire}
                         onOpenSeatChat={openSeatChat}
                     />
                 </React.Suspense>

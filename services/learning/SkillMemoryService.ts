@@ -25,11 +25,35 @@ import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../ut
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
+import {
+    recordWorthGateApproval,
+    recordWorthGateConfirm,
+    recordRefinementOutcome,
+    recordEvalAgreement,
+} from './metaCalibration';
+import {
+    recordTombstone,
+    findArchiveTwin,
+    queueRevivalProposal,
+    retirementReasonFromHistory,
+} from './skillGraveyard';
+import { isStaleByRegime } from '../../utils/regimeSentinel';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { familiesRelate } from '../../utils/patternMatch';
-import { skillInjectedSince, recordMemoryInjection } from './MemoryInjectionService';
+import { recordMemoryInjection, skillAdherenceForRun } from './MemoryInjectionService';
 import { resolveMemoryConfig } from './MemoryModelService';
+import {
+    sanitizePrediction,
+    serializePrediction,
+    parsePredictionLine,
+    defaultPrediction,
+    evaluateClaim,
+    type SkillPrediction,
+} from '../../utils/skillPrediction';
+import { ciGatePasses } from '../../utils/skillStatistics';
+import { queueLearningProposal } from '../../utils/learningQueue';
+import { getSkillLibraryCap } from '../../utils/harnessSettings';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
@@ -80,6 +104,44 @@ export interface SkillMeta {
      *  belief was applied to a non-scope regime N times" so a skill that only
      *  "works" outside its stated regime is caught. */
     crossRegimeIds?: string[];
+    /** ── §8.3a three-state adherence join ──
+     *  Matched + injected + CITED by the verdict → counted in wins/losses
+     *  (FOLLOWED). Matched + injected + NOT cited → this list (OVERRIDDEN):
+     *  the moderator was handed the skill and ignored it, so the outcome
+     *  belongs to neither the skill nor the control group. A high override
+     *  rate is itself a signal — the amendment queue consumes it. */
+    overriddenIds?: string[];
+    /** ── §8.3b per-regime evidence splits ──
+     *  wins/losses accumulated inside each regime, written alongside the
+     *  global counters. When the split diverges (works in one regime, fails
+     *  in another) the skill is CONDITIONAL, not fading — re-scope instead
+     *  of decay. */
+    regimeStats?: Record<string, { w: number; l: number }>;
+    /** ── §8.2a birth certificate ──
+     *  The falsifiable claim registered at creation. The eval scheduler
+     *  tests the skill against THIS instead of a generic hurts/helps
+     *  question; the ladder consumes the claim verdict. */
+    prediction?: SkillPrediction;
+    /** §8.2a: followed-evidence sample size at the last claim test — the
+     *  claim is re-tested only when new evidence has landed since. */
+    claimTestedEvidence?: number;
+    /** ── §8.3c shadow refinement ──
+     *  A refined version drafted after a loss streak does NOT swap into the
+     *  live slot immediately — it waits here (eval-only) while the prior
+     *  version keeps injecting for SHADOW_WINDOW_TRADES matched trades.
+     *  The comparison then promotes whichever wins. */
+    shadow?: {
+        kind: SkillKind;
+        ifCondition?: string;
+        thenAction?: string;
+        body: string;
+        name?: string;
+        startedAt: string;
+        /** Matched trades observed since the shadow opened. */
+        seen: number;
+        wins: number;
+        losses: number;
+    };
     /** Total trades EVER counted for this skill. `tradeIds` is a
      *  tail-20 list; without this counter the verdict block's "learned from
      *  N logged trade(s)" understates long-lived skills forever. */
@@ -137,6 +199,13 @@ export const MIN_SAMPLE_RETIRE = 6;
 export const MIN_SAMPLE_FOR_VETO = 2;
 /** Consecutive losses on a CONFIRMED skill before the LLM refinement pass. */
 export const REFINE_AFTER_CONSECUTIVE_LOSSES = 3;
+/**
+ * §8.3c: matched trades the PRIOR version keeps the live injection slot for
+ * while a refinement sits in eval-only shadow. A panicked rewrite after a
+ * bad-luck streak used to swap in immediately — undetectably replacing a
+ * good skill with a worse one. The window is the detection mechanism.
+ */
+export const SHADOW_WINDOW_TRADES = 10;
 /**
  * Refinement also requires the losses to span at least this many hours —
  * three whipsaw losses inside one session is regime noise, not a broken rule
@@ -246,6 +315,48 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
             const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
             return ids.length > 0 ? ids : undefined;
         })(),
+        // §8.3a: injected-but-not-cited (OVERRIDDEN) trade ids.
+        overriddenIds: (() => {
+            const raw = pick('overriddenIds');
+            if (!raw) return undefined;
+            const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
+            return ids.length > 0 ? ids : undefined;
+        })(),
+        // §8.3b: per-regime W/L split (JSON map in frontmatter).
+        regimeStats: (() => {
+            const raw = pick('regimeStats');
+            if (!raw) return undefined;
+            try {
+                const parsed = JSON.parse(raw) as Record<string, { w?: number; l?: number }>;
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+                const out: NonNullable<SkillMeta['regimeStats']> = {};
+                for (const [k, v] of Object.entries(parsed)) {
+                    if (v && Number.isFinite(v.w) && Number.isFinite(v.l)) out[k] = { w: v.w!, l: v.l! };
+                }
+                return Object.keys(out).length > 0 ? out : undefined;
+            } catch {
+                return undefined;
+            }
+        })(),
+        // §8.2a: the birth-certificate claim.
+        prediction: parsePredictionLine(pick('prediction')) ?? undefined,
+        // §8.2a: followed-evidence sample at the last claim test (re-test
+        // only when new evidence landed since).
+        claimTestedEvidence: (() => {
+            const n = parseInt(pick('claimTestedEvidence') || '', 10);
+            return Number.isFinite(n) && n >= 0 ? n : undefined;
+        })(),
+        // §8.3c: the pending shadow refinement (JSON in frontmatter).
+        shadow: (() => {
+            const raw = pick('shadow');
+            if (!raw) return undefined;
+            try {
+                const parsed = JSON.parse(raw) as SkillMeta['shadow'];
+                return parsed && typeof parsed.body === 'string' && parsed.kind ? parsed : undefined;
+            } catch {
+                return undefined;
+            }
+        })(),
         // Cross-regime diagnostic: counted trades outside the scope regime.
         crossRegimeIds: (() => {
             const raw = pick('crossRegimeIds');
@@ -274,7 +385,7 @@ export const setSkillStatus = async (fileId: string, status: SkillStatus, userna
     if (!file) return;
     const meta = parseSkillMarkdown(file.content);
     if (!meta) return;
-    stampStatusTransition(meta, status, 'manual');
+    stampStatusTransition(meta, status, status === 'retired' ? 'user-veto' : 'manual');
     meta.status = status;
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
@@ -360,7 +471,12 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.supersededBy ? [`supersededBy: ${meta.supersededBy}`] : []),
         ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
         ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-20).join(',')}`] : []),
+        ...(meta.overriddenIds && meta.overriddenIds.length > 0 ? [`overriddenIds: ${meta.overriddenIds.slice(-20).join(',')}`] : []),
         ...(meta.crossRegimeIds && meta.crossRegimeIds.length > 0 ? [`crossRegimeIds: ${meta.crossRegimeIds.slice(-20).join(',')}`] : []),
+        ...(meta.regimeStats ? [`regimeStats: ${JSON.stringify(meta.regimeStats)}`] : []),
+        ...(meta.prediction ? [serializePrediction(meta.prediction)] : []),
+        ...(meta.claimTestedEvidence !== undefined ? [`claimTestedEvidence: ${meta.claimTestedEvidence}`] : []),
+        ...(meta.shadow ? [`shadow: ${JSON.stringify(meta.shadow)}`] : []),
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
@@ -485,7 +601,37 @@ export const evalDemotionActive = (meta: SkillMeta): boolean => {
     return Date.now() - t < EVAL_VERDICT_STALE_MS;
 };
 
-const deriveStatus = (meta: SkillMeta): SkillStatus => {
+/**
+ * §8.3d: the raw ladder (5 samples, 60% win rate) is a FLOOR, not the gate —
+ * a 4-1 record at N=5 is statistically indistinguishable from a coin flip.
+ * Confirmation additionally requires the Wilson interval of the followed
+ * evidence to separate from the control win rate (or, cold-start with no
+ * control evidence, to exclude 50% outright at N ≥ 8). Demotion and
+ * retirement are unchanged — the CI only gates PROMOTION.
+ */
+export const confirmationCiGate = (
+    meta: SkillMeta,
+    control?: { wins: number; losses: number },
+): boolean => ciGatePasses(meta.kind, meta.wins, meta.losses, control);
+
+/** §8.3d: control-group evidence for the CI comparison — the settled
+ *  outcomes of the skill's controlIds (matched-but-not-injected trades). */
+const controlStatsFrom = (
+    meta: SkillMeta,
+    allTrades?: LoggedTrade[],
+): { wins: number; losses: number } | undefined => {
+    if (!allTrades || !meta.controlIds || meta.controlIds.length === 0) return undefined;
+    const ids = new Set(meta.controlIds);
+    let wins = 0, losses = 0;
+    for (const t of allTrades) {
+        if (!ids.has(t.id)) continue;
+        if (t.outcome === TradeOutcome.WIN) wins += 1;
+        else if (t.outcome === TradeOutcome.LOSS) losses += 1;
+    }
+    return wins + losses > 0 ? { wins, losses } : undefined;
+};
+
+const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number }): SkillStatus => {
     // ── Causal override ──
     // An automated A/B eval that shows the skill HURTS decisions demotes it
     // regardless of outcome correlation — injection-causation outranks
@@ -502,6 +648,17 @@ const deriveStatus = (meta: SkillMeta): SkillStatus => {
         && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
     ) return 'candidate';
 
+    // ── §8.2a birth certificate ──
+    // The skill's own pre-registered claim, tested against its followed
+    // evidence. evaluateClaim is pure arithmetic, so the ladder can consume
+    // it directly: a claim that has reached its horizon and FAILED blocks
+    // promotion (the skill must meet the bar it promised, not just the
+    // generic one); met or pending claims defer to the normal ladder.
+    const claim = meta.prediction
+        ? evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses })
+        : null;
+    const claimUnmet = Boolean(claim && !claim.pending && !claim.met);
+
     const sample = meta.wins + meta.losses;
     const winRate = sample > 0 ? meta.wins / sample : 0;
     if (sample >= MIN_SAMPLE_RETIRE) {
@@ -509,8 +666,17 @@ const deriveStatus = (meta: SkillMeta): SkillStatus => {
         if (meta.kind === 'avoid' && winRate > 0.6) return 'retired';
     }
     if (sample >= MIN_SAMPLE_CONFIRMED) {
-        if (meta.kind === 'repeat' && winRate >= 0.6) return 'confirmed';
-        if (meta.kind === 'avoid' && winRate <= 0.4) return 'confirmed';
+        const rawSaysConfirmed = meta.kind === 'repeat'
+            ? winRate >= 0.6
+            : meta.kind === 'avoid' ? winRate <= 0.4 : false;
+        // Raw threshold is the floor; the Wilson CI is the gate. The gate
+        // applies to PROMOTION only — a skill already confirmed keeps its
+        // status through re-derivation passes (consolidation, merge) and is
+        // demoted by the retire band or the eval override above, never by
+        // retroactive statistics.
+        if (rawSaysConfirmed && !claimUnmet && (meta.status === 'confirmed' || confirmationCiGate(meta, control))) {
+            return 'confirmed';
+        }
         return 'candidate';
     }
     return 'candidate';
@@ -560,31 +726,37 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         if (meta.tradeIds.includes(trade.id)) continue;
 
         // ── Evidence decay ──
-        // Authority expires with its evidence. Before counting this trade:
-        //   • counts >30 days stale are halved
-        //   • evidence earned in a DIFFERENT market regime halves again
-        // deriveStatus then naturally demotes stale skills to candidate —
-        // no new status machinery needed.
+        // Authority expires with its evidence: counts >30 days stale are
+        // halved before counting this trade. Regime mismatch NO LONGER
+        // halves (§8.3b) — "works in trend, fails in chop" is CONDITIONAL,
+        // not fading; the per-regime split below routes divergence to a
+        // re-scope proposal instead of decay. deriveStatus then naturally
+        // demotes genuinely stale skills to candidate.
         applyEvidenceDecay(meta, trade.marketRegime);
 
-        // ── Weighted attribution (injected vs. CONTROL) ──
-        // Full credit ONLY when retrieval actually injected this skill around
-        // the time of this trade. A matched-but-NOT-injected trade is no
-        // longer half-counted as evidence — it becomes a CONTROL observation
-        // (recorded in controlIds): the skill could have influenced it but
-        // provably didn't, so its outcome belongs to the baseline, not to the
-        // skill. Unknown telemetry (empty log) keeps full credit so tiering
-        // cannot starve on missing data. Scoping to the trade window means
-        // one injection can no longer upgrade credit for unrelated setups.
-        const tradeTs = Date.parse(trade.timestamp || '');
-        const sinceMs = Number.isFinite(tradeTs) ? Math.max(0, Date.now() - tradeTs) : undefined;
-        let injected: boolean | null;
+        // ── Weighted attribution (§8.3a three-state adherence) ──
+        // Full credit ONLY when retrieval actually injected this skill in the
+        // run that produced this trade AND the verdict did not override it.
+        // The join is EXACT on the originating runId (persisted on both sides)
+        // — a time window anchored on trade.timestamp cannot work: the run
+        // predates the log click, so "records since the trade" looked at later,
+        // unrelated runs and mislabeled every followed skill as CONTROL.
+        //   FOLLOWED (injected + cited)      → counts toward wins/losses
+        //   OVERRIDDEN (injected + not cited) → separate override counter;
+        //     the moderator was handed the skill and ignored it, so the
+        //     outcome must not rot the skill's stats (the most common way
+        //     skill stats silently decay). A high override rate is itself a
+        //     signal — it queues an amendment proposal.
+        //   CONTROL (matched, not injected)  → controlIds, the lift baseline.
+        // Unknown telemetry (empty log, legacy records without runId/cited)
+        // keeps full credit so tiering cannot starve on missing data.
+        let adherence: Awaited<ReturnType<typeof skillAdherenceForRun>>;
         try {
-            injected = await skillInjectedSince(username, file.name, sinceMs);
+            adherence = await skillAdherenceForRun(username, file.name, trade.sourceRunId);
         } catch {
-            injected = null;
+            adherence = null;
         }
-        if (injected === false) {
+        if (adherence === 'not-injected') {
             // CONTROL group: record and move on — never inflate wins/losses
             // with outcomes this skill did not shape.
             const control = meta.controlIds ?? [];
@@ -598,13 +770,96 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             }
             continue;
         }
+        if (adherence === 'overridden') {
+            // OVERRIDDEN: injected and ignored. Never counts toward the
+            // skill's record; accumulates the amendment signal instead.
+            const over = meta.overriddenIds ?? [];
+            if (!over.includes(trade.id)) {
+                meta.overriddenIds = [...over, trade.id].slice(-20);
+                meta.modifiedAt = new Date().toISOString();
+                await updateMemoryFileUnlocked(file.id, {
+                    content: serializeSkill(meta, titleFromMeta(meta)),
+                    enabled: meta.status !== 'retired',
+                }, username);
+                if (meta.overriddenIds.length >= OVERRIDE_RATE_FOR_AMENDMENT) {
+                    queueLearningProposal({
+                        kind: 'rescope',
+                        skillSlug: file.name.replace(/\.md$/i, ''),
+                        text: `${file.name} was injected and ignored ${meta.overriddenIds.length} times — the trigger or wording needs an amendment pass (the floor keeps routing around it).`,
+                        fingerprint: `${file.name}|override`,
+                    }, username);
+                }
+            }
+            continue;
+        }
 
+        // §8.5b eval-verdict agreement: the first FOLLOWED trade after a
+        // helps/hurts verdict era is one agreement sample (once per era).
+        if ((meta.evalVerdict === 'helps' || meta.evalVerdict === 'hurts') && meta.lastEvalAt) {
+            void recordEvalAgreement(
+                username,
+                `${file.name}|${meta.lastEvalAt}`,
+                (meta.evalVerdict === 'helps') === (trade.outcome === TradeOutcome.WIN),
+            );
+        }
         if (trade.outcome === TradeOutcome.WIN) {
             meta.wins += 1;
             meta.consecutiveLosses = 0;
         } else {
             meta.losses += 1;
             meta.consecutiveLosses += 1;
+        }
+        // §8.3b: per-regime split, written alongside the global counters —
+        // the substrate that lets a conditional pattern be RE-SCOPED instead
+        // of decayed into oblivion.
+        if (trade.marketRegime) {
+            const stats = { ...(meta.regimeStats ?? {}) };
+            const cur = stats[trade.marketRegime] ?? { w: 0, l: 0 };
+            stats[trade.marketRegime] = trade.outcome === TradeOutcome.WIN
+                ? { w: cur.w + 1, l: cur.l }
+                : { w: cur.w, l: cur.l + 1 };
+            meta.regimeStats = stats;
+            maybeQueueRescopeProposal(file.name, meta, username);
+        }
+        // §8.3c: a pending shadow refinement observes the same matched
+        // trades — its counterfactual window fills while the live version
+        // keeps the injection slot. At window close the comparison settles.
+        if (meta.shadow) {
+            meta.shadow = {
+                ...meta.shadow,
+                seen: meta.shadow.seen + 1,
+                wins: meta.shadow.wins + (trade.outcome === TradeOutcome.WIN ? 1 : 0),
+                losses: meta.shadow.losses + (trade.outcome === TradeOutcome.LOSS ? 1 : 0),
+            };
+            if (meta.shadow.seen >= SHADOW_WINDOW_TRADES) {
+                const settled = settleShadow(meta, { wins: meta.shadow.wins, losses: meta.shadow.losses });
+                // §8.5b: this refinement settled — one recovery sample.
+                void recordRefinementOutcome(username, settled.promoted);
+                if (settled.promoted) {
+                    meta.previousVersion = {
+                        kind: meta.kind,
+                        ifCondition: meta.ifCondition,
+                        thenAction: meta.thenAction,
+                    };
+                    meta.kind = meta.shadow.kind;
+                    meta.ifCondition = meta.shadow.ifCondition;
+                    meta.thenAction = meta.shadow.thenAction;
+                    meta.body = meta.shadow.body;
+                    meta.shadow = undefined;
+                } else if (settled.discarded) {
+                    meta.shadow = undefined;
+                    try {
+                        const { recordHarnessLesson } = await import('./harnessLessons');
+                        recordHarnessLesson({
+                            kind: 'injection',
+                            scope: 'skillGuidance',
+                            pattern: `skill-refinement:${file.name.replace(/\.md$/i, '')}`,
+                            lesson: settled.lesson ?? 'refinement overfit',
+                            evidenceId: trade.id,
+                        });
+                    } catch { /* lesson store is best-effort */ }
+                }
+            }
         }
         meta.tradeIds = [...meta.tradeIds, trade.id];
         // Cross-regime diagnostic: this counted trade came from OUTSIDE the
@@ -625,7 +880,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         // refinement pass, not an evidence append.
         if (trade.marketRegime && !meta.regime) meta.regime = trade.marketRegime;
         {
-            const derived = deriveStatus(meta);
+            const derived = deriveStatus(meta, controlStatsFrom(meta, allTrades));
             // A demotion driven by the eval causal override (not by the
             // win-rate math) must read as an EVAL demotion in the temporal
             // ledger — rehabilitation looks for /^eval hurts/ on the last
@@ -635,10 +890,24 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
                 && meta.evalVerdict === 'hurts'
                 && evalDemotionActive(meta)
                 && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK;
+            // §8.5b worth-gate precision: a gate-approved skill confirming is
+            // one delivery of the gate's promise.
+            if (derived === 'confirmed' && meta.status !== 'confirmed') {
+                void recordWorthGateConfirm(username, meta.ifCondition);
+            }
+            // §8.4b: a retire-band transition records WHICH reason, not just
+            // 'evidence'. Regime-mix divergence (§8.5d) distinguishes a real
+            // shift from a simple evidence dry-up — a conditional library
+            // gets re-scoped, not deleted.
+            const transitionReason = derived === 'retired'
+                ? (isStaleByRegime(meta, trade.analysis?.coinName) ? 'regime-shifted' : 'insufficient-evidence')
+                : evalOverrideDemotion
+                    ? `eval hurts ×${meta.evalStreak} (evidence)`
+                    : 'evidence';
             stampStatusTransition(
                 meta,
                 derived,
-                evalOverrideDemotion ? `eval hurts ×${meta.evalStreak} (evidence)` : 'evidence',
+                transitionReason,
             );
             meta.status = derived;
         }
@@ -674,17 +943,60 @@ const evidenceAgeDays = (meta: SkillMeta): number => {
 
 /**
  * Halve wins/losses when the skill's evidence is stale (>30 days since the
- * last counted trade) or was earned in a different regime than the incoming
- * trade's. Mutates `meta` before the new outcome is counted.
+ * last counted trade). The regime-mismatch halving was REMOVED here (§8.3b):
+ * a skill that works in one regime and fails in another is conditional, not
+ * fading — regimeStats + the re-scope proposal handle that case without
+ * erasing the skill's earned authority. `incomingRegime` is kept in the
+ * signature for call-site stability. Mutates `meta` before the new outcome
+ * is counted.
  */
 export const applyEvidenceDecay = (meta: SkillMeta, incomingRegime?: string): void => {
+    void incomingRegime;
     let halvings = 0;
     if (evidenceAgeDays(meta) > EVIDENCE_STALE_DAYS) halvings += 1;
-    if (incomingRegime && meta.regime && incomingRegime !== meta.regime) halvings += 1;
     if (halvings > 0) halveCounts(meta, halvings);
 };
 
 export const EVIDENCE_STALE_DAYS = 30;
+
+/** Injected-and-ignored observations that justify an amendment proposal. */
+export const OVERRIDE_RATE_FOR_AMENDMENT = 3;
+
+/**
+ * §8.3b divergence test: one regime carries ≥3W/≤1L while another carries
+ * ≥3L/≤1W. Returns [strongRegime, weakRegime] or null.
+ */
+export const findRegimeDivergence = (
+    stats: Record<string, { w: number; l: number }> | undefined,
+): [string, string] | null => {
+    if (!stats) return null;
+    const strong = Object.entries(stats).filter(([, v]) => v.w >= 3 && v.l <= 1);
+    const weak = Object.entries(stats).filter(([, v]) => v.l >= 3 && v.w <= 1);
+    if (strong.length === 0 || weak.length === 0) return null;
+    // Most-supported vs most-contradicted.
+    strong.sort((a, b) => b[1].w - a[1].w);
+    weak.sort((a, b) => b[1].l - a[1].l);
+    return [strong[0][0], weak[0][0]];
+};
+
+/**
+ * When the per-regime split diverges, the skill gets SHARPER, not weaker:
+ * queue a re-scope proposal ("narrow appliesWhen to <strong regime>") into
+ * the learning queue. Deduped by fingerprint — the same divergence is not
+ * re-queued every trade.
+ */
+const maybeQueueRescopeProposal = (fileName: string, meta: SkillMeta, username: string): void => {
+    const div = findRegimeDivergence(meta.regimeStats);
+    if (!div) return;
+    const [strong, weak] = div;
+    if (meta.regime === strong) return; // already scoped to the winning regime
+    queueLearningProposal({
+        kind: 'rescope',
+        skillSlug: fileName.replace(/\.md$/i, ''),
+        text: `${fileName} wins ${meta.regimeStats![strong]!.w}/${meta.regimeStats![strong]!.w + meta.regimeStats![strong]!.l} in ${strong} but loses ${meta.regimeStats![weak]!.l}/${meta.regimeStats![weak]!.w + meta.regimeStats![weak]!.l} in ${weak} — narrow its scope to ${strong} instead of letting mixed evidence fade it.`,
+        fingerprint: `${fileName}|rescope|${strong}`,
+    }, username);
+};
 
 /** Halve wins/losses n times (floor at 0). Keeps sample math consistent. */
 export const halveCounts = (meta: SkillMeta, times: number): void => {
@@ -745,8 +1057,12 @@ const craftRefinement = async (
 /**
  * Write phase of skill refinement — MUST run under the notebook write lock.
  * Re-reads the skill so evidence that landed during the LLM round-trip is
- * preserved, then applies the refined trigger/procedure. Returns false when
- * the file vanished meanwhile.
+ * preserved. §8.3c: the refined version does NOT swap into the live slot —
+ * it enters an eval-only SHADOW while the prior version keeps the injection
+ * slot for SHADOW_WINDOW_TRADES matched trades. A panicked refinement after
+ * a bad-luck streak used to replace a good skill with a worse one,
+ * undetectably; the shadow window is the detection. Returns false when the
+ * file vanished meanwhile.
  */
 const applyRefinementUnlocked = async (
     fileId: string,
@@ -756,23 +1072,107 @@ const applyRefinementUnlocked = async (
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     const latest = file ? parseSkillMarkdown(file.content) : null;
     if (!latest) return false;
-    latest.previousVersion = {
-        kind: latest.kind,
-        ifCondition: latest.ifCondition,
-        thenAction: latest.thenAction,
+    // A second refinement while one is already shadowing replaces the
+    // shadow (the newest draft is the better guess), never the live slot.
+    latest.shadow = {
+        kind: refined.kind,
+        ifCondition: refined.ifCondition,
+        thenAction: refined.thenAction,
+        body: formatCraftedSkillBody(refined),
+        name: refined.name,
+        startedAt: new Date().toISOString(),
+        seen: 0,
+        wins: 0,
+        losses: 0,
     };
-    latest.kind = refined.kind;
-    latest.ifCondition = refined.ifCondition;
-    latest.thenAction = refined.thenAction;
-    latest.body = formatCraftedSkillBody(refined);
     latest.consecutiveLosses = 0;
     latest.refinedAt = new Date().toISOString();
     latest.modifiedAt = latest.refinedAt;
     await updateMemoryFileUnlocked(fileId, {
-        content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
+        content: serializeSkill(latest, titleFromMeta(latest)),
         enabled: latest.status !== 'retired',
     }, username);
     return true;
+};
+
+/**
+ * §8.3c shadow verdict at window close. The shadow is never injected, so
+ * both versions faced identical outcomes — the only honest comparison is
+ * the incumbent's record INSIDE the window: if the live trigger kept
+ * losing (worse than the kind's coin-flip band), the tightened refinement
+ * earned the slot; if the live version held up, the rewrite was an
+ * overfit reaction to bad luck and gets discarded with a P7 lesson.
+ */
+export const settleShadow = (
+    meta: SkillMeta,
+    windowEvidence: { wins: number; losses: number },
+): { promoted: boolean; discarded: boolean; lesson?: string } => {
+    const shadow = meta.shadow;
+    if (!shadow || shadow.seen < SHADOW_WINDOW_TRADES) return { promoted: false, discarded: false };
+    const sample = windowEvidence.wins + windowEvidence.losses;
+    const winRate = sample > 0 ? windowEvidence.wins / sample : 0.5;
+    const incumbentStruggled = meta.kind === 'avoid' ? winRate > 0.6 : winRate < 0.4;
+    if (incumbentStruggled) {
+        return { promoted: true, discarded: false };
+    }
+    return {
+        promoted: false,
+        discarded: true,
+        lesson: `refinement of a ${meta.kind} skill sat in shadow for ${shadow.seen} matched trades while the live version held ${windowEvidence.wins}W/${windowEvidence.losses}L — the rewrite was not needed (refinement overfit).`,
+    };
+};
+
+/**
+ * Apply a settled shadow under the write lock (public entry for the
+ * dashboard / tests): promote or discard exactly as the evidence path's
+ * inline settle does, without needing a new trade to close the window.
+ */
+export const settleSkillShadow = (fileId: string, username: string): Promise<'promoted' | 'discarded' | 'pending'> =>
+    withNotebookWriteLock(() => settleShadowUnlocked(fileId, username));
+
+const settleShadowUnlocked = async (
+    fileId: string,
+    username: string,
+): Promise<'promoted' | 'discarded' | 'pending'> => {
+    const file = getMemoryFiles().files.find(f => f.id === fileId);
+    const meta = file ? parseSkillMarkdown(file.content) : null;
+    if (!meta || !meta.shadow) return 'pending';
+    const windowEvidence = { wins: meta.shadow.wins, losses: meta.shadow.losses };
+    const verdict = settleShadow(meta, windowEvidence);
+    if (!verdict.promoted && !verdict.discarded) return 'pending';
+    // §8.5b: refinement recovery — a settled shadow is one sample.
+    void recordRefinementOutcome(username, verdict.promoted);
+    if (verdict.promoted && meta.shadow) {
+        meta.previousVersion = {
+            kind: meta.kind,
+            ifCondition: meta.ifCondition,
+            thenAction: meta.thenAction,
+        };
+        meta.kind = meta.shadow.kind;
+        meta.ifCondition = meta.shadow.ifCondition;
+        meta.thenAction = meta.shadow.thenAction;
+        meta.body = meta.shadow.body;
+    } else if (meta.shadow) {
+        // Refinement lost the shadow comparison — a lesson about the
+        // HARNESS (keyed on the refinement gate, not any provider).
+        try {
+            const { recordHarnessLesson } = await import('./harnessLessons');
+            recordHarnessLesson({
+                kind: 'injection',
+                scope: 'skillGuidance',
+                pattern: `skill-refinement:${fileId}`,
+                lesson: verdict.lesson ?? 'refinement overfit',
+                evidenceId: fileId,
+            });
+        } catch { /* lesson store is best-effort */ }
+    }
+    meta.shadow = undefined;
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(fileId, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: meta.status !== 'retired',
+    }, username);
+    return verdict.promoted ? 'promoted' : 'discarded';
 };
 
 /**
@@ -841,7 +1241,7 @@ const maybeMergeSkillUnlocked = async (
                 // other path so skillStatusAt replay sees them. Stamp BEFORE
                 // assigning: stampStatusTransition no-ops once meta.status
                 // already equals the next status.
-                const derived = deriveStatus(latestMeta);
+                const derived = deriveStatus(latestMeta, controlStatsFrom(latestMeta, allTrades));
                 stampStatusTransition(latestMeta, derived, 'worth-gate merge');
                 latestMeta.status = derived;
             }
@@ -863,11 +1263,19 @@ const maybeMergeSkillUnlocked = async (
             const latestFile = getMemoryFiles().files.find(f => f.id === file.id);
             const latest = latestFile ? parseSkillMarkdown(latestFile.content) : null;
             if (latest && refined) {
-                latest.previousVersion = { kind: latest.kind, ifCondition: latest.ifCondition, thenAction: latest.thenAction };
-                latest.kind = refined.kind;
-                latest.ifCondition = refined.ifCondition;
-                latest.thenAction = refined.thenAction;
-                latest.body = formatCraftedSkillBody(refined);
+                // §8.3c: merge-driven refinements enter the shadow too —
+                // the live trigger keeps its slot until the window settles.
+                latest.shadow = {
+                    kind: refined.kind,
+                    ifCondition: refined.ifCondition,
+                    thenAction: refined.thenAction,
+                    body: formatCraftedSkillBody(refined),
+                    name: refined.name,
+                    startedAt: new Date().toISOString(),
+                    seen: 0,
+                    wins: 0,
+                    losses: 0,
+                };
                 latest.refinedAt = new Date().toISOString();
                 latestMeta = latest;
             }
@@ -957,7 +1365,7 @@ const maybeUpsertSkillUnlocked = async (
     username: string,
     // The worth-gate's JUDGED clauses ride through so the
     // persisted skill matches the artifact that was validated.
-    preferredClause?: { ifCondition?: string; thenAction?: string },
+    preferredClause?: { ifCondition?: string; thenAction?: string; prediction?: SkillPrediction },
 ): Promise<MemoryFile | null> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return null;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
@@ -994,6 +1402,16 @@ const maybeUpsertSkillUnlocked = async (
     const clause = (preferredClause?.ifCondition || preferredClause?.thenAction)
         ? { ifCondition: preferredClause.ifCondition ?? '', thenAction: preferredClause.thenAction ?? '' }
         : parseIfThenClauses(trade.postMortem ?? '')[0];
+    // §8.4a: never silently re-create a retired twin. An archive match drafts
+    // a REVIVAL review card instead of a fresh skill — the graveyard is how
+    // the system remembers what didn't work.
+    if (clause?.ifCondition) {
+        const twin = findArchiveTwin(username, clause.ifCondition);
+        if (twin) {
+            queueRevivalProposal(username, twin);
+            return null;
+        }
+    }
     const lesson = clause
         ? formatSkillProcedure(clause)
         : extractLessonFromPostMortem(trade.postMortem ?? '');
@@ -1020,6 +1438,14 @@ const maybeUpsertSkillUnlocked = async (
         tradeIds: cluster.map(t => t.id),
         ifCondition: clause?.ifCondition,
         thenAction: clause?.thenAction,
+        // §8.2a birth certificate: the worth-gate's judged claim when it
+        // carried one, else the deterministic default from the cluster's
+        // scope. Every new skill leaves with a falsifiable prediction.
+        prediction: preferredClause?.prediction ?? defaultPrediction({
+            coin: setup.coin,
+            family: setup.family,
+            regime: setup.regime,
+        }),
         body: clause
             ? lesson
             : [
@@ -1033,7 +1459,13 @@ const maybeUpsertSkillUnlocked = async (
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return null;
     const content = serializeSkill(meta, titleFromMeta(meta));
-    return createMemoryFileUnlocked(folder.id, fileNameFromMeta(meta), content, username, true);
+    const created = await createMemoryFileUnlocked(folder.id, fileNameFromMeta(meta), content, username, true);
+    // §8.5b: the worth-gate judged this clause — count it as a gate approval
+    // so weekly meta-calibration can measure how many approvals confirm.
+    if (created && preferredClause?.ifCondition) {
+        void recordWorthGateApproval(username, preferredClause.ifCondition);
+    }
+    return created;
 };
 
 /** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
@@ -1043,7 +1475,7 @@ export const maybeUpsertSkill = (
     username: string,
     // The worth-gate's JUDGED clauses ride through the locked
     // wrapper so callers can persist the validated artifact.
-    preferredClause?: { ifCondition?: string; thenAction?: string },
+    preferredClause?: { ifCondition?: string; thenAction?: string; prediction?: SkillPrediction },
 ): Promise<MemoryFile | null> =>
     withNotebookWriteLock(() => maybeUpsertSkillUnlocked(trade, allTrades, username, preferredClause));
 
@@ -1064,6 +1496,12 @@ const ingestCraftedSkillUnlocked = async (
         const meta = parseSkillMarkdown(f.content);
         return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
     });
+    // §8.4a: retired twin → REVIVAL card, not a duplicate birth.
+    const twin = findArchiveTwin(username, crafted.ifCondition);
+    if (twin) {
+        queueRevivalProposal(username, twin);
+        return;
+    }
     const kind = crafted.kind;
     if (existing) {
         const meta = parseSkillMarkdown(existing.content);
@@ -1076,6 +1514,15 @@ const ingestCraftedSkillUnlocked = async (
         meta.kind = kind;
         meta.ifCondition = crafted.ifCondition;
         meta.thenAction = crafted.thenAction;
+        // A legacy skill updated through the craft path gains its birth
+        // certificate here if it never had one.
+        if (!meta.prediction) {
+            meta.prediction = crafted.prediction ?? defaultPrediction({
+                coin: trade.analysis?.coinName,
+                family: trade.analysis?.detectedPatternFamily,
+                regime: trade.marketRegime,
+            });
+        }
         meta.body = formatCraftedSkillBody(crafted);
         meta.status = deriveStatus(meta);
         await updateMemoryFileUnlocked(existing.id, {
@@ -1097,6 +1544,11 @@ const ingestCraftedSkillUnlocked = async (
         tradeIds: [trade.id],
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
+        prediction: crafted.prediction ?? defaultPrediction({
+            coin: trade.analysis?.coinName,
+            family: trade.analysis?.detectedPatternFamily,
+            regime: trade.marketRegime,
+        }),
         body: formatCraftedSkillBody(crafted),
     };
     meta.status = deriveStatus(meta);
@@ -1140,6 +1592,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         tradeIds: [],
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
+        prediction: crafted.prediction ?? defaultPrediction({ coin }),
         body: formatCraftedSkillBody(crafted),
     };
     const slug = slugifyName(crafted.name) || slugifyName([coin, crafted.kind].filter(Boolean).join(' ')) || 'skill';
@@ -1203,6 +1656,11 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             tradeIds: [trade.id],
             ifCondition: clause.ifCondition,
             thenAction: clause.thenAction,
+            prediction: defaultPrediction({
+                coin: trade.analysis?.coinName,
+                family: trade.analysis?.detectedPatternFamily,
+                regime: trade.marketRegime,
+            }),
             body: formatSkillProcedure(clause),
         };
         meta.status = deriveStatus(meta);
@@ -1316,6 +1774,18 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
             for (const f of retired) {
                 if (f.folderId !== archive.id) {
                     await updateMemoryFileUnlocked(f.id, { folderId: archive.id, enabled: false }, username);
+                    // §8.4a: every retirement leaves a graveyard row — the
+                    // worth gate reads it so a retired twin is never
+                    // re-created without a REVIVAL review card.
+                    const m = parseSkillMarkdown(f.content);
+                    if (m) {
+                        void recordTombstone(username, {
+                            slug: f.name.replace(/\.md$/i, ''),
+                            reason: retirementReasonFromHistory(m.history?.[m.history.length - 1]?.reason),
+                            sampleN: (m.wins || 0) + (m.losses || 0),
+                            liftPts: null,
+                        });
+                    }
                 }
             }
         }
@@ -1325,6 +1795,189 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
 /** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
 export const consolidateSkills = (username: string): Promise<void> =>
     withNotebookWriteLock(() => consolidateSkillsUnlocked(username));
+
+/**
+ * §8.2b comparative worth gate. Confirmed skills are unbounded while the
+ * injection budgets are fixed (900/400/600 chars), so every new skill
+ * silently taxes every existing skill's chance of being seen — unbounded
+ * libraries are how memory systems drown.
+ *
+ * Below the cap the worth gate answers in isolation, as today. AT the cap it
+ * must answer a different question: "is this better than the weakest
+ * confirmed skill?" The comparison is favorability — the cluster record the
+ * gate just judged (challenger) against the weakest incumbent's realized
+ * record (the same quantity MemoryProvenanceService's lift ranks on). A new
+ * skill that wins displaces the weakest — but displacement is a SUGGESTION
+ * queued for approval (§10.3): the gate proposes, the inbox disposes.
+ *
+ * Returns 'create' when the caller should proceed with creation (below cap,
+ * or at the cap but the challenger beats the weakest incumbent — the winner
+ * enters as a candidate while the displacement of the weakest rides the
+ * human gate), and 'skip' when the library is full and the challenger lost
+ * the comparison (a proposal is still queued — the human may retire the
+ * incumbent anyway).
+ */
+export const favorabilityOf = (m: { kind: SkillKind; wins: number; losses: number }): number => {
+    const sample = m.wins + m.losses;
+    if (sample === 0) return 0.5;
+    const wr = m.wins / sample;
+    // An avoid skill "wins" when the setups it steered away from LOST.
+    return m.kind === 'avoid' ? 1 - wr : wr;
+};
+
+export interface CapChallenger {
+    kind: SkillKind;
+    wins: number;
+    losses: number;
+    ifCondition?: string;
+    thenAction?: string;
+    prediction?: SkillPrediction;
+}
+
+export const checkLibraryCapAtGate = (
+    challenger: CapChallenger,
+    username: string,
+): 'create' | 'skip' => {
+    const confirmed = listSkills().filter(({ meta }) => meta.status === 'confirmed' && !meta.supersededBy);
+    if (confirmed.length < getSkillLibraryCap()) return 'create';
+    const weakest = [...confirmed].sort((a, b) => favorabilityOf(a.meta) - favorabilityOf(b.meta))[0];
+    if (!weakest) return 'create';
+    const chScore = favorabilityOf(challenger);
+    const incScore = favorabilityOf(weakest.meta);
+    const wins = chScore > incScore;
+    const verdictLine = wins
+        ? `The new lesson outperforms the weakest incumbent ${weakest.file.name} (${weakest.meta.wins}W/${weakest.meta.losses}L) — displace it to retired (reason: superseded)?`
+        : `The new lesson does NOT beat the weakest incumbent ${weakest.file.name} (${weakest.meta.wins}W/${weakest.meta.losses}L) — creation blocked. Retire ${weakest.file.name} anyway to make room?`;
+    queueLearningProposal({
+        kind: 'displacement',
+        skillSlug: weakest.file.name.replace(/\.md$/i, ''),
+        text: `Skill library is at its cap (${confirmed.length} confirmed). ${verdictLine}`,
+        fingerprint: `cap|${weakest.file.name}|${challenger.ifCondition?.slice(0, 40) ?? ''}`,
+        payload: {
+            displacedSlug: weakest.file.name.replace(/\.md$/i, ''),
+            reason: 'superseded',
+            challenger,
+        },
+    }, username);
+    return wins ? 'create' : 'skip';
+};
+
+/**
+ * Act on an APPROVED displacement proposal: retire the named skill with
+ * reason `superseded` (pointing at its successor when the challenger is
+ * known) and create the challenger in its place. Called from the learning
+ * queue UI — never automatically.
+ */
+export const applyDisplacementProposal = async (
+    displacedSlug: string,
+    username: string,
+    challenger?: Partial<CapChallenger> & { supersededBy?: string },
+): Promise<boolean> => withNotebookWriteLock(async () => {
+    await ensureHarnessFoldersUnlocked(username);
+    const target = getMemoryFiles().files
+        .filter(isSkillFile)
+        .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === displacedSlug.replace(/\.md$/i, '').toLowerCase());
+    if (!target) return false;
+    const meta = parseSkillMarkdown(target.content);
+    if (!meta) return false;
+    stampStatusTransition(meta, 'retired', 'superseded');
+    meta.status = 'retired';
+    if (challenger?.supersededBy) meta.supersededBy = challenger.supersededBy;
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(target.id, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: false,
+    }, username);
+    // The displaced skill moves to the archive so the graveyard dedup (§8.4a)
+    // can see it on the next creation pass.
+    const archive = await ensureSkillsArchiveFolderUnlocked(username);
+    if (archive) {
+        await updateMemoryFileUnlocked(target.id, { folderId: archive.id, enabled: false }, username);
+    }
+    // The docstring promised "create the challenger in its place" — the
+    // gate's judged clauses ride in the proposal payload, so approval must
+    // actually install them (as a CANDIDATE — it displaced on score, but it
+    // still has to earn confirmed). Without this, approving displacement
+    // silently loses the challenger the gate compared.
+    if (challenger?.ifCondition && challenger?.thenAction) {
+        const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
+        const dup = folder && getMemoryFiles().files.filter(isSkillFile).find(f => {
+            const m = parseSkillMarkdown(f.content);
+            return m?.ifCondition?.toLowerCase() === challenger.ifCondition?.toLowerCase();
+        });
+        if (folder && !dup) {
+            const meta: SkillMeta = {
+                status: 'candidate',
+                kind: challenger.kind ?? 'repeat',
+                wins: challenger.wins ?? 0,
+                losses: challenger.losses ?? 0,
+                consecutiveLosses: 0,
+                tradeIds: [],
+                ifCondition: challenger.ifCondition,
+                thenAction: challenger.thenAction,
+                prediction: challenger.prediction,
+                body: `Displaces "${displacedSlug}" at the library cap (approved from the learning queue).`,
+            };
+            const slug = slugifyName(challenger.ifCondition.slice(0, 60)) || `skill-${Date.now()}`;
+            await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
+        }
+    }
+    return true;
+});
+
+/**
+ * Act on an APPROVED revival proposal (§8.4a): the retired twin comes back
+ * as a CANDIDATE (never straight to confirmed — it must re-earn its tier),
+ * moved out of the archive back into the live skills folder.
+ */
+export const applyRevivalProposal = async (
+    slug: string,
+    username: string,
+): Promise<boolean> => withNotebookWriteLock(async () => {
+    await ensureHarnessFoldersUnlocked(username);
+    const target = getMemoryFiles().files
+        .filter(f => f.name.endsWith('.md'))
+        .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === slug.replace(/\.md$/i, '').toLowerCase());
+    if (!target) return false;
+    const meta = parseSkillMarkdown(target.content);
+    if (!meta) return false;
+    stampStatusTransition(meta, 'candidate', 'revival-approved');
+    meta.status = 'candidate';
+    meta.supersededBy = undefined;
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(target.id, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        folderId: 'skills',
+        enabled: true,
+    }, username);
+    return true;
+});
+
+/**
+ * Act on an APPROVED demote proposal (§8.4e): a zero-evidence confirmed skill
+ * is expelled from injection by dropping it to candidate. Reversible in the
+ * grid; never automatic.
+ */
+export const applyDemoteProposal = async (
+    slug: string,
+    username: string,
+): Promise<boolean> => withNotebookWriteLock(async () => {
+    await ensureHarnessFoldersUnlocked(username);
+    const target = getMemoryFiles().files
+        .filter(isSkillFile)
+        .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === slug.replace(/\.md$/i, '').toLowerCase());
+    if (!target) return false;
+    const meta = parseSkillMarkdown(target.content);
+    if (!meta) return false;
+    stampStatusTransition(meta, 'candidate', 'demote-approved');
+    meta.status = 'candidate';
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(target.id, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: true,
+    }, username);
+    return true;
+});
 
 /**
  * Closed-loop write: diary + mistakes + skill scores. Safe to call from
@@ -1372,7 +2025,13 @@ export const syncClosedTradeToNotebook = async (
                     const botCtx = getBotMemoryContext(firstBotId, setup, 'global');
                     const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
                     if (decision) {
-                        const judgedClause = { ifCondition: decision.ifCondition, thenAction: decision.thenAction };
+                        const judgedClause = {
+                            ifCondition: decision.ifCondition,
+                            thenAction: decision.thenAction,
+                            // §8.2a: the gate's claim rides through so the
+                            // persisted skill carries the validated artifact.
+                            prediction: decision.prediction,
+                        };
                         // The create/merge mutations are
                         // read-modify-write cycles over the shared notebook
                         // cache — they MUST hold the write lock. syncClosedTrade-
@@ -1385,10 +2044,23 @@ export const syncClosedTradeToNotebook = async (
                             const err = validateCraftedSkill(decision,
                                 cluster.filter(t => t.outcome === TradeOutcome.WIN).length,
                                 cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
+                            // §8.2b: at the library cap the gate turns
+                            // comparative — creation is blocked and a
+                            // displacement proposal naming the weakest
+                            // incumbent rides the learning queue instead.
+                            const capOk = checkLibraryCapAtGate({
+                                kind: decision.kind === 'repeat' ? 'repeat' : 'avoid',
+                                wins: cluster.filter(t => t.outcome === TradeOutcome.WIN).length,
+                                losses: cluster.filter(t => t.outcome === TradeOutcome.LOSS).length,
+                                ifCondition: decision.ifCondition,
+                                thenAction: decision.thenAction,
+                                prediction: decision.prediction,
+                            }, username);
                             // The gate judged SPECIFIC clauses —
                             // persist those (validated ≡ persisted), not a fresh
                             // re-parse of the raw post-mortem.
-                            if (!err) await maybeUpsertSkill(trade, allTrades, username, judgedClause);
+                            if (!err && capOk === 'create') await maybeUpsertSkill(trade, allTrades, username, judgedClause);
+                            else if (!err && capOk === 'skip') console.log('[SkillMemory] Library cap reached — displacement proposal queued instead of create.');
                             else console.warn('[SkillMemory] Skill worth-gate rejected crafted skill:', err);
                         } else if (decision.verdict === 'merge' && decision.mergeTarget) {
                             // 'merge' was dead code — the gate's

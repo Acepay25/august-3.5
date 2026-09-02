@@ -37,6 +37,7 @@ import {
     MIN_SAMPLE_CONFIRMED,
     type SkillMeta,
 } from './SkillMemoryService';
+import { evaluateClaim } from '../../utils/skillPrediction';
 
 /** Max matched trades to evaluate per skill (cost cap). */
 export const SKILL_EVAL_MAX_TRADES = 6;
@@ -298,6 +299,18 @@ const recordEvalVerdictUnlocked = async (
     meta.evalVerdict = result.verdict;
     meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
     meta.lastEvalAt = new Date().toISOString();
+    // §8.2a: the birth certificate rides the same pass — test the skill's
+    // OWN claim against its followed evidence and stamp the sample size at
+    // which it was judged (deriveStatus consumes the verdict on every
+    // ladder pass; this records WHEN it was last tested + surfaces the
+    // outcome in the eval detail).
+    if (meta.prediction) {
+        const claim = evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses });
+        meta.claimTestedEvidence = meta.wins + meta.losses;
+        meta.evalDetail += claim.pending
+            ? ` | claim ${claim.reason}`
+            : ` | claim ${claim.met ? 'MET' : 'UNMET'}: ${claim.reason}`;
+    }
     // Streak bookkeeping. A re-confirmation stamped AFTER the previous eval
     // (manual promote or evidence crossing the bar) breaks the chain: the
     // demotion gate must re-arm instead of firing on one legacy 'hurts'.
@@ -343,10 +356,18 @@ const recordEvalVerdictUnlocked = async (
     ) {
         const last = meta.history?.[meta.history.length - 1];
         const isRehabilitation = last?.status === 'candidate' && /^eval hurts/i.test(last.reason ?? '');
+        // §8.2a: a fresh promotion also has to honor the skill's OWN claim —
+        // an unmet birth certificate blocks promotion through this path too
+        // (same semantics as deriveStatus's ladder). Rehabilitation is
+        // exempt: it restores what an eval wrongly benched, not a first tier.
+        const claimBlocksPromotion = meta.prediction && (() => {
+            const c = evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses });
+            return !c.pending && !c.met;
+        })();
         if (isRehabilitation) {
             stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail})`);
             meta.status = 'confirmed';
-        } else if (meta.wins + meta.losses >= MIN_SAMPLE_CONFIRMED) {
+        } else if (meta.wins + meta.losses >= MIN_SAMPLE_CONFIRMED && !claimBlocksPromotion) {
             stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail}) — promotion`);
             meta.status = 'confirmed';
         }

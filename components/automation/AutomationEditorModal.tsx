@@ -4,6 +4,8 @@ import { parseCron, nextCronTime, humanizeCron } from '../../services/automation
 import { ProviderConfig } from '../../types/provider';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import ModelPicker from '../shared/ModelPicker';
+import { SelectMenu } from '../shared/SelectMenu';
+import type { AgentBot } from '../../services/agents/agentRoster';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 export interface ModelOption {
@@ -121,6 +123,8 @@ interface AutomationEditorModalProps {
     initial?: AutomationConfig;
     modelOptions: ModelOption[];
     providers: ProviderConfig[];
+    /** G5: the bot roster — enables "Run as bot" routines when non-empty. */
+    bots?: AgentBot[];
     onClose: () => void;
     onSave: (config: AutomationConfig) => void;
     onDelete?: () => void;
@@ -133,7 +137,7 @@ const splitOption = (value: string): { providerId: string; modelId: string } => 
         : { providerId: value, modelId: '' };
 };
 
-const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible, initial, modelOptions, providers, onClose, onSave, onDelete }) => {
+const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible, initial, modelOptions, providers, bots, onClose, onSave, onDelete }) => {
     const [name, setName] = useState(initial?.name ?? '');
     // Schedule = frequency (once per day, or every N minutes/hours) +
     // days-of-week toggles + a time of day (h/m/s for the daily mode).
@@ -171,7 +175,12 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         const m = initial?.moderatorModel;
         return m && m.providerId ? `${m.providerId}::${m.modelId}` : '';
     });
+    // G5: "Run as bot" — empty string = the ensemble pipeline (default).
+    const [botId, setBotId] = useState<string>(initial?.botId ?? '');
     const [error, setError] = useState<string | null>(null);
+
+    const botOptions = useMemo(() => (bots ?? []).map(b => ({ value: b.id, label: b.name, meta: b.title ?? undefined })), [bots]);
+    const runAsBot = botId !== '';
 
     // Runs-per-day estimate for the frequency modes (selected days only).
     // NOTE: this must live BEFORE the `if (!isVisible) return null;` early
@@ -208,8 +217,12 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         if (!cronValid) { setError('The schedule is not a valid cron expression.'); return; }
         if (scheduleDays.length === 0 && !advancedCron.trim()) { setError('Toggle at least one day of the week.'); return; }
         if (inputSource === 'template' && !promptTemplate.trim()) { setError('Enter the prompt template the automation should send.'); return; }
-        if (!selectionsValid) { setError(useLenses ? 'Lens mode needs 3 distinct analyst models.' : 'Pick at least one analyst model.'); return; }
-        if (!moderatorSelection) { setError('Pick the moderator model.'); return; }
+        // G5: a bot-scoped routine runs the bot's own provider/model — the
+        // ensemble seats do not apply.
+        if (!runAsBot) {
+            if (!selectionsValid) { setError(useLenses ? 'Lens mode needs 3 distinct analyst models.' : 'Pick at least one analyst model.'); return; }
+            if (!moderatorSelection) { setError('Pick the moderator model.'); return; }
+        }
 
         const analystModels: AutomationModelPick[] = filledSelections.slice(0, 3).map(splitOption);
         const moderatorModel = splitOption(moderatorSelection);
@@ -222,11 +235,15 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             schedule: { cron: effectiveCron },
             inputSource,
             promptTemplate: inputSource === 'template' ? promptTemplate.trim() : undefined,
+            // G5: bot-scoped routines carry ONLY the bot identity (the
+            // ensemble seats are not read at fire time) — clear stale picks
+            // so a saved routine never looks half-configured.
             mode,
             useLenses,
             lensTradingStyle,
-            analystModels,
-            moderatorModel,
+            analystModels: runAsBot ? [] : analystModels,
+            moderatorModel: runAsBot ? { providerId: '', modelId: '' } : moderatorModel,
+            botId: runAsBot ? botId : undefined,
             createdAt: initial?.createdAt ?? now,
             updatedAt: now,
             lastRunAt: initial?.lastRunAt,
@@ -429,6 +446,37 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                         )}
                     </div>
 
+                    {/* G5: Run as bot — the routine executes as a roster bot
+                        (its persona + its own provider/model, reply in its
+                        thread) instead of the ensemble debate. Empty = the
+                        full ensemble pipeline (default). Rendered while a
+                        saved routine points at a bot that has since been
+                        deleted, so it can be cleared back to the ensemble. */}
+                    {(botOptions.length > 0 || runAsBot) && (
+                        <div>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Run as bot</span>
+                            <SelectMenu
+                                value={botId}
+                                onChange={setBotId}
+                                options={[
+                                    { value: '', label: 'No — run the full ensemble (default)' },
+                                    ...botOptions,
+                                ]}
+                                placeholder="Unknown bot — pick another, or run the ensemble"
+                                aria-label="Run as bot"
+                                data-testid="automation-run-as-bot"
+                                triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] hover:bg-zinc-800"
+                            />
+                            <p className="text-[10px] text-zinc-500 mt-1.5">
+                                {runAsBot
+                                    ? 'Runs the prompt as the bot in its own thread — its persona, its model. The analyst seats below are skipped.'
+                                    : 'Runs the full analyst debate pipeline.'}
+                            </p>
+                        </div>
+                    )}
+
+                    {!runAsBot && (
+                    <>
                     {/* Mode */}
                     <div>
                         <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Mode</span>
@@ -514,6 +562,8 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             placeholder="Select provider/model"
                         />
                     </div>
+                    </>
+                    )}
 
                     {error && (
                         <p className="text-[11px] text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-lg px-3 py-2">{error}</p>

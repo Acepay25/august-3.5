@@ -1487,3 +1487,92 @@ then order one commit.
 - **Style:** monochrome zinc theme (status-surface scope only for real
   status colors); all functions typed; AGENTS.md conventions apply;
   plain changelog row per round (ROUND-41 next).
+
+---
+
+## 17. SESSION HANDOFF (2026-09-01) — post-batch audit + review fixes
+
+**Read §16 above for history; this section is the CURRENT state.**
+
+All plan batches (5–14) are now implemented AND audited. The audit
+(ROUND-48, changelog.md) re-verified every claim against source and fixed
+seven wiring/logic defects plus two P0 dead surfaces. Full detail lives in
+the ROUND-48 changelog row and `.hermes/plans/harness-review-fix-plan.md`.
+
+- **State:** UNCOMMITTED on `main` (HEAD still `0787668`), ~130 dirty files.
+  Gates at handoff: tsc 0, **1861 passed / 11 skipped / 0 failed**, build
+  clean, eslint 0 errors on touched files.
+- **The §8.3a join is now EXACT-runId** (`trade.sourceRunId` ↔
+  `MemoryInjectionRecord.runId` ↔ `runStats.runId`). Any future attribution
+  code must join on runId — never a time window around trade.timestamp
+  (that was the inverted-join bug: the run predates the log click).
+- **Learning queue** (`utils/learningQueue.ts`) finally has its consumer:
+  `components/settings/LearningQueuePanel` in Settings → Skills. New
+  proposal kinds MUST render there (unknown kinds fall back to a generic
+  card + Dismiss). Apply paths: displacement/revival/demote actuate;
+  rescope/contradiction are human-edit prompts by design.
+- **Birth certificate** is live: deriveStatus + recordEvalVerdict consume
+  `evaluateClaim`. A skill's claim now gates promotion — when tuning
+  thresholds remember an unmet claim blocks confirmed tier.
+- **Remaining scope (user go-ahead needed):** NONE — §10.1 Coach thread +
+  message search landed in ROUND-49 (Coach row in the rail,
+  CoachThreadPanel as the learning inbox, roster search filters by thread
+  content). Reference-parity UI pass (ROUND-49): SelectMenu replaces every
+  native <select> in chat surfaces; monochrome violations fixed.
+- **Pitfalls still true:** twin sessions edit this repo concurrently
+  (re-check `git status` before touching); ensembleService anchors drifted
+  ~980 lines; apiKey?.trim() masks in tool output but is fine on disk;
+  jsdom tests hitting sendChatRequest need the hostname override.
+- **Next action when the user says done:** ONE commit for the whole
+  ROUND-41→48 batch (their convention: accumulate, commit once on order).
+
+---
+
+## 18. SESSION HANDOFF (2026-09-01 → 09-02) — Bot Mode scan → G1–G5 complete
+
+Full mechanism map + port plan: `.hermes/plans/botmode-scan-and-plan.md`
+(read that file first — it is the scan). Summary of state:
+
+- **Scanned**: Hermes Bot Mode at source level (desktop plugin
+  `apps/desktop/src/plugins/hermes-bots/`, core `tools/bot_mode_probe.py`
+  / `bot_mode_dm.py`, file relay `tools/bot_relay.py`, AGENTS.md §Bot
+  Mode) and Grok Bot (xAI beta: persistent named "AI teammates" sharing a
+  cloud computer, texting each other). The transferable DNA: named
+  teammates + texting-style async delegation + bot↔bot coordination +
+  bounded rounds with silence as an outcome.
+- **G1 BUILT (ROUND-50)**: `services/agents/botMailbox.ts` (pure: marker
+  grammar, handle resolution, validateDM refusals, teammate protocol,
+  buildBotSystemPrompt) + `hooks/useBotMailbox.ts` (per-target serial
+  queues, TTL 15min, 12/min budget, 3-hop cap, wake-up notices). The
+  pipeline's casual branch now runs bot-thread sends AS the bot (exact
+  provider+model, persona prompt, thread-scoped history) and hands the
+  settled reply to the mailbox. 20 new tests; gates green.
+- **Key invariants to preserve**: (1) DM markers are stripped from the
+  bubble BEFORE the text persists — the model composes, the harness owns
+  delivery + attribution; (2) refusals are always VISIBLE notices in the
+  sender's thread (never silent drops); (3) the reply wakes the sender as
+  a notice — never auto-runs the sender (storm guard = hop cap + budget);
+  (4) the protocol section is byte-stable per roster (prompt caching);
+  (5) outside bot threads the pipeline is behavior-identical to pre-G1.
+- **Not ported (deliberate)**: cross-connection relay/socket layer
+  (august's bots are in-process), session-id pins (derived threads are
+  already the post-incident design), per-bot session browsers.
+- **G2–G5 BUILT (ROUND-51)**: G2 real room coordination
+  (`services/agents/groupRounds.ts` — bounded rounds + `(pass)` silence +
+  deterministic mention routing + per-member incremental context;
+  `useAgentGroups` rewritten onto the engine; `Message.hidden` + filter),
+  G3 needs-attention badges (`services/agents/botAttention.ts` + ⚠/tooltip
+  in AgentRosterRail), G4 roster-derived @mention chips in ChatInput
+  (`botHandle()`, un-gated from ensemble), G5 bot-scoped Routines
+  (`AutomationConfig.botId?` + `services/agents/botRoutine.ts` pure
+  executor — runs AS the bot: persona prompt, its provider/model, reply
+  into its thread, markers → mailbox; visible skips for dangling
+  bot/provider/prompt; editor "Run as bot" SelectMenu + rail Routines
+  disclosure; App bridges roster getter + mailbox DM delivery).
+- **Gates at handoff**: tsc 0 · 1936 passed/11 skipped · build clean ·
+  eslint 0 errors (whole dirty tree). COMMITTED as 03d4451 on main
+  (ROUND-41→51, one commit per convention; pre-commit review: static
+  scan clean, 4 stale eslint-disable exhaustive-deps errors fixed,
+  vitest testTimeout raised to 15s — heavy jsdom files hit the default
+  5s per-test timeout only in full runs, clean-HEAD stash bisect proved
+  a scheduling edge, not regressions). Not pushed.

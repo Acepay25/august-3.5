@@ -1,365 +1,30 @@
 /**
- * InsightExtractionService
- * Extracts key learnings from post-mortem analyses and stores them in a knowledge base.
- * 
- * Features:
- * - Parse post-mortem text to extract actionable insights
- * - Store insights with metadata (coin, pattern, direction)
- * - Retrieve relevant insights for current setups
- * - Generate prompt injections with past learnings
- * - Provider attribution for tracking which AI gave which insight
+ * severityInsights — R-severity and provider-attributed insight generation
+ * (moved out of InsightExtractionService when the regex miner was deleted in
+ * the §8.1 store-unification batch: regex mining rewards fluent writing, not
+ * correct writing, and the prompt-injection layer built on it was dead code).
+ *
+ * These generators write through the attributed-insight store API in
+ * PatternMemorySynthesisService, which since §8.1 persists to the trader
+ * notebook (distilled/ memory files) — the notebook paths the plan asked the
+ * post-mortem job to be re-pointed at.
  */
 
-import { LoggedTrade, TradeInsight, InsightKnowledgeBase, AIProvider } from '../../types';
+import { LoggedTrade, AttributedInsight } from '../../types';
+import { AIProvider } from '../../types/enums';
 import {
     addAttributedInsight,
-    AttributedInsight,
+    upsertAttributedInsight,
     loadAttributedInsights,
-    saveAttributedInsights,
     markInsightUsed,
     calculateAggregatedStats,
     calculatePnlR,
-    SetupContext
+    SetupContext,
 } from './PatternMemorySynthesisService';
+import { extractLessonFromPostMortem } from './MemoryFilesService';
 
-// Maximum insights to store to keep memory manageable
-const MAX_STORED_INSIGHTS = 100;
-// Maximum insights to show in prompt injection
-const MAX_INJECTION_INSIGHTS = 3;
-// Minimum insight text length to be considered valuable
+/** Minimum insight text length to be considered valuable */
 const MIN_INSIGHT_LENGTH = 20;
-
-
-/**
- * Categories for insight extraction
- */
-type InsightCategory = TradeInsight['category'];
-
-interface InsightPattern {
-    category: InsightCategory;
-    patterns: RegExp[];
-    extractInsight: (match: RegExpMatchArray, fullText: string) => string | null;
-}
-
-/**
- * Patterns to detect and extract insights from post-mortem text
- */
-const insightPatterns: InsightPattern[] = [
-    {
-        category: 'entry_timing',
-        patterns: [
-            /should have (waited|entered|held off)[^.]*\./gi,
-            /next time[^.]*entry[^.]*\./gi,
-            /entered too (early|late)[^.]*\./gi,
-            /better entry[^.]*would be[^.]*\./gi,
-            /lesson[^:]*:[^.]*entry[^.]*\./gi
-        ],
-        extractInsight: (match, _) => match[0].trim()
-    },
-    {
-        category: 'exit_strategy',
-        patterns: [
-            /should have (taken profit|closed|exited)[^.]*\./gi,
-            /next time[^.]*exit[^.]*\./gi,
-            /stop loss[^.]*should[^.]*\./gi,
-            /target[^.]*was (too|not)[^.]*\./gi,
-            /lesson[^:]*:[^.]*exit[^.]*\./gi
-        ],
-        extractInsight: (match, _) => match[0].trim()
-    },
-    {
-        category: 'pattern_recognition',
-        patterns: [
-            /pattern[^.]*was (invalid|false|weak)[^.]*\./gi,
-            /should have (noticed|seen)[^.]*\./gi,
-            /missed[^.]*signal[^.]*\./gi,
-            /(false|failed) breakout[^.]*\./gi,
-            /lesson[^:]*:[^.]*pattern[^.]*\./gi
-        ],
-        extractInsight: (match, _) => match[0].trim()
-    },
-    {
-        category: 'risk_management',
-        patterns: [
-            /position size[^.]*was (too|should)[^.]*\./gi,
-            /leverage[^.]*should[^.]*\./gi,
-            /risk[^.]*was (too|not)[^.]*\./gi,
-            /should have (reduced|avoided)[^.]*\./gi,
-            /lesson[^:]*:[^.]*risk[^.]*\./gi
-        ],
-        extractInsight: (match, _) => match[0].trim()
-    },
-    {
-        category: 'general',
-        patterns: [
-            /key (lesson|takeaway|learning)[^:]*:[^.]+\./gi,
-            /next time[^:]*:[^.]+\./gi,
-            /important to remember[^.]+\./gi,
-            /will (avoid|do|remember)[^.]+\./gi,
-            /mistake was[^.]+\./gi
-        ],
-        extractInsight: (match, _) => match[0].trim()
-    }
-];
-
-/**
- * Extract insights from a post-mortem text
- */
-export function extractInsightsFromPostMortem(
-    postMortemText: string,
-    trade: LoggedTrade
-): TradeInsight[] {
-    if (!postMortemText || postMortemText.length < MIN_INSIGHT_LENGTH) {
-        return [];
-    }
-
-    const insights: TradeInsight[] = [];
-    const seenInsights = new Set<string>(); // Prevent duplicates
-
-    for (const pattern of insightPatterns) {
-        for (const regex of pattern.patterns) {
-            // Reset regex state
-            regex.lastIndex = 0;
-            let match;
-
-            while ((match = regex.exec(postMortemText)) !== null) {
-                const insightText = pattern.extractInsight(match, postMortemText);
-
-                if (insightText && insightText.length >= MIN_INSIGHT_LENGTH) {
-                    // Normalize for duplicate detection
-                    const normalized = insightText.toLowerCase().trim();
-                    if (!seenInsights.has(normalized)) {
-                        seenInsights.add(normalized);
-
-                        insights.push({
-                            id: `insight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                            category: pattern.category,
-                            insight: insightText,
-                            sourceTradeId: trade.id,
-                            coin: trade.analysis.coinName,
-                            pattern: trade.analysis.detectedPatternFamily,
-                            direction: trade.analysis.direction === 'Neutral' ? undefined : trade.analysis.direction,
-                            createdAt: new Date().toISOString(),
-                            useCount: 0
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    return insights;
-}
-
-/**
- * Initialize empty knowledge base
- */
-export function initializeKnowledgeBase(): InsightKnowledgeBase {
-    return {
-        insights: [],
-        lastUpdated: new Date().toISOString()
-    };
-}
-
-/**
- * Store new insights in the knowledge base
- */
-export function storeInsights(
-    newInsights: TradeInsight[],
-    currentKB: InsightKnowledgeBase | undefined
-): InsightKnowledgeBase {
-    const kb = currentKB ? { ...currentKB } : initializeKnowledgeBase();
-
-    // Add new insights
-    const allInsights = [...kb.insights, ...newInsights];
-
-    // If over limit, remove oldest unused insights
-    if (allInsights.length > MAX_STORED_INSIGHTS) {
-        // Sort by: useCount (ascending), then createdAt (ascending) = oldest unused first
-        allInsights.sort((a, b) => {
-            if (a.useCount !== b.useCount) {
-                return a.useCount - b.useCount;
-            }
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        });
-
-        // Keep only the most valuable insights
-        allInsights.splice(0, allInsights.length - MAX_STORED_INSIGHTS);
-    }
-
-    return {
-        insights: allInsights,
-        lastUpdated: new Date().toISOString()
-    };
-}
-
-/**
- * Find insights relevant to the current trading setup
- */
-export function getRelevantInsights(
-    currentCoin: string | undefined,
-    currentPattern: string | undefined,
-    currentDirection: 'Long' | 'Short' | 'Neutral',
-    knowledgeBase: InsightKnowledgeBase | undefined
-): TradeInsight[] {
-    if (!knowledgeBase || knowledgeBase.insights.length === 0) {
-        return [];
-    }
-
-    // Score insights by relevance
-    const scoredInsights = knowledgeBase.insights.map(insight => {
-        let score = 0;
-
-        // Coin match (highest priority)
-        if (currentCoin && insight.coin) {
-            const normCurrent = currentCoin.toUpperCase().replace(/USDT?$/, '');
-            const normInsight = insight.coin.toUpperCase().replace(/USDT?$/, '');
-            if (normCurrent === normInsight) {
-                score += 30;
-            }
-        }
-
-        // Pattern match
-        if (currentPattern && insight.pattern) {
-            if (currentPattern.toLowerCase() === insight.pattern.toLowerCase()) {
-                score += 25;
-            }
-        }
-
-        // Direction match
-        if (currentDirection !== 'Neutral' && insight.direction === currentDirection) {
-            score += 15;
-        }
-
-        // Recency bonus (insights from last 30 days get bonus)
-        const insightAge = (Date.now() - new Date(insight.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-        if (insightAge <= 30) {
-            score += 10;
-        } else if (insightAge <= 60) {
-            score += 5;
-        }
-
-        // Use count bonus (validated insights)
-        if (insight.useCount > 0) {
-            score += Math.min(insight.useCount * 2, 10);
-        }
-
-        return { insight, score };
-    });
-
-    // Filter to only relevant insights (score > 0)
-    const relevant = scoredInsights.filter(si => si.score > 0);
-
-    // Sort by score descending
-    relevant.sort((a, b) => b.score - a.score);
-
-    // Return top insights
-    return relevant.slice(0, MAX_INJECTION_INSIGHTS).map(si => si.insight);
-}
-
-/**
- * Increment use count for insights that were surfaced
- */
-export function markInsightsUsed(
-    usedIds: string[],
-    knowledgeBase: InsightKnowledgeBase
-): InsightKnowledgeBase {
-    const updatedInsights = knowledgeBase.insights.map(insight => {
-        if (usedIds.includes(insight.id)) {
-            return { ...insight, useCount: insight.useCount + 1 };
-        }
-        return insight;
-    });
-
-    return {
-        insights: updatedInsights,
-        lastUpdated: new Date().toISOString()
-    };
-}
-
-/**
- * Generate AI prompt injection with relevant insights
- */
-export function generateInsightInjection(
-    currentCoin: string | undefined,
-    currentPattern: string | undefined,
-    currentDirection: 'Long' | 'Short' | 'Neutral',
-    knowledgeBase: InsightKnowledgeBase | undefined
-): string {
-    const relevantInsights = getRelevantInsights(
-        currentCoin,
-        currentPattern,
-        currentDirection,
-        knowledgeBase
-    );
-
-    if (relevantInsights.length === 0) {
-        return '';
-    }
-
-    const parts: string[] = [];
-    parts.push('🧠 **LESSONS FROM YOUR PAST TRADES**');
-    parts.push('');
-
-    for (let i = 0; i < relevantInsights.length; i++) {
-        const insight = relevantInsights[i];
-        const date = new Date(insight.createdAt).toLocaleDateString();
-        const context = [insight.coin, insight.pattern, insight.direction]
-            .filter(Boolean)
-            .join(' ');
-
-        parts.push(`${i + 1}. "${insight.insight}"`);
-        parts.push(`   _From ${context} trade on ${date}_`);
-    }
-
-    parts.push('');
-    parts.push('**INSTRUCTION:** Consider these past learnings when making your analysis. Reference relevant insights if they apply to the current setup.');
-
-    return parts.join('\n');
-}
-
-/**
- * Get insights summary for UI display
- */
-export function getInsightsSummary(knowledgeBase: InsightKnowledgeBase | undefined): {
-    totalInsights: number;
-    byCategory: Record<InsightCategory, number>;
-    mostUsed: TradeInsight[];
-} {
-    const empty = {
-        totalInsights: 0,
-        byCategory: {
-            entry_timing: 0,
-            exit_strategy: 0,
-            pattern_recognition: 0,
-            risk_management: 0,
-            general: 0
-        },
-        mostUsed: []
-    };
-
-    if (!knowledgeBase || knowledgeBase.insights.length === 0) {
-        return empty;
-    }
-
-    const byCategory = { ...empty.byCategory };
-    for (const insight of knowledgeBase.insights) {
-        byCategory[insight.category] = (byCategory[insight.category] || 0) + 1;
-    }
-
-    const mostUsed = [...knowledgeBase.insights]
-        .filter(i => i.useCount > 0)
-        .sort((a, b) => b.useCount - a.useCount)
-        .slice(0, 5);
-
-    return {
-        totalInsights: knowledgeBase.insights.length,
-        byCategory,
-        mostUsed
-    };
-}
-
-// ========================= PROVIDER ATTRIBUTION =========================
 
 // ========================= R-SEVERITY INSIGHT GENERATOR =========================
 
@@ -537,10 +202,11 @@ export function extractCumulativeBleedInsight(
 }
 
 /**
- * Persist a `SeverityInsight` to the `AttributedInsight` store so it flows
- * into the moderator's pattern-memory prompt and gate enforcement context.
- * The synthetic provider id keeps it clearly distinguishable from
- * human/LLM-sourced insights for the byProvider view.
+ * Persist a `SeverityInsight` to the attributed-insight store (the trader
+ * notebook's distilled/ facts) so it flows into the moderator's
+ * pattern-memory prompt and gate enforcement context. The synthetic provider
+ * id keeps it clearly distinguishable from human/LLM-sourced insights for
+ * the byProvider view.
  *
  * Idempotent: the severity id is derived from the trade/setup
  * (`severity-${trade.id}-${kind}` / `severity-cluster-${coin}-${family}-...`),
@@ -566,9 +232,7 @@ export function recordSeverityInsight(insight: SeverityInsight): AttributedInsig
 
     if (existingIndex >= 0) {
         const updated: AttributedInsight = { ...store[existingIndex], ...base };
-        store[existingIndex] = updated;
-        saveAttributedInsights(store);
-        return updated;
+        return upsertAttributedInsight(updated);
     }
 
     return addAttributedInsight({ ...base, id: insight.id });
@@ -654,7 +318,7 @@ function markStoredInsightUsed(insightId: string, site: string): void {
     try {
         markInsightUsed(insightId);
     } catch (e) {
-        console.warn(`[InsightExtraction] Failed to mark insight used (${site}):`, e);
+        console.warn(`[severityInsights] Failed to mark insight used (${site}):`, e);
     }
 }
 
@@ -780,9 +444,7 @@ function recordProviderInsight(
     const existingIndex = store.findIndex(i => i.id === id);
     if (existingIndex >= 0) {
         const updated: AttributedInsight = { ...store[existingIndex], ...base };
-        store[existingIndex] = updated;
-        saveAttributedInsights(store);
-        return updated;
+        return upsertAttributedInsight(updated);
     }
     return addAttributedInsight({ ...base, id });
 }
@@ -794,6 +456,11 @@ function recordProviderInsight(
  * by-provider view: each extracted lesson is stored with the display name
  * of the AI that actually wrote it, so `getAttributedInsightsSummary` can
  * show per-provider counts and average quality.
+ *
+ * Lesson text comes from the notebook's own deterministic lesson extractor
+ * (`extractLessonFromPostMortem` — the "Lesson:/takeaway:" line miner the
+ * trader diary uses), NOT the deleted regex miner: post-mortem prose was
+ * exactly the "mines fluency, not outcomes" failure mode the plan bans.
  *
  * Runs inside the EXTRACT_INSIGHTS job — everything is best-effort and
  * idempotent. Insights are marked "used" at creation (they are now live in
@@ -807,14 +474,12 @@ export function extractAndRecordProviderInsights(trade: LoggedTrade): Attributed
     for (const [provider, text] of Object.entries(trade.postMortemByProvider)) {
         if (!provider || !text || text.trim().length < MIN_INSIGHT_LENGTH) continue;
 
-        // Reuse the post-mortem insight extractor for the actual lesson text
-        // (deterministic order for a given text), then attribute each hit.
-        const extracted = extractInsightsFromPostMortem(text, trade);
-        extracted.slice(0, 5).forEach((insight, i) => {
-            const stored = recordProviderInsight(insight.insight, provider, trade, i);
+        const lesson = extractLessonFromPostMortem(text);
+        if (lesson && lesson.length >= MIN_INSIGHT_LENGTH) {
+            const stored = recordProviderInsight(lesson, provider, trade, 0);
             markStoredInsightUsed(stored.id, 'provider attribution');
             recorded.push(stored);
-        });
+        }
     }
     return recorded;
 }

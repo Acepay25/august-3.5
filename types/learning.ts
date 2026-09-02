@@ -2,6 +2,8 @@
 // AI LEARNING TYPES - Adaptive Learning, Mistake Patterns, Insight Extraction
 // =============================================================================
 
+import { AIProvider } from './enums';
+
 /**
  * FinCom disagree-or-commit marker (Batch 4): one line per peer in a debate
  * turn — the seat either commits to the peer's current position (with why)
@@ -49,7 +51,7 @@ export interface TradingWeaknesses {
 
 /**
  * A single insight extracted from a post-mortem analysis
- * Used by InsightExtractionService
+ * Used by AlgorithmicMemoryService (GlobalMemory.insightKnowledgeBase)
  */
 export interface TradeInsight {
   id: string;
@@ -69,6 +71,33 @@ export interface TradeInsight {
 export interface InsightKnowledgeBase {
   insights: TradeInsight[];
   lastUpdated: string;
+}
+
+/**
+ * An insight with provider attribution and usage tracking. Lives in the
+ * trader notebook as a distilled/ memory file (plan §8.1 store unification —
+ * the old standalone `attributed_insights_kb` preference store was folded
+ * into the notebook so one store, one cap, one UI owns it).
+ */
+export interface AttributedInsight {
+  id: string;
+  insight: string;
+  sourceProvider: AIProvider | string;
+  category: 'global' | 'coin' | 'pattern' | 'regime' | 'family';
+  scope?: string; // e.g., "BTCUSDT" for coin-specific, "Family C" for family-specific
+  qualityScore: number; // 0-100, based on user feedback or outcome correlation
+  wasValidated: boolean; // Did following this advice help?
+  timesUsed: number;
+  timesHelpful: number;
+  /** Negative explicit feedback — lets qualityScore reflect feedback only,
+   *  not mere surface marks (timesUsed counts displays, which inflated the
+   *  denominator and diluted the ratio). */
+  timesNotHelpful?: number;
+  /** Dedupe guard for "surfaced to a prompt" marks. Session-scoped since the
+   *  notebook store — cross-restart re-marks cost one counter tick at most. */
+  lastSurfacedAt?: number;
+  createdAt: string;
+  tradeId: string;
 }
 
 export interface GlobalMemory {

@@ -9,10 +9,9 @@
 import { LoggedTrade } from '../../types';
 import { getUserProfile } from './dbService';
 import {
-    extractInsightsFromPostMortem,
     extractAndRecordSeverityInsights,
     extractAndRecordProviderInsights
-} from '../learning/InsightExtractionService';
+} from '../learning/severityInsights';
 export enum JobType {
     EXTRACT_INSIGHTS = 'EXTRACT_INSIGHTS',
     /** Retired: IF/THEN lessons live in skills. Kept as a string
@@ -179,14 +178,11 @@ class JobQueueService {
             console.warn('[JobQueue] Provider insight attribution failed:', e);
         }
 
-        // Run extraction (CPU intensive part)
-        const insights = extractInsightsFromPostMortem(trade.postMortem, trade);
-
-        if (insights.length > 0) {
-            console.log(`[JobQueue] Extracted ${insights.length} insights.`);
-        }
-
-        return insights;
+        // The regex miner (extractInsightsFromPostMortem) was deleted with
+        // the §8.1 store unification: regex mining rewards fluent writing,
+        // not correct writing. Severity + provider attribution above now
+        // write the trader notebook's distilled facts directly.
+        return [];
     }
 
     /**

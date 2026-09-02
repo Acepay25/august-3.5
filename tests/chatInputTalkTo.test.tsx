@@ -80,8 +80,29 @@ const base = {
     setSelectedChatModel: noop,
 };
 
-const getSelect = (): HTMLSelectElement =>
-    screen.getByLabelText('Talk to') as HTMLSelectElement;
+// The Talk-to control is a SelectMenu (reference-styled dropdown): the
+// trigger carries the aria-label, options render in a portal listbox with
+// data-option values. Helpers below replace the old native-<select> access.
+
+const getTrigger = (): HTMLElement => screen.getByLabelText('Talk to');
+
+const openMenu = (): void => {
+    fireEvent.click(getTrigger());
+};
+
+const pickOption = (value: string): void => {
+    openMenu();
+    const opt = document.querySelector(`[data-option="${value}"]`) as HTMLElement;
+    if (!opt) throw new Error(`option ${value} not rendered`);
+    fireEvent.click(opt);
+};
+
+const optionValues = (): string[] => {
+    openMenu();
+    const vals = Array.from(document.querySelectorAll('[data-option]')).map(el => el.getAttribute('data-option')!);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    return vals;
+};
 
 describe('Talk-to selector with named bots', () => {
     it('lists the bot roster ahead of raw provider models', () => {
@@ -92,13 +113,11 @@ describe('Talk-to selector with named bots', () => {
                 providers={[provider()]}
             />,
         );
-        const select = getSelect();
-        const labels = Array.from(select.options).map(o => o.textContent);
-        expect(labels.some(l => l?.includes('Scout'))).toBe(true);
-        expect(labels.some(l => l?.includes('OpenAI'))).toBe(true);
-        // Bots come first.
-        expect(labels.findIndex(l => l?.includes('Scout')))
-            .toBeLessThan(labels.findIndex(l => l?.includes('OpenAI')));
+        const values = optionValues();
+        expect(values.some(v => v.startsWith('bot:'))).toBe(true);
+        expect(values.some(v => v === 'gpt-test')).toBe(true);
+        // Bots come first (after Team).
+        expect(values.indexOf('bot:b1')).toBeLessThan(values.indexOf('gpt-test'));
     });
 
     it('selecting a bot opens its thread', () => {
@@ -110,14 +129,14 @@ describe('Talk-to selector with named bots', () => {
                 onSelectBot={onSelectBot}
             />,
         );
-        fireEvent.change(getSelect(), { target: { value: 'bot:b2' } });
+        pickOption('bot:b2');
         expect(onSelectBot).toHaveBeenCalledWith('b2');
     });
 
     it('the New bot… entry opens the New Bot dialog', () => {
         const onNewBot = vi.fn();
         render(<ChatInput {...base} bots={[bot()]} onNewBot={onNewBot} />);
-        fireEvent.change(getSelect(), { target: { value: '__new_bot__' } });
+        pickOption('__new_bot__');
         expect(onNewBot).toHaveBeenCalledTimes(1);
     });
 
@@ -131,14 +150,56 @@ describe('Talk-to selector with named bots', () => {
                 bots={[bot()]}
             />,
         );
-        fireEvent.change(getSelect(), { target: { value: '__team__' } });
+        pickOption('__team__');
         expect(setIsEnsembleEnabled).toHaveBeenCalledWith(true);
     });
 
     it('no New bot… entry without the callback; selector hidden in thread mode', () => {
         const { rerender } = render(<ChatInput {...base} bots={[bot()]} />);
-        expect(Array.from(getSelect().options).some(o => o.value === '__new_bot__')).toBe(false);
+        expect(optionValues().some(v => v === '__new_bot__')).toBe(false);
         rerender(<ChatInput {...base} bots={[bot()]} threadMode onNewBot={vi.fn()} />);
         expect(screen.queryByTestId('talk-to-selector')).toBeNull();
+    });
+});
+
+// ── G4 (plan botmode-scan): @mention autocomplete from the live roster ────
+describe('@mention popover (G4)', () => {
+    it('offers collapsed roster handles while typing @ (multi-word names included)', () => {
+        const setInput = vi.fn();
+        render(
+            <ChatInput
+                {...base}
+                bots={[bot({ name: 'Risk Bot' }), bot({ id: 'b2', name: 'Macro' })]}
+                input="check @"
+                setInput={setInput}
+            />,
+        );
+        // "Risk Bot" must surface as @riskbot — the exact token the room
+        // engine and mailbox resolve (the old hack truncated to "@Risk",
+        // which no parser matched).
+        expect(screen.getByRole('button', { name: '@riskbot' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '@macro' })).toBeTruthy();
+    });
+
+    it('clicking a chip inserts the handle into the composer', () => {
+        const setInput = vi.fn();
+        render(
+            <ChatInput {...base} bots={[bot({ name: 'Macro' })]} input="ask @" setInput={setInput} />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: '@macro' }));
+        expect(setInput).toHaveBeenCalledTimes(1);
+        expect(String(setInput.mock.calls[0][0])).toContain('@macro');
+    });
+
+    it('works in casual mode too (mentions route room turns, not debates)', () => {
+        render(
+            <ChatInput {...base} isEnsembleEnabled={false} bots={[bot({ name: 'Scout' })]} input="@" />,
+        );
+        expect(screen.getByRole('button', { name: '@scout' })).toBeTruthy();
+    });
+
+    it('no popover without bots', () => {
+        render(<ChatInput {...base} bots={[]} input="@" />);
+        expect(screen.queryByText('Mention')).toBeNull();
     });
 });

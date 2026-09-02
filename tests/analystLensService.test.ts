@@ -54,7 +54,7 @@ describe('loadEnsembleModelSelection', () => {
     expect(loadEnsembleModelSelection()).toEqual([]);
   });
 
-  it('filters malformed entries and caps the selection at 5 (a trader team seats 2–5)', () => {
+  it('filters malformed entries and caps the selection at 10 (2–5 flat floor, 6–10 lens pods)', () => {
     localStorage.setItem('ensemble_model_selection', JSON.stringify([
       { providerId: 'gemini', model: 'm1' },
       { providerId: 'deepseek', model: 'm2' },
@@ -63,10 +63,15 @@ describe('loadEnsembleModelSelection', () => {
       { providerId: 'groq', model: 'm4' },
       { providerId: 'openrouter', model: 'm5' },
       { providerId: 'kilocode', model: 'm6' },
+      { providerId: 'p7', model: 'm7' },
+      { providerId: 'p8', model: 'm8' },
+      { providerId: 'p9', model: 'm9' },
+      { providerId: 'p10', model: 'm10' },
+      { providerId: 'p11', model: 'm11' },
     ]));
 
     const selection = loadEnsembleModelSelection();
-    expect(selection).toHaveLength(5);
+    expect(selection).toHaveLength(10);
     expect(selection[0]).toEqual({ providerId: 'gemini', model: 'm1' });
     expect(selection[1]).toEqual({ providerId: 'deepseek', model: 'm2' });
     expect(selection[2]).toEqual({ providerId: 'zhipu', model: 'm3' });

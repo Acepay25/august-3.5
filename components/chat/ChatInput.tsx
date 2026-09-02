@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
-import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon } from '../shared/Icons';
+import { PlusIcon, LoadingIcon, SendIcon, StopIcon } from '../shared/Icons';
+import { SelectMenu } from '../shared/SelectMenu';
 import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
@@ -17,6 +18,7 @@ import { parseComposerIntent } from '../../utils/composerMentions';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { buildTeamRoster, LENS_ROSTER_ROLES } from '../../utils/teamRoster';
 import type { AgentBot } from '../../services/agents/agentRoster';
+import { botHandle } from '../../services/agents/botMailbox';
 
 interface ChatInputProps {
     images: ImageMetadata[];
@@ -159,24 +161,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
     const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
     const [mentionOpen, setMentionOpen] = useState(false);
-    const [botMentionNames, setBotMentionNames] = useState<string[]>([]);
-    React.useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const key = (typeof localStorage !== 'undefined' ? localStorage.getItem('last_active_user') : null) || 'default';
-                const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${key}`) : null;
-                if (!raw) { if (!cancelled) setBotMentionNames([]); return; }
-                const data = JSON.parse(raw) as { bots?: Array<{ name?: string; hidden?: boolean }> };
-                const bots = Array.isArray(data?.bots) ? data.bots : [];
-                const names = bots.filter(b => b.name && !(b as { hidden?: boolean }).hidden).map(b => `@${String(b.name).trim().split(/\s+/)[0]}`).filter(Boolean).slice(0, 6);
-                if (!cancelled) setBotMentionNames(names);
-            } catch { if (!cancelled) setBotMentionNames([]); }
-        })();
-        return () => { cancelled = true; };
-    }, [isTeamModalOpen, mentionOpen]);
+    // G4 (plan botmode-scan): @mention autocomplete from the LIVE roster —
+    // the `bots` prop (authoritative, subscription-backed), collapsed to
+    // the same handles the room engine and the mailbox resolve. The old
+    // implementation read a raw localStorage key and truncated names at
+    // the first space ("Risk Bot" -> "@Risk"), which no parser matched.
+    const botMentionNames = React.useMemo(
+        () => (bots ?? []).map(b => `@${botHandle(b.name)}`).slice(0, 12),
+        [bots],
+    );
     const mentionCandidates = React.useMemo(() => {
-        if (!isEnsembleEnabled) return [] as string[];
+        // Bot handles always; ensemble seat chips only mid-debate setup.
+        if (!isEnsembleEnabled) return botMentionNames;
         if (botMentionNames.length > 0) return botMentionNames;
         if (lensConfig.enabled) {
             const map: Record<string, string> = {
@@ -186,11 +182,11 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             };
             return LENS_ROSTER_ROLES.map(r => map[r]).filter(Boolean);
         }
-        // Team mode: one chip per live seat (a trader team seats 2–5),
-        // labeled by seat — @Macro/@Technical/@Risk for the first three,
-        // then @Seat4/@Seat5. The label is a steer hint, not an id: seat
-        // steering matches by analyst name at run time.
-        return (ensembleModelSelection || []).slice(0, 5).map((_, i) =>
+        // Team mode: one chip per live seat (2–5 flat floor, 6–10 lens
+        // pods), labeled by seat — @Macro/@Technical/@Risk for the first
+        // three, then @Seat4…@Seat10. The label is a steer hint, not an id:
+        // seat steering matches by analyst name at run time.
+        return (ensembleModelSelection || []).slice(0, 10).map((_, i) =>
             ['@Macro', '@Technical', '@Risk'][i] ?? `@Seat${i + 1}`,
         ).filter(Boolean) as string[];
     }, [isEnsembleEnabled, lensConfig.enabled, ensembleModelSelection, botMentionNames]);
@@ -230,10 +226,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         };
     }, [isAnalysisInProgress, handleCancelAnalysis, mentionOpen, setInput, input]);
     React.useEffect(() => {
-        if (!isEnsembleEnabled || isAnalysisInProgress) setMentionOpen(false);
+        if (isAnalysisInProgress) setMentionOpen(false);
         else if (input.includes('@') && mentionCandidates.length > 0) setMentionOpen(true);
         else setMentionOpen(false);
-    }, [input, isEnsembleEnabled, isAnalysisInProgress, mentionCandidates.length]);
+    }, [input, isAnalysisInProgress, mentionCandidates.length]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -387,70 +383,50 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 keyboard and screen-reader experience is
                                 predictable (arrow keys, type-ahead). */}
                             {!threadMode && (
-                                <label
-                                    className="flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-200"
+                                <SelectMenu
+                                    aria-label="Talk to"
                                     data-testid="talk-to-selector"
-                                >
-                                    <span className="text-[10px] uppercase tracking-widest text-zinc-500">
-                                        Talk to
-                                    </span>
-                                    <select
-                                        aria-label="Talk to"
-                                        value={isEnsembleEnabled ? '__team__' : (effectiveChatModel || '')}
-                                        onChange={e => {
-                                            const v = e.target.value;
-                                            if (v === '__team__') {
-                                                setIsEnsembleEnabled(true);
-                                            } else if (v.startsWith('bot:')) {
-                                                onSelectBot?.(v.slice(4));
-                                            } else if (v === '__new_bot__') {
-                                                onNewBot?.();
-                                            } else {
-                                                setIsEnsembleEnabled(false);
-                                                setSelectedChatModel(v);
-                                            }
-                                        }}
-                                        className="bg-transparent text-[12px] text-zinc-100 outline-none"
-                                    >
-                                        <option value="__team__" className="bg-zinc-900 text-zinc-100">
-                                            Team ({rosterSlots.length})
-                                        </option>
-                                        {(bots ?? []).map(bot => {
-                                            const value = `bot:${bot.id}`;
-                                            return (
-                                                <option
-                                                    key={value}
-                                                    value={value}
-                                                    className="bg-zinc-900 text-zinc-100"
-                                                >
-                                                    {bot.name} · {formatModelDisplayName(bot.modelId)}
-                                                </option>
-                                            );
-                                        })}
-                                        {(bots ?? []).length > 0 && chatModelOptions.length > 0 && (
-                                            <option key="bots-sep" disabled className="bg-zinc-900 text-zinc-500">
-                                                ─── models ───
-                                            </option>
-                                        )}
-                                        {chatModelOptions.map(opt => {
-                                            const value = `${opt.providerName}::${opt.modelId}`;
-                                            return (
-                                                <option
-                                                    key={value}
-                                                    value={opt.modelId}
-                                                    className="bg-zinc-900 text-zinc-100"
-                                                >
-                                                    {opt.providerName} · {formatModelDisplayName(opt.modelId)}
-                                                </option>
-                                            );
-                                        })}
-                                        {onNewBot && (
-                                            <option value="__new_bot__" className="bg-zinc-900 text-zinc-100">
-                                                ＋ New bot…
-                                            </option>
-                                        )}
-                                    </select>
-                                </label>
+                                    prefix="Talk to"
+                                    value={isEnsembleEnabled ? '__team__' : (effectiveChatModel || '')}
+                                    onChange={v => {
+                                        if (v === '__team__') {
+                                            setIsEnsembleEnabled(true);
+                                        } else if (v.startsWith('bot:')) {
+                                            onSelectBot?.(v.slice(4));
+                                        } else if (v === '__new_bot__') {
+                                            onNewBot?.();
+                                        } else {
+                                            setIsEnsembleEnabled(false);
+                                            setSelectedChatModel(v);
+                                        }
+                                    }}
+                                    options={[
+                                        {
+                                            options: [
+                                                { value: '__team__', label: 'Team', meta: `${rosterSlots.length} seats` },
+                                            ],
+                                        },
+                                        ...((bots ?? []).length > 0 ? [{
+                                            label: 'Bots',
+                                            options: (bots ?? []).map(bot => ({
+                                                value: `bot:${bot.id}`,
+                                                label: bot.name,
+                                                meta: formatModelDisplayName(bot.modelId),
+                                            })),
+                                        }] : []),
+                                        ...(chatModelOptions.length > 0 ? [{
+                                            label: 'Models',
+                                            options: chatModelOptions.map(opt => ({
+                                                value: opt.modelId,
+                                                label: formatModelDisplayName(opt.modelId),
+                                                meta: opt.providerName,
+                                            })),
+                                        }] : []),
+                                        ...(onNewBot ? [{
+                                            options: [{ value: '__new_bot__', label: '+ New bot…' }],
+                                        }] : []),
+                                    ]}
+                                />
                             )}
 
                         </div>

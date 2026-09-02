@@ -174,6 +174,23 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         });
         return () => { cancelled = true; };
     }, [username, notebook]);
+    const [metaCalibration, setMetaCalibration] = useState<{
+        worthGatePrecision: number | null;
+        refinementRecovery: number | null;
+        evalAgreement: number | null;
+    } | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        const user = username || getActiveUsername();
+        void (async () => {
+            try {
+                const { loadMetaCalibration, computeMetaCalibrationRatios } = await import('../../services/learning/metaCalibration');
+                const d = await loadMetaCalibration(user);
+                if (!cancelled) setMetaCalibration(d.ratios ?? computeMetaCalibrationRatios(d));
+            } catch { /* surface only — never crash the dashboard */ }
+        })();
+        return () => { cancelled = true; };
+    }, [username]);
     const injectedSkillFiles = useMemo(() => {
         const names = new Set<string>();
         for (const rec of injections) {
@@ -784,6 +801,30 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     Based on {profile.totalAnalyzedTrades} analyzed trades
                 </p>
             </div>
+
+            {/* §8.5b meta-calibration: the loop on the loop (deterministic ratios) */}
+            {metaCalibration && (
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    <div className="bg-zinc-900 rounded-xl p-2 sm:p-3 border border-white/5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Worth-gate precision</p>
+                        <p className="text-sm sm:text-base font-bold text-white">
+                            {metaCalibration.worthGatePrecision !== null ? `${Math.round(metaCalibration.worthGatePrecision * 100)}%` : '—'}
+                        </p>
+                    </div>
+                    <div className="bg-zinc-900 rounded-xl p-2 sm:p-3 border border-white/5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Refinement recovery</p>
+                        <p className="text-sm sm:text-base font-bold text-white">
+                            {metaCalibration.refinementRecovery !== null ? `${Math.round(metaCalibration.refinementRecovery * 100)}%` : '—'}
+                        </p>
+                    </div>
+                    <div className="bg-zinc-900 rounded-xl p-2 sm:p-3 border border-white/5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Eval agreement</p>
+                        <p className="text-sm sm:text-base font-bold text-white">
+                            {metaCalibration.evalAgreement !== null ? `${Math.round(metaCalibration.evalAgreement * 100)}%` : '—'}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Overall Performance */}
             <div className="grid grid-cols-2 gap-2 sm:gap-4">

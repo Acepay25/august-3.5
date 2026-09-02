@@ -13,6 +13,7 @@
 import { ProviderConfig } from '../../types/provider';
 import { AnalystLensConfig, AnalystRole, AnalystRoleAssignment } from '../../types';
 import { ANALYST_ROLE_DEFINITIONS, EnsembleModelSelection } from './AnalystLensService';
+import { MAX_ROSTER_SEATS } from '../providers/debatePods';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { isProviderOnCooldown } from '../infrastructure/ProviderHealthService';
 
@@ -156,7 +157,9 @@ export const buildEnsembleAnalysts = (
         // seats 2–5 analysts). Do not fall back to provider.ensembleModels
         // — those leftover defaults used to fill the first provider and
         // hide the models the user just picked.
-        const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, 5);
+        // Pod tier (plan §9.1): 6-10 Team slots are legal — above 5 the
+        // engine runs them as lens pods, not a flat floor.
+        const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, MAX_ROSTER_SEATS);
         if (slots.length > 0) {
             // The same provider+model can occupy several Team slots. Those
             // seats must stay distinguishable: identical names collapse the

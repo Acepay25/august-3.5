@@ -21,6 +21,8 @@ export interface HarnessSettings {
     guardDailyLossPct?: number;
     guardMaxTradesPerDay?: number;
     guardPostLossCooldownMin?: number;
+    /** §8.2b: confirmed-skills cap before the worth gate turns comparative. */
+    skillLibraryCap?: number;
 }
 
 const KEY = 'harness_settings_v1';
@@ -39,6 +41,7 @@ const read = (): Partial<HarnessSettings> => {
 export const getHarnessSettings = (): HarnessSettings => {
     const stored = typeof localStorage === 'undefined' ? {} : read();
     const rate = stored.promptAbRate;
+    const cap = stored.skillLibraryCap;
     return {
         equityUsd: typeof stored.equityUsd === 'number' && stored.equityUsd > 0 ? stored.equityUsd : 10_000,
         riskPercent: typeof stored.riskPercent === 'number' && stored.riskPercent > 0
@@ -56,6 +59,7 @@ export const getHarnessSettings = (): HarnessSettings => {
         guardDailyLossPct: typeof stored.guardDailyLossPct === 'number' && stored.guardDailyLossPct > 0 ? stored.guardDailyLossPct : undefined,
         guardMaxTradesPerDay: typeof stored.guardMaxTradesPerDay === 'number' && stored.guardMaxTradesPerDay >= 1 ? stored.guardMaxTradesPerDay : undefined,
         guardPostLossCooldownMin: typeof stored.guardPostLossCooldownMin === 'number' && stored.guardPostLossCooldownMin >= 0 ? stored.guardPostLossCooldownMin : undefined,
+        skillLibraryCap: typeof cap === 'number' && Number.isFinite(cap) ? cap : undefined,
     };
 };
 
@@ -89,4 +93,23 @@ export const getSessionGuardConfig = (): SessionGuardConfig => {
         postLossCooldownMin: cool,
         tradeRiskPercent: s.riskPercent,
     };
+};
+
+/**
+ * §8.2b: effective confirmed-skills cap before the worth gate turns
+ * comparative. localStorage-backed with a hard default — the cap must exist
+ * even when nothing is stored, because an unbounded skill library silently
+ * taxes every skill's chance of being seen (fixed injection budgets).
+ */
+export const DEFAULT_SKILL_LIBRARY_CAP = 40;
+
+/** Effective cap, clamped to a sane range (never 0, never absurd). */
+export const getSkillLibraryCap = (): number => {
+    const n = getHarnessSettings().skillLibraryCap;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return DEFAULT_SKILL_LIBRARY_CAP;
+    return Math.min(200, Math.max(5, Math.round(n)));
+};
+
+export const setSkillLibraryCap = (n: number): void => {
+    saveHarnessSettings({ skillLibraryCap: Math.min(200, Math.max(5, Math.round(n))) });
 };
