@@ -1,8 +1,13 @@
 /**
- * useAgentGroups — runs a group thread: one prompt fans out to every
- * member bot SERIALLY (Hermes caps turns; we do one pass per send),
- * each reply streaming into its own message attributed by
- * modelsUsed[providerId] = modelId, with @name directs and @everyone.
+ * useAgentGroups — runs a group ROOM (plan botmode-scan G2): Hermes
+ * group-rounds semantics in-process. Round 1 = the @mentioned members
+ * (@everyone/all = fan-out parity with the old single pass); each turn is
+ * fed ONLY the room messages newer than what that member last saw; a
+ * reply that @mentions teammates sets next round's speakers; replying
+ * exactly "(pass)" is silence — no bubble, no room entry; a round with no
+ * mentions settles the room. Bounded by ROOM_ROUND_CAP rounds and
+ * ROOM_TURN_CAP model turns per send. Replies stream into their own
+ * message attributed by modelsUsed[providerId] = modelId.
  *
  * The caller supplies message append/patch functions (App's
  * updateMessages) and the provider configs; the hook exposes the
@@ -16,6 +21,18 @@ import { Message } from '../types/message';
 import { ProviderConfig } from '../types/provider';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import { AgentBot } from '../services/agents/agentRoster';
+import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
+import {
+    ROOM_HUMAN_LABEL,
+    ROOM_ROUND_CAP,
+    ROOM_TURN_CAP,
+    buildRoomSystemPrompt,
+    couldStillBePass,
+    isPassReply,
+    parseRoomMentions,
+    renderRoomTurn,
+    type RoomEntry,
+} from '../services/agents/groupRounds';
 
 export interface GroupActivityEntry {
     id: string;
@@ -39,10 +56,13 @@ export const useAgentGroups = ({
     providerConfigs,
     appendMessage,
     patchMessage,
+    username,
 }: {
     providerConfigs: ProviderConfig[];
     appendMessage: (msg: Message) => void;
     patchMessage: (id: string, patch: Partial<Message>) => void;
+    /** Active profile — enables per-bot persona/notes in room turns. */
+    username?: string | null;
 }): UseAgentGroupsResult => {
     const [workingBotId, setWorkingBotId] = useState<string | null>(null);
     const [isRunning, setIsRunning] = useState(false);
@@ -58,16 +78,17 @@ export const useAgentGroups = ({
         if (!trimmed || group.memberIds.length === 0) return;
         const nonce = ++runNonce.current;
 
-        // @direct: "@hermes look at this" → only that bot; "@everyone" → all.
-        const direct = /@([a-z0-9_-]+)/i.exec(trimmed);
-        const everyone = /@everyone\b/i.test(trimmed);
-        let members = group.memberIds
+        const members = group.memberIds
             .map(id => bots.find(b => b.id === id))
             .filter((b): b is AgentBot => Boolean(b));
-        if (direct && !everyone) {
-            const target = members.find(m => m.name.toLowerCase().replace(/\s+/g, '') === direct[1].toLowerCase());
-            if (target) members = [target];
-        }
+        if (members.length === 0) return;
+
+        // Round 1 speakers: @mention routing (Hermes's deterministic parse
+        // — name/title/no-space forms + @everyone). No mention = the old
+        // fan-out (every member speaks once), which keeps single-pass
+        // behavior byte-identical for plain prompts.
+        const mentioned = parseRoomMentions(trimmed, members);
+        let speakers: AgentBot[] = mentioned.length > 0 ? mentioned : members;
 
         // The prompt lands once as the thread opener.
         appendMessage({
@@ -79,59 +100,106 @@ export const useAgentGroups = ({
         pushActivity({ kind: 'sent' });
         setIsRunning(true);
 
+        // The room log: everything said so far. Each member tracks the
+        // index it last saw — a turn is fed ONLY the newer entries (this
+        // is what makes multi-round cheap, Hermes group-rounds parity).
+        const room: RoomEntry[] = [{ speaker: ROOM_HUMAN_LABEL, text: trimmed }];
+        const lastSeen = new Map<string, number>();
+        let turns = 0;
+
         try {
-            for (const bot of members) {
-                if (runNonce.current !== nonce) return;
-                const provider = providerConfigs.find(p => p.id === bot.providerId);
-                if (!provider || !isProviderReady(provider) || !provider.models.includes(bot.modelId)) {
-                    pushActivity({ kind: 'passed', botName: bot.name, detail: 'provider offline' });
-                    continue;
-                }
-
-                setWorkingBotId(bot.id);
-                pushActivity({ kind: 'working', botName: bot.name });
-
-                const config = { ...provider, selectedModel: bot.modelId };
-                const replyId = `grp-${Date.now()}-${bot.id}`;
-                appendMessage({
-                    id: replyId,
-                    role: MessageRole.AI,
-                    text: '',
-                    createdAt: new Date().toISOString(),
-                    modelsUsed: { [provider.id]: bot.modelId },
-                    isStreaming: true,
-                });
-
-                let visible = '';
-                let lastFlush = 0;
-                try {
-                    const responseText = await streamQuickResponse(
-                        config,
-                        trimmed,
-                        [],
-                        undefined,
-                        undefined,
-                        undefined,
-                        delta => {
-                            visible += delta;
-                            const now = Date.now();
-                            if (now - lastFlush > 120) {
-                                lastFlush = now;
-                                patchMessage(replyId, { text: visible });
-                            }
-                        },
-                    );
+            for (let round = 1; round <= ROOM_ROUND_CAP && speakers.length > 0; round++) {
+                const nextSpeakers = new Map<string, AgentBot>();
+                for (const bot of speakers) {
                     if (runNonce.current !== nonce) return;
-                    patchMessage(replyId, { text: responseText || visible, isStreaming: false });
-                    pushActivity({ kind: 'replied', botName: bot.name });
-                } catch (error) {
-                    if (runNonce.current !== nonce) return;
-                    patchMessage(replyId, {
-                        text: visible || `(${bot.name} could not reply — provider error)`,
-                        isStreaming: false,
+                    if (turns >= ROOM_TURN_CAP) {
+                        pushActivity({ kind: 'passed', botName: bot.name, detail: 'turn budget' });
+                        continue;
+                    }
+                    const provider = providerConfigs.find(p => p.id === bot.providerId);
+                    if (!provider || !isProviderReady(provider) || !provider.models.includes(bot.modelId)) {
+                        pushActivity({ kind: 'passed', botName: bot.name, detail: 'provider offline' });
+                        continue;
+                    }
+                    turns++;
+
+                    setWorkingBotId(bot.id);
+                    pushActivity({ kind: 'working', botName: bot.name });
+
+                    const unseen = room.slice(lastSeen.get(bot.id) ?? 0);
+                    // Advance BEFORE the turn: the member's own reply is
+                    // pushed to the room after this point, so it lands in
+                    // the NEXT window (rendered "You:") — the model sees
+                    // what it said, never the prompt twice.
+                    lastSeen.set(bot.id, room.length);
+                    const system = buildRoomSystemPrompt(bot, {
+                        persona: username ? readBotSystemMarkdown(bot.id) : null,
+                        notes: username ? readBotMemoryMarkdown(bot.id) : null,
+                        members,
                     });
-                    pushActivity({ kind: 'passed', botName: bot.name, detail: 'error' });
+
+                    const config = { ...provider, selectedModel: bot.modelId };
+                    const replyId = `grp-${Date.now()}-${bot.id}-${round}`;
+                    appendMessage({
+                        id: replyId,
+                        role: MessageRole.AI,
+                        text: '',
+                        createdAt: new Date().toISOString(),
+                        modelsUsed: { [provider.id]: bot.modelId },
+                        isStreaming: true,
+                    });
+
+                    let visible = '';
+                    let lastFlush = 0;
+                    try {
+                        const responseText = await streamQuickResponse(
+                            config,
+                            renderRoomTurn(bot.name, unseen),
+                            [],
+                            system,
+                            undefined,
+                            undefined,
+                            delta => {
+                                visible += delta;
+                                // A pure "(pass)" must never render — hold
+                                // the bubble empty while it could still be.
+                                if (couldStillBePass(visible)) return;
+                                const now = Date.now();
+                                if (now - lastFlush > 120) {
+                                    lastFlush = now;
+                                    patchMessage(replyId, { text: visible });
+                                }
+                            },
+                        );
+                        if (runNonce.current !== nonce) return;
+                        const finalText = responseText || visible;
+                        if (isPassReply(finalText)) {
+                            // Silence is a first-class outcome: no bubble,
+                            // no room entry — just the activity feed.
+                            patchMessage(replyId, { text: '', isStreaming: false, hidden: true });
+                            pushActivity({ kind: 'passed', botName: bot.name });
+                        } else {
+                            patchMessage(replyId, { text: finalText, isStreaming: false });
+                            room.push({ speaker: bot.name, text: finalText });
+                            pushActivity({ kind: 'replied', botName: bot.name });
+                            // Deterministic routing: mentions in this reply
+                            // speak next round (self-excluded; no echo loop).
+                            for (const t of parseRoomMentions(finalText, members)) {
+                                if (t.id !== bot.id) nextSpeakers.set(t.id, t);
+                            }
+                        }
+                    } catch (error) {
+                        if (runNonce.current === nonce) {
+                            patchMessage(replyId, {
+                                text: visible || `(${bot.name} could not reply — provider error)`,
+                                isStreaming: false,
+                            });
+                            pushActivity({ kind: 'passed', botName: bot.name, detail: 'error' });
+                        }
+                    }
                 }
+                // A round where nobody was addressed = the room settled.
+                speakers = [...nextSpeakers.values()];
             }
         } finally {
             if (runNonce.current === nonce) {
@@ -139,7 +207,7 @@ export const useAgentGroups = ({
                 setIsRunning(false);
             }
         }
-    }, [providerConfigs, appendMessage, patchMessage, pushActivity]);
+    }, [providerConfigs, appendMessage, patchMessage, pushActivity, username]);
 
     return { workingBotId, isRunning, activity, runGroupThread };
 };

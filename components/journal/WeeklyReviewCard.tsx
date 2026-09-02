@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { loadWeeklyReview, WeeklyReviewDigest } from '../../services/learning/weeklyReview';
 
+const pctOrDash = (v: number | null | undefined): string =>
+    v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`;
+
 /**
  * Weekly review card (Batch 5, plan §4.5) — the deterministic week stats
  * plus the ONE improvement impulse, rendered at the top of the Journal
@@ -32,6 +35,17 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
                 {s.topMistake && <span>costliest: {s.topMistake}</span>}
                 {s.givebackDays > 0 && <span>givebacks: {s.givebackDays}</span>}
             </div>
+            {/* §8.5b meta-calibration (the loop learns about the loop) — the
+                ratios ride the digest; render them beside the week stats so
+                the weekly surface shows gate/refinement/eval health, not
+                just trade health. '—' when a ratio has no sample. */}
+            {digest.metaCalibration && (
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/5 pt-2 text-[10px] uppercase tracking-widest text-zinc-600 tabular-nums">
+                    <span>gate precision {pctOrDash(digest.metaCalibration.worthGatePrecision)}</span>
+                    <span>refinement recovery {pctOrDash(digest.metaCalibration.refinementRecovery)}</span>
+                    <span>eval agreement {pctOrDash(digest.metaCalibration.evalAgreement)}</span>
+                </div>
+            )}
         </div>
     );
 };

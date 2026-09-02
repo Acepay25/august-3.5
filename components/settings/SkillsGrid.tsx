@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { consumePendingSkillOpen } from '../chat/SkillCitationChips';
+import LearningQueuePanel from './LearningQueuePanel';
 import { setSkillStatus, parseSkillMarkdown } from '../../services/learning/SkillMemoryService';
 import { getMemoryFiles, subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
@@ -289,6 +291,26 @@ const SkillsGrid: React.FC = () => {
         return subscribeMemoryFilesChanged(refresh);
     }, []);
 
+    // Deep link from a skill-citation chip in the transcript (§10.1): open
+    // that skill's card. The chip fires the event and the settings menu
+    // mounts this grid on the same tick, so also consume the pending slug
+    // once the file list exists.
+    useEffect(() => {
+        const openBySlug = (slug: string): void => {
+            const base = slug.replace(/\.md$/i, '');
+            const hit = skills.find(s => s.name === base);
+            if (hit) setSelectedId(hit.fileId);
+        };
+        const pending = consumePendingSkillOpen();
+        if (pending && skills.length > 0) openBySlug(pending);
+        const onOpen = (e: Event): void => {
+            const detail = (e as CustomEvent<{ slug?: string }>).detail;
+            if (detail?.slug) openBySlug(detail.slug);
+        };
+        window.addEventListener('august:open-skill', onOpen);
+        return () => window.removeEventListener('august:open-skill', onOpen);
+    }, [skills]);
+
     const visible = skills
         .filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
         .sort((a, b) => {
@@ -340,6 +362,11 @@ const SkillsGrid: React.FC = () => {
                     placeholder="Search skills…"
                     className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
                 />
+            </div>
+            {/* §4.6 loop E: the proposals side of the learning loop lands
+                here — "the gate proposes, the inbox disposes." */}
+            <div className="shrink-0">
+                <LearningQueuePanel />
             </div>
             {visible.length === 0 ? (
                 <p className="py-10 text-center text-xs text-zinc-600">

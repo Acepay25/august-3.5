@@ -130,6 +130,8 @@ direction: Short
 family: Family A
 wins: 2
 losses: 5
+ifCondition: BTC short setup
+thenAction: enter the short after the 15m reclaim
 ${extra}tradeIds: a,b,c,d,e,f,g
 ---
 
@@ -175,8 +177,12 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     expect(quickResponseMock).toHaveBeenCalledTimes(1);
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
     const meta = parseSkillMarkdown(file.content)!;
-    expect(meta.ifCondition).toBe('BTC short without a 15m reclaim and rising volume');
-    expect(meta.thenAction).toBe('skip the short until the reclaim candle closes');
+    // §8.3c: the refinement enters the eval-only SHADOW — the live trigger
+    // keeps its injection slot until the window settles.
+    expect(meta.ifCondition).toBe('BTC short setup');
+    expect(meta.shadow?.ifCondition).toBe('BTC short without a 15m reclaim and rising volume');
+    expect(meta.shadow?.thenAction).toBe('skip the short until the reclaim candle closes');
+    expect(meta.shadow?.seen).toBe(0);
     // The refined skill starts a fresh streak; evidence still landed.
     expect(meta.consecutiveLosses).toBe(0);
     expect(meta.losses).toBe(7);

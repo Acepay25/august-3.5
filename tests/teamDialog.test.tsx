@@ -6,6 +6,15 @@ import { TeamDialog } from '../components/chat/TeamDialog';
 import { AgentTeam } from '../services/agents/agentRoster';
 import { ProviderConfig } from '../types/provider';
 
+// Seat provider/model pickers are SelectMenus (styled listbox in a portal):
+// open via the trigger's data-testid, choose via [data-option="<value>"].
+const pickSeatOption = (testId: string, optionValue: string): void => {
+    fireEvent.click(screen.getByTestId(testId));
+    const opt = document.querySelector(`[data-option="${optionValue}"]`) as HTMLElement;
+    if (!opt) throw new Error(`option ${optionValue} not rendered for ${testId}`);
+    fireEvent.click(opt);
+};
+
 beforeAll(() => {
     if (typeof window !== 'undefined' && !window.matchMedia) {
         window.matchMedia = ((query: string) => ({
@@ -39,7 +48,7 @@ const base = {
     onClose: () => {},
     onCreate: vi.fn(),
     onUpdate: vi.fn(),
-    providers: [provider(), provider({ id: 'p2', name: 'Anthropic', models: ['claude-1'], selectedModel: 'claude-1' })],
+    providers: [provider(), provider({ id: 'p2', name: 'Anthropic', models: ['claude-1'], selectedModel: 'claude-1' }), provider({ id: 'p3', name: 'EmptyCo', models: [], selectedModel: '' })],
 };
 
 beforeEach(() => {
@@ -52,7 +61,7 @@ describe('TeamDialog (the Team is user-created and modifiable)', () => {
         render(<TeamDialog {...base} open />);
         fireEvent.change(screen.getByTestId('team-name'), { target: { value: 'Alpha Desk' } });
         // Seeded with two usable seats — pick the second provider for seat 2.
-        fireEvent.change(screen.getByTestId('team-seat-provider-1'), { target: { value: 'p2' } });
+        pickSeatOption('team-seat-provider-1', 'p2');
         fireEvent.click(screen.getByTestId('save-team'));
         expect(base.onCreate).toHaveBeenCalledTimes(1);
         const draft = base.onCreate.mock.calls[0][0];
@@ -70,7 +79,7 @@ describe('TeamDialog (the Team is user-created and modifiable)', () => {
         fireEvent.click(screen.getByTestId('add-team-seat'));
         expect(screen.getByTestId('team-seat-2')).toBeTruthy();
         // Fill the new seat, then remove seat 0 — still 2 valid seats.
-        fireEvent.change(screen.getByTestId('team-seat-model-2'), { target: { value: 'gpt-b' } });
+        pickSeatOption('team-seat-model-2', 'gpt-b');
         fireEvent.click(screen.getByTestId('team-seat-remove-0'));
         fireEvent.click(screen.getByTestId('save-team'));
         const draft = base.onCreate.mock.calls[0][0];
@@ -102,8 +111,9 @@ describe('TeamDialog (the Team is user-created and modifiable)', () => {
 
     it('invalid seats (no model) do not count toward the minimum', () => {
         render(<TeamDialog {...base} open />);
-        // Blank out both seeded models → save disabled.
-        fireEvent.change(screen.getByTestId('team-seat-model-0'), { target: { value: '' } });
+        // Point seat 0 at a provider whose model list is empty (p3 has no
+        // models) → its modelId clears → only 1 valid seat → save disabled.
+        pickSeatOption('team-seat-provider-0', 'p3');
         expect((screen.getByTestId('save-team') as HTMLButtonElement).disabled).toBe(true);
     });
 });

@@ -28,7 +28,10 @@ export type CapabilityClass =
     | 'thinkingOptIn'      // model thinks only when asked
     | 'wireReasoningEffort' // chat_completions reasoning_effort knob
     | 'jsonMode'
-    | 'vision';
+    | 'vision'
+    // Skill-guidance injections (the notebook's learned beliefs): negative
+    // evidence recorded from the chat surface, e.g. a flagged citation.
+    | 'skillGuidance';
 
 export interface HarnessLesson {
     id: string;
@@ -240,7 +243,7 @@ export const probeWireSupport = async (
 ): Promise<WireProbeResult> => {
     const { audit } = buildReasoningPatch(config, effort);
     let honored = false;
-    let evidence = '';
+    let evidence: string;
     try {
         const reply = await sendChatRequest(
             { ...config, apiKey: config.apiKey?.trim() || 'not-needed' },

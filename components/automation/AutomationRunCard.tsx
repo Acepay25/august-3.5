@@ -34,6 +34,9 @@ const AutomationRunCard: React.FC<{
     const analysis = run.message?.analysis;
     const snapshot = (analysis?.marketSnapshot ?? undefined) as HybridSnapshot | undefined;
     const time = new Date(run.startedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    // G5: a bot-scoped run's message carries persona prose, no analysis —
+    // without this the card reads a misleading "Neutral" with an empty bubble.
+    const isBotReply = !analysis && !!run.message?.text?.trim();
 
     const statusBadge = run.status === 'complete' ? (
         <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Complete</span>
@@ -44,14 +47,25 @@ const AutomationRunCard: React.FC<{
     ) : run.status === 'error' ? (
         <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-rose-500/10 text-rose-400 border border-rose-500/20">Failed</span>
     ) : (
-        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">Skipped</span>
+        <span
+            className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
+            title={run.error ?? undefined}
+        >
+            Skipped
+        </span>
     );
 
-    const direction = analysis?.direction || 'Neutral';
+    // A bot-scoped run has no trade analysis — label the card by what it is
+    // instead of a fabricated "Neutral" signal.
+    const direction = analysis?.direction ?? (isBotReply ? 'Bot reply' : 'Neutral');
     const directionColor = direction === 'Long' ? 'text-emerald-400' : direction === 'Short' ? 'text-rose-400' : 'text-zinc-400';
 
-    // Compact chat-message summary of the signal (no raw JSON).
+    // Compact chat-message summary of the signal (no raw JSON). Bot-scoped
+    // runs show the persona reply instead; skipped runs surface the reason
+    // (mirrored from the error box path — visible, never a bare badge).
     const markdown = useMemo(() => {
+        if (isBotReply) return run.message?.text ?? '';
+        if (run.status === 'skipped' && run.error) return `_Skipped — ${run.error}_`;
         if (!analysis) return '';
         const lines: string[] = [];
         lines.push(`**${analysis.coinName ?? 'Unknown asset'} · ${analysis.direction ?? 'Neutral'} · ${analysis.confidence ?? '—'}**`);
@@ -68,7 +82,7 @@ const AutomationRunCard: React.FC<{
             lines.push(analysis.strategy.length > 400 ? `${analysis.strategy.slice(0, 400)}…` : analysis.strategy);
         }
         return lines.join('\n');
-    }, [analysis, snapshot]);
+    }, [isBotReply, run.status, run.error, run.message?.text, analysis, snapshot]);
 
     const outcomeActions: { key: RunOutcomeConfirm; label: string; className: string }[] = [
         { key: 'win', label: 'Win', className: 'status-surface rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },

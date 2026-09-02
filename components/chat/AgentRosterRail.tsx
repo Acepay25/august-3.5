@@ -11,10 +11,12 @@
  */
 
 import React from 'react';
-import { Trash2, SlidersHorizontal } from 'lucide-react';
+import { Trash2, SlidersHorizontal, Bot as BotIcon, Users, Swords, GraduationCap, ChevronDown, Repeat } from 'lucide-react';
 import { BotAvatar, PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot, AgentGroup, AgentTeam } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
+import type { AutomationConfig } from '../../types/automation';
+import { nextCronTime, humanizeCron } from '../../services/automation/cronParser';
 import { MessageRole } from '../../types/enums';
 import { Message } from '../../types/message';
 import type { TeamSlot } from '../../utils/teamRoster';
@@ -23,6 +25,8 @@ import {
     ThreadSelection,
     threadForGroup,
     threadForProvider,
+    unreadCount,
+    unreadInSlice,
 } from '../../utils/agentThreads';
 
 export interface AgentRosterRailProps {
@@ -58,9 +62,39 @@ export interface AgentRosterRailProps {
     onNewBot: () => void;
     onNewGroup: () => void;
     onNewTeam?: () => void;
+    /** Coach thread (§10.1): the learning loop's inbox as a conversation. */
+    onSelectCoach?: () => void;
+    /** Pending drafts + proposals waiting on the trader (badge count). */
+    coachCount?: number;
     /** Bot id currently working (active-now strip + pulse). */
     workingBotId?: string | null;
+    /** Per-thread last-opened ISO timestamps (keyed by bot.id / group.id)
+     *  — drives the unread count badges (plan §10.1). Absent = never opened. */
+    lastOpenedMap?: Record<string, string>;
+    /** G3 (plan botmode-scan): botId → one-line fix hint when the bot
+     *  cannot do its job (missing provider/key/model, auth, quota, bench).
+     *  The row shows a ⚠ badge with the hint as tooltip. */
+    attentionMap?: Record<string, string>;
+    /** G5 (plan botmode-scan): routines scoped to a bot, keyed by botId.
+     *  When a bot has routines, its row gains a Routines disclosure with
+     *  the schedule, next fire, and Run-now affordance. */
+    botRoutines?: Record<string, AutomationConfig[]>;
+    /** Run a routine immediately (Run now in the disclosure). */
+    onRunRoutine?: (config: AutomationConfig) => void;
 }
+
+/** Monochrome unread-count badge (plan §10.1) — a count, never a colored dot. */
+const UnreadBadge: React.FC<{ count: number }> = ({ count }) => {
+    if (count <= 0) return null;
+    return (
+        <span
+            data-testid="roster-unread-badge"
+            className="ml-auto shrink-0 rounded-full border border-zinc-600 px-1.5 py-px text-[9px] font-bold tabular-nums leading-tight text-zinc-300"
+        >
+            {count > 9 ? '9+' : count}
+        </span>
+    );
+};
 
 const formatRelative = (iso: string | null): string => {
     if (!iso) return '';
@@ -74,6 +108,62 @@ const formatRelative = (iso: string | null): string => {
 };
 
 const lastOf = (slice: Message[]): Message | null => (slice.length > 0 ? slice[slice.length - 1] : null);
+
+/** G5 (plan botmode-scan): a bot's Routines disclosure — one row per
+ *  bot-scoped automation (name, humanized schedule, next fire) with a
+ *  Run-now affordance. Only rendered when the bot actually has routines;
+ *  monochrome, dense, stopPropagation so the bot row stays selected. */
+const RoutineDisclosure: React.FC<{
+    routines: AutomationConfig[];
+    onRun: (config: AutomationConfig) => void;
+}> = ({ routines, onRun }) => {
+    const [open, setOpen] = React.useState(false);
+    if (routines.length === 0) return null;
+    return (
+        <div className="px-2 pb-1.5" data-testid="routine-disclosure">
+            <button
+                type="button"
+                onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+                aria-expanded={open}
+                data-testid="routine-disclosure-toggle"
+                className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:bg-zinc-800/60 hover:text-zinc-300"
+            >
+                <Repeat className="h-3 w-3" />
+                Routines ({routines.length})
+                <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && (
+                <ul className="mt-0.5 space-y-0.5">
+                    {routines.map(r => {
+                        const next = r.enabled ? nextCronTime(r.schedule.cron, new Date()) : null;
+                        return (
+                            <li key={r.id} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-[11px] text-zinc-400">
+                                <span className="min-w-0 flex-1 truncate" title={`${r.name} — ${humanizeCron(r.schedule.cron)}`}>
+                                    {r.name}
+                                    <span className="block truncate text-[9px] font-mono text-zinc-600">
+                                        {next
+                                            ? `next ${next.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`
+                                            : (r.enabled ? humanizeCron(r.schedule.cron) : 'paused / off')}
+                                    </span>
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); onRun(r); }}
+                                    disabled={!r.enabled}
+                                    data-testid={`routine-run-${r.id}`}
+                                    title={r.enabled ? 'Run now' : 'Enable the routine first'}
+                                    className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    Run
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </div>
+    );
+};
 
 /** Hover trash — fades in over the row's timestamp while hovered
  *  (Claude-sidebar pattern). A sibling of the row button, so nested-
@@ -111,7 +201,13 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
     onNewBot,
     onNewGroup,
     onNewTeam,
+    onSelectCoach,
+    coachCount,
     workingBotId,
+    lastOpenedMap,
+    attentionMap,
+    botRoutines,
+    onRunRoutine,
 }) => {
     const [query, setQuery] = React.useState('');
     const [menuOpen, setMenuOpen] = React.useState(false);
@@ -121,13 +217,31 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
         () => (q ? userTeams.filter(({ team }) => (team.name ?? 'Team').toLowerCase().includes(q)) : userTeams),
         [userTeams, q],
     );
+    // Message search (plan §10.1): threads are derived views over ONE flat
+    // message array, so searching messages is a filter over that array —
+    // no index, no new store. A bot/group row stays visible when its NAME
+    // matches or its thread contains a message whose text matches.
+    const threadMatchesQuery = (slice: Message[]): boolean =>
+        q.length >= 2 && slice.some(m => (m.text || '').toLowerCase().includes(q));
     const visibleBots = React.useMemo(
-        () => (q ? bots.filter(b => b.name.toLowerCase().includes(q) || (b.title ?? '').toLowerCase().includes(q)) : bots),
-        [bots, q],
+        () => (q
+            ? bots.filter(b =>
+                b.name.toLowerCase().includes(q)
+                || (b.title ?? '').toLowerCase().includes(q)
+                || threadMatchesQuery(threadForProvider(messages, b.providerId, b.modelId)))
+            : bots),
+        [bots, q, messages],
     );
     const visibleGroups = React.useMemo(
-        () => (q ? groups.filter(g => groupDisplayName(g, bots).toLowerCase().includes(q)) : groups),
-        [groups, bots, q],
+        () => (q
+            ? groups.filter(g =>
+                groupDisplayName(g, bots).toLowerCase().includes(q)
+                || threadMatchesQuery(threadForGroup(messages, g.memberIds
+                    .map(id => bots.find(b => b.id === id))
+                    .filter((b): b is AgentBot => Boolean(b))
+                    .map(m => ({ providerId: m.providerId, modelId: m.modelId })))))
+            : groups),
+        [groups, bots, q, messages],
     );
     // The Team row is the LIVE ensemble roster: stacked identity discs
     // for each configured seat, subtitle = the seat labels (deduped —
@@ -179,18 +293,18 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                 role="menuitem"
                                 onClick={() => { setMenuOpen(false); onNewBot(); }}
                                 data-testid="menu-new-bot"
-                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-zinc-200 hover:bg-zinc-800"
+                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] font-medium text-zinc-200 hover:bg-zinc-800"
                             >
-                                ☻ New Bot
+                                <BotIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" /> New Bot
                             </button>
                             <button
                                 type="button"
                                 role="menuitem"
                                 onClick={() => { setMenuOpen(false); onNewGroup(); }}
                                 data-testid="menu-new-group"
-                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-zinc-200 hover:bg-zinc-800"
+                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] font-medium text-zinc-200 hover:bg-zinc-800"
                             >
-                                ⚿ New Group Chat
+                                <Users className="h-3.5 w-3.5 shrink-0 text-zinc-500" /> New Group Chat
                             </button>
                             {onNewTeam && (
                                 <button
@@ -198,9 +312,9 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                     role="menuitem"
                                     onClick={() => { setMenuOpen(false); onNewTeam(); }}
                                     data-testid="menu-new-team"
-                                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-zinc-200 hover:bg-zinc-800"
+                                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] font-medium text-zinc-200 hover:bg-zinc-800"
                                 >
-                                    ⚔ New Team
+                                    <Swords className="h-3.5 w-3.5 shrink-0 text-zinc-500" /> New Team
                                 </button>
                             )}
                         </div>
@@ -229,7 +343,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
 
             {/* Active now strip */}
             {workingBotId && (
-                <div className="px-3 pb-2" data-testid="active-now">
+                <div className="status-surface px-3 pb-2" data-testid="active-now">
                     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-200">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
                         {bots.find(b => b.id === workingBotId)?.name ?? 'Bot'} is working
@@ -289,6 +403,39 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                 <SlidersHorizontal className="h-3.5 w-3.5" />
                             </button>
                         )}
+                    </li>
+                    )}
+
+                    {/* Coach thread (§10.1) — the learning loop's inbox as a
+                        conversation: pending skill drafts + queue proposals.
+                        Badge = items waiting on the trader. */}
+                    {onSelectCoach && (
+                    <li className="group/coach relative">
+                        <button
+                            type="button"
+                            onClick={onSelectCoach}
+                            data-testid="roster-coach"
+                            data-active={selection.kind === 'coach' ? '1' : '0'}
+                            title="Coach — drafts and proposals waiting on your decision"
+                            className={`${rowBase} ${selection.kind === 'coach' ? rowActive : rowIdle}`}
+                        >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
+                                <GraduationCap className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="flex items-baseline gap-2">
+                                    <span className="truncate text-[13px] font-semibold text-zinc-100">Coach</span>
+                                    {(coachCount ?? 0) > 0
+                                        ? <UnreadBadge count={coachCount ?? 0} />
+                                        : <span className="ml-auto shrink-0 text-[10px] text-zinc-500">in sync</span>}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                                    {(coachCount ?? 0) > 0
+                                        ? `${coachCount} item${coachCount === 1 ? '' : 's'} need your call`
+                                        : 'Nothing waiting — the loop asks before it acts'}
+                                </span>
+                            </span>
+                        </button>
                     </li>
                     )}
 
@@ -384,6 +531,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                         const slice = threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId })));
                         const last = lastOf(slice);
                         const active = selection.kind === 'group' && selection.groupId === g.id;
+                        const unread = active ? 0 : unreadInSlice(slice, lastOpenedMap?.[g.id]);
                         return (
                             <li key={g.id} className="group/row relative">
                                 <button
@@ -405,9 +553,11 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                             <span className="truncate text-[13px] font-semibold text-zinc-100">
                                                 {groupDisplayName(g, bots)}
                                             </span>
-                                            <span className="ml-auto shrink-0 text-[10px] text-zinc-500 transition-opacity group-hover/row:opacity-0">
-                                                {formatRelative(last?.createdAt ?? null)}
-                                            </span>
+                                            {unread > 0
+                                                ? <UnreadBadge count={unread} />
+                                                : <span className="ml-auto shrink-0 text-[10px] text-zinc-500 transition-opacity group-hover/row:opacity-0">
+                                                    {formatRelative(last?.createdAt ?? null)}
+                                                </span>}
                                         </span>
                                         <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
                                             {last
@@ -432,6 +582,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                         const slice = threadForProvider(messages, bot.providerId, bot.modelId);
                         const last = lastOf(slice);
                         const active = selection.kind === 'bot' && selection.botId === bot.id;
+                        const unread = active ? 0 : unreadCount(messages, bot.providerId, lastOpenedMap?.[bot.id], bot.modelId);
                         return (
                             <li key={bot.id} className="group/row relative">
                                 <button
@@ -447,9 +598,23 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                     <span className="min-w-0 flex-1">
                                         <span className="flex items-baseline gap-2">
                                             <span className="truncate text-[13px] font-semibold text-zinc-100">{bot.name}</span>
-                                            <span className="ml-auto shrink-0 text-[10px] text-zinc-500 transition-opacity group-hover/row:opacity-0">
-                                                {formatRelative(last?.createdAt ?? null)}
-                                            </span>
+                                            {unread > 0
+                                                ? <UnreadBadge count={unread} />
+                                                : <span className="ml-auto shrink-0 text-[10px] text-zinc-500 transition-opacity group-hover/row:opacity-0">
+                                                    {formatRelative(last?.createdAt ?? null)}
+                                                </span>}
+                                            {/* G3: needs-attention — the row
+                                                says WHY (tooltip), never a
+                                                silent failure. Monochrome. */}
+                                            {attentionMap?.[bot.id] && (
+                                                <span
+                                                    data-testid={`roster-attention-${bot.id}`}
+                                                    title={attentionMap[bot.id]}
+                                                    className="shrink-0 text-[10px] leading-none text-zinc-400"
+                                                >
+                                                    ⚠
+                                                </span>
+                                            )}
                                         </span>
                                         <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
                                             {last ? previewTextFor(last) : (bot.title || 'No messages yet')}
@@ -463,6 +628,10 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                         onPress={() => onDeleteBot(bot.id)}
                                     />
                                 )}
+                                {/* G5: this bot's routines — schedule peek + Run now. */}
+                                {onRunRoutine && botRoutines?.[bot.id] ? (
+                                    <RoutineDisclosure routines={botRoutines[bot.id]} onRun={onRunRoutine} />
+                                ) : null}
                             </li>
                         );
                     })}

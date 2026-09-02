@@ -323,9 +323,12 @@ export async function analyzeTradingView(
     }
 
     const memoryToUse = (isPureAiMode && !isMemoryEnabledInPureAI) ? undefined : globalMemory;
+    // Both branches must honor the Pure-AI memory-off gate (memoryToUse) —
+    // the non-accuracy path used to read `globalMemory` directly, silently
+    // injecting memory the user had disabled.
     const memoryContext = isAccuracyMode
         ? constructOptimizedContext(chatHistory, threadSummary, memoryToUse)
-        : truncateTextToTokens(constructOptimizedContext(chatHistory, threadSummary, globalMemory), 800);
+        : truncateTextToTokens(constructOptimizedContext(chatHistory, threadSummary, memoryToUse), 800);
 
     const frameworksList = activeFrameworks.map((fw, index) => `${index + 1}. **${fw}**`).join('\n');
     const userStrategiesBlock = userStrategies

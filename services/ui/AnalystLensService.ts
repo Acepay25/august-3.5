@@ -225,8 +225,9 @@ export function saveLensConfig(config: AnalystLensConfig): void {
 export type EnsembleModelSelection = { providerId: string; model: string }[];
 
 /**
- * Load the ordinary ensemble model selection (max 5 entries — a trader
- * team seats 2–5 analysts; 3 was the legacy expert trio).
+ * Load the ordinary ensemble model selection (max 10 entries — a trader
+ * team seats 2–5 on the flat floor, 6–10 run as lens pods, plan §9.1;
+ * 3 was the legacy expert trio).
  * Web reads localStorage directly (matching loadLensConfig); native reads go
  * through initAnalystLensService's Preferences sync in App.tsx.
  */
@@ -238,7 +239,7 @@ export function loadEnsembleModelSelection(): EnsembleModelSelection {
             if (Array.isArray(parsed)) {
                 return parsed
                     .filter((e: any) => e && typeof e.providerId === 'string' && typeof e.model === 'string')
-                    .slice(0, 5);
+                    .slice(0, 10);
             }
         }
     } catch (e) {
@@ -277,10 +278,10 @@ export function saveLastModeratorPick(pick: LastModeratorPick): void {
     } catch { /* ignore */ }
 }
 
-/** Persist the ordinary ensemble model selection (capped at 5 entries —
- *  a trader team seats 2–5 analysts). */
+/** Persist the ordinary ensemble model selection (capped at 10 entries —
+ *  2–5 flat floor, 6–10 lens pods, plan §9.1). */
 export function saveEnsembleModelSelection(selection: EnsembleModelSelection): void {
-    setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 5)).catch(e =>
+    setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 10)).catch(e =>
         console.warn('[AnalystLens] Failed to save ensemble model selection:', e)
     );
     // localStorage mirror — same rationale as saveLensConfig: the sync load
@@ -288,7 +289,7 @@ export function saveEnsembleModelSelection(selection: EnsembleModelSelection): v
     // native (Capacitor) session sees an empty picker until the App startup
     // sync restores from Preferences.
     try {
-        localStorage.setItem(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, JSON.stringify(selection.slice(0, 5)));
+        localStorage.setItem(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, JSON.stringify(selection.slice(0, 10)));
     } catch (e) {
         console.warn('[AnalystLens] Failed to mirror ensemble model selection to localStorage:', e);
     }

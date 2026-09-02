@@ -7,7 +7,7 @@ import { sanitizeAIResponse } from '../utils/sanitizers';
 import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
-import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
+import { buildSeverityPostMortemContext } from '../services/learning/severityInsights';
 import { writeModelNote } from '../services/learning/MemoryFilesService';
 import { getMemoryFiles } from '../services/learning/MemoryFilesService';
 import { syncClosedTradeToNotebook, parseSkillMarkdown } from '../services/learning/SkillMemoryService';

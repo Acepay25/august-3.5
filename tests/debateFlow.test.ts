@@ -1364,3 +1364,139 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
     expect(round3.map(e => e.speaker)).toEqual(['Analyst Two']);
   });
 });
+
+// =============================================================================
+// LENS PODS (Batch 12, plan §9.1) — the 6-seat structured tier
+// =============================================================================
+
+describe('conductRealDebate — lens pods at 6 seats', () => {
+  beforeEach(() => {
+    streamMock.mockReset();
+    sendMock.mockReset();
+  });
+
+  async function collectPodEvents(gen: AsyncGenerator<RealDebateTurnEvent>): Promise<RealDebateTurnEvent[]> {
+    const out: RealDebateTurnEvent[] = [];
+    for await (const e of gen) out.push(e);
+    return out;
+  }
+
+  const seatNames = ['Seat 1', 'Seat 2', 'Seat 3', 'Seat 4', 'Seat 5', 'Seat 6'];
+
+  const seatAnalyst = (i: number) => ({
+    provider: {
+      config: { ...config, id: `prov-${i}`, name: seatNames[i - 1], models: [`model-${i}`], selectedModel: `model-${i}` },
+      name: seatNames[i - 1],
+      model: `model-${i}`,
+      thoughtsKey: `prov-${i}:model-${i}`,
+    },
+    result: {
+      thoughtProcess: `${seatNames[i - 1]} internal thinking`,
+      finalOutput: `${seatNames[i - 1]} opening statement: long bias on breakout.`,
+      // Alternate entries so the openings are NOT tightly aligned (no
+      // consensus round-trim) but carry zero direction/confidence spread
+      // (divergence 0 → clarification skipped — pods alone under test).
+      analysis: {
+        ...analysis,
+        entryPoints: [{ description: 'Key support retest', price: i % 2 ? '95000' : '96000' }],
+      },
+    },
+  });
+
+  it('runs one pod round per seat, reps-only intermediate floor, full-seat final auction', async () => {
+    const streamCalls: { system: string; user: string }[] = [];
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      streamCalls.push({ system, user });
+      const seat = seatNames.find(n => system.includes(`**FLOOR SEAT:** ${n}`));
+      if (system.includes('debate moderator')) {
+        yield 'Verdict: Long on breakout.\n';
+        yield '</DEBATE_END>\n';
+        yield MARKDOWN_PLAN('Long', 'Medium', 60);
+        return;
+      }
+      if (user.includes('FINAL CONVICTION LINE')) {
+        const idx = seat ? seatNames.indexOf(seat) + 1 : 1;
+        yield `rebuttal-final-${idx}\n\nCONVICTION: ${50 + idx}`;
+        return;
+      }
+      yield `rebuttal-${seat ?? 'unknown'}`;
+    });
+    sendMock.mockImplementation(async (...args: any[]) => {
+      const messages = args[1] as { role: string; content: string }[];
+      // Pod round only — nothing else in this flow uses sendChatRequest.
+      expect(messages[1].content).toContain('POD ROUND');
+      return 'pod position: hold the long, dissent noted';
+    });
+
+    const events = await collectPodEvents(conductRealDebate(
+      [1, 2, 3, 4, 5, 6].map(seatAnalyst),
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+    ));
+
+    // Pod assignment (round-robin, no lenses): macro[1,4] tech[2,5] risk[3,6]
+    // → representatives Seat 1/2/3 (roster order, cold trust store).
+    const podNotice = events.find(e => e.speaker === 'System' && e.text.includes('Lens pods:'));
+    expect(podNotice).toBeDefined();
+    expect(podNotice!.text).toContain('carried by Seat 1');
+    expect(podNotice!.text).toContain('carried by Seat 2');
+    expect(podNotice!.text).toContain('carried by Seat 3');
+
+    // One bounded pod call per seat (all pods have 2 members).
+    expect(sendMock).toHaveBeenCalledTimes(6);
+
+    // Intermediate floor round (2): ONLY the three representatives speak.
+    const round2 = events.filter(e => e.round === 2 && e.speaker !== 'System').map(e => e.speaker);
+    expect([...new Set(round2)].sort()).toEqual(['Seat 1', 'Seat 2', 'Seat 3']);
+
+    // Final round (3): EVERY seat speaks — the auction stays seat-level.
+    const round3 = new Set(events.filter(e => e.round === 3 && e.speaker !== 'System').map(e => e.speaker));
+    expect([...round3].sort()).toEqual([...seatNames].sort());
+
+    // Cost assertion: 3 rep turns + 6 final turns = 9 floor rebuttals
+    // (a flat 6-seat floor would run 12).
+    const rebuttalStreams = streamCalls.filter(c => c.system.includes('ENSEMBLE DEBATE PARTICIPANT'));
+    expect(rebuttalStreams.length).toBe(9);
+
+    // Representatives carry the pod position into their floor turn.
+    const repRound2 = rebuttalStreams.find(c => c.system.includes('**FLOOR SEAT:** Seat 1'));
+    expect(repRound2?.user).toContain('YOUR POD POSITION');
+    expect(repRound2?.user).toContain('pod position: hold the long');
+
+    // The verdict sees the complete 6-seat auction + the ensemble line.
+    const verdictCall = streamCalls.find(c => c.system.includes('debate moderator'))!;
+    const auction = verdictCall.user.match(/SEALED CONVICTION AUCTION[\s\S]*?(?=\n\n|$)/)?.[0] ?? '';
+    for (const n of seatNames) expect(auction).toContain(n);
+    expect(verdictCall.user).toContain('DETERMINISTIC ENSEMBLE LINE');
+  });
+
+  it('5-seat rosters are untouched by the pod tier', async () => {
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (system.includes('debate moderator')) {
+        yield '</DEBATE_END>\n';
+        yield MARKDOWN_PLAN('Long', 'Medium', 60);
+        return;
+      }
+      if (user.includes('FINAL CONVICTION LINE')) { yield 'x\n\nCONVICTION: 60'; return; }
+      yield 'rebuttal';
+    });
+    sendMock.mockImplementation(async () => 'pod');
+    const events = await collectPodEvents(conductRealDebate(
+      [1, 2, 3, 4, 5].map(seatAnalyst),
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+    ));
+    expect(events.some(e => e.text?.includes('Lens pods:'))).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+});

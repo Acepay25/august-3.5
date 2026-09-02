@@ -23,11 +23,13 @@ import { MessageRole } from '../types/enums';
 import { Message } from '../types/message';
 
 /** Which conversation surface is open. 'team' = the full ensemble
- *  debate chat; 'bot' = a named bot's 1:1; 'group' = a bot group room. */
+ *  debate chat; 'bot' = a named bot's 1:1; 'group' = a bot group room;
+ *  'coach' = the learning inbox (skill drafts + queue proposals). */
 export type ThreadSelection =
     | { kind: 'team' }
     | { kind: 'bot'; botId: string }
-    | { kind: 'group'; groupId: string };
+    | { kind: 'group'; groupId: string }
+    | { kind: 'coach' };
 
 /**
  * Derive the per-agent thread slice for one provider — optionally
@@ -193,13 +195,16 @@ export const threadPreview = (messages: Message[], providerId: string): AgentThr
  * Unread count for one provider: AI messages in the thread newer than
  * the last time the trader opened that thread. `lastOpenedAt` is an
  * ISO timestamp (absent = never opened → everything unread, capped).
+ * `modelId` scopes to an exact model (a bot's model) — same semantics
+ * as threadForProvider.
  */
 export const unreadCount = (
     messages: Message[],
     providerId: string,
     lastOpenedAt: string | null | undefined,
+    modelId?: string,
 ): number => {
-    const thread = threadForProvider(messages, providerId);
+    const thread = threadForProvider(messages, providerId, modelId);
     if (thread.length === 0) return 0;
     const openedMs = lastOpenedAt ? Date.parse(lastOpenedAt) : NaN;
     if (Number.isNaN(openedMs)) {
@@ -219,3 +224,41 @@ export const markThreadOpened = (map: AgentThreadOpenedMap, providerId: string):
     ...map,
     [providerId]: new Date().toISOString(),
 });
+
+/**
+ * Unread count over an already-derived thread slice (bots use
+ * unreadCount; groups need the same math over threadForGroup output).
+ * Absent `lastOpenedAt` = never opened → recent tail, capped at 9.
+ */
+export const unreadInSlice = (
+    slice: Message[],
+    lastOpenedAt: string | null | undefined,
+): number => {
+    const ai = slice.filter(m => m.role === MessageRole.AI);
+    if (ai.length === 0) return 0;
+    const openedMs = lastOpenedAt ? Date.parse(lastOpenedAt) : NaN;
+    if (Number.isNaN(openedMs)) return Math.min(ai.length, 9);
+    return ai.filter(m => Date.parse(m.createdAt) > openedMs).length;
+};
+
+// ─── last-opened persistence (plan §10.1 unread badges) ────────────────────
+
+const openedKey = (username: string): string =>
+    `agent_threads_opened_v1_${(username || 'default').trim() || 'default'}`;
+
+/** Load the per-thread last-opened map for a user ({} when none). */
+export const loadThreadOpenedMap = (username: string): AgentThreadOpenedMap => {
+    try {
+        const raw = localStorage.getItem(openedKey(username));
+        const parsed = raw ? JSON.parse(raw) : null;
+        return parsed && typeof parsed === 'object' ? parsed as AgentThreadOpenedMap : {};
+    } catch {
+        return {};
+    }
+};
+
+export const saveThreadOpenedMap = (username: string, map: AgentThreadOpenedMap): void => {
+    try {
+        localStorage.setItem(openedKey(username), JSON.stringify(map));
+    } catch { /* best-effort */ }
+};

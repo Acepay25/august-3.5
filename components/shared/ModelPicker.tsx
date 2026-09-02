@@ -340,7 +340,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                 type="checkbox"
                                 checked={freeOnly}
                                 onChange={(e) => handleFreeOnlyToggle(e.target.checked)}
-                                className="rounded border-zinc-600 bg-zinc-800 text-cyan-500 focus:ring-cyan-500/40"
+                                className="rounded border-zinc-600 bg-zinc-800 text-zinc-200 focus:ring-zinc-500/40"
                             />
                             Free models only
                         </label>

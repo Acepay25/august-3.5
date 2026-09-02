@@ -13,6 +13,10 @@ export interface LoggedTrade {
   /** Prompt-layer fingerprint from the originating run (journal A/B). */
   promptVersion?: string;
   promptLane?: 'live' | 'control';
+  /** §8.3a: runId of the originating verdict run (runStats.runId). Skill
+   *  evidence attribution joins the injection log on THIS — exact — instead
+   *  of a time window around the log click. Absent on legacy trades. */
+  sourceRunId?: string;
   tradeType?: 'scalp' | 'swing';  // Denormalized for filtering/stats
   outcome: TradeOutcome;
   timestamp: string;
@@ -119,6 +123,10 @@ export interface LoggedTrade {
   skipReason?: string;
   /** Pre-trade checklist completion at log time (plan §4.3): items checked / shown. */
   checklistCompleted?: { done: number; total: number };
+  /** Pre-read capture (plan §5a): the user's committed prior call from
+   *  BEFORE the verdict reveal, copied from the source message at log time.
+   *  Feeds the journal's user-prior vs verdict vs outcome calibration row. */
+  userPriorCall?: import('./message').UserPriorCall;
 }
 
 export interface StrategySearchResult {

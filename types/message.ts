@@ -90,6 +90,9 @@ export interface EnsembleProgress {
 
 /** Lightweight per-run summary — durations, gate cap, Monte Carlo snapshot. */
 export interface RunStats {
+  /** §8.3a: id of the user message that triggered this run — the join key
+   *  between injection records and trades logged from this verdict. */
+  runId?: string;
   startedAt: string;
   finishedAt: string;
   durationMs: number;
@@ -104,12 +107,14 @@ export interface RunStats {
   promptVersion?: string;
   /** live = registry overrides; control = built-in prompts (A/B). */
   promptLane?: 'live' | 'control';
-  /**
-   * Debate-structure lane used by this run (standard/extended/efficient).
+  /** Debate-structure lane used by this run (standard/extended/efficient).
    * Deterministically assigned per setup — surfaced on the
    * signal card as a provenance chip.
    */
   protocol?: string;
+  /** §8.5a: true when this run was an ε-holdout run — skill injection was
+   * withheld so the run's outcomes belong to the CONTROL group for lift. */
+  skillHoldout?: boolean;
   /** First analyst's Monte Carlo win rate (%), if computed. */
   mcWinRate?: number;
   /** First analyst's Monte Carlo expected value (R), if computed. */
@@ -261,6 +266,17 @@ export interface Message {
   watchEpisodes?: WatchEpisode[];
   /** Append-only debate run log (model-visible facts for replay). */
   debateRunLog?: DebateRunEvent[];
+  /** ── Bot Mode (plan botmode-scan G1) ──
+   *  A user-role row that is a teammate DM (rendered as an envelope, not a
+   *  user bubble). The target's turn runs from it; the reply wakes the
+   *  sender with a `dmNotice` row in THEIR thread instead. */
+  dmFrom?: boolean;
+  /** A system notice produced by the DM machinery (reply wake-up, refusal,
+   *  hop-cap hold). Rendered muted; never fed back into a model prompt. */
+  dmNotice?: boolean;
+  /** G2: a room turn that resolved to "(pass)" — the row exists for thread
+   *  attribution but renders nowhere (silence is a first-class outcome). */
+  hidden?: boolean;
   /** Notebook files / skills retrieved for this run (inspectable on the card). */
   memoryRetrieved?: Array<{ path: string; kind: string }>;
   /** Verdict evidence pack: the journal evidence assembled for
@@ -281,6 +297,20 @@ export interface Message {
   /** "What would I do today?" — fresh forward-looking re-assessment of the
    *  closed trade's setup against the current market price. */
   todayReassessment?: TodayReassessment;
+  /** Pre-read capture (Batch 5 §5a, opt-in training mode): the user's own
+   *  direction + confidence committed BEFORE the verdict card revealed.
+   *  Rides the message so the journal can show user-prior vs verdict vs
+   *  outcome — the human-Brier vs ensemble-Brier anti-automation display. */
+  userPriorCall?: UserPriorCall;
+}
+
+/** A committed pre-read call (plan §5a). `confidencePct` is the user's own
+ *  0-100 belief that their direction plays out (TP before SL). */
+export interface UserPriorCall {
+  direction: 'Long' | 'Short' | 'Flat';
+  confidencePct: number;
+  /** ISO timestamp at commit (before the reveal). */
+  createdAt: string;
 }
 
 export interface WatchEpisode {

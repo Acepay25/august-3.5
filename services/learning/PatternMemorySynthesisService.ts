@@ -6,13 +6,25 @@
  */
 
 import { LoggedTrade, AIProvider } from '../../types';
-import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { AttributedInsight } from '../../types/learning';
 import { parsePrice } from '../../utils/analysisUtils';
 import { familiesRelate } from '../../utils/patternMatch';
-// Cyclic-import note: InsightExtractionService imports several helpers from
-// this module. The cycle is safe — both sides only reference the other's
-// exports inside function bodies, never at module-evaluation time.
-import { extractCumulativeBleedInsight, recordSeverityInsight } from './InsightExtractionService';
+import {
+    loadDistilledFacts,
+    mergeDistilledFact,
+    migrateLegacyAttributedInsights,
+    flushDistilledWrites,
+    resetDistilledCache,
+} from './distilledMemory';
+// Cyclic-import note: severityInsights imports the store API below from this
+// module, and the enforcement context calls back into severity generators.
+// The cycle is safe — both sides only reference the other's exports inside
+// function bodies, never at module-evaluation time.
+import { extractCumulativeBleedInsight, recordSeverityInsight } from './severityInsights';
+
+// The attributed-insight type moved to types/learning.ts with the store
+// unification (§8.1) — re-exported here for every existing import site.
+export type { AttributedInsight };
 
 // ========================= INTERFACES =========================
 
@@ -74,29 +86,6 @@ export interface AggregatedStats {
      */
     lossesWithR: number;
     regimeBreakdown: Record<string, { wins: number; losses: number; winRate: number }>;
-}
-
-/**
- * An insight with provider attribution and validation tracking
- */
-export interface AttributedInsight {
-    id: string;
-    insight: string;
-    sourceProvider: AIProvider | string;
-    category: 'global' | 'coin' | 'pattern' | 'regime' | 'family';
-    scope?: string; // e.g., "BTCUSDT" for coin-specific, "Family C" for family-specific
-    qualityScore: number; // 0-100, based on user feedback or outcome correlation
-    wasValidated: boolean; // Did following this advice help?
-    timesUsed: number;
-    timesHelpful: number;
-    /** Negative explicit feedback — lets qualityScore reflect feedback only,
-     *  not mere surface marks (timesUsed counts displays, which inflated the
-     *  denominator and diluted the ratio). */
-    timesNotHelpful?: number;
-    /** Dedupe guard for "surfaced to a prompt" marks (see markInsightSurfaced). */
-    lastSurfacedAt?: number;
-    createdAt: string;
-    tradeId: string;
 }
 
 /**
@@ -243,7 +232,7 @@ function extractKeyLesson(postMortem: string | undefined): string {
  * Calculate P&L in R multiples
  *
  * Exported so the post-mortem severity-insight generator in
- * `InsightExtractionService` can use the same R-multiple math as the
+ * `severityInsights.ts` can use the same R-multiple math as the
  * pattern-memory gate (single source of truth — see the comment at the
  * LOSS branch below re: the correctedStopLoss scaling that the old
  * hardcoded -1.0 used to flatten out).
@@ -653,85 +642,43 @@ export function generateSynthesizedPromptInjection(synthesis: PatternMemorySynth
     return parts.join('\n');
 }
 
-// ========================= STORAGE & RETRIEVAL =========================
+// ========================= STORAGE (notebook-backed — plan §8.1) =========================
+//
+// The attributed-insight store used to be a standalone Preferences key
+// (`attributed_insights_kb_<user>`) — the third parallel memory store with its
+// own cap and no review UI. It now lives in the trader notebook as distilled/
+// memory files (see distilledMemory.ts): one store, one cap, one UI. The API
+// below is unchanged for consumers; only the persistence backend moved.
 
-// In-memory cache
-let _insightsCache: AttributedInsight[] | null = null;
-let _isInitialized = false;
-
-/**
- * User-scoped preference key. Insights are learning state — like
- * GlobalLearningService's calibration, they must not leak across profiles.
- */
-const insightsPrefKey = (): string => {
-    const username = typeof localStorage !== 'undefined'
-        ? (localStorage.getItem('last_active_user') || 'default')
-        : 'default';
-    return `${PREF_KEYS.ATTRIBUTED_INSIGHTS}_${username}`;
-};
-
-/**
- * Switch the active user (called from App.loadUserData). Resets the
- * one-shot init guard + cache so the next load reads the new user's data
- * instead of the previous user's in-session cache.
- */
+/** Switch the active user (called from App.loadUserData). The notebook store
+ *  is keyed per user inside MemoryFilesService; this only keeps the
+ *  last-active-user marker (also read by distilledMemory + job handlers) in
+ *  sync so reads/writes land on the right user's notebook. */
 export const setAttributedInsightsUser = (username: string | null): void => {
-    _insightsCache = null;
-    _isInitialized = false;
+    // The distilled facts mirror cache must not leak across profiles.
+    resetDistilledCache();
     if (username) {
         localStorage.setItem('last_active_user', username);
     }
 };
 
 /**
- * Initialize service - load insights into memory
+ * Initialize service. The notebook cache hydrates via initMemoryFiles at
+ * boot; the remaining work here is the one-time migration of the legacy
+ * pref-store rows into distilled/ notebook files.
  */
 export const initPatternMemoryService = async (): Promise<void> => {
-    if (_isInitialized) return;
-
-    try {
-        const stored = await getPreferenceObject<AttributedInsight[]>(insightsPrefKey());
-        if (stored) {
-            _insightsCache = stored;
-        } else {
-            _insightsCache = [];
-        }
-        _isInitialized = true;
-        console.log('[PatternMemory] Service initialized with cached insights');
-    } catch (e) {
-        console.error('[PatternMemory] Cached init failed:', e);
-        _insightsCache = [];
-    }
+    await migrateLegacyAttributedInsights();
+    console.log('[PatternMemory] Store unified with the trader notebook (distilled/)');
 };
 
 /**
- * Load attributed insights from memory
+ * Load attributed insights — a sync derivation from the notebook cache.
+ * Order is oldest-first (the notebook cache order), matching the old store's
+ * append-order semantics that the cap and `.slice(-3)` consumers rely on.
  */
 export function loadAttributedInsights(): AttributedInsight[] {
-    if (_insightsCache) return _insightsCache;
-
-    // Fallback for non-initialized state
-    try {
-        const stored = localStorage.getItem(insightsPrefKey());
-        return stored ? JSON.parse(stored) : [];
-    } catch (e) {
-        console.warn('[PatternMemorySynthesis] Failed to load insights:', e);
-        return [];
-    }
-}
-
-/**
- * Save attributed insights to storage
- */
-export function saveAttributedInsights(insights: AttributedInsight[]): void {
-    // Keep only most recent 200 insights
-    const trimmed = insights.slice(-200);
-    _insightsCache = trimmed;
-
-    // Fire and forget
-    setPreferenceObject(insightsPrefKey(), trimmed).catch(e =>
-        console.warn('[PatternMemorySynthesis] Failed to save insights:', e)
-    );
+    return loadDistilledFacts();
 }
 
 /**
@@ -741,7 +688,7 @@ export function saveAttributedInsights(insights: AttributedInsight[]): void {
  * need idempotent writes (e.g. R-severity insights, whose ids are derived
  * from the trade/setup) can pass a stable id so re-running the same job
  * updates the existing row instead of duplicating it — dedupe/update is
- * handled by the caller (see `InsightExtractionService.recordSeverityInsight`).
+ * handled by the store (writeDistilledFact merges on id + fingerprint).
  */
 export function addAttributedInsight(
     insight: Omit<AttributedInsight, 'id' | 'createdAt' | 'wasValidated' | 'timesUsed' | 'timesHelpful' | 'qualityScore'> & { id?: string }
@@ -756,24 +703,43 @@ export function addAttributedInsight(
         qualityScore: 50, // Default neutral score
     };
 
-    const insights = loadAttributedInsights();
-    insights.push(newInsight);
-    saveAttributedInsights(insights);
+    // mergeDistilledFact returns the EFFECTIVE stored fact — when a
+    // fingerprint twin already exists, the caller's id is absorbed and the
+    // real (stored) record is returned so downstream usage marks land on it.
+    const stored = mergeDistilledFact(newInsight);
 
     console.log(`[PatternMemorySynthesis] Added insight: "${insight.insight.slice(0, 50)}..."`);
-    return newInsight;
+    return stored;
 }
+
+/**
+ * Replace a stored insight in place (keeps the file identity and any fields
+ * the caller did not override). Used by the idempotent severity/provider
+ * upserts, which re-derive rows with fresh magnitudes but must preserve
+ * feedback counters.
+ */
+export function upsertAttributedInsight(insight: AttributedInsight): AttributedInsight {
+    return mergeDistilledFact(insight);
+}
+
+/** Apply a mutation to one stored fact and persist it through the notebook
+ *  write lock. Resolves null when no fact with that id exists. */
+const mutateStoredFact = (
+    insightId: string,
+    fn: (i: AttributedInsight) => void
+): AttributedInsight | null => {
+    const fact = loadAttributedInsights().find(i => i.id === insightId);
+    if (!fact) return null;
+    fn(fact);
+    mergeDistilledFact(fact);
+    return fact;
+};
 
 /**
  * Mark an insight as used (surfaced to moderator)
  */
 export function markInsightUsed(insightId: string): void {
-    const insights = loadAttributedInsights();
-    const insight = insights.find(i => i.id === insightId);
-    if (insight) {
-        insight.timesUsed++;
-        saveAttributedInsights(insights);
-    }
+    mutateStoredFact(insightId, i => { i.timesUsed++; });
 }
 
 /** One debate run renders the same insight in the gate scan, the mandatory
@@ -783,41 +749,47 @@ export function markInsightUsed(insightId: string): void {
  *  true value. Surfaced marks are deduped within this window instead. */
 const SURFACED_DEDUPE_MS = 15 * 60 * 1000;
 
+/** Session-scoped surfaced marks. The notebook store persists the counter
+ *  but not this dedupe timestamp — a cross-restart re-mark costs one counter
+ *  tick at most, which is the same behavior the pre-notebook store had on
+ *  its first run of a session. */
+const surfacedMarks = new Map<string, number>();
+
 /**
  * Mark an insight as surfaced to a prompt (analyst/moderator context).
  * Deduped per SURFACED_DEDUPE_MS — explicit feedback paths
  * (recordInsightFeedback / markStoredInsightUsed) still use markInsightUsed.
  */
 export function markInsightSurfaced(insightId: string): void {
-    const insights = loadAttributedInsights();
-    const insight = insights.find(i => i.id === insightId);
-    if (!insight) return;
-    if (insight.lastSurfacedAt && Date.now() - insight.lastSurfacedAt < SURFACED_DEDUPE_MS) return;
-    insight.lastSurfacedAt = Date.now();
-    insight.timesUsed++;
-    saveAttributedInsights(insights);
+    const last = surfacedMarks.get(insightId);
+    if (last !== undefined && Date.now() - last < SURFACED_DEDUPE_MS) return;
+    surfacedMarks.set(insightId, Date.now());
+    mutateStoredFact(insightId, i => { i.timesUsed++; });
 }
 
 /**
- * Record feedback on an insight's helpfulness
+ * Record feedback on an insight's helpfulness. Awaitable so UI callers can
+ * reload only after the write has landed in the notebook.
  */
-export function recordInsightFeedback(insightId: string, wasHelpful: boolean): void {
-    const insights = loadAttributedInsights();
-    const insight = insights.find(i => i.id === insightId);
-    if (insight) {
-        insight.wasValidated = true;
+export async function recordInsightFeedback(insightId: string, wasHelpful: boolean): Promise<void> {
+    const fact = mutateStoredFact(insightId, i => {
+        i.wasValidated = true;
         if (wasHelpful) {
-            insight.timesHelpful++;
+            i.timesHelpful++;
         } else {
-            insight.timesNotHelpful = (insight.timesNotHelpful ?? 0) + 1;
+            i.timesNotHelpful = (i.timesNotHelpful ?? 0) + 1;
         }
         // Quality = feedback ratio ONLY (timesUsed counts mere display —
         // including it diluted every surfaced-but-unrated insight to near 0).
-        const feedbackTotal = insight.timesHelpful + (insight.timesNotHelpful ?? 0);
+        const feedbackTotal = i.timesHelpful + (i.timesNotHelpful ?? 0);
         if (feedbackTotal > 0) {
-            insight.qualityScore = Math.round((insight.timesHelpful / feedbackTotal) * 100);
+            i.qualityScore = Math.round((i.timesHelpful / feedbackTotal) * 100);
         }
-        saveAttributedInsights(insights);
+    });
+    if (fact) {
+        // mutateStoredFact already scheduled the write — wait for it to land
+        // so an immediate UI reload observes the new counters.
+        await flushDistilledWrites();
         console.log(`[PatternMemorySynthesis] Insight feedback: ${insightId} - helpful: ${wasHelpful}`);
     }
 }
@@ -848,7 +820,7 @@ export interface PatternMemoryGate {
  * the current setup's family/coin/pattern scope.
  *
  * The synthetic provider id `pattern-memory-severity-detector` is the
- * tag `InsightExtractionService.recordSeverityInsight` writes, so we
+ * tag `severityInsights.recordSeverityInsight` writes, so we
  * filter on it here without polluting the general insight store.
  */
 function buildSeverityMandatoryQuestion(

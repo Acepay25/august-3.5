@@ -17,6 +17,8 @@
  */
 
 import { LoggedTrade } from '../../types';
+import { shouldSkillHoldout } from '../../utils/skillHoldout';
+import { regimeRankFactor } from '../../utils/regimeSentinel';
 import { getMemoryFiles } from './MemoryFilesService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
 import { settledBeliefsBlock } from './settledBeliefs';
@@ -115,7 +117,10 @@ const rankedMatchedSkills = (
         // can never disagree about what matters.
         const statusWeight = meta.status === 'confirmed' ? 2 : 1;
         const overlap = dimsOverlap(meta, query);
-        const score = statusWeight * overlap * evidenceDecay(meta);
+        // §8.5d: a skill whose evidence mix diverges from the market's current
+        // 30-day regime mix is downweighted (stale-by-regime, distinct from
+        // stale-by-time) until fresh evidence in the current mix re-converges.
+        const score = statusWeight * overlap * evidenceDecay(meta) * regimeRankFactor(meta, query?.coin);
         candidates.push({ file, meta, score });
     }
     candidates.sort((a, b) => b.score - a.score || (b.meta.wins + b.meta.losses) - (a.meta.wins + a.meta.losses));
@@ -464,6 +469,9 @@ export interface MemoryContextOptions {
      *  Prompt-side half of the lensScope contract: lens-scoped skills only
      *  reach the prompt of their own seat. Omitted ⇒ filter is a no-op. */
     activeLens?: string;
+    /** §8.5a: per-run id used to seed the reproducible ε-holdout decision.
+     *  Omitted ⇒ this retrieval never holds out (conservative default). */
+    runId?: string;
 }
 
 export const getMemoryFilesContext = (
@@ -476,20 +484,27 @@ export const getMemoryFilesContext = (
     const budget = STAGE_BUDGET_CHARS[stage];
     const blocks: string[] = [];
     /** What ACTUALLY made it into the prompt — recorded for attribution. */
-    const injected: Array<{ path: string; kind: string }> = [];
+    const injected: Array<{ path: string; kind: string; chars?: number }> = [];
     let used = 0;
 
-    const push = (block: string): boolean => {
-        if (!block || used >= budget) return false;
+    const push = (block: string): number => {
+        if (!block || used >= budget) return 0;
         const room = budget - used;
-        blocks.push(cap(block, room));
-        used += Math.min(block.length, room);
-        return true;
+        const capped = cap(block, room);
+        blocks.push(capped);
+        used += capped.length;
+        return capped.length;
     };
 
     const exclude = options?.excludeSkillName?.toLowerCase().replace(/\.md$/i, '');
     const activeLens = options?.activeLens;
-    if (push(identityBlock())) injected.push({ path: 'profile/memory', kind: 'identity' });
+    // §8.5a ε-holdout: on ~10% of runs (seeded per run id) skill injection is
+    // withheld entirely so the control group keeps growing. The decision is
+    // the same for the analyst-opening and moderator-verdict slices of a run
+    // (same runId), recorded on the injection record, and mirrored in runStats.
+    const holdout = Boolean(options?.runId && shouldSkillHoldout(options.runId));
+    const identChars = push(identityBlock());
+    if (identChars > 0) injected.push({ path: 'profile/memory', kind: 'identity', chars: identChars });
     if (stage === 'verdict') push(conflictNote(query)); // a flag, not a notebook source
     const primary = (() => {
         if (!exclude) return matchedSkillBlock(query, audience, stage, activeLens);
@@ -499,8 +514,13 @@ export const getMemoryFilesContext = (
             ? { text: `[skills/${firstNonExcluded.file.name}] ${skillIndexLine(firstNonExcluded.file.name, firstNonExcluded.meta)}`, meta: firstNonExcluded.meta, name: firstNonExcluded.file.name }
             : { text: '', meta: null as SkillMeta | null, name: '' };
     })();
-    if (push(primary.text) && primary.meta) injected.push({ path: `skills/${primary.name}`, kind: 'skill' });
-    if (stage === 'verdict') {
+    if (!holdout) {
+        const skillChars = push(primary.text);
+        if (skillChars > 0 && primary.meta) {
+            injected.push({ path: `skills/${primary.name}`, kind: 'skill', chars: skillChars });
+        }
+    }
+    if (!holdout && stage === 'verdict') {
         // Top-K: verdict depth surfaces the runners-up as index
         // lines — one matching skill is a coincidence, two a pattern.
         // The primary skill is already pushed above — skip it
@@ -510,15 +530,19 @@ export const getMemoryFilesContext = (
                 && m.file.name !== primary.name,
         );
         for (const extra of ranked.slice(0, VERDICT_EXTRA_SKILLS)) {
-            if (push(`[skills/${extra.file.name}] ${skillIndexLine(extra.file.name, extra.meta)}`)) {
-                injected.push({ path: `skills/${extra.file.name}`, kind: 'skill' });
+            const extraChars = push(`[skills/${extra.file.name}] ${skillIndexLine(extra.file.name, extra.meta)}`);
+            if (extraChars > 0) {
+                injected.push({ path: `skills/${extra.file.name}`, kind: 'skill', chars: extraChars });
             }
         }
     }
-    if (push(riskRulesBlock())) injected.push({ path: 'rules/risk-rules', kind: 'rules' });
-    if (push(uncoveredMistakeLine(query))) injected.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
-    if (stage === 'verdict' && push(similarTradesBlock(query, trades))) {
-        injected.push({ path: 'journal/similar-trades', kind: 'similar' });
+    const riskChars = push(riskRulesBlock());
+    if (riskChars > 0) injected.push({ path: 'rules/risk-rules', kind: 'rules', chars: riskChars });
+    const mistakeChars = push(uncoveredMistakeLine(query));
+    if (mistakeChars > 0) injected.push({ path: 'rules/recurring-mistakes', kind: 'rules', chars: mistakeChars });
+    if (stage === 'verdict') {
+        const similarChars = push(similarTradesBlock(query, trades));
+        if (similarChars > 0) injected.push({ path: 'journal/similar-trades', kind: 'similar', chars: similarChars });
     }
 
     const doctrine = doctrineBlock();
@@ -547,6 +571,8 @@ export const getMemoryFilesContext = (
                     audience,
                     coin: query?.coin,
                     sources: injected,
+                    holdout: holdout || undefined,
+                    runId: options?.runId,
                 });
             } catch { /* telemetry must never break prompt assembly */ }
         })();

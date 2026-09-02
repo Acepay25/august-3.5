@@ -4,6 +4,510 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-51 — Bot Mode G2–G5: rooms, attention badges, @mentions, bot Routines
+
+Finished the port plan (`.hermes/plans/botmode-scan-and-plan.md`): group
+rooms become real coordination, bots surface their own failure states,
+the composer knows the roster, and a bot can own a schedule.
+
+- **G2 room rounds — `services/agents/groupRounds.ts` (new, pure)** —
+  the Hermes room engine: bounded round-robin rounds per user send,
+  speakers chosen by a deterministic @mention parse (name/title/no-space
+  forms, @everyone), replying exactly `(pass)` (or nothing/failing) is
+  silence, and a round where everyone passed = settled. Per-member
+  `lastSeenIndex` into the room log feeds each turn only what it hasn't
+  seen (incremental context — what makes multi-round cheap).
+  `hooks/useAgentGroups.ts` is rewritten onto the engine; `Message.hidden`
+  + a GroupChatView filter keep passed turns out of the transcript while
+  preserving thread attribution.
+- **G3 needs-attention badges — `services/agents/botAttention.ts` (new,
+  pure)** — `classifyBotAttention` over ProviderConfig +
+  ProviderHealthService telemetry: no_provider / model_missing / no_key /
+  disabled outrank transient auth / quota / benched. AgentRosterRail rows
+  show a ⚠ badge with the one-line fix hint as tooltip (attentionMap
+  computed in App).
+- **G4 @mention autocomplete (ChatInput)** — mention chips now derive
+  from the live roster via `botHandle()`; the old localStorage hack
+  truncated "Risk Bot" to "@Risk", which no parser matched. Un-gated
+  from ensemble mode — mentions work in every chat surface.
+- **G5 bot-scoped Routines** — `AutomationConfig` gains optional
+  `botId`: the run executes AS that bot instead of the ensemble
+  pipeline. `services/agents/botRoutine.ts` (new, pure executor):
+  persona via `buildBotSystemPrompt`, the bot's own provider/model over
+  `streamQuickResponse`, reply persisted as an AI row attributed to the
+  bot's identity pair (threadForProvider files it into the bot's 1:1),
+  `[[dm:@…]]` markers stripped and delivered through the mailbox (one
+  hop below a direct DM turn). Dangling bot / unconfigured provider /
+  missing prompt = VISIBLE skipped runs (reason stored on the run +
+  toast), never silent no-shows; ensemble automations are untouched.
+  Editor gets a "Run as bot" SelectMenu (ensemble seats hidden and
+  cleared while a bot is selected); the rail shows a Routines
+  disclosure on a bot's row (schedule peek + Run now). App wires the
+  automations hook to Bot Mode via a fire-time roster getter + mailbox
+  DM delivery. AutomationRunCard renders bot-run cards properly: the
+  persona reply in the bubble labeled "Bot reply" (was an empty
+  "Neutral" card), skipped runs surface their reason in the body with
+  it as the badge tooltip, outcome buttons stay analysis-gated.
+
+Tests: `tests/groupRounds.test.ts` (12) + room tests in
+`tests/agentGroups.test.tsx` (G2), `tests/botAttention.test.ts` (6, also
+tsc-fixed), `tests/chatInputTalkTo.test.tsx` (+4, G4),
+`tests/botRoutine.test.ts` (9) + `tests/automationBotRoutine.test.tsx`
+(5) + `tests/botRoutinesUI.test.tsx` (9) — readiness/skip doctrine,
+persona turn, marker strip + delivery, ensemble isolation, editor
+gating, rail disclosure, run-card bot/skip/ensemble rendering. Gates:
+tsc 0 · 1936 passed/11 skipped · build clean · eslint 0 errors on
+touched files (new files fully clean).
+
+---
+
+## ROUND-50 — Bot Mode G1: teammate DMs (the Grok/Hermes heartbeat)
+
+Deep-scanned Hermes Bot Mode at source level (plugin
+`apps/desktop/src/plugins/hermes-bots/`, core `tools/bot_mode_probe.py`,
+`bot_mode_dm.py`, `tools/bot_relay.py`, AGENTS.md §Bot Mode) and Grok Bot
+(xAI's "AI teammates" that share a cloud computer and text each other).
+Wrote the mechanism map + port plan to `.hermes/plans/botmode-scan-and-plan.md`
+(G1–G5). Implemented **G1 — teammate DMs**, the headline behavior:
+
+- **`services/agents/botMailbox.ts` (new, pure half)** — `[[dm:@handle]] text`
+  marker grammar (line-scoped body so prose after a marker stays in the
+  bubble), roster-handle resolution (exact / collapsed / title, Hermes
+  parity), `validateDM` with visible refusals (unknown target, self-DM,
+  unreachable provider, hop cap, TTL, rate budget, malformed — a lost DM
+  is the bug class Hermes's #93091 fixed), the byte-stable teammate
+  protocol section (roster as `- @handle — role` lines, "fire-and-forget
+  like texting, never predict a teammate's answer"), and
+  `buildBotSystemPrompt` (persona system.md + notes memory.md + protocol —
+  also fixes the pre-existing gap where bot threads used the generic
+  assistant prompt).
+- **`hooks/useBotMailbox.ts` (new, async half)** — per-target serial queues
+  (Hermes's per-profile lock, in-memory since august's bots are
+  in-process), 15-min envelope TTL checked at drain, 12/min global budget,
+  3-hop chain cap. A DM runs the target's turn with its persona over its
+  own thread; the reply lands in the target thread AND wakes the sender's
+  thread with a "↩ replied to your DM" notice — the completion-notification
+  shape, never auto-running the sender.
+- **Pipeline (casual branch)** — bot-thread sends run AS the bot: exact
+  provider+model, persona system prompt, thread-scoped history
+  (`threadForProvider`), and the settled reply is handed to the mailbox to
+  strip markers + deliver. Outside bot threads behavior is byte-identical
+  to before. Bridge via `getActiveBot`/`onBotReply` refs (roster state is
+  declared below the pipeline hook).
+- **Transcript** — DM rows badge as "DM · teammate" (never read as the
+  trader speaking); notices are attributed system rows; the rail's
+  working-pulse merges draining DM queues.
+
+Tests: `tests/botMailbox.test.ts` (13: grammar, resolution, refusals,
+hop cap, protocol byte-stability) + `tests/botMailboxAsync.test.ts` (7:
+wake-up notice, marker strip + next hop, TTL expiry, idempotent dispatch,
+provider-not-ready fallback). Gates: tsc 0 · 1889 passed/11 skipped ·
+build clean · eslint 0 errors.
+
+---
+
+## ROUND-49 — Reference-parity UI pass + Coach thread (§10.1)
+
+Target: the Hermes-style reference screenshot (flat dark rows, fill-hover
+selection, checkmark on the current row, avatar+name+time+preview list,
+status-icon vocabulary). Gates: tsc 0, **1869 passed / 11 skipped / 0
+failed**, build clean, eslint 0 errors on touched files.
+
+- **New `components/shared/SelectMenu.tsx`** — the reference-styled dropdown:
+  bare trigger, portal listbox, 13px rows, selection by background fill,
+  check glyph on the current row, right-aligned muted meta, section labels,
+  full keyboard (arrows/Enter/Escape, focus wraps), viewport flip. Optional
+  `triggerClassName` for boxed form usage.
+- **Native `<select>` popups replaced** (their OS-white chrome broke the
+  dark theme): ChatInput's Talk-to (now Team / Bots / Models sections with
+  model meta instead of the `─── models ───` hack), NewBotDialog provider +
+  model, TeamDialog seat provider/model ×N + moderator pair. Tests rewritten
+  to drive the listbox via `data-option` (teamDialog's "invalid seat" case
+  now points a seat at a model-less provider — menus can't select '').
+- **Monochrome fixes:** ModelPicker's cyan "free only" checkbox → zinc;
+  the roster's "is working" emerald pulse now sits inside a `status-surface`
+  scope so it renders as intended; roster "+" menu glyphs (☻ ⚿ ⚔) → lucide
+  Bot/Users/Swords icons.
+- **§10.1 Coach thread — built.** `ThreadSelection` gains `kind:'coach'`;
+  the roster rail gets a Coach row (GraduationCap avatar, unread badge =
+  drafts + queue proposals waiting, "in sync" when zero, preview line);
+  `components/chat/CoachThreadPanel` (lazy) renders the learning loop's
+  inbox as cards in the reference vocabulary — drafts (If→then clauses,
+  Save-as-skill / Discard routed through App's existing ingest + tombstone
+  handlers, "View the trade" jumps back to the highlighted verdict card)
+  and proposals (Apply for displacement/revival/demote via the ROUND-48
+  actuation paths, Dismiss for the human-edit kinds). Live on the same
+  `august-skill-drafts` / `august-learning-queue` events. 8 tests
+  (tests/coachThread.test.tsx). The coach thread is exempt from the
+  last-opened marking effect (its badge is a backlog count, not unread
+  messages).
+- **Learning/memory/skill loop wiring re-verified end-to-end:** verdict →
+  citations (F1) → adherence (P0-2 runId join) → evidence ladder + birth
+  claim (P0-3) → proposals → Coach thread + Settings→Skills queue panel
+  (P0-1) → apply paths → notebook. Drafts → Inbox + Coach cards → ingest.
+  Pass mining → weekly sweep → drafts → same approval surface. Every queue
+  now has a human-visible, human-actionable exit.
+
+---
+
+## ROUND-48 — Post-batch audit + review fixes: the learning loop's silent breaks
+
+Full review of the uncommitted ROUND-41→47 work (plan batches 5–14): every
+changelog claim re-verified against source, UI/UX wiring audited component by
+component, three deep logic reviews. Gates after: tsc 0, **1861 passed / 11
+skipped / 0 failed**, build clean, eslint 0 errors on all touched files.
+
+**Wiring fixes (features that existed but never fired):**
+- `annotateVerdictCitations` had ZERO callers → the `cited` field was never
+  written → OVERRIDDEN adherence was dead. Now called at verdict commit
+  (hooks/useAnalysisPipeline.ts), scoped to the run's own record via runId +
+  a short settle wait so a slow Preferences write can't stamp the previous run.
+- `runPassMiningSweep` (§8.2c) had zero callers → wired into the weekly boot
+  pass (fire-and-forget, ≤5 kline fetches/sweep) + 8 regression tests
+  (tests/passMining.test.ts: TP-first vs SL-first resolution, cluster→draft,
+  no draft from misses, the splice guard below).
+- Journal now surfaces the miss-cost counter-metric (`missCostLine`);
+  WeeklyReviewCard now renders `digest.metaCalibration` (Brier / gate
+  precision / refinement recovery) — both computed but never displayed.
+- Boot passes read `loggedTradesRef` BEFORE the profile's trades loaded →
+  moved after the load, `loadedTrades` passed directly (App.tsx).
+
+**Logic bugs:**
+- passMining upsert: `splice(findIndex(...), 1)` with findIndex = −1 deleted
+  the LAST record (JS negative-index semantics). Guarded.
+- PreReadGate re-gated every old settled card → latest-only via
+  `context.latestMessageId`.
+- SkillCitationChips / ContextDisclosure queried injections by createdAt
+  only → later runs' records leaked into older cards. Bound by the message's
+  own `finishedAt`.
+- **§8.3a adherence join was inverted** (the big one): the window looked at
+  records AFTER `trade.timestamp` — but the run that shaped the trade
+  PREDATES the log click, so every followed skill was mislabeled CONTROL and
+  no skill ever earned FOLLOWED credit. Replaced with an EXACT runId join:
+  runId (= triggering user message id) now persists on the injection record,
+  `runStats.runId`, and `trade.sourceRunId`; `skillAdherenceForRun` joins on
+  it. Legacy trades/records without linkage keep full credit (UNKNOWN).
+  skillHoldout fixtures moved to production timing + 2 new regression tests
+  (later run must not steal attribution; legacy trade = UNKNOWN).
+- `runContradictionSweep`'s queued count was discarded → logged like the
+  other passes.
+
+**P0 — the learning queue was write-only (§4.6 loop E):**
+`listLearningProposals` had ZERO consumers — five subsystems (cap
+displacement, graveyard revival, zero-evidence demote, re-scope ×3,
+contradiction ×2) queued proposals into localStorage every week and nobody
+could ever see or act on them. New `components/settings/LearningQueuePanel`
+mounted in Settings → Skills: newest-first list, kind badges, Apply where a
+deterministic actuation exists, Open-in-chat / Dismiss otherwise, live on the
+`august-learning-queue` event. New apply paths in SkillMemoryService:
+`applyRevivalProposal` (archive → live, as candidate — never straight to
+confirmed), `applyDemoteProposal` (confirmed → candidate), and
+`applyDisplacementProposal` now actually INSTALLS the challenger the gate
+compared (its docstring promised this; the body only retired the incumbent).
+6 tests (tests/learningQueueApply.test.ts).
+
+**P0 — §8.2a birth certificate was never tested:**
+`evaluateClaim` existed, was imported, and was called nowhere;
+`claimTestedEvidence` was declared but never serialized or written. Now:
+deriveStatus consumes the claim directly (an UNMET claim at horizon blocks
+promotion; met/pending defer to the ladder), recordEvalVerdict tests the
+claim each pass (stamps `claimTestedEvidence`, appends MET/UNMET/pending to
+evalDetail), and the eval-promotion path honors an unmet claim. 7 tests
+(tests/skillBirthClaim.test.ts).
+
+**Dead code:** `skillInjectedSince` (zero callers; the dashboard derives the
+same set inline) removed.
+
+**Remaining scope (not defects):** §10.1 Coach thread (roster bot rendering
+drafts + queue proposals as inline cards) and message search were claimed in
+batch 13 but never built — the drafts/queue now have real surfaces (Inbox +
+LearningQueuePanel), so the Coach thread is a convenience layer, not a
+functional gap. Deferred pending user go-ahead.
+
+---
+
+## ROUND-47 — §8.4a–d: graveyard + retirement taxonomy, contradiction sweep, settled-belief challenge
+
+**§8.4a + §8.4b — `services/learning/skillGraveyard.ts`:**
+- Tombstone index per user (cap 40, newest-first): one line per retired skill —
+  "tried X, retired: <reason> after N=<n>, lift <±pts>" — written at the
+  archive sweep (retirement time), and injected into the WORTH GATE's context
+  (capped 40, dynamic import; never into debates).
+- Retirement taxonomy: `insufficient-evidence | regime-shifted | superseded |
+  eval-hurts | user-veto`, mapped from the ledger's transition reason. The
+  retire-band transition now stamps `regime-shifted` when the §8.5d sentinel
+  sees a regime mix divergence, else `insufficient-evidence`; manual retire
+  stamps `user-veto` (history + tombstone, not just 'manual').
+- Creation dedup against the ARCHIVE (exact + token-shuffled trigger
+  normalization) at both creation paths (worth-gate fold, crafted ingest) —
+  a retired twin queues a REVIVAL review card with its re-entry rule instead
+  of a silent re-creation; live dedup untouched.
+- **§8.4c — `utils/contradictionSweep.ts`:** live skill pairs with ≥2 shared
+  condition tokens AND conflicting action (opposite kind / opposite direction)
+  → one deduped merge/priority proposal per pair, fired weekly beside the
+  review (no LLM).
+- **§8.4d — `services/learning/beliefChallenge.ts`:** per-slug rolling
+  30-day counter for WIN trades whose direction contradicts the settled
+  belief's claim (context-matched); ≥3 flags a review proposal — NEVER
+  auto-invalidated.
+- Tests (+26): graveyard exact/token-twins, tombstone lines + cap, reason
+  mapping + re-entry rules, revival dedupe; sweep pair detection + dedupe;
+  claim extraction, flag threshold, context/direction guards, status stays
+  settled.
+
+**ROUND-48 — Batch 6: §4.6 self-improvement loop A→E**
+- **A extractor** (`extractEpisodes`): post-hoc, read-only, outcome-linked
+  episodes from closed post-mortems (rootCauseClass, key lesson, clause),
+  180-day retention. **B fingerprints**: failure class + setup identity,
+  normalized (ids/numbers/paths stripped); stable cause = mineable;
+  unclassifiable → `unknown:<first-line>`; ≥2 occurrences ⇒ flagged.
+- **C judge gate**: extract-only by DEFAULT (no drafting at all) until a judge
+  precision ≥ 0.8 over ≥ 30 samples is recorded (`recordJudgePrecision`).
+- **D distill + queue**: deterministic three-way classification (no cover →
+  create-draft via the existing skill-draft inbox; shallow overlap →
+  amend-trigger proposal; deep overlap → amend-body Pitfalls-only proposal);
+  one draft per fingerprint/action/target (dedupe ledger); pruning: zero
+  evidence AND zero injection hits in 30 days ⇒ demote SUGGESTION (kind
+  `demote`) — never automatic. Human gate = the existing
+  approval-inbox/skill-draft + learning-proposal queues.
+- **E measurement loop**: fingerprint↔skill linking (re-linkable later),
+  `recurrence_after_install` credited, zero recurrence in 30 days ⇒ resolved
+  (+ skill credited), recurrence auto-drafts a REVISION proposal (never a
+  silent rewrite); metrics via `loadLearningMetrics`.
+- Wired into the weekly review pass (offline, add-only). Tests (9) incl. the
+  plan's end-to-end seeded chain: inject failure → fingerprint → flagged →
+  draft → approve → simulate recurrence → revision proposal appears.
+
+Gates (both rounds): tsc exit 0, 1832 passed / 11 skipped / 0 failed,
+vite build clean.
+
+---
+
+## ROUND-46 — §8.5d regime-mix drift sentinel (stale-by-regime, not stale-by-time)
+
+Time-decay is the only staleness axis skill evidence had; a fast crypto
+regime shift is invisible to a 30-day age constant. The sentinel compares the
+mix during which a skill's evidence accumulated against the market's current
+30-day mix, and downweights divergent skills in retrieval — the main way a
+whole library goes quietly wrong at once now has a tripwire.
+
+- `utils/regimeSentinel.ts` — `skillEvidenceMixWeights` (regimeStats counts →
+  weights, raw keys mapped through the ledger's own `marketRegimeToLedger`);
+  `currentRegimeMix` (regimeLedger sync cache, 30-day window); L1 distance
+  with `REGIME_MIX_L1_THRESHOLD = 0.6` (strict >; boundary is NOT divergent);
+  `STALE_BY_REGIME_DOWNWEIGHT = 0.6`.
+- **Live-derived flag, no persisted state**: `regimeRankFactor` is computed
+  on every retrieval read, so it auto-clears the moment fresh evidence in the
+  current mix moves the skill's evidence weights back toward the market mix
+  (no invalidation machinery to forget).
+- Wired into the single ranking point (`rankedMatchedSkills` score =
+  status × overlap × evidence-decay × regime factor) — the same score every
+  consumer (opening slice, verdict extras, retrieval list) sees.
+- Tests (`tests/regimeSentinel.test.ts`, 9): weight normalization, L1 math +
+  threshold boundary, null safety, auto-clear, and a full-stack ledger-cache
+  test (25 trending + 5 ranging days via `recordRegimeDay`) proving a
+  cross-regime skill is flagged + downweighted (0.6×) while a dominant-regime
+  skill is untouched, and unknown coins are silent.
+
+Gates: tsc exit 0, 1806 passed / 11 skipped / 0 failed, vite build clean.
+§8.5 a–d now complete.
+
+---
+
+## ROUND-45 — §8.5c context-budget economics (cost vs benefit of every injected skill)
+
+Injection chars are the scarce resource; now the cost side is measured,
+ranked, and audited on a cadence.
+
+- **Per-source char telemetry** — `InjectedSource.chars` records the actual
+  chars each block contributed to the prompt (retrieval's `push()` returns the
+  sliced length; every source — skill, risk rules, mistake line, similar
+  trades, identity — now logs it).
+- **`utils/skillEconomics.ts`** — per-skill economics: cost = Σ injected chars
+  (legacy records fall back to per-stage defaults: index line 120 / full-body
+  retrofit 450 — the §4.7 economics price an index line AND a recall pull
+  differently), benefit = lift pts × injection frequency, value = lift-per-char.
+  `worstBudgetOffender` picks the smallest lift-per-char among measured
+  skills (highest cost when no lift data exists).
+- **Monthly scoreboard** — `buildMonthReport` (with optional injections)
+  names the worst offender in the card's `needsAttention` short list
+  ("costs ~N chars for ±Xpt lift — worst value per char…"), and
+  `runMonthlyReport` feeds the injection log in. The library's cost side is
+  now reviewed monthly, alongside adherence, mistakes, and Brier.
+- Tests (`tests/skillEconomics.test.ts`, 6): cost/benefit math from fixture
+  logs, best-first sorting, index-line vs recall pricing (defaults differ
+  >2×), no-lift skills never outrank measured ones, cost-highest fallback,
+  empty-log safety. Existing monthlyReport tests unchanged (param optional).
+
+Gates: tsc exit 0, 1797 passed / 11 skipped / 0 failed, vite build clean.
+
+---
+
+## ROUND-44 — §8.5b meta-calibration (the loop learns about the loop)
+
+Three deterministic ratios, maintained by recorders at ground-truth points
+and computed weekly into a per-user Preferences blob; surfaced in the AI
+Learning Profile header (LearningDashboard) and on the weekly digest.
+
+- `services/learning/metaCalibration.ts` — counters + a pending watch for
+  gate-approved triggers; `computeMetaCalibrationRatios` (null when no
+  sample); `runWeeklyMetaCalibration` (called by the weekly review pass)
+  persists the ratios and, when worth-gate precision < 40% at sample ≥ 10,
+  emits a P7 harness-lesson (`worth-gate-precision-decay`) with a
+  default-change proposal (raise `MIN_SAMPLE_CONFIRMED` / tighten the Wilson
+  band) — a decayed gate gets a proposal, never a silent threshold tweak.
+- **Worth-gate precision** — `recordWorthGateApproval` at the gate fold's
+  create path (the only `maybeUpsertSkill` caller, when `preferredClause` was
+  the gate's judged clause); `recordWorthGateConfirm` on the candidate→confirmed
+  transition (matched via the pending watch, so only gate-approved skills count).
+- **Refinement recovery** — `recordRefinementOutcome` at both shadow
+  settlements (the inline evidence-path settle and `settleSkillShadow`).
+- **Eval-verdict agreement** — the first FOLLOWED trade after a helps/hurts
+  verdict era counts once per era: helps→WIN / hurts→LOSS agreed.
+- **UI** — three-chip row under the LearningDashboard header (monochrome;
+  ‘—’ when a ratio has no sample); `WeeklyReviewDigest.metaCalibration`.
+- Tests (`tests/metaCalibration.test.ts`, 8): approval→confirm via the watch,
+  no confirm without approval, pending stays pending, once-per-era counting,
+  null ratios on empty data, decay lesson at sample ≥ floor + below floor
+  sample, no lesson above the floor.
+
+Gates: tsc exit 0, 1791 passed / 11 skipped / 0 failed, vite build clean.
+
+---
+
+## ROUND-43 — §8.5a permanent ε-holdout (the long-run honesty mechanism)
+
+~10% of runs now withhold skill injection so the CONTROL group keeps growing
+and counterfactual lift stays honest after year one. Seeded per run id and
+reproducible; deliberately NOT configurable.
+
+- `utils/skillHoldout.ts` — pure, platform-stable decision: FNV-1a of the run
+  id, `hash % 100 < 10` (≈10%). Same id → same decision, always; no id ⇒ no
+  holdout (conservative default, never misclassifies).
+- Decided at the single retrieval entry point (`getMemoryFilesContext`): a
+  holdout run injects NO skill blocks (primary + verdict extras) for BOTH the
+  analyst-opening and moderator-verdict slices (same runId), and the injection
+  record carries `holdout: true` with no skill source — so downstream
+  `skillAdherenceSince` sees "not-injected" and the matched skill's outcomes
+  accumulate in `controlIds` (the CONTROL evidence group) instead of W/L.
+- Run id = the triggering user message id (the run's stable identity in
+  `handleSendMessage`), threaded `useAnalysisPipeline` →
+  `assemblePipelineMemoryContext(runId)` → `MemoryContextOptions.runId`.
+- `RunStats.skillHoldout` mirrors the same seeded decision, so every
+  downstream consumer (signal card, dashboards, audits) can see whether a run
+  was a control run.
+- Tests (`tests/skillHoldout.test.ts`, 8): determinism, ~10% rate over 1000
+  ids, no-id default, both outcomes; integration — holdout run injects no
+  skill + records holdout:true; normal run injects + records the source;
+  holdout-run outcome → controlIds, counts untouched; normal-run outcome →
+  full credit.
+
+Gates: tsc exit 0, 1782 passed / 11 skipped / 0 failed (one full-suite load
+flake in roomComponents.test.tsx — passes 10/10 isolated, same class as the
+documented skillsGrid issue), vite build clean.
+
+---
+
+## ROUND-42 — Stabilize ROUND-41 tree: restore harnessSettings regression, fix §8.2a type errors, reconcile tests to §8.3c/§8.3d
+
+ROUND-41's tree was NOT green: `tsc` exited 2 and 3 tests failed. A mid-flight
+edits broke a foundational settings module and left the birth-certificate +
+§8.3 work half-integrated. This round gets it green again (gates: tsc exit 0,
+1775 passed / 0 failed, build clean) without disturbing the ROUND-41 feature
+surface.
+
+- **Restore `utils/harnessSettings.ts` (regression).** The §8.2b library-cap
+  work rewrote the module from scratch, flattening the existing settings
+  surface and deleting `getHarnessSettings` / `saveHarnessSettings` /
+  `getSessionGuardConfig` (plus prompt-A/B, desk-tools, equity/risk, debate-cap
+  fields) — breaking 11 consumers of the session-guard config and landing
+  features. Reconstructed the full original module and extended it with
+  `skillLibraryCap` + `DEFAULT_SKILL_LIBRARY_CAP` / `getSkillLibraryCap` /
+  `setSkillLibraryCap`, so the §8.2b cap ships on top of the working settings
+  instead of replacing them. `getSessionGuardConfig` (preset + per-field
+  overrides) is back as the single static source.
+- **Fix §8.2a type errors.** `SkillMemoryService` frontmatter parse now
+  `parsePredictionLine(...) ?? undefined`, and `skillWorthGate` builds its
+  `SkillWorthDecision` with `prediction ?? undefined` instead of conditionally
+  spreading (the `| null` from `sanitizePrediction` no longer leaks as `| undefined`).
+- **Reconcile 3 tests to the §8.3c/§8.3d contract.** `harnessMemory` seed never
+  set a live `ifCondition`, so the shadow-semantics assertion (live trigger
+  retained vs. refined version in `shadow`) saw `undefined`; the seed now
+  carries `ifCondition`/`thenAction`. `skillLedgerInvariant` fixtures were pinned
+  at N=5 where §8.3d's Wilson cold-start gate (N≥8, band excludes 50%) holds a
+  skill at `candidate`; fixtures moved to 7W/1L (repeat) and 1W/7L (avoid) so the
+  evidence-driven and worth-gate-merge transitions genuinely confirm.
+
+---
+
+## ROUND-41 — Debate pods + chat/floor observability (§9–§10), journal remainder (§4.5/§5a), memory index (§4.7), store unification (§8.1)
+
+All uncommitted work in this tree, gated green (tsc exit 0, 1775 tests
+passed, vite build clean).
+
+**Batch 5 remainder:**
+- Monthly report card (§4.5): `services/learning/monthlyReport.ts`
+  (deterministic what-happened/learned/needs-attention assembly incl.
+  grade-the-panel Brier per provider + ensemble line) rendered by
+  `components/journal/MonthlyReportCard.tsx` in the Journal.
+- Pre-read capture (§5a): opt-in gate (`components/chat/PreReadGate.tsx` +
+  `utils/preRead.ts`) — commit direction + confidence BEFORE the verdict
+  reveals, stored as `userPriorCall`; human-vs-verdict calibration line in
+  the journal and session usage panel.
+- Index-layer memory injection (§4.7): `buildGlobalMemoryIndex` replaces the
+  JSON dump of GlobalMemory in `constructOptimizedContext` — one line per
+  entry, ~900-char cap, `familyPerformance` stays injected verbatim; detail
+  remains a `recall` tool pull.
+
+**Batch 12 — seat tier + health read side:**
+- Lens pods (§9.1): `services/providers/debatePods.ts` — 6–10 seats map to
+  3 pods, one trust-chosen representative carries the pod position to the
+  floor, every seat still seals its own conviction; verdict transcript cap
+  scales 2400 + 400×(seats−5). Roster cap raised 5→10 (`MAX_ROSTER_SEATS`),
+  team chips and composer steering cover 10 seats. debateFlow tests at 6
+  seats + pod unit tests.
+- Provider health view (§9.2): live last-error/latency/rate-limit read-out
+  in Settings → Providers (the read side ProviderHealthService always
+  promised).
+
+**Batch 13 — chat + floor observability:**
+- Unread thread badges on the roster rail + `markThreadOpened` on focus;
+  message search over the flat thread array.
+- Skill-citation chips on verdict messages (tap → skill card), per-message
+  context disclosure ("what this seat saw"), harness-lessons browser in
+  Settings.
+- Floor mode: seat desks show thinking/effort/cooldown posture from the
+  wire audit + health data, harness-lesson squawks, sealed-auction dot plot,
+  guard state on the Big Board, pin-a-seat side pane.
+
+**Batch 9 — store unification (§8.1):**
+- The attributed-insight store moved into the trader notebook: new
+  `distilled/` folder, one auto-managed file per lesson
+  (`services/learning/distilledMemory.ts`), `distilled:<fingerprint>`
+  provenance, cap 200 pruning lowest-quality-first, write-through sync cache
+  so reads-after-writes stay consistent. Old `attributed_insights_kb`
+  preference rows migrate once on boot, then the key is retired.
+- `AttributedInsight` type moved to types/learning.ts; the store API in
+  PatternMemorySynthesisService is unchanged for consumers — only the
+  persistence backend moved. The mandatory-pattern gate verdicts are pinned
+  by a snapshot test (`tests/storeUnification.test.ts`).
+- Regex miner deleted (`InsightExtractionService.ts`, ~870 lines): regex
+  mining rewarded fluent writing, not correct writing, and its prompt-
+  injection layer was dead code. Severity + provider-attribution machinery
+  moved to `services/learning/severityInsights.ts` (cyclic import with the
+  synthesis service reduced to one documented safe edge); provider
+  attribution now pulls lesson text via the notebook's own deterministic
+  lesson extractor — one lesson per provider, not up to 5 regex hits.
+- Fingerprint dedupe: two lessons with the same normalized shape merge into
+  one fact (magnitudes/ids stripped), keeping the merged feedback counters —
+  the §4.6 recurrence-counting substrate. `JobQueueService`'s
+  EXTRACT_INSIGHTS job still records severity + provider lessons, minus the
+  miner; the App-side per-profile insight-KB feed was removed.
+- VersionHistoryDashboard's knowledge-base tab reads the notebook-backed
+  store; insight feedback is awaited before reload.
+
+---
+
 ## ROUND-40 — Audit-fix batch (plan §14), dead-code cleanup (§8.0), weekly review (§4.5)
 
 **Batch 14 (all audit findings from the v5 plan review, fixed with

@@ -28,6 +28,16 @@ import {
     runUid,
 } from '../services/automation/AutomationService';
 import { parseCron, nextCronTime, hasCronFireBetween } from '../services/automation/cronParser';
+import type { AgentBot } from '../services/agents/agentRoster';
+import type { DMEnvelope } from '../services/agents/botMailbox';
+import {
+    botRoutineMessageRow,
+    botRoutineRunRow,
+    botRoutineSkipReason,
+    runBotRoutineTurn,
+} from '../services/agents/botRoutine';
+import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
+import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
 /** Global catch-up budget: at most this many missed runs replay on reopen. */
@@ -71,6 +81,19 @@ export interface UseAutomationsParams {
         error: (t: string, m?: string) => void;
         warning: (t: string, m?: string) => void;
     };
+    /**
+     * G5 (plan botmode-scan): the bot roster. Bot-scoped routines run AS a
+     * roster bot (persona + its provider/model) instead of the ensemble.
+     * Accepts a live snapshot getter (App's roster state lives below this
+     * hook in its body) or a plain array. Optional so existing call sites
+     * and tests stay valid; a bot-scoped run without a bridge is a visible
+     * skip (never a silent no-show).
+     */
+    bots?: AgentBot[] | (() => AgentBot[]);
+    /** Live message array ref — the bot turn's history is its own thread. */
+    messagesRef?: React.MutableRefObject<Message[]>;
+    /** Deliver the reply's [[dm:@…]] markers (useBotMailbox.dispatchFromBotReply shape). */
+    onBotRoutineDMs?: (envelopes: DMEnvelope[]) => void;
 }
 
 /** Reconstruct an ImageMetadata from a stored data URL (repeat-last-analysis). */
@@ -148,6 +171,20 @@ export function useAutomations(params: UseAutomationsParams) {
     const inFlightRef = useRef<string | null>(null);
     const conversationHistoryRef = useRef(conversationHistory);
     conversationHistoryRef.current = conversationHistory;
+    // G5 bridge — live roster/messages/DM-delivery read at FIRE time (the
+    // roster can change between render and a cron fire, and App's roster
+    // state is declared below this hook, so a getter must not be invoked
+    // during render — only once a run actually fires).
+    const botsSourceRef = useRef<AgentBot[] | (() => AgentBot[]) | undefined>(undefined);
+    botsSourceRef.current = params.bots;
+    const messagesRefRef = useRef<React.MutableRefObject<Message[]> | undefined>(params.messagesRef);
+    messagesRefRef.current = params.messagesRef;
+    const dmsRef = useRef<((envelopes: DMEnvelope[]) => void) | undefined>(params.onBotRoutineDMs);
+    dmsRef.current = params.onBotRoutineDMs;
+    const botsNow = (): AgentBot[] => {
+        const src = botsSourceRef.current;
+        return typeof src === 'function' ? src() : (src ?? []);
+    };
     // Per-automation "last tick checked" timestamps — the scheduler fires
     // when the cron's next occurrence falls inside the tick window, so
     // second-exact schedules are never missed by a coarse tick.
@@ -187,12 +224,116 @@ export function useAutomations(params: UseAutomationsParams) {
     }, []);
     const runsByAutomationRef = useRef<Record<string, AutomationRun[]>>({});
 
+    // ─── G5: bot-scoped routine execution ─────────────────────────────────
+    // Runs the automation AS a roster bot: persona system prompt + the
+    // bot's own provider/model, reply appended as an AI row attributed to
+    // the bot's identity pair (threadForProvider files it in the bot's
+    // 1:1 thread). Mirrors runAutomation's bookkeeping (one-run guard,
+    // lastRunAt/runCount bump, catch-up chaining) minus the ensemble
+    // machinery. DM markers in the reply are stripped by the pure half and
+    // delivered through the mailbox bridge.
+    const runBotScopedAutomation = useCallback(async (
+        config: AutomationConfig,
+        isCatchUp: boolean,
+    ): Promise<void> => {
+        const bots = botsNow();
+        const messagesSource = messagesRefRef.current;
+        const deliverDMs = dmsRef.current;
+        const skipReason = botRoutineSkipReason(bots, config, providerConfigs);
+        const prompt = (config.promptTemplate ?? '').trim();
+        const runId = runUid();
+        const startedAt = new Date().toISOString();
+        const finishMeta = (): void => {
+            const nextConfigs = configsRef.current.map(c => c.id === config.id
+                ? { ...c, lastRunAt: Date.now(), runCount: c.runCount + 1, updatedAt: Date.now() }
+                : c);
+            void persistConfigs(nextConfigs);
+        };
+
+        if (skipReason || !prompt) {
+            if (skipReason) {
+                appendRun(config.id, {
+                    id: runId, automationId: config.id, status: 'skipped',
+                    startedAt, finishedAt: new Date().toISOString(), error: skipReason,
+                });
+                toast.warning(isCatchUp ? 'Routine skipped (catch-up)' : 'Routine skipped',
+                    `"${config.name}" — ${skipReason}`);
+            } else {
+                toast.warning('Routine skipped', `"${config.name}" has no prompt template.`);
+            }
+            finishMeta();
+            return;
+        }
+
+        if (!messagesSource || !deliverDMs) {
+            // No bridge wired (embedders/tests without the Bot Mode half):
+            // a bot-scoped routine must not silently degrade into the
+            // ensemble pipeline — surface the miss.
+            toast.error('Routine failed', `"${config.name}" — bot routines are not wired up.`);
+            return;
+        }
+
+        inFlightRef.current = config.id;
+        setRunningAutomationId(config.id);
+        try {
+            const outcome = await runBotRoutineTurn(config.botId!, prompt, {
+                bots,
+                providerConfigs,
+                messages: messagesSource.current,
+                persona: readBotSystemMarkdown(config.botId!),
+                notes: readBotMemoryMarkdown(config.botId!),
+                stream: (provider, p, history, system) => streamQuickResponse(provider, p, history, system),
+            });
+            if (outcome.status === 'skipped') {
+                appendRun(config.id, {
+                    id: runId, automationId: config.id, status: 'skipped',
+                    startedAt, finishedAt: new Date().toISOString(), error: outcome.skipReason,
+                });
+                toast.warning(isCatchUp ? 'Routine skipped (catch-up)' : 'Routine skipped',
+                    `"${config.name}" — ${outcome.skipReason}`);
+            } else {
+                const row = botRoutineMessageRow(outcome.bot, outcome.reply, `botrun-${runId}`);
+                messagesSource.current = [...messagesSource.current, row];
+                appendMessageRef.current?.(row);
+                if (outcome.dmEnvelopes.length > 0) deliverDMs(outcome.dmEnvelopes);
+                appendRun(config.id, botRoutineRunRow(config, prompt, runId, startedAt, row));
+                toast.success(isCatchUp ? 'Routine caught up' : 'Routine complete',
+                    `"${config.name}" — ${outcome.bot.name} replied.`);
+            }
+            finishMeta();
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            appendRun(config.id, {
+                id: runId, automationId: config.id, status: 'error',
+                startedAt, finishedAt: new Date().toISOString(), error: msg,
+            });
+            toast.error('Routine failed', `"${config.name}" — ${msg}`);
+            finishMeta();
+        } finally {
+            inFlightRef.current = null;
+            setRunningAutomationId(null);
+        }
+    }, [providerConfigs, toast, appendRun, persistConfigs]);
+
+    // Set once by App after both hooks exist (see assignAutomationsBridge).
+    const appendMessageRef = useRef<((msg: Message) => void) | null>(null);
+
     // ─── Execute one run ──────────────────────────────────────────────────
     const runAutomation = useCallback(async (config: AutomationConfig, isCatchUp = false): Promise<void> => {
         if (inFlightRef.current) return; // one run at a time (manual or automation)
         if (params.isAnalysisInProgress) return;
         const username = usernameRef.current;
         if (!username || !config.enabled) return;
+
+        // ─── G5: bot-scoped routine — run AS the bot, not the ensemble ─────
+        // A bot-scoped run is the bot's own casual turn (persona prompt +
+        // provider/model, reply filed into its thread) instead of the
+        // ensemble debate. No-op prompts and a dangling bot/provider are
+        // VISIBLE skips (stored on the run), never silent no-shows.
+        if (config.botId) {
+            await runBotScopedAutomation(config, isCatchUp);
+            return;
+        }
 
         // Build the input: fixed template, or replay the last manual analysis.
         let prompt = (config.promptTemplate ?? '').trim();
@@ -427,6 +568,17 @@ export function useAutomations(params: UseAutomationsParams) {
         void loadRuns(id);
     }, [loadRuns]);
 
+    /**
+     * G5 bridge — App wires the automations hook to the Bot Mode half after
+     * both hooks exist (the roster state and mailbox live below useAuto-
+     * mations in App's body). Assigned refs, never re-rendering state.
+     */
+    const assignAutomationsBridge = useCallback((bridge: {
+        appendMessage: (msg: Message) => void;
+    }) => {
+        appendMessageRef.current = bridge.appendMessage;
+    }, []);
+
     // ─── Schedule previews (for the sidebar + editor) ─────────────────────
     const getNextRunPreview = useCallback((config: AutomationConfig): string | null => {
         if (!config.enabled) return null;
@@ -451,6 +603,11 @@ export function useAutomations(params: UseAutomationsParams) {
         deleteAutomation,
         toggleAutomationEnabled,
         pauseAutomationUntil,
+        assignAutomationsBridge,
+        botRoutineCount: (botId: string): number =>
+            configs.filter(c => c.botId === botId).length,
+        botRoutinesFor: (botId: string): AutomationConfig[] =>
+            configs.filter(c => c.botId === botId),
         getNextRunPreview,
         isCronValid: (cron: string) => parseCron(cron) !== null,
         uid,

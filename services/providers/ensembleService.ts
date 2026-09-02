@@ -1,7 +1,7 @@
 
 import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole, AnalystConsensus } from '../../types';
 import { ProviderConfig } from '../../types/provider';
-import { ChatMessage, warmProviderConnection } from './GenericProviderService';
+import { ChatMessage, warmProviderConnection, sendChatRequest } from './GenericProviderService';
 import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache, ARBITER_ALLOWED_TOOLS } from '../analysis/DeskToolsService';
 import { createDebateMailbox, synthesizeReplyToLine, formatDmEventLine } from '../analysis/DebateMailbox';
 import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learning/EvidencePackService';
@@ -55,6 +55,16 @@ import {
     formatEnsembleLineBlock,
     homogeneousRosterWarning,
 } from './debateScience';
+import {
+    assignPods,
+    buildPodRoundPrompt,
+    formatPodPositionBlock,
+    POD_TIER_MIN_SEATS,
+    scaleTranscriptCap,
+    verdictTranscriptCap,
+    withTrustRepresentatives,
+    Pod,
+} from './debatePods';
 import { formatHarnessNotesBlock, recordBudgetLessonFromAudit } from '../learning/harnessLessons';
 import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
@@ -2088,6 +2098,117 @@ export const conductRealDebate = async function* (
     }
     const skipRebuttals = pre.action === 'skip_to_verdict' || lastDone >= totalRounds || Boolean(forceSkipRebuttals);
     const rebuttalStart = Math.max(2, lastDone + 1);
+
+    // ─── LENS PODS (Batch 12, plan §9.1) ──────────────────────────────────
+    // 6+ seats do NOT run as a flat floor: addressed routing degenerates,
+    // the verdict transcript truncates, and cost scales linearly. The seats
+    // collapse into 3 pods (macro/technical/risk — lens-mapped when lenses
+    // are ON, round-robin when not). Each pod runs ONE compact internal
+    // round over its members' openings; the pod's most-trusted seat carries
+    // the position + dissent to the floor. Intermediate floor rounds then
+    // run at effective size = #representatives; the FINAL round still
+    // speaks for EVERY seat (the sealed-conviction auction stays
+    // seat-level — the moderator seeing all 6-10 convictions is the point).
+    const podsActive = !skipRebuttals && lastDone < 2 && names.length >= POD_TIER_MIN_SEATS;
+    const pods: Pod[] = podsActive
+        ? (() => {
+            const lensOf = (name: string): string | undefined => {
+                if (!lensConfig?.enabled) return undefined;
+                const seat = debateRoster.find(o => o.provider.name === name);
+                if (!seat) return undefined;
+                const role = getRoleForProvider(`${seat.provider.config.id}::${seat.provider.model}`, lensConfig.assignments);
+                if (role === AnalystRole.MACRO_VOLATILITY) return 'macro';
+                if (role === AnalystRole.TECHNICAL_ANALYST) return 'technical';
+                if (role === AnalystRole.RISK_EXECUTION) return 'risk';
+                return undefined;
+            };
+            // Seat trust = realized calibration (lower Brier = more trusted;
+            // unknown seats score 0 and keep roster order).
+            let cal: ReturnType<typeof getCalibrationSummaries> = [];
+            try { cal = getCalibrationSummaries(); } catch { /* cold store */ }
+            const trustOf = (name: string): number => {
+                const pid = debateRoster.find(o => o.provider.name === name)?.provider.config.id;
+                const c = cal.find(x => x.provider === pid || x.provider === name);
+                if (!c || c.samples === 0 || c.brierScore === null) return 0;
+                return (0.25 - c.brierScore) * Math.min(c.samples, 20);
+            };
+            return withTrustRepresentatives(assignPods(names, lensOf), trustOf);
+        })()
+        : [];
+    const podBySeat = new Map<string, Pod>();
+    const representativeSet = new Set<string>();
+    for (const p of pods) {
+        for (const s of p.seats) podBySeat.set(s, p);
+        representativeSet.add(p.representative);
+    }
+    const podRoundTexts: Record<string, string> = {};
+    if (podsActive && pods.length > 0) {
+        emitLog('episode', `Lens pods active (${pods.length} pods): ${pods.map(p => `${p.name}[${p.seats.join(',')}] → ${p.representative}`).join(' ')}`, 1);
+        yield {
+            speaker: 'System',
+            round: 1,
+            text: `**Lens pods:** ${pods.map(p => `${p.name.toUpperCase()} — ${p.seats.join(', ')} (carried by ${p.representative})`).join(' · ')}. Each pod settles its position internally before the floor rounds.`,
+        };
+        // One bounded, non-streamed round per pod member. Failures fall back
+        // to the seat's opening — the pod round must never break a debate.
+        const podTasks = debateRoster
+            .filter(a => podBySeat.has(a.provider.name))
+            .map(analyst => {
+                const name = analyst.provider.name;
+                const pod = podBySeat.get(name)!;
+                const peers = pod.seats.filter(n => n !== name);
+                if (peers.length === 0) {
+                    podRoundTexts[name] = roundTexts[name]?.[1] || '';
+                    return null;
+                }
+                const peerOpenings = peers
+                    .map(n => ({ name: n, text: (roundTexts[n]?.[1] || '').slice(0, 700) }))
+                    .filter(o => o.text);
+                const messages: ChatMessage[] = [
+                    { role: 'system', content: `You are ${name}, one seat in a ${pod.name} analyst pod. Settle the pod's shared position — compact, no JSON.` },
+                    { role: 'user', content: buildPodRoundPrompt(pod, name, peerOpenings) },
+                ];
+                return (async () => {
+                    try {
+                        const text = await sendChatRequest(analyst.provider.config, messages, {
+                            maxTokens: 220,
+                            temperature: 0.3,
+                            signal,
+                            reasoningEffort: 'low',
+                            onWireAudit: entry => emitLog('budget', `wire: ${name} pod-round ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, 1, name),
+                        });
+                        podRoundTexts[name] = (text || '').trim().slice(0, 900) || (roundTexts[name]?.[1] || '');
+                    } catch {
+                        podRoundTexts[name] = roundTexts[name]?.[1] || '';
+                    }
+                })();
+            })
+            .filter((t): t is Promise<void> => t !== null);
+        if (podTasks.length > 0 && Date.now() < deadline) {
+            // Never let the pod round eat the whole debate budget: wait at
+            // most until the deadline, then proceed with whatever settled
+            // (missing pod texts fall back to the seat's opening).
+            const remaining = Math.max(0, deadline - Date.now());
+            await Promise.race([
+                Promise.all(podTasks),
+                new Promise<void>(resolve => setTimeout(resolve, remaining)),
+            ]);
+        }
+        // Non-representative seats skip the intermediate floor rounds; seed
+        // their pod statement as the position they hold going into the FINAL
+        // round (the pump requires a settled previous round to advance, and
+        // the moderator transcript gains each seat's pod statement).
+        if (totalRounds - 1 >= rebuttalStart) {
+            for (const [name, pod] of podBySeat) {
+                if (representativeSet.has(name)) continue;
+                const seed = podRoundTexts[name] || roundTexts[name]?.[1] || '';
+                if (seed && !roundTexts[name]?.[totalRounds - 1]) {
+                    roundTexts[name][totalRounds - 1] = `[${pod.name} pod statement] ${seed}`.slice(0, 900);
+                }
+            }
+        }
+    }
+
     // Warm the moderator's connection while the analysts rebut — the verdict
     // call then reuses the pooled socket and skips DNS/TCP/TLS handshake
     // latency. Best-effort, no-op on Electron/localhost.
@@ -2201,6 +2322,11 @@ export const conductRealDebate = async function* (
             (sessionGuardBlock ? sessionGuardBlock + `\n\n` : '') +
             (round === rebuttalStart && seatCharges.has(analyst.provider.name)
                 ? `**MODERATOR'S CHARGE (your assignment this round):** ${seatCharges.get(analyst.provider.name)}\n\n`
+                : '') +
+            // Pod tier: a representative opens its floor turns carrying the
+            // pod position + dissent summary settled in the pod round.
+            (podsActive && representativeSet.has(analyst.provider.name) && round < totalRounds
+                ? `${formatPodPositionBlock(podBySeat.get(analyst.provider.name)!, podRoundTexts)}\n\n`
                 : '') +
             (round === rebuttalStart ? `${CONTEXT_MATCH_DIRECTIVE}\n\n` : '') +
             (homogeneityLine ? `${homogeneityLine}\n\n` : '') +
@@ -2408,6 +2534,14 @@ export const conductRealDebate = async function* (
             const current = seatRound.get(name) ?? 0;
             const next = current + 1;
             if (next < rebuttalStart || next > totalRounds) continue;
+            // Pod tier: non-representative seats skip the INTERMEDIATE floor
+            // rounds (their pod statement is seeded as the position they hold
+            // at totalRounds-1) and jump straight to the FINAL round — the
+            // sealed-conviction auction stays seat-level for all 6-10 seats.
+            if (podsActive && podBySeat.has(name) && !representativeSet.has(name) && next !== totalRounds) {
+                seatRound.set(name, totalRounds - 1);
+                continue;
+            }
             if (!roundTexts[name]?.[next - 1] || roundTexts[name]?.[next]) continue;
             if (budgetExhausted()) continue;
             seatRound.set(name, next);
@@ -2458,11 +2592,16 @@ export const conductRealDebate = async function* (
     // Seeded from the prompt hash so the devil seat rotates per setup, not
     // per run. 'efficient' lane: no forced contra when openings already
     // disagree — the counter-case exists without manufacturing one.
+    // Pod tier: the contra assignment only makes sense on a seat that
+    // actually speaks the intermediate rounds — pick among representatives.
+    const devilPool = podsActive
+        ? debateRoster.filter(o => representativeSet.has(o.provider.name))
+        : debateRoster;
     const devilName = (!skipRebuttals && !(debateProtocol === 'efficient' && floorAgreesAtOpen))
-        ? debateRoster[(() => {
+        ? devilPool[(() => {
             let h = 0;
             for (let i = 0; i < userPrompt.length; i++) h = (h * 31 + userPrompt.charCodeAt(i)) >>> 0;
-            return h % Math.max(debateRoster.length, 1);
+            return h % Math.max(devilPool.length, 1);
         })()]?.provider.name
         : undefined;
     if (devilName) emitLog('round', `Devil's advocate: ${devilName}`, rebuttalStart, devilName);
@@ -2669,7 +2808,7 @@ export const conductRealDebate = async function* (
         if (steerQ) {
             yield { speaker: 'System', round: questionRound, text: `User steering: ${steerQ}` };
         }
-        const priorQATranscript = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 1500);
+        const priorQATranscript = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, scaleTranscriptCap(1500, names.length));
         const questionSystemPrompt = getPrompt('debate.clarification_questions', MODERATOR_CLARIFICATION_QUESTIONS_PROMPT).replace('{{ANALYSTS}}', names.join(', '));
         const questionUserContent =
             `**THE DEBATE TRANSCRIPT (rounds 1-${lastRebuttalRound}):**\n${priorQATranscript}` +
@@ -2749,7 +2888,7 @@ export const conductRealDebate = async function* (
             roundTexts,
             questionRound,
             100,
-            1500,
+            scaleTranscriptCap(1500, names.length),
         );
         const answerTasks = liveAnalysts.map((analyst) => {
             const otherAnalystNames = liveAnalysts
@@ -2931,7 +3070,7 @@ export const conductRealDebate = async function* (
             roundTexts,
             answerRound,
             100,
-            1500,
+            scaleTranscriptCap(1500, names.length),
         );
         onSpeakerStatus?.('Moderator', judgmentRound, true);
         let judgmentText = '';
@@ -2981,7 +3120,7 @@ export const conductRealDebate = async function* (
     // Include every visible analyst and moderator turn in chronological order.
     // The per-turn 100-token cap is unchanged; the total cap is raised so all
     // clarification cycles fit before the verdict.
-    const transcriptBlock = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 2400);
+    const transcriptBlock = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, verdictTranscriptCap(names.length));
     const steerVerdict = takeSteering(lastRebuttalRound + 1);
     if (steerVerdict) {
         yield { speaker: 'System', round: lastRebuttalRound + 1, text: `User steering: ${steerVerdict}` };

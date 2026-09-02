@@ -491,7 +491,10 @@ describe('sequential eval verdict gating', () => {
 // ─── 4. Control attribution ─────────────────────────────────────────────────
 // NOTE: the REAL MemoryInjectionService is used — the shared Preferences
 // store is seeded with injection records (or left empty), which exercises
-// skillInjectedSince's actual window logic instead of a mock.
+// skillAdherenceForRun's actual runId join instead of a mock. §8.3a: the
+// join is EXACT on the originating run (trade.sourceRunId === record.runId);
+// a time window anchored on trade.timestamp looked at the WRONG side of the
+// log click and mislabeled every followed skill as CONTROL.
 
 describe('injected-vs-control attribution', () => {
     beforeEach(async () => {
@@ -501,17 +504,19 @@ describe('injected-vs-control attribution', () => {
 
     it('a matched-but-NOT-injected trade lands in controlIds, not wins/losses', async () => {
         const fileId = await seedSkill('ctrl-a.md', 'lastEvidenceAt: 2026-08-25T00:00:00.000Z\n');
-        // Seed telemetry with an injection of a DIFFERENT skill (recent, so
-        // the log is non-empty) but never THIS skill → injected === false.
+        // Seed telemetry: THIS run injected a DIFFERENT skill and never
+        // THIS one → the run is a matched-window record without the skill
+        // → injected === false → CONTROL.
         store['memory_injections_v1_round40-user'] = [{
             ts: new Date().toISOString(),
             stage: 'opening',
             audience: 'analyst',
             coin: 'BTCUSDT',
+            runId: 'run-ctrl-1',
             sources: [{ path: 'skills/some-other-skill.md', kind: 'skill' }],
         }];
 
-        const loss = makeTrade('ctrl-1', 'LOSS' as TradeOutcome);
+        const loss = makeTrade('ctrl-1', 'LOSS' as TradeOutcome, { sourceRunId: 'run-ctrl-1' });
         await applySkillEvidence(loss, USER, [loss]);
 
         const meta = readMeta(fileId);
@@ -523,16 +528,18 @@ describe('injected-vs-control attribution', () => {
 
     it('an INJECTED trade keeps full credit as before', async () => {
         const fileId = await seedSkill('ctrl-b.md', 'lastEvidenceAt: 2026-08-25T00:00:00.000Z\n');
-        // Telemetry shows THIS skill was injected recently (inside the trade window).
+        // Telemetry shows THIS skill was injected in the trade's run
+        // (no citation annotation → 'injected-unknown' → full credit).
         store['memory_injections_v1_round40-user'] = [{
             ts: new Date(Date.now() - 1000).toISOString(),
             stage: 'opening',
             audience: 'analyst',
             coin: 'BTCUSDT',
+            runId: 'run-ctrl-2',
             sources: [{ path: 'skills/ctrl-b.md', kind: 'skill' }],
         }];
 
-        const loss = makeTrade('ctrl-2', 'LOSS' as TradeOutcome);
+        const loss = makeTrade('ctrl-2', 'LOSS' as TradeOutcome, { sourceRunId: 'run-ctrl-2' });
         await applySkillEvidence(loss, USER, [loss]);
 
         const meta = readMeta(fileId);

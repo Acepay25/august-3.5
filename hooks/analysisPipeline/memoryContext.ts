@@ -61,6 +61,7 @@ export const assemblePipelineMemoryContext = (
     effectiveInput: string,
     loggedTrades: LoggedTrade[],
     freshHybridData: HybridDataPacket | null | undefined,
+    runId?: string,
 ): PipelineMemoryContext => {
     const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
     const detectedLearningCoin = detectedCoinRaw && !COMMON_WORDS.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
@@ -109,8 +110,8 @@ export const assemblePipelineMemoryContext = (
     // the verdict slice (full skill bodies, conflict flags, runner-up skills,
     // similar trades) — the arbiter binds the decision, so it needs verdict
     // depth even though its context bundle is assembled at send time.
-    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
-    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
     const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
     // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the analysts

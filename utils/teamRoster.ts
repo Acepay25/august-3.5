@@ -18,10 +18,12 @@ import { formatModelDisplayName } from './providerUtils';
 import { avatarRoleForName, type RolePreset } from '../components/desk/pixelAvatars';
 import type { AgentTeam } from '../services/agents/agentRoster';
 
-/** The debate engine rejects fewer than 2 analysts; 5 keeps verdict
- *  cards and transcripts readable. Teams seat 2–5. */
+/** The debate engine rejects fewer than 2 analysts. Teams seat 2–5 on the
+ *  flat floor; 6–10 run as LENS PODS (plan §9.1) — three pods whose
+ *  representatives take the floor while every seat still emits its own
+ *  sealed conviction. */
 export const TEAM_MIN_SEATS = 2;
-export const TEAM_MAX_SEATS = 5;
+export const TEAM_MAX_SEATS = 10;
 
 /** The three lens seats, in floor order (macro → technical → risk). */
 export const LENS_ROSTER_ROLES: AnalystRole[] = [

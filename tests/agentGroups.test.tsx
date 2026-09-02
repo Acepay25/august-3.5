@@ -139,3 +139,106 @@ describe('useAgentGroups', () => {
         expect(result.current.activity[1].detail).toBe('provider offline');
     });
 });
+
+// ── G2: bounded rounds, (pass) silence, incremental room context ──────────
+describe('useAgentGroups room engine (G2)', () => {
+    const bots3 = [
+        bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
+        bot({ id: 'b2', name: 'Risk', modelId: 'model-b' }),
+        bot({ id: 'b3', name: 'Scout', modelId: 'model-a' }),
+    ];
+
+    const setupRoom = () => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+        }));
+        return { store, result };
+    };
+
+    it('a reply that @mentions a teammate gives them the next round', async () => {
+        streamMock
+            .mockResolvedValueOnce('Thesis is long. @risk check my size')
+            .mockResolvedValueOnce('Size is fine');
+        const { store, result } = setupRoom();
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro analyze', bots3);
+        });
+        // Round 1: only Macro (mention routing). Round 2: Risk (re-mention).
+        expect(streamMock).toHaveBeenCalledTimes(2);
+        expect(String(streamMock.mock.calls[0][3])).toContain('You are Macro');
+        expect(String(streamMock.mock.calls[1][3])).toContain('You are Risk');
+        // Risk's turn was fed Macro's reply, not the whole room twice.
+        expect(String(streamMock.mock.calls[1][1])).toContain('Macro: Thesis is long');
+        // Settled: Scout was never addressed.
+        expect(store.messages.filter(m => m.role === MessageRole.AI)).toHaveLength(2);
+    });
+
+    it('(pass) is silence: no bubble, no room entry, activity only', async () => {
+        streamMock
+            .mockResolvedValueOnce('(pass)')
+            .mockResolvedValueOnce('I concur');
+        const { store, result } = setupRoom();
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro @risk go', bots3);
+        });
+        const ai = store.messages.filter(m => m.role === MessageRole.AI);
+        // The pass row exists (attribution) but is hidden and empty.
+        expect(ai).toHaveLength(2);
+        expect(ai[0].hidden).toBe(true);
+        expect(ai[0].text).toBe('');
+        expect(ai[1].text).toBe('I concur');
+        expect(result.current.activity.some(a => a.kind === 'passed' && a.botName === 'Macro')).toBe(true);
+    });
+
+    it('an all-pass round settles the room (no further rounds)', async () => {
+        streamMock.mockResolvedValue('(pass)');
+        const { result } = setupRoom();
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@everyone react', bots3);
+        });
+        // @everyone = both speak once; nobody mentioned anyone → settled.
+        expect(streamMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('each member sees only room messages newer than their last turn', async () => {
+        streamMock
+            .mockResolvedValueOnce('M1 @risk your call')
+            .mockResolvedValueOnce('R1 @macro your call')
+            .mockResolvedValueOnce('M2');
+        const { result } = setupRoom();
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro start', bots3);
+        });
+        expect(streamMock).toHaveBeenCalledTimes(3);
+        // Macro turn 1: only the prompt.
+        const macroFirst = String(streamMock.mock.calls[0][1]);
+        expect(macroFirst).toContain('Trader: @macro start');
+        // Risk turn: prompt + Macro's reply (both new to Risk).
+        const riskTurn = String(streamMock.mock.calls[1][1]);
+        expect(riskTurn).toContain('Trader: @macro start');
+        expect(riskTurn).toContain('Macro: M1 @risk your call');
+        // Macro turn 2: only what appeared since its last turn — the
+        // prompt is NOT re-fed, but its own prior line is (rendered as
+        // "You:" — a stateless model needs to see what it already said).
+        const macroSecond = String(streamMock.mock.calls[2][1]);
+        expect(macroSecond).toContain('Risk: R1 @macro your call');
+        expect(macroSecond).toContain('You: M1 @risk your call');
+        expect(macroSecond).not.toContain('Trader: @macro start');
+    });
+
+    it('the turn budget bounds a chatty room', async () => {
+        // Every reply mentions the other bot: an endless ping-pong.
+        streamMock.mockImplementation(async (_c, prompt) =>
+            String(prompt).includes('Macro:') ? '@macro your turn' : '@risk your turn');
+        const { result } = setupRoom();
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro start', bots3);
+        });
+        // ROOM_ROUND_CAP (3) rounds serial bounds it well under turn cap.
+        expect(streamMock.mock.calls.length).toBeLessThanOrEqual(6);
+        expect(result.current.isRunning).toBe(false);
+    });
+});

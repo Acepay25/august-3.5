@@ -7,10 +7,13 @@ import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
+import { MonthlyReportCard } from './MonthlyReportCard';
 import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
+import { buildHumanCalibration, humanCalibrationLine as humanCalLine } from '../../utils/preRead';
+import { getActiveUsername } from '../../utils/activeUser';
 import { ProviderConfig } from '../../types/provider';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -191,6 +194,7 @@ const JournalInner: React.FC<JournalProps> = ({
             <div className="h-full overflow-y-auto">
                 <div className="p-6 sm:p-8 space-y-8">
                     <WeeklyReviewCard username={activeUsername} />
+                    <MonthlyReportCard username={activeUsername} />
                     <JournalAnalyticsSummary trades={trades} />
                     <EquityCurveDashboard trades={trades} />
                     <WinRateDashboard trades={trades} />
@@ -343,6 +347,21 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = 
 
 const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
   const stats = useMemo(() => computeJournalStats(trades), [trades]);
+  const humanCal = useMemo(() => buildHumanCalibration(trades), [trades]);
+  // §8.2c pass-mining counter-metric: the sweep resolves SKIPPED trades
+  // post-hoc; the journal shows the two sides of discipline — passes the
+  // market vindicated (CORRECT_PASS) and passes that cost a move
+  // (MISSED_OPPORTUNITY). Read-only over the stored records.
+  const [passCounts, setPassCounts] = useState<{ correct: number; missed: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const { loadPassRecords, correctPassCount, missedOpportunityCount } = await import('../../services/learning/passMining');
+      const recs = await loadPassRecords(getActiveUsername());
+      if (alive) setPassCounts({ correct: correctPassCount(recs), missed: missedOpportunityCount(recs) });
+    })().catch(() => { /* counter-metric is best-effort */ });
+    return () => { alive = false; };
+  }, [trades.length]);
   if (stats.total === 0) return null;
   const top = stats.perStrategy[0];
   return (
@@ -355,6 +374,25 @@ const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }
         sub={`best ${stats.bestWinStreak}W / ${-stats.bestLossStreak}L`}
       />
       <Stat label="Top strategy" value={top?.key ?? '—'} sub={top ? `${top.trades} trades · ${top.winRate}% WR` : undefined} />
+      {/* Pre-read capture (§5a): the human-Brier vs verdict-Brier row — only
+          when the user has committed priors. Anti-automation-bias display. */}
+      {humanCal && (
+        <Stat
+          label="Your calls vs verdict"
+          value={humanCal.humanBrier !== null ? humanCal.humanBrier.toFixed(2) : '—'}
+          sub={humanCalLine(humanCal) || `${humanCal.n} pre-read trade(s)`}
+        />
+      )}
+      {/* §8.2c: the pass ledger — vindicated skips draft avoid-skills;
+          missed opportunities are a counter-metric ONLY (we never teach
+          the system to take more trades). */}
+      {passCounts && (passCounts.correct > 0 || passCounts.missed > 0) && (
+        <Stat
+          label="Passes"
+          value={`${passCounts.correct} right / ${passCounts.missed} missed`}
+          sub="skips resolved against post-skip price"
+        />
+      )}
     </div>
   );
 };

@@ -7,7 +7,7 @@ import {
     extractAndRecordProviderInsights,
     buildSeverityPostMortemContext,
     recordSeverityInsight,
-} from '../services/learning/InsightExtractionService';
+} from '../services/learning/severityInsights';
 import {
     addAttributedInsight,
     loadAttributedInsights
@@ -207,13 +207,15 @@ describe('extractCumulativeBleedInsightForTrade (post-mortem cluster wiring)', (
 
 describe('recordSeverityInsight idempotency', () => {
     it('does not duplicate when the same severity insight is recorded twice', () => {
-        const before = loadAttributedInsights().length;
         const trade = makeLoss({ id: 'idem-single', correctedStopLoss: '67,000' }); // -3R
         const insight = extractSeverityInsightFromTrade(trade)!;
         const first = recordSeverityInsight(insight);
         const second = recordSeverityInsight(insight);
-        expect(loadAttributedInsights().length).toBe(before + 1);
+        // Same id → exactly one row (assert per id: the §8.1 fingerprint
+        // merge may legitimately collapse same-SHAPED lessons from earlier
+        // tests into one fact, so global counts are not stable here).
         expect(second.id).toBe(first.id);
+        expect(loadAttributedInsights().filter(i => i.id === first.id)).toHaveLength(1);
     });
 
     it('updates the stored cumulative text when the same cluster deepens', () => {
@@ -243,23 +245,27 @@ describe('recordSeverityInsight idempotency', () => {
 
 describe('extractAndRecordSeverityInsights (post-mortem job orchestrator)', () => {
     it('records single + cumulative for a deep loss inside a deep cluster', () => {
-        const before = loadAttributedInsights().length;
         const current = makeLoss({ id: 'orch-cur', correctedStopLoss: '67,000' });
         const prior = makeLoss({ id: 'orch-prior', correctedStopLoss: '67,000' });
         const recorded = extractAndRecordSeverityInsights(current, [prior]);
         expect(recorded.length).toBe(2);
         expect(recorded.map(i => i.kind)).toEqual(expect.arrayContaining(['deep_single_loss', 'cumulative_bleed']));
-        expect(loadAttributedInsights().length).toBe(before + 2);
+        // Both lessons are present exactly once (matched by text, not id —
+        // the §8.1 fingerprint merge may store a same-shaped lesson from an
+        // earlier test under that fact's id, so global counts and derived
+        // ids are not stable here).
+        for (const insight of recorded) {
+            expect(loadAttributedInsights().filter(i => i.insight === insight.text)).toHaveLength(1);
+        }
     });
 
     it('records only the single-trade insight when the cluster has one R-bearing loss', () => {
-        const before = loadAttributedInsights().length;
         const current = makeLoss({ id: 'orch-shallow', correctedStopLoss: '67,000' }); // -3R
         const priorWin = { ...makeLoss({ id: 'orch-shallow-prior' }), outcome: TradeOutcome.WIN };
         const recorded = extractAndRecordSeverityInsights(current, [priorWin]);
         expect(recorded.length).toBe(1);
         expect(recorded[0].kind).toBe('deep_single_loss');
-        expect(loadAttributedInsights().length).toBe(before + 1);
+        expect(loadAttributedInsights().filter(i => i.insight === recorded[0].text)).toHaveLength(1);
     });
 
     it('records nothing for a winning trade', () => {
@@ -380,32 +386,25 @@ describe('buildSeverityPostMortemContext (severity-aware post-mortem generation)
 });
 
 describe('extractAndRecordProviderInsights (provider attribution)', () => {
-    // Sentences crafted to hit the post-mortem insight patterns: entry
-    // timing, risk management, pattern recognition.
-    const pmText = [
-        'Next time the entry should wait for the retest to confirm.',
-        'Entered too early on a weak impulse.',
-        'Position size was too large for the volatility.',
-        'Risk was too high relative to the setup.',
-        'The false breakout invalidated the thesis.',
-    ].join(' ');
-
-    it('records attributed insights per provider with scope categorization', () => {
+    it('records ONE deterministic lesson per provider with scope categorization', () => {
+        // §8.1 store unification deleted the regex miner: provider
+        // attribution now extracts a single "Lesson:/takeaway:"-shaped line
+        // per provider via the notebook's lesson extractor, not up to 5
+        // regex hits per prose blob.
         const before = loadAttributedInsights().length;
         const trade = makeLoss({
             id: 'attr-1',
             correctedStopLoss: '67,000',
             postMortemByProvider: {
-                Gemini: pmText,
-                'Custom LLM': 'Missed the reversal signal before the breakdown.',
+                Gemini: `Lesson: the false breakout invalidated the thesis — wait for the retest.`,
+                'Custom LLM': 'Lesson: missed the reversal signal before the breakdown.',
             },
         });
         const recorded = extractAndRecordProviderInsights(trade);
-        // Gemini text → 5 pattern hits; Custom LLM text → 1.
-        expect(recorded.length).toBe(6);
-        expect(recorded.filter(i => i.sourceProvider === 'Gemini')).toHaveLength(5);
+        expect(recorded.length).toBe(2);
+        expect(recorded.filter(i => i.sourceProvider === 'Gemini')).toHaveLength(1);
         expect(recorded.filter(i => i.sourceProvider === 'Custom LLM')).toHaveLength(1);
-        expect(loadAttributedInsights().length).toBe(before + 6);
+        expect(loadAttributedInsights().length).toBe(before + 2);
 
         // Scope categorization: the false-breakout lesson is pattern-scoped.
         const breakout = recorded.find(i => i.insight.includes('false breakout'))!;
@@ -418,18 +417,17 @@ describe('extractAndRecordProviderInsights (provider attribution)', () => {
 
     it('is idempotent — re-running updates in place, never duplicates', () => {
         const before = loadAttributedInsights().length;
-        const trade = makeLoss({ id: 'attr-2', correctedStopLoss: '67,000', postMortemByProvider: { Gemini: pmText } });
+        const trade = makeLoss({ id: 'attr-2', correctedStopLoss: '67,000', postMortemByProvider: { Gemini: 'Lesson: wait for the retest before entering.' } });
         const first = extractAndRecordProviderInsights(trade);
         const second = extractAndRecordProviderInsights(trade);
-        expect(loadAttributedInsights().length).toBe(before + 5);
-        expect(second.length).toBe(5);
-        for (const insight of first) {
-            const stored = loadAttributedInsights().find(s => s.id === insight.id);
-            expect(stored).toBeDefined();
-            expect(loadAttributedInsights().filter(s => s.id === insight.id)).toHaveLength(1);
-            // Each surfacing counts; the row itself is never duplicated.
-            expect(stored!.timesUsed).toBe(2);
-        }
+        expect(first.length).toBe(1);
+        expect(loadAttributedInsights().length).toBe(before + 1);
+        expect(second.length).toBe(1);
+        const stored = loadAttributedInsights().find(s => s.id === first[0].id);
+        expect(stored).toBeDefined();
+        expect(loadAttributedInsights().filter(s => s.id === first[0].id)).toHaveLength(1);
+        // Each surfacing counts; the row itself is never duplicated.
+        expect(stored!.timesUsed).toBe(2);
     });
 
     it('records nothing without contributions, without analysis, or for tiny texts', () => {

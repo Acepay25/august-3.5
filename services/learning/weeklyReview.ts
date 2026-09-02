@@ -13,6 +13,10 @@ import { LoggedTrade } from '../../types/trade';
 import { TradeOutcome } from '../../types/enums';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
+import { runWeeklyMetaCalibration, type MetaCalibrationRatios } from './metaCalibration';
+import { runContradictionSweep } from '../../utils/contradictionSweep';
+import { runBeliefChallengePass } from './beliefChallenge';
+import { runSelfImprovementPass } from './selfImprovement';
 import { sendChatRequest } from '../providers/GenericProviderService';
 import { getFirstReadyProvider } from '../../utils/providerUtils';
 import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
@@ -40,6 +44,8 @@ export interface WeeklyReviewDigest {
     impulse: string;
     /** Provider that wrote it (provenance). */
     providerName: string;
+    /** §8.5b: the loop's own ratios (null samples stay null). */
+    metaCalibration?: MetaCalibrationRatios;
 }
 
 const keyFor = (username: string): string =>
@@ -128,6 +134,7 @@ export const runWeeklyReview = async (
             stats,
             impulse,
             providerName: provider.name,
+            metaCalibration: await runWeeklyMetaCalibration(username),
         };
         await setPreferenceObject(keyFor(username), digest);
         return digest;
@@ -144,6 +151,33 @@ export const runWeeklyReviewIfDue = async (
 ): Promise<WeeklyReviewDigest | null> => {
     try {
         if (!(await isWeeklyReviewDue(username))) return null;
+        // §8.4c/§8.4d: deterministic passes beside the weekly rollup (no LLM):
+        // live-skill contradiction detection + settled-belief challenge flags.
+        try {
+            // Synchronous sweep; the queued count rides the log like the
+            // other passes so a silent conflict backlog is visible.
+            const conflicts = runContradictionSweep(username);
+            if (conflicts > 0) console.log('[ContradictionSweep] queued', conflicts, 'conflict proposals');
+            await runBeliefChallengePass(username, trades);
+            // §4.6 (batch 6): the self-improvement loop — episodes →
+            // fingerprints → (judge-gated) distill → measurement. Offline,
+            // read-only; fires alongside the weekly review.
+            await runSelfImprovementPass(username, trades);
+            // §8.2c: mine correct passes — resolve recent SKIPPED trades
+            // against post-skip klines (≤5 fetches/sweep) and queue
+            // avoid-skill drafts for vindicated-pass clusters through the
+            // approval inbox. Fire-and-forget: it fetches, so it must never
+            // delay the digest, and a network hiccup retries next week.
+            void (async () => {
+                const { runPassMiningSweep } = await import('./passMining');
+                const { fetchKlines } = await import('../analysis/KlineService');
+                return runPassMiningSweep(trades, username, fetchKlines);
+            })()
+                .then(res => {
+                    if (res.resolved > 0) console.log('[PassMining] resolved', res.resolved, 'skips; drafted:', res.draftedClusters);
+                })
+                .catch(() => { /* pass mining is best-effort */ });
+        } catch { /* the review must not fail on a sweep hiccup */ }
         const configs = await loadProviderConfigs();
         return await runWeeklyReview(username, trades, configs);
     } catch {

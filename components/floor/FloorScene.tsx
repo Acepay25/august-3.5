@@ -39,6 +39,7 @@ import type { ApprovalItem } from '../../utils/approvalInbox';
 import type { ProviderConfig } from '../../types/provider';
 import { FLOOR_THEME } from './floorTheme';
 import { useFloorMarketData } from '../../hooks/useFloorMarketData';
+import { seatWireGlyphs, type SeatWireState } from '../../utils/floorSeatWire';
 
 export interface FloorPosition {
     id: string;
@@ -88,9 +89,81 @@ export interface FloorSceneProps {
     workingBotId?: string | null;
     /** Signed PnL from today's settled tickets (top bar). */
     dayPnl?: number;
+    /** SessionGuard state for the Big Board rotation (plan §10.2): day P&L
+     *  vs the daily limit + trades remaining — the ambient risk surface. */
+    guardState?: {
+        dailyLossLimitUsd: number;
+        tradesToday: number;
+        maxTradesPerDay: number;
+        level: 'clear' | 'notice' | 'warning' | 'standdown';
+    };
+    /** Per-seat wire observability (plan §10.2): thinking/effort/cooldown/
+     *  fitness derived from the P5 audit lines + §9.2 health. Keyed by seat
+     *  name; absent = no evidence yet (badge hidden). */
+    seatWire?: Record<string, SeatWireState>;
     /** Clicking a seat opens that agent's 1:1 chat thread. */
     onOpenSeatChat?: (seatName: string) => void;
 }
+
+/**
+ * Guard rotation line on the Big Board (plan §10.2): risk state is the
+ * thing most worth ambient awareness. Two faces on a 6s period driven by
+ * the floor's existing 1s clock: day P&L vs the daily limit, then trades
+ * remaining. Monochrome; the HALT level encodes as a text flag.
+ */
+const GuardRotation: React.FC<{
+    guard: NonNullable<FloorSceneProps['guardState']>;
+    dayPnl?: number;
+    clockMs: number;
+}> = ({ guard, dayPnl, clockMs }) => {
+    const face = Math.floor(clockMs / 3000) % 2;
+    const remaining = Math.max(0, guard.maxTradesPerDay - guard.tradesToday);
+    const pnlText = dayPnl === undefined ? '—' : `Day ${dayPnl >= 0 ? '+' : '−'}$${Math.abs(Math.round(dayPnl)).toLocaleString()}`;
+    return (
+        <div data-testid="floor-guard-rotation" className="mt-2 border-t border-white/5 pt-1.5">
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                Guard {guard.level === 'standdown' ? '· STANDDOWN' : guard.level === 'warning' ? '· near limit' : ''}
+            </p>
+            <p className="mt-0.5 font-mono text-[10px] tabular-nums text-zinc-400">
+                {face === 0
+                    ? <>{pnlText} · limit −${Math.round(guard.dailyLossLimitUsd).toLocaleString()}</>
+                    : <>{remaining} of {guard.maxTradesPerDay} tickets left today</>}
+            </p>
+        </div>
+    );
+};
+
+/**
+ * Sealed-auction dot plot (plan §10.2): one dot per seat on a 0-100 axis,
+ * labeled by seat initial — makes the conviction spread (dissent) legible
+ * at a glance on the floor. Purely presentational over the same conviction
+ * rows the VerdictCard receives.
+ */
+const AuctionDotPlot: React.FC<{ seats: { name: string; value: number }[] }> = ({ seats }) => {
+    if (seats.length < 2) return null;
+    const spread = Math.max(...seats.map(s => s.value)) - Math.min(...seats.map(s => s.value));
+    return (
+        <div data-testid="floor-auction-plot" className="mt-2 border-t border-white/5 pt-1.5">
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                Sealed auction · spread {spread}
+            </p>
+            <div className="relative mt-2 h-5">
+                <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
+                {seats.map(s => (
+                    <span
+                        key={s.name}
+                        title={`${s.name}: ${s.value}/100`}
+                        className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-300 bg-zinc-800"
+                        style={{ left: `${Math.min(100, Math.max(0, s.value))}%` }}
+                    />
+                ))}
+            </div>
+            <div className="flex justify-between font-mono text-[8px] text-zinc-600">
+                <span>0</span><span>50</span><span>100</span>
+            </div>
+        </div>
+    );
+};
 
 export const FloorScene: React.FC<FloorSceneProps> = ({
     open,
@@ -110,6 +183,8 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
     bots = [],
     workingBotId,
     dayPnl,
+    guardState,
+    seatWire,
     onOpenSeatChat,
 }) => {
     // Esc exits the floor (mirrors DeskScene's overlay contract).
@@ -154,18 +229,25 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
         () => (actorNames.length + botNames.length === 0
             ? []
             : applyRoomLayout(layoutFloor([...actorNames, ...botNames]), getRoomLayout([...actorNames, ...botNames]))),
-        [actorNames, botNames, layoutTick], // eslint-disable-line react-hooks/exhaustive-deps
+        [actorNames, botNames, layoutTick],
     );
     const botByName = React.useMemo(() => new Map(bots.map(b => [b.name, b])), [bots]);
 
-    // The one actor the floor is listening to right now: whoever is
-    // speaking (bubble shows their speech), else whoever is thinking
-    // (bubble shows their thought). Everyone else just shows a chip.
+    // The one actor the floor is listening to right now: a PINNED seat
+    // (plan §10.2 — click a desk mid-debate to pin its live argument in
+    // place) wins over the automatic spotlight: whoever is speaking
+    // (bubble shows their speech), else whoever is thinking.
+    const [pinnedSeatId, setPinnedSeatId] = React.useState<string | null>(null);
+    // Leaving the floor drops the pin (the next visit re-derives the
+    // automatic spotlight).
+    React.useEffect(() => { if (!open) setPinnedSeatId(null); }, [open]);
     const spotlight = React.useMemo(() => {
+        const pinned = pinnedSeatId ? actors.find(a => a.id === pinnedSeatId) : null;
+        if (pinned && (pinned.speech || pinned.thought)) return pinned;
         return actors.find(a => a.speaking && a.speech)
             ?? actors.find(a => a.thinking && (a.thought || a.speech))
             ?? null;
-    }, [actors]);
+    }, [actors, pinnedSeatId]);
 
     if (!open) return null;
 
@@ -275,8 +357,8 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
 
                     {/* Floor canvas */}
                     <div className="relative min-h-0 flex-1 overflow-hidden">
-                        {/* Big Board — top-left card (watched symbols). */}
-                        {quotes.length > 0 && (
+                        {/* Big Board — top-left card (watched symbols + guard rotation + auction plot). */}
+                        {(quotes.length > 0 || guardState || convictions.length >= 2) && (
                             <div
                                 data-testid="floor-big-board"
                                 className="absolute left-4 top-4 z-10 w-56 rounded-md border border-white/10 bg-zinc-950/80 p-3 backdrop-blur"
@@ -307,6 +389,18 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                         </li>
                                     ))}
                                 </ul>
+                                {/* Guard state rotation (plan §10.2): the
+                                    floor is the ambient display — day P&L vs
+                                    the daily limit and trades remaining
+                                    rotate under the quotes on the same 1s
+                                    clock tick (5s period, two faces). */}
+                                {guardState && (
+                                    <GuardRotation guard={guardState} dayPnl={dayPnl} clockMs={clock.getTime()} />
+                                )}
+                                {/* Sealed-auction dot plot (§10.2): once the
+                                    convictions exist, the spread lives on the
+                                    Big Board — dissent legible at a glance. */}
+                                <AuctionDotPlot seats={convictions} />
                             </div>
                         )}
 
@@ -417,6 +511,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                     const role = roleForName(seat.name);
                                     const isSpotlight = spotlight?.id === actor!.id;
                                     const bubbleText = actor!.speech || actor!.thought || '';
+                                    const wire = seatWire?.[seat.name];
                                     return (
                                         <div
                                             key={seat.id}
@@ -433,6 +528,11 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                                         toneKey={role}
                                                     />
                                                 )}
+                                                {isSpotlight && pinnedSeatId === actor!.id && (
+                                                    <p className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] uppercase tracking-widest text-zinc-500">
+                                                        pinned · click to release
+                                                    </p>
+                                                )}
                                                 <PixelSeat
                                                     name={actor!.name}
                                                     speech={actor!.speech}
@@ -441,8 +541,33 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                                     speaking={actor!.speaking}
                                                     statusText={actor!.speaking ? 'speaking…' : actor!.thinking ? 'thinking…' : actor!.toolChip}
                                                     roleOverride={role}
-                                                    onClick={onOpenSeatChat ? () => onOpenSeatChat(seat.name) : undefined}
+                                                    onClick={() => {
+                                                        // Pin-in-place while the seat has a live
+                                                        // argument (plan §10.2); otherwise the
+                                                        // click keeps its old meaning — open the
+                                                        // seat's 1:1 thread.
+                                                        const live = actor!.speech || actor!.thought;
+                                                        if (live) {
+                                                            setPinnedSeatId(prev => prev === actor!.id ? null : actor!.id);
+                                                        } else if (onOpenSeatChat) {
+                                                            onOpenSeatChat(seat.name);
+                                                        }
+                                                    }}
                                                 />
+                                                {/* Wire badge (plan §10.2): what the
+                                                    harness actually sent this seat —
+                                                    thinking knob, effort tier, pin,
+                                                    cooldown, fitness. Monochrome
+                                                    glyphs; hover for the raw reason. */}
+                                                {wire && (
+                                                    <div
+                                                        data-testid={`floor-seat-wire-${seat.name}`}
+                                                        title={wire.detail ? `${seat.name}: ${wire.detail}` : seat.name}
+                                                        className="mt-0.5 truncate text-center font-mono text-[8px] uppercase tracking-wider text-zinc-500"
+                                                    >
+                                                        {seatWireGlyphs(wire)}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     );
