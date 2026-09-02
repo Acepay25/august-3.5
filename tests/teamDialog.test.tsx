@@ -5,6 +5,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TeamDialog } from '../components/chat/TeamDialog';
 import { AgentTeam } from '../services/agents/agentRoster';
 import { ProviderConfig } from '../types/provider';
+import { AnalystRole } from '../types/enums';
 
 // Seat provider/model pickers are SelectMenus (styled listbox in a portal):
 // open via the trigger's data-testid, choose via [data-option="<value>"].
@@ -115,5 +116,55 @@ describe('TeamDialog (the Team is user-created and modifiable)', () => {
         // models) → its modelId clears → only 1 valid seat → save disabled.
         pickSeatOption('team-seat-provider-0', 'p3');
         expect((screen.getByTestId('save-team') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('assigns a built-in role to a seat and persists it on save', () => {
+        render(<TeamDialog {...base} open />);
+        fireEvent.change(screen.getByTestId('team-name'), { target: { value: 'Roled' } });
+        pickSeatOption('team-seat-role-0', AnalystRole.RISK_EXECUTION);
+        fireEvent.click(screen.getByTestId('save-team'));
+        const draft = base.onCreate.mock.calls[0][0];
+        expect(draft.seats[0]).toEqual({ providerId: 'p1', modelId: 'gpt-a', role: AnalystRole.RISK_EXECUTION });
+        // Seat 1 stays unroled — the selector defaults to general.
+        expect(draft.seats[1].role).toBeUndefined();
+    });
+
+    it('per-seat instructions ride the seat (customPrompt persisted)', () => {
+        render(<TeamDialog {...base} open />);
+        fireEvent.click(screen.getByTestId('team-seat-instructions-0'));
+        fireEvent.change(screen.getByTestId('team-seat-prompt-0'), {
+            target: { value: 'Focus on funding-rate extremes and liquidity sweeps.' },
+        });
+        fireEvent.click(screen.getByTestId('save-team'));
+        const draft = base.onCreate.mock.calls[0][0];
+        expect(draft.seats[0].customPrompt).toBe('Focus on funding-rate extremes and liquidity sweeps.');
+    });
+
+    it('a blank instructions box is not persisted as noise', () => {
+        render(<TeamDialog {...base} open />);
+        fireEvent.click(screen.getByTestId('team-seat-instructions-0'));
+        fireEvent.change(screen.getByTestId('team-seat-prompt-0'), { target: { value: '   ' } });
+        fireEvent.click(screen.getByTestId('save-team'));
+        const draft = base.onCreate.mock.calls[0][0];
+        expect(draft.seats[0].customPrompt).toBeUndefined();
+        expect(draft.seats[0].role).toBeUndefined();
+    });
+
+    it('edit mode prefills saved roles and instructions', () => {
+        const initial: AgentTeam = {
+            id: 't1',
+            name: 'Roled Team',
+            seats: [
+                { providerId: 'p1', modelId: 'gpt-a', role: AnalystRole.MACRO_VOLATILITY, customPrompt: 'watch DXY' },
+                { providerId: 'p2', modelId: 'claude-1' },
+            ],
+            createdAt: new Date().toISOString(),
+        };
+        render(<TeamDialog {...base} open initial={initial} />);
+        fireEvent.click(screen.getByTestId('save-team'));
+        const draft = base.onUpdate.mock.calls[0][1];
+        expect(draft.seats[0].role).toBe(AnalystRole.MACRO_VOLATILITY);
+        expect(draft.seats[0].customPrompt).toBe('watch DXY');
+        expect(draft.seats[1].role).toBeUndefined();
     });
 });

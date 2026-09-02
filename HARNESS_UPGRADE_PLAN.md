@@ -1528,10 +1528,28 @@ the ROUND-48 changelog row and `.hermes/plans/harness-review-fix-plan.md`.
 
 ---
 
-## 18. SESSION HANDOFF (2026-09-01 → 09-02) — Bot Mode scan → G1–G5 complete
+## 18. SESSION HANDOFF (2026-09-01 → 09-03) — Bot Mode G1–G5 + team seat roles
 
 Full mechanism map + port plan: `.hermes/plans/botmode-scan-and-plan.md`
 (read that file first — it is the scan). Summary of state:
+
+- **ROUND-52 (latest)**: the stale "max 3 providers" Standard-mode cap
+  was removed (now mirrors `TEAM_MAX_SEATS` = 10; pod tier already
+  handles 6+). Teams gain per-seat **roles** (Macro/Technical/Risk
+  inherit their built-in debate prompts, editable) + optional trader
+  instructions; unroled seats default to the general-analyst mandate
+  (full-scope market analysis, best actionable signal, desk tools +
+  web search — `web_search` is a registered desk tool). Personas ride
+  openings (`seatDirective`), rebuttals (`conductRealDebate`
+  `seatPersonas` keyed by seat name — a replacement inherits the
+  dropped seat's persona under its own name), and tool scope
+  (`defaultToolsForRole`). New: `services/agents/seatPersonas.ts`
+  (`seatPersonaPrompt` / `builtInPromptForRole` / `seatHasPersona`).
+  Rail avatar stacks no longer bleed over team names. Gates: tsc 0 ·
+  1948 passed / 11 skipped · build clean · eslint 0 errors. Ad-hoc
+  (teamless) ensembles keep the legacy mandate rotation byte-identical.
+- **ROUND-51**: Bot Mode G2–G5 done (rooms, attention badges, mentions,
+  bot Routines) — see changelog; G1 (DMs) was ROUND-50.
 
 - **Scanned**: Hermes Bot Mode at source level (desktop plugin
   `apps/desktop/src/plugins/hermes-bots/`, core `tools/bot_mode_probe.py`
