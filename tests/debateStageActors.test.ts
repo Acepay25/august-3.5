@@ -67,6 +67,47 @@ describe('stageActorsForMessage', () => {
         expect(actors[0].name).toBe('Moderator');
     });
 
+    it('carries seat role/focus tags from the run ledger onto the actor (u1)', () => {
+        const msg = base({
+            isDebating: true,
+            debateTurns: [
+                { speaker: 'Kilo', text: 'structure intact' },
+                { speaker: 'Kilo #2', text: 'risk is the trade' },
+            ],
+            runStats: {
+                startedAt: '2026-09-04T00:00:00.000Z',
+                finishedAt: '2026-09-04T00:01:00.000Z',
+                durationMs: 60_000,
+                analysts: [
+                    { providerId: 'p1', displayName: 'Kilo', modelId: 'm1', seatRole: 'Macro' },
+                    { providerId: 'p2', displayName: 'Kilo #2', modelId: 'm2', seatFocus: 'risk' },
+                ],
+            },
+        });
+        const actors = stageActorsForMessage(msg);
+        const kilo = actors.find(a => a.name === 'Kilo');
+        const kilo2 = actors.find(a => a.name === 'Kilo #2');
+        expect(kilo?.seatRole).toBe('Macro');
+        expect(kilo?.seatFocus).toBeUndefined();
+        expect(kilo2?.seatRole).toBeUndefined();
+        expect(kilo2?.seatFocus).toBe('risk');
+    });
+
+    it('fuzzy-matches ledger display names to speaker names (suffix variants)', () => {
+        const msg = base({
+            isDebating: true,
+            debateTurns: [{ speaker: 'Gemini Pro', text: 'go' }],
+            runStats: {
+                startedAt: '2026-09-04T00:00:00.000Z',
+                finishedAt: '2026-09-04T00:01:00.000Z',
+                durationMs: 60_000,
+                analysts: [{ providerId: 'p1', displayName: 'Gemini Pro (2)', modelId: 'm1', seatRole: 'Risk' }],
+            },
+        });
+        const [actor] = stageActorsForMessage(msg);
+        expect(actor.seatRole).toBe('Risk');
+    });
+
     it('marks the active speaker as speaking with its newest speech line', () => {
         const msg = base({
             isDebating: true,

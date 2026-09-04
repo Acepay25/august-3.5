@@ -446,9 +446,14 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                         const viewing = selection.kind === 'team' && isHarness;
                         const label = team.name?.trim() || 'Team';
                         const seatLabels = [...new Set(slots.map(s => s.label))];
-                        const subtitle = seatLabels.length < slots.length
-                            ? `${seatLabels.join(' · ')} ×${slots.length}`
-                            : seatLabels.join(' · ');
+                        // Role-aware subtitle (u3): "Macro · Technical · Risk"
+                        // when seats carry team roles, provider labels otherwise.
+                        const roleTags = slots.map(s => s.roleTag).filter(Boolean) as string[];
+                        const subtitle = roleTags.length === slots.length && slots.length > 0
+                            ? roleTags.join(' · ')
+                            : seatLabels.length < slots.length
+                                ? `${seatLabels.join(' · ')} ×${slots.length}`
+                                : seatLabels.join(' · ');
                         return (
                             <li key={team.id} className="group/teamrow relative">
                                 <button

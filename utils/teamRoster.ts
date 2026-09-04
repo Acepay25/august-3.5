@@ -50,6 +50,9 @@ export interface TeamSlot {
     initial: string;
     /** Pixel role for identity color on the rail's Team row. */
     role: RolePreset;
+    /** Seat role short name ("Macro"/"Technical"/"Risk") when the seat
+     *  carries a built-in team role — shown on the rail's team row. */
+    roleTag?: string;
 }
 
 export const buildTeamRoster = (
@@ -100,5 +103,8 @@ export const teamSlots = (team: AgentTeam, providers: ProviderConfig[]): TeamSlo
             label,
             model: formatModelDisplayName(seat.modelId),
             role: avatarRoleForName(label),
+            roleTag: seat.role && seat.role !== AnalystRole.UNASSIGNED
+                ? ANALYST_ROLE_DEFINITIONS[seat.role]?.shortName
+                : undefined,
         };
     });

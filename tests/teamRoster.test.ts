@@ -115,4 +115,19 @@ describe('teamSlots (user-team render slots)', () => {
         expect(TEAM_MIN_SEATS).toBe(2);
         expect(TEAM_MAX_SEATS).toBe(10);
     });
+
+    it('carries the seat role short name onto the slot (u3 rail tags)', () => {
+        const roled: AgentTeam = {
+            ...team,
+            seats: [
+                { providerId: 'p1', modelId: 'gpt-test', role: AnalystRole.MACRO_VOLATILITY },
+                { providerId: 'p2', modelId: 'claude-3', role: AnalystRole.UNASSIGNED },
+                { providerId: 'ghost', modelId: 'm', role: AnalystRole.RISK_EXECUTION },
+            ],
+        };
+        const slots = teamSlots(roled, [provider(), provider({ id: 'p2', name: 'Anthropic' })]);
+        expect(slots[0].roleTag).toBe('Macro');
+        expect(slots[1].roleTag).toBeUndefined();
+        expect(slots[2].roleTag).toBe('Risk');
+    });
 });

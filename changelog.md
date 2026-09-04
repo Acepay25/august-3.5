@@ -4,6 +4,54 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-53 — Learning flow: seat diversity, ToolForge, manual A/B eval, memory self-correction
+
+Four upgrades to how the harness learns and what the models may build:
+
+- **Unroled team seats now diverge.** A 4–10 seat team left on "General
+  analyst" gave every seat the same default mandate — N seats produced
+  near-identical reads. Unroled seats rotate a FOCUS DIMENSION
+  (structure → entry mechanics → risk/invalidation → momentum/regime →
+  liquidity/positioning → macro context), stable per seat index; roled
+  seats are unchanged.
+- **ToolForge — models can create tools.** Any seat (or the arbiter)
+  can call `forge_tool` to propose a new desk tool as a DECLARATIVE
+  HTTP RECIPE — URL template, param mapping, JSONPath extract. No code
+  execution, ever. The harness hardens proposals (https-only, SSRF
+  guards, header rules, response caps, per-tool cache TTL) and stores
+  them as CANDIDATES; a human approves network access in
+  Settings → Skills → Forged tools before a tool can run. Confirmed
+  tools merge into every seat's tool loop (`custom_*` executor with
+  size caps + failure counting); stats drive retire decisions.
+- **Manual skill A/B eval.** Skill detail gains "Run A/B eval" — the
+  same with-skill/without-skill comparison the auto-scheduler runs,
+  on demand, writing the same verdict ledger (helps/hurts streaks can
+  promote or demote). Requires a memory model.
+- **Memory self-correction.** New `amend_memory` desk tool: models can
+  PROPOSE corrections to non-auto notebook files (edit = replace body,
+  supersede = append a provenance-stamped correction section).
+  Proposals land in Settings → Memory's review inbox — auto-managed
+  files are unamendable, identical content is rejected, approvals apply
+  through the notebook write lock, rejections are tombstoned.
+
+UX wiring: every proposal fires a toast the moment it lands ("approve
+in Settings → …"), and the Settings nav shows pending counts on the
+Skills (forged tools) and Memory (amendments) tabs — nothing waits in
+silence. Tool calls themselves already render as live chips in the
+transcript via `onToolEvent`. Seat personas are now VISIBLE: the run
+ledger carries each seat's role short name (or, for unroled seats, the
+focus dimension), rendered as a tag beside the seat name on the floor,
+in the transcript's actor cards, and in the rail's team-row subtitle
+("Macro · Technical · Risk"). The floor squawk also prints seat
+activity from the debate run log (rounds, drops, charges) and per-turn
+working/passed/replied lines — the desk reads alive, reference parity.
+
+Tests: toolForge (13), memoryAmendments (5), seatPersonas (+dim),
+stageActors role/focus tags, teamSlots roleTag, plus catalog updates.
+Gates: tsc 0 · 1966 passed / 11 skipped · build clean.
+
+---
+
 ## ROUND-52 — Teams: seat roles, the 3-provider cap removed, living defaults
 
 The Standard-mode debate blocked at 3 providers even though teams seat

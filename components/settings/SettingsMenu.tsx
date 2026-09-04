@@ -9,6 +9,9 @@ import ProviderManager from './ProviderManager';
 import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
 import SkillsGrid from './SkillsGrid';
+import ToolForgeManager from './ToolForgeManager';
+import { loadForgedTools } from '../../services/tools/toolForge';
+import { listAmendments } from '../../services/learning/memoryAmendments';
 import DeskSeatMappingEditor from './DeskSeatMappingEditor';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
@@ -20,6 +23,7 @@ import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from 
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
+import AmendmentsInbox from './AmendmentsInbox';
 import ModelPicker from '../shared/ModelPicker';
 import { Journal } from '../journal/Journal';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
@@ -265,6 +269,27 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const [isDirty, setIsDirty] = useState(false);
     const [navQuery, setNavQuery] = useState('');
+    // Pending-proposal counters for the nav badges: model-authored tools
+    // and notebook amendments waiting for a human decision.
+    const [pendingForged, setPendingForged] = useState(() => loadForgedTools().filter(t => t.status === 'candidate').length);
+    const [pendingAmendments, setPendingAmendments] = useState(() => listAmendments('pending').length);
+    useEffect(() => {
+        const sync = (): void => {
+            setPendingForged(loadForgedTools().filter(t => t.status === 'candidate').length);
+            setPendingAmendments(listAmendments('pending').length);
+        };
+        sync();
+        // Proposals arrive via custom events; poll as a cheap fallback
+        // (the panels also self-refresh on the same cadence).
+        const t = window.setInterval(sync, 5000);
+        window.addEventListener('august:forged-proposal', sync);
+        window.addEventListener('august:memory-amendment', sync);
+        return () => {
+            window.clearInterval(t);
+            window.removeEventListener('august:forged-proposal', sync);
+            window.removeEventListener('august:memory-amendment', sync);
+        };
+    }, []);
     const navMatch = (label: string): boolean => {
         const q = navQuery.trim().toLowerCase();
         return !q || label.toLowerCase().includes(q);
@@ -439,6 +464,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         onClick={() => setActiveTab('memory')}
                                         icon={<ActivityIcon className="w-4 h-4" />}
                                         label="Memory"
+                                        badge={pendingAmendments > 0 ? `${pendingAmendments}` : undefined}
                                     />
                                 )}
                                 {navMatch('Skills') && (
@@ -448,6 +474,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         onClick={() => setActiveTab('skills')}
                                         icon={<ActivityIcon className="w-4 h-4" />}
                                         label="Skills"
+                                        badge={pendingForged > 0 ? `${pendingForged}` : undefined}
                                     />
                                 )}
                                 {navMatch('Playbooks') && (
@@ -878,19 +905,33 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             )}
 
                             {activeTab === 'memory' && (
-                                <div className="h-full min-h-0 animate-fade-in flex flex-col">
+                                <div className="h-full min-h-0 animate-fade-in flex flex-col gap-4">
                                     <MemoryFilesManager
                                         username={username}
                                         isGlobalMemoryEnabled={isGlobalMemoryEnabled}
                                         setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
                                         memoryConfig={memoryConfig ?? null}
                                     />
+                                    <div className="px-4 pb-4">
+                                        <h3 className="text-[13px] font-bold text-zinc-100">Model correction proposals</h3>
+                                        <p className="mt-0.5 text-[11px] text-zinc-500 mb-3">
+                                            Notebook amendments proposed by the models (amend_memory). Nothing changes until you approve.
+                                        </p>
+                                        <AmendmentsInbox />
+                                    </div>
                                 </div>
                             )}
 
                             {activeTab === 'skills' && (
-                                <div className="h-full min-h-0 animate-fade-in flex flex-col px-4 pb-4">
-                                    <SkillsGrid />
+                                <div className="h-full min-h-0 animate-fade-in flex flex-col px-4 pb-4 gap-6">
+                                    <SkillsGrid memoryConfig={memoryConfig} loggedTrades={props.loggedTrades} />
+                                    <div className="border-t border-zinc-800 pt-4">
+                                        <h3 className="text-[13px] font-bold text-zinc-100">Forged tools</h3>
+                                        <p className="mt-0.5 text-[11px] text-zinc-500 mb-3">
+                                            Model-authored desk tools awaiting your approval.
+                                        </p>
+                                        <ToolForgeManager />
+                                    </div>
                                 </div>
                             )}
 

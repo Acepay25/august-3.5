@@ -35,6 +35,9 @@ export interface PixelSeatProps {
     speaking?: boolean;
     /** Optional override for the role — used by tests. */
     roleOverride?: ReturnType<typeof roleForName>;
+    /** Team role or focus-dimension tag ("MACRO", "RISK", "structure") —
+     *  rendered after the name plate so the floor shows WHO is who. */
+    roleTag?: string;
     /** Pixel scale (cell size in CSS px). Default 5. */
     pixelSize?: number;
     /** Optional click handler — usually opens the seat's transcript. */
@@ -55,6 +58,7 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
     thinking = false,
     speaking = false,
     roleOverride,
+    roleTag,
     pixelSize = 5,
     onClick,
     statusText,
@@ -218,10 +222,21 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
             </span>
 
             {/* Name plate — kept visible at all sizes; the role is implied
-                by the cap color. */}
+                by the cap color. A team role/focus tag rides after the name
+                so the floor shows who is who (u1). */}
             {!compact && (
-                <span className="mt-0.5 max-w-[7.5rem] truncate rounded-sm border border-white/10 bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-zinc-200">
-                    {name}
+                <span className="mt-0.5 flex max-w-[9.5rem] items-center gap-1">
+                    <span className="max-w-[7.5rem] truncate rounded-sm border border-white/10 bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-zinc-200">
+                        {name}
+                    </span>
+                    {roleTag && (
+                        <span
+                            title={roleTag}
+                            className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-zinc-500"
+                        >
+                            {roleTag}
+                        </span>
+                    )}
                 </span>
             )}
             {!compact && statusText && (

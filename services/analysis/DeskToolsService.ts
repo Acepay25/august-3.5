@@ -1,10 +1,13 @@
 /**
  * Desk tools — live lookups analysts can call before writing the trade brief.
  * Uses existing market services + a keyless web search (DuckDuckGo).
+ * Confirmed ToolForge tools (model-authored HTTP recipes, services/tools/
+ * toolForge) merge into the same loop via their own hardened executor.
  */
 
 import type { ProviderConfig } from '../../types/provider';
 import { getHarnessSettings } from '../../utils/harnessSettings';
+import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
 import { calculateCorrelationRisk } from './CorrelationRiskService';
@@ -196,6 +199,51 @@ const asSymbol = (value: unknown, fallback: string): string => {
 };
 
 export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
+    {
+        type: 'function',
+        function: {
+            name: 'amend_memory',
+            description:
+                'Propose a CORRECTION to an existing Trader Notebook file (not skills, not diary) when you know its content is wrong or outdated. ' +
+                'Lands as a pending amendment a human must approve — the notebook does not change until then. ' +
+                'Use write access sparingly; prefer this over writing a duplicate contradicting note.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    file_name: { type: 'string', description: 'Exact notebook file name, e.g. "my-edge.md"' },
+                    kind: { type: 'string', enum: ['edit', 'supersede'], description: 'edit = replace the whole file content; supersede = append a correcting section' },
+                    proposed_content: { type: 'string', description: 'The corrected markdown content (edit) or the correcting section (supersede)' },
+                    reason: { type: 'string', description: 'Why the current content is wrong — cite the evidence' },
+                },
+                required: ['file_name', 'kind', 'proposed_content', 'reason'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'forge_tool',
+            description:
+                'Propose a NEW desk tool for future debates when the tools you need do not exist. ' +
+                'Declarative HTTP recipe only — never code. Provide: name (snake_case), description, ' +
+                'parameters (name -> string|number|boolean), urlTemplate (https://, {param} slots), ' +
+                'method (GET/POST), extractPath (dot path into the JSON response), ttlMs. ' +
+                'The proposal lands as a CANDIDATE — a human must approve it before it can ever run.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'snake_case tool name, e.g. funding_history' },
+                    description: { type: 'string', description: 'What it returns and when to use it' },
+                    urlTemplate: { type: 'string', description: 'https:// URL template with {param} slots' },
+                    parameters_json: { type: 'string', description: 'JSON object mapping param name -> "string"|"number"|"boolean"' },
+                    extractPath: { type: 'string', description: 'Dot path to extract from the JSON response, e.g. data.result' },
+                },
+                required: ['name', 'description', 'urlTemplate', 'parameters_json'],
+                additionalProperties: false,
+            },
+        },
+    },
     {
         type: 'function',
         function: {
@@ -548,6 +596,49 @@ export async function executeDeskTool(
     try {
         let content: string;
         switch (call.name) {
+            case 'amend_memory': {
+                // Model proposing a notebook correction. PENDING only — a
+                // human approves in Settings → Memory; nothing is applied here.
+                try {
+                    const { proposeAmendment } = await import('../learning/memoryAmendments');
+                    const { getMemoryFiles } = await import('../learning/MemoryFilesService');
+                    const fileName = String(call.arguments.file_name ?? '').replace(/\.md$/i, '');
+                    const target = getMemoryFiles().files.find(f => f.name.replace(/\.md$/i, '') === fileName) ?? null;
+                    const amendment = proposeAmendment(
+                        target?.id ?? '',
+                        call.arguments.kind === 'supersede' ? 'supersede' : 'edit',
+                        String(call.arguments.proposed_content ?? ''),
+                        String(call.arguments.reason ?? ''),
+                        'model:desk',
+                        id => target && target.id === id ? target : null,
+                    );
+                    content = JSON.stringify({ proposed: true, id: amendment.id, status: amendment.status, note: 'Pending human approval in Settings → Memory. The notebook is unchanged until approved.' });
+                } catch (err) {
+                    content = `amend_memory rejected: ${err instanceof Error ? err.message : String(err)}`;
+                }
+                break;
+            }
+            case 'forge_tool': {
+                // A model proposing a tool. Store as CANDIDATE — the proposal
+                // never touches the network; approval is a human action.
+                try {
+                    const parsed = JSON.parse(String(call.arguments.parameters_json ?? '{}')) as Record<string, string>;
+                    const { proposeForgedTool } = await import('../tools/toolForge');
+                    const tool = proposeForgedTool({
+                        name: String(call.arguments.name ?? ''),
+                        description: String(call.arguments.description ?? ''),
+                        urlTemplate: String(call.arguments.urlTemplate ?? ''),
+                        parameters: Object.fromEntries(
+                            Object.entries(parsed).map(([k, v]) => [k, (v === 'number' || v === 'boolean') ? v : 'string']),
+                        ),
+                        extractPath: call.arguments.extractPath ? String(call.arguments.extractPath) : undefined,
+                    }, 'model:desk');
+                    content = JSON.stringify({ proposed: true, id: tool.id, status: tool.status, note: 'Candidate stored. A human must approve it in Settings → AI Models before it can run.' });
+                } catch (err) {
+                    content = `forge_tool rejected: ${err instanceof Error ? err.message : String(err)}`;
+                }
+                break;
+            }
             case 'web_search':
                 content = await runWebSearch(asString(call.arguments.query), context.signal);
                 break;
@@ -650,6 +741,8 @@ export const ARBITER_ALLOWED_TOOLS = [
     'get_setup_history_stats',
     'get_session_context',
     'web_search',
+    'forge_tool',
+    'amend_memory',
 ] as const;
 
 /** Parse OpenAI-style tool_calls from a chat message. */
@@ -807,7 +900,10 @@ export async function runDeskToolLoop(params: {
     let reasoning = '';
 
     for (let round = 0; round < MAX_DESK_TOOL_ROUNDS; round++) {
-        const allDefs = extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...extraToolDefs] : DESK_TOOL_DEFINITIONS;
+        const forgedDefs = confirmedForgedToolDefinitions();
+        const allDefs = forgedDefs.length > 0
+            ? (extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...forgedDefs, ...extraToolDefs] : [...DESK_TOOL_DEFINITIONS, ...forgedDefs])
+            : (extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...extraToolDefs] : DESK_TOOL_DEFINITIONS);
         const effectiveTools = nativeTools
             ? (allowedTools && allowedTools.length > 0
                 ? allDefs.filter(d => allowedTools.includes(d.function.name))
@@ -862,14 +958,23 @@ export async function runDeskToolLoop(params: {
             coreCalls.push(call);
         }
         onToolEvent?.(calls.map(c => `calling ${toolLabel(c.name)}…`).join(' · '));
-        const coreResults = coreCalls.length > 0
-            ? await executeDeskTools(coreCalls, {
+        // Forged tools (model-authored recipes) execute through their own
+        // hardened path BEFORE the built-in executor sees the calls.
+        const forgedResults: DeskToolResult[] = [];
+        const builtInCalls: DeskToolCall[] = [];
+        for (const call of coreCalls) {
+            if (!call.name.startsWith('custom_')) { builtInCalls.push(call); continue; }
+            const forged = await executeForgedTool(call.name, call, options?.signal);
+            if (forged) forgedResults.push(forged);
+        }
+        const coreResults = builtInCalls.length > 0
+            ? await executeDeskTools(builtInCalls, {
                 defaultSymbol,
                 signal: options?.signal,
                 trades,
             })
             : [];
-        const results = [...extraResults, ...coreResults];
+        const results = [...extraResults, ...forgedResults, ...coreResults];
         usedTools.push(...results.map(r => r.name));
         onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
 

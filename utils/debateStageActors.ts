@@ -35,6 +35,12 @@ export const stageActorsForMessage = (message: Message): DebateStageActor[] => {
     if (!isEnsembleMessage(message)) return [];
     const debateTurns: DebateTurn[] = message.debateTurns ?? message.postMortemDebateTurns ?? [];
     const active = message.activeDebateSpeakers ?? {};
+    // Seat identity from the run ledger (u1): role + focus dimension per
+    // seat name, so the floor and transcript can tag who is who.
+    const seatIdentity = new Map<string, { role?: string; focus?: string }>();
+    for (const a of message.runStats?.analysts ?? []) {
+        if (a.seatRole || a.seatFocus) seatIdentity.set(a.displayName, { role: a.seatRole, focus: a.seatFocus });
+    }
     const names: string[] = [];
     for (const t of debateTurns) if (!names.includes(t.speaker)) names.push(t.speaker);
     for (const k of Object.keys(active)) if (!names.includes(k)) names.push(k);
@@ -44,6 +50,7 @@ export const stageActorsForMessage = (message: Message): DebateStageActor[] => {
         const isActive = Boolean(message.isDebating) && (active[name] ?? 0) > 0;
         const addressedTo = (last as { to?: string[] } | undefined)?.to;
         const speechText = (last?.text ?? '').replace(/\s+/g, ' ').trim();
+        const identity = seatIdentity.get(name) ?? seatIdentity.get([...seatIdentity.keys()].find(k => name.includes(k) || k.includes(name)) ?? '');
         return {
             id: name,
             name,
@@ -55,6 +62,8 @@ export const stageActorsForMessage = (message: Message): DebateStageActor[] => {
             toolChip: addressedTo?.length
                 ? `replying to ${addressedTo.join(', ')}`
                 : (message.liveToolEvents ?? {})[name]?.split('\n')[0],
+            seatRole: identity?.role,
+            seatFocus: identity?.focus,
             thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
             meta: (() => {
                 const seat = (message.runStats?.analysts ?? []).find(a =>
