@@ -24,6 +24,14 @@ export interface AgentBot {
     providerId: string;
     /** The model this bot thinks with (within providerId). */
     modelId: string;
+    /** Debate persona: a built-in AnalystRole inherits that role's curated
+     *  prompt (optionally refined by customPrompt); omitted = the
+     *  general-analyst default. Formerly a TEAM-seat field — groups'
+     *  members carry it now (the Team/group merge). */
+    role?: AnalystRole;
+    /** Free-text trader instructions. On a built-in role they REFINE the
+     *  role prompt; unroled they REPLACE the default mandate. */
+    customPrompt?: string;
     /** Avatar: a built-in geometric face, our pixel roles, 'auto', or an
      *  uploaded image clipped to a container shape (data URL). */
     avatar:

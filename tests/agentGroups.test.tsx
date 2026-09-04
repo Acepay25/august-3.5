@@ -242,3 +242,115 @@ describe('useAgentGroups room engine (G2)', () => {
         expect(result.current.isRunning).toBe(false);
     });
 });
+
+// ── R54: cancel + hybrid injection ─────────────────────────────────────────
+describe('useAgentGroups cancel + hybrid (R54)', () => {
+    const bots2 = [
+        bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
+        bot({ id: 'b2', name: 'Risk', modelId: 'model-b' }),
+    ];
+
+    it('cancelRun aborts the stream, stops the loop, and settles the room', async () => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+        }));
+        // A stream that never resolves on its own — cancel must break it.
+        streamMock.mockImplementation((_c, _p, _h, _s, signal) => new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }));
+
+        let runPromise: Promise<void> = Promise.resolve();
+        act(() => {
+            runPromise = result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, 'analyze btc', bots2);
+        });
+        expect(result.current.isRunning).toBe(true);
+        expect(streamMock).toHaveBeenCalledTimes(1);
+
+        act(() => { result.current.cancelRun(); });
+        await act(async () => { await runPromise.catch(() => undefined); });
+
+        expect(result.current.isRunning).toBe(false);
+        expect(result.current.workingBotId).toBeNull();
+        // Only the first member's bubble was created; the loop never
+        // reached the second (nonce guard) — no partial second bubble.
+        expect(store.messages.filter(m => m.role === MessageRole.AI)).toHaveLength(1);
+        expect(result.current.activity.some(a => a.detail === 'cancelled')).toBe(true);
+    });
+
+    it('hybrid ON injects the enhanced packet into every member system prompt', async () => {
+        // resetModules so the doMock below actually applies — the hook was
+        // already imported statically at the top of the file.
+        vi.resetModules();
+        vi.doMock('../services/analysis/HybridIntelligenceService', () => ({
+            tryFetchHybridDataFromPromptWithCalibration: vi.fn(async () => ({
+                data: {},
+                promptInjection: 'BASE',
+                enhancedInjection: 'LIVE BTC DATA',
+            })),
+        }));
+        const { useAgentGroups: withHybrid } = await import('../hooks/useAgentGroups');
+        streamMock.mockResolvedValue('ok');
+        const store = makeStore();
+        const { result } = renderHook(() => withHybrid({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+            hybridEnabled: true,
+        }));
+
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, 'analyze btc', bots2);
+        });
+        expect(streamMock).toHaveBeenCalledTimes(2);
+        expect(String(streamMock.mock.calls[0][3])).toContain('LIVE BTC DATA');
+        expect(String(streamMock.mock.calls[1][3])).toContain('LIVE BTC DATA');
+    });
+
+    it('hybrid OFF sends plain system prompts (no fetch at all)', async () => {
+        vi.resetModules();
+        const hybridFetch = vi.fn();
+        vi.doMock('../services/analysis/HybridIntelligenceService', () => ({
+            tryFetchHybridDataFromPromptWithCalibration: hybridFetch,
+        }));
+        const { useAgentGroups: withHybrid } = await import('../hooks/useAgentGroups');
+        streamMock.mockResolvedValue('ok');
+        const store = makeStore();
+        const { result } = renderHook(() => withHybrid({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+            hybridEnabled: false,
+        }));
+
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bots2[0]]);
+        });
+        expect(hybridFetch).not.toHaveBeenCalled();
+        expect(String(streamMock.mock.calls[0][3])).not.toContain('LIVE BTC DATA');
+    });
+
+    it('a hybrid fetch failure never blocks the room (plain prompts still sent)', async () => {
+        vi.resetModules();
+        vi.doMock('../services/analysis/HybridIntelligenceService', () => ({
+            tryFetchHybridDataFromPromptWithCalibration: vi.fn(async () => { throw new Error('offline'); }),
+        }));
+        const { useAgentGroups: withHybrid } = await import('../hooks/useAgentGroups');
+        streamMock.mockResolvedValue('ok');
+        const store = makeStore();
+        const { result } = renderHook(() => withHybrid({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+            hybridEnabled: true,
+        }));
+
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bots2[0]]);
+        });
+        expect(streamMock).toHaveBeenCalledTimes(1);
+        expect(result.current.isRunning).toBe(false);
+    });
+});

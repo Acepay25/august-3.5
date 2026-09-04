@@ -53,8 +53,7 @@ const base = {
     messages: [] as Message[],
     bots: [] as AgentBot[],
     groups: [] as AgentGroup[],
-    selection: { kind: 'team' } as const,
-    onSelectTeam: () => {},
+    selection: { kind: 'coach' } as const,
     onSelectBot: () => {},
     onSelectGroup: () => {},
     onNewBot: () => {},
@@ -62,7 +61,7 @@ const base = {
 };
 
 describe('AgentRosterRail (bots + groups)', () => {
-    it('renders the pinned Team row, one row per bot, and one row per group', () => {
+    it('renders one row per bot and one row per group — no Team row (merged into groups)', () => {
         render(
             <AgentRosterRail
                 {...base}
@@ -70,7 +69,7 @@ describe('AgentRosterRail (bots + groups)', () => {
                 groups={[group({ id: 'g1', memberIds: ['b1', 'b2'] })]}
             />,
         );
-        expect(screen.getByTestId('roster-team')).toBeTruthy();
+        expect(screen.queryByTestId('roster-team')).toBeNull();
         expect(screen.getByTestId('roster-bot-b1')).toBeTruthy();
         expect(screen.getByTestId('roster-bot-b2')).toBeTruthy();
         expect(screen.getByTestId('roster-group-g1')).toBeTruthy();
@@ -78,36 +77,34 @@ describe('AgentRosterRail (bots + groups)', () => {
         expect(screen.getByTestId('roster-group-g1').textContent).toContain('Scout, Ledger');
     });
 
-    it('marks the active selection with data-active="1" (team default)', () => {
+    it('marks the active selection with data-active="1" (group thread)', () => {
         render(
             <AgentRosterRail
                 {...base}
+                selection={{ kind: 'group', groupId: 'g1' }}
                 bots={[bot({ id: 'b1' })]}
+                groups={[group({ id: 'g1', memberIds: ['b1'] })]}
             />,
         );
-        expect(screen.getByTestId('roster-team').getAttribute('data-active')).toBe('1');
+        expect(screen.getByTestId('roster-group-g1').getAttribute('data-active')).toBe('1');
         expect(screen.getByTestId('roster-bot-b1').getAttribute('data-active')).toBe('0');
     });
 
-    it('clicking a bot row selects it; clicking Team selects the team', () => {
+    it('clicking a bot row selects it', () => {
         const onSelectBot = vi.fn();
-        const onSelectTeam = vi.fn();
         render(
             <AgentRosterRail
                 {...base}
                 selection={{ kind: 'bot', botId: 'b2' }}
                 onSelectBot={onSelectBot}
-                onSelectTeam={onSelectTeam}
                 bots={[bot({ id: 'b1' }), bot({ id: 'b2' })]}
             />,
         );
         fireEvent.click(screen.getByTestId('roster-bot-b2'));
         expect(onSelectBot).toHaveBeenCalledWith('b2');
-        fireEvent.click(screen.getByTestId('roster-team'));
-        expect(onSelectTeam).toHaveBeenCalledTimes(1);
     });
 
-    it('search filters bot and group rows by name but keeps Team visible', () => {
+    it('search filters bot and group rows by name', () => {
         render(
             <AgentRosterRail
                 {...base}
@@ -120,7 +117,6 @@ describe('AgentRosterRail (bots + groups)', () => {
         expect(screen.queryByTestId('roster-bot-b1')).toBeNull();
         expect(screen.getByTestId('roster-bot-b2')).toBeTruthy();
         expect(screen.queryByTestId('roster-group-g1')).toBeNull();
-        expect(screen.getByTestId('roster-team')).toBeTruthy();
     });
 
     it('scopes bot previews to provider+model: two bots on one provider keep separate threads', () => {
@@ -191,36 +187,6 @@ describe('AgentRosterRail (bots + groups)', () => {
     });
 });
 
-describe('AgentRosterRail Team row (derived from the live ensemble config)', () => {
-    const teamMembers = [
-        { label: 'Macro', model: 'OpenAI · GPT', initial: 'M', role: 'macro' as const },
-        { label: 'Technical', model: 'OpenAI · GPT', initial: 'T', role: 'technical' as const },
-        { label: 'Risk', model: 'Anthropic · Claude', initial: 'R', role: 'risk' as const },
-    ];
-
-    it('subtitle lists the configured seats — never a hardcoded description', () => {
-        render(<AgentRosterRail {...base} teamMembers={teamMembers} />);
-        const row = screen.getByTestId('roster-team');
-        expect(row.textContent).toContain('Macro · Technical · Risk');
-        expect(row.textContent).not.toContain('Debates and team analysis');
-    });
-
-    it('without a configured roster it says how to configure one', () => {
-        render(<AgentRosterRail {...base} />);
-        expect(screen.getByTestId('roster-team').textContent).toContain('No analysts configured');
-    });
-
-    it('renders stacked identity discs for the team seats', () => {
-        const { container } = render(<AgentRosterRail {...base} teamMembers={teamMembers} />);
-        const row = screen.getByTestId('roster-team');
-        // One identity disc per seat (up to 3) — spans with the role
-        // accent background, not the gray fallback circle.
-        const discs = row.querySelectorAll('span > span');
-        expect(discs.length).toBeGreaterThanOrEqual(3);
-        void container;
-    });
-});
-
 describe('AgentRosterRail delete affordance', () => {
     it('hover trash buttons call onDeleteBot / onDeleteGroup', () => {
         const onDeleteBot = vi.fn();
@@ -261,92 +227,41 @@ describe('AgentRosterRail delete affordance', () => {
     });
 });
 
-describe('AgentRosterRail Team manage affordance', () => {
-    it('hover gear opens seat management (the Team is managed, never deleted)', () => {
-        const onManageTeam = vi.fn();
-        render(<AgentRosterRail {...base} teamMembers={[{ label: 'Kilocode', model: 'K', initial: '1', role: 'macro' as const }] } onManageTeam={onManageTeam} />);
-        fireEvent.click(screen.getByTestId('manage-team'));
-        expect(onManageTeam).toHaveBeenCalledTimes(1);
-    });
-
-    it('the Team row has no delete trash — only bots and groups delete', () => {
+describe('AgentRosterRail group manage affordance (Team merge)', () => {
+    it('hover gear opens group settings; groups delete via trash', () => {
+        const onEditGroup = vi.fn();
         render(
             <AgentRosterRail
                 {...base}
-                teamMembers={[{ label: 'Macro', model: 'M', initial: 'M', role: 'macro' as const }]}
-                onDeleteBot={vi.fn()}
+                groups={[group({ id: 'g1', memberIds: ['b1'] })]}
+                bots={[bot({ id: 'b1' })]}
+                onEditGroup={onEditGroup}
                 onDeleteGroup={vi.fn()}
-                onManageTeam={vi.fn()}
             />,
         );
-        expect(screen.queryByTestId('delete-team')).toBeNull();
-        expect(screen.getByTestId('manage-team')).toBeTruthy();
-    });
-
-    it('subtitle dedupes identical seat labels ("Kilocode ×3", not a stutter)', () => {
-        const threeK = [
-            { label: 'Kilocode', model: 'a', initial: '1', role: 'macro' as const },
-            { label: 'Kilocode', model: 'b', initial: '2', role: 'technical' as const },
-            { label: 'Kilocode', model: 'c', initial: '3', role: 'risk' as const },
-        ];
-        render(<AgentRosterRail {...base} teamMembers={threeK} />);
-        const row = screen.getByTestId('roster-team');
-        expect(row.textContent).toContain('Kilocode ×3');
-        expect(row.textContent).not.toContain('Kilocode · Kilocode');
+        fireEvent.click(screen.getByTestId('edit-group-g1'));
+        expect(onEditGroup).toHaveBeenCalledWith('g1');
+        expect(screen.getByTestId('delete-group-g1')).toBeTruthy();
     });
 });
 
-describe('AgentRosterRail user teams (the Team is one of these)', () => {
-    const teamSlots = [
-        { label: 'OpenAI', model: 'GPT', initial: '1', role: 'macro' as const },
-        { label: 'Anthropic', model: 'Claude', initial: '2', role: 'risk' as const },
-    ];
-    const userTeam = {
-        team: { id: 't1', name: 'Alpha Desk', seats: [], createdAt: new Date().toISOString() },
-        slots: teamSlots,
-    };
-    const teamBase = { ...base, teams: [userTeam], activeTeamId: 't1' };
-
-    it('teams replace the pinned Settings-derived row', () => {
-        render(<AgentRosterRail {...teamBase} teamMembers={[{ label: 'Legacy', model: '', initial: '1', role: 'macro' as const }]} />);
+describe('AgentRosterRail user teams (merged into groups — Team rows gone)', () => {
+    it('no Team row or team affordances render — negative contract', () => {
+        render(<AgentRosterRail {...base} bots={[bot({ id: 'b1' })]} />);
         expect(screen.queryByTestId('roster-team')).toBeNull();
-        expect(screen.getByTestId('roster-team-t1')).toBeTruthy();
-        expect(screen.getByTestId('roster-team-t1').textContent).toContain('Alpha Desk');
-    });
-
-    it('clicking a team activates it; gear edits; trash deletes', () => {
-        const onActivateTeam = vi.fn();
-        const onEditTeam = vi.fn();
-        const onDeleteTeam = vi.fn();
-        render(
-            <AgentRosterRail
-                {...teamBase}
-                onActivateTeam={onActivateTeam}
-                onEditTeam={onEditTeam}
-                onDeleteTeam={onDeleteTeam}
-            />,
-        );
-        fireEvent.click(screen.getByTestId('roster-team-t1'));
-        expect(onActivateTeam).toHaveBeenCalledWith('t1');
-        fireEvent.click(screen.getByTestId('edit-team-t1'));
-        expect(onEditTeam).toHaveBeenCalledWith('t1');
-        fireEvent.click(screen.getByTestId('delete-team-t1'));
-        expect(onDeleteTeam).toHaveBeenCalledWith('t1');
-    });
-
-    it("'+ New Team' row and the '+' menu entry open the create dialog", () => {
-        const onNewTeam = vi.fn();
-        render(<AgentRosterRail {...teamBase} onNewTeam={onNewTeam} />);
-        fireEvent.click(screen.getByTestId('new-team-button'));
-        expect(onNewTeam).toHaveBeenCalledTimes(1);
-        fireEvent.click(screen.getByTestId('bots-add'));
-        expect(screen.getByTestId('menu-new-team')).toBeTruthy();
-    });
-
-    it('team search filters by name', () => {
-        render(<AgentRosterRail {...teamBase} />);
-        fireEvent.change(screen.getByTestId('roster-search'), { target: { value: 'nomatch' } });
         expect(screen.queryByTestId('roster-team-t1')).toBeNull();
+        expect(screen.queryByTestId('edit-team-t1')).toBeNull();
+        expect(screen.queryByTestId('delete-team-t1')).toBeNull();
+        expect(screen.queryByTestId('new-team-button')).toBeNull();
+        expect(screen.queryByTestId('menu-new-team')).toBeNull();
+    });
+
+    it('the "+" menu offers New Bot / New Group Chat only', () => {
+        render(<AgentRosterRail {...base} bots={[bot({ id: 'b1' })]} />);
+        fireEvent.click(screen.getByTestId('bots-add'));
+        expect(screen.queryByTestId('menu-new-team')).toBeNull();
+        expect(screen.getByTestId('menu-new-bot')).toBeTruthy();
+        expect(screen.getByTestId('menu-new-group')).toBeTruthy();
     });
 });
 

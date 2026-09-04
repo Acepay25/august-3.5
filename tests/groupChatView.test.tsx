@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
 import { GroupChatView } from '../components/chat/GroupChatView';
 import { AgentBot, AgentGroup } from '../services/agents/agentRoster';
@@ -94,5 +94,72 @@ describe('GroupChatView (room UX)', () => {
         ];
         render(<GroupChatView {...base} messages={messages} workingBotId="b1" isRunning />);
         expect(screen.getByTestId('group-thinking').textContent).toContain('Scout is thinking');
+    });
+
+    it('Stop replaces New Thread while running and fires onCancelRun', () => {
+        const onCancelRun = vi.fn();
+        const { rerender } = render(<GroupChatView {...base} isRunning onCancelRun={onCancelRun} />);
+        // While running, the composer shows Stop (no New Thread).
+        expect(screen.getByTestId('composer-cancel')).toBeTruthy();
+        expect(screen.queryByTestId('new-thread-button')).toBeNull();
+        // The thread area shows the cancel affordance too (empty room → no
+        // thread rows, so only the composer Stop renders here).
+        fireEvent.click(screen.getByTestId('composer-cancel'));
+        expect(onCancelRun).toHaveBeenCalledTimes(1);
+
+        rerender(<GroupChatView {...base} isRunning={false} onCancelRun={onCancelRun} />);
+        expect(screen.queryByTestId('composer-cancel')).toBeNull();
+        expect(screen.getByTestId('new-thread-button')).toBeTruthy();
+    });
+
+    it('with a thread in flight, an inline Stop sits next to the thinking line', () => {
+        const onCancelRun = vi.fn();
+        const messages: Message[] = [
+            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc' }),
+        ];
+        render(<GroupChatView {...base} messages={messages} workingBotId="b1" isRunning onCancelRun={onCancelRun} />);
+        expect(screen.getByTestId('group-thinking').textContent).toContain('Scout is thinking');
+        fireEvent.click(screen.getByTestId('group-cancel'));
+        expect(onCancelRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('no Stop affordances without onCancelRun', () => {
+        render(<GroupChatView {...base} isRunning />);
+        expect(screen.queryByTestId('composer-cancel')).toBeNull();
+        expect(screen.queryByTestId('group-cancel')).toBeNull();
+        // Falls back to New Thread (input-gated, not run-gated).
+        expect(screen.getByTestId('new-thread-button')).toBeTruthy();
+    });
+
+    it('the hybrid toggle renders only when wired and flips via onToggleHybrid', () => {
+        const onToggleHybrid = vi.fn();
+        const { rerender } = render(
+            <GroupChatView {...base} hybridEnabled={false} onToggleHybrid={onToggleHybrid} />,
+        );
+        const toggle = screen.getByTestId('group-hybrid-toggle') as HTMLButtonElement;
+        expect(toggle.getAttribute('aria-checked')).toBe('false');
+        fireEvent.click(toggle);
+        expect(onToggleHybrid).toHaveBeenCalledTimes(1);
+
+        rerender(<GroupChatView {...base} hybridEnabled onToggleHybrid={onToggleHybrid} />);
+        expect((screen.getByTestId('group-hybrid-toggle') as HTMLButtonElement).getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('the hybrid toggle is absent when the callback is omitted', () => {
+        render(<GroupChatView {...base} />);
+        expect(screen.queryByTestId('group-hybrid-toggle')).toBeNull();
+    });
+
+    it('member replies render markdown (bold survives as a <strong>) with a hover copy button', { timeout: 30_000 }, async () => {
+        const messages: Message[] = [
+            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc' }),
+            msg({ id: 'm2', role: MessageRole.AI, text: '**Spot:** $77,648 · below the 7d mean', modelsUsed: { p1: 'model-a' } }),
+        ];
+        const { container } = render(<GroupChatView {...base} messages={messages} />);
+        expect(screen.getByTestId('group-copy-m2')).toBeTruthy();
+        // MarkdownContent lazy-loads the renderer chunk — under full-suite
+        // load the chunk fetch + parse can exceed the default waitFor window
+        // (same 30s class as the skillsGrid detail-open test, §14-11c).
+        await waitFor(() => expect(container.querySelector('strong')).toBeTruthy(), { timeout: 25_000 });
     });
 });

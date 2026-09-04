@@ -5,6 +5,8 @@ import { setSkillStatus, parseSkillMarkdown } from '../../services/learning/Skil
 import { getMemoryFiles, subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import { evaluateSkill, SkillEvalResult, recordEvalVerdict } from '../../services/learning/SkillEvalService';
+import { importSkillFiles, readSkillFiles } from '../../services/learning/SkillImportService';
+import { useToastActions } from '../shared/Toast';
 import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -332,6 +334,8 @@ const SkillDetail: React.FC<{
 };
 
 const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?: LoggedTrade[] }> = ({ memoryConfig, loggedTrades }) => {
+    const toast = useToastActions();
+    const [isImporting, setIsImporting] = useState(false);
     const [skills, setSkills] = useState<SkillCardData[]>([]);
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -440,13 +444,56 @@ const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?
 
     return (
         <div className="flex h-full min-h-0 flex-col animate-fade-in">
-            <div className="shrink-0 pb-4">
+            <div className="flex shrink-0 items-center gap-2 pb-4">
                 <input
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     placeholder="Search skills…"
                     className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
                 />
+                {/* Import skills from .md files (user-brought skills the
+                    models can then USE in debates). Strict validation:
+                    non-skill files are reported, never silently dropped. */}
+                <label
+                    className="shrink-0 cursor-pointer rounded-xl border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+                    title="Import skill .md files — they must carry valid skill frontmatter"
+                >
+                    {isImporting ? 'Importing…' : '⬆ Import'}
+                    <input
+                        type="file"
+                        accept=".md,text/markdown,text/plain"
+                        multiple
+                        data-testid="skills-import-input"
+                        className="hidden"
+                        onChange={async e => {
+                            const picked = e.target.files;
+                            e.target.value = '';
+                            if (!picked || picked.length === 0 || isImporting) return;
+                            setIsImporting(true);
+                            try {
+                                const files = await readSkillFiles(picked);
+                                const result = await importSkillFiles(files);
+                                if (result.imported.length > 0) {
+                                    toast.success(
+                                        'Skills imported',
+                                        `${result.imported.length} file${result.imported.length === 1 ? '' : 's'} added — the models can use them in debates now.`,
+                                    );
+                                }
+                                for (const fail of result.failed) {
+                                    toast.error(`Import failed: ${fail.name}`, fail.reason);
+                                }
+                                if (result.skipped.length > 0) {
+                                    toast.info('Duplicates skipped', `${result.skipped.length} file${result.skipped.length === 1 ? '' : 's'} already learned (same trigger).`);
+                                }
+                            } catch (err) {
+                                toast.error('Import failed', err instanceof Error ? err.message : 'Could not read the files.');
+                            } finally {
+                                setIsImporting(false);
+                                refresh();
+                            }
+                        }}
+                    />
+                </label>
             </div>
             {/* §4.6 loop E: the proposals side of the learning loop lands
                 here — "the gate proposes, the inbox disposes." */}

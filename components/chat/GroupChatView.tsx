@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Settings, Trash2 } from 'lucide-react';
+import { Settings, Trash2, Square, Copy, Check, Activity as ActivityIcon } from 'lucide-react';
 import { BotAvatar } from './BotAvatar';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
@@ -18,6 +18,7 @@ import type { GroupActivityEntry } from '../../hooks/useAgentGroups';
 import { GroupThread, splitGroupThreads, threadForGroup } from '../../utils/agentThreads';
 import { MessageRole } from '../../types/enums';
 import { Message } from '../../types/message';
+import MarkdownContent from '../shared/MarkdownContent';
 
 export interface GroupChatViewProps {
     group: AgentGroup;
@@ -38,6 +39,13 @@ export interface GroupChatViewProps {
      *  Members' incremental context carries the prior thread (G2), so
      *  the round continues it in place. Omit to hide reply affordances. */
     onReplyInThread?: (prompt: string) => void;
+    /** Abort the in-flight room round (R54: cancel the request). When
+     *  provided, a Stop button replaces New Thread while a round runs. */
+    onCancelRun?: () => void;
+    /** Hybrid Intelligence toggle (R54): when ON, live market data is
+     *  fetched once per send and injected into EVERY member's prompt. */
+    hybridEnabled?: boolean;
+    onToggleHybrid?: () => void;
 }
 
 const relTime = (iso: string | number): string => {
@@ -67,11 +75,15 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
     onEditGroup,
     onDeleteGroup,
     onReplyInThread,
+    onCancelRun,
+    hybridEnabled = false,
+    onToggleHybrid,
 }) => {
     const [input, setInput] = React.useState('');
     const [replyDrafts, setReplyDrafts] = React.useState<Record<string, string>>({});
     const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
     const [activityOpen, setActivityOpen] = React.useState(true);
+    const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const members = React.useMemo(
         () => group.memberIds
             .map(id => bots.find(b => b.id === id))
@@ -112,9 +124,17 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
     const memberByName = (name: string | undefined): AgentBot | undefined =>
         name ? members.find(m => m.name.toLowerCase() === name.toLowerCase()) : undefined;
 
+    const copyReply = async (reply: Message): Promise<void> => {
+        try {
+            await navigator.clipboard.writeText(reply.text);
+            setCopiedId(reply.id);
+            window.setTimeout(() => setCopiedId(cur => (cur === reply.id ? null : cur)), 1600);
+        } catch { /* clipboard unavailable — silently ignore */ }
+    };
+
     return (
         <div className="flex min-h-0 flex-1 flex-col bg-zinc-950" data-testid="group-chat-view">
-            {/* Header — stacked faces, title, N bots, actions */}
+            {/* Header — Back, stacked faces, title, hybrid toggle, actions */}
             <div className="flex items-center gap-3 border-b border-white/[0.06] bg-zinc-950/80 px-4 py-2.5 backdrop-blur">
                 <span className="relative flex shrink-0">
                     {members.slice(0, 2).map((m, i) => (
@@ -124,22 +144,31 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                     ))}
                 </span>
                 <div className="min-w-0 flex-1">
-                    {onOpenTeam ? (
-                        <button
-                            type="button"
-                            onClick={onOpenTeam}
-                            data-testid="group-open-team"
-                            title="The Team is a room too — open the full debate transcript"
-                            className="block max-w-full truncate text-left text-[15px] font-semibold text-zinc-100 hover:text-white hover:underline"
-                        >
-                            {groupDisplayName(group, bots)}
-                        </button>
-                    ) : (
-                        <p className="truncate text-[15px] font-semibold text-zinc-100">
-                            {groupDisplayName(group, bots)}
-                        </p>
-                    )}
+                    <p className="truncate text-[15px] font-semibold text-zinc-100">
+                        {groupDisplayName(group, bots)}
+                    </p>
                 </div>
+                {onToggleHybrid && (
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hybridEnabled}
+                        onClick={onToggleHybrid}
+                        data-testid="group-hybrid-toggle"
+                        title={hybridEnabled
+                            ? 'Hybrid Intelligence is ON — live market data is injected into every member'
+                            : 'Hybrid Intelligence is OFF — members answer from their own knowledge'}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                            hybridEnabled
+                                ? 'border-zinc-400/60 bg-zinc-800 text-zinc-100'
+                                : 'border-white/10 text-zinc-500 hover:text-zinc-300'
+                        }`}
+                    >
+                        <ActivityIcon className="h-3 w-3" />
+                        Hybrid
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${hybridEnabled ? 'bg-zinc-200' : 'bg-zinc-600'}`} />
+                    </button>
+                )}
                 <span className="shrink-0 text-[11px] text-zinc-500">{members.length} bots</span>
                 {onEditGroup && (
                     <button
@@ -233,24 +262,27 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                             const isLast = ti === threads.length - 1;
                             return (
                                 <div key={thread.prompt.id} className="space-y-3">
-                                    {/* You */}
-                                    <div className="relative flex justify-end">
-                                        <div className="max-w-[85%] rounded-2xl bg-zinc-200 px-4 py-2.5 text-[13px] text-zinc-900">
-                                            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">You</p>
-                                            {thread.prompt.text}
-                                        </div>
+                                    {/* You — reference pattern: full-width card
+                                        with a "You · time" header, left-aligned. */}
+                                    <div className="relative rounded-xl border border-white/[0.06] bg-zinc-900/60 px-4 py-3">
+                                        <p className="mb-1 text-[12px]">
+                                            <span className="font-bold text-zinc-100">You</span>
+                                            <span className="ml-2 text-zinc-500">{relTime(thread.prompt.createdAt)}</span>
+                                        </p>
+                                        <div className="text-[13px] text-zinc-100 whitespace-pre-wrap break-words">{thread.prompt.text}</div>
                                         {onReplyInThread && (
                                             <button
                                                 type="button"
                                                 onClick={() => setOpenReplyId(id => (id === thread.prompt.id ? null : thread.prompt.id))}
                                                 data-testid={`reply-link-${thread.prompt.id}`}
-                                                className="absolute -bottom-5 right-0 text-[11px] text-zinc-500 transition-colors hover:text-zinc-200"
+                                                className="mt-1.5 block text-[11px] text-zinc-500 transition-colors hover:text-zinc-200"
                                             >
                                                 Reply in thread
                                             </button>
                                         )}
                                     </div>
-                                    {/* Member replies */}
+                                    {/* Member replies — reference: flat markdown on
+                                        the canvas, copy icon at the row's right. */}
                                     {thread.replies.map(reply => {
                                         const bot = members.find(m =>
                                             Object.keys(reply.modelsUsed ?? {}).some(pid =>
@@ -259,26 +291,53 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                                         );
                                         if (!bot) return null;
                                         return (
-                                            <div key={reply.id} className="flex items-start gap-2.5">
+                                            <div key={reply.id} className="group relative flex items-start gap-2.5">
                                                 <BotAvatar bot={bot} size={28} working={reply.isStreaming} />
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-[12px] font-semibold text-zinc-300">
                                                         {bot.name}
                                                         <span className="ml-2 font-normal text-zinc-600">{relTime(reply.createdAt)}</span>
                                                     </p>
-                                                    <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-200">
-                                                        {reply.text}
-                                                        {reply.isStreaming && <span className="ml-1 animate-pulse text-zinc-500">▍</span>}
-                                                    </div>
+                                                    <MarkdownContent
+                                                        content={reply.text}
+                                                        className="text-[13px] leading-relaxed text-zinc-200 [&_strong]:text-zinc-50"
+                                                    />
+                                                    {reply.isStreaming && <span className="ml-1 animate-pulse text-zinc-500">▍</span>}
                                                 </div>
+                                                {!reply.isStreaming && reply.text && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void copyReply(reply)}
+                                                        aria-label={`Copy ${bot.name}'s reply`}
+                                                        data-testid={`group-copy-${reply.id}`}
+                                                        className="absolute right-0 top-0 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-zinc-800 hover:text-zinc-300 focus:opacity-100 group-hover:opacity-100"
+                                                    >
+                                                        {copiedId === reply.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                                    </button>
+                                                )}
                                             </div>
                                         );
                                     })}
-                                    {/* Working line on the open thread */}
-                                    {isLast && isRunning && workingBotId && (
-                                        <p className="pl-1 text-[12px] italic text-zinc-500" data-testid="group-thinking">
-                                            {members.find(m => m.id === workingBotId)?.name} is thinking…
-                                        </p>
+                                    {/* Working line on the open thread + cancel */}
+                                    {isLast && isRunning && (
+                                        <div className="flex items-center gap-3">
+                                            {workingBotId && (
+                                                <p className="pl-1 text-[12px] italic text-zinc-500" data-testid="group-thinking">
+                                                    {members.find(m => m.id === workingBotId)?.name} is thinking…
+                                                </p>
+                                            )}
+                                            {onCancelRun && (
+                                                <button
+                                                    type="button"
+                                                    onClick={onCancelRun}
+                                                    data-testid="group-cancel"
+                                                    className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+                                                >
+                                                    <Square className="h-3 w-3" />
+                                                    Stop
+                                                </button>
+                                            )}
+                                        </div>
                                     )}
                                     {/* Inline reply composer (reference: Reply in thread) */}
                                     {onReplyInThread && openReplyId === thread.prompt.id && (
@@ -310,7 +369,8 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                 )}
             </div>
 
-            {/* Composer — New thread in … (@name to direct, @everyone for all) */}
+            {/* Composer — New thread in … (@name to direct, @everyone for all);
+                becomes a Stop control while the room is running. */}
             <div className="border-t border-white/[0.06] px-4 py-3">
                 <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-zinc-900 px-3 py-2">
                     <input
@@ -323,15 +383,26 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                         aria-label="New group thread"
                         className="min-w-0 flex-1 bg-transparent text-[13px] text-zinc-100 placeholder-zinc-600 outline-none"
                     />
-                    <button
-                        type="button"
-                        onClick={send}
-                        disabled={!input.trim() || isRunning}
-                        data-testid="new-thread-button"
-                        className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                        New Thread
-                    </button>
+                    {isRunning && onCancelRun ? (
+                        <button
+                            type="button"
+                            onClick={onCancelRun}
+                            data-testid="composer-cancel"
+                            className="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-[12px] font-bold text-zinc-200 hover:border-zinc-400 hover:bg-zinc-800"
+                        >
+                            Stop
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={send}
+                            disabled={!input.trim()}
+                            data-testid="new-thread-button"
+                            className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            New Thread
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

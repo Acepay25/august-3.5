@@ -60,7 +60,8 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         if (isEnsembleEnabled) {
             // No footer Team chip — the composer already carries a
             // Team dropdown; a second control for the same state read as
-            // duplication in the empty-state UI.
+            // duplication in the empty-state UI. (hidden chip retained —
+            // the ensemble now belongs to the GROUP room.)
             list.push({ kind: 'team', label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit, hidden: true });
         }
         if (isAccuracyModeEnabled) {

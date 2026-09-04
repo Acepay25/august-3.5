@@ -651,12 +651,16 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 )}
             </div>
 
-            {/* Hybrid Intelligence Connection Status - Always visible */}
+            {/* Hybrid Intelligence Connection Status — hidden on the fresh
+                welcome canvas (the reference keeps the empty chat clean;
+                the draggable icon floating over the greeting read as a
+                rendering artifact). It returns as soon as the conversation
+                has content, where it's a real status surface. */}
             <HybridDataPanel
                 data={hybridData}
                 isLoading={isHybridLoading}
                 connectionStatus={hybridConnectionStatus}
-                hidden={hideHybridPanel}
+                hidden={hideHybridPanel || (messages.length === 0 && !visibleBot)}
                 slOptimization={slOptimization}
                 suggestedEntryPrice={suggestedEntryPrice}
                 entryTimingScore={entryTimingScore}

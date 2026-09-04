@@ -16,6 +16,7 @@ import { AgentTeam, AgentTeamSeat } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
 import { AnalystRole } from '../../types/enums';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
+import { builtInPromptForRole } from '../../services/agents/seatPersonas';
 
 /** Role options for a seat persona dropdown (UNASSIGNED = general default). */
 const SEAT_ROLE_OPTIONS: { value: AnalystRole; label: string }[] = [
@@ -201,6 +202,17 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
                                 >
                                     <MessageSquareText className="h-3.5 w-3.5" />
                                 </button>
+                                {seat.role && seat.role !== AnalystRole.UNASSIGNED && (
+                                    <button
+                                        type="button"
+                                        onClick={() => patchSeat(i, { customPrompt: builtInPromptForRole(seat.role) })}
+                                        data-testid={`team-seat-inherit-${i}`}
+                                        title="Copy the built-in role prompt into the instructions box — edit it freely; the seat runs role + instructions"
+                                        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                                    >
+                                        Inherit
+                                    </button>
+                                )}
                                 <span className="min-w-0 truncate text-[11px] text-zinc-600">
                                     {seat.role && seat.role !== AnalystRole.UNASSIGNED
                                         ? ANALYST_ROLE_DEFINITIONS[seat.role].focus

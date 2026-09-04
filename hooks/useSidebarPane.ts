@@ -1,7 +1,8 @@
 /**
- * useSidebarPane — which tab the unified sidebar shows: 'sessions'
- * (trading conversations), 'bots' (agent roster — the BOTS tab), or
- * 'terminal' (background jobs / terminal surface).
+ * useSidebarPane — which tab the unified sidebar shows: 'bots' (agent
+ * roster) or 'sessions' (legacy fallback). SESSIONS was removed per user
+ * decision — the desktop sidebar now shows the BOTS roster directly; the
+ * pane state is kept for backward-compat with the stored preference.
  *
  * Same persistence pattern as useUiMode: synchronous localStorage read
  * in the useState initializer (no flash of the wrong tab on reload)
@@ -11,21 +12,21 @@
 import { useCallback, useState } from 'react';
 import { setPreference } from '../services/infrastructure/PreferencesService';
 
-export type SidebarPane = 'sessions' | 'bots' | 'terminal';
+export type SidebarPane = 'sessions' | 'bots';
 
 const LOCAL_KEY = 'august_sidebar_pane';
 const PREF_KEY = 'sidebar_pane_v1';
 
 const isPane = (value: string | null): value is SidebarPane =>
-    value === 'sessions' || value === 'bots' || value === 'terminal';
+    value === 'sessions' || value === 'bots';
 
 const readStoredPane = (): SidebarPane => {
     try {
         const stored = window.localStorage.getItem(LOCAL_KEY);
-        return isPane(stored) ? stored : 'sessions';
+        return isPane(stored) ? stored : 'bots';
     } catch {
-        // Restricted browser context — default to sessions.
-        return 'sessions';
+        // Restricted browser context — default to bots.
+        return 'bots';
     }
 };
 

@@ -20,6 +20,7 @@ import { MessageRole } from '../types/enums';
 import { Message } from '../types/message';
 import { ProviderConfig } from '../types/provider';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
+import { tryFetchHybridDataFromPromptWithCalibration } from '../services/analysis/HybridIntelligenceService';
 import { AgentBot } from '../services/agents/agentRoster';
 import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
 import {
@@ -50,6 +51,9 @@ export interface UseAgentGroupsResult {
     isRunning: boolean;
     activity: GroupActivityEntry[];
     runGroupThread: (group: { memberIds: string[] }, prompt: string, bots: AgentBot[]) => Promise<void>;
+    /** Abort the in-flight room round: streams are aborted, the loop stops
+     *  at the next member boundary, and partial bubbles are marked done. */
+    cancelRun: () => void;
 }
 
 export const useAgentGroups = ({
@@ -57,20 +61,41 @@ export const useAgentGroups = ({
     appendMessage,
     patchMessage,
     username,
+    /** Hybrid Intelligence (R54): when ON, live market data is fetched once
+     *  per send (symbol detected from the prompt) and the enhanced packet
+     *  injection is added to EVERY member's system prompt — the whole room
+     *  reasons over the same live read, not just the debate pipeline. */
+    hybridEnabled = false,
 }: {
     providerConfigs: ProviderConfig[];
     appendMessage: (msg: Message) => void;
     patchMessage: (id: string, patch: Partial<Message>) => void;
     /** Active profile — enables per-bot persona/notes in room turns. */
     username?: string | null;
+    hybridEnabled?: boolean;
 }): UseAgentGroupsResult => {
     const [workingBotId, setWorkingBotId] = useState<string | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [activity, setActivity] = useState<GroupActivityEntry[]>([]);
     const runNonce = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
 
     const pushActivity = useCallback((entry: Omit<GroupActivityEntry, 'id' | 'at'>) => {
         setActivity(prev => [...prev, { ...entry, id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: Date.now() }]);
+    }, []);
+    const pushActivityRef = useRef(pushActivity);
+    pushActivityRef.current = pushActivity;
+
+    /** User-facing cancel: a stale nonce makes every subsequent turn
+     *  bail (the `runNonce.current !== nonce` guards), the in-flight
+     *  stream's AbortController is fired, and the room settles. */
+    const cancelRun = useCallback(() => {
+        runNonce.current += 1;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setWorkingBotId(null);
+        setIsRunning(false);
+        pushActivityRef.current({ kind: 'passed', botName: 'Room', detail: 'cancelled' });
     }, []);
 
     const runGroupThread = useCallback(async (group: { memberIds: string[] }, prompt: string, bots: AgentBot[]): Promise<void> => {
@@ -99,6 +124,21 @@ export const useAgentGroups = ({
         });
         pushActivity({ kind: 'sent' });
         setIsRunning(true);
+        const abort = new AbortController();
+        abortRef.current = abort;
+
+        // Hybrid Intelligence for the room (R54): fetched ONCE per send,
+        // injected into EVERY member's system prompt — the whole room
+        // shares the same live market read. Silent fallback to plain
+        // prompts when the symbol can't be detected or the fetch fails.
+        let hybridInjection = '';
+        if (hybridEnabled) {
+            try {
+                const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(trimmed);
+                if (runNonce.current !== nonce) return;
+                if (hybridResult) hybridInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
+            } catch { /* offline / no symbol — the room runs without live data */ }
+        }
 
         // The room log: everything said so far. Each member tracks the
         // index it last saw — a turn is fed ONLY the newer entries (this
@@ -136,7 +176,7 @@ export const useAgentGroups = ({
                         persona: username ? readBotSystemMarkdown(bot.id) : null,
                         notes: username ? readBotMemoryMarkdown(bot.id) : null,
                         members,
-                    });
+                    }) + (hybridInjection ? `\n\n${hybridInjection}` : '');
 
                     const config = { ...provider, selectedModel: bot.modelId };
                     const replyId = `grp-${Date.now()}-${bot.id}-${round}`;
@@ -157,7 +197,7 @@ export const useAgentGroups = ({
                             renderRoomTurn(bot.name, unseen),
                             [],
                             system,
-                            undefined,
+                            abort.signal,
                             undefined,
                             delta => {
                                 visible += delta;
@@ -188,13 +228,17 @@ export const useAgentGroups = ({
                                 if (t.id !== bot.id) nextSpeakers.set(t.id, t);
                             }
                         }
-                    } catch (error) {
+                    } catch {
                         if (runNonce.current === nonce) {
+                            const aborted = abort.signal.aborted;
                             patchMessage(replyId, {
-                                text: visible || `(${bot.name} could not reply — provider error)`,
+                                text: aborted
+                                    ? (visible ? `${visible}\n\n(cancelled)` : '')
+                                    : (visible || `(${bot.name} could not reply — provider error)`),
                                 isStreaming: false,
+                                hidden: aborted && !visible,
                             });
-                            pushActivity({ kind: 'passed', botName: bot.name, detail: 'error' });
+                            if (!aborted) pushActivity({ kind: 'passed', botName: bot.name, detail: 'error' });
                         }
                     }
                 }
@@ -202,14 +246,15 @@ export const useAgentGroups = ({
                 speakers = [...nextSpeakers.values()];
             }
         } finally {
+            if (abortRef.current === abort) abortRef.current = null;
             if (runNonce.current === nonce) {
                 setWorkingBotId(null);
                 setIsRunning(false);
             }
         }
-    }, [providerConfigs, appendMessage, patchMessage, pushActivity, username]);
+    }, [providerConfigs, appendMessage, patchMessage, pushActivity, username, hybridEnabled]);
 
-    return { workingBotId, isRunning, activity, runGroupThread };
+    return { workingBotId, isRunning, activity, runGroupThread, cancelRun };
 };
 
 export default useAgentGroups;

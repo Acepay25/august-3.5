@@ -16,7 +16,7 @@ import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
 import { AnalystRole } from '../types/enums';
 import { getActiveUsername } from '../utils/activeUser';
-import { getTeams, getActiveTeamId, AgentTeamSeat } from '../services/agents/agentRoster';
+import { getBots, getGroups, AgentTeamSeat } from '../services/agents/agentRoster';
 import { seatPersonaPrompt, generalSeatMandate, GENERAL_DIMENSION_TAGS } from '../services/agents/seatPersonas';
 import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 
@@ -831,29 +831,32 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             runEnsembleEnabled
         );
 
-        // Team-seat personas: resolve the ACTIVE team's seats in debate
-        // order so each seat's role/custom instructions ride its prompts.
-        // Seats are matched by provider+model identity (the same identity
-        // syncTeamToHarness writes into runEnsembleSelection); a seat that
-        // moved on gets the general-analyst default rather than a stale
-        // persona. Read at fire time — persona edits apply to the next send.
-        const runAgentTeamSeats: AgentTeamSeat[] = (() => {
+        // Group-member personas (the Team/group merge): resolve the personas
+        // of bots that are members of ANY group, keyed provider+model, so
+        // each member's role/custom instructions ride its prompts. Members
+        // are matched by provider+model identity (the same identity the
+        // composer's Talk-to selector writes); a bot that moved on gets the
+        // general-analyst default rather than a stale persona. Read at fire
+        // time — persona edits apply to the next send.
+        const runGroupMemberPersonas: AgentTeamSeat[] = (() => {
             try {
-                const activeId = getActiveTeamId();
-                const team = activeId ? getTeams().find(t => t.id === activeId) : undefined;
-                return (team?.seats ?? []).filter(s => s.providerId && s.modelId);
+                const groups = getGroups();
+                const memberIds = new Set(groups.flatMap(g => g.memberIds));
+                return getBots()
+                    .filter(b => memberIds.has(b.id) && b.providerId && b.modelId)
+                    .map(b => ({ providerId: b.providerId, modelId: b.modelId, role: b.role, customPrompt: b.customPrompt }));
             } catch {
                 return [];
             }
         })();
         const teamSeatFor = (configId: string, model: string): AgentTeamSeat | undefined =>
-            runAgentTeamSeats.find(s => s.providerId === configId && s.modelId === model);
+            runGroupMemberPersonas.find(s => s.providerId === configId && s.modelId === model);
         // Role-scoped desk tools: a seat with a built-in team role inherits
         // that role's tool preset (macro/technical/risk) on its opening;
         // unroled seats, teamless runs, and Lens mode keep the FULL toolset
         // (undefined) — personas never mix with the Lens engine.
         const seatToolsFor = (seat?: AgentTeamSeat): string[] | undefined =>
-            !runLensConfig.enabled && runAgentTeamSeats.length > 0 && seat?.role ? defaultToolsForRole(seat.role) : undefined;
+            !runLensConfig.enabled && runGroupMemberPersonas.length > 0 && seat?.role ? defaultToolsForRole(seat.role) : undefined;
         // Legacy mandate rotation (ad-hoc ensembles, no active team). Hoisted
         // so the mid-debate replacement path can mirror the initial seats.
         const seatMandates = [
@@ -1033,11 +1036,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
         }
 
-        // Seat ceiling mirrors the Team menu (TEAM_MAX_SEATS). Teams of 4+
-        // are the supported pod-tier configuration (debatePods), so the old
-        // hard-3 Standard-mode cap was stale — it blocked exactly the team
-        // sizes the roster builder seats. The ceiling still guards a runaway
-        // enabled-provider list (no active team) from fanning out N× calls.
+        // Seat ceiling (TEAM_MAX_SEATS, kept from the Team era — now it
+        // caps the GROUP debate room). Teams of 4+ are the supported
+        // pod-tier configuration (debatePods), so the old hard-3
+        // Standard-mode cap was stale — it blocked exactly the room sizes
+        // the roster builder seats. The ceiling still guards a runaway
+        // enabled-provider list from fanning out N× calls.
         if (!isAutomationRun && !runAccuracyMode && enabledProviders.length > TEAM_MAX_SEATS) {
             appendBlockedRunNotice(
                 `Too many providers for a Standard-mode debate. A maximum of ${TEAM_MAX_SEATS} AI providers can join — disable at least one in Settings → AI Models, then send again.`
@@ -2124,7 +2128,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // mandate stays so ad-hoc ensembles behave
                             // exactly as before.
                             const teamSeat = teamSeatFor(provider.config.id, provider.model);
-                            const persona = !runLensConfig.enabled && runAgentTeamSeats.length > 0
+                            const persona = !runLensConfig.enabled && runGroupMemberPersonas.length > 0
                                 ? seatPersonaPrompt(teamSeat)
                                 : `Your specialty: ${seatMandates[analystIndex % seatMandates.length]}.`;
                             // Seat differentiation lives in the SYSTEM prompt
@@ -2678,7 +2682,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 ? enabledProviders.findIndex(p => p.config.id === dropped.provider.config.id && p.model === dropped.provider.model)
                                 : -1;
                             const replacementSeatDirective = !runLensConfig.enabled
-                                ? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${!runLensConfig.enabled && runAgentTeamSeats.length > 0 ? seatPersonaPrompt(droppedSeat) : `Your specialty: ${seatMandates[seatIdx >= 0 ? seatIdx % seatMandates.length : 0]}.`} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
+                                ? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${!runLensConfig.enabled && runGroupMemberPersonas.length > 0 ? seatPersonaPrompt(droppedSeat) : `Your specialty: ${seatMandates[seatIdx >= 0 ? seatIdx % seatMandates.length : 0]}.`} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
                                 : undefined;
                             const runStartedAtMs = performance.now();
                             const result = await runAnalyzeTradingView(
@@ -2729,7 +2733,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         // Mutable: a mid-debate replacement registers under
                         // its own name, inheriting the dropped seat's persona.
                         const seatPersonasBySeatName: Record<string, string> | undefined =
-                            !runLensConfig.enabled && runAgentTeamSeats.length > 0
+                            !runLensConfig.enabled && runGroupMemberPersonas.length > 0
                                 ? Object.fromEntries(enabledProviders.map((p, i) => {
                                       const seat = teamSeatFor(p.config.id, p.model);
                                       // Unroled seats rotate a focus dimension so
@@ -3600,11 +3604,11 @@ ${accuracyVerificationNote}`
                                 // the team role (or the unroled seat's focus
                                 // dimension) the harness actually ran with.
                                 const seat = teamSeatFor(a.provider.config.id, a.provider.model);
-                                const seatRole = !runLensConfig.enabled && runAgentTeamSeats.length > 0 && seat?.role && seat.role !== AnalystRole.UNASSIGNED
+                                const seatRole = !runLensConfig.enabled && runGroupMemberPersonas.length > 0 && seat?.role && seat.role !== AnalystRole.UNASSIGNED
                                     ? ANALYST_ROLE_DEFINITIONS[seat.role]?.shortName
                                     : undefined;
                                 const seatIndex = allFulfilledAnalysts.indexOf(a);
-                                const seatFocus = !runLensConfig.enabled && runAgentTeamSeats.length > 0 && !seatRole
+                                const seatFocus = !runLensConfig.enabled && runGroupMemberPersonas.length > 0 && !seatRole
                                     ? GENERAL_DIMENSION_TAGS[seatIndex % GENERAL_DIMENSION_TAGS.length]
                                     : undefined;
                                 return {

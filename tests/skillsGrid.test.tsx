@@ -18,6 +18,7 @@ import {
     getMemoryFiles,
     createMemoryFile,
 } from '../services/learning/MemoryFilesService';
+import { ToastProvider } from '../components/shared/Toast';
 import SkillsGrid from '../components/settings/SkillsGrid';
 
 const SKILL_A = [
@@ -65,7 +66,7 @@ describe('SkillsGrid', () => {
     });
 
     it('renders every skill as a card with status/kind badges', async () => {
-        render(<SkillsGrid />);
+        render(<ToastProvider><SkillsGrid /></ToastProvider>);
         expect(await screen.findByText('avoid-btc-short-fakeouts')).toBeInTheDocument();
         expect(screen.getByText('repeat-eth-continuation')).toBeInTheDocument();
         expect(screen.getByText('CONFIRMED')).toBeInTheDocument();
@@ -76,7 +77,7 @@ describe('SkillsGrid', () => {
     });
 
     it('search filters the grid', async () => {
-        render(<SkillsGrid />);
+        render(<ToastProvider><SkillsGrid /></ToastProvider>);
         await screen.findByText('avoid-btc-short-fakeouts');
         await userEvent.type(screen.getByPlaceholderText('Search skills…'), 'eth');
         expect(screen.queryByText('avoid-btc-short-fakeouts')).toBeNull();
@@ -86,7 +87,7 @@ describe('SkillsGrid', () => {
     // 15s: under full-suite load the detail-open transition exceeds the
     // default 5s (plan §14-11c — the isolation run is ~2s).
     it('clicking a card opens the detail with meta + instructions, back returns', { timeout: 30_000 }, async () => {
-        render(<SkillsGrid />);
+        render(<ToastProvider><SkillsGrid /></ToastProvider>);
         await userEvent.click(await screen.findByText('avoid-btc-short-fakeouts'));
 
         // Detail header + meta panel.
