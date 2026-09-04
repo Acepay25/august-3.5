@@ -22,11 +22,11 @@
 import { MessageRole } from '../types/enums';
 import { Message } from '../types/message';
 
-/** Which conversation surface is open. 'team' = the full ensemble
- *  debate chat; 'bot' = a named bot's 1:1; 'group' = a bot group room;
- *  'coach' = the learning inbox (skill drafts + queue proposals). */
+/** Which conversation surface is open. 'bot' = a named bot's 1:1;
+ *  'group' = a bot group room (also the debate room — the Team merged
+ *  into groups); 'coach' = the learning inbox (skill drafts + queue
+ *  proposals). */
 export type ThreadSelection =
-    | { kind: 'team' }
     | { kind: 'bot'; botId: string }
     | { kind: 'group'; groupId: string }
     | { kind: 'coach' };

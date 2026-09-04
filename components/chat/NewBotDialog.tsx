@@ -14,6 +14,17 @@ import { ProviderConfig } from '../../types/provider';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { ROLE_ACCENTS } from '../desk/pixelAvatars';
 import { SelectMenu } from '../shared/SelectMenu';
+import { AnalystRole } from '../../types/enums';
+import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
+import { builtInPromptForRole } from '../../services/agents/seatPersonas';
+
+/** Role options for the bot's debate-persona dropdown (UNASSIGNED = general default). */
+const SEAT_ROLE_OPTIONS: { value: AnalystRole; label: string }[] = [
+    { value: AnalystRole.UNASSIGNED, label: 'General analyst (default)' },
+    { value: AnalystRole.MACRO_VOLATILITY, label: ANALYST_ROLE_DEFINITIONS[AnalystRole.MACRO_VOLATILITY].shortName },
+    { value: AnalystRole.TECHNICAL_ANALYST, label: ANALYST_ROLE_DEFINITIONS[AnalystRole.TECHNICAL_ANALYST].shortName },
+    { value: AnalystRole.RISK_EXECUTION, label: ANALYST_ROLE_DEFINITIONS[AnalystRole.RISK_EXECUTION].shortName },
+];
 
 export interface NewBotDialogProps {
     open: boolean;
@@ -38,6 +49,8 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const [uploadSrc, setUploadSrc] = React.useState<string | null>(null);
     const [uploadShape, setUploadShape] = React.useState<FaceShape>('circle');
     const [pixelRole, setPixelRole] = React.useState<(typeof PIXEL_ROLE_CHOICES)[number]>('macro');
+    const [role, setRole] = React.useState<AnalystRole>(AnalystRole.UNASSIGNED);
+    const [customPrompt, setCustomPrompt] = React.useState('');
     const [providerId, setProviderId] = React.useState<string>(() => firstReadyProviderId(providers));
     const [modelId, setModelId] = React.useState<string>('');
     const [advancedOpen, setAdvancedOpen] = React.useState(false);
@@ -54,6 +67,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
             setName(''); setTitle(''); setDescription('');
             setFace('auto'); setTab('faces');
             setUploadSrc(null); setUploadShape('circle');
+            setRole(AnalystRole.UNASSIGNED); setCustomPrompt('');
             setProviderId(firstReadyProviderId(providers));
             setModelId('');
         }
@@ -72,6 +86,8 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
             description: description.trim() || undefined,
             providerId: provider.id,
             modelId: effectiveModel,
+            role: role !== AnalystRole.UNASSIGNED ? role : undefined,
+            customPrompt: customPrompt.trim() || undefined,
             avatar: tab === 'pixel'
                 ? { kind: 'pixel', role: pixelRole }
                 : tab === 'upload' && uploadSrc
@@ -290,6 +306,55 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             rows={3}
                             className="w-full resize-none rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
+                    </div>
+
+                    {/* Debate persona — former Team-seat feature, now on the
+                        bot itself (the Team/group merge): pick a role to
+                        inherit its curated prompt (optionally refined by
+                        instructions), or leave general. */}
+                    <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
+                        <div className="flex items-center gap-2">
+                            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Role</span>
+                            <SelectMenu
+                                aria-label="Debate role"
+                                data-testid="bot-role"
+                                value={role}
+                                onChange={v => setRole(v as AnalystRole)}
+                                options={SEAT_ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
+                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] hover:bg-zinc-800"
+                            />
+                        </div>
+                        {role !== AnalystRole.UNASSIGNED && (
+                            <button
+                                type="button"
+                                onClick={() => setCustomPrompt(builtInPromptForRole(role))}
+                                data-testid="bot-inherit"
+                                title="Copy the built-in role prompt into the instructions box — edit freely"
+                                className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                            >
+                                Inherit prompt
+                            </button>
+                        )}
+                        <div>
+                            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Trader instructions</span>
+                            <textarea
+                                value={customPrompt}
+                                onChange={e => setCustomPrompt(e.target.value)}
+                                placeholder={role !== AnalystRole.UNASSIGNED
+                                    ? 'Refine this role — e.g. "focus on funding-rate extremes"'
+                                    : 'Leave empty for the general-analyst default (full market analysis, web + tools)'}
+                                rows={3}
+                                data-testid="bot-instructions"
+                                className="w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[12px] leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            />
+                            <p className="mt-1 text-[11px] leading-snug text-zinc-600">
+                                {role !== AnalystRole.UNASSIGNED
+                                    ? 'The bot inherits this role\'s prompt in debates; your instructions refine it and win on conflict.'
+                                    : ANALYST_ROLE_DEFINITIONS[AnalystRole.MACRO_VOLATILITY].focus.length > 0
+                                        ? 'Unroled bots rotate a focus dimension per seat so N generalists diverge.'
+                                        : ''}
+                            </p>
+                        </div>
                     </div>
 
                     {/* Advanced — provider + model this bot thinks with */}

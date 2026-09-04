@@ -24,6 +24,16 @@ const isSafeUrl = (url: string): boolean => {
     return url.startsWith('http://') || url.startsWith('https://');
 };
 
+/** Relative age for the user card's "You · time" header (reference style). */
+const relTime = (iso: string): string => {
+    const ms = Date.now() - Date.parse(iso);
+    if (Number.isNaN(ms)) return '';
+    if (ms < 60_000) return 'now';
+    if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+    if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+    return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
 // Neutral insight card style — no provider brand hints (providers are
 // user-configured, so names render as-is).
 export interface ChatContextProps {
@@ -304,19 +314,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // TradingSignalCard below is the moderator's only chat-area output.
     const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
 
-    // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini.
-    // In a 1:1 agent thread (context.threadMode) plain messages render as
-    // reference-style bubbles: light right-aligned user bubble, dark agent
-    // bubble. Debate/analysis cards keep their own surfaces either way.
+    // Determine bubble styling — reference pattern: the USER row is a
+    // full-width, left-aligned card ("You · time" header, subtle panel);
+    // AI replies sit FLAT on the canvas (no bubble); system rows keep the
+    // centered notice card. threadMode no longer switches surfaces — the
+    // card pattern is uniform across the Team transcript and 1:1 threads.
     const threadBubble = context?.threadMode === true;
     const bubbleClass = isUserMessage
-        ? (threadBubble ? 'bg-zinc-200 text-zinc-900 rounded-2xl px-4 py-2.5' : '') // user messages render as plain text (Cursor-style, no bubble)
+        ? 'rounded-xl border border-white/[0.06] bg-zinc-900/60 px-4 py-3'
         : message.role === MessageRole.AI
             ? (message.isPostMortem
                 ? 'bg-zinc-900/60 text-zinc-100 border border-white/10 rounded-xl'
-                : threadBubble
-                    ? 'bg-zinc-800/80 text-zinc-100 rounded-2xl px-4 py-3'
-                    : 'bg-transparent text-zinc-200')
+                : 'bg-transparent text-zinc-200')
             : 'bg-rose-500/10 text-rose-300 border border-rose-500/20 text-center rounded-xl';
 
     const isSelected = selectedMessageIds?.has(message.id);
@@ -335,7 +344,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         <div
             id={`message-${message.id}`}
             className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-3 sm:px-4 lg:px-8 transition-all duration-200 chat-column
-            ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
+            ${message.role === MessageRole.SYSTEM ? 'justify-center' : ''}
             ${isHighlighted ? 'rounded-2xl' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
         `}
@@ -359,25 +368,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             )}
 
             <div className={`${isUserMessage
-                ? threadBubble
-                    // Reference-style: the user bubble hugs its content.
-                    ? 'py-1 pl-1 pr-6 max-w-[85%] w-fit break-words relative group'
-                    : 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-none w-full break-words relative group text-zinc-100'
+                // Reference pattern: full-width card, left-aligned.
+                ? 'w-full break-words relative group'
                 : 'w-full break-words relative group'
-                } ${isUserMessage ? '' : bubbleClass}`}>
+                } ${isUserMessage ? bubbleClass : ''}`}>
 
                 <>
-                        {/* Bot Mode G1: a user-role row that is actually a
-                            teammate DM — badge it so it never reads as the
-                            trader speaking. */}
-                        {isUserMessage && message.dmFrom && (
-                            <div className="flex justify-end mb-1">
-                                <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border border-zinc-700/70 rounded-full px-2 py-0.5">
-                                    DM · teammate
-                                </span>
-                            </div>
-                        )}
-
                         {/* Post-Mortem Collapsible Header */}
                         {message.isPostMortem && (
                             <button
@@ -575,6 +571,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     </div>
                                 </div>
                             )}
+                            {/* Reference pattern: "You" + relative time header
+                                on the user card (identity, not decoration). */}
+                            {isUserMessage && (
+                                <p className="mb-1 text-[12px]">
+                                    <span className="font-bold text-zinc-100">You</span>
+                                    <span className="ml-2 text-zinc-500">{relTime(message.createdAt)}</span>
+                                    {message.dmFrom && (
+                                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border border-zinc-700/70 rounded-full px-2 py-0.5">DM · teammate</span>
+                                    )}
+                                </p>
+                            )}
+
                             {isUserMessage && editingMessageId === message.id ? (
                                 <div className="flex flex-col gap-2">
                                     <textarea

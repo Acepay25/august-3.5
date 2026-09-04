@@ -4,6 +4,65 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-54 extension 2 — group room: cancel, hybrid toggle, reference reply styling
+
+- **Cancel a group request.** While a room round runs, the composer's
+  New Thread button becomes **Stop** (and an inline Stop sits next to
+  the "X is thinking…" line). Stopping aborts the in-flight stream, the
+  round loop bails at the next member boundary, partial bubbles are
+  finalized (kept when they have content, hidden when empty), and the
+  activity feed records "Room passed (cancelled)". Implementation:
+  `useAgentGroups` gains an `AbortController` per run + a public
+  `cancelRun` (nonce bump + abort).
+- **Toggleable Hybrid Intelligence for the room.** The group header has
+  a **Hybrid** switch (shares the main hybrid setting). When ON, live
+  market data is fetched ONCE per send and the enhanced packet
+  injection is appended to EVERY member's system prompt — the whole
+  room reasons over the same live read. Fetch failures fall back to
+  plain prompts; the room never blocks on it.
+- **Reference reply styling.** Member replies now render as Markdown on
+  the canvas (bold headers/labels like the reference's BTC reads) with
+  a hover **copy** icon at the row's right — matching the Hermes group
+  screenshots. The title-links/`onOpenTeam` prop (a Team-era artifact)
+  is gone with the Team merge.
+
+Gates: tsc 0 · **2020 passed / 11 skipped** · build clean · eslint 0
+errors · dev boot 200.
+
+---
+
+## ROUND-54 extension — Team→Group merge, group-tabs-only strip, member personas, skill import
+
+- **Team and Group are now ONE concept — the Group.** The group UI
+  (Activity timeline, reply-in-thread, member tabs, gear/trash) is kept
+  as-is; Team's features merged into it; every Team surface removed:
+  - `ThreadSelection` no longer has a `team` kind; defaults land on the
+    Coach inbox instead. The Team tab is gone from `ThreadTabs` (strip =
+    group tabs only, rendered only inside group threads).
+  - The roster rail has no Team row and no New Team menu entry; groups
+    gain a hover **gear** that opens the group editor (membership +
+    member personas). TeamDialog is no longer imported by App (file kept,
+    unreferenced); team state/handlers (`teams`, `activeTeamId`,
+    `activateTeam`, `syncTeamToHarness`, dialog open state) deleted.
+  - Debate personas now come from **group members**: each bot carries
+    `role` + `instructions` (set via the New Bot dialog's Debate persona
+    section or group editing); `useAnalysisPipeline` keys personas by
+    provider+model across all groups — any group send debates with the
+    room's member roles/instructions. Opening a group still re-arms the
+    ensemble. (Team store code retained for data migration only.)
+- **Skill import.** Settings → Skills gains **⬆ Import**: pick one or
+  many `.md` files; each is validated (skill frontmatter required),
+  deduped by trigger, name-unique (`-2`, `-3`… on collisions), and
+  written into the harness skills folder — so imported skills are usable
+  by the models in debates immediately. Outcomes surface as toasts:
+  imported count, per-file failure reasons (nothing silently dropped),
+  duplicates-skipped notice. New `SkillImportService` + 4 tests.
+
+Gates: tsc 0 · **2010 passed / 11 skipped** · build clean · eslint 0
+errors · dev boot 200.
+
+---
+
 ## ROUND-54 — Bot Mode UI parity: unified sidebar panes, thread tabs, bot page, room actions
 
 The six Hermes Bot Mode screenshots as the reference; the app's chat
@@ -70,10 +129,41 @@ surface rebuilt to match, in four slices:
   flips Thinking ↔ Thought with state. Applies everywhere ReasoningRow
   renders (chat bubble, debate replay, side panel).
 
-Tests: +39 net across the round (sidebar panes, embedded rail variant,
-thread tabs, bot detail + upload avatars, room actions/reply, dialog
-upload + group edit, tool-action classifier + status rows + ledger
-helper, reference-style reasoning rows). Gates: tsc 0 · 2005 passed /
+- **TERMINAL sidebar tab removed** (user call: useless — the same
+  background-jobs status stack lives in the header's Jobs drawer). The
+  sidebar is now SESSIONS | BOTS; a stale stored 'terminal' value
+  migrates to sessions, `JobsPane` is folded back into `JobsDrawer`
+  (single surface again).
+- **Message presentation to the reference pattern.** User prompts are
+  now full-width, left-aligned cards — subtle panel, "You · time"
+  header (DM badge inline) — instead of right-aligned plain text /
+  right bubbles; this was THE gap that made the chat not match the
+  reference. AI replies stay flat on the canvas. Group threads use the
+  same card with the Reply-in-thread link inside it. The floating
+  Hybrid Intelligence widget no longer hovers over the fresh welcome
+  canvas (it returns once the conversation has content).
+
+- **Sessions removed from the sidebar.** The desktop sidebar is the BOTS
+  roster, full stop — the SESSIONS tab is gone (conversation history
+  stays reachable through the header's history affordances). Floor
+  mode / mobile drawer / collapsed rail still fall back to the legacy
+  sessions body so no surface goes empty.
+- **Model catalogs stay fresh automatically.** New
+  `useModelCatalogRefresh`: on boot (+ every 6h) each ready provider's
+  /models endpoint is queried and newly discovered ids merge into the
+  config via the same update path Settings uses — so the composer
+  selector, New Bot dialog, team seats, and automation editor all show
+  the provider's CURRENT models without visiting Settings. Merge-only
+  (manual additions survive), failures silent (offline keeps the
+  stored list authoritative), staggered per provider.
+- **Team seats: role inheritance is explicit.** Picking a role for a
+  seat keeps inheriting the built-in role prompt at runtime (unchanged
+  behavior) AND gains an **Inherit** button that copies the role's full
+  prompt into the instructions box as editable text — refine it freely;
+  the seat runs role + instructions (instructions win on conflict).
+  No Inherit on the general-analyst default (nothing to copy).
+
+Tests: +47 net across the round. Gates: tsc 0 · 2013 passed /
 11 skipped · build clean · eslint 0 errors (whole dirty tree).
 
 ---

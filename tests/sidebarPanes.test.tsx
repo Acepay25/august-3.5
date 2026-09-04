@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
@@ -58,59 +58,45 @@ const base = {
     onDeleteConversation: () => {},
 };
 
-describe('SidebarContent unified panes (SESSIONS | BOTS | TERMINAL)', () => {
-    it('without pane props (mobile drawer) there is no tab bar — sessions body only', () => {
-        render(<SidebarContent {...base} />);
-        expect(screen.queryByTestId('sidebar-pane-sessions')).toBeNull();
-        expect(screen.queryByTestId('sidebar-pane-bots')).toBeNull();
-        expect(screen.queryByTestId('sidebar-pane-terminal')).toBeNull();
-        expect(screen.getByText('Hello from c1')).toBeTruthy();
-    });
-
-    it('renders the three tabs and switches bodies by pane', () => {
-        let pane: SidebarPane = 'sessions';
-        const setPane = (p: SidebarPane): void => { pane = p; };
-        const { rerender } = render(
+describe('SidebarContent unified panes (BOTS roster, sessions removed)', () => {
+    it('with pane props + roster the sidebar IS the roster — sessions body hidden', () => {
+        render(
             <SidebarContent
                 {...base}
-                sidebarPane={pane}
-                onSetSidebarPane={setPane}
-                rosterSlot={<div data-testid="roster-slot">roster</div>}
-            />,
-        );
-        expect(screen.getByTestId('sidebar-pane-sessions')).toBeTruthy();
-        expect(screen.getByTestId('sidebar-pane-bots')).toBeTruthy();
-        expect(screen.getByTestId('sidebar-pane-terminal')).toBeTruthy();
-        expect(screen.getByText('Hello from c1')).toBeTruthy();
-
-        // Click BOTS → parent state flips → rerender shows the roster slot.
-        fireEvent.click(screen.getByTestId('sidebar-pane-bots'));
-        rerender(
-            <SidebarContent
-                {...base}
-                sidebarPane={pane}
-                onSetSidebarPane={setPane}
+                sidebarPane="bots"
+                onSetSidebarPane={() => {}}
                 rosterSlot={<div data-testid="roster-slot">roster</div>}
             />,
         );
         expect(screen.getByTestId('roster-slot')).toBeTruthy();
         expect(screen.queryByText('Hello from c1')).toBeNull();
+    });
 
-        // Click TERMINAL → jobs pane mounts.
-        fireEvent.click(screen.getByTestId('sidebar-pane-terminal'));
-        rerender(
+    it('SESSIONS tab is removed — never rendered', () => {
+        render(
             <SidebarContent
                 {...base}
-                sidebarPane={pane}
-                onSetSidebarPane={setPane}
+                sidebarPane="bots"
+                onSetSidebarPane={() => {}}
                 rosterSlot={<div data-testid="roster-slot">roster</div>}
             />,
         );
-        expect(screen.getByTestId('jobs-pane')).toBeTruthy();
-        expect(screen.queryByTestId('roster-slot')).toBeNull();
+        expect(screen.queryByTestId('sidebar-pane-sessions')).toBeNull();
     });
 
-    it('bots pane without roster content (floor mode) falls back to sessions body', () => {
+    it('TERMINAL tab is removed — never rendered', () => {
+        render(
+            <SidebarContent
+                {...base}
+                sidebarPane="bots"
+                onSetSidebarPane={() => {}}
+                rosterSlot={<div data-testid="roster-slot">roster</div>}
+            />,
+        );
+        expect(screen.queryByTestId('sidebar-pane-terminal')).toBeNull();
+    });
+
+    it('without roster content (mobile drawer / floor mode) the fallback body shows, no tabs', () => {
         render(
             <SidebarContent
                 {...base}
@@ -121,9 +107,10 @@ describe('SidebarContent unified panes (SESSIONS | BOTS | TERMINAL)', () => {
         );
         expect(screen.getByText('Hello from c1')).toBeTruthy();
         expect(screen.queryByTestId('roster-slot')).toBeNull();
+        expect(screen.queryByTestId('sidebar-pane-bots')).toBeNull();
     });
 
-    it('collapsed rail shows the compact sessions body, no tabs', () => {
+    it('collapsed rail shows the compact fallback body, no tabs', () => {
         render(
             <SidebarContent
                 {...base}
@@ -133,21 +120,40 @@ describe('SidebarContent unified panes (SESSIONS | BOTS | TERMINAL)', () => {
                 rosterSlot={<div data-testid="roster-slot">roster</div>}
             />,
         );
-        expect(screen.queryByTestId('sidebar-pane-sessions')).toBeNull();
+        expect(screen.queryByTestId('sidebar-pane-bots')).toBeNull();
         // Collapsed hides text content entirely (icons only).
         expect(screen.queryByText('Hello from c1')).toBeNull();
     });
 
-    it('sessions-only pane list when rosterSlot is omitted — BOTS tab never a dead end', () => {
+    it('clicking the BOTS tab keeps the roster selected (single-pane contract)', () => {
+        const setPane = vi.fn();
         render(
             <SidebarContent
                 {...base}
-                sidebarPane="sessions"
-                onSetSidebarPane={() => {}}
+                sidebarPane="bots"
+                onSetSidebarPane={setPane}
+                rosterSlot={<div data-testid="roster-slot">roster</div>}
             />,
         );
-        expect(screen.getByTestId('sidebar-pane-sessions')).toBeTruthy();
-        expect(screen.queryByTestId('sidebar-pane-bots')).toBeNull();
-        expect(screen.getByTestId('sidebar-pane-terminal')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('sidebar-pane-bots'));
+        expect(setPane).toHaveBeenCalledWith('bots');
+    });
+});
+
+describe('SidebarPane legacy-value migration', () => {
+    it('a stale stored pane value falls back to bots (sessions removed from the bar)', async () => {
+        // Simulate the hook reading a pre-removal stored value.
+        window.localStorage.setItem('august_sidebar_pane', 'sessions');
+        const { useSidebarPane } = await import('../hooks/useSidebarPane');
+        const TestProbe: React.FC = () => {
+            const { sidebarPane } = useSidebarPane();
+            return <div data-testid="probe-pane">{sidebarPane}</div>;
+        };
+        render(<TestProbe />);
+        // 'sessions' remains a valid enum member (fallback body), so the
+        // stored value is preserved — the TAB is what's gone from the bar.
+        expect(screen.getByTestId('probe-pane').textContent).toBe('sessions');
+        expect(screen.queryByTestId('sidebar-pane-sessions')).toBeNull();
+        window.localStorage.removeItem('august_sidebar_pane');
     });
 });
