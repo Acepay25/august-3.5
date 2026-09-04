@@ -76,6 +76,37 @@ describe('streamQuickResponse (live casual-chat streaming)', () => {
     expect(result).toContain('could not generate');
   });
 
+  it('retries once with a doubled budget when reasoning consumed the whole stream', async () => {
+    // Pass 1: the model thinks (think tags → reasoning channel) and never
+    // gets to the answer. Pass 2 (doubled maxTokens): the reply lands.
+    const THINK_OPEN = '<' + 'think' + '>';
+    const THINK_CLOSE = '</' + 'think' + '>';
+    let call = 0;
+    streamMock.mockImplementation(() => {
+      call += 1;
+      return asyncGen(call === 1
+        ? [`${THINK_OPEN}a very long chain of thought${THINK_CLOSE}`]
+        : ['The answer is Long.']);
+    });
+    let reasoning = '';
+    const result = await streamQuickResponse(
+      config, 'question', [], undefined, undefined,
+      r => { reasoning += r; },
+    );
+    expect(streamMock).toHaveBeenCalledTimes(2);
+    expect(reasoning).toContain('a very long chain of thought');
+    expect(result).toBe('The answer is Long.');
+    // Second attempt asked for double the chat budget.
+    const secondOptions = (streamMock.mock.calls[1] as any)[2];
+    expect(secondOptions.maxTokens).toBe(2048 * 2);
+  });
+
+  it('does not retry when the stream simply yields nothing (no reasoning)', async () => {
+    streamMock.mockReturnValue(asyncGen([]));
+    await streamQuickResponse(config, 'question', []);
+    expect(streamMock).toHaveBeenCalledTimes(1);
+  });
+
   it('builds the chat messages with a system prompt and the user prompt once', async () => {
     streamMock.mockReturnValue(asyncGen(['ok']));
     await streamQuickResponse(config, 'my question', [

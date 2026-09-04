@@ -471,7 +471,12 @@ const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?
                             if (!picked || picked.length === 0 || isImporting) return;
                             setIsImporting(true);
                             try {
-                                const files = await readSkillFiles(picked);
+                                const read = await readSkillFiles(picked);
+                                // Read errors become import failures — same
+                                // visible outcome as a rejected file, and the
+                                // readable rest of the batch still imports.
+                                const files = read.filter(f => f.content !== undefined) as Array<{ name: string; content: string }>;
+                                const readErrors = read.filter(f => f.error !== undefined) as Array<{ name: string; error: string }>;
                                 const result = await importSkillFiles(files);
                                 if (result.imported.length > 0) {
                                     toast.success(
@@ -481,6 +486,9 @@ const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?
                                 }
                                 for (const fail of result.failed) {
                                     toast.error(`Import failed: ${fail.name}`, fail.reason);
+                                }
+                                for (const fail of readErrors) {
+                                    toast.error(`Import failed: ${fail.name}`, fail.error);
                                 }
                                 if (result.skipped.length > 0) {
                                     toast.info('Duplicates skipped', `${result.skipped.length} file${result.skipped.length === 1 ? '' : 's'} already learned (same trigger).`);

@@ -158,9 +158,15 @@ export const useBotMailbox = ({
                 ));
                 setDmActivityCount(n => n + 1);
             }
-        } catch {
+        } catch (error) {
+            // Surface the transport's user-safe reason (toFriendlyProviderError)
+            // — a bare "provider error" hid WHY every DM turn was dying.
+            const rawReason = error instanceof Error ? error.message.trim() : '';
+            const reason = rawReason
+                ? /[.!?]$/.test(rawReason) ? rawReason.slice(0, 160) : `${rawReason.slice(0, 160)}.`
+                : 'provider error';
             patchMessage(replyId, {
-                text: `(${bot.name} could not process the DM — provider error)`,
+                text: `(${bot.name} could not process the DM — ${reason})`,
                 isStreaming: false,
             });
         }

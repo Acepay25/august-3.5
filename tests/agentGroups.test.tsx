@@ -138,6 +138,48 @@ describe('useAgentGroups', () => {
         expect(result.current.activity.map(a => a.kind)).toEqual(['sent', 'passed']);
         expect(result.current.activity[1].detail).toBe('provider offline');
     });
+
+    it('a failed turn shows the transport error reason, not a generic provider error', async () => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+        }));
+        streamMock.mockRejectedValue(new Error('Kilocode · step-3.7: rate limit or quota reached. Please wait and try again.'));
+
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bot({ id: 'b1', name: 'Raven' })]);
+        });
+
+        const bubble = store.messages.find(m => m.role === MessageRole.AI);
+        expect(bubble?.text).toContain('could not reply');
+        expect(bubble?.text).toContain('rate limit or quota reached');
+        expect(bubble?.text).not.toContain('— provider error)');
+        const passed = result.current.activity.find(a => a.kind === 'passed');
+        expect(passed?.detail).toContain('rate limit');
+    });
+
+    it('a mid-stream failure keeps the partial text and appends the reason', async () => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+        }));
+        streamMock.mockImplementation(async (_c, _p, _h, _s, _sig, _r, onChunk) => {
+            onChunk?.('Half an answer');
+            throw new Error('Kilocode: request timed out.');
+        });
+
+        await act(async () => {
+            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bot({ id: 'b1', name: 'Raven' })]);
+        });
+
+        const bubble = store.messages.find(m => m.role === MessageRole.AI);
+        expect(bubble?.text).toContain('Half an answer');
+        expect(bubble?.text).toContain('(failed: Kilocode: request timed out.)');
+    });
 });
 
 // ── G2: bounded rounds, (pass) silence, incremental room context ──────────

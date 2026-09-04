@@ -93,4 +93,49 @@ describe('useModelCatalogRefresh (background model refresh)', () => {
         // …and the failure stays silent (no update, no throw).
         expect(onUpdateProvider).not.toHaveBeenCalled();
     });
+
+    it('a total-failure sweep marks lastSweepFailed so the next window retries in 15min', async () => {
+        discover.mockRejectedValue(new Error('offline'));
+        const onUpdateProvider = vi.fn(async () => {});
+        const configs = [provider({})];
+        const utils = renderHook(() => useModelCatalogRefresh(configs, onUpdateProvider));
+        await act(async () => {
+            await utils.result.current.refreshNow();
+        });
+        // The persisted sweep state carries the total-failure flag.
+        const { getPreferenceObject, setPreferenceObject } = await import('../services/infrastructure/PreferencesService');
+        const state = await getPreferenceObject<{ lastSweepAt: number; lastSweepFailed?: boolean }>('model_catalog_sweep_v1');
+        expect(state?.lastSweepFailed).toBe(true);
+
+        // The flag shortens the eligibility gap: a failed sweep ~15min ago
+        // is eligible again, while a SUCCESSFUL sweep at that age is not.
+        await setPreferenceObject('model_catalog_sweep_v1', {
+            lastSweepAt: Date.now() - 15 * 60_000 - 1_000,
+            lastSweepFailed: true,
+        });
+        discover.mockResolvedValue(['model-a', 'model-b']);
+        await act(async () => {
+            await utils.result.current.refreshNow();
+        });
+        expect(onUpdateProvider).toHaveBeenCalledWith(
+            'p1',
+            expect.objectContaining({ models: expect.arrayContaining(['model-b']) }),
+        );
+    });
+
+    it('a partial failure does NOT set the flag (6h gap stands)', async () => {
+        discover
+            .mockRejectedValueOnce(new Error('offline'))
+            .mockResolvedValueOnce(['model-a', 'model-b']);
+        const onUpdateProvider = vi.fn(async () => {});
+        const configs = [provider({ id: 'p1' }), provider({ id: 'p2' })];
+        const utils = renderHook(() => useModelCatalogRefresh(configs, onUpdateProvider));
+        await act(async () => {
+            await utils.result.current.refreshNow();
+        });
+        const { getPreferenceObject } = await import('../services/infrastructure/PreferencesService');
+        const state = await getPreferenceObject<{ lastSweepFailed?: boolean }>('model_catalog_sweep_v1');
+        expect(state?.lastSweepFailed).toBe(false);
+        expect(onUpdateProvider).toHaveBeenCalledWith('p2', expect.objectContaining({ models: expect.arrayContaining(['model-b']) }));
+    });
 });

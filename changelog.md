@@ -4,6 +4,69 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-54 extension 4 — reviewer follow-ups: dead code, per-file import, sweep backoff
+
+Follow-ups from the R54 independent code review (all non-blocking
+suggestions, now landed):
+
+- **Merge artifacts deleted.** `TeamDialog.tsx` (unreferenced since the
+  Team→Group merge) and `BotDetail.tsx` (unreferenced since bots open
+  straight into chat) are gone from disk along with their now-dead
+  component tests and the unused lazy import in App. The Team-UI
+  behaviors they covered (role picker, Inherit, seat prompt editing)
+  live on the NewBotDialog persona section — which now has its own test.
+- **Skill import never sinks a batch on one bad file.** `readSkillFiles`
+  returns per-file outcomes (`Promise.allSettled`): read failures carry
+  a reason and surface as normal import-failure toasts while the
+  readable rest of the batch still imports. Test covers a 2-file pick
+  with one unreadable file.
+- **Trigger-less skills dedupe on title.** Frontmatter without
+  `ifCondition` previously bypassed dedupe entirely; the import key now
+  falls back to the normalized first `# heading`, so the same skill
+  can't be re-imported under shuffled file names.
+- **Model catalog sweep retries sooner after a total failure.** A sweep
+  where EVERY ready provider failed (e.g. booted offline) persists
+  `lastSweepFailed`, shrinking the next window from 6h to 15min —
+  stale model dropdowns no longer pin for six hours. Partial failures
+  keep the normal 6h gap. Tests cover the total-failure retry and the
+  partial-failure exclusion.
+
+Gates: tsc 0 · **2013 passed / 11 skipped** · build clean · eslint 0
+errors · dev boot 200.
+
+---
+
+## ROUND-54 extension 3 — bot failure visibility + reasoning-budget starvation fix
+
+- **Why "(Raven could not reply — provider error)" appeared while models
+  worked elsewhere.** Two distinct failure modes were both rendered as
+  generic errors:
+  1. The room/DM turns run through the STREAMING transport
+     (`streamQuickResponse` → `streamViaProxy` on dev), which — unlike the
+     non-streaming `sendChatRequest` — had NO retry: one 429/network blip
+     killed the turn instantly, and the catch threw the real message away.
+     Now `streamViaProxy` retries the stream OPEN via `withRetry` (3
+     attempts, same backoff as non-streaming), and both `useAgentGroups`
+     and `useBotMailbox` put the transport's user-safe reason INTO the
+     bubble and the activity feed instead of "provider error".
+  2. "I am sorry, I could not generate a response." was a lie: the stream
+     completed cleanly (HTTP 200), but a reasoning model burned the whole
+     chat budget (2048 max_tokens) inside its hidden chain of thought and
+     never emitted visible text — gateways that ignore `reasoning_effort`
+     make this routine. `streamQuickResponse` now detects exactly that
+     (zero visible + reasoning seen + not aborted), retries ONCE with a
+     doubled budget, and if it still lands empty the fallback says the
+     model spent its budget on hidden reasoning instead of claiming it
+     "could not generate".
+- **Where the truth already lived:** Settings → Providers shows each
+  provider's persisted `lastError` (ProviderHealthService) and the roster
+  ⚠ tooltip classifies it — the new bubble text just surfaces it inline.
+
+Gates: tsc 0 · **2013 passed / 11 skipped** (4 new regression tests) ·
+build clean · eslint 0 errors.
+
+---
+
 ## ROUND-54 extension 2 — group room: cancel, hybrid toggle, reference reply styling
 
 - **Cancel a group request.** While a room round runs, the composer's

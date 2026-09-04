@@ -84,7 +84,6 @@ const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
 const ThreadTabs = React.lazy(() => import('./components/chat/ThreadTabs'));
-const BotDetail = React.lazy(() => import('./components/chat/BotDetail'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
