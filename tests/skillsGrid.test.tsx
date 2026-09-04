@@ -85,7 +85,7 @@ describe('SkillsGrid', () => {
 
     // 15s: under full-suite load the detail-open transition exceeds the
     // default 5s (plan §14-11c — the isolation run is ~2s).
-    it('clicking a card opens the detail with meta + instructions, back returns', { timeout: 15_000 }, async () => {
+    it('clicking a card opens the detail with meta + instructions, back returns', { timeout: 30_000 }, async () => {
         render(<SkillsGrid />);
         await userEvent.click(await screen.findByText('avoid-btc-short-fakeouts'));
 

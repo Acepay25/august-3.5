@@ -18,6 +18,8 @@ describe('DeskToolsService', () => {
     it('exports a focused trading tool catalog', () => {
         const names = DESK_TOOL_DEFINITIONS.map(t => t.function.name);
         expect(names).toEqual([
+            'amend_memory',
+            'forge_tool',
             'web_search',
             'get_derivatives',
             'get_order_book',
@@ -29,7 +31,7 @@ describe('DeskToolsService', () => {
             'recall',
             'recall_chat',
         ]);
-        expect(toAnthropicTools()[0]).toMatchObject({
+        expect(toAnthropicTools().find(t => (t as { name: string }).name === 'web_search')).toMatchObject({
             name: 'web_search',
             input_schema: expect.objectContaining({ type: 'object' }),
         });

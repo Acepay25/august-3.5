@@ -4,10 +4,14 @@ import LearningQueuePanel from './LearningQueuePanel';
 import { setSkillStatus, parseSkillMarkdown } from '../../services/learning/SkillMemoryService';
 import { getMemoryFiles, subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
+import { evaluateSkill, SkillEvalResult, recordEvalVerdict } from '../../services/learning/SkillEvalService';
+import type { LoggedTrade } from '../../types';
+import type { ProviderConfig } from '../../types/provider';
+import { getActiveUsername } from '../../utils/activeUser';
 import MarkdownContent from '../shared/MarkdownContent';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ChevronLeftIcon } from '../shared/Icons';
-import { PinIcon, MessageSquarePlus } from 'lucide-react';
+import { PinIcon, MessageSquarePlus, FlaskConical } from 'lucide-react';
 
 /**
  * "Try in chat" — drops the skill's /slug into the composer.
@@ -160,17 +164,64 @@ const MetaField: React.FC<{ label: string; value: string; wide?: boolean }> = ({
 );
 
 /** Detail pane for one skill — meta panel + full instructions, like the
- *  reference gallery's skill page. */
+ *  reference gallery's skill page. Includes the manual A/B eval runner:
+ *  the same evaluateSkill the auto-scheduler uses, fired on demand. */
 const SkillDetail: React.FC<{
     skill: SkillCardData;
     onBack: () => void;
     onToggleRetire: () => void;
-}> = ({ skill, onBack, onToggleRetire }) => {
+    memoryConfig?: ProviderConfig | null;
+    loggedTrades?: LoggedTrade[];
+}> = ({ skill, onBack, onToggleRetire, memoryConfig, loggedTrades }) => {
     const meta = skill.meta;
     const retired = meta?.status === 'retired';
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
     const refined = Boolean(meta?.previousVersion && meta?.refinedAt);
+    // Manual A/B eval state — user-invoked, cost-capped by SKILL_EVAL_MAX_TRADES.
+    const [evalState, setEvalState] = useState<'idle' | 'running' | 'done'>('idle');
+    const [evalResult, setEvalResult] = useState<SkillEvalResult | null>(null);
+
+    const runManualEval = async (): Promise<void> => {
+        if (!memoryConfig || evalState === 'running') return;
+        setEvalState('running');
+        setEvalResult(null);
+        try {
+            const username = getActiveUsername();
+            const { buildDefaultRunner } = await import('../../services/learning/SkillEvalScheduler');
+            const result = await evaluateSkill(
+                skill.fileId,
+                username,
+                loggedTrades ?? [],
+                memoryConfig,
+                buildDefaultRunner(memoryConfig, username),
+            );
+            setEvalResult(result);
+            setEvalState('done');
+            // Same ledger the auto-scheduler writes: verdict feeds
+            // deriveStatus (helps/hurts streaks), so a manual run can
+            // rehabilitate or demote exactly like an automated one.
+            await recordEvalVerdict(skill.fileId, result, username);
+        } catch (err) {
+            setEvalResult({
+                fileId: skill.fileId,
+                name: skill.name,
+                verdict: 'inconclusive',
+                flips: 0, alignedFlips: 0, misalignedFlips: 0, cases: [],
+                error: err instanceof Error ? err.message : String(err),
+            });
+            setEvalState('done');
+        }
+    };
+
+    const evalBadge = (verdict: SkillEvalResult['verdict']): string => {
+        switch (verdict) {
+            case 'helps': return 'bg-emerald-950/60 text-emerald-400';
+            case 'hurts': return 'bg-rose-950/50 text-rose-400/90';
+            case 'mixed': return 'bg-amber-950/60 text-amber-400';
+            default: return 'bg-zinc-800 text-zinc-400';
+        }
+    };
 
     return (
         <div className="flex h-full min-h-0 flex-col animate-fade-in">
@@ -236,6 +287,38 @@ const SkillDetail: React.FC<{
                 </div>
             )}
 
+            {/* Manual A/B eval — with-skill vs without-skill on matched trades.
+                Verdict feeds the same promotion/demotion ledger as the
+                automated scheduler. Needs a memory model configured. */}
+            <div className="mt-4 shrink-0 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => { void runManualEval(); }}
+                        disabled={evalState === 'running' || !memoryConfig}
+                        data-testid="run-skill-eval"
+                        title={!memoryConfig ? 'Configure a memory model first (Settings → Memory model)' : 'Run a with-skill vs without-skill A/B over matched trades'}
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        <FlaskConical className="h-3.5 w-3.5" />
+                        {evalState === 'running' ? 'Evaluating…' : 'Run A/B eval'}
+                    </button>
+                    {evalState === 'done' && evalResult && (
+                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide ${evalBadge(evalResult.verdict)}`} data-testid="skill-eval-verdict">
+                            {evalResult.verdict.toUpperCase()}
+                        </span>
+                    )}
+                    <span className="ml-auto text-[10px] text-zinc-600">
+                        {evalState === 'done' && evalResult
+                            ? `${evalResult.alignedFlips}/${evalResult.flips} aligned flips · ${evalResult.cases.length} trades`
+                            : !memoryConfig ? 'Needs a memory model' : 'Costs up to 12 provider calls'}
+                    </span>
+                </div>
+                {evalState === 'done' && evalResult?.error && (
+                    <p className="mt-2 text-[11px] text-rose-400/80">{evalResult.error}</p>
+                )}
+            </div>
+
             <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
                 <div className="shrink-0 border-b border-zinc-800 px-4 py-3 text-xs font-bold text-zinc-300">
                     Instructions
@@ -248,7 +331,7 @@ const SkillDetail: React.FC<{
     );
 };
 
-const SkillsGrid: React.FC = () => {
+const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?: LoggedTrade[] }> = ({ memoryConfig, loggedTrades }) => {
     const [skills, setSkills] = useState<SkillCardData[]>([]);
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -349,6 +432,8 @@ const SkillsGrid: React.FC = () => {
                 skill={selected}
                 onBack={() => setSelectedId(null)}
                 onToggleRetire={() => toggleRetire(selected)}
+                memoryConfig={memoryConfig}
+                loggedTrades={loggedTrades}
             />
         );
     }

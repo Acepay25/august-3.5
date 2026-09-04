@@ -143,6 +143,14 @@ export interface RunAnalystStats {
   providerId: string;
   displayName: string;
   modelId: string;
+  /** Team seat role short name ("Macro"/"Technical"/"Risk") when the run
+   *  was driven by an active team and the seat carries a built-in role.
+   *  Powers the floor + transcript role tags — UI-only, never prompted. */
+  seatRole?: string;
+  /** Focus dimension short tag for UNROLED team seats (the u1 diversity
+   *  rotation, e.g. "structure", "risk") — distinguishes N general seats
+   *  on the floor. Absent for roled/teamless seats. */
+  seatFocus?: string;
   /** Wall-clock time for the initial analysis call, ms. */
   durationMs?: number;
   /** Combined output size (final output + thought process), chars. */

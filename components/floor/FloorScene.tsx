@@ -512,6 +512,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                     const isSpotlight = spotlight?.id === actor!.id;
                                     const bubbleText = actor!.speech || actor!.thought || '';
                                     const wire = seatWire?.[seat.name];
+                                    const roleTag = actor!.seatRole || actor!.seatFocus;
                                     return (
                                         <div
                                             key={seat.id}
@@ -541,6 +542,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                                     speaking={actor!.speaking}
                                                     statusText={actor!.speaking ? 'speaking…' : actor!.thinking ? 'thinking…' : actor!.toolChip}
                                                     roleOverride={role}
+                                                    roleTag={roleTag}
                                                     onClick={() => {
                                                         // Pin-in-place while the seat has a live
                                                         // argument (plan §10.2); otherwise the

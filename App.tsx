@@ -28,6 +28,8 @@ import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineS
 // Modular Imports
 import { ChatContextProps } from './components/chat/MessageItem';
 import { useToastActions } from './components/shared/Toast';
+import { FORGED_PROPOSAL_EVENT } from './services/tools/toolForge';
+import { AMENDMENT_EVENT } from './services/learning/memoryAmendments';
 import { useConfirmDialog } from './components/shared/ConfirmDialog';
 import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
@@ -2223,6 +2225,26 @@ const App: React.FC = () => {
         if (changed) toast.success('Bots synced from Team');
     }, [lensConfig, ensembleModelSelection, providerConfigs, toast]);
 
+    // ToolForge + memory amendments: models can PROPOSE mid-debate; the
+    // user only sees them in Settings, so surface each arrival as a toast
+    // (the tool result already tells the model it landed as a candidate).
+    useEffect(() => {
+        const onForged = (e: Event): void => {
+            const d = (e as CustomEvent<{ id?: string; name?: string }>).detail;
+            toast.warning('New tool proposal', `${d?.name ?? 'A model'} proposed a desk tool — approve or retire it in Settings → Skills → Forged tools.`);
+        };
+        const onAmendment = (e: Event): void => {
+            const d = (e as CustomEvent<{ id?: string; fileName?: string }>).detail;
+            toast.warning('Memory correction proposed', `${d?.fileName ?? 'A file'} was flagged by a model — review it in Settings → Memory.`);
+        };
+        window.addEventListener(FORGED_PROPOSAL_EVENT, onForged);
+        window.addEventListener(AMENDMENT_EVENT, onAmendment);
+        return () => {
+            window.removeEventListener(FORGED_PROPOSAL_EVENT, onForged);
+            window.removeEventListener(AMENDMENT_EVENT, onAmendment);
+        };
+    }, [toast]);
+
     // Quota flagging UI never materialized (the old quotaExceededModels state
     // was set but never read by any component) — keep the callback for the
     // modal plumbing; quota errors surface via the OCR error state instead.
@@ -3366,9 +3388,37 @@ const App: React.FC = () => {
                 text: `LESSON ${l.kind} · ${l.scope}${l.provider ? ` · ${l.provider}` : ''}: ${l.lesson}`,
             });
         }
+        // Seat activity (u2 — reference parity): the debate's own run log is
+        // already an append-only feed of seat events (rounds, drops, tool
+        // calls, verdict). Project the newest few onto the tape so the floor
+        // reads like a trading desk: WHO is working, who got benched, what
+        // the moderator charged. Plus per-turn "working/passed/replied"
+        // derived from the transcript for replays of pre-log debates.
+        const debateLogSource = deskSceneMessage?.debateRunLog ?? [];
+        for (const ev of debateLogSource.slice(-8)) {
+            const at = Date.parse(ev.at);
+            const time = Number.isFinite(at)
+                ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+                : '';
+            const who = ev.speaker ? `${ev.speaker} · ` : '';
+            events.push({ id: `runlog-${ev.at}-${ev.kind}-${ev.detail.slice(0, 12)}`, time, text: `${who}${ev.detail}` });
+        }
+        for (const t of (deskSceneMessage?.debateTurns ?? []).slice(-6)) {
+            const at = t.createdAt ? Date.parse(t.createdAt) : NaN;
+            const time = Number.isFinite(at)
+                ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+                : '';
+            const text = t.text.trim();
+            const verb = !text || text === '(pass)'
+                ? 'passed'
+                : t.to?.length
+                    ? `replied to ${t.to.join(', ')}`
+                    : 'submitted an argument';
+            events.push({ id: `turn-${t.speaker}-${t.createdAt ?? t.text.slice(0, 12)}`, time, text: `${t.speaker} ${verb}` });
+        }
         events.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0));
         return events;
-    }, [messages]);
+    }, [messages, deskSceneMessage]);
     // Day PnL for the floor top bar: today's settled tickets only.
     const floorDayPnl = useMemo(() => {
         const today = new Date().toDateString();

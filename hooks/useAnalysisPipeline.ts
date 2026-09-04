@@ -16,7 +16,7 @@ import { defaultToolsForRole } from '../types/bot';
 import { AnalystRole } from '../types/enums';
 import { getActiveUsername } from '../utils/activeUser';
 import { getTeams, getActiveTeamId, AgentTeamSeat } from '../services/agents/agentRoster';
-import { seatPersonaPrompt } from '../services/agents/seatPersonas';
+import { seatPersonaPrompt, generalSeatMandate, GENERAL_DIMENSION_TAGS } from '../services/agents/seatPersonas';
 import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 
 // Analysis / validation / backtesting services
@@ -2713,7 +2713,12 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             !runLensConfig.enabled && runAgentTeamSeats.length > 0
                                 ? Object.fromEntries(enabledProviders.map((p, i) => {
                                       const seat = teamSeatFor(p.config.id, p.model);
-                                      return [p.name, `You are INDEPENDENT ANALYST SEAT ${i + 1} of ${enabledProviders.length}. ${seatPersonaPrompt(seat)}`];
+                                      // Unroled seats rotate a focus dimension so
+                                      // N general seats diverge instead of echoing.
+                                      const persona = seat?.role || (seat?.customPrompt ?? '').trim()
+                                          ? seatPersonaPrompt(seat)
+                                          : `${seatPersonaPrompt(seat)}\n\n${generalSeatMandate(i)}`;
+                                      return [p.name, `You are INDEPENDENT ANALYST SEAT ${i + 1} of ${enabledProviders.length}. ${persona}`];
                                   }))
                                 : undefined;
                         try {
@@ -3567,10 +3572,23 @@ ${accuracyVerificationNote}`
                             analysts: allFulfilledAnalysts.map(a => {
                                 const timing = analystTimings.get(a.provider.thoughtsKey);
                                 const tokens = tokenByProvider.get(a.provider.config.id);
+                                // Seat identity for the floor/transcript tags:
+                                // the team role (or the unroled seat's focus
+                                // dimension) the harness actually ran with.
+                                const seat = teamSeatFor(a.provider.config.id, a.provider.model);
+                                const seatRole = !runLensConfig.enabled && runAgentTeamSeats.length > 0 && seat?.role && seat.role !== AnalystRole.UNASSIGNED
+                                    ? ANALYST_ROLE_DEFINITIONS[seat.role]?.shortName
+                                    : undefined;
+                                const seatIndex = allFulfilledAnalysts.indexOf(a);
+                                const seatFocus = !runLensConfig.enabled && runAgentTeamSeats.length > 0 && !seatRole
+                                    ? GENERAL_DIMENSION_TAGS[seatIndex % GENERAL_DIMENSION_TAGS.length]
+                                    : undefined;
                                 return {
                                     providerId: a.provider.config.id,
                                     displayName: a.provider.name,
                                     modelId: a.provider.model,
+                                    ...(seatRole ? { seatRole } : {}),
+                                    ...(seatFocus ? { seatFocus } : {}),
                                     ...(timing ? { durationMs: timing.durationMs, charsOut: timing.charsOut } : {}),
                                     ...(tokens ? { promptTokens: tokens.promptTokens, completionTokens: tokens.completionTokens } : {}),
                                 };

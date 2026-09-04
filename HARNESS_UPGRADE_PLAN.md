@@ -1528,12 +1528,25 @@ the ROUND-48 changelog row and `.hermes/plans/harness-review-fix-plan.md`.
 
 ---
 
-## 18. SESSION HANDOFF (2026-09-01 → 09-03) — Bot Mode G1–G5 + team seat roles
+## 18. SESSION HANDOFF (2026-09-01 → 09-03) — Bot Mode G1–G5 + team roles + learning loop
 
 Full mechanism map + port plan: `.hermes/plans/botmode-scan-and-plan.md`
 (read that file first — it is the scan). Summary of state:
 
-- **ROUND-52 (latest)**: the stale "max 3 providers" Standard-mode cap
+- **ROUND-53 (latest)**: learning-flow round. (1) Unroled team seats
+  rotate FOCUS DIMENSIONS (seatPersonas `generalSeatMandate`) so N
+  general seats diverge. (2) ToolForge (`services/tools/toolForge.ts`):
+  models propose desk tools via the `forge_tool` tool as declarative
+  HTTP recipes; harness hardens (https-only, SSRF, header/size caps);
+  candidates need human approval (Settings → Skills → Forged tools,
+  `ToolForgeManager`); confirmed `custom_*` tools execute through
+  `executeForgedTool` inside the desk tool loop. (3) Manual A/B skill
+  eval button in SkillDetail (same `evaluateSkill` + verdict ledger as
+  the auto scheduler). (4) `amend_memory` tool + `memoryAmendments.ts`:
+  models propose notebook corrections; human reviews in Settings →
+  Memory (`AmendmentsInbox`); autoManaged files unamendable. Gates:
+  tsc 0 · 1966 passed / 11 skipped · build clean.
+- **ROUND-52**: the stale "max 3 providers" Standard-mode cap
   was removed (now mirrors `TEAM_MAX_SEATS` = 10; pod tier already
   handles 6+). Teams gain per-seat **roles** (Macro/Technical/Risk
   inherit their built-in debate prompts, editable) + optional trader

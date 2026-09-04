@@ -17,6 +17,12 @@ export interface DebateStageActor {
     replyTo?: string;
     replies?: Array<{ id: string; target: string; text: string }>;
     toolChip?: string;
+    /** Team seat role short name ("Macro"/"Technical"/"Risk") from the
+     *  run's analyst ledger — rendered as the seat's role tag. */
+    seatRole?: string;
+    /** Focus dimension tag for unroled team seats ("structure", "risk"…)
+     *  — the u1 rotation that keeps N general seats distinguishable. */
+    seatFocus?: string;
     /** Quiet cost/latency line for the hover tooltip —
      *  "Macro · gemini-2.5-pro · 41s · 1.2k out · ~$0.01". */
     meta?: string;
@@ -125,7 +131,20 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                             speaking={actor.speaking}
                         />
                         <span className="min-w-0 flex-1">
-                            <span className="block truncate text-xs font-semibold text-zinc-200">{actor.name}</span>
+                            <span className="flex items-baseline gap-1.5">
+                                <span className="block truncate text-xs font-semibold text-zinc-200">{actor.name}</span>
+                                {(actor.seatRole || actor.seatFocus) && (
+                                    <span
+                                        title={actor.seatRole
+                                            ? `${actor.seatRole} seat — the team role this run`
+                                            : `Focus: ${actor.seatFocus} — the dimension this unroled seat owns`}
+                                        data-testid={`actor-role-${actor.id}`}
+                                        className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 font-mono text-[9px] uppercase tracking-wider text-zinc-500"
+                                    >
+                                        {actor.seatRole || actor.seatFocus}
+                                    </span>
+                                )}
+                            </span>
                             {actor.thinking ? (
                                 <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
                                     thinking
