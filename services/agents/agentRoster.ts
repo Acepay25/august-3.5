@@ -24,10 +24,12 @@ export interface AgentBot {
     providerId: string;
     /** The model this bot thinks with (within providerId). */
     modelId: string;
-    /** Avatar: a built-in geometric face, our pixel roles, or 'auto'. */
+    /** Avatar: a built-in geometric face, our pixel roles, 'auto', or an
+     *  uploaded image clipped to a container shape (data URL). */
     avatar:
         | { kind: 'face'; spec: BotFaceSpec }
         | { kind: 'pixel'; role: RolePreset }
+        | { kind: 'upload'; src: string; shape: BotFaceSpec['shape'] }
         | { kind: 'auto' };
     createdAt: string;
 }
@@ -123,6 +125,8 @@ export const removeBot = (id: string): void => {
 };
 
 export const saveGroup = (group: AgentGroup): void => write(GROUPS_KEY, [...getGroups(), group]);
+export const updateGroup = (id: string, patch: Partial<Omit<AgentGroup, 'id'>>): void =>
+    write(GROUPS_KEY, getGroups().map(g => (g.id === id ? { ...g, ...patch } : g)));
 export const removeGroup = (id: string): void => write(GROUPS_KEY, getGroups().filter(g => g.id !== id));
 
 export const saveTeam = (team: AgentTeam): void => write(TEAMS_KEY, [...getTeams(), team]);

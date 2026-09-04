@@ -21,6 +21,7 @@ import { SkillCitationChips } from './SkillCitationChips';
 import { loadPreReadEnabled } from '../../utils/preRead';
 import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
+import ToolActionsRow from './ToolActionsRow';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import { buildSupplementMarkdown, extractModeratorThinking } from '../../utils/analysisUtils';
 import { formatModelDisplayName } from '../../utils/providerUtils';
@@ -600,6 +601,10 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                         </div>
                                     )}
                                 </div>
+                            )}
+
+                            {Array.isArray(message.toolActions) && message.toolActions.length > 0 && (
+                                <ToolActionsRow actions={message.toolActions} />
                             )}
 
                             {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}>{isSafeUrl(source.web.uri) ? (<a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-zinc-100 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a>) : (<span className="text-zinc-300 break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</span>)}</li>))}</ul></div>}

@@ -81,6 +81,11 @@ export interface AgentRosterRailProps {
     botRoutines?: Record<string, AutomationConfig[]>;
     /** Run a routine immediately (Run now in the disclosure). */
     onRunRoutine?: (config: AutomationConfig) => void;
+    /** 'full' (default) — the standalone chat-mode rail column (own
+     *  background, border, width). 'embedded' — mounted INSIDE the unified
+     *  sidebar's BOTS pane: transparent fill, no border/width so it reads
+     *  as the pane body, not a nested column. */
+    variant?: 'full' | 'embedded';
 }
 
 /** Monochrome unread-count badge (plan §10.1) — a count, never a colored dot. */
@@ -208,6 +213,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
     attentionMap,
     botRoutines,
     onRunRoutine,
+    variant = 'full',
 }) => {
     const [query, setQuery] = React.useState('');
     const [menuOpen, setMenuOpen] = React.useState(false);
@@ -263,11 +269,14 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
     const rowActive = 'bg-zinc-800';
     const rowIdle = 'hover:bg-zinc-800/50';
 
+    const embedded = variant === 'embedded';
     return (
         <aside
             data-testid="agent-roster-rail"
             aria-label="Bots"
-            className="relative z-10 hidden w-72 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50 lg:flex"
+            className={`relative z-10 flex shrink-0 flex-col ${embedded
+                ? 'min-h-0 flex-1 bg-transparent'
+                : 'hidden w-72 border-r border-white/[0.06] bg-zinc-900/50 lg:flex'}`}
         >
             {/* Header — BOTS + the "+" menu (New Bot / New Group Chat) */}
             <div className="flex items-center justify-between px-4 pb-2 pt-4">
@@ -648,17 +657,20 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                 </ul>
             </nav>
 
-            {/* New Agent — docked at the bottom, Hermes-style */}
-            <div className="p-3">
-                <button
-                    type="button"
-                    onClick={onNewBot}
-                    data-testid="new-agent-button"
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-800 px-3 py-2.5 text-[13px] font-semibold text-zinc-100 transition-colors hover:bg-zinc-700"
-                >
-                    + New Agent
-                </button>
-            </div>
+            {/* New Agent — docked at the bottom, Hermes-style. Suppressed in
+                the embedded variant (the pane header's "+" menu covers it). */}
+            {!embedded && (
+                <div className="p-3">
+                    <button
+                        type="button"
+                        onClick={onNewBot}
+                        data-testid="new-agent-button"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-800 px-3 py-2.5 text-[13px] font-semibold text-zinc-100 transition-colors hover:bg-zinc-700"
+                    >
+                        + New Agent
+                    </button>
+                </div>
+            )}
         </aside>
     );
 };

@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { BotFace, BUILTIN_FACES, randomFace, type BotFaceSpec } from './BotFace';
+import { BotFace, BUILTIN_FACES, UPLOADABLE_FACES, randomFace, type BotFaceSpec, type FaceShape } from './BotFace';
 import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
@@ -33,8 +33,10 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const [name, setName] = React.useState('');
     const [title, setTitle] = React.useState('');
     const [description, setDescription] = React.useState('');
-    const [tab, setTab] = React.useState<'faces' | 'pixel'>('faces');
+    const [tab, setTab] = React.useState<'faces' | 'upload' | 'pixel'>('faces');
     const [face, setFace] = React.useState<BotFaceSpec | 'auto'>('auto');
+    const [uploadSrc, setUploadSrc] = React.useState<string | null>(null);
+    const [uploadShape, setUploadShape] = React.useState<FaceShape>('circle');
     const [pixelRole, setPixelRole] = React.useState<(typeof PIXEL_ROLE_CHOICES)[number]>('macro');
     const [providerId, setProviderId] = React.useState<string>(() => firstReadyProviderId(providers));
     const [modelId, setModelId] = React.useState<string>('');
@@ -51,6 +53,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
         if (open) {
             setName(''); setTitle(''); setDescription('');
             setFace('auto'); setTab('faces');
+            setUploadSrc(null); setUploadShape('circle');
             setProviderId(firstReadyProviderId(providers));
             setModelId('');
         }
@@ -71,7 +74,9 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
             modelId: effectiveModel,
             avatar: tab === 'pixel'
                 ? { kind: 'pixel', role: pixelRole }
-                : face === 'auto' ? { kind: 'auto' } : { kind: 'face', spec: face },
+                : tab === 'upload' && uploadSrc
+                    ? { kind: 'upload', src: uploadSrc, shape: uploadShape }
+                    : face === 'auto' ? { kind: 'auto' } : { kind: 'face', spec: face },
         });
         onClose();
     };
@@ -85,7 +90,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                     <div>
                         <h2 className="text-lg font-semibold text-zinc-100">New Bot</h2>
                         <p className="mt-1 text-[12px] leading-snug text-zinc-500">
-                            A named teammate with its own model and chat. It answers in your roster like Hermes&apos; bots do.
+                            A named teammate with its own memory, skills, and chat. It can message your other agents.
                         </p>
                     </div>
                     <button
@@ -102,12 +107,14 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                 <div className="mt-5 flex justify-center">
                     {tab === 'pixel'
                         ? <PixelAvatarFigure role={pixelRole} size={72} />
-                        : <BotFace face={face} name={previewName} size={72} />}
+                        : tab === 'upload'
+                            ? <BotFace face={{ shape: uploadShape, hue: '#000000' }} name={previewName} size={72} uploadSrc={uploadSrc ?? undefined} />
+                            : <BotFace face={face} name={previewName} size={72} />}
                 </div>
 
                 {/* Avatar tabs */}
                 <div className="mt-4 flex justify-center gap-1">
-                    {([['faces', 'Faces'], ['pixel', 'Pixel']] as const).map(([key, label]) => (
+                    {([['faces', 'Faces'], ['upload', 'Upload'], ['pixel', 'Pixel']] as const).map(([key, label]) => (
                         <button
                             key={key}
                             type="button"
@@ -167,6 +174,67 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             {face === 'auto' ? 'Face follows the name.' : 'Pinned face.'}
                         </p>
                     </div>
+                ) : tab === 'upload' ? (
+                    <div className="mt-4">
+                        <div className="grid grid-cols-3 justify-items-center gap-2">
+                            {UPLOADABLE_FACES.map(spec => (
+                                <button
+                                    key={spec.shape}
+                                    type="button"
+                                    onClick={() => setUploadShape(spec.shape)}
+                                    data-testid={`upload-shape-${spec.shape}`}
+                                    aria-label={`${spec.shape} clip`}
+                                    className={`flex h-11 w-11 items-center justify-center rounded-lg border ${
+                                        uploadShape === spec.shape ? 'border-zinc-400 bg-zinc-800' : 'border-transparent hover:border-white/25'
+                                    }`}
+                                >
+                                    <BotFace face={spec} name={previewName} size={34} uploadSrc={uploadSrc ?? undefined} />
+                                </button>
+                            ))}
+                        </div>
+                        <div className="mt-3 flex items-center justify-center">
+                            <label className="cursor-pointer rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-zinc-300 hover:border-white/25 hover:text-zinc-100">
+                                {uploadSrc ? 'Replace image…' : 'Upload image…'}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    data-testid="upload-input"
+                                    className="hidden"
+                                    onChange={e => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const reader = new FileReader();
+                                        reader.onload = (): void => {
+                                            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+                                            // Downscale to 96px cover-cropped before storing —
+                                            // the avatar persists to localStorage and raw phone
+                                            // photos would blow the quota instantly.
+                                            const img = new Image();
+                                            img.onload = (): void => {
+                                                const S = 96;
+                                                const canvas = document.createElement('canvas');
+                                                canvas.width = S;
+                                                canvas.height = S;
+                                                const ctx = canvas.getContext('2d');
+                                                if (!ctx) { setUploadSrc(dataUrl); return; }
+                                                const scale = Math.max(S / img.width, S / img.height);
+                                                const w = img.width * scale;
+                                                const h = img.height * scale;
+                                                ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+                                                setUploadSrc(canvas.toDataURL('image/png'));
+                                            };
+                                            img.onerror = (): void => setUploadSrc(dataUrl);
+                                            img.src = dataUrl;
+                                        };
+                                        reader.readAsDataURL(file);
+                                    }}
+                                />
+                            </label>
+                        </div>
+                        <p className="mt-1 text-center text-[11px] text-zinc-600">
+                            {uploadSrc ? 'Stored locally, downscaled to 96px.' : 'Pick an image — it stays on this device.'}
+                        </p>
+                    </div>
                 ) : (
                     <div className="mt-4">
                         <div className="grid grid-cols-7 justify-items-center gap-2">
@@ -219,7 +287,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             value={description}
                             onChange={e => setDescription(e.target.value)}
                             placeholder="What should this Bot help with?"
-                            rows={2}
+                            rows={3}
                             className="w-full resize-none rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>

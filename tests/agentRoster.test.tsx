@@ -349,3 +349,36 @@ describe('AgentRosterRail user teams (the Team is one of these)', () => {
         expect(screen.queryByTestId('roster-team-t1')).toBeNull();
     });
 });
+
+describe('AgentRosterRail embedded variant (unified sidebar BOTS pane)', () => {
+    it('embedded keeps the roster rows but drops the standalone chrome (width, border, docked New Agent)', () => {
+        render(
+            <AgentRosterRail
+                {...base}
+                bots={[bot({ id: 'b1', name: 'Scout' })]}
+                variant="embedded"
+            />,
+        );
+        const rail = screen.getByTestId('agent-roster-rail');
+        // Pane body, not a nested column: transparent fill, no fixed width.
+        expect(rail.className).not.toContain('w-72');
+        expect(rail.className).not.toContain('bg-zinc-900/50');
+        expect(rail.className).toContain('bg-transparent');
+        // The "+" menu still covers creation inside the pane.
+        expect(screen.getByTestId('bots-add')).toBeTruthy();
+        // No docked footer — the pane header owns creation.
+        expect(screen.queryByTestId('new-agent-button')).toBeNull();
+    });
+
+    it('full variant keeps the standalone chrome (default unchanged)', () => {
+        render(
+            <AgentRosterRail
+                {...base}
+                bots={[bot({ id: 'b1', name: 'Scout' })]}
+            />,
+        );
+        const rail = screen.getByTestId('agent-roster-rail');
+        expect(rail.className).toContain('w-72');
+        expect(screen.queryByTestId('new-agent-button')).toBeTruthy();
+    });
+});

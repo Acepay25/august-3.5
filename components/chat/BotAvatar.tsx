@@ -61,6 +61,17 @@ export const BotAvatar: React.FC<BotAvatarProps> = ({ bot, size = 40, working = 
     if (bot.avatar.kind === 'pixel') {
         return <PixelAvatarFigure role={bot.avatar.role} size={size} />;
     }
+    if (bot.avatar.kind === 'upload') {
+        return (
+            <BotFace
+                face={{ shape: bot.avatar.shape, hue: '#000000' }}
+                name={bot.name}
+                size={size}
+                working={working}
+                uploadSrc={bot.avatar.src}
+            />
+        );
+    }
     return (
         <BotFace
             face={bot.avatar.kind === 'face' ? bot.avatar.spec : 'auto'}

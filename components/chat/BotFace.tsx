@@ -59,6 +59,14 @@ export const BUILTIN_FACES: BotFaceSpec[] = FACE_HUES.map((hue, i) => ({
     hue,
 }));
 
+/** Uploadable container shapes for a custom image avatar (the reference's
+ *  Upload tab): the image is clipped into one of these silhouettes. */
+export const UPLOADABLE_FACES: BotFaceSpec[] = [
+    { shape: 'circle', hue: FACE_HUES[0] },
+    { shape: 'square', hue: FACE_HUES[0] },
+    { shape: 'blob', hue: FACE_HUES[0] },
+] as const;
+
 const SHAPE_PATHS: Record<FaceShape, React.ReactNode> = {
     circle: <circle cx="12" cy="12" r="10" />,
     square: <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />,
@@ -76,11 +84,40 @@ export interface BotFaceProps {
     size?: number;
     /** Blink the eyes (Hermes: eyes scan while the bot works). */
     working?: boolean;
+    /** A custom uploaded image — clipped to the face's shape. When set,
+     *  `face.shape` picks the silhouette and the hue is unused. */
+    uploadSrc?: string;
     className?: string;
 }
 
-export const BotFace: React.FC<BotFaceProps> = ({ face, name, size = 40, working = false, className }) => {
+export const BotFace: React.FC<BotFaceProps> = ({ face, name, size = 40, working = false, uploadSrc, className }) => {
     const spec = resolveFace(face, name);
+    const clipId = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+    if (uploadSrc) {
+        return (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 24 24"
+                className={className}
+                role="img"
+                aria-label={`${name} avatar`}
+            >
+                <defs>
+                    <clipPath id={`faceclip-${clipId}`}>{SHAPE_PATHS[spec.shape]}</clipPath>
+                </defs>
+                <image
+                    href={uploadSrc}
+                    x="0"
+                    y="0"
+                    width="24"
+                    height="24"
+                    preserveAspectRatio="xMidYMid slice"
+                    clipPath={`url(#faceclip-${clipId})`}
+                />
+            </svg>
+        );
+    }
     return (
         <svg
             width={size}

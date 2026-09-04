@@ -12,6 +12,7 @@ import DebateStage, { DebateStageActor } from '../analysis/DebateStage';
 import DebateSidePanel from '../analysis/DebateSidePanel';
 import ReplacementOfferCard from '../analysis/ReplacementOfferCard';
 import ModelByline from '../shared/ModelByline';
+import ToolActionsRow from './ToolActionsRow';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { extractModeratorThinking } from '../../utils/analysisUtils';
 import { isEnsembleMessage as isEnsembleMessageOf, stageActorsForMessage } from '../../utils/debateStageActors';
@@ -689,6 +690,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             {/* Quiet byline: who sat on this desk, how long. */}
                             {!isUserMessage && !message.isDebating && !message.isPostMortem && message.runStats && (
                                 <ModelByline runStats={message.runStats} />
+                            )}
+
+                            {/* R54: Hermes-style model side-effect rows —
+                                proposals, skill writes, notebook notes. */}
+                            {!isUserMessage && Array.isArray(message.toolActions) && message.toolActions.length > 0 && (
+                                <div className="mt-2">
+                                    <ToolActionsRow actions={message.toolActions} />
+                                </div>
                             )}
 
                             {Array.isArray(message.images) && message.images.length > 0 && (

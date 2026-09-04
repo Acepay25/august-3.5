@@ -25,7 +25,51 @@ import { getSessionContext } from '../infrastructure/SessionService';
 import { handleRecallTool } from '../learning/MemoryRetrievalService';
 import { computeSetupClusterStats } from '../learning/EvidencePackService';
 import type { LoggedTrade } from '../../types';
+import type { ToolAction } from '../../types/message';
 import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
+
+/**
+ * Classify a desk-tool result into a persisted model side-effect (R54):
+ * proposal tools (forge_tool / amend_memory) and custom_ tools become
+ * ToolAction rows the transcript renders Hermes-style. Data lookups stay
+ * out — they're reads, not changes. ok = the proposal was accepted as a
+ * pending candidate; the reject text of both proposal tools starts with
+ * `<tool> rejected:`.
+ */
+export const toolActionFromResult = (name: string, ok: boolean, content: string, speaker: string): ToolAction | null => {
+    const isProposal = name === 'forge_tool' || name === 'amend_memory';
+    const isCustom = name.startsWith('custom_');
+    if (!isProposal && !isCustom) return null;
+    const at = new Date().toISOString();
+    if (!ok) {
+        return { at, speaker, tool: name, ok: false, verb: name === 'forge_tool' ? 'proposed' : name === 'amend_memory' ? 'amended' : 'created', label: 'rejected', review: '' };
+    }
+    let label: string;
+    let review = '';
+    let verb = 'created';
+    try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (name === 'forge_tool') {
+            label = String(parsed.id ?? parsed.name ?? 'tool');
+            review = 'Settings → AI Models';
+            verb = 'proposed';
+        } else if (name === 'amend_memory') {
+            label = `notebook/${parsed.id ?? 'amendment'}`;
+            review = 'Settings → Memory';
+            verb = 'amended';
+        } else {
+            label = String(parsed.name ?? parsed.id ?? name);
+        }
+    } catch {
+        // Non-JSON receipt — keep the generic label.
+        label = name;
+    }
+    return { at, speaker, tool: name, ok: true, verb, label, review };
+};
+
+/** Proposals + custom tools, for the loop's per-result classification. */
+const isActionableToolResult = (r: DeskToolResult): boolean =>
+    r.name === 'forge_tool' || r.name === 'amend_memory' || r.name.startsWith('custom_');
 
 export interface DeskToolDefinition {
     type: 'function';
@@ -864,6 +908,14 @@ export async function runDeskToolLoop(params: {
      *  ground itself with at least one real lookup before arguing — used by
      *  debates running WITHOUT live hybrid market data. */
     requireFirstToolRound?: boolean;
+    /** R54: fires once per proposal/custom tool result so the caller can
+     *  persist model side-effects (ToolAction rows) on the message. The
+     *  action carries `speaker: ''` — the CALLER stamps the seat name
+     *  (only the moderator path can default it here). */
+    onToolAction?: (action: ToolAction) => void;
+    /** Speaker label stamped on emitted ToolActions when the caller does
+     *  not override (moderator path). Empty default — callers stamp. */
+    speaker?: string;
 }): Promise<DeskToolLoopResult> {
     const {
         config,
@@ -871,6 +923,8 @@ export async function runDeskToolLoop(params: {
         options,
         defaultSymbol,
         onToolEvent,
+        onToolAction,
+        speaker = '',
         nativeTools = config.apiFormat === 'chat_completions',
         allowedTools,
         trades,
@@ -977,6 +1031,15 @@ export async function runDeskToolLoop(params: {
         const results = [...extraResults, ...forgedResults, ...coreResults];
         usedTools.push(...results.map(r => r.name));
         onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
+        // R54: persist proposal/custom tool side-effects (the transcript's
+        // "Saved to memory"-style status rows). The loop does not know seat
+        // names — the caller stamps them; the moderator path defaults here.
+        if (onToolAction) {
+            for (const r of results.filter(isActionableToolResult)) {
+                const action = toolActionFromResult(r.name, r.ok, r.content, speaker);
+                if (action) onToolAction(action);
+            }
+        }
 
         if (nativeTools && turn.assistantMessage?.tool_calls?.length) {
             messages.push(turn.assistantMessage);
@@ -1013,6 +1076,11 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     allowedTools?: string[];
     /** Closed-trade log for the `recall` notebook tool. */
     trades?: LoggedTrade[];
+    /** R54: fires once per proposal/custom tool result (forge_tool,
+     *  amend_memory, custom_*) so the caller can persist ToolAction rows.
+     *  Actions arrive with `speaker: ''` — stamp the seat name in the
+     *  wrapper (streamChatWithDeskTools knows mailboxSeat / speaker). */
+    onToolAction?: (action: ToolAction) => void;
     /** Debate mailbox: when present, the seat can send_message /
      *  read_message to other seats. The loop injects an inbox notice and
      *  reports deliveries back through `onMailSent`. */
@@ -1070,6 +1138,7 @@ export async function* streamChatWithDeskTools(
         afterToolsNudge,
         enabled: _enabled,
         onToolEvent,
+        onToolAction,
         allowedTools,
         trades,
         mailbox,
@@ -1140,6 +1209,8 @@ export async function* streamChatWithDeskTools(
         // Inbox + capability notice rides AFTER any desk-tools block so it is
         // always the most recent instruction the seat reads before its turn.
         appendSystemNotice,
+        onToolAction,
+        speaker: seatName,
         onToolEvent: line => {
             onToolEvent?.(line);
             options?.onReasoning?.(`\n[Desk tools] ${line}\n`);

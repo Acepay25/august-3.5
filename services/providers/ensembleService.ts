@@ -333,6 +333,8 @@ const getModeratorAnalysisStream = async function* (
     /** P5 audit sink — receives the applied reasoning-route label so the
      *  run log explains the verdict's reasoning depth. */
     onWireAudit?: (entry: import('./reasoningControls').WireAuditEntry) => void,
+    /** R54: model side-effects from the arbiter's desk tools. */
+    onToolAction?: (action: import('../../types/message').ToolAction) => void,
 ): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
@@ -373,6 +375,7 @@ const getModeratorAnalysisStream = async function* (
             mailboxSeat: 'Moderator',
             mailboxRound: mailboxRound ?? 0,
             onMailSent: info => onMailSent?.(info),
+            onToolAction: action => onToolAction?.({ ...action, speaker: 'Moderator' }),
         })) {
             if (chunk) yield chunk;
         }
@@ -1150,7 +1153,12 @@ export const conductDebate = (
     /** Analyst Lens config — the accuracy-mode moderator must see the same
      *  role context the standard-mode moderator gets (the old call dropped
      *  it, so Lenses + Accuracy ran with zero personas). */
-    lensConfig?: AnalystLensConfig
+    lensConfig?: AnalystLensConfig,
+    /** R54 options bag (optional, trailing). */
+    opts?: {
+        /** Model side-effects from the arbiter's desk tools. */
+        onToolAction?: (action: import('../../types/message').ToolAction) => void,
+    },
 ): AsyncGenerator<string, void, unknown> => {
 
     let tradeHistoryContext = finalTradeSummary ? `Pattern Memory Library (History):\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
@@ -1295,7 +1303,7 @@ ${analystsInput}
 Start the simulation now. Begin with <DEBATE_START>.
 `;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal, onReasoning);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal, onReasoning, undefined, undefined, undefined, undefined, undefined, undefined, undefined, opts?.onToolAction);
 };
 
 /**
@@ -1894,6 +1902,14 @@ export const conductRealDebate = async function* (
      *  streak facts the moderator must weigh when grading. Built by
      *  formatGuardContextBlock in the pipeline. */
     sessionGuardBlock?: string,
+    /** R54 options bag (optional, trailing) — surface callbacks that don't
+     *  fit the positional legacy chain. */
+    opts?: {
+        /** Model side-effects for the transcript: proposal tools
+         *  (forge_tool/amend_memory) and file creations, keyed by the seat
+         *  that ran them. The pipeline persists them as Message.toolActions. */
+        onToolAction?: (action: import('../../types/message').ToolAction) => void,
+    },
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2418,6 +2434,7 @@ export const conductRealDebate = async function* (
                     mailbox: debateMailbox,
                     mailboxSeat: analyst.provider.name,
                     mailboxRound: round,
+                    onToolAction: action => opts?.onToolAction?.({ ...action, speaker: analyst.provider.name }),
                     onMailSent: info => {
                         // Announce each delivery once as a System line —
                         // the DM body itself stays private to recipient.
@@ -2663,6 +2680,7 @@ export const conductRealDebate = async function* (
                 undefined,
                 undefined,
                 entry => emitLog('budget', `wire: Moderator routing ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, rebuttalStart, 'Moderator'),
+                action => opts?.onToolAction?.(action),
             )) {
                 if (chunk) chargeText += chunk;
             }
@@ -2857,6 +2875,7 @@ export const conductRealDebate = async function* (
                 // DM receipts carry the real debate round.
                 questionRound,
                 entry => emitLog('budget', `wire: Moderator questions ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, questionRound, 'Moderator'),
+                action => opts?.onToolAction?.(action),
             )) {
                 if (chunk) {
                     questionText += chunk;
@@ -3107,6 +3126,7 @@ export const conductRealDebate = async function* (
                 undefined,
                 undefined,
                 entry => emitLog('budget', `wire: Moderator judgment ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, judgmentRound, 'Moderator'),
+                action => opts?.onToolAction?.(action),
             )) {
                 if (chunk) judgmentText += chunk;
             }
@@ -3299,7 +3319,7 @@ export const conductRealDebate = async function* (
                 });
                 emitLog('tool', dmLine, finalRound, 'Moderator');
                 onToolEvent?.('Moderator', finalRound, dmLine);
-            }, finalRound, entry => emitLog('budget', `wire: Moderator verdict ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, finalRound, 'Moderator'))) {
+            }, finalRound, entry => emitLog('budget', `wire: Moderator verdict ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, finalRound, 'Moderator'), action => opts?.onToolAction?.(action))) {
                 if (chunk) {
                     moderatorText += chunk;
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };

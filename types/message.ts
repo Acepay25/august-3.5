@@ -310,6 +310,11 @@ export interface Message {
    *  Rides the message so the journal can show user-prior vs verdict vs
    *  outcome — the human-Brier vs ensemble-Brier anti-automation display. */
   userPriorCall?: UserPriorCall;
+  /** Persisted model side-effects (R54): proposal tools and file
+   *  creations this run produced, for the Hermes-style status rows on
+   *  the bubble ("Saved to memory · N entries", "⚠ Memory write noted").
+   *  Append-only; capped by the pipeline. */
+  toolActions?: ToolAction[];
 }
 
 /** A committed pre-read call (plan §5a). `confidencePct` is the user's own
@@ -343,6 +348,30 @@ export interface DebateRunEvent {
   speaker?: string;
   round?: number;
   detail: string;
+}
+
+/**
+ * One model side-effect on a run — the persisted counterpart of the
+ * Hermes-style transcript status rows ("Saved to memory · 6 entries",
+ * "⚠ Memory write noted · 7 items"). Proposal-class actions
+ * (forge_tool / amend_memory) and file creations persist here so the
+ * transcript can show what the models CHANGED, not just what they said.
+ */
+export interface ToolAction {
+  /** Wall-clock stamp (ISO) of when the action ran. */
+  at: string;
+  /** The seat/bot that ran it (speaker name). */
+  speaker: string;
+  /** Tool name — forge_tool, amend_memory, or a custom_ tool. */
+  tool: string;
+  /** ok = accepted as a candidate/pending item; !ok = rejected/failed. */
+  ok: boolean;
+  /** short verb for the status row ("proposed", "amended", "created"). */
+  verb: string;
+  /** short human label of the target ("sketch-momentum", "notebook/edge_rules"). */
+  label: string;
+  /** Where a human reviews it ("Settings → AI Models", "Settings → Memory"). */
+  review: string;
 }
 
 /** "What would I do today?" — fresh forward-looking re-assessment of a closed

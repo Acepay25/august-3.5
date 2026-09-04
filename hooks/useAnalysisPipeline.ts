@@ -9,6 +9,7 @@ import {
 
 import { ProviderConfig } from '../types/provider';
 import { analyzeTradingView, getQuickResponse, streamQuickResponse } from '../services/providers/GenericAnalysisService';
+import type { ToolAction } from '../types/message';
 import { WireAuditEntry } from '../services/providers/reasoningControls';
 import * as ensembleService from '../services/providers/ensembleService';
 import { BotRegistry } from '../services/bots/BotRegistry';
@@ -77,6 +78,7 @@ import { annotateVerdictCitations } from '../services/learning/MemoryInjectionSe
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { threadForProvider } from '../utils/agentThreads';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
+import { toolActionStamp } from '../utils/toolActions';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor } from '../services/learning/SkillMemoryService';
@@ -361,6 +363,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         onPartialOutput: (chunk: string) => void;
         /** Wire-audit sink (P5) — applied reasoning-route label per call. */
         onWireAudit?: (entry: WireAuditEntry) => void;
+        /** R54: model side-effects from this seat's desk tools. */
+        onToolAction?: (action: ToolAction) => void;
     }
 
     const runAnalyzeTradingView = useCallback(async (
@@ -406,6 +410,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             onReasoning: params.onReasoning,
             onPartialOutput: params.onPartialOutput,
             onWireAudit: params.onWireAudit,
+            onToolAction: params.onToolAction,
         });
         return result;
     }, []);
@@ -559,6 +564,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // Live desk-tool chips: speaker -> latest tool line. Transient — cleared
     // when the debate concludes (never persisted).
     const liveToolEventsRef = useRef<Record<string, string>>({});
+    // R54: persisted model side-effects for the CURRENT run — proposal tools
+    // (forge_tool/amend_memory) and custom tools. Reset at run start, merged
+    // into the AI message when it lands (Hermes-style status rows).
+    const toolActionsRef = useRef<ToolAction[]>([]);
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
     /**
@@ -961,6 +970,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Memory**.`,
                         createdAt: new Date().toISOString(),
                         isDebating: false,
+                        // R54: status row for the model-authored write.
+                        toolActions: [{
+                            at: toolActionStamp(), speaker: 'Coach', tool: 'notebook_note', ok: true,
+                            verb: note.decision === 'append' ? 'appended' : 'created',
+                            label: `${note.folder}/${file.name}`, review: 'Settings → Memory',
+                        }],
                     }], activeConversationId);
                 } else {
                     updateMessages(prev => [...prev, {
@@ -1901,6 +1916,7 @@ ${reflectionBlock}`
                     openingTextRef.current = {};
                     activeDebateSpeakersRef.current = {};
                     liveToolEventsRef.current = {};
+                    toolActionsRef.current = [];
                     const resumeSeeds = canResume && resumeTarget ? reconstructOpenings(resumeTarget.debateTurns || []) : [];
                     const useResume = resumeSeeds.filter(s => enabledProviders.some(p => p.name === s.name)).length >= 2;
                     if (useResume && resumeTarget) {
@@ -2126,7 +2142,8 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 imageFiles,
                                 dataURLs,
                                 currentAbortController.signal,
-                                { ...buildAnalystParams(provider), seatDirective: seatDirective || undefined, allowedTools: seatToolsFor(teamSeat) },
+                                { ...buildAnalystParams(provider), seatDirective: seatDirective || undefined, allowedTools: seatToolsFor(teamSeat),
+                                  onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, { ...action, speaker: provider.name }].slice(-50); } },
                             );
                         })()
                                  .then(result => {
@@ -2578,7 +2595,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 // (lenses silently inert in accuracy mode).
                                 // Assignments are resolved so stale model ids
                                 // still resolve to the right persona.
-                                runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined
+                                runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined,
+                                // R54: model side-effects — same ledger as standard mode.
+                                { onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); } },
                         );
                     } else {
                         // STANDARD MODE — REAL inter-model debate. Each analyst
@@ -2927,6 +2946,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 getHarnessSettings().equityUsd,
                                 getSessionGuardConfig(),
                             )),
+                            // R54: model side-effects — proposals + custom tools
+                            // land on the message as ToolAction status rows.
+                            { onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); } },
                         );
                     }
 
@@ -3512,6 +3534,8 @@ ${accuracyVerificationNote}`
                             // Always set tradingStyle regardless of Lens mode
                             tradingStyle: effectiveTradingStyle,
                             debateRunLog: [...debateRunLogRef.current],
+                            // R54: persisted model side-effects for this run.
+                            toolActions: toolActionsRef.current.length > 0 ? [...toolActionsRef.current] : undefined,
                             debateCheckpoint: undefined,
                             memoryRetrieved,
                             // Audit surfaces: the finished

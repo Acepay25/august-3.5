@@ -6,21 +6,26 @@
 
 import React from 'react';
 import { BotAvatar } from './BotAvatar';
-import type { AgentBot } from '../../services/agents/agentRoster';
+import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 
 export interface NewGroupDialogProps {
     open: boolean;
     onClose: () => void;
     onCreate: (memberIds: string[]) => void;
+    /** Edit mode (R4 gear): update this room's membership instead of
+     *  creating. The Create button becomes Save. */
+    initialGroup?: AgentGroup | null;
+    onUpdate?: (groupId: string, memberIds: string[]) => void;
     bots: AgentBot[];
 }
 
-export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, onCreate, bots }) => {
+export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, onCreate, initialGroup, onUpdate, bots }) => {
     const [selected, setSelected] = React.useState<Set<string>>(new Set());
+    const editing = Boolean(initialGroup && onUpdate);
 
     React.useEffect(() => {
-        if (open) setSelected(new Set());
-    }, [open]);
+        if (open) setSelected(new Set(initialGroup?.memberIds ?? []));
+    }, [open, initialGroup]);
 
     if (!open) return null;
 
@@ -37,9 +42,11 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-group-dialog">
                 <div className="flex items-start justify-between">
                     <div>
-                        <h2 className="text-lg font-semibold text-zinc-100">New Group Chat</h2>
+                        <h2 className="text-lg font-semibold text-zinc-100">{editing ? 'Group Settings' : 'New Group Chat'}</h2>
                         <p className="mt-1 text-[12px] leading-snug text-zinc-500">
-                            One prompt goes to every member, one at a time, with a live activity feed. @name to direct, @everyone for all.
+                            {editing
+                                ? 'Change who is in this room. The transcript stays.'
+                                : 'One prompt goes to every member, one at a time, with a live activity feed. @name to direct, @everyone for all.'}
                         </p>
                     </div>
                     <button
@@ -99,12 +106,16 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                     </button>
                     <button
                         type="button"
-                        onClick={() => { onCreate([...selected]); onClose(); }}
-                        disabled={selected.size < 2}
+                        onClick={() => {
+                            if (editing && initialGroup) onUpdate?.(initialGroup.id, [...selected]);
+                            else onCreate([...selected]);
+                            onClose();
+                        }}
+                        disabled={selected.size < 2 || (editing ? new Set(initialGroup?.memberIds ?? []).size === selected.size && [...selected].every(id => initialGroup?.memberIds.includes(id)) : false)}
                         data-testid="create-group"
                         className="rounded-lg bg-zinc-200 px-4 py-2 text-[13px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        Create Group{selected.size >= 2 ? ` (${selected.size})` : ''}
+                        {editing ? 'Save' : `Create Group${selected.size >= 2 ? ` (${selected.size})` : ''}`}
                     </button>
                 </div>
             </div>

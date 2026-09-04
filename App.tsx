@@ -83,6 +83,8 @@ const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
+const ThreadTabs = React.lazy(() => import('./components/chat/ThreadTabs'));
+const BotDetail = React.lazy(() => import('./components/chat/BotDetail'));
 const TeamDialog = React.lazy(() => import('./components/chat/TeamDialog'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
@@ -93,10 +95,10 @@ import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
-import { type ThreadSelection, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
+import { type ThreadSelection, threadForProvider, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
 import { buildTeamRoster, teamSlots } from './utils/teamRoster';
 import {
-    getBots, getGroups, saveBot, saveGroup, removeBot, removeGroup, subscribeAgentRoster,
+    getBots, getGroups, saveBot, saveGroup, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
     getTeams, saveTeam, updateTeam as updateTeamStore, removeTeam as removeTeamStore,
     getActiveTeamId, setActiveTeamId as setActiveTeamIdStore,
     groupDisplayName, newId,
@@ -148,6 +150,7 @@ import { VetoLedgerService } from './services/ui/VetoLedgerService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useUiMode } from './hooks/useUiMode';
+import { useSidebarPane } from './hooks/useSidebarPane';
 import type { FloorPosition, FloorSquawkEvent } from './components/floor/FloorScene';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
@@ -408,6 +411,9 @@ const App: React.FC = () => {
     }, [isSidebarCollapsed]);
     // Chat vs floor presentation mode (see hooks/useUiMode.ts).
     const { uiMode, setUiMode, toggleUiMode } = useUiMode();
+    // Unified sidebar pane (sessions | bots | terminal) — the BOTS tab
+    // embeds the roster rail; floor mode hides the roster (below).
+    const { sidebarPane, setSidebarPane } = useSidebarPane();
     const ensembleInitializedRef = useRef(false);
     // Persisted per-profile ensemble choice (loaded by loadUserData, possibly
     // after this effect fires on first mount — the ref bridges that race).
@@ -1162,6 +1168,9 @@ const App: React.FC = () => {
     }), []);
     const [isNewBotOpen, setIsNewBotOpen] = useState(false);
     const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
+    // When set, the New Group dialog EDITS this room (R4 gear): create
+    // becomes update-membership. Null = plain create.
+    const [groupEditTarget, setGroupEditTarget] = useState<AgentGroup | null>(null);
     const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
     const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
     // Opening a bot thread flips the composer target to that bot's model
@@ -1222,6 +1231,11 @@ const App: React.FC = () => {
         const group: AgentGroup = { id: `grp-${Date.now()}`, memberIds, createdAt: new Date().toISOString() };
         saveGroup(group);
         setActiveThread({ kind: 'group', groupId: group.id });
+    }, []);
+    // R4: the group header gear reuses the New Group dialog as an editor —
+    // the Create button becomes Save (update-membership) instead.
+    const updateGroupMembers = useCallback((groupId: string, memberIds: string[]) => {
+        updateGroup(groupId, { memberIds });
     }, []);
     // Deleting a bot pulls it from its groups (agentRoster.removeBot);
     // deleting a group only drops the room. If the deleted surface is
@@ -1405,6 +1419,15 @@ const App: React.FC = () => {
         const group = groups.find(g => g.id === activeThread.groupId);
         if (group) void runGroupThread(group, prompt, bots);
     }, [activeThread, groups, bots, runGroupThread]);
+    // Reply in thread (R4): a direct @everyone round into the SAME room —
+    // members' incremental context (lastSeenIndex) already carries the
+    // prior thread, so the round continues it in place. Same shape as a
+    // new-thread send; GroupChatView gates the affordance on this prop.
+    const sendGroupReply = useCallback((prompt: string) => {
+        if (activeThread.kind !== 'group') return;
+        const group = groups.find(g => g.id === activeThread.groupId);
+        if (group) void runGroupThread(group, prompt, bots);
+    }, [activeThread, groups, bots, runGroupThread]);
     // The visible bot for ChatArea's scoped thread view.
     const visibleBot = useMemo(() => {
         if (activeThread.kind !== 'bot') return null;
@@ -1414,6 +1437,19 @@ const App: React.FC = () => {
     const activeGroup = useMemo(() => (
         activeThread.kind === 'group' ? groups.find(g => g.id === activeThread.groupId) ?? null : null
     ), [activeThread, groups]);
+    // R2: the reference-style bot detail page. Shows for a fresh 1:1
+    // (zero messages in the derived thread) until Open chat dismisses it;
+    // switching bots re-arms it. The flag is render-scoped (session state,
+    // not persisted) by design — the empty state is a landing page.
+    const [botDetailDismissed, setBotDetailDismissed] = useState(false);
+    useEffect(() => { setBotDetailDismissed(false); }, [activeThread.kind === 'bot' ? activeThread.botId : null]);
+    const botDetailVisible = useMemo(() =>
+        uiMode === 'chat'
+        && activeThread.kind === 'bot'
+        && visibleBot !== null
+        && threadForProvider(messages, visibleBot.providerId, visibleBot.modelId).length === 0
+        && !botDetailDismissed,
+    [uiMode, activeThread, visibleBot, messages, botDetailDismissed]);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -4179,44 +4215,47 @@ const App: React.FC = () => {
                         onOpenAutomation={(id) => automations.openAutomation(id)}
                         onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
                         collapsed={isSidebarCollapsed}
+                        sidebarPane={sidebarPane}
+                        onSetSidebarPane={setSidebarPane}
+                        rosterSlot={uiMode === 'chat' ? (
+                            <React.Suspense fallback={null}>
+                                <AgentRosterRail
+                                    variant="embedded"
+                                    bots={bots}
+                                    groups={groups}
+                                    messages={messages}
+                                    selection={activeThread}
+                                    teamMembers={teamMembers}
+                                    teams={teams.map(t => ({ team: t, slots: teamSlots(t, providerConfigs) }))}
+                                    activeTeamId={activeTeamId}
+                                    onActivateTeam={activateTeam}
+                                    onEditTeam={openEditTeamDialog}
+                                    onDeleteTeam={deleteTeam}
+                                    onNewTeam={openNewTeamDialog}
+                                    onSelectTeam={selectTeamThread}
+                                    onSelectBot={selectBotThread}
+                                    onSelectGroup={selectGroupThread}
+                                    onDeleteBot={deleteBot}
+                                    onDeleteGroup={deleteGroup}
+                                    onManageTeam={() => { setSettingsInitialTab('models'); setIsSettingsMenuVisible(true); }}
+                                    onNewBot={() => setIsNewBotOpen(true)}
+                                    onNewGroup={() => setIsNewGroupOpen(true)}
+                                    onSelectCoach={selectCoachThread}
+                                    coachCount={coachCount}
+                                    workingBotId={workingBotId ?? dmWorkingBotId}
+                                    lastOpenedMap={threadOpenedMap}
+                                    attentionMap={attentionMap}
+                                    botRoutines={botRoutinesMap}
+                                    onRunRoutine={runRoutineFromRail}
+                                />
+                            </React.Suspense>
+                        ) : null}
                     />
                 </aside>
 
-                {/* Chat mode: agent roster rail — the agents as contacts.
-                    Team (full debate conversation) + one row per ready
-                    provider. Floor mode hides it; the floor is the surface. */}
-                {uiMode === 'chat' && (
-                    <React.Suspense fallback={null}>
-                        <AgentRosterRail
-                            bots={bots}
-                            groups={groups}
-                            messages={messages}
-                            selection={activeThread}
-                            teamMembers={teamMembers}
-                            teams={teams.map(t => ({ team: t, slots: teamSlots(t, providerConfigs) }))}
-                            activeTeamId={activeTeamId}
-                            onActivateTeam={activateTeam}
-                            onEditTeam={openEditTeamDialog}
-                            onDeleteTeam={deleteTeam}
-                            onNewTeam={openNewTeamDialog}
-                            onSelectTeam={selectTeamThread}
-                            onSelectBot={selectBotThread}
-                            onSelectGroup={selectGroupThread}
-                            onDeleteBot={deleteBot}
-                            onDeleteGroup={deleteGroup}
-                            onManageTeam={() => { setSettingsInitialTab('models'); setIsSettingsMenuVisible(true); }}
-                            onNewBot={() => setIsNewBotOpen(true)}
-                            onNewGroup={() => setIsNewGroupOpen(true)}
-                            onSelectCoach={selectCoachThread}
-                            coachCount={coachCount}
-                            workingBotId={workingBotId ?? dmWorkingBotId}
-                            lastOpenedMap={threadOpenedMap}
-                            attentionMap={attentionMap}
-                            botRoutines={botRoutinesMap}
-                            onRunRoutine={runRoutineFromRail}
-                        />
-                    </React.Suspense>
-                )}
+                {/* The standalone chat-mode roster rail was folded into the
+                    unified sidebar's BOTS pane (rosterSlot above) — one
+                    roster, reference-style SESSIONS | BOTS | TERMINAL tabs. */}
 
                 <main
                     className={`chat-main flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[21rem] lg:px-8 xl:px-16' : ''}`}
@@ -4237,7 +4276,36 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     />
 
-            {activeThread.kind === 'coach' ? (
+                    {/* R2: reference-style document tabs — one tab per
+                        addressable thread. Floor mode hides the strip; the
+                        floor is the surface. */}
+                    {uiMode === 'chat' && (
+                        <React.Suspense fallback={null}>
+                            <ThreadTabs
+                                selection={activeThread}
+                                bots={bots}
+                                groups={groups}
+                                onSelectTeam={selectTeamThread}
+                                onSelectBot={selectBotThread}
+                                onSelectGroup={selectGroupThread}
+                                onSelectCoach={selectCoachThread}
+                            />
+                        </React.Suspense>
+                    )}
+
+                    {/* R2: reference-style bot page — the empty state for a
+                        fresh 1:1. Open chat dismisses it for the session. */}
+                    {uiMode === 'chat' && activeThread.kind === 'bot' && botDetailVisible && (
+                        <React.Suspense fallback={null}>
+                            <BotDetail
+                                bot={bots.find(b => b.id === activeThread.botId) ?? { id: activeThread.botId, name: 'Bot', providerId: '', modelId: '', avatar: { kind: 'auto' }, createdAt: '' }}
+                                onOpenChat={() => setBotDetailDismissed(true)}
+                            />
+                        </React.Suspense>
+                    )}
+
+                    {/* Chat body (hidden while the bot detail page shows) */}
+                    {!botDetailVisible && (activeThread.kind === 'coach' ? (
                 <div className="min-h-0 flex-1 overflow-y-auto chat-scroll">
                     <React.Suspense fallback={null}>
                         <CoachThreadPanel
@@ -4263,6 +4331,16 @@ const App: React.FC = () => {
                         workingBotId={workingBotId}
                         isRunning={groupRunning}
                         onSendThread={sendGroupThread}
+                        onReplyInThread={sendGroupReply}
+                        onEditGroup={() => {
+                            if (!activeGroup) return;
+                            setGroupEditTarget(activeGroup);
+                            setIsNewGroupOpen(true);
+                        }}
+                        onDeleteGroup={() => {
+                            if (!activeGroup) return;
+                            deleteGroup(activeGroup.id);
+                        }}
                     />
                 </React.Suspense>
             ) : (
@@ -4355,7 +4433,7 @@ const App: React.FC = () => {
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
-            )}
+            ))}
                 </main>
 
                 {/* Desktop activity card: float progress over the
@@ -4528,8 +4606,10 @@ const App: React.FC = () => {
                 <React.Suspense fallback={null}>
                     <NewGroupDialog
                         open
-                        onClose={() => setIsNewGroupOpen(false)}
+                        onClose={() => { setIsNewGroupOpen(false); setGroupEditTarget(null); }}
                         onCreate={createGroup}
+                        onUpdate={updateGroupMembers}
+                        initialGroup={groupEditTarget}
                         bots={bots}
                     />
                 </React.Suspense>
