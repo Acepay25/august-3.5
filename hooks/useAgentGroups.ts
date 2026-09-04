@@ -228,17 +228,27 @@ export const useAgentGroups = ({
                                 if (t.id !== bot.id) nextSpeakers.set(t.id, t);
                             }
                         }
-                    } catch {
+                    } catch (error) {
                         if (runNonce.current === nonce) {
                             const aborted = abort.signal.aborted;
+                            // The transport already mapped the raw failure to a
+                            // user-safe message (toFriendlyProviderError) — show
+                            // WHY the turn died instead of a generic
+                            // "provider error" that leaves the user guessing.
+                            const rawReason = error instanceof Error ? error.message.trim() : '';
+                            const reason = rawReason
+                                ? /[.!?]$/.test(rawReason) ? rawReason.slice(0, 160) : `${rawReason.slice(0, 160)}.`
+                                : 'provider error';
                             patchMessage(replyId, {
                                 text: aborted
                                     ? (visible ? `${visible}\n\n(cancelled)` : '')
-                                    : (visible || `(${bot.name} could not reply — provider error)`),
+                                    : (visible
+                                        ? `${visible}\n\n(failed: ${reason})`
+                                        : `(${bot.name} could not reply — ${reason})`),
                                 isStreaming: false,
                                 hidden: aborted && !visible,
                             });
-                            if (!aborted) pushActivity({ kind: 'passed', botName: bot.name, detail: 'error' });
+                            if (!aborted) pushActivity({ kind: 'passed', botName: bot.name, detail: reason });
                         }
                     }
                 }

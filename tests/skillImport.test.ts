@@ -64,4 +64,44 @@ describe('SkillImportService (import skills the models can use)', () => {
         expect(second.imported).toHaveLength(1);
         expect(listSkills().filter(s => s.file.name.startsWith('collide')).length).toBe(2);
     });
+
+    it('trigger-less skills dedupe on their title (no re-import under shuffled names)', async () => {
+        const bare = (name: string, title: string): { name: string; content: string } => ({
+            name,
+            content: ['---', 'status: candidate', 'kind: repeat', 'wins: 0', 'losses: 0', 'tradeIds: ', '---', '', `# ${title}`, '', 'Body.'].join('\n'),
+        });
+        const first = await importSkillFiles([bare('one-name', 'Fade Illiquid Alts')]);
+        expect(first.imported).toHaveLength(1);
+        // Same TITLE under a different file name → still a duplicate.
+        const second = await importSkillFiles([bare('totally-other', 'fade illiquid alts')]);
+        expect(second.skipped).toEqual(['totally-other']);
+        expect(second.imported).toHaveLength(0);
+    });
+
+    it('readSkillFiles reports per-file read errors instead of sinking the batch', async () => {
+        const { readSkillFiles } = await import('../services/learning/SkillImportService');
+        const good = new File([validSkill('good', 't').content], 'good.md', { type: 'text/markdown' });
+        const bad = new File(['x'], 'broken.md', { type: 'text/plain' });
+        // Simulate a read failure on the second file.
+        const origReadAsText = FileReader.prototype.readAsText;
+        let calls = 0;
+        FileReader.prototype.readAsText = function (this: FileReader & { __fake?: boolean }, ...args: Parameters<typeof FileReader.prototype.readAsText>): void {
+            calls += 1;
+            if (calls === 2) {
+                Object.defineProperty(this, 'error', { value: new DOMException('denied'), configurable: true });
+                this.dispatchEvent(new Event('error'));
+            } else {
+                origReadAsText.apply(this, args);
+            }
+        };
+        try {
+            const outcomes = await readSkillFiles([good, bad]);
+            expect(outcomes).toHaveLength(2);
+            expect(outcomes[0].content).toBeTruthy();
+            expect(outcomes[1].error).toBeTruthy();
+            expect(outcomes[1].name).toBe('broken.md');
+        } finally {
+            FileReader.prototype.readAsText = origReadAsText;
+        }
+    });
 });

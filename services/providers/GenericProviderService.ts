@@ -1244,25 +1244,37 @@ async function* streamViaProxy(
     messages: ChatMessage[],
     options?: ChatRequestOptions
 ): AsyncGenerator<string, void, unknown> {
-    const response = await fetch('/__provider_proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            config,
-            messages,
-            maxTokens: options?.maxTokens,
-            temperature: options?.temperature,
-            jsonMode: options?.jsonMode,
-            stream: true,
-        }),
-        signal: withStreamTimeoutSignal(options?.signal),
-    });
-    if (!response.ok || !response.body) {
-        const result = await response.json().catch(() => null);
-        const message = result?.message || `Provider stream failed (${response.status}).`;
-        const error = new Error(message);
-        if (result?.status !== undefined) (error as any).status = result.status;
-        throw error;
+    // Retry the OPEN of the stream on transient failures (429 / network /
+    // 5xx) with the same backoff the non-streaming path uses — without it,
+    // one rate-limit blip killed a bot room turn instantly while casual
+    // chat (sendChatRequest → withRetry) recovered silently. Only the
+    // request open is retried: once SSE bytes start flowing, a mid-stream
+    // failure surfaces as an error instead of replaying the answer.
+    const response = await withRetry(async () => {
+        const attempt = await fetch('/__provider_proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                config,
+                messages,
+                maxTokens: options?.maxTokens,
+                temperature: options?.temperature,
+                jsonMode: options?.jsonMode,
+                stream: true,
+            }),
+            signal: withStreamTimeoutSignal(options?.signal),
+        });
+        if (!attempt.ok || !attempt.body) {
+            const result = await attempt.json().catch(() => null);
+            const message = result?.message || `Provider stream failed (${attempt.status}).`;
+            const error = new Error(message);
+            if (result?.status !== undefined) (error as any).status = result.status;
+            throw error;
+        }
+        return attempt;
+    }, (config.name as ProviderName) || 'Provider', 3, options?.signal);
+    if (!response.body) {
+        throw new Error('Provider stream returned no body.');
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

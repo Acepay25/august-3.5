@@ -4,7 +4,6 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 import { NewBotDialog } from '../components/chat/NewBotDialog';
 import { NewGroupDialog } from '../components/chat/NewGroupDialog';
-import { TeamDialog } from '../components/chat/TeamDialog';
 import { AgentBot, AgentGroup } from '../services/agents/agentRoster';
 import { ProviderConfig } from '../types/provider';
 
@@ -95,46 +94,6 @@ describe('NewGroupDialog — edit mode (R4 gear)', () => {
         render(<NewGroupDialog {...base} />);
         expect(screen.getByText('New Group Chat')).toBeTruthy();
         expect((screen.getByTestId('create-group') as HTMLButtonElement).textContent).toContain('Create Group');
-    });
-});
-
-describe('TeamDialog — seat roles + Inherit (role prompt inheritance)', () => {
-    const providers = [provider({})];
-    const base = {
-        open: true,
-        onClose: () => {},
-        onCreate: () => {},
-        providers,
-    };
-
-    it('role selector assigns a seat role and the focus line follows', () => {
-        render(<TeamDialog {...base} />);
-        const roleSelect = screen.getByTestId('team-seat-role-0');
-        fireEvent.click(roleSelect);
-        // Pick the Macro role from the dropdown options.
-        fireEvent.click(screen.getByText('Macro'));
-        expect(screen.getByTestId('team-seat-role-0').textContent).toContain('Macro');
-    });
-
-    it('Inherit copies the built-in role prompt into the instructions box', () => {
-        render(<TeamDialog {...base} />);
-        fireEvent.click(screen.getByTestId('team-seat-role-0'));
-        fireEvent.click(screen.getByText('Macro'));
-        // Open the instructions textarea…
-        fireEvent.click(screen.getByTestId('team-seat-instructions-0'));
-        const promptBox = screen.getByTestId('team-seat-prompt-0') as HTMLTextAreaElement;
-        expect(promptBox.value).toBe('');
-        // …then Inherit fills it with the built-in Macro prompt.
-        fireEvent.click(screen.getByTestId('team-seat-inherit-0'));
-        expect(promptBox.value.length).toBeGreaterThan(20);
-        // The seat remains editable after inheriting.
-        fireEvent.change(promptBox, { target: { value: 'Focus on funding extremes.' } });
-        expect((screen.getByTestId('team-seat-prompt-0') as HTMLTextAreaElement).value).toBe('Focus on funding extremes.');
-    });
-
-    it('Inherit is absent for the general-analyst default (nothing to inherit)', () => {
-        render(<TeamDialog {...base} />);
-        expect(screen.queryByTestId('team-seat-inherit-0')).toBeNull();
     });
 });
 

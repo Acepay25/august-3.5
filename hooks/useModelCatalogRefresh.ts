@@ -23,11 +23,17 @@ import { mergeDiscoveredModels } from '../utils/providerUtils';
 const LAST_SWEEP_KEY = 'model_catalog_sweep_v1';
 /** Minimum gap between background sweeps (6h). */
 const SWEEP_INTERVAL_MS = 6 * 3_600_000;
+/** After a sweep where EVERY provider failed (e.g. the app booted
+ *  offline), retry sooner instead of waiting out the full 6h. */
+const FAILURE_RETRY_MS = 15 * 60_000;
 /** Stagger between providers — stay under per-key rate limits. */
 const PROVIDER_STAGGER_MS = 1_500;
 
 interface SweepState {
     lastSweepAt: number;
+    /** Set when a sweep ran but produced zero successes — the next
+     *  eligible sweep uses FAILURE_RETRY_MS instead of the full 6h. */
+    lastSweepFailed?: boolean;
 }
 
 const readSweepState = async (): Promise<SweepState> =>
@@ -57,6 +63,7 @@ export const useModelCatalogRefresh = (
             const targets = configsRef.current.filter(
                 p => p.isEnabled && (p.apiKey || '').trim().length > 0 && (p.baseUrl || '').trim().length > 0,
             );
+            let successes = 0;
             for (const provider of targets) {
                 try {
                     const discovered = await discoverProviderModels({
@@ -64,6 +71,7 @@ export const useModelCatalogRefresh = (
                         apiKey: provider.apiKey,
                         apiFormat: provider.apiFormat,
                     });
+                    successes += 1;
                     const existing = new Set(provider.models);
                     const fresh = discovered.filter(m => !existing.has(m));
                     if (fresh.length > 0) {
@@ -72,12 +80,18 @@ export const useModelCatalogRefresh = (
                         await updateRef.current(provider.id, { models: mergeDiscoveredModels(provider.models, discovered) });
                     }
                 } catch {
-                    // Silent: offline, unsupported /models, rate limit — the
-                    // stored list stays authoritative until a sweep succeeds.
+                    // Silent per provider: offline, unsupported /models, rate
+                    // limit — the stored list stays authoritative until a
+                    // sweep succeeds. A total failure only shortens the NEXT
+                    // retry window (below), never surfaces in the UI.
                 }
                 await new Promise<void>(resolve => setTimeout(resolve, PROVIDER_STAGGER_MS));
             }
-            await setPreferenceObject<SweepState>(LAST_SWEEP_KEY, { lastSweepAt: Date.now() });
+            // Every provider failed → record it so the next window retries
+            // in 15min instead of waiting out the full 6h (booting offline
+            // should not pin stale dropdowns for six hours).
+            const totalFailure = targets.length > 0 && successes === 0;
+            await setPreferenceObject<SweepState>(LAST_SWEEP_KEY, { lastSweepAt: Date.now(), lastSweepFailed: totalFailure });
         } finally {
             sweepingRef.current = false;
         }
@@ -87,7 +101,8 @@ export const useModelCatalogRefresh = (
         let cancelled = false;
         const maybeSweep = async (): Promise<void> => {
             const state = await readSweepState();
-            if (cancelled || Date.now() - state.lastSweepAt < SWEEP_INTERVAL_MS) return;
+            const minGap = state.lastSweepFailed ? FAILURE_RETRY_MS : SWEEP_INTERVAL_MS;
+            if (cancelled || Date.now() - state.lastSweepAt < minGap) return;
             await sweep();
         };
         // Small boot delay so the first paint never competes with the sweep.

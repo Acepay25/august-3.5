@@ -934,6 +934,18 @@ export async function conductTodayReassessment(
 
 // ─── getQuickResponse ───────────────────────────────────────────────────────
 
+/**
+ * The empty-visible fallback. A reasoning model can burn the whole chat
+ * token budget inside its chain of thought and stream ZERO visible text —
+ * the stream completes cleanly, so no provider error fires, but "could not
+ * generate a response" is a lie: it generated a lot, we just starved the
+ * answer. When reasoning arrived, say so — it names the real fix.
+ */
+const emptyVisibleFallback = (reasoningSeen: boolean): string =>
+    reasoningSeen
+        ? '(The model spent its entire reply budget on hidden reasoning and never produced an answer — pick a lighter-thinking model or raise the chat budget.)'
+        : 'I am sorry, I could not generate a response.';
+
 export async function getQuickResponse(
     config: ProviderConfig,
     prompt: string,
@@ -952,16 +964,21 @@ export async function getQuickResponse(
         messages.push({ role: 'user', content: prompt });
     }
 
-    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning, reasoningEffort: EFFORT_BY_TASK.chat });
+    let reasoningSeen = false;
+    const noteReasoning = (reasoning: string): void => {
+        if (reasoning.trim()) reasoningSeen = true;
+        onReasoning?.(reasoning);
+    };
+    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning: noteReasoning, reasoningEffort: EFFORT_BY_TASK.chat });
     // Defensive: some apiFormats leave  bodies in the final content.
     // Strip them here (idempotent — chat_completions already peeled them via
     // splitChatContent) and route any leftover to the reasoning side channel
     // so the bubble's Thinking row owns it instead of the visible reply.
     const stripped = extractAndStripThinkBlocks(result || '');
-    if (stripped.leaked.trim()) onReasoning?.(stripped.leaked);
+    if (stripped.leaked.trim()) noteReasoning(stripped.leaked);
     // Chat replies render via MarkdownRenderer — the light sanitizer keeps the
     // model's markdown (bold/lists/code) instead of flattening it to plain text.
-    return sanitizeAIResponseLight(stripped.visible || "I am sorry, I could not generate a response.");
+    return sanitizeAIResponseLight(stripped.visible || emptyVisibleFallback(reasoningSeen));
 }
 
 /**
@@ -991,29 +1008,47 @@ export async function streamQuickResponse(
     }
 
     let visible = '';
+    let reasoningSeen = false;
+    const noteReasoning = (reasoning: string): void => {
+        if (reasoning.trim()) reasoningSeen = true;
+        onReasoning?.(reasoning);
+    };
+    // One streaming pass into `visible` with a given output budget.
     // Double safety net: chat_completions already gates think-tag bodies into
     // the reasoning channel at the transport, but other apiFormats (and the
     // Electron non-streaming path) can still leak them into content. Gating
     // here guarantees the live bubble never shows scratchpad markup.
-    const gate = createThinkingStreamGate();
-    for await (const chunk of streamChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning, reasoningEffort: EFFORT_BY_TASK.chat })) {
-        if (!chunk) continue;
-        const gated = gate.push(chunk);
-        if (gated.thinking) onReasoning?.(gated.thinking);
-        if (gated.visible) {
-            visible += gated.visible;
-            onChunk?.(gated.visible);
+    const pump = async (maxTokens: number): Promise<void> => {
+        const gate = createThinkingStreamGate();
+        for await (const chunk of streamChatRequest(config, messages, { maxTokens, signal, onReasoning: noteReasoning, reasoningEffort: EFFORT_BY_TASK.chat })) {
+            if (!chunk) continue;
+            const gated = gate.push(chunk);
+            if (gated.thinking) noteReasoning(gated.thinking);
+            if (gated.visible) {
+                visible += gated.visible;
+                onChunk?.(gated.visible);
+            }
         }
-    }
-    const flushed = gate.flush();
-    if (flushed.thinking) onReasoning?.(flushed.thinking);
-    if (flushed.visible) {
-        visible += flushed.visible;
-        onChunk?.(flushed.visible);
+        const flushed = gate.flush();
+        if (flushed.thinking) noteReasoning(flushed.thinking);
+        if (flushed.visible) {
+            visible += flushed.visible;
+            onChunk?.(flushed.visible);
+        }
+    };
+    await pump(TASK_BUDGETS.chat);
+    // A reasoning model can burn the ENTIRE chat budget inside its chain of
+    // thought and finish cleanly with zero visible text — the stream worked,
+    // the answer didn't exist. One retry with a doubled budget so the reply
+    // actually lands (only on this exact empty-visible-after-reasoning case,
+    // never on aborts, so cost stays bounded).
+    if (!visible.trim() && reasoningSeen && !signal?.aborted) {
+        console.warn('[streamQuickResponse] reasoning consumed the chat budget — retrying once with doubled maxTokens');
+        await pump(TASK_BUDGETS.chat * 2);
     }
     const stripped = extractAndStripThinkBlocks(visible || '');
-    if (stripped.leaked.trim()) onReasoning?.(stripped.leaked);
-    return sanitizeAIResponseLight(stripped.visible || "I am sorry, I could not generate a response.");
+    if (stripped.leaked.trim()) noteReasoning(stripped.leaked);
+    return sanitizeAIResponseLight(stripped.visible || emptyVisibleFallback(reasoningSeen));
 }
 
 // ─── summarizeChartImage (vision/OCR) ───────────────────────────────────────

@@ -85,11 +85,31 @@ export const importSkillFiles = async (files: Array<{ name: string; content: str
     return result;
 };
 
-/** Read a FileList of .md files into {name, content} pairs (UTF-8). */
-export const readSkillFiles = (fileList: FileList | File[]): Promise<Array<{ name: string; content: string }>> =>
-    Promise.all(Array.from(fileList).map(file => new Promise<{ name: string; content: string }>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve({ name: file.name, content: typeof reader.result === 'string' ? reader.result : '' });
-        reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
-        reader.readAsText(file);
-    })));
+/** Read a FileList of .md files into per-file outcomes. One unreadable
+ *  file must NOT sink the batch (matches the service's "report, never
+ *  silently drop" contract): successes carry content, failures carry a
+ *  reason and surface as normal import failures in the UI. */
+export interface SkillFileRead {
+    name: string;
+    content?: string;
+    error?: string;
+}
+
+export const readSkillFiles = async (fileList: FileList | File[]): Promise<SkillFileRead[]> => {
+    const results = await Promise.allSettled(
+        Array.from(fileList).map(file => new Promise<{ name: string; content: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result === 'string') resolve({ name: file.name, content: reader.result });
+                else reject(new Error('File is not readable as text'));
+            };
+            reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
+            reader.readAsText(file);
+        })),
+    );
+    return results.map((r, i) =>
+        r.status === 'fulfilled'
+            ? { name: r.value.name, content: r.value.content }
+            : { name: (Array.from(fileList)[i] as File).name, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+    );
+};
