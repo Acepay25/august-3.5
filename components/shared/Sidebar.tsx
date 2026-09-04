@@ -3,6 +3,8 @@ import { Conversation, MessageRole } from '../../types';
 import { AutomationConfig } from '../../types/automation';
 import { humanizeCron } from '../../services/automation/cronParser';
 import { searchChatHistory, ChatSearchHit } from '../../services/infrastructure/sessionSearch';
+import type { SidebarPane } from '../../hooks/useSidebarPane';
+import JobsPane from '../settings/JobsPane';
 import {
     ActivityIcon,
     BotIcon,
@@ -103,6 +105,18 @@ interface SidebarContentProps {
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
     onOpenBotManager?: () => void;
+    // Unified-pane props (desktop sidebar only). When `sidebarPane` is
+    // provided the sidebar renders the SESSIONS | BOTS | TERMINAL tab bar
+    // and swaps its body by pane — BOTS embeds the full agent roster rail
+    // (variant="embedded"), TERMINAL the background-jobs pane. The mobile
+    // drawer omits these and keeps the classic sessions-only body.
+    sidebarPane?: SidebarPane;
+    onSetSidebarPane?: (pane: SidebarPane) => void;
+    /** Bots-pane content: the <AgentRosterRail variant="embedded" .../>
+     *  element, built by App (which owns roster state). Optional — omit in
+     *  the mobile drawer; the pane bar hides BOTS/TERMINAL without these
+     *  props so no dead tab can render. */
+    rosterSlot?: React.ReactNode;
     // Automations — scheduled analyses. The section lists them inline; a
     // click opens the automation's own card feed.
     automations?: AutomationConfig[];
@@ -132,6 +146,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onDeleteConversation,
     onDeleteConversations,
     onOpenBotManager,
+    sidebarPane,
+    onSetSidebarPane,
+    rosterSlot,
     automations = [],
     onOpenAutomation,
     onCreateAutomation,
@@ -251,6 +268,22 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
     const isSearchingQuery = searchOpen && searchQuery.trim().length > 0;
 
+    // Unified panes: when the desktop shell provides sidebarPane, the body
+    // swaps between SESSIONS (classic content below), BOTS (the embedded
+    // agent roster rail), and TERMINAL (background jobs). The mobile drawer
+    // omits the props → showUnified stays false → identical to before.
+    // A collapsed rail (w-16) has no room for tabs or roster rows — the
+    // compact sessions body shows instead; the pane returns on expand.
+    const showUnified = Boolean(sidebarPane && onSetSidebarPane) && !collapsed;
+    // Bots pane without roster content (e.g. floor mode passes null) falls
+    // back to the sessions body — a pane tab never shows an empty column.
+    const showSessionsBody = !showUnified || sidebarPane === 'sessions' || (sidebarPane === 'bots' && !rosterSlot);
+    const showBotsBody = showUnified && sidebarPane === 'bots' && Boolean(rosterSlot);
+    const showTerminalBody = showUnified && sidebarPane === 'terminal';
+    const panes: [SidebarPane, string][] = rosterSlot
+        ? [['sessions', 'Sessions'], ['bots', 'Bots'], ['terminal', 'Terminal']]
+        : [['sessions', 'Sessions'], ['terminal', 'Terminal']];
+
     const renderConversationRow = (conv: Conversation) => (
         <div
             key={conv.id}
@@ -308,6 +341,32 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
     return (
         <div className="flex flex-col h-full min-h-0 bg-zinc-900">
+            {/* Unified pane tabs (SESSIONS | BOTS | TERMINAL) — desktop
+                only; the mobile drawer (no sidebarPane) has no tabs. */}
+            {showUnified && (
+                <div className="flex shrink-0 items-center gap-4 px-4 pt-3" role="tablist" aria-label="Sidebar panes">
+                    {panes.map(([pane, label]) => {
+                        const active = sidebarPane === pane;
+                        return (
+                            <button
+                                key={pane}
+                                type="button"
+                                role="tab"
+                                aria-selected={active}
+                                data-testid={`sidebar-pane-${pane}`}
+                                onClick={() => onSetSidebarPane?.(pane)}
+                                className={`-mb-px border-b pb-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${active
+                                    ? 'border-zinc-200 text-zinc-100'
+                                    : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
+            {showSessionsBody && (<>
             {/* Top rows: New chat + Search with kbd hints, then
                 the quick actions as plain icon rows (no section header). */}
             <div className={collapsed ? 'p-2 pb-1' : 'px-2 pt-3 pb-1'}>
@@ -517,6 +576,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                     </button>
                 )}
             </div>
+            </>)}
+
+            {/* BOTS pane — the full agent roster rail, embedded. App builds
+                the element (it owns the roster state); here it just mounts. */}
+            {showBotsBody && rosterSlot}
+
+            {/* TERMINAL pane — the status stack of background work. */}
+            {showTerminalBody && <JobsPane />}
 
             {/* User footer — opens an account popover (Settings,
                 New chat, version). The footer no longer navigates

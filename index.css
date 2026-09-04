@@ -223,14 +223,19 @@ body {
 }
 
 /* ===== REASONING ROW (collapsible thinking) =====
-   One quiet 24px line: a live ticker while running (latest line), a
-   first-line summary when done, gradient light-sweep as the running
-   indicator. Expands to the dimmed full trace. */
+   Reference style: a settled collapsed row is a BARE quiet `Thought ›`
+   line (transparent, no box) that blends into the transcript; while
+   running it reads `Thinking · Ns` with a live ticker of the latest
+   line. Expanded, it becomes the boxed, scrollable dimmed trace. */
 .reasoning-row {
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
   overflow: hidden;
+  border: 1px solid transparent;
+}
+.reasoning-row[data-state="running"],
+.reasoning-row.is-open {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 .reasoning-row-summary {
   position: relative;
@@ -253,7 +258,9 @@ body {
 }
 .reasoning-row-summary::-webkit-details-marker { display: none; }
 .reasoning-row-summary:hover { color: var(--color-zinc-300); }
-.reasoning-row-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.8; }
+/* Collapsed: a small right chevron (the reference's `›`); expanded the
+   ChevronDownIcon rotates to point up. */
+.reasoning-row-icon { width: 10px; height: 10px; flex-shrink: 0; opacity: 0.7; }
 .reasoning-row-label { flex-shrink: 0; letter-spacing: 0.02em; }
 .reasoning-row-meta {
   flex-shrink: 0;
@@ -271,26 +278,6 @@ body {
   display: inline-block;
   white-space: nowrap;
 }
-/* Settled + collapsed: truncated preview of the trace's first line, ending
-   in a "Show full reasoning" affordance (the summary click toggles it). */
-.reasoning-row-preview {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-style: italic;
-  color: var(--color-zinc-600);
-}
-.reasoning-row-more {
-  flex-shrink: 0;
-  margin-left: 6px;
-  color: var(--color-zinc-500);
-  text-decoration: underline;
-  text-decoration-color: var(--color-zinc-700);
-  text-underline-offset: 2px;
-}
-.reasoning-row-summary:hover .reasoning-row-more { color: var(--color-zinc-300); }
 /* Blinking caret at the ticker's edge while running. */
 .reasoning-row[data-state="running"] .reasoning-row-line::after {
   content: '';
@@ -406,25 +393,7 @@ body {
   margin-bottom: 0.35rem;
 }
 .reasoning-row-body li { margin-block-start: 0.15em; margin-block-end: 0.15em; }
-.reasoning-row[data-state="running"] .reasoning-row-summary::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.07) 50%, transparent 80%);
-  transform: translateX(-100%);
-  animation: reasoning-sweep 2.6s ease-out infinite;
-  pointer-events: none;
-}
-@keyframes reasoning-sweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .reasoning-row[data-state="running"] .reasoning-row-summary::after {
-    animation: none;
-    transform: none;
-    opacity: 0.35;
-  }
   .reasoning-row-dots span,
   .reasoning-row-caret,
   .reasoning-row[data-state="running"] .reasoning-row-line::after {

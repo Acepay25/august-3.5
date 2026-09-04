@@ -10,38 +10,39 @@ vi.mock('../components/shared/Icons', () => ({
     ChevronDownIcon: ({ className }: { className?: string }) => <span data-testid="chevron" className={className} />,
 }));
 
-describe('ReasoningRow (collapsed by default)', () => {
+describe('ReasoningRow (Hermes reference style)', () => {
     it('renders nothing for empty thinking', () => {
         const { container } = render(<ReasoningRow thinking="   " />);
         expect(container.querySelector('.reasoning-row')).toBeNull();
     });
 
-    it('is a native disclosure that keeps the trace in the DOM when collapsed', () => {
-        render(<ReasoningRow thinking="Weighed the sweep." />);
-        const details = screen.getAllByText('Weighed the sweep.')[0].closest('details');
+    it('settled + collapsed is a bare Thought row — no duration, no preview, no affordance', () => {
+        render(<ReasoningRow thinking={'First thought.\nSecond thought.'} />);
+        const details = screen.getByText('Thought').closest('details');
         expect(details).toBeDefined();
         expect(details?.open).toBe(false);
         expect(details?.getAttribute('data-state')).toBe('ok');
+        // No duration meta, no first-line preview, no "Show full reasoning".
+        expect(document.querySelector('.reasoning-row-meta')).toBeNull();
+        expect(screen.queryByText('First thought.')).toBeNull();
+        expect(screen.queryByText('Show full reasoning')).toBeNull();
     });
 
-    it('previews the first line with a Show full reasoning affordance when settled', () => {
+    it('expands when clicked and shows the full trace (Thought ↔ Thinking states)', () => {
         render(<ReasoningRow thinking={'First thought.\nSecond thought.'} />);
-        expect(screen.getByText('First thought.')).toBeDefined();
-        expect(screen.getByText('Show full reasoning')).toBeDefined();
+        fireEvent.click(screen.getByText('Thought'));
+        const details = screen.getByText('Thought').closest('details');
+        expect(details?.open).toBe(true);
+        // Full trace is in the body once expanded.
         expect(screen.getByTestId('md').textContent).toContain('Second thought.');
     });
 
-    it('expands when the Thinking label is clicked', () => {
-        render(<ReasoningRow thinking="Weighed the sweep." />);
-        fireEvent.click(screen.getByText('Thinking'));
-        expect(screen.getAllByText('Weighed the sweep.')[0].closest('details')?.open).toBe(true);
-    });
-
-    it('shows a running state with a live ticker of the latest line — WITHOUT auto-expanding', () => {
+    it('shows a running state labeled Thinking with a live ticker — WITHOUT auto-expanding', () => {
         const { rerender } = render(<ReasoningRow thinking={'step one\nstep two\nstep three'} />);
         rerender(<ReasoningRow thinking={'step one\nstep two\nstep three'} running />);
         expect(document.querySelector('.reasoning-row')?.getAttribute('data-state')).toBe('running');
-        // The collapsed ticker surfaces the most recent line only…
+        // Live label + the collapsed ticker surfaces the most recent line only…
+        expect(screen.getByText('Thinking')).toBeDefined();
         expect(screen.getByText('step three')).toBeDefined();
         // …the full trace stays in the body, and the row stays CLOSED.
         expect(screen.queryByText('step one')).toBeDefined();
@@ -56,7 +57,7 @@ describe('ReasoningRow (collapsed by default)', () => {
         });
     });
 
-    it('auto-collapses when the stream settles and reports Thought-for duration', async () => {
+    it('auto-collapses when the stream settles back to a bare Thought row', async () => {
         const utils = render(<ReasoningRow thinking="thinking hard" running />);
         await waitFor(() => {
             expect(document.querySelector('.reasoning-row-meta')?.textContent).toMatch(/\d+s/);
@@ -64,7 +65,9 @@ describe('ReasoningRow (collapsed by default)', () => {
         utils.rerender(<ReasoningRow thinking="thinking hard" />);
         const row = document.querySelector('.reasoning-row');
         expect(row?.classList.contains('is-open')).toBe(false);
-        expect(row?.textContent).toMatch(/\d+\.\ds/);
+        // Settled: label flips to Thought and the duration disappears.
+        expect(screen.getByText('Thought')).toBeDefined();
+        expect(document.querySelector('.reasoning-row-meta')).toBeNull();
     });
 
     it('ignores defaultOpen — rows always start collapsed', () => {
@@ -78,7 +81,7 @@ describe('ReasoningRow (collapsed by default)', () => {
         expect(long.length).toBeGreaterThan(600);
         render(<ReasoningRow thinking={long} />);
         // Collapsed first…
-        fireEvent.click(screen.getByText('Thinking'));
+        fireEvent.click(screen.getByText('Thought'));
         // Expanded but truncated past the preview limit.
         expect(screen.queryByText(/line number 80/)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Show more' }));

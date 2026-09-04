@@ -10,10 +10,12 @@ import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { buildSeverityPostMortemContext } from '../services/learning/severityInsights';
 import { writeModelNote } from '../services/learning/MemoryFilesService';
 import { getMemoryFiles } from '../services/learning/MemoryFilesService';
-import { syncClosedTradeToNotebook, parseSkillMarkdown } from '../services/learning/SkillMemoryService';
+import { syncClosedTradeToNotebook, parseSkillMarkdown, listSkillSlugs } from '../services/learning/SkillMemoryService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
 import { queueSkillDraft, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
+import { appendToolActions, toolActionStamp } from '../utils/toolActions';
+import type { ToolAction } from '../types/message';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { lensFromSpeakerName } from '../utils/thinkingLens';
@@ -185,9 +187,11 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         setExpandedPostMortems(prev => ({ ...prev, [postMortemMessageId]: true }));
         updatePostMortemMessages(prev => [...prev, placeholderMsg]);
 
-        // Tracks whether the run finished successfully — the finally block marks
-        // still-running steps 'complete' on success but 'error' on failure
-        // (mirroring useAnalysisPipeline, which never force-completes failures).
+        // R54: model side-effects from this post-mortem (skill draft,
+        // evidence skills, AI notebook note) — flushed onto the bubble
+        // as Hermes-style status rows when the run finishes its learning
+        // passes. Declared outside the try so `finally` can flush it.
+        const pmActions: ToolAction[] = [];
         let postMortemSucceeded = true;
         try {
             const history: Message[] = [...messagesRef.current];
@@ -664,7 +668,20 @@ Please investigate this discrepancy in your analysis.
                     // start as unenforced candidates that still need wins to
                     // confirm. Only the *LLM-crafted* skill (a generative
                     // artifact) goes through the human-approval inbox below.
+                    // R54 ledger: snapshot the skill list BEFORE the sync so
+                    // skills the evidence path CREATED (IF/THEN auto-ingest)
+                    // can be diffed out afterward.
+                    const beforeSlugs = new Set(listSkillSlugs());
                     await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
+                    try {
+                        const created = listSkillSlugs().filter(s => !beforeSlugs.has(s));
+                        for (const slug of created) {
+                            pmActions.push({
+                                at: toolActionStamp(), speaker: 'Coach', tool: 'skill_ingest', ok: true,
+                                verb: 'created', label: slug, review: 'Settings → Skills',
+                            });
+                        }
+                    } catch { /* ledger is best-effort */ }
                     if (craftConfig) {
                         const crafted = await craftSkillFromPostMortem(closed, craftConfig);
                         // One post-mortem must not spawn BOTH an
@@ -689,6 +706,12 @@ Please investigate this discrepancy in your analysis.
                                 coin: closed.analysis?.coinName,
                                 crafted,
                             }, notebookUser);
+                            // R54 ledger: the LLM-crafted skill is a proposal —
+                            // it lands in the Coach inbox for human review.
+                            pmActions.push({
+                                at: toolActionStamp(), speaker: 'Coach', tool: 'skill_draft', ok: true,
+                                verb: 'crafted', label: crafted.name, review: 'the Coach inbox',
+                            });
                         }
                     }
                 } catch (notebookError) {
@@ -712,6 +735,12 @@ Please investigate this discrepancy in your analysis.
                         if (note) {
                             const created = await writeModelNote(note, notebookUser);
                             console.log('[TraderNotebook] AI wrote notebook note:', created.name, 'in', note.folder);
+                            // R54 ledger: the model authored notebook content.
+                            pmActions.push({
+                                at: toolActionStamp(), speaker: 'Coach', tool: 'notebook_note', ok: true,
+                                verb: note.decision === 'append' ? 'appended' : 'created',
+                                label: `${note.folder}/${created.name}`, review: 'Settings → Memory',
+                            });
                         }
                     }
                 } catch (notebookError) {
@@ -743,6 +772,13 @@ Please investigate this discrepancy in your analysis.
             } : m));
         } finally {
             if (!isRunStale(myRunId)) {
+                // R54: flush model side-effects onto the bubble as status
+                // rows (best-effort — the run result is already saved).
+                if (pmActions.length > 0) {
+                    try {
+                        updatePostMortemMessages(prev => appendToolActions(prev, postMortemMessageId, pmActions));
+                    } catch { /* ledger is best-effort */ }
+                }
                 setIsPostMortemInProgress(false);
                 setLoadingMessage(null);
                 // Fail-safe close: the overlay must never stay up forever even

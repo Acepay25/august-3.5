@@ -42,6 +42,7 @@ import {
 } from '../analysis/DeskToolsService';
 
 import { isVisionModel } from '../../utils/modelUtils';
+import type { ToolAction } from '../../types/message';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,9 @@ export interface AnalyzeTradingViewParams {
     /** Wire-audit sink (P5) — receives the applied reasoning-route label for
      *  this call so the debate run log can show what the wire received. */
     onWireAudit?: (entry: WireAuditEntry) => void;
+    /** R54: model side-effects from this seat's desk-tool loop
+     *  (forge_tool / amend_memory / custom_* receipts). */
+    onToolAction?: (action: ToolAction) => void;
 }
 
 export async function analyzeTradingView(
@@ -512,6 +516,7 @@ export async function analyzeTradingView(
             trades: params.trades,
             defaultSymbol: resolveDefaultSymbol(prompt, marketDataOverride),
             afterToolsNudge: 'Tool results are above. Write the public Floor reply now from the findings. No JSON, no tool tags.',
+            onToolAction: action => params.onToolAction?.(action),
             onReasoning: (reasoning: string) => {
                 reasoningAccumulated += reasoning;
                 options.onReasoning?.(reasoning);

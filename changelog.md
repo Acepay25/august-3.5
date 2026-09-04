@@ -4,6 +4,80 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-54 — Bot Mode UI parity: unified sidebar panes, thread tabs, bot page, room actions
+
+The six Hermes Bot Mode screenshots as the reference; the app's chat
+surface rebuilt to match, in four slices:
+
+- **Unified sidebar (SESSIONS | BOTS | TERMINAL).** The desktop sidebar
+  and the old second-column roster rail merged into one column with
+  underline tabs (persisted via `useSidebarPane`, same pattern as the
+  chat/floor toggle). BOTS embeds the full roster rail
+  (`variant="embedded"` — transparent, no docked footer); TERMINAL is
+  the background-jobs status stack (`JobsPane`, extracted from
+  JobsDrawer, which now shares the same body). Floor mode and the
+  collapsed rail fall back to the classic sessions body; the mobile
+  drawer is byte-identical to before.
+- **Open-thread document tabs.** A tab strip above the chat — Team,
+  Coach, one tab per bot, one per group — mirroring the reference's
+  `• BOT CHAT / • NEW SESSION` docs. Hidden in floor mode.
+- **Bot detail page.** Opening a fresh 1:1 shows the reference's bot
+  page first: large avatar, `Bot · @handle` (mono), description,
+  "This device" host chip, Open chat. Dismissed per bot for the
+  session; a 1:1 with history skips straight to the conversation.
+- **New Bot dialog: Upload tab.** Faces / Upload / Pixel; an uploaded
+  image is downscaled to a 96px cover-cropped data URL (localStorage
+  quota safe) and clipped to circle/square/blob. Dialog copy matches
+  the reference ("own memory, skills, and chat… can message your other
+  agents"); description textarea deepened.
+- **Room UX.** Group header gains gear + trash (gear reuses the New
+  Group dialog as Group Settings — membership edits update the room,
+  transcript untouched; `updateGroup` added to the roster store). The
+  title links to the Team transcript. "Reply in thread" opens an inline
+  composer under a prompt and runs a direct @everyone round — members'
+  incremental context carries the prior thread, so it continues in
+  place (no derived-thread surgery).
+- **Model side-effect status rows (Hermes transcript parity).** When a
+  seat proposes a tool (`forge_tool`), amends memory (`amend_memory`),
+  or runs a forged/custom tool, the desk-tool loop now persists a
+  `ToolAction` ledger on the message (`toolActions`, capped at 50) and
+  the analysis bubble renders Hermes-style status rows: "Memory
+  amendment proposed — review in Settings → Memory", "Desk tools
+  proposed — review in Settings → AI Models" with count chips and seat
+  names, and a ⚠ "rejected — nothing stored" row for failed proposals.
+  Data lookups stay out (reads, not changes). Wired through all three
+  run phases: openings (per-seat `analyzeTradingView`), debate rounds +
+  every moderator call (`conductRealDebate`/`conductDebate` opts bag),
+  and reset per run.
+- **Skills + notebook writes join the ledger.** The post-mortem flow's
+  three model-driven writes now surface the same way on the
+  post-mortem bubble: evidence-backed skills created by the IF/THEN
+  auto-ingest ("Skill created from evidence — slug"), the LLM-crafted
+  skill draft ("Skill draft queued — review with the Coach"), and the
+  AI-authored notebook note ("Notebook created/appended —
+  folder/file"). The chat quick-save ("save this to the notebook")
+  carries its status row too. Ledger appends go through one shared
+  helper (`utils/toolActions.ts`) so every writer caps and persists
+  identically.
+- **Thinking rows restyled to the reference.** Settled collapsed rows are
+  now a bare quiet `Thought ›` line — no lightbulb icon, no duration, no
+  first-line preview, no "Show full reasoning" affordance, no box —
+  blending into the transcript exactly like the reference. While
+  streaming the row reads `Thinking · Ns` with the live ticker and
+  bouncing dots; expanded it becomes the boxed, scrollable trace with
+  Show more/less (unchanged). Custom labels ("Moderator thinking",
+  "Thinking · N traces") are preserved verbatim; only the default label
+  flips Thinking ↔ Thought with state. Applies everywhere ReasoningRow
+  renders (chat bubble, debate replay, side panel).
+
+Tests: +39 net across the round (sidebar panes, embedded rail variant,
+thread tabs, bot detail + upload avatars, room actions/reply, dialog
+upload + group edit, tool-action classifier + status rows + ledger
+helper, reference-style reasoning rows). Gates: tsc 0 · 2005 passed /
+11 skipped · build clean · eslint 0 errors (whole dirty tree).
+
+---
+
 ## ROUND-53 — Learning flow: seat diversity, ToolForge, manual A/B eval, memory self-correction
 
 Four upgrades to how the harness learns and what the models may build:
