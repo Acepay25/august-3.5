@@ -9,7 +9,7 @@
  * silently dropped. Names never overwrite: a colliding slug gets -2, -3…
  */
 
-import { parseSkillMarkdown, listSkillSlugs } from './SkillMemoryService';
+import { parseSkillMarkdown } from './SkillMemoryService';
 import { createMemoryFile, getMemoryFiles } from './MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { slugifyName } from './MemoryFilesService';
@@ -72,9 +72,6 @@ export const importSkillFiles = async (files: Array<{ name: string; content: str
             result.skipped.push(file.name);
             continue;
         }
-        const existingSlugs = listSkillSlugs();
-        const slug = slugifyName(file.name.replace(/\.md$/i, '')) || slugifyName(meta.body.slice(0, 40)) || 'skill';
-        void existingSlugs;
         try {
             await createMemoryFile(folderId, uniqueName(file.name), file.content, username, false);
             result.imported.push(file.name);

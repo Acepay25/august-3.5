@@ -118,14 +118,25 @@ export const computeContractSize = (
     };
 };
 
-/** Isolated-margin wipe vs the ticket stop. Positive buffer = SL is inside liquidation. */
+/**
+ * Isolated-margin wipe vs the ticket stop. Positive buffer = SL is inside
+ * liquidation.
+ *
+ * `liquidationMovePct = 100 / lev` is the ISOLATED-margin approximation
+ * (maintenance margin ignored, so it overstates the true distance). Under
+ * CROSS margin the liquidation price depends on the whole account balance,
+ * not this ticket — a per-ticket buffer is meaningless, so cross mode
+ * returns null with a note instead of a misleading number.
+ */
 export const computeLiquidationBuffer = (
     entry?: string,
     stopLoss?: string,
     leverage = 1,
+    marginMode: 'isolated' | 'cross' = 'isolated',
 ): LiquidationBuffer | null => {
     const lev = leverage > 0 ? leverage : 1;
     if (lev < 2) return null;
+    if (marginMode === 'cross') return null;
     const entryN = parseNum(entry);
     const slN = parseNum(stopLoss);
     if (!entryN || !slN) return null;

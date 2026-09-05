@@ -199,6 +199,11 @@ export const simulateTradeSignal = async (
                 outcome = 'LOSS';
             } else if (hitTarget !== 'NONE') {
                 outcome = 'WIN';
+            } else {
+                // Entry filled but neither SL nor TP hit inside the lookback:
+                // a live position, not a missed signal. NOT_TRIGGERED is
+                // reserved for "the entry never filled".
+                outcome = 'ENTERED_OPEN';
             }
         }
 
@@ -588,6 +593,11 @@ export const simulateFromAnalysisTime = async (
             hitCandleIndex = resolution.exitCandleIndex;
             hitCandleTime = resolution.exitTime;
             exitPrice = resolution.exitPrice ?? 0;
+        } else {
+            // The shared engine resolved OPEN: the entry filled (this branch
+            // only runs after ENTRY CONFIRMED) but neither SL nor TP hit.
+            // That is an open position, not a missed entry.
+            outcome = 'ENTERED_OPEN';
         }
 
         // Calculate time to outcome
@@ -910,6 +920,14 @@ export const validateWithBacktest = async (
         return {
             shouldTake: true,
             reason: `Historical backtest supports this setup - would have hit ${result.hitTarget}.`,
+            backtestResult: result
+        };
+    }
+
+    if (result.outcome === 'ENTERED_OPEN') {
+        return {
+            shouldTake: true,
+            reason: 'Backtest entered but neither target nor stop was reached in the window - inconclusive.',
             backtestResult: result
         };
     }

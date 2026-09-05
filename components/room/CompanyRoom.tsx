@@ -99,7 +99,6 @@ export const CompanyRoom: React.FC<CompanyRoomProps> = ({
     const layout = React.useMemo(
         () => getRoomLayout(names),
         // include the tick so this re-runs when the store changes
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [names, layoutTick],
     );
 

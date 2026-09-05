@@ -34,6 +34,7 @@ import {
     renderRoomTurn,
     type RoomEntry,
 } from '../services/agents/groupRounds';
+import { parseDmMarkers } from '../services/agents/botMailbox';
 
 export interface GroupActivityEntry {
     id: string;
@@ -214,7 +215,12 @@ export const useAgentGroups = ({
                             },
                         );
                         if (runNonce.current !== nonce) return;
-                        const finalText = responseText || visible;
+                        // The room protocol forbids [[dm:@…]] markers (that is
+                        // the 1:1 mailbox's channel), but a model can still
+                        // emit one. Strip it from the persisted text so the
+                        // bubble never shows a raw marker — same pattern the
+                        // mailbox uses for its own replies.
+                        const finalText = parseDmMarkers(responseText || visible).clean.trim();
                         if (isPassReply(finalText)) {
                             // Silence is a first-class outcome: no bubble,
                             // no room entry — just the activity feed.

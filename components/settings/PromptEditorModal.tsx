@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeftIcon, CloseIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface PromptEditorModalProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
 }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [draft, setDraft] = useState<string>('');
+    useEscapeClose(isOpen, onClose);
 
     useEffect(() => {
         if (isOpen) {

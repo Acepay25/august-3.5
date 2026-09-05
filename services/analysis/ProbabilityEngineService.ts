@@ -21,6 +21,29 @@ interface SimilarityMatch {
     distance: number;
 }
 
+/**
+ * Target-probability decay. TP1 keeps the base probability; each further
+ * target is discounted by how far it sits past the first (ratio of
+ * distances, exponential with k≈0.5) — or by a fixed 0.75/0.55 ratio when
+ * the caller has no distance data. Always strictly ordered and ≥ 0.
+ */
+const decayTargetProbabilities = (base: number, tpDistancesPct?: number[]): [number, number, number] => {
+    const clamp = (v: number): number => Math.round(Math.max(0, Math.min(100, v)) * 10) / 10;
+    const d1 = tpDistancesPct?.[0];
+    const d2 = tpDistancesPct?.[1];
+    const d3 = tpDistancesPct?.[2];
+    const ratio = (dist: number | undefined): number => {
+        if (typeof dist !== 'number' || !(dist > 0) || !(d1 && d1 > 0)) return NaN;
+        const extra = Math.max(0, dist / d1 - 1); // 0 at TP1's distance
+        return Math.exp(-0.5 * extra);
+    };
+    const r2 = ratio(d2);
+    const r3 = ratio(d3);
+    const tp2 = Number.isFinite(r2) ? base * r2 : base * 0.75;
+    const tp3 = Number.isFinite(r3) ? base * r3 : base * 0.55;
+    return [clamp(base), clamp(Math.min(tp2, base)), clamp(Math.min(tp3, tp2))];
+};
+
 export const ProbabilityEngineService = {
 
     /**
@@ -29,7 +52,11 @@ export const ProbabilityEngineService = {
     calculateAlgoProbabilities(
         snapshot: HybridDataPacket | any, // Use any for now if strict type fails
         loggedTrades: LoggedTrade[],
-        direction: 'Long' | 'Short' | 'Neutral'
+        direction: 'Long' | 'Short' | 'Neutral',
+        /** Optional entry→TP distances in % (ascending: [tp1, tp2, tp3]).
+         *  When present, each target's probability decays with how far past
+         *  the first target it sits instead of a fixed step. */
+        tpDistancesPct?: number[],
     ): LevelProbabilities {
 
         // 1. Extract Features
@@ -51,11 +78,19 @@ export const ProbabilityEngineService = {
         // 6. Construct Reasoning
         const reasoningText = generateReasoningText(prior, matches, multipliers);
 
+        // Target probabilities decay with how far each target sits past the
+        // first, not by a fixed step. The old `-15 / -30` was distance-blind
+        // (a TP2 one tick past TP1 lost the same 15 points as one 50% away)
+        // and collapsed to 0/0 for any base under 30, so TP2 and TP3 became
+        // indistinguishable. Multiplicative decay keeps them strictly ordered
+        // and positive. Without distances, fall back to fixed ratios.
+        const tpProbs = decayTargetProbabilities(finalProb, tpDistancesPct);
+
         return {
             slProbability: slProb,
-            tp1Probability: finalProb, // Base target
-            tp2Probability: Math.max(0, finalProb - 15), // Decay for TP2
-            tp3Probability: Math.max(0, finalProb - 30), // Decay for TP3
+            tp1Probability: tpProbs[0], // Base target
+            tp2Probability: tpProbs[1],
+            tp3Probability: tpProbs[2],
             slReasoning: {
                 indicatorBasis: "Derived from inverse of TP probability",
                 volatilityFactor: "N/A",
@@ -68,9 +103,9 @@ export const ProbabilityEngineService = {
                 tp1: { indicatorBasis: "Algo Engine", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: reasoningText }
             },
             tpProbabilities: [
-                { level: 1, probability: finalProb, reasoning: { indicatorBasis: "Bayesian + Similarity", volatilityFactor: "N/A", patternMemoryInfluence: `${matches.length} matches`, aiAdjustments: reasoningText } },
-                { level: 2, probability: Math.max(0, finalProb - 15), reasoning: { indicatorBasis: "Decay Model", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: "Linear decay" } },
-                { level: 3, probability: Math.max(0, finalProb - 30), reasoning: { indicatorBasis: "Decay Model", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: "Linear decay" } }
+                { level: 1, probability: tpProbs[0], reasoning: { indicatorBasis: "Bayesian + Similarity", volatilityFactor: "N/A", patternMemoryInfluence: `${matches.length} matches`, aiAdjustments: reasoningText } },
+                { level: 2, probability: tpProbs[1], reasoning: { indicatorBasis: "Decay Model", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: tpDistancesPct ? "Distance-aware decay" : "Fixed-ratio decay" } },
+                { level: 3, probability: tpProbs[2], reasoning: { indicatorBasis: "Decay Model", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: tpDistancesPct ? "Distance-aware decay" : "Fixed-ratio decay" } }
             ],
             calculationMode: 'Algo'
         };

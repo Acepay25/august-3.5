@@ -15,7 +15,14 @@
 
 import { Kline } from '../types';
 
-/** ATR(14) over completed candles — the standard stop-math yardstick. */
+/**
+ * ATR(14) over completed candles — the standard stop-math yardstick.
+ * NOTE: this is a SIMPLE moving average of true range, not Wilder's
+ * smoothing (α=1/14). The two converge over long windows but diverge on
+ * short/volatile ones; consumers here (structure clustering, stop math)
+ * only need a stable volatility yardstick, so the SMA form is kept and
+ * named honestly rather than pretending to be Wilder's.
+ */
 export const atr14 = (klines: Kline[], period = 14): number => {
     const ks = klines.slice(0, -1); // drop the forming candle
     if (ks.length < period + 1) return 0;

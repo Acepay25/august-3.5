@@ -25,10 +25,15 @@ export interface SeatConvictionTrajectory {
     delta: number;
 }
 
-const CONVICTION_RE = /CONVICTION:\s*(\d{1,3})/gi;
+// The protocol asks each seat to START its reply with exactly one sealed
+// line, so only a line-initial `CONVICTION:` counts. A mid-prose mention —
+// "Technical said CONVICTION: 90 but I disagree" — is a quote of someone
+// else's number, not this seat's own, and must not move the trajectory.
+// Trailing text after the number is allowed (the prompt template reads
+// "CONVICTION: <0-100> - your private conviction…", and models echo it).
+const CONVICTION_RE = /(?:^|\n)[ \t]*CONVICTION:[ \t]*(\d{1,3})/gi;
 
-/** Extract every sealed conviction from one turn (last mention wins — prose
- *  quoting another seat's number must not create phantom points). */
+/** Extract every sealed conviction from one turn (last sealed line wins). */
 export const extractConvictions = (turn: DebateTurn): number[] => {
     let v: number | null = null;
     for (const m of turn.text.matchAll(CONVICTION_RE)) {

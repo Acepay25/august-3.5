@@ -142,6 +142,22 @@ describe('simulateTradeSignal (lookback walk)', () => {
     expect(result.wouldHaveTriggered).toBe(false);
     expect(result.outcome).toBe('NOT_TRIGGERED');
   });
+
+  it('reports ENTERED_OPEN when the entry fills but neither level is reached', async () => {
+    // Entry fills on candle 0; every later candle is a neutral filler that
+    // touches neither the 94000 stop nor the 96000 target. That is an OPEN
+    // position, not a missed entry — the two used to share NOT_TRIGGERED.
+    scripted1m = [
+      [94950, 95100, 94900, 95000],
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+
+    const result = await simulateTradeSignal(makeAnalysis(), 'BTCUSDT');
+    expect(result.wouldHaveTriggered).toBe(true);
+    expect(result.outcome).toBe('ENTERED_OPEN');
+    expect(result.hitTarget).toBe('NONE');
+    expect(result.simulationDetails).toMatch(/neither SL nor TP/);
+  });
 });
 
 // =============================================================================

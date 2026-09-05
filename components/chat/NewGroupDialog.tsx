@@ -10,6 +10,7 @@
 import React from 'react';
 import { BotAvatar } from './BotAvatar';
 import { SelectMenu } from '../shared/SelectMenu';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { AnalystRole } from '../../types/enums';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
@@ -63,6 +64,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
     // in-progress selection.
     const botsRef = React.useRef(bots);
     botsRef.current = bots;
+    useEscapeClose(open, onClose);
 
     React.useEffect(() => {
         if (!open) return;

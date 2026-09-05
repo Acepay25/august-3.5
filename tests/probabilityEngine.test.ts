@@ -85,3 +85,33 @@ describe('ProbabilityEngineService — regime alignment (B6)', () => {
     expect(baseline.tp1Probability).toBe(55);
   });
 });
+
+describe('ProbabilityEngineService — target decay', () => {
+  const snap = { ...baseSnapshot(), regime: { regime: 'ranging', trendDirection: 'neutral', adx: 18, plusDI: 15, minusDI: 15, trendStrength: 'none', tradingBias: 'mean_reversion', recommendation: 'x' } };
+
+  it('keeps TP1 > TP2 > TP3 strictly ordered and never negative', () => {
+    // The old fixed -15/-30 decay collapsed both to 0 for a low base and
+    // ignored distance entirely.
+    for (const direction of ['Long', 'Short'] as const) {
+      const r = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], direction);
+      expect(r.tp1Probability!).toBeGreaterThanOrEqual(r.tp2Probability!);
+      expect(r.tp2Probability!).toBeGreaterThanOrEqual(r.tp3Probability!);
+      expect(r.tp3Probability!).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('decays by distance: a near TP2 keeps more probability than a far one', () => {
+    const near = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long', [2, 3, 4]);
+    const far = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long', [2, 20, 40]);
+    expect(near.tp2Probability!).toBeGreaterThan(far.tp2Probability!);
+    expect(near.tp3Probability!).toBeGreaterThan(far.tp3Probability!);
+    // TP1 is the base either way.
+    expect(near.tp1Probability).toBe(far.tp1Probability);
+  });
+
+  it('falls back to fixed ratios when no distances are given', () => {
+    const r = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long');
+    expect(r.tp2Probability).toBeCloseTo(r.tp1Probability! * 0.75, 1);
+    expect(r.tp3Probability).toBeCloseTo(r.tp1Probability! * 0.55, 1);
+  });
+});

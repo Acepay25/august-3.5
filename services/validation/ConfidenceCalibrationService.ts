@@ -339,9 +339,11 @@ Continue logging trades to build historical accuracy data.
             return `| ${level.padEnd(8)} | Insufficient data (n=${stats.total}, need ${MIN_TRADES_FOR_CALIBRATION}) |`;
         }
         const winRateStr = stats.winRate !== null ? `${stats.winRate}%` : 'N/A';
+        // Monochrome text indicators (the zinc theme bans emoji): strong /
+        // middling / weak calibration at this confidence level.
         const indicator = stats.winRate !== null
-            ? (stats.winRate >= 70 ? '' : stats.winRate >= 50 ? '' : '')
-            : '';
+            ? (stats.winRate >= 70 ? 'STRONG' : stats.winRate >= 50 ? 'OK' : 'WEAK')
+            : '—';
         return `| ${level.padEnd(8)} | ${winRateStr.padEnd(6)} | n=${stats.total.toString().padEnd(3)} | ${indicator}`;
     };
 
