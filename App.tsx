@@ -16,6 +16,7 @@ import { useUserProfileLoader } from './hooks/useUserProfileLoader';
 import { useTradeJournalActions } from './hooks/useTradeJournalActions';
 import { useProfilePersistence } from './hooks/useProfilePersistence';
 import { useConversationHousekeeping } from './hooks/useConversationHousekeeping';
+import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -245,15 +246,6 @@ const App: React.FC = () => {
         handleSetModeratorModel: setConversationModeratorModel,
     } = useConversations();
 
-    const handleSetModeratorProvider = useCallback((providerId: string) => {
-        setConversationModeratorProvider(providerId);
-        saveLastModeratorPick({ providerId, model: moderatorModel || '' });
-    }, [setConversationModeratorProvider, moderatorModel]);
-
-    const handleSetModeratorModel = useCallback((model: string) => {
-        setConversationModeratorModel(model);
-        if (moderatorProviderId) saveLastModeratorPick({ providerId: moderatorProviderId, model });
-    }, [setConversationModeratorModel, moderatorProviderId]);
 
     // UI and other state
 
@@ -1214,13 +1206,6 @@ const App: React.FC = () => {
         });
     }, [groups, bots, activeThread, confirmDialog]);
 
-    // Analyst Lens config handler - updates state and persists to storage.
-    // Defined above the (removed) teams block — activating a group now
-    // sets the ensemble directly; the lens toggle stays for Settings.
-    const handleSetLensConfig = useCallback((newConfig: AnalystLensConfig) => {
-        setLensConfig(newConfig);
-        saveLensConfig(newConfig);
-    }, []);
 
     // ─── Groups ARE the debate room (Team/group merge) ─────────────────
     // Opening a group re-arms the ensemble with the room's members
@@ -1519,80 +1504,27 @@ const App: React.FC = () => {
         setShowAccuracyModal(true);
     };
 
-    const handleConfirmAccuracyMode = () => {
-        setIsAccuracyModeEnabled(!isAccuracyModeEnabled);
-        setShowAccuracyModal(false);
 
-        if (!isAccuracyModeEnabled) { // Enabling Accuracy Mode
-            // Default moderator/vision to the first ready provider instead of a hardcoded brand.
-            const firstReady = getFirstReadyProvider(providerConfigs);
-            updateActiveConversation(conv => ({
-                ...conv,
-                moderatorProviderId: firstReady?.id || conv.moderatorProviderId || '',
-                moderatorModel: firstReady?.selectedModel || conv.moderatorModel || '',
-                ocrModel: firstReady?.selectedModel || conv.ocrModel || ''
-            }));
-            if (!accuracySubMode) setAccuracySubMode('original');
-        }
-    };
-
-    // Ordinary ensemble model selection (Lenses off) handler — persists the
-    // picked models that drive the cards and the debate (2–5 flat floor,
-    // 6–10 lens pods; Settings pickers offer 3).
-    const handleSetEnsembleModelSelection = useCallback((selection: EnsembleModelSelection) => {
-        setEnsembleModelSelection(selection.slice(0, 10));
-        saveEnsembleModelSelection(selection.slice(0, 10));
-    }, [setEnsembleModelSelection]);
-
-    // Seed the ordinary (normal-mode) debate-model selection from the ready
-    // providers' ensembleModels when nothing has been picked yet. The run
-    // falls back to those models anyway — without the seed the chat pickers
-    // look empty while three "hardcoded" models silently run. Once seeded
-    // (or cleared by the user), never re-seed this session.
-    const ensembleSelectionSeededRef = useRef(false);
-    useEffect(() => {
-        if (!providerConfigsLoaded || ensembleSelectionSeededRef.current) return;
-        if (ensembleModelSelection && ensembleModelSelection.length > 0) {
-            ensembleSelectionSeededRef.current = true;
-            return;
-        }
-        const ready = providerConfigs.filter(c => c.isEnabled && c.apiKey.trim().length > 0);
-        if (ready.length === 0) return;
-        const seeded: EnsembleModelSelection = [];
-        for (const c of ready) {
-            const models = (c.ensembleModels?.filter(m => c.models.includes(m)) ?? []).slice(0, 3);
-            if (models.length === 0 && c.selectedModel && c.models.includes(c.selectedModel)) models.push(c.selectedModel);
-            for (const m of models) {
-                if (seeded.length >= 3) break;
-                const key = `${c.id}::${m}`;
-                if (!seeded.some(e => `${e.providerId}::${e.model}` === key)) seeded.push({ providerId: c.id, model: m });
-            }
-            if (seeded.length >= 3) break;
-        }
-        if (seeded.length > 0) {
-            ensembleSelectionSeededRef.current = true;
-            handleSetEnsembleModelSelection(seeded);
-        }
-    }, [providerConfigsLoaded, providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
-
-    // Custom prompt overrides (prompt editor) — persist so they survive reloads.
-    const handleSetCustomEnsemblePrompt = useCallback((prompt: string | null) => {
-        setCustomEnsemblePrompt(prompt);
-        saveCustomEnsemblePrompt(prompt);
-    }, [setCustomEnsemblePrompt]);
-
-    const handleSetCustomLensPrompts = useCallback((prompts: Record<string, string>) => {
-        setCustomLensPrompts(prompts);
-        saveCustomLensPrompts(prompts);
-    }, [setCustomLensPrompts]);
-
-    useCatalogReconcile({
-        providerConfigsLoaded,
-        providerConfigs,
-        lensConfig,
+    // Lens / ensemble / moderator configuration (extracted to
+    // hooks/useLensAndEnsembleConfig.ts): persisted setters, ensemble
+    // seeding, and the catalog reconcile.
+    const {
+        handleSetModeratorProvider,
+        handleSetModeratorModel,
         handleSetLensConfig,
-        ensembleModelSelection,
+        handleConfirmAccuracyMode,
         handleSetEnsembleModelSelection,
+        handleSetCustomEnsemblePrompt,
+        handleSetCustomLensPrompts,
+    } = useLensAndEnsembleConfig({
+        setConversationModeratorProvider, setConversationModeratorModel,
+        moderatorProviderId, moderatorModel, updateActiveConversation,
+        setLensConfig, lensConfig,
+        setEnsembleModelSelection, ensembleModelSelection,
+        setCustomEnsemblePrompt, setCustomLensPrompts,
+        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
+        accuracySubMode, setAccuracySubMode, setShowAccuracyModal,
+        providerConfigs, providerConfigsLoaded,
     });
 
     useEffect(() => {
