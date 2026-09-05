@@ -23,6 +23,7 @@
  */
 
 import React from 'react';
+import { clamp01 } from '../../utils/math';
 import { PixelSeat } from '../desk/PixelSeat';
 import {
     applyRoomLayout,
@@ -121,8 +122,8 @@ export const CompanyRoom: React.FC<CompanyRoomProps> = ({
         const name = draggingSeatRef.current;
         if (!name || !floorRef.current) return;
         const rect = floorRef.current.getBoundingClientRect();
-        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        const x = clamp01((e.clientX - rect.left) / rect.width);
+        const y = clamp01((e.clientY - rect.top) / rect.height);
         setDragPositions(prev => ({ ...prev, [name]: { x, y } }));
     };
     const handleFloorPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
@@ -212,7 +213,7 @@ export const CompanyRoom: React.FC<CompanyRoomProps> = ({
                     </span>
                     <div className="flex items-center gap-2">
                         {gauges.map(g => {
-                            const pct = Math.max(0, Math.min(1, g.value / maxGauge));
+                            const pct = clamp01(g.value / maxGauge);
                             return (
                                 <div key={g.label} className="flex items-center gap-1.5">
                                     <span className="text-[9px] uppercase tracking-widest text-zinc-500">

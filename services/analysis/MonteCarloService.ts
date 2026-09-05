@@ -13,6 +13,8 @@
 // TYPES
 // =============================================================================
 
+import { clamp01 } from '../../utils/math';
+
 export interface MonteCarloResult {
     simulations: number;
     winRate: number;                  // % of sims hitting any TP
@@ -409,7 +411,7 @@ export const computeKellyFraction = (
         ? Math.abs(ciLowerPct)
         : 1; // Default 1% if unknown
     const b = avgLossPercent > 0 ? avgWinPercent / avgLossPercent : 0;
-    return b > 0 ? Math.max(0, Math.min(1, (b * winRate - lossRate) / b)) : 0;
+    return b > 0 ? clamp01((b * winRate - lossRate) / b) : 0;
 };
 
 export const calculateRuinRisk = (

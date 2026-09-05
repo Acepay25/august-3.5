@@ -16,6 +16,7 @@
  */
 
 import { TechnicalIndicators, ConfluenceResult, RegimeAnalysis, AdvancedVolumeAnalysis } from '../analysis/TechnicalAnalysisService';
+import { clamp100 } from '../../utils/math';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { ConfidenceCalibration, CorrelationRiskResult } from '../../types';
 import { getCalibrationSummary, getCalibratedWinRateWithDecay } from './ConfidenceCalibrationService';
@@ -334,7 +335,7 @@ export const validateVolumeConfirmation = (
         warnings,
         errors,
         adjustedConfidence,
-        validationScore: Math.max(0, Math.min(100, score))
+        validationScore: clamp100(score)
     };
 };
 
@@ -409,7 +410,7 @@ export const validateMarketRegime = (
         isValid: errors.length === 0,
         warnings,
         errors,
-        validationScore: Math.max(0, Math.min(100, validationScore))
+        validationScore: clamp100(validationScore)
     };
 };
 
