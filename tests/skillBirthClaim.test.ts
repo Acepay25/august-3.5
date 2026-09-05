@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.2a birth certificate : every skill pre-registers a
+// Birth certificate: every skill pre-registers a
 // falsifiable claim (prediction). evaluateClaim existed but was called
 // NOWHERE — the scheduler asked the generic hurts/helps question and the
 // ladder never consulted the claim. This suite pins the wiring: the claim
@@ -55,7 +55,7 @@ const readMeta = (fileId: string) => {
     return parseSkillMarkdown(file.content)!;
 };
 
-describe('§8.2a birth certificate wiring', () => {
+describe('birth certificate wiring', () => {
     beforeEach(async () => {
         store = {};
         localStorage.clear();

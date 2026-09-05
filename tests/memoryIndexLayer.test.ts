@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Index-layer memory injection (Batch 5 remainder, plan §4.7): the prompt
+// Index-layer memory injection (Batch 5 remainder,): the prompt
 // gets a compact INDEX of GlobalMemory instead of the JSON dump, with
 // familyPerformance staying injected verbatim (six-phase constraint).
 

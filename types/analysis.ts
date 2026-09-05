@@ -191,7 +191,7 @@ export interface TradeAnalysis {
    */
   fundingRate?: number;
   /**
-   * Plan version (Batch 7 §5b): 1 for the original publication, incrementing
+   * Plan version: 1 for the original publication, incrementing
    * on each trade-update. A revision is an explicit amendment — the card
    * shows the version chip and WHAT moved (planDiff) — never a silent edit.
    */

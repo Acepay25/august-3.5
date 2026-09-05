@@ -558,7 +558,7 @@ async function messagesCall(
         };
         delete body.temperature;
     }
-    // P5 wire audit (plan §14-2): the messages transport previously emitted
+    // P5 wire audit: the messages transport previously emitted
     // NO audit line, so Claude seats — the format whose thinking gate P3
     // fixed — were invisible in the run log. Report the shim's actual
     // decision: applied (thinking block sent), or why it wasn't.
@@ -710,7 +710,7 @@ async function googleCall(
     const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
     const key = (config.apiKey || '').trim();
     const url = googleGenerateUrl(base, config.selectedModel, key, false);
-    // P5 audit (plan §14-2): Google generateContent has no verified effort
+    // P5 audit: Google generateContent has no verified effort
     // knob — record the fail-closed no-op so the run log says so explicitly
     // instead of staying silent for Gemini seats.
     options?.onWireAudit?.({

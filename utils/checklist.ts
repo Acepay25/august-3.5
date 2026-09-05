@@ -1,5 +1,5 @@
 /**
- * Pre-trade checklist (Batch 5, plan §4.3) — FTMO-derived defaults, OFF by
+ * Pre-trade checklist — FTMO-derived defaults, OFF by
  * default. The checklist rides the log-trade capture path: when enabled,
  * the capture modal shows the items as checkboxes and the completion count
  * is stored on the trade (`checklistCompleted`), feeding adherence stats.
@@ -11,7 +11,7 @@ export interface ChecklistItem {
     label: string;
 }
 
-/** FTMO-derived defaults from the research (plan §4.3). */
+/** FTMO-derived defaults from the research. */
 export const DEFAULT_CHECKLIST: ChecklistItem[] = [
     { id: 'mental-state', label: 'Mental state checked (calm, not chasing)' },
     { id: 'news', label: 'High-impact news checked' },

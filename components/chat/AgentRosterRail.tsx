@@ -44,14 +44,14 @@ export interface AgentRosterRailProps {
     onEditGroup?: (groupId: string) => void;
     onNewBot: () => void;
     onNewGroup: () => void;
-    /** Coach thread (§10.1): the learning loop's inbox as a conversation. */
+    /** Coach thread: the learning loop's inbox as a conversation. */
     onSelectCoach?: () => void;
     /** Pending drafts + proposals waiting on the trader (badge count). */
     coachCount?: number;
     /** Bot id currently working (active-now strip + pulse). */
     workingBotId?: string | null;
     /** Per-thread last-opened ISO timestamps (keyed by bot.id / group.id)
-     *  — drives the unread count badges (plan §10.1). Absent = never opened. */
+     * — drives the unread count badges. Absent = never opened. */
     lastOpenedMap?: Record<string, string>;
     /** botId → one-line fix hint when the bot
      *  cannot do its job (missing provider/key/model, auth, quota, bench).
@@ -70,7 +70,7 @@ export interface AgentRosterRailProps {
     variant?: 'full' | 'embedded';
 }
 
-/** Monochrome unread-count badge (plan §10.1) — a count, never a colored dot. */
+/** Monochrome unread-count badge — a count, never a colored dot. */
 const UnreadBadge: React.FC<{ count: number }> = ({ count }) => {
     if (count <= 0) return null;
     return (
@@ -192,7 +192,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
     const [query, setQuery] = React.useState('');
     const [menuOpen, setMenuOpen] = React.useState(false);
     const q = query.trim().toLowerCase();
-    // Message search (plan §10.1): threads are derived views over ONE flat
+    // Message search: threads are derived views over ONE flat
     // message array, so searching messages is a filter over that array —
     // no index, no new store. A bot/group row stays visible when its NAME
     // matches or its thread contains a message whose text matches.
@@ -308,7 +308,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
             {/* Roster */}
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
                 <ul className="space-y-0.5">
-                    {/* Coach thread (§10.1) — the learning loop's inbox as a
+                    {/* Coach thread — the learning loop's inbox as a
                         conversation: pending skill drafts + queue proposals.
                         Badge = items waiting on the trader. */}
                     {onSelectCoach && (

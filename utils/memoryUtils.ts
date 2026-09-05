@@ -2,19 +2,19 @@
 import { Message, GlobalMemory, LoggedTrade } from '../types';
 
 /**
- * Index-layer memory injection (Batch 5, plan §4.7 — the ZCode memory
+ * Index-layer memory injection (Batch 5, — the ZCode memory
  * pattern): a tiny always-loaded INDEX instead of the whole GlobalMemory
  * JSON dump. One line per entry with status; full content is fetched
  * on demand through the desk `recall` tool (handleRecallTool). Tokens
  * saved scale with library size; salience goes UP because each seat
  * sees a menu, not a wall.
  *
- * Migration constraint (§4.7): `familyPerformance` is genuinely read by
+ * Migration constraint: `familyPerformance` is genuinely read by
  * the model — it stays injected verbatim as computed stats, never demoted
  * to "call recall".
  */
 const INDEX_LINE_CAP = 5;      // newest N lines per list section
-const INDEX_TOTAL_CAP = 900;   // chars — snapshot-cap discipline (§2)
+const INDEX_TOTAL_CAP = 900;   // chars — snapshot-cap discipline 
 
 export const buildGlobalMemoryIndex = (globalMemory: GlobalMemory): string => {
     const lines: string[] = [];
@@ -47,7 +47,7 @@ export const buildGlobalMemoryIndex = (globalMemory: GlobalMemory): string => {
     // The insight knowledge base is the wall (up to 100 full JSON records).
     // Index it: top-5 by use count, one line each — the text IS the detail
     // for a one-sentence insight. (This GlobalMemory block is maintained by
-    // AlgorithmicMemoryService — the §8.1 batch folded the separate
+    // AlgorithmicMemoryService — the batch folded the separate
     // InsightExtractionService/attributed-insight stores into the notebook.)
     const insights = globalMemory.insightKnowledgeBase?.insights ?? [];
     if (insights.length > 0) {
@@ -74,7 +74,7 @@ export const constructOptimizedContext = (
 ): string => {
     let context = "";
 
-    // Layer 3: Global Long-Term Memory — INDEX only (§4.7). The old
+    // Layer 3: Global Long-Term Memory — INDEX only. The old
     // JSON.stringify dump scaled with library size and buried the signal;
     // seats pull detail via the recall desk tool when a setup matches.
     if (globalMemory) {

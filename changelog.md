@@ -367,7 +367,7 @@ touched files (new files fully clean).
 
 Deep-scanned Hermes Bot Mode at source level (plugin
 `apps/desktop/src/plugins/hermes-bots/`, core `tools/bot_mode_probe.py`,
-`bot_mode_dm.py`, `tools/bot_relay.py`, AGENTS.md §Bot Mode) and Grok Bot
+`bot_mode_dm.py`, `tools/bot_relay.py`, AGENTS.md's Bot Mode section) and Grok Bot
 (xAI's "AI teammates" that share a cloud computer and text each other).
 Wrote the mechanism map + port plan to `.hermes/plans/botmode-scan-and-plan.md`
 (G1–G5). Implemented **G1 — teammate DMs**, the headline behavior:
@@ -430,7 +430,7 @@ failed**, build clean, eslint 0 errors on touched files.
   the roster's "is working" emerald pulse now sits inside a `status-surface`
   scope so it renders as intended; roster "+" menu glyphs (☻ ⚿ ⚔) → lucide
   Bot/Users/Swords icons.
-- **§10.1 Coach thread — built.** `ThreadSelection` gains `kind:'coach'`;
+- **Coach thread — built.** `ThreadSelection` gains `kind:'coach'`;
   the roster rail gets a Coach row (GraduationCap avatar, unread badge =
   drafts + queue proposals waiting, "in sync" when zero, preview line);
   `components/chat/CoachThreadPanel` (lazy) renders the learning loop's
@@ -464,7 +464,7 @@ skipped / 0 failed**, build clean, eslint 0 errors on all touched files.
   written → OVERRIDDEN adherence was dead. Now called at verdict commit
   (hooks/useAnalysisPipeline.ts), scoped to the run's own record via runId +
   a short settle wait so a slow Preferences write can't stamp the previous run.
-- `runPassMiningSweep` (§8.2c) had zero callers → wired into the weekly boot
+- `runPassMiningSweep` had zero callers → wired into the weekly boot
   pass (fire-and-forget, ≤5 kline fetches/sweep) + 8 regression tests
   (tests/passMining.test.ts: TP-first vs SL-first resolution, cluster→draft,
   no draft from misses, the splice guard below).
@@ -482,7 +482,7 @@ skipped / 0 failed**, build clean, eslint 0 errors on all touched files.
 - SkillCitationChips / ContextDisclosure queried injections by createdAt
   only → later runs' records leaked into older cards. Bound by the message's
   own `finishedAt`.
-- **§8.3a adherence join was inverted** (the big one): the window looked at
+- **The adherence join was inverted** (the big one): the window looked at
   records AFTER `trade.timestamp` — but the run that shaped the trade
   PREDATES the log click, so every followed skill was mislabeled CONTROL and
   no skill ever earned FOLLOWED credit. Replaced with an EXACT runId join:
@@ -494,7 +494,7 @@ skipped / 0 failed**, build clean, eslint 0 errors on all touched files.
 - `runContradictionSweep`'s queued count was discarded → logged like the
   other passes.
 
-**P0 — the learning queue was write-only (§4.6 loop E):**
+**P0 — the learning queue was write-only (loop E):**
 `listLearningProposals` had ZERO consumers — five subsystems (cap
 displacement, graveyard revival, zero-evidence demote, re-scope ×3,
 contradiction ×2) queued proposals into localStorage every week and nobody
@@ -508,7 +508,7 @@ confirmed), `applyDemoteProposal` (confirmed → candidate), and
 compared (its docstring promised this; the body only retired the incumbent).
 6 tests (tests/learningQueueApply.test.ts).
 
-**P0 — §8.2a birth certificate was never tested:**
+**P0 — the birth certificate was never tested:**
 `evaluateClaim` existed, was imported, and was called nowhere;
 `claimTestedEvidence` was declared but never serialized or written. Now:
 deriveStatus consumes the claim directly (an UNMET claim at horizon blocks
@@ -520,7 +520,7 @@ evalDetail), and the eval-promotion path honors an unmet claim. 7 tests
 **Dead code:** `skillInjectedSince` (zero callers; the dashboard derives the
 same set inline) removed.
 
-**Remaining scope (not defects):** §10.1 Coach thread (roster bot rendering
+**Remaining scope (not defects):** Coach thread (roster bot rendering
 drafts + queue proposals as inline cards) and message search were claimed in
 batch 13 but never built — the drafts/queue now have real surfaces (Inbox +
 LearningQueuePanel), so the Coach thread is a convenience layer, not a
@@ -530,25 +530,25 @@ functional gap. Deferred pending user go-ahead.
 
 ## Graveyard + retirement taxonomy, contradiction sweep, settled-belief challenge
 
-**§8.4a + §8.4b — `services/learning/skillGraveyard.ts`:**
+**Skill graveyard — `services/learning/skillGraveyard.ts`:**
 - Tombstone index per user (cap 40, newest-first): one line per retired skill —
   "tried X, retired: <reason> after N=<n>, lift <±pts>" — written at the
   archive sweep (retirement time), and injected into the WORTH GATE's context
   (capped 40, dynamic import; never into debates).
 - Retirement taxonomy: `insufficient-evidence | regime-shifted | superseded |
   eval-hurts | user-veto`, mapped from the ledger's transition reason. The
-  retire-band transition now stamps `regime-shifted` when the §8.5d sentinel
+  retire-band transition now stamps `regime-shifted` when the regime-drift sentinel
   sees a regime mix divergence, else `insufficient-evidence`; manual retire
   stamps `user-veto` (history + tombstone, not just 'manual').
 - Creation dedup against the ARCHIVE (exact + token-shuffled trigger
   normalization) at both creation paths (worth-gate fold, crafted ingest) —
   a retired twin queues a REVIVAL review card with its re-entry rule instead
   of a silent re-creation; live dedup untouched.
-- **§8.4c — `utils/contradictionSweep.ts`:** live skill pairs with ≥2 shared
+- **Contradiction sweep — `utils/contradictionSweep.ts`:** live skill pairs with ≥2 shared
   condition tokens AND conflicting action (opposite kind / opposite direction)
   → one deduped merge/priority proposal per pair, fired weekly beside the
   review (no LLM).
-- **§8.4d — `services/learning/beliefChallenge.ts`:** per-slug rolling
+- **Belief challenge — `services/learning/beliefChallenge.ts`:** per-slug rolling
   30-day counter for WIN trades whose direction contradicts the settled
   belief's claim (context-matched); ≥3 flags a review proposal — NEVER
   auto-invalidated.
@@ -612,7 +612,7 @@ whole library goes quietly wrong at once now has a tripwire.
   skill is untouched, and unknown coins are silent.
 
 Gates: tsc exit 0, 1806 passed / 11 skipped / 0 failed, vite build clean.
-§8.5 a–d now complete.
+All four learning-loop follow-ups (a–d) are now complete.
 
 ---
 
@@ -627,7 +627,7 @@ ranked, and audited on a cadence.
   trades, identity — now logs it).
 - **`utils/skillEconomics.ts`** — per-skill economics: cost = Σ injected chars
   (legacy records fall back to per-stage defaults: index line 120 / full-body
-  retrofit 450 — the §4.7 economics price an index line AND a recall pull
+  retrofit 450 — the memory-index economics price an index line AND a recall pull
   differently), benefit = lift pts × injection frequency, value = lift-per-char.
   `worstBudgetOffender` picks the smallest lift-per-char among measured
   skills (highest cost when no lift data exists).
@@ -714,29 +714,29 @@ documented skillsGrid issue), vite build clean.
 
 The debate-pods tree was NOT green: `tsc` exited 2 and 3 tests failed. A mid-flight
 edits broke a foundational settings module and left the birth-certificate +
-§8.3 work half-integrated. This round gets it green again (gates: tsc exit 0,
+the three-state-adherence work half-integrated. This round gets it green again (gates: tsc exit 0,
 1775 passed / 0 failed, build clean) without disturbing the debate-pods feature
 surface.
 
-- **Restore `utils/harnessSettings.ts` (regression).** The §8.2b library-cap
+- **Restore `utils/harnessSettings.ts` (regression).** The library-cap
   work rewrote the module from scratch, flattening the existing settings
   surface and deleting `getHarnessSettings` / `saveHarnessSettings` /
   `getSessionGuardConfig` (plus prompt-A/B, desk-tools, equity/risk, debate-cap
   fields) — breaking 11 consumers of the session-guard config and landing
   features. Reconstructed the full original module and extended it with
   `skillLibraryCap` + `DEFAULT_SKILL_LIBRARY_CAP` / `getSkillLibraryCap` /
-  `setSkillLibraryCap`, so the §8.2b cap ships on top of the working settings
+  `setSkillLibraryCap`, so the cap ships on top of the working settings
   instead of replacing them. `getSessionGuardConfig` (preset + per-field
   overrides) is back as the single static source.
-- **Fix §8.2a type errors.** `SkillMemoryService` frontmatter parse now
+- **Fix the birth-certificate type errors.** `SkillMemoryService` frontmatter parse now
   `parsePredictionLine(...) ?? undefined`, and `skillWorthGate` builds its
   `SkillWorthDecision` with `prediction ?? undefined` instead of conditionally
   spreading (the `| null` from `sanitizePrediction` no longer leaks as `| undefined`).
-- **Reconcile 3 tests to the §8.3c/§8.3d contract.** `harnessMemory` seed never
+- **Reconcile 3 tests to the shadow-refinement + Wilson-gate contract.** `harnessMemory` seed never
   set a live `ifCondition`, so the shadow-semantics assertion (live trigger
   retained vs. refined version in `shadow`) saw `undefined`; the seed now
   carries `ifCondition`/`thenAction`. `skillLedgerInvariant` fixtures were pinned
-  at N=5 where §8.3d's Wilson cold-start gate (N≥8, band excludes 50%) holds a
+  at N=5 where the Wilson cold-start gate (N≥8, band excludes 50%) holds a
   skill at `candidate`; fixtures moved to 7W/1L (repeat) and 1W/7L (avoid) so the
   evidence-driven and worth-gate-merge transitions genuinely confirm.
 
@@ -748,27 +748,27 @@ All uncommitted work in this tree, gated green (tsc exit 0, 1775 tests
 passed, vite build clean).
 
 **Batch 5 remainder:**
-- Monthly report card (§4.5): `services/learning/monthlyReport.ts`
+- Monthly report card: `services/learning/monthlyReport.ts`
   (deterministic what-happened/learned/needs-attention assembly incl.
   grade-the-panel Brier per provider + ensemble line) rendered by
   `components/journal/MonthlyReportCard.tsx` in the Journal.
-- Pre-read capture (§5a): opt-in gate (`components/chat/PreReadGate.tsx` +
+- Pre-read capture: opt-in gate (`components/chat/PreReadGate.tsx` +
   `utils/preRead.ts`) — commit direction + confidence BEFORE the verdict
   reveals, stored as `userPriorCall`; human-vs-verdict calibration line in
   the journal and session usage panel.
-- Index-layer memory injection (§4.7): `buildGlobalMemoryIndex` replaces the
+- Index-layer memory injection: `buildGlobalMemoryIndex` replaces the
   JSON dump of GlobalMemory in `constructOptimizedContext` — one line per
   entry, ~900-char cap, `familyPerformance` stays injected verbatim; detail
   remains a `recall` tool pull.
 
 **Batch 12 — seat tier + health read side:**
-- Lens pods (§9.1): `services/providers/debatePods.ts` — 6–10 seats map to
+- Lens pods: `services/providers/debatePods.ts` — 6–10 seats map to
   3 pods, one trust-chosen representative carries the pod position to the
   floor, every seat still seals its own conviction; verdict transcript cap
   scales 2400 + 400×(seats−5). Roster cap raised 5→10 (`MAX_ROSTER_SEATS`),
   team chips and composer steering cover 10 seats. debateFlow tests at 6
   seats + pod unit tests.
-- Provider health view (§9.2): live last-error/latency/rate-limit read-out
+- Provider health view: live last-error/latency/rate-limit read-out
   in Settings → Providers (the read side ProviderHealthService always
   promised).
 
@@ -782,7 +782,7 @@ passed, vite build clean).
   wire audit + health data, harness-lesson squawks, sealed-auction dot plot,
   guard state on the Big Board, pin-a-seat side pane.
 
-**Batch 9 — store unification (§8.1):**
+**Batch 9 — store unification:**
 - The attributed-insight store moved into the trader notebook: new
   `distilled/` folder, one auto-managed file per lesson
   (`services/learning/distilledMemory.ts`), `distilled:<fingerprint>`
@@ -802,7 +802,7 @@ passed, vite build clean).
   lesson extractor — one lesson per provider, not up to 5 regex hits.
 - Fingerprint dedupe: two lessons with the same normalized shape merge into
   one fact (magnitudes/ids stripped), keeping the merged feedback counters —
-  the §4.6 recurrence-counting substrate. `JobQueueService`'s
+  the recurrence-counting substrate. `JobQueueService`'s
   EXTRACT_INSIGHTS job still records severity + provider lessons, minus the
   miner; the App-side per-profile insight-KB feed was removed.
 - VersionHistoryDashboard's knowledge-base tab reads the notebook-backed
@@ -834,12 +834,12 @@ Cooldown in-memory scope + success-clears ruling documented; all-benched
 moderator fallback now warns. Dead P2 tiers wired (post-mortem medium,
 chat/OCR low). quietHours got its test suite; skillsGrid timeout raised.
 
-**Batch 8 (§8.0):** deleted the six orphaned components and the ~980-line
+**Batch 8:** deleted the six orphaned components and the ~980-line
 conductTwoWayDebate/conductThreeWayDebate generators + their five test
 blocks (error-path coverage already lives on conductRealDebate); stale
 "dead generators" comments updated.
 
-**Batch 5 partial (§4.3 + §4.5):** pre-trade checklist (utils/checklist.ts,
+**Batch 5 partial:** pre-trade checklist (utils/checklist.ts,
 FTMO defaults, OFF by default, Settings toggle, checkboxes in the capture
 modal, completion stored on the trade); weekly review service
 (services/learning/weeklyReview.ts — deterministic week stats + ONE

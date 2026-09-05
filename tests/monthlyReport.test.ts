@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-// Monthly report card (Batch 5 remainder, plan §4.5): deterministic
+// Monthly report card (Batch 5 remainder,): deterministic
 // month-stats + grade-the-panel (per-provider / moderator / ensemble Brier).
 
 import {

@@ -1,5 +1,5 @@
 /**
- * trustSurface — rendered-side trust helpers (Batch 7, plan §5).
+ * trustSurface — rendered-side trust helpers.
  *
  * Pure functions, no side effects: the deterministic math the trust research
  * says a human-command harness must show (funding carry relative to the
@@ -9,7 +9,7 @@
 
 import { TradeAnalysis } from '../types';
 
-// ─── Funding carry-cost (§5.5) ──────────────────────────────────────────────
+// ─── Funding carry-cost ──────────────────────────────────────────────
 
 export interface FundingCarry {
     /** Signed cost to THIS position per 8h funding interval, percent of
@@ -52,7 +52,7 @@ export const fundingCarrySnapshotLine = (fundingRate: number | undefined): strin
     return `Funding ${pct >= 0 ? '+' : ''}${pct.toFixed(4)}%/8h — ${pct > 0 ? 'longs pay / shorts receive' : 'shorts pay / longs receive'}; grade a multi-hour hold with carry in mind.`;
 };
 
-// ─── Rendered-copy sweep (§5g) ──────────────────────────────────────────────
+// ─── Rendered-copy sweep ──────────────────────────────────────────────
 
 /**
  * Deterministic-claim softening for rendered verdict/share text. The prompt
@@ -94,7 +94,7 @@ export const sweepDeterministicClaims = (text: string): CopySweepResult => {
 /** The standing framing line appended to share/export copy. */
 export const FINANCIAL_ADVICE_DISCLAIMER = 'Analysis, not financial advice — probabilistic read of one setup; the market can disagree.';
 
-// ─── Plan amendment diff (§5b) ──────────────────────────────────────────────
+// ─── Plan amendment diff ──────────────────────────────────────────────
 
 const priceOf = (v?: string): number | undefined => {
     if (!v) return undefined;

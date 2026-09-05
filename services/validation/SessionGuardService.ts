@@ -35,7 +35,7 @@ export interface SessionGuardConfig {
     /**
      * The trader's per-trade risk budget (percent of equity, e.g. 1). Used
      * to convert pnlPercent-only autopilot rows to dollars when no
-     * investmentAmount exists (plan §14-7): a row resolved at its stop
+     * investmentAmount exists: a row resolved at its stop
      * counts as exactly -riskUsd. Defaults to the harness risk setting.
      */
     tradeRiskPercent: number;
@@ -57,7 +57,7 @@ export const FTMO_SESSION_GUARD: SessionGuardConfig = {
 };
 
 /**
- * Dollar P&L of one journal row (plan §14-7, corrected during
+ * Dollar P&L of one journal row (plan -7, corrected during
  * implementation): pnlAmount is authoritative when present. pnlPercent is
  * a LEVERAGED POSITION percent (autopilot rows carry e.g. -200 = the
  * position lost 200% of its margin). Dollars = margin × pct/100, where the
@@ -173,7 +173,7 @@ export const assessSession = (
     const tradesToday = trades.filter(t =>
         // Trade cap buckets by OPEN time (the signal's createdAt), not the
         // close timestamp — a trade opened 23:50 UTC and closed 00:10 is
-        // still a trade of yesterday's session (plan §14-6, corrected by
+        // Still a trade of yesterday's session (plan -6, corrected by
         // review: `timestamp` is stamped at outcome-capture, so it is
         // already close time and is right for P&L/streak/cooldown).
         isOpenOfDay(t.analysis?.createdAt ?? t.timestamp, dayStart, nowMs)

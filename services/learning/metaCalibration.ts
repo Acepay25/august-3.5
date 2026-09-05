@@ -1,5 +1,5 @@
 /**
- * §8.5b — Meta-calibration: the loop learns about the loop (plan §8.5b).
+ * Meta-calibration: the loop learns about the loop.
  *
  * Three deterministic ratios (no LLM), maintained by recorders at the exact
  * points that carry ground truth, and computed into a per-user preferences
@@ -8,7 +8,7 @@
  *   worth-gate precision   — of gate-approved creations, the fraction that
  *                            later reached 'confirmed' (the gate promised a
  *                            falsifiable prediction; this measures delivery).
- *   refinement recovery    — of shadow refinements (§8.3c) that settled, the
+ * refinement recovery — of shadow refinements that settled, the
  *                            fraction the incumbent was promoted (i.e. the
  *                            refinement beat the live version).
  *   eval-verdict agreement — of helps/hurts verdict eras that produced at
@@ -124,7 +124,7 @@ export const recordWorthGateConfirm = async (username: string, ifCondition?: str
     } catch { /* ignore */ }
 };
 
-/** A shadow refinement (§8.3c) settled: recovered = it won the comparison. */
+/** A shadow refinement settled: recovered = it won the comparison. */
 export const recordRefinementOutcome = async (username: string, recovered: boolean): Promise<void> => {
     try {
         const d = await read(username);

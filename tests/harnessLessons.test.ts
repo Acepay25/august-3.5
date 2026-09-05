@@ -128,7 +128,7 @@ describe('probeWireSupport (P6 known-answer probe)', () => {
         mockSend.mockResolvedValue('something else entirely');
         const result = await probeWireSupport(makeConfig({ baseUrl: 'https://api.x.ai/v1' }), 'high');
         expect(result.honored).toBe(false);
-        // §14-3: "200 + no OK" is INCONCLUSIVE (a thinking-default model can
+        // -3: "200 + no OK" is INCONCLUSIVE (a thinking-default model can
         // legitimately return no visible text) — never pin-off evidence.
         expect(result.evidence).toContain('inconclusive');
     });

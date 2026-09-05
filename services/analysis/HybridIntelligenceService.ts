@@ -929,7 +929,7 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         data.live1h && data.marketData.currentPrice > 0
             ? `Live 1H: open $${fmtPx(data.live1h.open)} → $${fmtPx(data.live1h.price)} · ${data.live1h.minutesLeft}m left · ${data.live1h.percentTraveled.toFixed(0)}% of range`
             : '',
-        // SMC structure sits high in the packet (plan §14-9): the 2400-char
+        // SMC structure sits high in the packet: the 2400-char
         // snapshot cap is a head-slice, and at the tail the detectors were
         // the FIRST thing truncated under dense packets.
         data.smcStructure

@@ -23,7 +23,7 @@ import {
 import { extractCumulativeBleedInsight, recordSeverityInsight } from './severityInsights';
 
 // The attributed-insight type moved to types/learning.ts with the store
-// unification (§8.1) — re-exported here for every existing import site.
+// unification — re-exported here for every existing import site.
 export type { AttributedInsight };
 
 // ========================= INTERFACES =========================
@@ -642,7 +642,7 @@ export function generateSynthesizedPromptInjection(synthesis: PatternMemorySynth
     return parts.join('\n');
 }
 
-// ========================= STORAGE (notebook-backed — plan §8.1) =========================
+// ========================= STORAGE (notebook-backed) =========================
 //
 // The attributed-insight store used to be a standalone Preferences key
 // (`attributed_insights_kb_<user>`) — the third parallel memory store with its

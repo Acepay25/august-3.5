@@ -1,10 +1,10 @@
-// Floor seat-wire observability (Batch 13, plan §10.2).
+// Floor seat-wire observability.
 //
 // The floor should be the ONE surface where you can SEE the harness managing
 // itself: per seat, what the wire actually received (thinking on/off, effort
 // tier), whether the provider is benched on cooldown, and how fit it looks.
 // All of it is DERIVED — from the P5 wire-audit lines already in the run log
-// (`wire: <provider> <phase> applied|no-op — <reason>`), the §9.2 health
+// (`wire: <provider> <phase> applied|no-op — <reason>`), the health
 // telemetry, and the P7 wire-lesson pins. No new state, no new store.
 //
 // Monochrome doctrine: states encode as glyphs + text, never color.
@@ -23,7 +23,7 @@ export interface SeatWireState {
     effort: ReasoningEffort | null;
     /** True when a P7 harness wire lesson pinned this seat's route off. */
     pinnedOff: boolean;
-    /** Cooldown remaining from §9.2 health telemetry (0 = not benched). */
+    /** Cooldown remaining from health telemetry (0 = not benched). */
     cooldownRemainingMs: number;
     /** Fitness read: benched > degraded (recent errors) > ok. */
     fitness: 'ok' | 'degraded' | 'benched';
@@ -74,7 +74,7 @@ const classifyAudit = (
  * Derive per-seat wire state from the projected run's audit lines. The LAST
  * `wire:` budget line per provider wins (rounds progress; the newest call is
  * the current truth). Seats with no wire evidence still get a fitness read
- * from §9.2 health when their name resolves to a provider.
+ * From health when their name resolves to a provider.
  */
 export const deriveSeatWireStates = (inputs: SeatWireInputs): Record<string, SeatWireState> => {
     const { runLog, providerNameToId, healthFor, cooldownFor, seatNames } = inputs;

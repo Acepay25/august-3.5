@@ -317,7 +317,7 @@ const App: React.FC = () => {
             return nonAnalystModerator;
         }
         return readyProviders.find(p => !isProviderOnCooldown(p.id)) || (() => {
-            // Every ready provider is benched (plan §14-10): the run still
+            // Every ready provider is benched: the run still
             // needs a moderator, but say so loudly instead of silently.
             if (readyProviders.length > 0) console.warn('[Moderator] ALL providers are on error cooldown — using the first ready one anyway.');
             return readyProviders[0];
@@ -1154,7 +1154,7 @@ const App: React.FC = () => {
 
     // ─── Chat mode: named bots + group chats (Hermes Bot Mode layout) ──────
     const [activeThread, setActiveThread] = useState<ThreadSelection>({ kind: 'coach' });
-    // Unread badges (plan §10.1): per-thread last-opened timestamps, keyed
+    // Unread badges: per-thread last-opened timestamps, keyed
     // by bot.id / group.id. Focusing a thread marks it opened (effect below).
     const [threadOpenedMap, setThreadOpenedMap] = useState<Record<string, string>>(
         () => loadThreadOpenedMap(activeUsername ?? ''));
@@ -1188,7 +1188,7 @@ const App: React.FC = () => {
         setActiveThread({ kind: 'group', groupId });
         setIsEnsembleEnabled(true);
     }, [setIsEnsembleEnabled]);
-    // Unread badges (§10.1): focusing a bot/group thread marks it opened
+    // Unread badges: focusing a bot/group thread marks it opened
     // (markThreadOpened + persist).
     useEffect(() => {
         if (activeThread.kind === 'coach' || !activeUsername) return;
@@ -1660,7 +1660,7 @@ const App: React.FC = () => {
             // Rebuild confluence historical stats from the loaded log (was
             // never wired — getConfluenceInsight always returned empty).
             syncConfluenceFromTradeLog(loadedTrades);
-            // Weekly review (Batch 5 §4.5) + monthly report card (§4.5
+ // Weekly review + monthly report card (
             // remainder): deterministic rollups, gated on due-checks. Run
             // AFTER the profile load with the freshly-read trade log —
             // loggedTradesRef.current is still the pre-switch value at the
@@ -2043,7 +2043,7 @@ const App: React.FC = () => {
 
     // Ordinary ensemble model selection (Lenses off) handler — persists the
     // picked models that drive the cards and the debate (2–5 flat floor,
-    // 6–10 lens pods, plan §9.1; Settings pickers offer 3).
+    // 6–10 lens pods; Settings pickers offer 3).
     const handleSetEnsembleModelSelection = useCallback((selection: EnsembleModelSelection) => {
         setEnsembleModelSelection(selection.slice(0, 10));
         saveEnsembleModelSelection(selection.slice(0, 10));
@@ -2661,7 +2661,7 @@ const App: React.FC = () => {
         stableHandleSendMessage(text, [], hidden, { followUpFromMessageId: messageId });
     }, [stableHandleSendMessage]);
 
-    // Pre-read capture (Batch 5 §5a): persist the user's committed prior
+    // Pre-read capture: persist the user's committed prior
     // call onto the settled verdict's message BEFORE the card reveals.
     // Rides conversation history (same path as the watch toggle), copied
     // onto the LoggedTrade at log time by useTradeLogging.
@@ -3261,7 +3261,7 @@ const App: React.FC = () => {
         () => collectApprovalItems(messages, autopilotResolutions, activeUsername || undefined),
         [messages, autopilotResolutions, skillDraftNonce, activeUsername],
     );
-    // ─── Coach thread (§10.1) ───────────────────────────────────────────────
+    // ─── Coach thread ───────────────────────────────────────────────
     // The learning loop's inbox as a conversation: pending skill drafts +
     // queue proposals. The badge counts both; the panel refreshes itself on
     // the same window events, so App only needs the count + selection.
@@ -3337,7 +3337,7 @@ const App: React.FC = () => {
                 events.push({ id: `review-${m.id}`, time, text: 'REVIEW post-mortem filed' });
             }
         }
-        // Harness-lesson system lines (plan §10.2): what the harness learned
+        // Harness-lesson system lines: what the harness learned
         // about the wires prints on the tape — the floor is where you SEE it
         // managing itself. Newest few, merged into time order.
         for (const l of listHarnessLessons().slice(0, 5)) {
@@ -3387,7 +3387,7 @@ const App: React.FC = () => {
             .filter(t => new Date(t.timestamp).toDateString() === today)
             .reduce((sum, t) => sum + (t.pnlAmount ?? 0), 0);
     }, [loggedTrades]);
-    // Skill-citation chip tap (plan §10.1): open Settings → Skills so the
+    // Skill-citation chip tap: open Settings → Skills so the
     // grid mounts and consumes the pending slug (SkillsGrid listens for the
     // same event when already mounted).
     useEffect(() => {
@@ -3398,8 +3398,8 @@ const App: React.FC = () => {
         window.addEventListener('august:open-skill', onOpenSkill);
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
     }, []);
-    // Seat-wire observability (plan §10.2): per seat, what the harness sent
-    // the wire (thinking/effort/pin) + cooldown/fitness from §9.2 health.
+    // Seat-wire observability: per seat, what the harness sent
+    // The wire (thinking/effort/pin) + cooldown/fitness from health.
     // Derived from the projected run's P5 audit lines — no new state.
     const floorSeatWire = useMemo(
         () => deriveSeatWireStates({

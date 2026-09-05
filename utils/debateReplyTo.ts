@@ -20,11 +20,16 @@ export const parseReplyTo = (text: string): string[] | null => {
     return list;
 };
 
-/** Whether a turn's text is addressed to (readable by) the named seat. */
-export const turnAddressedTo = (text: string, name: string): boolean => {
+/** Whether a turn's text is addressed to (readable by) the named seat.
+ *  `aliases` carries the seat's anonymized labels: when the lens is on, the
+ *  model sees "Macro Analyst" instead of the raw seat name and writes the
+ *  marker with THAT label, so a match on any alias counts as addressed. */
+export const turnAddressedTo = (text: string, name: string, aliases: string[] = []): boolean => {
     const to = parseReplyTo(text);
     if (!to) return true;
-    return to.includes(name.trim().toLowerCase());
+    const target = name.trim().toLowerCase();
+    if (to.includes(target)) return true;
+    return aliases.some(a => a.trim().toLowerCase() === target || to.includes(a.trim().toLowerCase()));
 };
 
 /** Strip the routing marker from display text and persist it as `to`. */

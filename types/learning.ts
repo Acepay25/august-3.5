@@ -75,7 +75,7 @@ export interface InsightKnowledgeBase {
 
 /**
  * An insight with provider attribution and usage tracking. Lives in the
- * trader notebook as a distilled/ memory file (plan §8.1 store unification —
+ * Trader notebook as a distilled/ memory file (plan store unification —
  * the old standalone `attributed_insights_kb` preference store was folded
  * into the notebook so one store, one cap, one UI owns it).
  */

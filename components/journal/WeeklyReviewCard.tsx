@@ -5,7 +5,7 @@ const pctOrDash = (v: number | null | undefined): string =>
     v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`;
 
 /**
- * Weekly review card (Batch 5, plan §4.5) — the deterministic week stats
+ * Weekly review card — the deterministic week stats
  * plus the ONE improvement impulse, rendered at the top of the Journal
  * analytics tab. Reads the stored digest only; generation happens at boot.
  */
@@ -35,7 +35,7 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
                 {s.topMistake && <span>costliest: {s.topMistake}</span>}
                 {s.givebackDays > 0 && <span>givebacks: {s.givebackDays}</span>}
             </div>
-            {/* §8.5b meta-calibration (the loop learns about the loop) — the
+            {/* meta-calibration (the loop learns about the loop) — the
                 ratios ride the digest; render them beside the week stats so
                 the weekly surface shows gate/refinement/eval health, not
                 just trade health. '—' when a ratio has no sample. */}

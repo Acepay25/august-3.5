@@ -179,7 +179,7 @@ class JobQueueService {
         }
 
         // The regex miner (extractInsightsFromPostMortem) was deleted with
-        // the §8.1 store unification: regex mining rewards fluent writing,
+        // The store unification: regex mining rewards fluent writing,
         // not correct writing. Severity + provider attribution above now
         // write the trader notebook's distilled facts directly.
         return [];

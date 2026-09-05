@@ -173,7 +173,7 @@ const HarnessControls: React.FC = () => {
                     <option value="0.5">50%</option>
                 </select>
             </label>
-            {/* Session-guard limits (plan §3b/§14-8): preset + overrides.
+            {/* Session-guard limits (plan -8): preset + overrides.
                 Takes effect immediately here; the in-the-moment cap change
                 rule (typed confirm) applies to the banner, not this panel. */}
             <label className="block text-[11px] text-zinc-400">
@@ -214,7 +214,7 @@ const HarnessControls: React.FC = () => {
                     />
                 </label>
             </div>
-            {/* Pre-trade checklist (plan §4.3): OFF by default; when on, the
+            {/* Pre-trade checklist: OFF by default; when on, the
                 capture modal shows the items and completion rides onto the
                 trade (checklistCompleted) feeding adherence stats. */}
             <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer select-none">
@@ -226,7 +226,7 @@ const HarnessControls: React.FC = () => {
                 />
                 Pre-trade checklist at capture (off by default)
             </label>
-            {/* Pre-read capture (plan §5a): opt-in training mode — the
+            {/* Pre-read capture: opt-in training mode — the
                 verdict card stays hidden until the user commits their own
                 direction + confidence. Off by default (friction). */}
             <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer select-none">
@@ -238,7 +238,7 @@ const HarnessControls: React.FC = () => {
                 />
                 Pre-read capture: commit your call before the verdict reveals (off by default)
             </label>
-            {/* P7 harness lessons (§14-5c): browse + clear what the harness
+            {/* P7 harness lessons: browse + clear what the harness
                 believes about provider wires. */}
             <HarnessLessonsBrowser />
             <label className="block text-[11px] text-zinc-400">

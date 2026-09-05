@@ -89,7 +89,7 @@ export interface FloorSceneProps {
     workingBotId?: string | null;
     /** Signed PnL from today's settled tickets (top bar). */
     dayPnl?: number;
-    /** SessionGuard state for the Big Board rotation (plan §10.2): day P&L
+    /** SessionGuard state for the Big Board rotation: day P&L
      *  vs the daily limit + trades remaining — the ambient risk surface. */
     guardState?: {
         dailyLossLimitUsd: number;
@@ -97,8 +97,8 @@ export interface FloorSceneProps {
         maxTradesPerDay: number;
         level: 'clear' | 'notice' | 'warning' | 'standdown';
     };
-    /** Per-seat wire observability (plan §10.2): thinking/effort/cooldown/
-     *  fitness derived from the P5 audit lines + §9.2 health. Keyed by seat
+    /** Per-seat wire observability: thinking/effort/cooldown/
+ * Fitness derived from the P5 audit lines + health. Keyed by seat
      *  name; absent = no evidence yet (badge hidden). */
     seatWire?: Record<string, SeatWireState>;
     /** Clicking a seat opens that agent's 1:1 chat thread. */
@@ -106,7 +106,7 @@ export interface FloorSceneProps {
 }
 
 /**
- * Guard rotation line on the Big Board (plan §10.2): risk state is the
+ * Guard rotation line on the Big Board: risk state is the
  * thing most worth ambient awareness. Two faces on a 6s period driven by
  * the floor's existing 1s clock: day P&L vs the daily limit, then trades
  * remaining. Monochrome; the HALT level encodes as a text flag.
@@ -134,7 +134,7 @@ const GuardRotation: React.FC<{
 };
 
 /**
- * Sealed-auction dot plot (plan §10.2): one dot per seat on a 0-100 axis,
+ * Sealed-auction dot plot: one dot per seat on a 0-100 axis,
  * labeled by seat initial — makes the conviction spread (dissent) legible
  * at a glance on the floor. Purely presentational over the same conviction
  * rows the VerdictCard receives.
@@ -234,7 +234,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
     const botByName = React.useMemo(() => new Map(bots.map(b => [b.name, b])), [bots]);
 
     // The one actor the floor is listening to right now: a PINNED seat
-    // (plan §10.2 — click a desk mid-debate to pin its live argument in
+    // (plan — click a desk mid-debate to pin its live argument in
     // place) wins over the automatic spotlight: whoever is speaking
     // (bubble shows their speech), else whoever is thinking.
     const [pinnedSeatId, setPinnedSeatId] = React.useState<string | null>(null);
@@ -389,7 +389,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                         </li>
                                     ))}
                                 </ul>
-                                {/* Guard state rotation (plan §10.2): the
+                                {/* Guard state rotation: the
                                     floor is the ambient display — day P&L vs
                                     the daily limit and trades remaining
                                     rotate under the quotes on the same 1s
@@ -397,7 +397,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                 {guardState && (
                                     <GuardRotation guard={guardState} dayPnl={dayPnl} clockMs={clock.getTime()} />
                                 )}
-                                {/* Sealed-auction dot plot (§10.2): once the
+                                {/* Sealed-auction dot plot: once the
                                     convictions exist, the spread lives on the
                                     Big Board — dissent legible at a glance. */}
                                 <AuctionDotPlot seats={convictions} />
@@ -545,7 +545,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                                     roleTag={roleTag}
                                                     onClick={() => {
                                                         // Pin-in-place while the seat has a live
-                                                        // argument (plan §10.2); otherwise the
+                                                        // argument ; otherwise the
                                                         // click keeps its old meaning — open the
                                                         // seat's 1:1 thread.
                                                         const live = actor!.speech || actor!.thought;
@@ -556,7 +556,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                                         }
                                                     }}
                                                 />
-                                                {/* Wire badge (plan §10.2): what the
+                                                {/* Wire badge: what the
                                                     harness actually sent this seat —
                                                     thinking knob, effort tier, pin,
                                                     cooldown, fitness. Monochrome

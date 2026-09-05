@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { UserPriorCall } from '../../types';
 
 /**
- * Pre-read gate (Batch 5, plan §5a) — opt-in training mode. When enabled
+ * Pre-read gate — opt-in training mode. When enabled
  * (Settings → Harness), the settled verdict card stays hidden behind this
  * panel: the user commits their OWN direction + confidence first (cognitive
  * forcing), then reveals. The commit rides the message (`userPriorCall`),
@@ -27,7 +27,7 @@ export const PreReadGate: React.FC<PreReadGateProps> = ({ onCommit, onSkip }) =>
                 Pre-read · commit before the reveal
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-                Training mode (plan §5a): call the setup yourself before reading the floor&apos;s verdict.
+                Training mode: call the setup yourself before reading the floor&apos;s verdict.
                 Your prior is scored against the outcome next to the verdict&apos;s — this measures
                 <span className="text-zinc-400"> your</span> calibration, not just the panel&apos;s.
             </p>

@@ -1,5 +1,5 @@
 /**
- * Wilson score interval + the confirmation CI gate (plan §8.3d).
+ * Wilson score interval + the confirmation CI gate.
  *
  * A 4-1 record at N=5 is statistically indistinguishable from a coin flip,
  * yet the raw ladder confirmed it. This module supplies the interval math

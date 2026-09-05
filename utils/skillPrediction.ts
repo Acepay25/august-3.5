@@ -1,5 +1,5 @@
 /**
- * Skill birth certificates (plan §8.2a).
+ * Skill birth certificates.
  *
  * A skill that carries no falsifiable claim cannot be confirmed or retired on
  * principle — the ladder degenerates to threshold magic. This module owns the

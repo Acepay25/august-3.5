@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { loadMonthlyReport, MonthlyReportCard as MonthlyReport } from '../../services/learning/monthlyReport';
 
 /**
- * Monthly report card (Batch 5 remainder, plan §4.5) — what happened /
+ * Monthly report card (Batch 5 remainder,) — what happened /
  * what was learned / needs attention, plus the GRADE-THE-PANEL section:
  * per-provider, moderator, and ensemble-line Brier for the period
  * ("which seats were actually right"). Reads the stored card only;

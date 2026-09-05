@@ -177,7 +177,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     expect(quickResponseMock).toHaveBeenCalledTimes(1);
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
     const meta = parseSkillMarkdown(file.content)!;
-    // §8.3c: the refinement enters the eval-only SHADOW — the live trigger
+    // The refinement enters the eval-only SHADOW — the live trigger
     // keeps its injection slot until the window settles.
     expect(meta.ifCondition).toBe('BTC short setup');
     expect(meta.shadow?.ifCondition).toBe('BTC short without a 15m reclaim and rising volume');

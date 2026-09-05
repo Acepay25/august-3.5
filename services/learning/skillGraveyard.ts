@@ -1,5 +1,5 @@
 /**
- * §8.4a/§8.4b — skill graveyard + retirement taxonomy (plan §8.4a/b).
+ * Skill graveyard + retirement taxonomy (plan.4a/b).
  *
  * Retired skills must stay barely visible: nothing stopped the worth gate
  * from re-creating the same skill from the next loss cluster. This module
@@ -85,7 +85,7 @@ export const graveyardBlock = async (username: string, max = MAX_TOMBSTONES): Pr
         .join('\n');
 };
 
-/** Re-entry rules per reason (§8.4b table). */
+/** Re-entry rules per reason (table). */
 export const reEntryRuleForReason = (reason: RetirementReason): string => {
     switch (reason) {
         case 'regime-shifted':

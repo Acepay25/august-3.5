@@ -16,7 +16,7 @@ const WorthDecisionSchema = z.object({
     ifCondition: z.string().optional(),
     thenAction: z.string().optional(),
     mergeTarget: z.string().optional(),
-    // Birth certificate (§8.2a): a create verdict must pre-register the
+    // Birth certificate: a create verdict must pre-register the
     // falsifiable claim the eval scheduler will test. Unknown at the schema
     // edge; sanitizePrediction + validateCraftedSkill enforce it fail-closed.
     prediction: z.unknown().optional(),
@@ -59,7 +59,7 @@ export const validateCraftedSkill = (candidate: SkillWorthDecision, clusterWins:
     const ta = (candidate.thenAction || '').trim();
     if (!ic || ic.length < 12) return 'IF too short or missing';
     if (!ta || ta.length < 12) return 'THEN too short or missing';
-    // Fail-closed birth certificate (§8.2a): a create verdict whose craft
+    // Fail-closed birth certificate: a create verdict whose craft
     // output lacks a valid prediction is rejected outright.
     if (candidate.verdict === 'create' && !sanitizePrediction(candidate.prediction)) {
         return 'create without a falsifiable prediction';
@@ -94,7 +94,7 @@ export const evaluateSkillWorth = async (
         .join('\n') || '(no skills yet)';
 
     const map = buildNotebookMapMarkdown().slice(0, 800);
-    // §8.4a: the graveyard rides the worth gate's context (capped, most
+    // The graveyard rides the worth gate's context (capped, most
     // recent 40) so a retired twin reads as "tried and failed" — never
     // re-created without a REVIVAL review card. Never injected into debates.
     let graveyard = '(none — nothing retired yet)';

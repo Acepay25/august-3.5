@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-// Batch 13 (§10.1): the unread-badge substrate — model-scoped unreadCount,
+// Batch 13: the unread-badge substrate — model-scoped unreadCount,
 // the group-slice helper, and the per-user opened-map persistence.
 
 import {

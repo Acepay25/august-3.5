@@ -159,7 +159,7 @@ describe('GroupChatView (room UX)', () => {
         expect(screen.getByTestId('group-copy-m2')).toBeTruthy();
         // MarkdownContent lazy-loads the renderer chunk — under full-suite
         // load the chunk fetch + parse can exceed the default waitFor window
-        // (same 30s class as the skillsGrid detail-open test, §14-11c).
+        // (same 30s class as the skillsGrid detail-open test, -11c).
         await waitFor(() => expect(container.querySelector('strong')).toBeTruthy(), { timeout: 25_000 });
     });
 });

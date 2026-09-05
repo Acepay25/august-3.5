@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
-// §10.1 — the Coach thread: the learning loop's inbox as a conversation
+// The Coach thread: the learning loop's inbox as a conversation
 // surface. The roster row carries the waiting-count badge; the panel lists
 // pending skill drafts + queue proposals as cards with real actions.
 
@@ -54,7 +54,7 @@ const railBase = {
     onNewGroup: () => {},
 };
 
-describe('Coach roster row (§10.1)', () => {
+describe('Coach roster row', () => {
     it('renders only when the coach callback exists; badge counts drafts + proposals', () => {
         const { rerender } = render(<AgentRosterRail {...railBase} />);
         expect(screen.queryByTestId('roster-coach')).toBeNull();
@@ -79,7 +79,7 @@ describe('Coach roster row (§10.1)', () => {
     });
 });
 
-describe('CoachThreadPanel (§10.1)', () => {
+describe('CoachThreadPanel', () => {
     let draft: { id: string };
     beforeEach(() => {
         localStorage.clear();

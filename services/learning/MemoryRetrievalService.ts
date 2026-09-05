@@ -117,7 +117,7 @@ const rankedMatchedSkills = (
         // can never disagree about what matters.
         const statusWeight = meta.status === 'confirmed' ? 2 : 1;
         const overlap = dimsOverlap(meta, query);
-        // §8.5d: a skill whose evidence mix diverges from the market's current
+        // A skill whose evidence mix diverges from the market's current
         // 30-day regime mix is downweighted (stale-by-regime, distinct from
         // stale-by-time) until fresh evidence in the current mix re-converges.
         const score = statusWeight * overlap * evidenceDecay(meta) * regimeRankFactor(meta, query?.coin);
@@ -469,7 +469,7 @@ export interface MemoryContextOptions {
      *  Prompt-side half of the lensScope contract: lens-scoped skills only
      *  reach the prompt of their own seat. Omitted ⇒ filter is a no-op. */
     activeLens?: string;
-    /** §8.5a: per-run id used to seed the reproducible ε-holdout decision.
+    /** Per-run id used to seed the reproducible ε-holdout decision.
      *  Omitted ⇒ this retrieval never holds out (conservative default). */
     runId?: string;
 }
@@ -498,7 +498,7 @@ export const getMemoryFilesContext = (
 
     const exclude = options?.excludeSkillName?.toLowerCase().replace(/\.md$/i, '');
     const activeLens = options?.activeLens;
-    // §8.5a ε-holdout: on ~10% of runs (seeded per run id) skill injection is
+    // ε-holdout: on ~10% of runs (seeded per run id) skill injection is
     // withheld entirely so the control group keeps growing. The decision is
     // the same for the analyst-opening and moderator-verdict slices of a run
     // (same runId), recorded on the injection record, and mirrored in runStats.

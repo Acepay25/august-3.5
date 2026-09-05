@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Quiet hours (Batch 7, plan §5.5) — silent-window math for price alerts.
+// Quiet hours — silent-window math for price alerts.
 
 import { isWithinQuietHours, quietHoursLabel, DEFAULT_QUIET_HOURS } from '../utils/quietHours';
 

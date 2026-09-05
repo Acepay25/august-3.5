@@ -18,7 +18,7 @@ const trySkillInChat = (slug: string): void => {
 };
 
 /**
- * LearningQueuePanel (§4.6 loop E / §8.4) — "the gate proposes, the inbox
+ * LearningQueuePanel (loop E /) — "the gate proposes, the inbox
  * disposes." Five lifecycle passes (cap displacement, graveyard revival,
  * zero-evidence demote, regime/recurrence re-scope, contradiction/belief
  * challenge) queue proposals; this is the ONLY surface that reads them.

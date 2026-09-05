@@ -249,7 +249,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const rounds = [...new Set(events.map(e => e.round))];
     expect(rounds).toEqual([1, 2, 3, 4, 5]);
 
-    // P6 wire-shape assertions (plan §14-4): the effort schedule must reach
+    // P6 wire-shape assertions: the effort schedule must reach
     // the transport options at every call site — rebuttals run 'high', the
     // moderator verdict runs 'max', and every call carries an audit sink so
     // the run log can label what the wire received.
@@ -1398,7 +1398,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
 });
 
 // =============================================================================
-// LENS PODS (Batch 12, plan §9.1) — the 6-seat structured tier
+// LENS PODS — the 6-seat structured tier
 // =============================================================================
 
 describe('conductRealDebate — lens pods at 6 seats', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.5b — Meta-calibration: the loop learns about the loop. Three
+// Meta-calibration: the loop learns about the loop. Three
 // deterministic ratios (worth-gate precision / refinement recovery /
 // eval-verdict agreement) maintained by recorders at the ground-truth points,
 // computed + persisted weekly, with a P7 harness-lesson when the worth gate's

@@ -1020,7 +1020,7 @@ ${analysis.details.map(d => `- ${d}`).join('\n')}
  * This is the LIVE-path calibration block: historical accuracy reaches the
  * moderator in the real debate and the accuracy-mode simulation (the
  * two/three-way generators that once held the only copy were deleted as
- * dead code, plan §8.0).
+ * Dead code,).
  */
 const buildCalibrationContext = (
     analysts: { name: string; providerId?: string; result: { analysis: TradeAnalysis } }[],
@@ -2120,7 +2120,7 @@ export const conductRealDebate = async function* (
     const skipRebuttals = pre.action === 'skip_to_verdict' || lastDone >= totalRounds || Boolean(forceSkipRebuttals);
     const rebuttalStart = Math.max(2, lastDone + 1);
 
-    // ─── LENS PODS (Batch 12, plan §9.1) ──────────────────────────────────
+    // ─── LENS PODS ──────────────────────────────────
     // 6+ seats do NOT run as a flat floor: addressed routing degenerates,
     // the verdict transcript truncates, and cost scales linearly. The seats
     // collapse into 3 pods (macro/technical/risk — lens-mapped when lenses
@@ -2285,7 +2285,7 @@ export const conductRealDebate = async function* (
         // Quoted texts are anonymized seat-to-seat (Batch 4 b).
         const otherOpenings = debateRoster
             .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
-            .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name))
+            .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name, [aliasOf(analyst.provider.name)]))
             .map(o => ({ name: aliasOf(o.provider.name), text: seatAliases.anonymize(roundTexts[o.provider.name][round - 1]) }));
         const others = otherOpenings.length > 0
             ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
@@ -2338,7 +2338,7 @@ export const conductRealDebate = async function* (
         const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
         const snapshotRows = debateRoster
             .filter(o => roundTexts[o.provider.name]?.[round - 1])
-            .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name))
+            .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name, [aliasOf(analyst.provider.name)]))
             .map(o => extractDebateLevels(aliasOf(o.provider.name), roundTexts[o.provider.name][round - 1]));
         const levelsSnap = formatDebateLevelsTable(snapshotRows);
         const userContent =
@@ -2975,7 +2975,7 @@ export const conductRealDebate = async function* (
                             reasoningEffort: 'low',
                             onWireAudit: entry => {
                                 emitLog('budget', `wire: ${analyst.provider.name} clarification ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, answerRound, analyst.provider.name);
-                                // P7 write path (plan §14-5): a clarification
+                                // P7 write path: a clarification
                                 // that could not be told to think less records
                                 // a budget lesson for the thinkingDefault class.
                                 recordBudgetLessonFromAudit(entry, 'clarification', analyst.provider.config.id);
@@ -3263,7 +3263,7 @@ export const conductRealDebate = async function* (
             return formatEnsembleLineBlock(computeEnsembleLine(convictions));
         })(),
         buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never) ? `\n\n${buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never)}` : '',
-        // Harness notes (P7 read path, plan §14-5): the harness's own
+        // Harness notes (P7 read path, plan -5): the harness's own
         // code-observed beliefs about provider behavior (wire/budget) —
         // capped, newest first. The moderator weighs known quirks ("this
         // seat 200-accepts but ignores reasoning_effort") when grading.

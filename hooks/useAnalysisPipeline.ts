@@ -3471,7 +3471,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             ));
                         }
                         processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
-                        // §8.3a citation stamp: annotate the newest verdict-stage
+                        // Citation stamp: annotate the newest verdict-stage
                         // injection record with which skills the FINAL verdict
                         // actually cited. Without this call the `cited` field is
                         // never written, skillAdherenceForRun can only ever return
@@ -3558,7 +3558,7 @@ ${accuracyVerificationNote}`
 
                         // Per-run execution summary (compare mode + diagnostics).
                         updatedMessage.runStats = {
-                            // §8.3a: the run's identity — the user message that
+                            // The run's identity — the user message that
                             // triggered it, same id the injection records carry.
                             // Trades copy it at log time so evidence attribution
                             // joins exactly instead than by time window.
@@ -3583,7 +3583,7 @@ ${accuracyVerificationNote}`
                             // Protocol lane attribution — on
                             // runStats itself so the signal card can chip it.
                             protocol: ensembleService.getLastDebateProtocol(),
-                            // §8.5a: ε-holdout classification for THIS run —
+                            // ε-holdout classification for THIS run —
                             // the same seeded decision the retrieval layer made
                             // when it withheld skill injection.
                             skillHoldout: shouldSkillHoldout(userMessage.id),

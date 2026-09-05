@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// §8.5c — context-budget economics: cost = injected chars, benefit = lift ×
+// Context-budget economics: cost = injected chars, benefit = lift ×
 // frequency, value = lift-per-char. Index lines (opening) are cheap; the
 // full-body pull (verdict) is not — legacy records without `chars` fall back
 // to per-stage defaults so BOTH are priced.

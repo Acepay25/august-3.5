@@ -278,7 +278,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 {rr !== undefined && (
                     <span className="text-xs tabular-nums text-zinc-300">R:R 1:{rr.toFixed(1)}</span>
                 )}
-                {/* Amendment stamp (Batch 7 §5b): a revised plan is an
+                {/* Amendment stamp: a revised plan is an
                     explicit version with a recorded diff, never a silent edit. */}
                 {(analysis.planVersion ?? 1) > 1 && (
                     <span

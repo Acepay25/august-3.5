@@ -211,7 +211,7 @@ describe('recordSeverityInsight idempotency', () => {
         const insight = extractSeverityInsightFromTrade(trade)!;
         const first = recordSeverityInsight(insight);
         const second = recordSeverityInsight(insight);
-        // Same id → exactly one row (assert per id: the §8.1 fingerprint
+        // Same id → exactly one row (assert per id: the fingerprint
         // merge may legitimately collapse same-SHAPED lessons from earlier
         // tests into one fact, so global counts are not stable here).
         expect(second.id).toBe(first.id);
@@ -251,7 +251,7 @@ describe('extractAndRecordSeverityInsights (post-mortem job orchestrator)', () =
         expect(recorded.length).toBe(2);
         expect(recorded.map(i => i.kind)).toEqual(expect.arrayContaining(['deep_single_loss', 'cumulative_bleed']));
         // Both lessons are present exactly once (matched by text, not id —
-        // the §8.1 fingerprint merge may store a same-shaped lesson from an
+        // The fingerprint merge may store a same-shaped lesson from an
         // earlier test under that fact's id, so global counts and derived
         // ids are not stable here).
         for (const insight of recorded) {
@@ -387,7 +387,7 @@ describe('buildSeverityPostMortemContext (severity-aware post-mortem generation)
 
 describe('extractAndRecordProviderInsights (provider attribution)', () => {
     it('records ONE deterministic lesson per provider with scope categorization', () => {
-        // §8.1 store unification deleted the regex miner: provider
+        // Store unification deleted the regex miner: provider
         // attribution now extracts a single "Lesson:/takeaway:"-shaped line
         // per provider via the notebook's lesson extractor, not up to 5
         // regex hits per prose blob.

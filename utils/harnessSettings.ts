@@ -14,14 +14,14 @@ export interface HarnessSettings {
     pinnedPromptLane?: 'live' | 'control';
     /** Analysts may call live desk tools (search, derivatives, session) before the brief. Default on. */
     deskToolsEnabled: boolean;
-    /** Session-guard preset (plan §3b/§14-8): 'default' = research-tight
+    /** Session-guard preset (plan -8): 'default' = research-tight
      *  (2%/2 trades/2-streak/4h), 'ftmo' = the looser alternative
      *  (3%/3 trades). Individual overrides win over the preset. */
     guardPreset?: 'default' | 'ftmo';
     guardDailyLossPct?: number;
     guardMaxTradesPerDay?: number;
     guardPostLossCooldownMin?: number;
-    /** §8.2b: confirmed-skills cap before the worth gate turns comparative. */
+    /** Confirmed-skills cap before the worth gate turns comparative. */
     skillLibraryCap?: number;
 }
 
@@ -72,7 +72,7 @@ export const saveHarnessSettings = (next: Partial<HarnessSettings>): HarnessSett
 };
 
 /**
- * Resolve the live SessionGuardConfig from the stored settings (plan §14-8):
+ * Resolve the live SessionGuardConfig from the stored settings :
  * preset base + per-field overrides, all clamped to sane ranges. This is
  * the single source every assessSession call site reads, so the FTMO preset
  * and the user's own limits actually take effect.
@@ -96,7 +96,7 @@ export const getSessionGuardConfig = (): SessionGuardConfig => {
 };
 
 /**
- * §8.2b: effective confirmed-skills cap before the worth gate turns
+ * Effective confirmed-skills cap before the worth gate turns
  * comparative. localStorage-backed with a hard default — the cap must exist
  * even when nothing is stored, because an unbounded skill library silently
  * taxes every skill's chance of being seen (fixed injection budgets).

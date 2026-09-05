@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.5a — permanent ε-holdout (plan §8.5a): ~10% of runs withhold skill
+// Permanent ε-holdout: ~10% of runs withhold skill
 // injection, seeded per run id and reproducible, recorded on the injection
 // log, and folded into runStats. The withheld run's outcomes must land in the
 // CONTROL group (controlIds) for lift — never in the skill's W/L record.
@@ -121,7 +121,7 @@ tradeIds: seed-1
             takeProfit: [{ price: 90 }],
         } as any,
         outcome: TradeOutcome.WIN,
-        // §8.3a: the join is EXACT on the originating run — production
+        // The join is EXACT on the originating run — production
         // timing (run at T0, logged at T1 > T0) no longer matters.
         timestamp: new Date().toISOString(),
         ...overrides,
@@ -170,7 +170,7 @@ tradeIds: seed-1
         expect(meta.controlIds ?? []).not.toContain('ctl-2');
     });
 
-    it('§8.3a regression: a LATER run must not steal attribution — a trade joined to run-0 is CONTROL even if run-8 (holdout) logged after it', async () => {
+    it('regression: a LATER run must not steal attribution — a trade joined to run-0 is CONTROL even if run-8 (holdout) logged after it', async () => {
         // Production order: run-0 injects the skill (T0) → user logs the
         // trade (T1) → a holdout run happens (T2). The old window join
         // (records AFTER trade.timestamp) would see only run-8 and label
@@ -188,7 +188,7 @@ tradeIds: seed-1
         expect(meta.wins).toBe(2);
     });
 
-    it('§8.3a: a legacy trade with no sourceRunId keeps full credit (UNKNOWN)', async () => {
+    it('a legacy trade with no sourceRunId keeps full credit (UNKNOWN)', async () => {
         theContext('run-0');
         await flushTelemetry();
         const trade = makeTrade({ id: 'ctl-4' }); // no sourceRunId

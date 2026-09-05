@@ -226,7 +226,7 @@ export type EnsembleModelSelection = { providerId: string; model: string }[];
 
 /**
  * Load the ordinary ensemble model selection (max 10 entries — a trader
- * team seats 2–5 on the flat floor, 6–10 run as lens pods, plan §9.1;
+ * Team seats 2–5 on the flat floor, 6–10 run as lens pods;
  * 3 was the legacy expert trio).
  * Web reads localStorage directly (matching loadLensConfig); native reads go
  * through initAnalystLensService's Preferences sync in App.tsx.
@@ -279,7 +279,7 @@ export function saveLastModeratorPick(pick: LastModeratorPick): void {
 }
 
 /** Persist the ordinary ensemble model selection (capped at 10 entries —
- *  2–5 flat floor, 6–10 lens pods, plan §9.1). */
+ * 2–5 flat floor, 6–10 lens pods,). */
 export function saveEnsembleModelSelection(selection: EnsembleModelSelection): void {
     setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 10)).catch(e =>
         console.warn('[AnalystLens] Failed to save ensemble model selection:', e)

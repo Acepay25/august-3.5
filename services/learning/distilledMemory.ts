@@ -1,6 +1,6 @@
 /**
  * distilledMemory — the notebook side of insight store unification (plan
- * §8.1). Attributed insights (severity lessons, provider-attributed
+ *). Attributed insights (severity lessons, provider-attributed
  * post-mortem lessons) used to live in a standalone Preferences key
  * (`attributed_insights_kb_<user>`) — a third parallel memory store with its
  * own cap and no review UI. They now live IN the trader notebook as one
@@ -15,7 +15,7 @@
  * The notebook is the single persistent store; the cache only mirrors it.
  *
  * Provenance: every fact carries a `distilled:<fingerprint>` source tag —
- * the normalized-insight slug the §4.6 distill path keys on. A fact whose
+ * The normalized-insight slug the distill path keys on. A fact whose
  * fingerprint already exists is updated in place instead of duplicated.
  */
 
@@ -42,7 +42,7 @@ const activeUsername = (): string =>
         ? (localStorage.getItem('last_active_user') || 'default')
         : 'default';
 
-// ─── Fingerprint (the §4.6 normalizer, minimal form) ────────────────────────
+// ─── Fingerprint (the normalizer, minimal form) ────────────────────────
 
 /**
  * Deterministic insight fingerprint: lowercase, numbers/dates/trade ids and

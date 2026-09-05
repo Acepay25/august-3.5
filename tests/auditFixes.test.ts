@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Batch 14 (plan §14) regression tests — audit fixes for landed batches.
+// Batch 14 regression tests — audit fixes for landed batches.
 
 // ─── 14-1: Kelly accepts the journal's NEGATIVE loss magnitudes ────────────
 
 import { kellyAdvisory } from '../utils/ticketSize';
 
-describe('§14-1 kellyAdvisory sign normalization', () => {
+describe('kellyAdvisory sign normalization', () => {
     it('renders from a negative avgLoss (the journal stores losses negative)', () => {
         // Same economics as the positive-literal tests: W=0.6, R=2 → f*=0.4
         const adv = kellyAdvisory(12, 8, 200, -100);
@@ -25,7 +25,7 @@ describe('§14-1 kellyAdvisory sign normalization', () => {
 // The transport builds real fetch calls — stub fetch so no network happens.
 // jsdom's location.hostname is 'localhost', which routes sendChatRequest
 // through the dev /__provider_proxy branch — override it to a non-local
-// host so the DIRECT messagesCall/googleCall path (the one §14-2 fixed)
+// Host so the DIRECT messagesCall/googleCall path (the one -2 fixed)
 // is what the tests exercise. Same setHostname pattern as
 // tests/warmProviderConnection.test.ts.
 const fetchMock = vi.fn();
@@ -51,7 +51,7 @@ const anthropicOk = () => ({
     json: async () => ({ content: [{ type: 'text', text: 'hello' }], usage: {} }),
 });
 
-describe('§14-2 wire audit on every transport', () => {
+describe('wire audit on every transport', () => {
     beforeEach(() => fetchMock.mockReset());
 
     it('messages format with thinking applied → anthropic-thinking audit', async () => {
@@ -112,7 +112,7 @@ const mkTrade = (over: Partial<LoggedTrade>): LoggedTrade => ({
     ...over,
 });
 
-describe('§14-6 open-time trade cap', () => {
+describe('open-time trade cap', () => {
     const NOW = new Date(Date.UTC(2026, 7, 30, 1, 0)); // 01:00 UTC Aug 30
     it('a trade opened yesterday but closed today does NOT consume today\'s cap', () => {
         const t = mkTrade({
@@ -132,7 +132,7 @@ describe('§14-6 open-time trade cap', () => {
 
 // ─── 14-7: rowPnlUsd converts leveraged percents through the margin ────────
 
-describe('§14-7 rowPnlUsd', () => {
+describe('rowPnlUsd', () => {
     it('uses investmentAmount as the margin when present', () => {
         const t = mkTrade({ pnlAmount: undefined, pnlPercent: -50, investmentAmount: 2000 });
         expect(rowPnlUsd(t, 10_000, 1)).toBeCloseTo(-1000);
@@ -151,7 +151,7 @@ describe('§14-7 rowPnlUsd', () => {
 
 import { getSessionGuardConfig } from '../utils/harnessSettings';
 
-describe('§14-8 getSessionGuardConfig', () => {
+describe('getSessionGuardConfig', () => {
     beforeEach(() => localStorage.clear());
     it('defaults to the tight preset', () => {
         const c = getSessionGuardConfig();

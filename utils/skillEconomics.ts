@@ -1,5 +1,5 @@
 /**
- * §8.5c — context-budget economics (plan §8.5c).
+ * Context-budget economics.
  *
  * Injection chars are the scarce resource, but nothing measured a skill's
  * cost against its benefit: a +1pt-lift skill occupying 200 chars of every
@@ -8,7 +8,7 @@
  * Cost  = Σ injected chars per fire (from the injection log's `chars` field;
  *         legacy records without it fall back to the per-stage default —
  *         an index line is cheap, a full-body verdict pull is not, so the
- *         §4.7 index-layer economics price both).
+ * Index-layer economics price both).
  * Benefit = lift points × injection frequency. liftPerChar = benefit / cost.
  *
  * The monthly report card names the worst offender (the most chars per unit

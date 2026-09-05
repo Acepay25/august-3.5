@@ -157,7 +157,7 @@ export const buildEnsembleAnalysts = (
         // seats 2–5 analysts). Do not fall back to provider.ensembleModels
         // — those leftover defaults used to fill the first provider and
         // hide the models the user just picked.
-        // Pod tier (plan §9.1): 6-10 Team slots are legal — above 5 the
+        // Pod tier: 6-10 Team slots are legal — above 5 the
         // engine runs them as lens pods, not a flat floor.
         const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, MAX_ROSTER_SEATS);
         if (slots.length > 0) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.4a/§8.4b — skill graveyard + retirement taxonomy: tombstone lines for
+// Skill graveyard + retirement taxonomy: tombstone lines for
 // retired skills, creation dedup against the ARCHIVE (exact + token-shuffled
 // twins → REVIVAL card, never a silent re-creation), reason mapping, and the
 // per-reason re-entry rules.

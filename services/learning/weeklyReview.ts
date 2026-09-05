@@ -1,5 +1,5 @@
 /**
- * Weekly review (Batch 5, plan §4.5) — the deterministic week-stats
+ * Weekly review — the deterministic week-stats
  * assembly + ONE moderator-provider call synthesizing exactly ONE
  * improvement impulse (Edgewonk cadence: one impulse, not a lecture).
  *
@@ -44,7 +44,7 @@ export interface WeeklyReviewDigest {
     impulse: string;
     /** Provider that wrote it (provenance). */
     providerName: string;
-    /** §8.5b: the loop's own ratios (null samples stay null). */
+    /** The loop's own ratios (null samples stay null). */
     metaCalibration?: MetaCalibrationRatios;
 }
 
@@ -151,7 +151,7 @@ export const runWeeklyReviewIfDue = async (
 ): Promise<WeeklyReviewDigest | null> => {
     try {
         if (!(await isWeeklyReviewDue(username))) return null;
-        // §8.4c/§8.4d: deterministic passes beside the weekly rollup (no LLM):
+        // Deterministic passes beside the weekly rollup (no LLM):
         // live-skill contradiction detection + settled-belief challenge flags.
         try {
             // Synchronous sweep; the queued count rides the log like the
@@ -159,11 +159,11 @@ export const runWeeklyReviewIfDue = async (
             const conflicts = runContradictionSweep(username);
             if (conflicts > 0) console.log('[ContradictionSweep] queued', conflicts, 'conflict proposals');
             await runBeliefChallengePass(username, trades);
-            // §4.6 (batch 6): the self-improvement loop — episodes →
+            // (batch 6): the self-improvement loop — episodes →
             // fingerprints → (judge-gated) distill → measurement. Offline,
             // read-only; fires alongside the weekly review.
             await runSelfImprovementPass(username, trades);
-            // §8.2c: mine correct passes — resolve recent SKIPPED trades
+            // Mine correct passes — resolve recent SKIPPED trades
             // against post-skip klines (≤5 fetches/sweep) and queue
             // avoid-skill drafts for vindicated-pass clusters through the
             // approval inbox. Fire-and-forget: it fetches, so it must never

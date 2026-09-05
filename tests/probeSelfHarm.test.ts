@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §14-3 probe self-harm guard — separate file because it mocks the whole
+// -3 probe self-harm guard — separate file because it mocks the whole
 // transport module (probeWireSupport calls sendChatRequest directly).
 
 const probeSend = vi.fn();
@@ -26,7 +26,7 @@ const glm = () => baseConfig({
     baseUrl: 'https://api.z-ai.dev/v1', selectedModel: 'glm-4.6', id: 'glm',
 });
 
-describe('§14-3 probe self-harm guard', () => {
+describe('probe self-harm guard', () => {
     beforeEach(() => {
         localStorage.clear();
         resetHarnessLessonCache();

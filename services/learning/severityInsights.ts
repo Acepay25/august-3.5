@@ -1,11 +1,11 @@
 /**
  * severityInsights — R-severity and provider-attributed insight generation
  * (moved out of InsightExtractionService when the regex miner was deleted in
- * the §8.1 store-unification batch: regex mining rewards fluent writing, not
+ * The store-unification batch: regex mining rewards fluent writing, not
  * correct writing, and the prompt-injection layer built on it was dead code).
  *
  * These generators write through the attributed-insight store API in
- * PatternMemorySynthesisService, which since §8.1 persists to the trader
+ * PatternMemorySynthesisService, which since persists to the trader
  * notebook (distilled/ memory files) — the notebook paths the plan asked the
  * post-mortem job to be re-pointed at.
  */

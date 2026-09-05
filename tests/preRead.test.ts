@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-// Pre-read capture (Batch 5 remainder, plan §5a): prior-vs-verdict comparison
+// Pre-read capture (Batch 5 remainder,): prior-vs-verdict comparison
 // and the human-Brier journal read-out.
 
 import {
