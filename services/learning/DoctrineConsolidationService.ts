@@ -15,10 +15,9 @@ import { AnalystRole, LoggedTrade, TradeOutcome } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import {
     getMemoryFiles,
-    createMemoryFileUnlocked,
-    updateMemoryFileUnlocked,
     ensureHarnessFoldersUnlocked,
     withNotebookWriteLock,
+    upsertHarnessFileUnlocked,
 } from './MemoryFilesService';
 import { sendChatTurn } from '../providers/GenericProviderService';
 import {
@@ -208,11 +207,7 @@ const consolidateDoctrineUnlocked = async (
         if (text.length > MAX_DOCTRINE_CHARS) text = `${text.slice(0, MAX_DOCTRINE_CHARS).trimEnd()}\n…`;
 
         const stamped = `<!-- trades: ${countClosed(trades)} -->\n${text}`;
-        if (existing) {
-            await updateMemoryFileUnlocked(existing.id, { content: stamped }, username);
-        } else {
-            await createMemoryFileUnlocked(profileFolder.id, DOCTRINE_FILE_NAME, stamped, username, true);
-        }
+        await upsertHarnessFileUnlocked(profileFolder, DOCTRINE_FILE_NAME, stamped, username);
         return { updated: true };
     } catch (e) {
         console.warn('[Doctrine] Consolidation failed (previous doctrine kept):', e instanceof Error ? e.message : e);
