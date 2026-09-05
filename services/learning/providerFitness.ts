@@ -14,6 +14,7 @@
  * a broken performance store degrades to neutral, never throws.
  */
 
+import { clamp01 } from '../../utils/math';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { getRollingWindowStats } from '../backtesting/ModelPerformanceService';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -61,7 +62,6 @@ export interface ProviderFitness {
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
 
-const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
 
 /**
  * Record one preflight gate outcome for a provider. Best-effort: telemetry

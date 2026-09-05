@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { clamp100 } from '../../utils/math';
 import { Cpu } from 'lucide-react';
 import { AIProvider, LoggedTrade } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
@@ -70,7 +71,7 @@ const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }
     const strokeWidth = 8;
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
-    const progress = Math.max(0, Math.min(100, percentage));
+    const progress = clamp100(percentage);
     const strokeDashoffset = circumference - (progress / 100) * circumference;
 
     return (

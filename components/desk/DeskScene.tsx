@@ -20,6 +20,7 @@
  */
 
 import React from 'react';
+import { clamp01 } from '../../utils/math';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import type {
@@ -179,8 +180,8 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         const seatName = draggingSeatRef.current;
         if (!seatName || !floorRef.current) return;
         const rect = floorRef.current.getBoundingClientRect();
-        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        const x = clamp01((e.clientX - rect.left) / rect.width);
+        const y = clamp01((e.clientY - rect.top) / rect.height);
         setDragPositions(prev => ({ ...prev, [seatName]: { x, y } }));
     };
     const handleFloorPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {

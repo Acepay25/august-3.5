@@ -4,6 +4,7 @@
  */
 
 import { AIProvider, LoggedTrade } from '../../types';
+import { clamp100 } from '../../utils/math';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
     getPreferenceObject,
@@ -595,7 +596,7 @@ export const calculateDynamicWeights = (
         }
 
         // Clamp score to 0-100
-        score = Math.max(0, Math.min(100, score));
+        score = clamp100(score);
 
         // Convert to 0-1 weight
         weights[provider] = score / 100;
@@ -1145,7 +1146,7 @@ export const calculateDynamicWeightsEnhanced = (
         }
 
         // Clamp score to 0-100
-        score = Math.max(0, Math.min(100, score));
+        score = clamp100(score);
         weights[provider] = score / 100;
     }
 
@@ -1943,7 +1944,7 @@ export const calculateDynamicWeightsWithAllImprovements = (
         }
 
         // Clamp score
-        score = Math.max(0, Math.min(100, score));
+        score = clamp100(score);
         weights[provider] = score / 100;
     }
 

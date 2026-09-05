@@ -4,6 +4,7 @@
  */
 
 import { RSI, MACD, EMA, BollingerBands, ATR, SMA, Stochastic } from 'technicalindicators';
+import { clamp100 } from '../../utils/math';
 import { Kline } from './MarketDataService';
 
 export interface TechnicalIndicators {
@@ -587,7 +588,7 @@ export const calculateConfluenceScore = (
     }
 
     // Clamp score
-    score = Math.max(0, Math.min(100, score));
+    score = clamp100(score);
 
     // Determine strength
     const strength: 'strong' | 'moderate' | 'weak' =
