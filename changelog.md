@@ -2,6 +2,72 @@
 
 Plain-English log of change rounds. Newest first.
 
+## App.tsx split into orchestration hooks, shared lookup helpers, one review fix
+
+Continues the approved implementation plan. App.tsx went from 4,588 to
+3,328 lines; every extraction was verified as a behavior-preserving move
+with regression tests, and the full suite grew to 2,071 passing tests.
+
+- **Workspace bootstrap is mount-only again (bug fix).** The profile
+  loading extraction had re-armed the startup workspace scan on every
+  identity change of `loadUserData` — and that callback legitimately
+  changes identity whenever provider configs, the lens config, or the
+  ensemble selection change. Each re-run reloaded the whole profile from
+  disk (loading flash, autopilot reset, migrations and startup backups
+  re-running) and wiped work outside the debounced save window. The
+  effect now reads the loader through a ref and depends only on stable
+  setter identities; a regression test edits provider configs mid-session
+  and asserts the profile loads exactly once.
+- **Journal actions hook** (`useTradeJournalActions`): delete trades with
+  thinking-record/autopilot cascade, clear-all with undo, insight
+  generate/rewrite/delete, outcome/PnL/leverage corrections, AI Review
+  regeneration. App keeps the stable debounced auto-refresh trigger; the
+  regeneration latest-ref is assigned inside the hook.
+- **Profile persistence hook** (`useProfilePersistence`): heavy DATA save
+  (1500ms debounce), light SETTINGS save (2500ms), 15s mid-run heartbeat,
+  synchronous unload flush. New fake-timer suite covers the debounces,
+  the heartbeat's dirty check during a simulated streaming run (the DATA
+  debounce perpetually restarting), idle silence, and the no-user
+  bail-out.
+- **Conversation housekeeping hook** (`useConversationHousekeeping`):
+  clear-all with undo, new-conversation reuse, load, single/selected
+  delete with the active-session fallback, user-message editing, and the
+  Ctrl/Cmd+N + "/" shortcuts. A stale duplicated shortcut comment was
+  removed.
+- **Lens/ensemble config hook** (`useLensAndEnsembleConfig`): moderator
+  picks with last-pick persistence, lens config setter, ensemble model
+  selection, accuracy-mode confirmation, custom prompt setters,
+  once-per-session ensemble seeding, catalog reconcile wiring.
+- **Agent threads hook** (`useAgentThreads`): bots/groups roster state
+  (pub/sub mirrored), thread selection with its composer side effects,
+  unread badges, group-edit targeting, roster CRUD with confirm dialogs.
+  The group runner, DM mailbox, and attention derivations stay in App —
+  they are glued to the analysis-pipeline bridge.
+- **Watch + autopilot hook** (`useWatchAndAutopilot`): watch toggling,
+  open-risk badge, follow-up/pre-read handlers, the diff-based autopilot
+  registration effect, startup catch-up, resolution confirm/dismiss, and
+  deferred cross-conversation watch-list actions. The price-triggered
+  re-debate trigger stays in App (it needs the pipeline's rerun-payload
+  builder).
+- **Floor projection hook** (`useFloorProjection`): gauge stats, positions
+  rail, squawk tape (prints, reviews, harness lessons, run log, turns),
+  day PnL, per-seat wire states, tickers, and the seat-click opener.
+- **Shared lookup helpers**: `findProviderById` (providerUtils) and
+  `findBotById` (agentRoster) replace ~20 inline `find(x => x.id === …)`
+  call sites across hooks, components, and App. Composite-predicate
+  lookups (ready-provider checks) and the Hermes bot registry (a
+  different type) deliberately keep their local predicates.
+- **Claim rejected after re-probe:** the plan's step to delete
+  `NumericChartService.detectPattern` as a "strict subset" of
+  `CandlePatternDetector.scan` is false — the two differ in input shape,
+  pattern vocabulary, strengths, and priority, and the chart pattern
+  feeds the AI prompt string and a state-confidence nudge. A repoint
+  would change model-facing numbers, and an output-preserving adapter
+  would keep the entire function. Dropped.
+
+Gates after every step: tsc 0 · vitest green (2,071 passed / 11 skipped) ·
+vite build clean · eslint 0 errors on touched files · dev boot 200.
+
 ---
 
 ## reviewer follow-ups: dead code, per-file import, sweep backoff
