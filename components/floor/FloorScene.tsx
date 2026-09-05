@@ -98,7 +98,7 @@ export interface FloorSceneProps {
         level: 'clear' | 'notice' | 'warning' | 'standdown';
     };
     /** Per-seat wire observability: thinking/effort/cooldown/
- * Fitness derived from the P5 audit lines + health. Keyed by seat
+ * Fitness derived from the wire-audit lines + health. Keyed by seat
      *  name; absent = no evidence yet (badge hidden). */
     seatWire?: Record<string, SeatWireState>;
     /** Clicking a seat opens that agent's 1:1 chat thread. */
@@ -126,7 +126,9 @@ const GuardRotation: React.FC<{
             </p>
             <p className="mt-0.5 font-mono text-[10px] tabular-nums text-zinc-400">
                 {face === 0
-                    ? <>{pnlText} · limit −${Math.round(guard.dailyLossLimitUsd).toLocaleString()}</>
+                    ? guard.dailyLossLimitUsd > 0
+                        ? <>{pnlText} · limit −${Math.round(guard.dailyLossLimitUsd).toLocaleString()}</>
+                        : <>{pnlText} · limit — set equity</>
                     : <>{remaining} of {guard.maxTradesPerDay} tickets left today</>}
             </p>
         </div>

@@ -3,9 +3,9 @@
 // The floor should be the ONE surface where you can SEE the harness managing
 // itself: per seat, what the wire actually received (thinking on/off, effort
 // tier), whether the provider is benched on cooldown, and how fit it looks.
-// All of it is DERIVED — from the P5 wire-audit lines already in the run log
+// All of it is DERIVED — from the wire-audit lines already in the run log
 // (`wire: <provider> <phase> applied|no-op — <reason>`), the health
-// telemetry, and the P7 wire-lesson pins. No new state, no new store.
+// telemetry, and the harness wire-lesson pins. No new state, no new store.
 //
 // Monochrome doctrine: states encode as glyphs + text, never color.
 
@@ -21,7 +21,7 @@ export interface SeatWireState {
     thinking: 'on' | 'off' | 'unknown';
     /** Effort tier the wire actually received, parsed from the audit reason. */
     effort: ReasoningEffort | null;
-    /** True when a P7 harness wire lesson pinned this seat's route off. */
+    /** True when a harness wire lesson pinned this seat's route off. */
     pinnedOff: boolean;
     /** Cooldown remaining from health telemetry (0 = not benched). */
     cooldownRemainingMs: number;

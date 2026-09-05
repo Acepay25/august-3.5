@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 // Grade-tiered risk + Kelly advisory (Batch 2) — the deterministic ticket-math
 // extensions layered onto the existing sizing.
 
-import { gradeRiskTier, kellyAdvisory } from '../utils/ticketSize';
+import { computeContractSize, gradeRiskTier, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
 
 describe('gradeRiskTier', () => {
     it('Grade A keeps the full base risk', () => {
@@ -74,5 +74,41 @@ describe('kellyAdvisory', () => {
     it('zero losses (or zero avg loss) → undefined estimate, no line', () => {
         expect(kellyAdvisory(20, 0, 200, 100).line).toBe('');
         expect(kellyAdvisory(20, 5, 200, 0).line).toBe('');
+    });
+});
+
+describe('computeContractSize — unconfigured equity', () => {
+    const trade = {
+        confidence: 'High',
+        direction: 'Long',
+        coinName: 'BTCUSDT',
+        entryPoints: [{ price: '100' }],
+        stopLoss: '90',
+    } as any;
+
+    it('returns a no-trade verdict instead of the old $10,000 phantom size', () => {
+        for (const eq of [0, -5, Number.NaN]) {
+            const sized = computeContractSize(trade, eq, 10, 1);
+            expect(sized.label).toBe('none');
+            expect(sized.fraction).toBe(0);
+            expect(sized.riskUsd).toBe(0);
+            expect(sized.qty).toBeNull();
+            expect(sized.reason).toBe(EQUITY_NOT_SET);
+            expect(sized.line).toMatch(/Equity not set/);
+        }
+    });
+
+    it('a vetoed trade keeps its own (more specific) reason', () => {
+        const vetoed = { ...trade, confidence: 'Avoid' };
+        const sized = computeContractSize(vetoed, 0, 10, 1);
+        expect(sized.reason).not.toBe(EQUITY_NOT_SET);
+        expect(sized.fraction).toBe(0);
+    });
+
+    it('equity > 0 sizes exactly as before', () => {
+        const sized = computeContractSize(trade, 10_000, 10, 1);
+        expect(sized.riskUsd).toBe(100);
+        expect(sized.qty).toBeCloseTo(10, 5);
+        expect(sized.reason).toBe('Uncapped');
     });
 });

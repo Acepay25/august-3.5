@@ -23,7 +23,7 @@ import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
 import { applyReasoningToChatParams, buildReasoningPatch } from './reasoningControls';
 // Side-effect import: harnessLessons registers the wire-route pin checker
-// into reasoningControls at module init (P7 read path). Importing here (the
+// into reasoningControls at module init (harness-lesson read path). Importing here (the
 // transport) guarantees the registration happens before any reasoning patch
 // is built — harnessLessons imports buildReasoningPatch from
 // reasoningControls, so the checker flows in through this module instead of
@@ -558,7 +558,7 @@ async function messagesCall(
         };
         delete body.temperature;
     }
-    // P5 wire audit: the messages transport previously emitted
+    // Wire audit: the messages transport previously emitted
     // NO audit line, so Claude seats — the format whose thinking gate P3
     // fixed — were invisible in the run log. Report the shim's actual
     // decision: applied (thinking block sent), or why it wasn't.
@@ -710,7 +710,7 @@ async function googleCall(
     const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
     const key = (config.apiKey || '').trim();
     const url = googleGenerateUrl(base, config.selectedModel, key, false);
-    // P5 audit: Google generateContent has no verified effort
+    // Wire audit: Google generateContent has no verified effort
     // knob — record the fail-closed no-op so the run log says so explicitly
     // instead of staying silent for Gemini seats.
     options?.onWireAudit?.({

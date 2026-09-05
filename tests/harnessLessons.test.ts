@@ -109,7 +109,7 @@ describe('harnessLessons store (P7)', () => {
     });
 });
 
-describe('probeWireSupport (P6 known-answer probe)', () => {
+describe('probeWireSupport (known-answer probe)', () => {
     beforeEach(() => {
         localStorage.clear();
         resetHarnessLessonCache();

@@ -7,7 +7,7 @@ import { describeModelCalibration } from '../../utils/avoidReason';
 import { WhyAvoidPanel, WaitForConfirmationBanner } from './WhyAvoidPanel';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
-import { computeContractSize, computeLiquidationBuffer, gradeRiskTier } from '../../utils/ticketSize';
+import { computeContractSize, computeLiquidationBuffer, gradeRiskTier, EQUITY_NOT_SET } from '../../utils/ticketSize';
 import { fundingCarryCost } from '../../utils/trustSurface';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { ticketExpiryLine } from '../../utils/paperPnl';
@@ -378,7 +378,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 {size.fraction > 0 && (
                     <p className="text-xs text-zinc-500">{tier.line}</p>
                 )}
-                {size.fraction > 0 && (
+                {(size.fraction > 0 || size.reason === EQUITY_NOT_SET) && (
                     <div className="grid grid-cols-2 gap-2">
                         <label className="block text-[11px] text-zinc-500">
                             Balance $
@@ -386,10 +386,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                                 type="number"
                                 min={100}
                                 step={100}
-                                value={equityUsd}
+                                value={equityUsd || ''}
+                                placeholder="Not set"
                                 aria-label="Account balance"
                                 onChange={e => {
-                                    const next = Number(e.target.value) || 10_000;
+                                    const raw = Number(e.target.value);
+                                    const next = Number.isFinite(raw) && raw > 0 ? raw : 0;
                                     setEquityUsd(next);
                                     saveHarnessSettings({ equityUsd: next });
                                 }}

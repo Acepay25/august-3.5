@@ -222,3 +222,19 @@ describe('formatGuardContextBlock (debate injection)', () => {
         expect(block).toContain('stand down');
     });
 });
+
+describe('assessSession — unconfigured equity fails closed', () => {
+    it('standdown with a set-equity warning instead of the old $10,000 stand-in', () => {
+        const v = assessSession([trade()], 0, DEFAULT_SESSION_GUARD, NOW);
+        expect(v.level).toBe('standdown');
+        expect(v.warnings.join(' ')).toMatch(/Equity not set/);
+        expect(v.lossBudgetUsed).toBe(0);
+        expect(v.tradesToday).toBe(1);
+    });
+    it('NaN equity behaves the same', () => {
+        expect(assessSession([], Number.NaN, DEFAULT_SESSION_GUARD, NOW).level).toBe('standdown');
+    });
+    it('positive equity keeps the normal verdict', () => {
+        expect(assessSession([], 10_000, DEFAULT_SESSION_GUARD, NOW).level).toBe('clear');
+    });
+});

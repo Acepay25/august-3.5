@@ -120,7 +120,7 @@ export interface WireAuditEntry {
     route: 'xai-effort' | 'glm-thinking' | 'deepseek-thinking' | 'anthropic-thinking' | 'responses-effort' | 'none';
     /** The harness effort tier that drove the translation. */
     effort: ReasoningEffort;
-    /** Machine-readable outcome — the P5 runStats / P6 probe substrate. */
+    /** Machine-readable outcome — the runStats / known-answer-probe substrate. */
     applied: boolean;
     /** Human-readable reason (surfaced in the DebateRunLog budget lines). */
     reason: string;
@@ -133,7 +133,7 @@ export interface ReasoningBodyPatch {
 }
 
 /**
- * Wire-route pin consult (P7 read path). Populated by harnessLessons at
+ * Wire-route pin consult (harness-lesson read path). Populated by harnessLessons at
  * module init via registerWireRoutePins — reasoningControls CANNOT import
  * harnessLessons (harnessLessons imports buildReasoningPatch from here;
  * a static cycle would dead-lock module init). A pinned route fails closed
@@ -287,7 +287,7 @@ declare module './GenericProviderService' {
 
 /**
  * Apply the reasoning patch to a chat-completions params object in place.
- * Returns the audit entry either way (P5 labels every call, applied or not).
+ * Returns the audit entry either way (the audit labels every call, applied or not).
  */
 export const applyReasoningToChatParams = (
     config: Pick<ProviderConfig, 'id' | 'baseUrl' | 'apiFormat' | 'selectedModel'>,

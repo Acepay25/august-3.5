@@ -177,7 +177,12 @@ describe('TradingSignalCard', () => {
                 leverage={5}
             />,
         );
-        expect(screen.getByLabelText('Account balance')).toBeDefined();
+        // Unconfigured equity fails closed: no phantom size, and the card
+        // says why. The balance editor stays reachable so the user CAN fix it.
+        expect(screen.getByText(/Equity not set/)).toBeDefined();
+        const balance = screen.getByLabelText('Account balance');
+        expect(balance).toBeDefined();
+        fireEvent.change(balance, { target: { value: '10000' } });
         fireEvent.change(screen.getByLabelText('Risk percent'), { target: { value: '2' } });
         expect(screen.getByText(/\$200 risk/)).toBeDefined();
         expect(screen.getByText(/Liq buffer/)).toBeDefined();

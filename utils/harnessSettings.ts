@@ -14,7 +14,7 @@ export interface HarnessSettings {
     pinnedPromptLane?: 'live' | 'control';
     /** Analysts may call live desk tools (search, derivatives, session) before the brief. Default on. */
     deskToolsEnabled: boolean;
-    /** Session-guard preset (plan -8): 'default' = research-tight
+    /** Session-guard preset: 'default' = research-tight
      *  (2%/2 trades/2-streak/4h), 'ftmo' = the looser alternative
      *  (3%/3 trades). Individual overrides win over the preset. */
     guardPreset?: 'default' | 'ftmo';
@@ -43,7 +43,10 @@ export const getHarnessSettings = (): HarnessSettings => {
     const rate = stored.promptAbRate;
     const cap = stored.skillLibraryCap;
     return {
-        equityUsd: typeof stored.equityUsd === 'number' && stored.equityUsd > 0 ? stored.equityUsd : 10_000,
+        // 0 means "not configured" — sizing and the session guard fail closed
+        // on it. The old $10,000 stand-in here made every downstream number
+        // look authoritative for a user who never set an account.
+        equityUsd: typeof stored.equityUsd === 'number' && stored.equityUsd > 0 ? stored.equityUsd : 0,
         riskPercent: typeof stored.riskPercent === 'number' && stored.riskPercent > 0
             ? Math.min(10, Math.max(0.1, stored.riskPercent))
             : 1,
