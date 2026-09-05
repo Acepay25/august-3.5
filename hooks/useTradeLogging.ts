@@ -203,7 +203,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
             console.log('[AutoInsight] Trade auto-added to Recent Insights:', loggedTrade.id);
         } catch (error) {
-            // P2-14: Surface the failure so the user knows an insight
+            // Surface the failure so the user knows an insight
             // wasn't created — their trade was still logged successfully.
             console.error('[AutoInsight] Failed to generate insight:', error);
             toast.error(
@@ -571,7 +571,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
                 console.log('[AutoInsight] Entry Not Hit logged to Recent Insights:', loggedTrade.id);
             } catch (error) {
-                // P2-14: Surface the failure so the user knows an insight
+                // Surface the failure so the user knows an insight
                 // wasn't created — their trade was still logged successfully.
                 console.error('[AutoInsight] Failed to generate insight:', error);
                 toast.error(

@@ -5,7 +5,7 @@ import type { ProviderConfig } from '../types/provider';
 import type { Message } from '../types';
 import { MessageRole } from '../types/enums';
 
-// Bot Mode G1 async half: per-target serial queues, TTL expiry, hop cap,
+// The mailbox's async half: per-target serial queues, TTL expiry, hop cap,
 // sender wake-up notices, and marker stripping on the settled bubble.
 // The transport (streamQuickResponse) is mocked — replies are scripted.
 
@@ -61,7 +61,7 @@ beforeEach(() => {
     streamQuickResponse.mockReset();
 });
 
-describe('useBotMailbox (G1)', () => {
+describe('useBotMailbox', () => {
     it('runs the target bot turn and wakes the sender with a reply notice', async () => {
         streamQuickResponse.mockResolvedValue('Size it at 0.5R.');
         const { h, messages } = setup();

@@ -123,7 +123,7 @@ interface AutomationEditorModalProps {
     initial?: AutomationConfig;
     modelOptions: ModelOption[];
     providers: ProviderConfig[];
-    /** G5: the bot roster — enables "Run as bot" routines when non-empty. */
+    /** the bot roster — enables "Run as bot" routines when non-empty. */
     bots?: AgentBot[];
     onClose: () => void;
     onSave: (config: AutomationConfig) => void;
@@ -175,7 +175,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         const m = initial?.moderatorModel;
         return m && m.providerId ? `${m.providerId}::${m.modelId}` : '';
     });
-    // G5: "Run as bot" — empty string = the ensemble pipeline (default).
+    // "Run as bot" — empty string = the ensemble pipeline (default).
     const [botId, setBotId] = useState<string>(initial?.botId ?? '');
     const [error, setError] = useState<string | null>(null);
 
@@ -217,7 +217,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         if (!cronValid) { setError('The schedule is not a valid cron expression.'); return; }
         if (scheduleDays.length === 0 && !advancedCron.trim()) { setError('Toggle at least one day of the week.'); return; }
         if (inputSource === 'template' && !promptTemplate.trim()) { setError('Enter the prompt template the automation should send.'); return; }
-        // G5: a bot-scoped routine runs the bot's own provider/model — the
+        // a bot-scoped routine runs the bot's own provider/model — the
         // ensemble seats do not apply.
         if (!runAsBot) {
             if (!selectionsValid) { setError(useLenses ? 'Lens mode needs 3 distinct analyst models.' : 'Pick at least one analyst model.'); return; }
@@ -235,7 +235,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             schedule: { cron: effectiveCron },
             inputSource,
             promptTemplate: inputSource === 'template' ? promptTemplate.trim() : undefined,
-            // G5: bot-scoped routines carry ONLY the bot identity (the
+            // bot-scoped routines carry ONLY the bot identity (the
             // ensemble seats are not read at fire time) — clear stale picks
             // so a saved routine never looks half-configured.
             mode,
@@ -446,7 +446,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                         )}
                     </div>
 
-                    {/* G5: Run as bot — the routine executes as a roster bot
+                    {/* Run as bot — the routine executes as a roster bot
                         (its persona + its own provider/model, reply in its
                         thread) instead of the ensemble debate. Empty = the
                         full ensemble pipeline (default). Rendered while a

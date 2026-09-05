@@ -6,7 +6,7 @@
  * - Configurable alert thresholds
  * - Push notifications when price approaches Entry/TP/SL
  *
- * P1-10: On native platforms, alerts are delivered via
+ * On native platforms, alerts are delivered via
  * @capacitor/local-notifications (so they fire even when the app is
  * backgrounded) and the WebSocket/polling loop is paused on `pause` and
  * resumed on `resume` via @capacitor/app. On web, the Web Notifications API
@@ -57,7 +57,7 @@ class PriceAlertServiceClass {
     // after the user disabled alerts or backgrounded the app.
     private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private maxReconnectAttempts = 5;
-    private isPaused = false; // P1-10: true when app is backgrounded
+    private isPaused = false; // true when app is backgrounded
     private nativeListenersRegistered = false;
     private nativeNotificationIdCounter = 1000;
     // SetupWatchService (and future consumers) can hook the same real-time
@@ -79,7 +79,7 @@ class PriceAlertServiceClass {
     private static readonly MAX_PENDING_QUIET = 25;
 
     constructor() {
-        // P1-10: Wire native app lifecycle (pause/resume) so we stop the
+        // Wire native app lifecycle (pause/resume) so we stop the
         // WebSocket + polling loop when the app is backgrounded and restart
         // it on resume. This saves battery and prevents WebView throttling
         // from causing stale-price alerts.
@@ -366,7 +366,7 @@ class PriceAlertServiceClass {
      */
     private ensureMonitoring(): void {
         if (this.alerts.size === 0 && this.externalMonitorHolders === 0 && this.trackedSymbols.size === 0) return;
-        // P1-10: Don't start monitoring while backgrounded — resume() will
+        // Don't start monitoring while backgrounded — resume() will
         // call this again on foreground.
         if (this.isPaused) return;
 
@@ -595,7 +595,7 @@ class PriceAlertServiceClass {
     /**
      * Send push notification.
      *
-     * P1-10: On native platforms, use @capacitor/local-notifications so the
+     * On native platforms, use @capacitor/local-notifications so the
      * alert fires even when the app is backgrounded (the Web Notifications
      * API requires a service worker push subscription to work in a WebView,
      * which this app doesn't have). On web, fall back to the Web Notifications API.

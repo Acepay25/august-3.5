@@ -35,7 +35,7 @@ export interface UsePostMortemParams {
     updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string | null) => void;
     isAccuracyModeEnabled: boolean;
     accuracySubMode: string;
-    // P0-2: activeUsername is used to cancel in-flight post-mortem work
+    // activeUsername is used to cancel in-flight post-mortem work
     // when the user switches accounts, preventing the old user's results
     // from being written into the new user's trade log. Passed as a ref
     // because this hook is instantiated before App.tsx destructures
@@ -107,7 +107,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
     /** Post-mortem message id currently running a "what would I do today?" re-assessment. */
     const [todayReassessmentInFlight, setTodayReassessmentInFlight] = useState<string | null>(null);
 
-    // ─── P0-2: Cancellation guard for in-flight post-mortem work ──────────
+    // ─── Cancellation guard for in-flight post-mortem work ──────────
     // When the user switches accounts, any async post-mortem analysis still
     // running for the OLD user would otherwise resolve and call
     // setLoggedTrades/setTradeSummaries/setGlobalMemory — clobbering the NEW
@@ -187,7 +187,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         setExpandedPostMortems(prev => ({ ...prev, [postMortemMessageId]: true }));
         updatePostMortemMessages(prev => [...prev, placeholderMsg]);
 
-        // R54: model side-effects from this post-mortem (skill draft,
+        // model side-effects from this post-mortem (skill draft,
         // evidence skills, AI notebook note) — flushed onto the bubble
         // as Hermes-style status rows when the run finishes its learning
         // passes. Declared outside the try so `finally` can flush it.
@@ -419,7 +419,7 @@ Please investigate this discrepancy in your analysis.
                 const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
 
                 for await (const chunk of debateStream) {
-                    // P0-2: abort the stream if the user switched accounts
+                    // abort the stream if the user switched accounts
                     if (isRunStale(myRunId)) {
                         console.log('[PostMortem] Aborting debate stream — user switched');
                         return;
@@ -569,7 +569,7 @@ Please investigate this discrepancy in your analysis.
                 ...((moderatorReasoning || Object.keys(postMortemReasoning).length > 0) ? { reasoningProcesses: { ...(m.reasoningProcesses ?? {}), ...(moderatorReasoning ? { moderator: moderatorReasoning } : {}), ...postMortemReasoning } } : {}),
             } : m));
 
-            // P0-2: If the user switched accounts while the post-mortem was
+            // If the user switched accounts while the post-mortem was
             // running, do NOT write the old user's results into the new
             // user's trade log / summaries / global memory. This is the
             // critical guard — without it, the in-flight setters clobber the
@@ -668,7 +668,7 @@ Please investigate this discrepancy in your analysis.
                     // start as unenforced candidates that still need wins to
                     // confirm. Only the *LLM-crafted* skill (a generative
                     // artifact) goes through the human-approval inbox below.
-                    // R54 ledger: snapshot the skill list BEFORE the sync so
+                    // snapshot the skill list BEFORE the sync so
                     // skills the evidence path CREATED (IF/THEN auto-ingest)
                     // can be diffed out afterward.
                     const beforeSlugs = new Set(listSkillSlugs());
@@ -706,7 +706,7 @@ Please investigate this discrepancy in your analysis.
                                 coin: closed.analysis?.coinName,
                                 crafted,
                             }, notebookUser);
-                            // R54 ledger: the LLM-crafted skill is a proposal —
+                            // the LLM-crafted skill is a proposal —
                             // it lands in the Coach inbox for human review.
                             pmActions.push({
                                 at: toolActionStamp(), speaker: 'Coach', tool: 'skill_draft', ok: true,
@@ -735,7 +735,7 @@ Please investigate this discrepancy in your analysis.
                         if (note) {
                             const created = await writeModelNote(note, notebookUser);
                             console.log('[TraderNotebook] AI wrote notebook note:', created.name, 'in', note.folder);
-                            // R54 ledger: the model authored notebook content.
+                            // the model authored notebook content.
                             pmActions.push({
                                 at: toolActionStamp(), speaker: 'Coach', tool: 'notebook_note', ok: true,
                                 verb: note.decision === 'append' ? 'appended' : 'created',
@@ -752,7 +752,7 @@ Please investigate this discrepancy in your analysis.
             postMortemSucceeded = false;
             if (isRunStale(myRunId)) return;
             console.error("Post Mortem Failed", e);
-            // P2-15: Keep the role as AI (not SYSTEM) so the message renders
+            // Keep the role as AI (not SYSTEM) so the message renders
             // consistently and the persisted record isn't a data-shape
             // mutation (an AI bubble becoming a SYSTEM message). The
             // postMortemFailedCandidate payload drives the retry button,
@@ -772,7 +772,7 @@ Please investigate this discrepancy in your analysis.
             } : m));
         } finally {
             if (!isRunStale(myRunId)) {
-                // R54: flush model side-effects onto the bubble as status
+                // flush model side-effects onto the bubble as status
                 // rows (best-effort — the run result is already saved).
                 if (pmActions.length > 0) {
                     try {

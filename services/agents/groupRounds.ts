@@ -1,5 +1,5 @@
 /**
- * Group room rounds (plan botmode-scan G2) — the pure half of Hermes
+ * Group room rounds  — the pure half of Hermes
  * group-rounds semantics: bounded round-robin where the NEXT speakers are
  * chosen by a deterministic @mention parse (no LLM router), "(pass)" is a
  * first-class outcome, an all-pass round settles the room, and each turn

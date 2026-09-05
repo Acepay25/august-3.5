@@ -48,8 +48,8 @@ import AutomationEditorModal, { ModelOption } from './components/automation/Auto
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 import BotManagerDrawer from './components/bots/BotManagerDrawer';
 
-// P1-6: Lazy-load heavy, conditionally-rendered components so the initial
-// bundle is much smaller. Previously the entire app was one ~1.73 MB chunk.
+// Lazy-load heavy, conditionally-rendered components so the initial
+// bundle stays small. Previously the entire app was one ~1.73 MB chunk.
 // Each lazy() call below produces a separate chunk loaded on demand when
 // the user opens the corresponding panel/modal. ChatArea and Header stay
 // eager (always-rendered, critical path).
@@ -640,7 +640,7 @@ const App: React.FC = () => {
         }
     }, [selectedChatModel]);
 
-    // ─── Bot Mode (plan botmode-scan G1) — pipeline bridge ────────────────
+    // ─── Bot Mode — pipeline bridge ────────────────
     // The pipeline is instantiated above the roster state, so it reads the
     // active bot + dispatches replies through refs assigned during render
     // (same pattern as handleSendMessageRef / loggedTradesRef).
@@ -753,7 +753,7 @@ const App: React.FC = () => {
         if (!enabled) setImages([]);
     }, [setImages]);
 
-    // P0-2: Mirror the (later-declared) activeUsername into a ref so the
+    // Mirror the (later-declared) activeUsername into a ref so the
     // usePostMortem hook — which is instantiated BEFORE useUserProfiles
     // destructures activeUsername — can observe user switches and cancel
     // in-flight post-mortem work that would otherwise clobber the new user.
@@ -791,7 +791,7 @@ const App: React.FC = () => {
         updateMessages,
         isAccuracyModeEnabled,
         accuracySubMode,
-        // P0-2: a ref (not the raw string) is passed because usePostMortem
+        // a ref (not the raw string) is passed because usePostMortem
         // is called before useUserProfiles destructures activeUsername below.
         // The ref is kept in sync on every render via the effect right after.
         activeUsernameRef,
@@ -1041,7 +1041,7 @@ const App: React.FC = () => {
         providerConfigs,
         isAnalysisInProgress,
         toast,
-        // G5: live roster snapshot getter — App's bot state is declared
+        // live roster snapshot getter — App's bot state is declared
         // below this hook, and a cron fire must see the CURRENT roster.
         bots: () => getBots(),
         messagesRef,
@@ -1106,7 +1106,7 @@ const App: React.FC = () => {
         };
     }, [activeUsername, conversationHistory, latestHistoricalAnalysis, loggedTrades, messages.length, providerConfigs.length, readyProviders.length, setInput, setJournalState]);
 
-    // P1-4/P1-9: Track the previous active user in a ref mutated by this
+    // Track the previous active user in a ref mutated by this
     // effect itself. (A render-phase read of activeUsernameRef made
     // `previous` equal the NEW username right after a switch — the
     // cache-clear and backup-stop below never fired, so one user's cached
@@ -1124,7 +1124,7 @@ const App: React.FC = () => {
         const previous = previousUsernameRef.current;
         const current = activeUsername ?? null;
         if (previous !== current) {
-            // P1-9: Stop the old user's backup scheduler; loadUserData starts
+            // Stop the old user's backup scheduler; loadUserData starts
             // a fresh one for the new user.
             if (previous !== null) stopAutoBackup();
             // No AI response cache exists to clear (removed). Only tool/data
@@ -1134,7 +1134,7 @@ const App: React.FC = () => {
         previousUsernameRef.current = current;
     }, [activeUsername]);
 
-    // P1-9: Final cleanup — stop the auto-backup scheduler when the app unmounts.
+    // Final cleanup — stop the auto-backup scheduler when the app unmounts.
     useEffect(() => {
         return () => {
             stopAutoBackup();
@@ -1166,7 +1166,7 @@ const App: React.FC = () => {
     }), []);
     const [isNewBotOpen, setIsNewBotOpen] = useState(false);
     const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
-    // When set, the New Group dialog EDITS this room (R4 gear): create
+    // When set, the New Group dialog EDITS this room: create
     // becomes update-membership. Null = plain create.
     const [groupEditTarget, setGroupEditTarget] = useState<AgentGroup | null>(null);
     // Opening a bot thread flips the composer target to that bot's model
@@ -1227,7 +1227,7 @@ const App: React.FC = () => {
         saveGroup(group);
         setActiveThread({ kind: 'group', groupId: group.id });
     }, []);
-    // R4: the group header gear reuses the New Group dialog as an editor —
+    // the group header gear reuses the New Group dialog as an editor —
     // the Create button becomes Save (update-membership + member roles)
     // instead.
     const updateGroupMembers = useCallback((groupId: string, memberIds: string[], memberRoles: Record<string, AnalystRole> = {}) => {
@@ -1294,14 +1294,14 @@ const App: React.FC = () => {
         appendMessage: appendGroupMessage,
         patchMessage: patchGroupMessage,
         username: activeUsername,
-        // Hybrid Intelligence room toggle (R54): shares the main hybrid
+        // Hybrid Intelligence room toggle: shares the main hybrid
         // switch — the same live-data gate the debate pipeline uses.
         hybridEnabled: isHybridIntelligenceEnabled,
     });
     const toggleGroupHybrid = useCallback(() => {
         setIsHybridIntelligenceEnabled(v => !v);
     }, [setIsHybridIntelligenceEnabled]);
-    // ─── Bot Mode (plan botmode-scan G1) — teammate DMs ────────────────────
+    // ─── Bot Mode — teammate DMs ────────────────────
     // Per-target serial queues; a DM runs the target bot's turn (persona +
     // notes + teammate protocol) and its reply's [[dm:@…]] markers deliver
     // the next hop or wake the sender with a notice. The pipeline bridge
@@ -1320,7 +1320,7 @@ const App: React.FC = () => {
     // Rail working-pulse merge: the group runner owns the pulse first; a
     // draining DM queue shows the (first) busy bot when nothing else runs.
     const dmWorkingBotId = mailbox.dmBusyBotIds[0] ?? null;
-    // G3 (plan botmode-scan): needs-attention — classify each bot against
+    // needs-attention — classify each bot against
     // the live configs + provider health so the rail row says WHY a bot
     // can't work (missing key/model, auth, quota, benched) instead of the
     // user discovering it through a silent failure.
@@ -1332,14 +1332,14 @@ const App: React.FC = () => {
         }
         return out;
     }, [bots, providerConfigs]);
-    // G5 (plan botmode-scan): wire the automations hook to the Bot Mode
+    // wire the automations hook to the Bot Mode
     // half — bot-scoped routines append their reply row through the same
     // message store as DM turns (App's roster state lives below useAuto-
     // mations, so bots are handed as a live getter instead of a value).
     useEffect(() => {
         automations.assignAutomationsBridge({ appendMessage: appendGroupMessage });
     }, [automations.assignAutomationsBridge, appendGroupMessage]);
-    // G5: bot → its bot-scoped routines (rail disclosure), plus the Run-now
+    // bot → its bot-scoped routines (rail disclosure), plus the Run-now
     // handler that routes through the same engine as the scheduler.
     const botRoutinesMap = useMemo(() => {
         const out: Record<string, AutomationConfig[]> = {};
@@ -1357,7 +1357,7 @@ const App: React.FC = () => {
         const group = groups.find(g => g.id === activeThread.groupId);
         if (group) void runGroupThread(group, prompt, bots);
     }, [activeThread, groups, bots, runGroupThread]);
-    // Reply in thread (R4): a direct @everyone round into the SAME room —
+    // Reply in thread: a direct @everyone round into the SAME room —
     // members' incremental context (lastSeenIndex) already carries the
     // prior thread, so the round continues it in place. Same shape as a
     // new-thread send; GroupChatView gates the affordance on this prop.
@@ -1552,7 +1552,7 @@ const App: React.FC = () => {
         try {
         // Initialize database (SQLite on native, IndexedDB on web)
         await dbService.initDatabase();
-        // P1-8: Configure native status bar (no-op on web)
+        // Configure native status bar (no-op on web)
         await initNativeStatusBar();
         // Initialize service caches
         await initModelPerformanceService();
@@ -1774,7 +1774,7 @@ const App: React.FC = () => {
                 console.warn('[DataIntegrity] Startup backup failed:', err)
             );
 
-            // P1-9: Start the 30-minute auto-backup scheduler. Previously
+            // Start the 30-minute auto-backup scheduler. Previously
             // startAutoBackup was dead code — only a single startup backup
             // ran per app launch, leaving long sessions unprotected. The
             // scheduler is stopped on user switch / unmount (see effect below).
@@ -1840,7 +1840,7 @@ const App: React.FC = () => {
         return () => { isMounted = false; };
     }, []);
 
-    // ─── P0-1: Save-on-unload flush ──────────────────────────────────────
+    // ─── Save-on-unload flush ──────────────────────────────────────
     // The debounced saves below lose data if the tab closes mid-window.
     // This ref tracks the last successfully persisted snapshot so the
     // useSaveOnUnload hook can skip IO when nothing has changed.
@@ -1863,7 +1863,7 @@ const App: React.FC = () => {
         learningRules: storageService.loadLearningRules(),
     }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
 
-    // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
+    // ─── Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
     // images) + ALL trades on ANY of 22 dependency changes, including trivial
     // settings toggles. Now:
@@ -1881,7 +1881,7 @@ const App: React.FC = () => {
 
         // Bail out when already SAVING — this effect re-arms on EVERY stream
         // chunk, and a state write to the same value would still schedule a
-        // full App render each time (P1-6: setSaveStatus was a raw setter).
+        // full App render each time (setSaveStatus was a raw setter).
         setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
 
         const handler = setTimeout(async () => {
@@ -2255,7 +2255,7 @@ const App: React.FC = () => {
     };
 
     const handleClearAllTrades = async () => {
-        // P2-13: Capture state before deletion for undo. Previously this used
+        // Capture state before deletion for undo. Previously this used
         // native confirm() (blocking, no undo) — a delete could appear to
         // succeed in UI but be lost if the tab closed before the debounced save.
         const prevTrades = loggedTrades;
@@ -2935,7 +2935,7 @@ const App: React.FC = () => {
     // same setup (also the missing retry path for failed analyst slots).
     // Shared by the manual Re-run button and price-triggered setup watches.
     const buildRerunPayload = useCallback((messageId: string, isUserMessageId = false): { prompt: string; images: ImageMetadata[] } | null => {
-        // P1-6: read via messagesRef for a stable identity (see handleSaveAnalysis).
+        // read via messagesRef for a stable identity (see handleSaveAnalysis).
         const msgs = messagesRef.current;
         const index = msgs.findIndex(m => m.id === messageId);
         const card = index >= 0 ? msgs[index] : undefined;
@@ -3085,7 +3085,7 @@ const App: React.FC = () => {
         setIsStrategySearchVisible(true);
     }, []);
 
-    // P1-6: reads messages via messagesRef (not the `messages` closure) so
+    // reads messages via messagesRef (not the `messages` closure) so
     // this handler keeps a stable identity across stream chunks — a fresh
     // identity here would re-create chatContext (and re-render every visible
     // MessageItem) on each chunk.
@@ -3620,7 +3620,7 @@ const App: React.FC = () => {
         },
     }), [activeUsername, loggedTrades, handleConfirmAutopilot, handleDismissAutopilot, toast]);
 
-    // P1-6b: leverage as a primitive — deriving it inside the memo with
+    // leverage as a primitive — deriving it inside the memo with
     // `activeConversation` in the dep list made chatContext (and therefore
     // every visible MessageItem) re-created on every stream chunk.
     const chatLeverage = parseInt(leverageInput, 10) || activeConversation?.leverage || DEFAULT_LEVERAGE;
@@ -3719,12 +3719,12 @@ const App: React.FC = () => {
     const showPipelineCard = isAnalysisProgressVisible && !isPipelineDismissed;
 
     return (
-        // P1-6: Outer Suspense boundary. fallback={null} so a suspending lazy
+        // Outer Suspense boundary. fallback={null} so a suspending lazy
         // subtree (e.g. a modal opening) does NOT blank the always-visible
         // chat/header. Per-component Suspense wrappers below isolate suspends.
         <React.Suspense fallback={null}>
         <div ref={appRef} className="flex flex-col bg-zinc-950 text-zinc-100 font-sans h-full overflow-hidden transition-colors duration-500">
-            {/* P2-13: Custom confirm dialog + undo toast (replaces window.confirm) */}
+            {/* Custom confirm dialog + undo toast (replaces window.confirm) */}
             {ConfirmDialogComponent}
 
             {isVersionHistoryVisible && (
@@ -4191,14 +4191,14 @@ const App: React.FC = () => {
                         </React.Suspense>
                     )}
 
-                    {/* P2-12: First-run onboarding card. Shows when no providers are
+                    {/* First-run onboarding card. Shows when no providers are
                         configured and the user hasn't dismissed it. */}
                     <OnboardingCard
                         hasAnyApiKey={readyProviders.length > 0}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     />
 
-                    {/* R2: reference-style document tabs — GROUP threads only.
+                    {/* reference-style document tabs — GROUP threads only.
                         Individual bots never appear in the strip: their thread
                         opens directly, chat-style. Hidden outside group threads
                         (bot threads, coach, floor). */}

@@ -274,7 +274,7 @@ export interface Message {
   watchEpisodes?: WatchEpisode[];
   /** Append-only debate run log (model-visible facts for replay). */
   debateRunLog?: DebateRunEvent[];
-  /** ── Bot Mode (plan botmode-scan G1) ──
+  /** ── Bot Mode ──
    *  A user-role row that is a teammate DM (rendered as an envelope, not a
    *  user bubble). The target's turn runs from it; the reply wakes the
    *  sender with a `dmNotice` row in THEIR thread instead. */
@@ -282,7 +282,7 @@ export interface Message {
   /** A system notice produced by the DM machinery (reply wake-up, refusal,
    *  hop-cap hold). Rendered muted; never fed back into a model prompt. */
   dmNotice?: boolean;
-  /** G2: a room turn that resolved to "(pass)" — the row exists for thread
+  /** a room turn that resolved to "(pass)" — the row exists for thread
    *  attribution but renders nowhere (silence is a first-class outcome). */
   hidden?: boolean;
   /** The group ROOM this row belongs to (AgentGroup.id). Stamped by the room
@@ -316,7 +316,7 @@ export interface Message {
    *  Rides the message so the journal can show user-prior vs verdict vs
    *  outcome — the human-Brier vs ensemble-Brier anti-automation display. */
   userPriorCall?: UserPriorCall;
-  /** Persisted model side-effects (R54): proposal tools and file
+  /** Persisted model side-effects: proposal tools and file
    *  creations this run produced, for the Hermes-style status rows on
    *  the bubble ("Saved to memory · N entries", "⚠ Memory write noted").
    *  Append-only; capped by the pipeline. */

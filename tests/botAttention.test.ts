@@ -4,7 +4,7 @@ import type { ProviderConfig } from '../types/provider';
 import { classifyBotAttention } from '../services/agents/botAttention';
 import { recordProviderError, resetProviderHealth } from '../services/infrastructure/ProviderHealthService';
 
-// Bot Mode G3 (plan botmode-scan): needs-attention classification — every
+// needs-attention classification — every
 // way a bot can silently stop working must produce a one-line hint.
 
 const bot = (over: Partial<AgentBot> = {}): AgentBot => ({

@@ -1,8 +1,8 @@
 /**
- * botRoutine (plan botmode-scan G5) — the bot-scoped Routines half.
+ * botRoutine — the bot-scoped Routines half.
  *
  * A bot-scoped automation run is NOT the ensemble debate pipeline: the run
- * executes AS the bot, exactly like its G1 DM turns — persona system.md +
+ * executes AS the bot, exactly like its DM turns — persona system.md +
  * notes memory.md + teammate protocol (buildBotSystemPrompt), the bot's
  * own provider/model, casual-chat transport (streamQuickResponse), and the
  * reply persisted as an AI message attributed to the bot's identity pair so
@@ -50,7 +50,7 @@ export interface BotRoutineTurnDeps {
 /** A teammate's reply is one hop below the routine (DM_MAX_HOPS still bounds the chain). */
 export const BOT_ROUTINE_HOP = DM_MAX_HOPS - 1;
 
-/** The ready provider a bot thinks with, or null (G1's readiness rule). */
+/** The ready provider a bot thinks with, or null (the DM-turn readiness rule). */
 export const botRoutineProvider = (
     bots: AgentBot[],
     providerConfigs: ProviderConfig[],
@@ -65,7 +65,7 @@ export const botRoutineProvider = (
 };
 
 /**
- * Run one bot-scoped turn with the G1 persona machinery. Pure besides the
+ * Run one bot-scoped turn with the DM persona machinery. Pure besides the
  * injected transport. The caller persists the reply and hands any DM
  * envelopes to the mailbox.
  */

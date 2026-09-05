@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.2a birth certificate (review fix P0-3): every skill pre-registers a
+// §8.2a birth certificate : every skill pre-registers a
 // falsifiable claim (prediction). evaluateClaim existed but was called
 // NOWHERE — the scheduler asked the generic hurts/helps question and the
 // ladder never consulted the claim. This suite pins the wiring: the claim

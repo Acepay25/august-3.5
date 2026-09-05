@@ -1,5 +1,5 @@
 /**
- * ToolAction ledger helpers (R54) — pure message transforms so every
+ * ToolAction ledger helpers — pure message transforms so every
  * writer (pipeline, post-mortem, quick-save) appends with the SAME
  * semantics: append-only, capped, immutable copies.
  */

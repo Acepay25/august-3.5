@@ -47,7 +47,7 @@ export interface NewGroupDialogProps {
     onClose: () => void;
     /** memberRoles = only the members whose role CHANGED (botId → role). */
     onCreate: (memberIds: string[], memberRoles: Record<string, AnalystRole>) => void;
-    /** Edit mode (R4 gear): update this room's membership + member roles
+    /** Edit mode: update this room's membership + member roles
      *  instead of creating. The Create button becomes Save. */
     initialGroup?: AgentGroup | null;
     onUpdate?: (groupId: string, memberIds: string[], memberRoles: Record<string, AnalystRole>) => void;

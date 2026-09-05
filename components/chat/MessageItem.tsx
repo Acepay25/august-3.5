@@ -681,7 +681,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Retry button for failed post-mortem analysis.
-                                The failed message is persisted as role AI (P2-15),
+                                The failed message is persisted as role AI,
                                 so gate on the candidate flag alone, not the role. */}
                             {message.postMortemFailedCandidate && onRetryPostMortem && (
                                 <button
@@ -700,7 +700,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <ModelByline runStats={message.runStats} />
                             )}
 
-                            {/* R54: Hermes-style model side-effect rows —
+                            {/* Hermes-style model side-effect rows —
                                 proposals, skill writes, notebook notes. */}
                             {!isUserMessage && Array.isArray(message.toolActions) && message.toolActions.length > 0 && (
                                 <div className="mt-2">

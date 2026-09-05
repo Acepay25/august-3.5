@@ -333,7 +333,7 @@ const getModeratorAnalysisStream = async function* (
     /** P5 audit sink — receives the applied reasoning-route label so the
      *  run log explains the verdict's reasoning depth. */
     onWireAudit?: (entry: import('./reasoningControls').WireAuditEntry) => void,
-    /** R54: model side-effects from the arbiter's desk tools. */
+    /** model side-effects from the arbiter's desk tools. */
     onToolAction?: (action: import('../../types/message').ToolAction) => void,
 ): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
@@ -1154,7 +1154,7 @@ export const conductDebate = (
      *  role context the standard-mode moderator gets (the old call dropped
      *  it, so Lenses + Accuracy ran with zero personas). */
     lensConfig?: AnalystLensConfig,
-    /** R54 options bag (optional, trailing). */
+    /** options bag (optional, trailing). */
     opts?: {
         /** Model side-effects from the arbiter's desk tools. */
         onToolAction?: (action: import('../../types/message').ToolAction) => void,
@@ -1902,7 +1902,7 @@ export const conductRealDebate = async function* (
      *  streak facts the moderator must weigh when grading. Built by
      *  formatGuardContextBlock in the pipeline. */
     sessionGuardBlock?: string,
-    /** R54 options bag (optional, trailing) — surface callbacks that don't
+    /** options bag (optional, trailing) — surface callbacks that don't
      *  fit the positional legacy chain. */
     opts?: {
         /** Model side-effects for the transcript: proposal tools

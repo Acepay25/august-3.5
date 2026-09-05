@@ -36,13 +36,13 @@ export interface GroupChatViewProps {
     /** Delete the room (App confirms). */
     onDeleteGroup?: () => void;
     /** Reply into an existing prompt thread — a direct @everyone round.
-     *  Members' incremental context carries the prior thread (G2), so
+     *  Members' incremental context carries the prior thread, so
      *  the round continues it in place. Omit to hide reply affordances. */
     onReplyInThread?: (prompt: string) => void;
-    /** Abort the in-flight room round (R54: cancel the request). When
+    /** Abort the in-flight room round (cancel the request). When
      *  provided, a Stop button replaces New Thread while a round runs. */
     onCancelRun?: () => void;
-    /** Hybrid Intelligence toggle (R54): when ON, live market data is
+    /** Hybrid Intelligence toggle: when ON, live market data is
      *  fetched once per send and injected into EVERY member's prompt. */
     hybridEnabled?: boolean;
     onToggleHybrid?: () => void;

@@ -162,8 +162,8 @@ describe('Talk-to selector with named bots', () => {
     });
 });
 
-// ── G4 (plan botmode-scan): @mention autocomplete from the live roster ────
-describe('@mention popover (G4)', () => {
+// ── @mention autocomplete from the live roster ────
+describe('@mention popover', () => {
     it('offers collapsed roster handles while typing @ (multi-word names included)', () => {
         const setInput = vi.fn();
         render(

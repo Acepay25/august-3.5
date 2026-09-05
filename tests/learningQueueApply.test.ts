@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// P0-1 (review fix plan): the learning queue was WRITE-ONLY — five passes
+// the learning queue was WRITE-ONLY — five passes
 // queued proposals and nothing read them. The SkillsGrid panel now renders
 // them, and the apply paths below actuate the three kinds that have a
 // deterministic action (displacement, revival, demote). These tests pin the
@@ -56,7 +56,7 @@ ${extra}---
 const findSkill = (name: string) =>
     getMemoryFiles().files.find(f => f.name === name);
 
-describe('learning queue apply paths (P0-1)', () => {
+describe('learning queue apply paths', () => {
     beforeEach(async () => {
         store = {};
         localStorage.clear();

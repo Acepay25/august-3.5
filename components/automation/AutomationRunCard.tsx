@@ -34,7 +34,7 @@ const AutomationRunCard: React.FC<{
     const analysis = run.message?.analysis;
     const snapshot = (analysis?.marketSnapshot ?? undefined) as HybridSnapshot | undefined;
     const time = new Date(run.startedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    // G5: a bot-scoped run's message carries persona prose, no analysis —
+    // a bot-scoped run's message carries persona prose, no analysis —
     // without this the card reads a misleading "Neutral" with an empty bubble.
     const isBotReply = !analysis && !!run.message?.text?.trim();
 

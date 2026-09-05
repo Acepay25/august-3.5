@@ -1,5 +1,5 @@
 /**
- * useAgentGroups — runs a group ROOM (plan botmode-scan G2): Hermes
+ * useAgentGroups — runs a group ROOM : Hermes
  * group-rounds semantics in-process. Round 1 = the @mentioned members
  * (@everyone/all = fan-out parity with the old single pass); each turn is
  * fed ONLY the room messages newer than what that member last saw; a
@@ -61,7 +61,7 @@ export const useAgentGroups = ({
     appendMessage,
     patchMessage,
     username,
-    /** Hybrid Intelligence (R54): when ON, live market data is fetched once
+    /** Hybrid Intelligence: when ON, live market data is fetched once
      *  per send (symbol detected from the prompt) and the enhanced packet
      *  injection is added to EVERY member's system prompt — the whole room
      *  reasons over the same live read, not just the debate pipeline. */
@@ -128,7 +128,7 @@ export const useAgentGroups = ({
         const abort = new AbortController();
         abortRef.current = abort;
 
-        // Hybrid Intelligence for the room (R54): fetched ONCE per send,
+        // Hybrid Intelligence for the room: fetched ONCE per send,
         // injected into EVERY member's system prompt — the whole room
         // shares the same live market read. Silent fallback to plain
         // prompts when the symbol can't be detected or the fetch fails.
