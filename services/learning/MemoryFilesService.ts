@@ -442,6 +442,39 @@ export const updateMemoryFileUnlocked = async (id: string, patch: Partial<Memory
 export const updateMemoryFile = (id: string, patch: Partial<MemoryFile>, username: string): Promise<void> =>
     withNotebookWriteLock(() => updateMemoryFileUnlocked(id, patch, username));
 
+/**
+ * Find a folder by its exact (slugified) name in the sync cache.
+ * Callers that hold the notebook write lock use this directly; others go
+ * through the *Unlocked APIs inside withNotebookWriteLock.
+ */
+export const findFolderByName = (name: string): MemoryFolder | undefined =>
+    memoryCache.folders.find(f => f.name === name);
+
+/** Find a file by exact name inside one folder. */
+export const findFileInFolder = (folderId: string, baseName: string): MemoryFile | undefined =>
+    memoryCache.files.find(f => f.folderId === folderId && f.name === baseName);
+
+/**
+ * Write a harness-owned file: update it when a file with this exact name
+ * already lives in the folder, create it (autoManaged) otherwise. The
+ * find-then-update-or-create shape every sync service repeated verbatim.
+ * Caller must hold the notebook write lock (or be a *Unlocked function).
+ */
+export const upsertHarnessFileUnlocked = async (
+    folder: MemoryFolder,
+    fileName: string,
+    content: string,
+    username: string,
+): Promise<MemoryFile> => {
+    const existing = findFileInFolder(folder.id, fileName);
+    if (existing) {
+        await updateMemoryFileUnlocked(existing.id, { content }, username);
+        // Return the FRESH cache object — `existing` is a stale reference.
+        return memoryCache.files.find(f => f.id === existing.id) ?? existing;
+    }
+    return createMemoryFileUnlocked(folder.id, fileName, content, username, true);
+};
+
 export const deleteMemoryFileUnlocked = async (id: string, username: string): Promise<void> => {
     memoryCache.files = memoryCache.files.filter(f => f.id !== id);
     await persist(username);
@@ -578,12 +611,7 @@ export const syncProfileMemoryUnlocked = async (profile: UserProfile | null, use
 
     if (!profile) {
         const fallback = `# About the Trader (auto-maintained by August)\n> Updated ${dateStr}\n\nNo profile data loaded yet.\n`;
-        const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'memory.md');
-        if (existing) {
-            await updateMemoryFileUnlocked(existing.id, { content: fallback }, username);
-        } else {
-            await createMemoryFileUnlocked(folder.id, 'memory.md', fallback, username, true);
-        }
+        await upsertHarnessFileUnlocked(folder, 'memory.md', fallback, username);
         return;
     }
 
@@ -628,12 +656,7 @@ export const syncProfileMemoryUnlocked = async (profile: UserProfile | null, use
     ];
     const content = lines.join('\n') + '\n';
 
-    const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'memory.md');
-    if (existing) {
-        await updateMemoryFileUnlocked(existing.id, { content }, username);
-    } else {
-        await createMemoryFileUnlocked(folder.id, 'memory.md', content, username, true);
-    }
+    await upsertHarnessFileUnlocked(folder, 'memory.md', content, username);
 };
 
 /** Serialized public API — see withNotebookWriteLock. */
@@ -779,12 +802,7 @@ export const syncPatternMemoryUnlocked = async (
     if (!folder) return;
     const stats = trades ? patternMemoryStatsFromTrades(trades) : undefined;
     const content = toPatternMemoryMarkdown(summary, stats);
-    const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'pattern-memory.md');
-    if (existing) {
-        await updateMemoryFileUnlocked(existing.id, { content }, username);
-    } else {
-        await createMemoryFileUnlocked(folder.id, 'pattern-memory.md', content, username, true);
-    }
+    await upsertHarnessFileUnlocked(folder, 'pattern-memory.md', content, username);
 };
 
 /** Serialized public API — see withNotebookWriteLock. */
@@ -805,12 +823,7 @@ export const syncRecurringMistakesUnlocked = async (trades: LoggedTrade[], usern
     const folder = memoryCache.folders.find(f => f.name === 'rules');
     if (!folder) return;
     const content = buildRecurringMistakesContent(trades);
-    const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'recurring-mistakes.md');
-    if (existing) {
-        await updateMemoryFileUnlocked(existing.id, { content }, username);
-    } else {
-        await createMemoryFileUnlocked(folder.id, 'recurring-mistakes.md', content, username, true);
-    }
+    await upsertHarnessFileUnlocked(folder, 'recurring-mistakes.md', content, username);
 };
 
 /** Serialized public API — see withNotebookWriteLock. */
