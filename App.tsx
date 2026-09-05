@@ -10,14 +10,9 @@ import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, UserProf
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
-import { initPromptOverrides } from './services/infrastructure/PromptOverrideService';
-import { initStrategyDocs } from './services/infrastructure/StrategyService';
-import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
+import { subscribeMemoryFilesChanged, syncPatternMemory } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
-import { runWeeklyRollupIfDue } from './services/learning/weeklyRollup';
-import { runWeeklyReviewIfDue } from './services/learning/weeklyReview';
-import { runMonthlyReportIfDue } from './services/learning/monthlyReport';
-import { hydrateRegimeLedger } from './services/learning/regimeLedger';
+import { useUserProfileLoader } from './hooks/useUserProfileLoader';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -129,19 +124,16 @@ import { getPreference, setPreference, removePreference, getPreferenceObject, se
 import * as MemoryService from './services/learning/MemoryService';
 import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
-import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
-import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
+import { saveLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { isProviderOnCooldown, providerCooldownRemainingMs, getProviderHealth } from './services/infrastructure/ProviderHealthService';
 import { deriveSeatWireStates } from './utils/floorSeatWire';
 import { listHarnessLessons } from './services/learning/harnessLessons';
 import { assessSession } from './services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
-import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
-import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
+import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
-import { VetoLedgerService } from './services/ui/VetoLedgerService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useUiMode } from './hooks/useUiMode';
@@ -149,10 +141,6 @@ import { useSidebarPane } from './hooks/useSidebarPane';
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
 import type { FloorPosition, FloorSquawkEvent } from './components/floor/FloorScene';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
-import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
-import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
-import { initPatternMemoryService, setAttributedInsightsUser } from './services/learning/PatternMemorySynthesisService';
-import GlobalLearningService from './services/learning/GlobalLearningService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
 
 /**
@@ -962,57 +950,10 @@ const App: React.FC = () => {
     //     compressMemory();
     // }, [messages.length, activeConversationId]);
 
-    // ... (resetAppState, loadUserData) ...
-    // resetAppState(usernameToSave): persists the blank profile under an
-    // EXPLICIT username. The caller decides the save target — reading
-    // `activeUsername` from the closure here is wrong: on user deletion the
-    // closure still holds the deleted name, so the save resurrected a blank
-    // profile for the user we just deleted. Pass null to skip persisting.
-    const resetAppState = async (usernameToSave?: string | null) => {
-        handleCancelAnalysis();
-        const newConv = createNewConversation();
-        setConversationHistory([newConv]);
-        setActiveConversationId(newConv.id);
-        setLoggedTrades([]);
-        setSavedAnalyses([]);
-        setTradeSummaries([]);
-        setFinalTradeSummary(null);
-        setGlobalMemory(undefined);
-        setIsGlobalMemoryEnabled(false);
-        setMemoryConfig(null);
-        setMemoryModel('');
-        setIsAccuracyModeEnabled(false);
-        setAccuracySubMode('original');
-        setCustomInstructions({ general: [], accuracyOriginal: [], accuracyPure: [] });
-        setIsPlaybookEnabledInPureAI(false);
-        setIsFamiliesEnabledInPureAI(false);
-        setIsMemoryEnabledInPureAI(false);
-        setIsHybridIntelligenceEnabled(false);
-        setIsAutoCapturing(false);
-        setIsUpdateAutoCapturing(false);
-        setIsEntryNotHitCapturing(false);
-        setActiveFrameworks(DEFAULT_FRAMEWORKS);
-        setSummaryCharLimit(4000);
-        const firstReady = getFirstReadyProvider(providerConfigs);
-        setSummarizationProvider(firstReady?.id || '');
-        setSummarizationModel(firstReady?.selectedModel || '');
-        setInput('');
-        setImages([]);
-        setExpandedPostMortems({});
-
-        if (usernameToSave) {
-            await dbService.saveUserProfile(usernameToSave, {
-                conversations: [newConv],
-                tradeLog: [],
-                savedAnalyses: [],
-                tradeSummaries: [],
-                finalTradeSummary: null,
-                globalMemory: undefined,
-                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', visionModel: '', isGlobalMemoryEnabled: false, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false, useAlgorithmicSummary: false, useAlgorithmicInsights: false, memoryProvider: '', memoryModel: '' },
-                lastActiveConversationId: newConv.id
-            });
-        }
-    };
+    const resetAppStateRef = useRef<((usernameToSave?: string | null) => Promise<void>) | null>(null);
+    const resetAppState = useCallback((usernameToSave?: string | null) => {
+        return resetAppStateRef.current ? resetAppStateRef.current(usernameToSave) : Promise.resolve();
+    }, []);
 
     // User Profile state and handlers (extracted to hooks/useUserProfiles.ts)
     const {
@@ -1030,6 +971,7 @@ const App: React.FC = () => {
         toast,
         confirmDialog,
     });
+
 
     // ─── Automations: scheduled analyses (own card feed per automation) ───
     // Placed after activeUsername — the scheduler is scoped to the active
@@ -1544,312 +1486,6 @@ const App: React.FC = () => {
     // already typing or an overlay is open).
     // (Ctrl+N + "/" handler lives next to handleNewConversation below.)
 
-
-    // Prevent the async startup profile scan from reopening the workspace
-    // picker after the user has already submitted a workspace name.
-    const profileSelectionStartedRef = useRef(false);
-
-    const loadUserData = async (username: string) => {
-        handleCancelAnalysis();
-        invalidatePostMortemRuns();
-        setIsLoading(true);
-
-        // Profile switch: clear the previous user's autopilot registrations
-        // and resolutions so the 60s loop can't verify/notify for the wrong
-        // profile (the service is a singleton and init() is guarded).
-        OutcomeAutopilotService.reset();
-        setAutopilotResolutions({});
-
-        try {
-        // Initialize database (SQLite on native, IndexedDB on web)
-        await dbService.initDatabase();
-        // Configure native status bar (no-op on web)
-        await initNativeStatusBar();
-        // Initialize service caches
-        await initModelPerformanceService();
-        await initAnalystLensService();
-        // Prompt overrides are per-user — load the active user's edits into
-        // the sync cache so prompt assembly (getPrompt) sees them.
-        await initPromptOverrides(username);
-        // Same per-user treatment for uploaded strategy docs (Settings →
-        // Strategies) — the sync cache feeds the analysis-prompt injection.
-        await initStrategyDocs(username);
-        // Trader Notebook (Settings → Personal edge → Memory files): load the
-        // user's markdown memory into the sync cache (seeds the default
-        // folders + starter templates on first boot).
-        await initMemoryFiles(username);
-        // Regime ledger (Macro-lens memory): hydrate the per-coin regime
-        // history into the sync cache so prompt-side readers (regime summary
-        // block, doctrine) see it this session. Fire-and-forget.
-        void hydrateRegimeLedger(username).catch(() => { /* ledger is best-effort */ });
-        // Compounding memory: once a week, distill the strongest confirmed
-        // skills into settled beliefs, generalize cross-coin clusters, and
-        // leave rollup notes for the next doctrine rewrite. Fire-and-forget —
-        // it must never block startup, and any failure retries next boot.
-        void runWeeklyRollupIfDue(username).then(res => {
-            if (res) console.log('[WeeklyRollup] pass complete:', res);
-        }).catch(e => {
-            console.warn('[WeeklyRollup] boot pass failed:', e instanceof Error ? e.message : e);
-        });
-        // NOTE: the weekly review + monthly report passes (below, after the
-        // profile load) need the trade log — loggedTradesRef.current only
-        // updates on the NEXT render, so reading it here would hand both
-        // passes an empty/stale array and silently skip them forever.
-        // Native (Capacitor) loads the lens config asynchronously, after the
-        // useAppSettings lazy initializer already ran with an empty default —
-        // push the cached config into React state so the lens dropdowns don't
-        // open empty on startup.
-        const cachedLens = loadLensConfig();
-        if (cachedLens && JSON.stringify(cachedLens) !== JSON.stringify(lensConfig)) {
-            handleSetLensConfig(cachedLens);
-        }
-        // Same async-load sync for the ordinary ensemble model selection
-        // (native stores it in Capacitor Preferences, not localStorage).
-        try {
-            const cachedSelection = await getPreferenceObject<EnsembleModelSelection>(PREF_KEYS.ENSEMBLE_MODEL_SELECTION);
-            if (Array.isArray(cachedSelection) && cachedSelection.length > 0
-                && JSON.stringify(cachedSelection) !== JSON.stringify(ensembleModelSelection)) {
-                handleSetEnsembleModelSelection(cachedSelection);
-            }
-        } catch (e) {
-            console.warn('[App] Failed to sync ensemble model selection:', e);
-        }
-        await PriceAlertService.init();
-        await SetupWatchService.init();
-        await OutcomeAutopilotService.init();
-        // Veto falsification ledger: load this user's pending vetoes, settle
-        // anything already expired, and pin the price feed to this user so
-        // tick-driven settlement grades the right ledger.
-        await VetoLedgerService.init(username);
-        await initConfluenceService();
-        await initPatternMemoryService();
-        await GlobalLearningService.setActiveUser(username);
-        // Same per-user treatment for the attributed-insights knowledge base —
-        // resets the module cache so the next read loads THIS user's insights.
-        setAttributedInsightsUser(username);
-
-        const profile = await dbService.getUserProfile(username);
-        if (profile) {
-            // Refresh the harness-maintained notebook files from the loaded
-            // profile: profile/memory.md (who the trader is) and
-            // rules/recurring-mistakes.md (loss clusters). Best-effort.
-            try {
-                await syncProfileMemory(profile, username);
-                await syncPatternMemory(profile.finalTradeSummary, username, profile.tradeLog || []);
-                await syncRecurringMistakes(profile.tradeLog || [], username);
-            } catch (e) {
-                console.warn('[TraderNotebook] Initial sync failed:', e);
-            }
-            const correctedConvs = (profile.conversations || []).map(conv => {
-                const leverage = conv.leverage || DEFAULT_LEVERAGE;
-                const correctedMessages = (conv.messages || []).map(msg => {
-                    // A restored message can never be mid-stream: the abort
-                    // controller and the debate status callbacks died with the
-                    // page that was running them. Clear live debate state so a
-                    // message saved mid-debate doesn't render a stuck
-                    // "thinking" indicator or permanently hide its turns
-                    // (the debate floor filters turns by activeDebateSpeakers).
-                    const normalized: Message = msg.isDebating || msg.activeDebateSpeakers
-                        ? { ...msg, isDebating: false, activeDebateSpeakers: undefined }
-                        : msg;
-                    if (normalized.analysis) {
-                        return { ...normalized, analysis: recalculateAnalysisMetrics(normalized.analysis, leverage) };
-                    }
-                    if (normalized.isDebating) {
-                        return { ...normalized, isDebating: false };
-                    }
-                    return normalized;
-                });
-                return { ...conv, leverage, messages: correctedMessages };
-            });
-
-            const convs = correctedConvs.length > 0 ? correctedConvs : [createNewConversation()];
-
-            setConversationHistory(convs);
-            const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
-            setLoggedTrades(loadedTrades);
-            // Rebuild confluence historical stats from the loaded log (was
-            // never wired — getConfluenceInsight always returned empty).
-            syncConfluenceFromTradeLog(loadedTrades);
- // Weekly review + monthly report card (
-            // remainder): deterministic rollups, gated on due-checks. Run
-            // AFTER the profile load with the freshly-read trade log —
-            // loggedTradesRef.current is still the pre-switch value at the
-            // top of loadUserData (it updates on the next render), so
-            // reading it there silently skipped both passes forever.
-            void runWeeklyReviewIfDue(username, loadedTrades).then(res => {
-                if (res) console.log('[WeeklyReview] digest generated:', res.impulse.slice(0, 80));
-            }).catch(e => {
-                console.warn('[WeeklyReview] boot pass failed:', e instanceof Error ? e.message : e);
-            });
-            void runMonthlyReportIfDue(username, loadedTrades).then(res => {
-                if (res) console.log('[MonthlyReport] card generated for period ending', res.generatedAt.slice(0, 10));
-            }).catch(e => {
-                console.warn('[MonthlyReport] boot pass failed:', e instanceof Error ? e.message : e);
-            });
-            setSavedAnalyses(profile.savedAnalyses || []);
-            setTradeSummaries((profile.tradeSummaries || []).slice(-MAX_TRADE_SUMMARIES));  // Keep most recent entries
-            setFinalTradeSummary(profile.finalTradeSummary || null);
-            setGlobalMemory(profile.globalMemory);
-            setActiveFrameworks(profile.settings?.activeFrameworks || DEFAULT_FRAMEWORKS);
-            setSummaryCharLimit(profile.settings?.summaryCharLimit || 4000);
-            const firstReadyProvider = getFirstReadyProvider(providerConfigs);
-            setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
-            setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
-            // Global vision model: empty = fall back to the conversation's
-            // OCR model / first ready provider at resolution time.
-            setVisionModel(profile.settings?.visionModel || '');
-            setUseAlgorithmicSummary(profile.settings?.useAlgorithmicSummary ?? false);
-            setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
-            setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
-            setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? false);
-            setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
-            setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
-
-            const loadedInstructions = profile.settings?.customInstructions;
-            const defaultMap: CustomInstructionsMap = { general: [], accuracyOriginal: [], accuracyPure: [] };
-
-            if (loadedInstructions) {
-                if (typeof (loadedInstructions as any).general === 'string') {
-                    const legacyGeneral = (loadedInstructions as any).general;
-                    const legacyOriginal = (loadedInstructions as any).accuracyOriginal;
-                    const legacyPure = (loadedInstructions as any).accuracyPure;
-
-                    if (legacyGeneral) defaultMap.general.push({ id: 'migrated-gen', title: 'Legacy General', content: legacyGeneral, isActive: true });
-                    if (legacyOriginal) defaultMap.accuracyOriginal.push({ id: 'migrated-orig', title: 'Legacy Accuracy', content: legacyOriginal, isActive: true });
-                    if (legacyPure) defaultMap.accuracyPure.push({ id: 'migrated-pure', title: 'Legacy Pure', content: legacyPure, isActive: true });
-
-                    setCustomInstructions(defaultMap);
-                } else {
-                    setCustomInstructions({
-                        general: loadedInstructions.general || [],
-                        accuracyOriginal: loadedInstructions.accuracyOriginal || [],
-                        accuracyPure: loadedInstructions.accuracyPure || []
-                    });
-                }
-            } else {
-                setCustomInstructions(defaultMap);
-            }
-
-            setIsPlaybookEnabledInPureAI(profile.settings?.isPlaybookEnabledInPureAI ?? false);
-            setIsFamiliesEnabledInPureAI(profile.settings?.isFamiliesEnabledInPureAI ?? false);
-            setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
-            setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
-            // Persisted ensemble mode wins; the derived provider count is the
-            // fallback for profiles that predate the setting. The ref bridges
-            // the race with the one-time init effect above (loadUserData can
-            // run before or after providers finish loading).
-            persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
-            setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
-            setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
-            setIsUpdateAutoCapturing(profile.settings?.isUpdateAutoCapturing ?? false);
-            setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
-            setConfidenceCalibration(profile.settings?.confidenceCalibration);
-            const loadedMemoryConfig = providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null;
-            setMemoryConfig(loadedMemoryConfig);
-            setMemoryModel(profile.settings?.memoryModel || loadedMemoryConfig?.selectedModel || getFirstReadyProvider(providerConfigs)?.selectedModel || '');
-
-            // AI Learning: Load knowledge base
-            setInsightKnowledgeBase(profile.insightKnowledgeBase);
-
-            // Restored/migrated profiles carry learning rules in the snapshot.
-            // Write them back into the local store when it's empty (e.g. after
-            // restoring a backup onto a fresh WebView) — in the normal flow the
-            // local store already holds the same (possibly newer) rules.
-            if (profile.learningRules && (profile.learningRules.rules?.length ?? 0) > 0) {
-                const localRules = storageService.loadLearningRules();
-                if ((localRules.rules?.length ?? 0) === 0) {
-                    storageService.saveLearningRules({
-                        rules: profile.learningRules.rules,
-                        lastUpdated: profile.learningRules.lastUpdated,
-                        version: 2,
-                    });
-                }
-            }
-
-            // Sync model performance data from trade log
-            const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
-            syncFromTradeLog(tradeLogData);
-            syncRollingWindowFromTradeLog(tradeLogData);
-            console.log('[App] Synced model performance data from trade log');
-
-            const lastActive = convs.find(c => c.id === profile.lastActiveConversationId) || convs[0];
-            setActiveConversationId(lastActive.id);
-
-            // Data Integrity: Run migrations if needed
-            await runMigrations(username);
-
-            // Data Integrity: Create startup backup before any operations
-            const tradeCount = (profile.tradeLog || []).length;
-            createStartupBackup(username).catch(err =>
-                console.warn('[DataIntegrity] Startup backup failed:', err)
-            );
-
-            // Start the 30-minute auto-backup scheduler. Previously
-            // startAutoBackup was dead code — only a single startup backup
-            // ran per app launch, leaving long sessions unprotected. The
-            // scheduler is stopped on user switch / unmount (see effect below).
-            startAutoBackup(username);
-
-            // Data Integrity: Check for data loss
-            const integrityCheck = await checkDataIntegrity(username, tradeCount);
-            if (!integrityCheck.valid && integrityCheck.tradeCountChanged) {
-                logIntegrityEvent('DATA_LOSS_DETECTED', integrityCheck);
-                const message = ` Data Issue Detected\n\n` +
-                    `Your trade log appears to have fewer trades than before ` +
-                    `(${integrityCheck.previousTradeCount} → ${integrityCheck.currentTradeCount}).\n\n` +
-                    (integrityCheck.hasBackups && integrityCheck.latestBackup
-                        ? `A backup with ${integrityCheck.latestBackup.tradeCount} trades is available from ${new Date(integrityCheck.latestBackup.timestamp).toLocaleString()}.\n\nGo to Settings → Export Data to restore from backup.`
-                        : 'Consider exporting your data regularly to prevent future data loss.');
-                toast.info(message);
-            }
-        } else {
-            // Fresh (never-saved) user: persist the blank profile under the
-            // NEW username — the closure's activeUsername is the PREVIOUS
-            // user, and saving under it would wipe their data on web.
-            resetAppState(username);
-        }
-        setActiveUsername(username);
-        sessionStorage.setItem('activeUsername', username);
-        localStorage.setItem('last_active_user', username);
-        profileSelectionStartedRef.current = true;
-        setIsUserModalOpen(false);
-        setHighlightedAnalysisId(null);
-        setIsLoading(false);
-        } catch (error) {
-            console.error('App: failed to load user data', error);
-            setActiveUsername(username);
-            sessionStorage.setItem('activeUsername', username);
-            profileSelectionStartedRef.current = true;
-            setIsUserModalOpen(false);
-            setIsLoading(false);
-        }
-    };
-
-    // Fresh-session workspace: must be visible even before provider configs
-    // finish loading — provider stall otherwise leaves a blank canvas.
-    useEffect(() => {
-        let isMounted = true;
-        const openWorkspaceIfNeeded = async (): Promise<void> => {
-            try {
-                const users = await dbService.getAllUsernames();
-                if (!isMounted) return;
-                setExistingUsernames(users);
-                const sessionUser = sessionStorage.getItem('activeUsername');
-                if (sessionUser && users.includes(sessionUser)) {
-                    void loadUserData(sessionUser);
-                } else if (!profileSelectionStartedRef.current) {
-                    setIsUserModalOpen(true);
-                }
-            } catch (error) {
-                console.error('App: initialization failed', error);
-                if (!isMounted) return;
-                if (!profileSelectionStartedRef.current) setIsUserModalOpen(true);
-            }
-        };
-        void openWorkspaceIfNeeded();
-        return () => { isMounted = false; };
-    }, []);
 
     // ─── Save-on-unload flush ──────────────────────────────────────
     // The debounced saves below lose data if the tab closes mid-window.
@@ -3274,6 +2910,64 @@ const App: React.FC = () => {
     // Register PENDING analyses for automatic SL/TP detection; resolutions
     // surface in the chat via chatContext for inline one-click confirmation.
     const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});
+
+    const {
+        loadUserData,
+        resetAppState: userProfileResetAppState,
+    } = useUserProfileLoader({
+        handleCancelAnalysis,
+        invalidatePostMortemRuns,
+        lensConfig,
+        handleSetLensConfig,
+        ensembleModelSelection,
+        handleSetEnsembleModelSelection,
+        persistedEnsembleModeRef,
+        ensembleModelCount,
+        providerConfigs,
+        setConversationHistory,
+        setActiveConversationId,
+        setLoggedTrades,
+        setSavedAnalyses,
+        setTradeSummaries,
+        setFinalTradeSummary,
+        setGlobalMemory,
+        setIsGlobalMemoryEnabled,
+        setMemoryConfig,
+        setMemoryModel,
+        setInsightKnowledgeBase,
+        setActiveFrameworks,
+        setSummaryCharLimit,
+        setSummarizationProvider,
+        setSummarizationModel,
+        setVisionModel,
+        setUseAlgorithmicSummary,
+        setUseAlgorithmicInsights,
+        setIsStrategiesEnabled,
+        setIsAccuracyModeEnabled,
+        setAccuracySubMode,
+        setCustomInstructions,
+        setIsPlaybookEnabledInPureAI,
+        setIsFamiliesEnabledInPureAI,
+        setIsMemoryEnabledInPureAI,
+        setIsHybridIntelligenceEnabled,
+        setIsEnsembleEnabled,
+        setIsAutoCapturing,
+        setIsUpdateAutoCapturing,
+        setIsEntryNotHitCapturing,
+        setConfidenceCalibration,
+        setAutopilotResolutions,
+        setInput,
+        setImages,
+        setExpandedPostMortems,
+        setHighlightedAnalysisId,
+        setIsLoading,
+        setActiveUsername,
+        setExistingUsernames,
+        setIsUserModalOpen,
+        toast,
+    });
+    resetAppStateRef.current = userProfileResetAppState;
+
     const confirmAutopilotRef = useRef<(messageId: string) => void>(() => {});
     const [skillDraftNonce, setSkillDraftNonce] = useState(0);
     useEffect(() => {
