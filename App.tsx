@@ -96,7 +96,7 @@ import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './u
 import { type ThreadSelection, threadForProvider, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
 import {
     getBots, getGroups, saveBot, saveGroup, updateBot, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
-    groupDisplayName, newId,
+    findBotById, groupDisplayName, newId,
     type AgentBot, type AgentGroup,
 } from './services/agents/agentRoster';
 import { useAgentGroups } from './hooks/useAgentGroups';
@@ -1173,7 +1173,7 @@ const App: React.FC = () => {
     // with ensemble off — the thread then shows exactly what a send does.
     const selectBotThread = useCallback((botId: string) => {
         setActiveThread({ kind: 'bot', botId });
-        const bot = bots.find(b => b.id === botId);
+        const bot = findBotById(bots, botId);
         if (bot?.modelId) {
             setSelectedChatModel(bot.modelId);
             setIsEnsembleEnabled(false);
@@ -1241,7 +1241,7 @@ const App: React.FC = () => {
     // open, fall back to Team. The bot's messages stay in the
     // conversation history — they just lose their byline.
     const deleteBot = useCallback((botId: string) => {
-        const bot = bots.find(b => b.id === botId);
+        const bot = findBotById(bots, botId);
         void confirmDialog({
             title: `Delete ${bot?.name ?? 'bot'}?`,
             message: 'The bot is removed from the roster and from any groups it belongs to. Its messages stay in your conversations.',
@@ -1369,7 +1369,7 @@ const App: React.FC = () => {
     // The visible bot for ChatArea's scoped thread view.
     const visibleBot = useMemo(() => {
         if (activeThread.kind !== 'bot') return null;
-        const bot = bots.find(b => b.id === activeThread.botId);
+        const bot = findBotById(bots, activeThread.botId);
         return bot ? { providerId: bot.providerId, modelId: bot.modelId, name: bot.name, avatar: bot.avatar } : null;
     }, [activeThread, bots]);
     const activeGroup = useMemo(() => (

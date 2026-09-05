@@ -18,7 +18,7 @@
  * direct DM turn).
  */
 
-import type { AgentBot } from './agentRoster';
+import { findBotById, type AgentBot } from './agentRoster';
 import type { AutomationConfig, AutomationRun } from '../../types/automation';
 import type { ProviderConfig } from '../../types/provider';
 import type { Message } from '../../types';
@@ -56,7 +56,7 @@ export const botRoutineProvider = (
     providerConfigs: ProviderConfig[],
     botId: string,
 ): { bot: AgentBot; provider: ProviderConfig } | null => {
-    const bot = bots.find(b => b.id === botId);
+    const bot = findBotById(bots, botId);
     if (!bot) return null;
     const provider = providerConfigs.find(
         c => c.id === bot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(bot.modelId),
@@ -76,7 +76,7 @@ export const runBotRoutineTurn = async (
 ): Promise<BotRoutineOutcome> => {
     const resolved = botRoutineProvider(deps.bots, deps.providerConfigs, botId);
     if (!resolved) {
-        const gone = deps.bots.find(b => b.id === botId);
+        const gone = findBotById(deps.bots, botId);
         return gone
             ? { status: 'skipped', skipReason: `${gone.name}'s provider is not configured (missing, disabled, or the model is off the list).` }
             : { status: 'skipped', skipReason: 'The bot this routine runs as is no longer on the roster.' };
@@ -108,7 +108,7 @@ export const runBotRoutineTurn = async (
 
 /** Resolve a routine's bot (null when the id dangles or none is set). */
 export const routineBot = (bots: AgentBot[], config: AutomationConfig): AgentBot | null =>
-    config.botId ? bots.find(b => b.id === config.botId) ?? null : null;
+    config.botId ? findBotById(bots, config.botId) ?? null : null;
 
 /** Fire-time skip reason for a bot-scoped routine, or null when runnable. */
 export const botRoutineSkipReason = (

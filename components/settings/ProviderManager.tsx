@@ -15,7 +15,7 @@ import { discoverProviderModels } from '../../services/infrastructure/ProviderCo
 import { resetProviderHealth, getProviderHealth, providerCooldownRemainingMs } from '../../services/infrastructure/ProviderHealthService';
 import { probeAndLearn } from '../../services/learning/harnessLessons';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
-import { mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
+import { findProviderById, mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { useToastActions } from '../shared/Toast';
 import { LoadingIcon } from '../shared/Icons';
@@ -234,7 +234,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     // Track the "saved" badge timer so it's cleared on unmount / next save.
     const saveStateTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-    const selected = useMemo(() => configs.find(c => c.id === selectedId) || configs[0], [configs, selectedId]);
+    const selected = useMemo(() => findProviderById(configs, selectedId) || configs[0], [configs, selectedId]);
 
     useEffect(() => {
         if (selected) {

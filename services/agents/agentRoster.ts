@@ -169,9 +169,13 @@ export const setActiveTeamId = (id: string | null): void => {
 export const groupDisplayName = (group: AgentGroup, bots: AgentBot[]): string => {
     if (group.name) return group.name;
     const names = group.memberIds
-        .map(id => bots.find(b => b.id === id)?.name)
+        .map(id => findBotById(bots, id)?.name)
         .filter((n): n is string => Boolean(n));
     return names.length > 0 ? names.join(', ') : 'Group';
 };
+
+/** A bot by id — shared lookup for roster rails, groups, and routines. */
+export const findBotById = (bots: AgentBot[], id: string): AgentBot | undefined =>
+    bots.find(b => b.id === id);
 
 export const newId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;

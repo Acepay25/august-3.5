@@ -21,7 +21,7 @@ import { Message } from '../types/message';
 import { ProviderConfig } from '../types/provider';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import { tryFetchHybridDataFromPromptWithCalibration } from '../services/analysis/HybridIntelligenceService';
-import { AgentBot } from '../services/agents/agentRoster';
+import { AgentBot, findBotById } from '../services/agents/agentRoster';
 import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
 import {
     ROOM_HUMAN_LABEL,
@@ -105,7 +105,7 @@ export const useAgentGroups = ({
         const nonce = ++runNonce.current;
 
         const members = group.memberIds
-            .map(id => bots.find(b => b.id === id))
+            .map(id => findBotById(bots, id))
             .filter((b): b is AgentBot => Boolean(b));
         if (members.length === 0) return;
 

@@ -11,7 +11,7 @@ import { BotFace, BUILTIN_FACES, UPLOADABLE_FACES, randomFace, type BotFaceSpec,
 import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
-import { formatModelDisplayName } from '../../utils/providerUtils';
+import { findProviderById, formatModelDisplayName } from '../../utils/providerUtils';
 import { ROLE_ACCENTS } from '../desk/pixelAvatars';
 import { SelectMenu } from '../shared/SelectMenu';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -57,7 +57,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const [advancedOpen, setAdvancedOpen] = React.useState(false);
     useEscapeClose(open, onClose);
 
-    const provider = providers.find(p => p.id === providerId) ?? providers[0];
+    const provider = findProviderById(providers, providerId) ?? providers[0];
     // Fall back to the provider's selected model (then its first) until
     // the trader picks one explicitly.
     const effectiveModel = modelId && provider?.models.includes(modelId)

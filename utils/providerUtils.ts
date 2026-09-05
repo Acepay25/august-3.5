@@ -23,6 +23,14 @@ export function getFirstReadyProvider(configs: ProviderConfig[]): ProviderConfig
     return configs.find(isProviderReady) ?? null;
 }
 
+/**
+ * A provider config by id — the single lookup used everywhere a seat,
+ * bot, or automation references its provider by id.
+ */
+export function findProviderById(configs: ProviderConfig[], id: string): ProviderConfig | undefined {
+    return configs.find(c => c.id === id);
+}
+
 const KNOWN_MODEL_TOKENS: Record<string, string> = {
     gpt: 'GPT',
     glm: 'GLM',

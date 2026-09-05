@@ -6,6 +6,7 @@
  * already keeps (ProviderConfig + ProviderHealthService telemetry).
  */
 
+import { findProviderById } from '../../utils/providerUtils';
 import type { AgentBot } from './agentRoster';
 import type { ProviderConfig } from '../../types/provider';
 import { getProviderHealth, isProviderOnCooldown } from '../infrastructure/ProviderHealthService';
@@ -30,7 +31,7 @@ export const classifyBotAttention = (
     bot: AgentBot,
     configs: ProviderConfig[],
 ): BotAttention | null => {
-    const provider = configs.find(c => c.id === bot.providerId);
+    const provider = findProviderById(configs, bot.providerId);
     if (!provider) {
         return { cls: 'no_provider', hint: `${bot.name} points at provider "${bot.providerId}" which no longer exists — edit the bot.` };
     }
