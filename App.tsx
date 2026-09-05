@@ -18,6 +18,7 @@ import { useProfilePersistence } from './hooks/useProfilePersistence';
 import { useConversationHousekeeping } from './hooks/useConversationHousekeeping';
 import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
 import { useAgentThreads } from './hooks/useAgentThreads';
+import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -1616,67 +1617,31 @@ const App: React.FC = () => {
 
 
 
-    const pendingWatchActionRef = useRef<
-        | { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS }
-        | { type: 'autopilot'; messageId: string }
-        | null
-    >(null);
+    const confirmAutopilotRef = useRef<(messageId: string) => void>(() => {});
 
-    const handleApprovalShow = useCallback((item: import('./utils/approvalInbox').ApprovalItem) => {
-        setHighlightedAnalysisId(item.messageId);
-        setIsApprovalInboxVisible(false);
-    }, []);
-
-    const handleToggleWatch = useCallback((messageId: string, conversationId?: string | null) => {
-        const convId = conversationId || activeConversationId;
-        if (!convId) return;
-        updateMessages(prev => prev.map(m => {
-            if (m.id !== messageId) return m;
-            const nextWatch = !m.watched;
-            const updated = toggleWatchOnMessage(m, nextWatch);
-            if (updated.watched) {
-                toast.success('Pinned', 'This signal is on the Watch list. Win/Loss and autopilot still work the same.');
-            }
-            return updated;
-        }), convId);
-    }, [activeConversationId, toast, updateMessages]);
-
-    const watchedSignals = useMemo(() => collectWatchedSignals(conversationHistory), [conversationHistory]);
-    const watchOpenR = useMemo(() => {
-        const book = buildRiskBook(watchedSignals, loggedTrades, (symbol) => PriceAlertService.getCurrentPrice(symbol));
-        return formatRiskBookBadge(book);
-    }, [watchedSignals, loggedTrades]);
-
-    const handleFollowUpTicket = useCallback((messageId: string, text: string) => {
-        const msg = messagesRef.current.find(m => m.id === messageId);
-        const analysis = msg?.analysis;
-        const ocr = (msg?.ocrCache?.texts || []).join('\n').slice(0, 800);
-        const openings = reconstructOpenings(msg?.debateTurns || [])
-            .map(s => `${s.name}: ${s.opening.slice(0, 280)}`)
-            .join('\n');
-        const hidden = analysis
-            ? `Follow-up on ${analysis.coinName || 'setup'} ${analysis.direction} SL ${analysis.stopLoss || '—'}. Do not re-open the tape; answer the user only.\n${openings ? `Prior openings:\n${openings}\n` : ''}${ocr ? `OCR:\n${ocr}` : ''}`
-            : 'Follow-up on the latest ticket.';
-        stableHandleSendMessage(text, [], hidden, { followUpFromMessageId: messageId });
-    }, [stableHandleSendMessage]);
-
-    // Pre-read capture: persist the user's committed prior
-    // call onto the settled verdict's message BEFORE the card reveals.
-    // Rides conversation history (same path as the watch toggle), copied
-    // onto the LoggedTrade at log time by useTradeLogging.
-    const handlePreReadCommit = useCallback((messageId: string, prior: { direction: 'Long' | 'Short' | 'Flat'; confidencePct: number }) => {
-        const convId = activeConversationId;
-        if (!convId) return;
-        updateMessages(prev => prev.map(m => m.id === messageId
-            ? { ...m, userPriorCall: { ...prior, confidencePct: Math.min(100, Math.max(0, prior.confidencePct)), createdAt: new Date().toISOString() } }
-            : m), convId);
-    }, [activeConversationId, updateMessages]);
-
-    const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
-        handleLoadConversation(conversationId);
-        setHighlightedAnalysisId(messageId);
-        setIsWatchListVisible(false);
-    }, [handleLoadConversation]);
+    // Watch list + outcome autopilot (extracted to hooks/useWatchAndAutopilot.ts):
+    // pinned-signal derivations and handlers, autopilot registration and
+    // resolutions, and the deferred watch-list actions.
+    const {
+        autopilotResolutions, setAutopilotResolutions,
+        handleApprovalShow,
+        handleToggleWatch,
+        watchedSignals,
+        watchOpenR,
+        handleFollowUpTicket,
+        handlePreReadCommit,
+        handleOpenWatchedSignal,
+        handleConfirmAutopilot,
+        runWatchListAction,
+        handleDismissAutopilot,
+    } = useWatchAndAutopilot({
+        messages, conversationHistory, loggedTrades,
+        activeConversationId, activeConversation, updateMessages, messagesRef,
+        stableHandleSendMessage, handleLoadConversation,
+        setHighlightedAnalysisId, setIsApprovalInboxVisible, setIsWatchListVisible,
+        confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
+        confirmAutopilotRef, toast,
+    });
 
     const handleStartNewConversation = handleNewConversation;
 
@@ -2209,7 +2174,6 @@ const App: React.FC = () => {
     // ─── Outcome Autopilot ────────────────────────────────────────────────
     // Register PENDING analyses for automatic SL/TP detection; resolutions
     // surface in the chat via chatContext for inline one-click confirmation.
-    const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});
 
     const {
         loadUserData,
@@ -2268,7 +2232,6 @@ const App: React.FC = () => {
     });
     resetAppStateRef.current = userProfileResetAppState;
 
-    const confirmAutopilotRef = useRef<(messageId: string) => void>(() => {});
     const [skillDraftNonce, setSkillDraftNonce] = useState(0);
     useEffect(() => {
         const bump = (): void => setSkillDraftNonce(n => n + 1);
@@ -2469,58 +2432,6 @@ const App: React.FC = () => {
         activeUsername,
     });
 
-    // P5: diff ids instead of re-registering every message on every stream
-    // chunk — register() re-arms the 60s detection loop, so the old effect
-    // perpetually reset the timers while a debate streamed.
-    const autopilotRegisteredRef = useRef<Set<string>>(new Set());
-    const autopilotLeverageRef = useRef<number>(DEFAULT_LEVERAGE);
-
-    useEffect(() => {
-        const leverage = activeConversation?.leverage || DEFAULT_LEVERAGE;
-        if (autopilotLeverageRef.current !== leverage) {
-            // Leverage changed — re-register everything with the new value.
-            autopilotRegisteredRef.current.clear();
-            autopilotLeverageRef.current = leverage;
-        }
-
-        const trackableIds = new Set<string>();
-        messages.forEach(m => {
-            const trackable = m.outcome === TradeOutcome.PENDING
-                && !!m.analysis
-                && m.analysis.direction !== 'Neutral'
-                && m.analysis.confidence !== 'Avoid'
-                && (m.analysis.direction === 'Long' || m.analysis.direction === 'Short')
-                && (m.analysis.entryPoints?.length ?? 0) > 0
-                && !!m.analysis.stopLoss;
-            if (trackable) {
-                trackableIds.add(m.id);
-                if (!autopilotRegisteredRef.current.has(m.id)) {
-                    OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
-                    autopilotRegisteredRef.current.add(m.id);
-                }
-            } else if (autopilotRegisteredRef.current.has(m.id)) {
-                OutcomeAutopilotService.unregister(m.id);
-                autopilotRegisteredRef.current.delete(m.id);
-            }
-        });
-        // Messages removed from the conversation entirely.
-        for (const id of [...autopilotRegisteredRef.current]) {
-            if (!trackableIds.has(id)) {
-                OutcomeAutopilotService.unregister(id);
-                autopilotRegisteredRef.current.delete(id);
-            }
-        }
-    }, [messages, activeConversation?.leverage]);
-
-    // Startup catch-up: once messages load, verify pending trades once
-    // (covers outcomes that resolved while the app was closed).
-    const autopilotCaughtUp = useRef(false);
-    useEffect(() => {
-        if (!autopilotCaughtUp.current && messages.length > 0) {
-            autopilotCaughtUp.current = true;
-            void OutcomeAutopilotService.checkNow();
-        }
-    }, [messages]);
 
     // F6: best-effort backup when the desktop app closes — the unload flush
     // protects the DB, but a fresh snapshot guards against IndexedDB
@@ -2542,58 +2453,8 @@ const App: React.FC = () => {
         return () => window.removeEventListener('beforeunload', onBeforeUnload);
     }, []);
 
-    const handleConfirmAutopilot = useCallback((messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
-        const resolution = OutcomeAutopilotService.getResolution(messageId);
-        if (!msg || !resolution || resolution.expiredOpen) return;
-        if (resolution.outcome === TradeOutcome.ENTRY_NOT_HIT) {
-            confirmAutopilotEntryNotHit(msg);
-        } else {
-            confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData);
-        }
-        OutcomeAutopilotService.markProcessed(messageId);
-        setAutopilotResolutions(prev => {
-            const next = { ...prev };
-            delete next[messageId];
-            return next;
-        });
-        toast.success('Trade logged', `${resolution.outcome} confirmed via autopilot`);
-    }, [messages, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
-    confirmAutopilotRef.current = handleConfirmAutopilot;
 
 
-    const runWatchListAction = useCallback((
-        conversationId: string,
-        action: { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS } | { type: 'autopilot'; messageId: string },
-    ) => {
-        if (conversationId !== activeConversationId) {
-            pendingWatchActionRef.current = action;
-            handleLoadConversation(conversationId);
-            setIsWatchListVisible(false);
-            return;
-        }
-        if (action.type === 'log') handleInitiateLogTrade(action.messageId, action.outcome);
-        else handleConfirmAutopilot(action.messageId);
-        setIsWatchListVisible(false);
-    }, [activeConversationId, handleConfirmAutopilot, handleInitiateLogTrade, handleLoadConversation]);
-
-    useEffect(() => {
-        const pending = pendingWatchActionRef.current;
-        if (!pending) return;
-        if (!messages.some(m => m.id === pending.messageId)) return;
-        pendingWatchActionRef.current = null;
-        if (pending.type === 'log') handleInitiateLogTrade(pending.messageId, pending.outcome);
-        else handleConfirmAutopilot(pending.messageId);
-    }, [messages, handleInitiateLogTrade, handleConfirmAutopilot]);
-
-    const handleDismissAutopilot = useCallback((messageId: string) => {
-        OutcomeAutopilotService.dismiss(messageId);
-        setAutopilotResolutions(prev => {
-            const next = { ...prev };
-            delete next[messageId];
-            return next;
-        });
-    }, []);
 
     /** Shared approval handlers — the Inbox modal AND the
      *  inline cards in the chat flow both route through these. */
