@@ -12,6 +12,7 @@
 import { ChartCandle, ChartLinePoint } from '../../types/chart';
 import { loadProviderConfigs, getReadyProviders } from '../infrastructure/ProviderConfigService';
 import { sendChatRequest } from '../providers/GenericProviderService';
+import { extractAndParseJson } from '../../utils/jsonUtils';
 
 export interface TrendlineResult {
     type: 'resistance' | 'support' | 'trendline';
@@ -56,12 +57,6 @@ const EMPTY_RESULT: AITrendlineAnalysis = {
         },
         riskFactors: ['AI analysis failed - use caution'],
     },
-};
-
-/** Extract JSON from a response that may be wrapped in markdown fences. */
-const extractJson = (responseText: string): string => {
-    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    return jsonMatch ? jsonMatch[1] : responseText;
 };
 
 /**
@@ -166,12 +161,14 @@ RESPOND IN THIS EXACT JSON FORMAT:
   }
 }`;
 
-    // Parse a raw response into the analysis shape (shared by all providers)
+    // Parse a raw response into the analysis shape (shared by all providers).
+    // The canonical boundary parser handles fenced blocks, bare JSON, and
+    // leading prose — the hand-rolled fence-only regex used to fail on any
+    // response that wrapped its JSON in extra text.
     const parseResponse = (responseText: string, providerName: string): AITrendlineAnalysis => {
-        const jsonStr = extractJson(responseText);
         let parsed: any;
         try {
-            parsed = JSON.parse(jsonStr);
+            parsed = extractAndParseJson(responseText);
         } catch (e) {
             const message = e instanceof Error ? e.message : 'Unknown JSON parsing error';
             throw new Error(`[AITrendlineService] ${providerName} returned invalid JSON: ${message}`, { cause: e });
