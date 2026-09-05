@@ -575,45 +575,66 @@ ${evWarning}
 // WEB WORKER API — runs simulations off the main thread
 // =============================================================================
 
-let workerInstance: Worker | null = null;
+/**
+ * A small worker POOL, not one shared worker: a single worker processes
+ * messages serially, so N concurrent simulations would still take N × the
+ * compute. The per-analyst Monte Carlo pass dispatches one simulation per
+ * debate seat; with a pool they actually run in parallel (capped at 4 —
+ * beyond that the seats just queue on cores anyway).
+ */
+const WORKER_POOL_SIZE = 4;
+const workerPool: Worker[] = [];
+let poolCursor = 0;
 let requestId = 0;
 const pendingRequests = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 
-const getWorker = (): Worker => {
-    if (!workerInstance) {
-        workerInstance = new Worker(
-            new URL('./monteCarlo.worker.ts', import.meta.url),
-            { type: 'module' }
-        );
-        workerInstance.onmessage = (e: MessageEvent) => {
-            const { type, id, result, error } = e.data;
-            const pending = pendingRequests.get(id);
-            if (!pending) return;
-            pendingRequests.delete(id);
-            if (type === 'error') {
-                pending.reject(new Error(error));
-            } else {
-                pending.resolve(result);
-            }
-        };
-        workerInstance.onerror = (e) => {
-            // Reject all pending requests on worker crash, then DROP the
-            // dead worker — without this the next postMessage went to a dead
-            // worker and its promise never settled (pending requests leaked
-            // forever). The next call spawns a fresh worker.
-            for (const [id, pending] of pendingRequests) {
-                pending.reject(new Error(e.message || 'Worker crashed'));
-                pendingRequests.delete(id);
-            }
-            try {
-                workerInstance?.terminate();
-            } catch (err) {
-                console.warn('[MonteCarlo] Worker terminate failed:', err);
-            }
-            workerInstance = null;
-        };
+const dropPool = (): void => {
+    for (const w of workerPool) {
+        try {
+            w.terminate();
+        } catch (err) {
+            console.warn('[MonteCarlo] Worker terminate failed:', err);
+        }
     }
-    return workerInstance;
+    workerPool.length = 0;
+};
+
+const spawnWorker = (): Worker => {
+    const w = new Worker(
+        new URL('./monteCarlo.worker.ts', import.meta.url),
+        { type: 'module' }
+    );
+    w.onmessage = (e: MessageEvent) => {
+        const { type, id, result, error } = e.data;
+        const pending = pendingRequests.get(id);
+        if (!pending) return;
+        pendingRequests.delete(id);
+        if (type === 'error') {
+            pending.reject(new Error(error));
+        } else {
+            pending.resolve(result);
+        }
+    };
+    w.onerror = (e) => {
+        // Reject all pending requests on worker crash, then DROP THE WHOLE
+        // POOL — pending ids are not tagged per worker, so a sibling's
+        // in-flight request cannot be told apart. Without this the next
+        // postMessage went to a dead worker and its promise never settled
+        // (pending requests leaked forever). The next call spawns fresh.
+        for (const [id, pending] of pendingRequests) {
+            pending.reject(new Error(e.message || 'Worker crashed'));
+            pendingRequests.delete(id);
+        }
+        dropPool();
+    };
+    return w;
+};
+
+const getWorker = (): Worker => {
+    if (workerPool.length < WORKER_POOL_SIZE) workerPool.push(spawnWorker());
+    const w = workerPool[poolCursor % workerPool.length];
+    poolCursor += 1;
+    return w;
 };
 
 /**

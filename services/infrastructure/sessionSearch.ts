@@ -37,6 +37,80 @@ const excerptAround = (text: string, lowerTerm: string): string => {
     return `${start > 0 ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`;
 };
 
+// ── Per-user message index ──────────────────────────────────────────────
+// searchChatHistory used to re-lowercase and re-scan every message of every
+// conversation on every call. The index flattens that work once per profile
+// fingerprint; repeated searches (the desk tool fires per debate seat) then
+// only touch the pre-lowered rows.
+//
+// The fingerprint is a cheap O(n) signature over the profile (conversation
+// count, message count, newest timestamp, and a per-message length+endpoint
+// sum) — primitive reads only, no allocations. The search reads the
+// PERSISTED profile (same source the fingerprint is computed from), so any
+// structural change or text edit that lands in storage flips it and forces a
+// rebuild. invalidateChatHistoryIndex() is exported for callers that mutate
+// message text in place without a fingerprint-visible change.
+
+interface IndexedMessage {
+    conv: Conversation;
+    text: string;
+    lower: string;
+    role: string;
+    createdAt?: string;
+}
+
+interface UserIndex {
+    fingerprint: string;
+    rows: IndexedMessage[];
+}
+
+const indexByUser = new Map<string, UserIndex>();
+const INDEX_USER_CAP = 4;
+
+const fingerprintOf = (conversations: Conversation[]): string => {
+    let newest = 0;
+    let messages = 0;
+    let sig = 0;
+    for (const c of conversations) {
+        if (c.timestamp > newest) newest = c.timestamp;
+        for (const m of c.messages ?? []) {
+            messages += 1;
+            const t = typeof m.text === 'string' ? m.text : '';
+            sig = (sig + t.length * 31 + (t.charCodeAt(0) || 0) + (t.charCodeAt(t.length - 1) || 0)) | 0;
+        }
+    }
+    return `${conversations.length}:${messages}:${newest}:${sig}`;
+};
+
+const buildIndex = (username: string, conversations: Conversation[]): UserIndex => {
+    const rows: IndexedMessage[] = [];
+    for (const conv of conversations) {
+        for (const msg of conv.messages ?? []) {
+            const text = typeof msg.text === 'string' ? msg.text : '';
+            if (!text) continue;
+            rows.push({ conv, text, lower: text.toLowerCase(), role: String(msg.role ?? ''), createdAt: msg.createdAt });
+        }
+    }
+    const index: UserIndex = { fingerprint: fingerprintOf(conversations), rows };
+    indexByUser.set(username, index);
+    // Bound the map: the oldest entry (by insertion) goes first.
+    while (indexByUser.size > INDEX_USER_CAP) {
+        const oldest = indexByUser.keys().next().value;
+        if (oldest === undefined) break;
+        indexByUser.delete(oldest);
+    }
+    return index;
+};
+
+/**
+ * Drop the cached index (all users, or one). Call after any in-place message
+ * text mutation the profile fingerprint cannot see.
+ */
+export const invalidateChatHistoryIndex = (username?: string): void => {
+    if (username === undefined) indexByUser.clear();
+    else indexByUser.delete(username);
+};
+
 /** Search every stored conversation's messages for a query. Returns top N. */
 export const searchChatHistory = async (
     query: string,
@@ -57,33 +131,33 @@ export const searchChatHistory = async (
         return [];
     }
 
+    const fingerprint = fingerprintOf(conversations);
+    const cached = indexByUser.get(user);
+    const index = cached && cached.fingerprint === fingerprint ? cached : buildIndex(user, conversations);
+
     const hits: ChatSearchHit[] = [];
-    for (const conv of conversations) {
-        for (const msg of conv.messages ?? []) {
-            const text = typeof msg.text === 'string' ? msg.text : '';
-            if (!text) continue;
-            const lower = text.toLowerCase();
-            let score = 0;
-            for (const term of terms) {
-                const occurrences = lower.split(term).length - 1;
-                if (occurrences > 0) score += Math.min(occurrences, 4);
-            }
-            if (score === 0) continue;
-            // Prefer AI/moderator analysis over short user prompts.
-            const roleWeight = msg.role === MessageRole.USER ? 0.6 : 1;
-            // Recency boost: newer conversations surface first on ties.
-            const ageDays = Math.max(0, (Date.now() - conv.timestamp) / 86_400_000);
-            const recency = Math.exp(-ageDays / 60);
-            const matched = terms.find(t => lower.includes(t)) ?? terms[0];
-            hits.push({
-                conversationId: conv.id,
-                conversationTitle: conv.title || 'Untitled session',
-                at: msg.createdAt ?? new Date(conv.timestamp).toISOString(),
-                speaker: String(msg.role ?? ''),
-                excerpt: excerptAround(text, matched),
-                score: score * roleWeight * (1 + recency),
-            });
+    for (const row of index.rows) {
+        const { lower, text } = row;
+        let score = 0;
+        for (const term of terms) {
+            const occurrences = lower.split(term).length - 1;
+            if (occurrences > 0) score += Math.min(occurrences, 4);
         }
+        if (score === 0) continue;
+        // Prefer AI/moderator analysis over short user prompts.
+        const roleWeight = row.role === MessageRole.USER ? 0.6 : 1;
+        // Recency boost: newer conversations surface first on ties.
+        const ageDays = Math.max(0, (Date.now() - row.conv.timestamp) / 86_400_000);
+        const recency = Math.exp(-ageDays / 60);
+        const matched = terms.find(t => lower.includes(t)) ?? terms[0];
+        hits.push({
+            conversationId: row.conv.id,
+            conversationTitle: row.conv.title || 'Untitled session',
+            at: row.createdAt ?? new Date(row.conv.timestamp).toISOString(),
+            speaker: row.role,
+            excerpt: excerptAround(text, matched),
+            score: score * roleWeight * (1 + recency),
+        });
     }
     return hits.sort((a, b) => b.score - a.score).slice(0, limit);
 };

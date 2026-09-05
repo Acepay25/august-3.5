@@ -247,13 +247,25 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // Ensemble reasoning is presented in the analyst progress/output card.
     // Do not duplicate it in the generic chat-level Thinking disclosure.
     const isEnsembleMessage = isEnsembleMessageOf(message);
-    const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
+    // Stable reference for the memoized DebateSidePanel — the ?? fallback
+    // would otherwise mint a fresh array on every render.
+    const debateTurns = React.useMemo(
+        () => message.debateTurns ?? message.postMortemDebateTurns ?? [],
+        [message.debateTurns, message.postMortemDebateTurns],
+    );
 
     // Debate floor: one thinking bubble per debater in the chat
     // area; the full transcript streams in the right-hand side panel.
     // Actor derivation lives in utils/debateStageActors so the opt-in
     // DeskScene overlay projects the exact same debate state.
     const [debatePanelActor, setDebatePanelActor] = React.useState<string | null>(null);
+    // Stable props for the memoized DebateSidePanel: fresh arrows/arrays per
+    // render would defeat the memo on every stream chunk.
+    const closeDebatePanel = React.useCallback(() => setDebatePanelActor(null), []);
+    const selectDebateActor = React.useCallback((id: string) => setDebatePanelActor(id), []);
+    const chooseReplacement = React.useCallback((providerId: string | null) => {
+        onReplacementChoice?.(message.id, providerId);
+    }, [onReplacementChoice, message.id]);
     // External open-actor request (e.g. from the desk view). The App
     // publishes a {messageId, actorId} pair + a nonce; only the message
     // whose id matches the request mirrors the actor into its local
@@ -266,6 +278,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         (): DebateStageActor[] => stageActorsForMessage(message),
         [message],
     );
+    const debateActorIds = React.useMemo(() => stageActors.map(a => a.id), [stageActors]);
 
     // Live phase line for the floor caption — "Round 2 · Rebuttal rounds" —
     // so the watcher always knows where in the protocol the debate is.
@@ -437,11 +450,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     )}
                                     <DebateSidePanel
                                         open={debatePanelActor !== null}
-                                        onClose={() => setDebatePanelActor(null)}
+                                        onClose={closeDebatePanel}
                                         turns={debateTurns}
-                                        actorIds={stageActors.map(a => a.id)}
+                                        actorIds={debateActorIds}
                                         activeActor={debatePanelActor}
-                                        onSelectActor={id => setDebatePanelActor(id)}
+                                        onSelectActor={selectDebateActor}
                                         isLive={Boolean(message.isDebating)}
                                         liveToolEvents={message.liveToolEvents}
                                         reasoningProcesses={message.reasoningProcesses}
@@ -450,9 +463,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         messageId={message.id}
                                         onForkDebate={onForkDebate}
                                         replacementOffer={message.replacementOffer}
-                                        onReplacementChoice={onReplacementChoice
-                                            ? providerId => onReplacementChoice(message.id, providerId)
-                                            : undefined}
+                                        onReplacementChoice={onReplacementChoice ? chooseReplacement : undefined}
                                     />
                                 </div>
                             )}

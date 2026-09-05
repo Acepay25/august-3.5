@@ -339,6 +339,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         }
         return map;
     }, [messages]);
+    const handleViewImage = useCallback((url: string) => setViewerImageUrl(url), []);
+
+    // Stable Virtuoso `components`: the inline arrow created a NEW component
+    // type on every render, so the footer remounted on every stream chunk.
+    // The loading flag rides a ref — the list re-renders whenever it changes
+    // (it's a prop), and the footer reads the fresh value without its own
+    // identity flipping.
+    const loadingMessageRef = useRef(loadingMessage);
+    loadingMessageRef.current = loadingMessage;
+    const virtuosoComponents = useMemo(() => ({
+        Header: ListHeader,
+        Footer: () => <ListFooter isLoading={Boolean(loadingMessageRef.current)} />,
+    }), []);
+
     const enhancedContext = useMemo(() => ({
         ...chatContext,
         latestMessageId,
@@ -350,11 +364,11 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
-        onViewImage: (url: string) => setViewerImageUrl(url),
+        onViewImage: handleViewImage,
         onSelectMessageForProbability,
         onRetryFailedRun,
         onEditUserMessage,
-    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, visibleBot, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
+    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, visibleBot, isSelectionMode, selectedIds, handleToggleSelection, handleViewImage, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -592,10 +606,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 style={{ height: '100%', width: '100%' }}
                 className="scrollbar-hide"
                 increaseViewportBy={200}
-                components={{
-                    Header: ListHeader,
-                    Footer: () => <ListFooter isLoading={Boolean(loadingMessage)} />
-                }}
+                components={virtuosoComponents}
             />
             </div>
             )}

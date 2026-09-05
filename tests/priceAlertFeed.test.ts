@@ -25,7 +25,7 @@ describe('PriceAlertService feed tracking', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     fetchMock.mockReset();
-    fetchMock.mockImplementation(async () => ({ json: async () => ({ symbol: 'BTCUSDT', price: '100.5' }) }));
+    fetchMock.mockImplementation(async () => ({ ok: true, json: async () => ({ symbol: 'BTCUSDT', price: '100.5' }) }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     svc.trackedSymbols.clear();
     svc.prices.clear();
@@ -45,13 +45,32 @@ describe('PriceAlertService feed tracking', () => {
 
     await vi.advanceTimersByTimeAsync(10_000);
 
-    // The polling loop hit the normalized symbol (BTC → BTCUSDT) with no
-    // alerts registered anywhere.
-    expect(fetchMock).toHaveBeenCalledWith('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
+    // The polling loop hits the normalized symbol (BTC → BTCUSDT) in ONE
+    // batched request (the old loop fetched once per symbol sequentially).
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT"]',
+    );
     // The tick populated the shared price cache AND fanned out to subscribers
     // (SetupWatchService.handlePriceTick → watch evaluation).
     expect(svc.getCurrentPrice('BTCUSDT')).toBe(100.5);
     expect(ticks).toEqual([['BTCUSDT', 100.5]]);
+    unsubscribe();
+  });
+
+  it('dedupes an unchanged price: the same tick fans out once, a change fans out again', async () => {
+    const ticks: Array<[string, number]> = [];
+    const unsubscribe = svc.subscribePrices((symbol, price) => ticks.push([symbol, price]));
+    fetchMock.mockImplementation(async () => ({ ok: true, json: async () => [{ symbol: 'BTCUSDT', price: '100.5' }] }));
+
+    expect(svc.trackSymbol('BTC')).toBe(true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    // Two polls, same price → one fan-out.
+    expect(ticks).toEqual([['BTCUSDT', 100.5]]);
+
+    fetchMock.mockImplementation(async () => ({ ok: true, json: async () => [{ symbol: 'BTCUSDT', price: '101' }] }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(ticks).toEqual([['BTCUSDT', 100.5], ['BTCUSDT', 101]]);
     unsubscribe();
   });
 

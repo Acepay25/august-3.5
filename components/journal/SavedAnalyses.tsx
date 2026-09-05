@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bookmark } from 'lucide-react';
 import { SavedAnalysis } from '../../types';
 import { CloseIcon, ChevronDownIcon, TrashIcon } from '../shared/Icons';
@@ -15,9 +15,12 @@ interface SavedAnalysesProps {
   ocrModelIdToName: Record<string, string>;
 }
 
-const SavedAnalysisRow: React.FC<{
+// Memoized row. The toggle handler takes the id (rather than closing over it
+// per row) so the prop identity stays stable across parent re-renders — an
+// inline arrow would rebuild on every render and defeat the memo.
+const SavedAnalysisRowImpl: React.FC<{
   item: SavedAnalysis;
-  onToggle: () => void;
+  onToggle: (id: string) => void;
   isExpanded: boolean;
   isSelected: boolean;
   onSelect: (id: string) => void;
@@ -30,7 +33,7 @@ const SavedAnalysisRow: React.FC<{
 
   return (
     <div className={`bg-zinc-950 rounded-lg border ${isSelected ? 'border-cyan-500' : 'border-white/10'}`}>
-      <div className="flex items-center p-3 cursor-pointer" onClick={onToggle}>
+      <div className="flex items-center p-3 cursor-pointer" onClick={() => onToggle(item.id)}>
         <input
           type="checkbox"
           checked={isSelected}
@@ -103,6 +106,8 @@ const SavedAnalysisRow: React.FC<{
   );
 };
 
+const SavedAnalysisRow = React.memo(SavedAnalysisRowImpl);
+
 const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisible, onDelete, onClearAll, modelIdToName, ocrModelIdToName }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -114,15 +119,15 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisi
     }
   }, [isVisible]);
 
-  const handleToggle = (id: string) => {
+  const handleToggle = useCallback((id: string) => {
     setExpandedId(prevId => (prevId === id ? null : id));
-  };
+  }, []);
 
-  const handleSelect = (id: string) => {
+  const handleSelect = useCallback((id: string) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
     );
-  };
+  }, []);
 
   const handleDeleteSelected = () => {
     if (selectedIds.length > 0) {
@@ -177,7 +182,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisi
                 <li key={item.id}>
                   <SavedAnalysisRow
                     item={item}
-                    onToggle={() => handleToggle(item.id)}
+                    onToggle={handleToggle}
                     isExpanded={expandedId === item.id}
                     isSelected={selectedIds.includes(item.id)}
                     onSelect={handleSelect}
