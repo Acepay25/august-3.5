@@ -14,6 +14,7 @@ import { ProviderConfig } from '../../types/provider';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { ROLE_ACCENTS } from '../desk/pixelAvatars';
 import { SelectMenu } from '../shared/SelectMenu';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { AnalystRole } from '../../types/enums';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import { builtInPromptForRole } from '../../services/agents/seatPersonas';
@@ -54,6 +55,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const [providerId, setProviderId] = React.useState<string>(() => firstReadyProviderId(providers));
     const [modelId, setModelId] = React.useState<string>('');
     const [advancedOpen, setAdvancedOpen] = React.useState(false);
+    useEscapeClose(open, onClose);
 
     const provider = providers.find(p => p.id === providerId) ?? providers[0];
     // Fall back to the provider's selected model (then its first) until

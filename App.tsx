@@ -3129,10 +3129,18 @@ const App: React.FC = () => {
         if (mode === 'Algo') {
             if (msg.analysis.marketSnapshot) {
                 try {
+                    // Entry→TP distances (% of entry) so the decay is
+                    // distance-aware instead of a fixed step.
+                    const entry = Number(String(msg.analysis.entryPoints?.[0]?.price ?? '').replace(/[$,\s]/g, ''));
+                    const tpPct = (msg.analysis.takeProfit ?? [])
+                        .map(tp => Number(String(tp.price ?? '').replace(/[$,\s]/g, '')))
+                        .filter(p => Number.isFinite(p) && Number.isFinite(entry) && entry > 0)
+                        .map(p => Math.abs(p - entry) / entry * 100);
                     const algoProbs = ProbabilityEngineService.calculateAlgoProbabilities(
                         msg.analysis.marketSnapshot,
                         loggedTrades,
-                        msg.analysis.direction as 'Long' | 'Short' | 'Neutral'
+                        msg.analysis.direction as 'Long' | 'Short' | 'Neutral',
+                        tpPct.length >= 2 ? tpPct : undefined
                     );
                     updateMessages(prev => prev.map(m =>
                         m.id === messageId

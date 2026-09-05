@@ -137,7 +137,6 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     const [editRoom, setEditRoom] = React.useState(false);
     const roomLayout: RoomLayout = React.useMemo(
         () => getRoomLayout(actors.map(a => a.id)),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [actors, roomLayoutTick, overridesTick],
     );
     // While a seat is being dragged we hold a transient override here
@@ -375,7 +374,6 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
 
     const seats = React.useMemo(
         () => layoutFloor(actors.map(a => a.id), roomLayout),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [actors, overridesTick, roomLayoutTick],
     );
 

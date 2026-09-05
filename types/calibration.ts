@@ -76,7 +76,12 @@ export interface CorrelationRiskResult {
  */
 export interface BacktestResult {
   wouldHaveTriggered: boolean;      // Did price reach entry?
-  outcome: 'WIN' | 'LOSS' | 'NOT_TRIGGERED';
+  /** WIN/LOSS are settled. NOT_TRIGGERED means the ENTRY NEVER FILLED.
+   *  ENTERED_OPEN means the entry filled but neither SL nor TP was hit
+   *  inside the lookback — a live position, not a missed signal. Older
+   *  persisted rows used NOT_TRIGGERED for both; readers must treat a
+   *  NOT_TRIGGERED row whose wouldHaveTriggered is true as ENTERED_OPEN. */
+  outcome: 'WIN' | 'LOSS' | 'NOT_TRIGGERED' | 'ENTERED_OPEN';
   hitTarget: 'TP1' | 'TP2' | 'TP3' | 'SL' | 'NONE';
   maxDrawdown: number;              // % drawdown during trade
   timeToOutcome: number;            // Candles until outcome

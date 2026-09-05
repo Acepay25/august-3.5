@@ -399,3 +399,27 @@ describe('useAgentGroups cancel + hybrid', () => {
         expect(result.current.isRunning).toBe(false);
     });
 });
+
+// ── room transcripts never carry DM markers ────────────────────────────
+describe('useAgentGroups marker hygiene', () => {
+    it('strips [[dm:@…]] markers from the persisted room reply', async () => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+        }));
+        // The room protocol forbids DM markers, but a model can still emit
+        // one — the bubble must never show the raw marker text.
+        streamMock.mockResolvedValue('Funding looks hot.\n[[dm:@scout]] check the desk');
+        await act(async () => {
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1'] }, 'analyze btc', [
+                bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
+            ]);
+        });
+        const replies = store.messages.filter(m => m.role === MessageRole.AI);
+        expect(replies).toHaveLength(1);
+        expect(replies[0].text).toBe('Funding looks hot.');
+        expect(replies[0].text).not.toContain('[[dm:');
+    });
+});

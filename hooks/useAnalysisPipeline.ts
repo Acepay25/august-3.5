@@ -113,6 +113,7 @@ import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystO
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { CLARIFICATION_MARKERS_RE, DEBATE_END_MARKERS_RE, MODERATOR_ERROR_BLOCK_RE, MODERATOR_RETRY_MARKER, MODERATOR_RETRY_RE, REPLACEMENT_TIMEOUT_MARKER } from '../constants/debateMarkers';
+import { parseDmMarkers } from '../services/agents/botMailbox';
 
 // ─── Params Interface ──────────────────────────────────────────────────────────
 
@@ -4010,12 +4011,18 @@ ${accuracyVerificationNote}`
                 // Split before display: native CoT and any leaked scratchpad
                 // belong in the bubble's Thinking row, never in the reply.
                 const casualSplit = splitThinkingFromOutput(reasoningContent, responseText);
+                // Strip [[dm:@…]] markers BEFORE the first persisted update:
+                // the mailbox delivery below is fire-and-forget, so without
+                // this the bubble shows raw marker text until the mailbox's
+                // own patch lands (and forever if it throws). The mailbox
+                // still receives the RAW text — it needs the markers to route.
+                const casualClean = parseDmMarkers(casualSplit.output).clean.trim();
                 // Casual chat is a single-model conversation. Do not store the
                 // answer as an individual insight; that creates an oversized
                 // "Individual AI Insights" section under ordinary replies.
                 updateMessages(prev => prev.map(m => m.id === streamingMessageId ? {
                     ...m,
-                    text: casualSplit.output,
+                    text: casualClean,
                     isStreaming: false,
                     modelsUsed: { [provider.config.id]: provider.model },
                     thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,

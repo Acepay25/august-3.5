@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 // Grade-tiered risk + Kelly advisory (Batch 2) — the deterministic ticket-math
 // extensions layered onto the existing sizing.
 
-import { computeContractSize, gradeRiskTier, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
+import { computeContractSize, computeLiquidationBuffer, gradeRiskTier, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
 
 describe('gradeRiskTier', () => {
     it('Grade A keeps the full base risk', () => {
@@ -110,5 +110,16 @@ describe('computeContractSize — unconfigured equity', () => {
         expect(sized.riskUsd).toBe(100);
         expect(sized.qty).toBeCloseTo(10, 5);
         expect(sized.reason).toBe('Uncapped');
+    });
+});
+
+describe('computeLiquidationBuffer — margin mode', () => {
+    it('isolated (default) computes the 100/lev approximation', () => {
+        const ok = computeLiquidationBuffer('100', '99', 10);
+        expect(ok?.liquidationMovePct).toBeCloseTo(10, 5);
+        expect(ok?.bufferPct).toBeCloseTo(9, 5);
+    });
+    it('cross returns null — liquidation depends on the whole account, not this ticket', () => {
+        expect(computeLiquidationBuffer('100', '99', 10, 'cross')).toBeNull();
     });
 });

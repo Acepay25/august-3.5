@@ -1294,7 +1294,11 @@ async function* streamViaProxy(
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
             // SSE events are separated by a blank line; each event carries a
-            // `data:` payload (possibly `data: [DONE]` at the end).
+            // `data:` payload (possibly `data: [DONE]` at the end). Some
+            // gateways emit CRLF line endings — normalize first so the
+            // blank-line scan (and the per-line `data:` match below) never
+            // strand an event behind a '\r\r\n' separator.
+            buffer = buffer.replace(/\r\n/g, '\n');
             let sep: number;
             while ((sep = buffer.indexOf('\n\n')) >= 0) {
                 const event = buffer.slice(0, sep);
@@ -1316,10 +1320,13 @@ async function* streamViaProxy(
                 if (chunk?.error) {
                     const message = chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`;
                     const error = new Error(message);
-                    // error.code is a STRING (e.g. 'invalid_request_error') —
-                    // assign a numeric status (or 0) so numeric status checks
-                    // downstream never see a string.
-                    if (chunk.error.code !== undefined) (error as any).status = parseInt(chunk.error.code, 10) || 0;
+                    // error.code is usually a STRING ('invalid_request_error')
+                    // — only a NUMERIC code is a status. The old
+                    // parseInt(code)||0 stamped status=0 onto every string
+                    // code, which downstream truthiness checks read as a
+                    // present status. Leave it unset unless it's really numeric.
+                    if (typeof chunk.error.code === 'number') (error as any).status = chunk.error.code;
+                    else if (typeof chunk.error.code === 'string' && /^\d{3}$/.test(chunk.error.code)) (error as any).status = Number(chunk.error.code);
                     if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
                     throw error;
                 }
@@ -1342,7 +1349,8 @@ async function* streamViaProxy(
                         // Provider error in the final event must propagate, not
                         // be silently swallowed like a partial event would be.
                         const error = new Error(chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`);
-                        if (chunk.error.code !== undefined) (error as any).status = parseInt(chunk.error.code, 10) || 0;
+                        if (typeof chunk.error.code === 'number') (error as any).status = chunk.error.code;
+                        else if (typeof chunk.error.code === 'string' && /^\d{3}$/.test(chunk.error.code)) (error as any).status = Number(chunk.error.code);
                         if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
                         throw error;
                     }

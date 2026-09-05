@@ -134,34 +134,6 @@ export function getProviderForRole(
 }
 
 /**
- * Get the prompt prefix for a provider based on their assigned role
- */
-export function getLensPromptForProvider(
-    provider: AIProvider,
-    config: AnalystRoleAssignment[]
-): string {
-    const role = getRoleForProvider(provider, config);
-    return ANALYST_ROLE_DEFINITIONS[role].promptPrefix;
-}
-
-/**
- * Get display info for a provider based on their role
- */
-export function getRoleDisplayForProvider(
-    provider: AIProvider,
-    config: AnalystRoleAssignment[]
-): { name: string; emoji: string; focus: string; shortName: string } {
-    const role = getRoleForProvider(provider, config);
-    const def = ANALYST_ROLE_DEFINITIONS[role];
-    return {
-        name: def.name,
-        emoji: def.emoji,
-        focus: def.focus,
-        shortName: def.shortName,
-    };
-}
-
-/**
  * Load lens config
  */
 export function loadLensConfig(): AnalystLensConfig {
@@ -371,7 +343,7 @@ export function validateLensConfig(config: AnalystRoleAssignment[]): string | nu
     );
 
     if (duplicates.length > 0) {
-        return `Model ${duplicates[0].replace('::', ' · ')} is assigned to multiple roles`;
+        return `Model ${duplicates[0].split('::').join(' · ')} is assigned to multiple roles`;
     }
     return null;
 }

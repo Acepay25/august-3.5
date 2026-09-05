@@ -11,18 +11,23 @@ const turn = (speaker: string, text: string, round?: number): DebateTurn =>
 
 describe('conviction drift', () => {
     it('extracts the last sealed conviction per turn (quoted numbers ignored)', () => {
-        const t = turn('Macro', 'Technical said CONVICTION: 90 but I disagree. CONVICTION: 55', 2);
+        // The sealed line is line-initial; a mid-prose quote of another
+        // seat's number must not create a point — and must not override the
+        // seat's own sealed line either.
+        const t = turn('Macro', 'Technical said CONVICTION: 90 but I disagree.\nCONVICTION: 55', 2);
         expect(extractConvictions(t)).toEqual([55]);
+        // A turn whose ONLY conviction mention is a quote has none of its own.
+        expect(extractConvictions(turn('Risk', 'Technical said CONVICTION: 90 and I agree.', 2))).toEqual([]);
         expect(extractConvictions(turn('Risk', 'no sealed line here', 2))).toEqual([]);
     });
 
     it('builds an ordered trajectory and delta across rounds', () => {
         const turns = [
-            turn('Macro', 'Opening... CONVICTION: 80', 1),
-            turn('Technical', 'Opening... CONVICTION: 60', 1),
+            turn('Macro', 'CONVICTION: 80\nOpening...', 1),
+            turn('Technical', 'CONVICTION: 60\nOpening...', 1),
             turn('Devil', 'Challenge!', 1),
-            turn('Macro', 'Rebuttal... CONVICTION: 62', 2),
-            turn('Technical', 'Rebuttal... CONVICTION: 75', 2),
+            turn('Macro', 'CONVICTION: 62\nRebuttal...', 2),
+            turn('Technical', 'CONVICTION: 75\nRebuttal...', 2),
         ];
         const macro = seatConvictionTrajectory(turns, 'Macro')!;
         expect(macro.points).toEqual([

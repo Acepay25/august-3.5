@@ -63,7 +63,9 @@ const DebateReplay: React.FC<DebateReplayProps> = ({ turns, onClose }) => {
     }, [cursor, playable.length, done]);
 
     useEffect(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+        // jsdom has no Element.scrollTo — assign scrollTop so the first
+        // render in a test (and any engine without scrollTo) still follows.
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, [cursor, shown]);
 
     const restart = (): void => {

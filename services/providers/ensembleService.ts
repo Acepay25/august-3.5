@@ -1590,7 +1590,9 @@ export const buildConvictionAuctionBlock = (roundTexts: Record<string, string[]>
     const rows: { name: string; value: number }[] = [];
     for (const name of names) {
         const text = roundTexts[name]?.[finalRound] || '';
-        const m = text.match(/CONVICTION:\s*(\d{1,3})/i);
+        // Line-initial only: a mid-prose quote of another seat's number is
+        // not this seat's sealed conviction (same rule as convictionDrift).
+        const m = text.match(/(?:^|\n)[ \t]*CONVICTION:[ \t]*(\d{1,3})/i);
         if (!m) continue;
         const v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
         rows.push({ name, value: v });
@@ -1637,7 +1639,7 @@ export const buildSeatTrustBlock = (
         for (const turn of t.debateTurns ?? []) {
             if (turn.speaker === 'Moderator' || turn.speaker === 'System') continue;
             let v: number | null = null;
-            for (const m of turn.text.matchAll(/CONVICTION:\s*(\d{1,3})/gi)) {
+            for (const m of turn.text.matchAll(/(?:^|\n)[ \t]*CONVICTION:[ \t]*(\d{1,3})/gi)) {
                 v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
             }
             if (v === null) continue;
@@ -2770,10 +2772,10 @@ export const conductRealDebate = async function* (
             // surface it to the arbiter — their last-known stance should not
             // vanish from the conviction auction just because time ran out.
             for (const name of activeAnalystNames) {
-                if (roundTexts[name]?.[totalRounds]?.match(/CONVICTION:\s*\d{1,3}/i)) continue;
+                if (roundTexts[name]?.[totalRounds]?.match(/(?:^|\n)[ \t]*CONVICTION:[ \t]*\d{1,3}/i)) continue;
                 let lastConviction: { round: number; value: number } | null = null;
                 for (let r = totalRounds - 1; r >= 1; r--) {
-                    const m = roundTexts[name]?.[r]?.match(/CONVICTION:\s*(\d{1,3})/i);
+                    const m = roundTexts[name]?.[r]?.match(/(?:^|\n)[ \t]*CONVICTION:[ \t]*(\d{1,3})/i);
                     if (m) {
                         lastConviction = { round: r, value: Math.min(100, Math.max(0, parseInt(m[1], 10))) };
                         break;
