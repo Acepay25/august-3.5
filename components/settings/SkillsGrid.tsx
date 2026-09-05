@@ -378,7 +378,7 @@ const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?
         return subscribeMemoryFilesChanged(refresh);
     }, []);
 
-    // Deep link from a skill-citation chip in the transcript (§10.1): open
+    // Deep link from a skill-citation chip in the transcript: open
     // that skill's card. The chip fires the event and the settings menu
     // mounts this grid on the same tick, so also consume the pending slug
     // once the file list exists.
@@ -503,7 +503,7 @@ const SkillsGrid: React.FC<{ memoryConfig?: ProviderConfig | null; loggedTrades?
                     />
                 </label>
             </div>
-            {/* §4.6 loop E: the proposals side of the learning loop lands
+            {/* loop E: the proposals side of the learning loop lands
                 here — "the gate proposes, the inbox disposes." */}
             <div className="shrink-0">
                 <LearningQueuePanel />

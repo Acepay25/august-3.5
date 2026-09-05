@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Lens pods (Batch 12, plan §9.1): pod assignment, representative choice,
+// Lens pods: pod assignment, representative choice,
 // transcript-cap scaling, pod-round prompt shape.
 
 import {

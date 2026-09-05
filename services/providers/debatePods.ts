@@ -1,5 +1,5 @@
 /**
- * Lens pods (Batch 12, plan §9.1) — the structured seat tier ABOVE 5.
+ * Lens pods — the structured seat tier ABOVE 5.
  *
  * A 6-10 seat flat floor breaks three engine properties designed for ≤5:
  * addressed routing degenerates (most pairs never address each other), the
@@ -85,7 +85,7 @@ export const withTrustRepresentatives = (
 }));
 
 /**
- * Verdict-transcript budget scaling (plan §9.1): the 2400-char total cap was
+ * Verdict-transcript budget scaling: the 2400-char total cap was
  * sized for ≤5 seats; at 10 it truncates mid-argument. Per-turn cap stays
  * 100; the total grows 400 chars per seat above 5.
  */

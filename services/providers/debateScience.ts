@@ -1,5 +1,5 @@
 /**
- * debateScience — Batch 4 structure changes (plan §1.2), as pure helpers the
+ * debateScience — Batch 4 structure changes , as pure helpers the
  * debate engine composes into prompts and metadata.
  *
  * Research anchors live in the plan: identity sycophancy (anonymize seat-to-

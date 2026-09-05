@@ -107,9 +107,11 @@ export const recordRegimeDay = async (
         kept.sort((a, b) => a.date.localeCompare(b.date));
         await setPreferenceObject(keyFor(username), kept.slice(-MAX_ENTRIES));
         if (cacheUser === username) {
-            cache = [...kept.filter(e => !(e.coin === coin && e.date === date)), { date, coin, regime: day.regime, source: day.source ?? 'hybrid' }]
-                .sort((a, b) => a.date.localeCompare(b.date))
-                .slice(-MAX_ENTRIES);
+            // Mirror the persisted write EXACTLY. `kept` already holds the new
+            // entry (pushed above) — re-filtering and re-pushing it here left
+            // the cache with two rows for (coin, date), so getRegimeSummary
+            // double-counted today: inflated `samples`, skewed distribution.
+            cache = kept.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-MAX_ENTRIES);
         }
     } catch { /* best-effort */ }
 };

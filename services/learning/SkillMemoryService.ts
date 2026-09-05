@@ -104,28 +104,28 @@ export interface SkillMeta {
      *  belief was applied to a non-scope regime N times" so a skill that only
      *  "works" outside its stated regime is caught. */
     crossRegimeIds?: string[];
-    /** ── §8.3a three-state adherence join ──
+    /** ── three-state adherence join ──
      *  Matched + injected + CITED by the verdict → counted in wins/losses
      *  (FOLLOWED). Matched + injected + NOT cited → this list (OVERRIDDEN):
      *  the moderator was handed the skill and ignored it, so the outcome
      *  belongs to neither the skill nor the control group. A high override
      *  rate is itself a signal — the amendment queue consumes it. */
     overriddenIds?: string[];
-    /** ── §8.3b per-regime evidence splits ──
+    /** ── per-regime evidence splits ──
      *  wins/losses accumulated inside each regime, written alongside the
      *  global counters. When the split diverges (works in one regime, fails
      *  in another) the skill is CONDITIONAL, not fading — re-scope instead
      *  of decay. */
     regimeStats?: Record<string, { w: number; l: number }>;
-    /** ── §8.2a birth certificate ──
+    /** ── birth certificate ──
      *  The falsifiable claim registered at creation. The eval scheduler
      *  tests the skill against THIS instead of a generic hurts/helps
      *  question; the ladder consumes the claim verdict. */
     prediction?: SkillPrediction;
-    /** §8.2a: followed-evidence sample size at the last claim test — the
+    /** Followed-evidence sample size at the last claim test — the
      *  claim is re-tested only when new evidence has landed since. */
     claimTestedEvidence?: number;
-    /** ── §8.3c shadow refinement ──
+    /** ── shadow refinement ──
      *  A refined version drafted after a loss streak does NOT swap into the
      *  live slot immediately — it waits here (eval-only) while the prior
      *  version keeps injecting for SHADOW_WINDOW_TRADES matched trades.
@@ -200,7 +200,7 @@ export const MIN_SAMPLE_FOR_VETO = 2;
 /** Consecutive losses on a CONFIRMED skill before the LLM refinement pass. */
 export const REFINE_AFTER_CONSECUTIVE_LOSSES = 3;
 /**
- * §8.3c: matched trades the PRIOR version keeps the live injection slot for
+ * Matched trades the PRIOR version keeps the live injection slot for
  * while a refinement sits in eval-only shadow. A panicked rewrite after a
  * bad-luck streak used to swap in immediately — undetectably replacing a
  * good skill with a worse one. The window is the detection mechanism.
@@ -315,14 +315,14 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
             const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
             return ids.length > 0 ? ids : undefined;
         })(),
-        // §8.3a: injected-but-not-cited (OVERRIDDEN) trade ids.
+        // Injected-but-not-cited (OVERRIDDEN) trade ids.
         overriddenIds: (() => {
             const raw = pick('overriddenIds');
             if (!raw) return undefined;
             const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
             return ids.length > 0 ? ids : undefined;
         })(),
-        // §8.3b: per-regime W/L split (JSON map in frontmatter).
+        // Per-regime W/L split (JSON map in frontmatter).
         regimeStats: (() => {
             const raw = pick('regimeStats');
             if (!raw) return undefined;
@@ -338,15 +338,15 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
                 return undefined;
             }
         })(),
-        // §8.2a: the birth-certificate claim.
+        // The birth-certificate claim.
         prediction: parsePredictionLine(pick('prediction')) ?? undefined,
-        // §8.2a: followed-evidence sample at the last claim test (re-test
+        // Followed-evidence sample at the last claim test (re-test
         // only when new evidence landed since).
         claimTestedEvidence: (() => {
             const n = parseInt(pick('claimTestedEvidence') || '', 10);
             return Number.isFinite(n) && n >= 0 ? n : undefined;
         })(),
-        // §8.3c: the pending shadow refinement (JSON in frontmatter).
+        // The pending shadow refinement (JSON in frontmatter).
         shadow: (() => {
             const raw = pick('shadow');
             if (!raw) return undefined;
@@ -602,7 +602,7 @@ export const evalDemotionActive = (meta: SkillMeta): boolean => {
 };
 
 /**
- * §8.3d: the raw ladder (5 samples, 60% win rate) is a FLOOR, not the gate —
+ * The raw ladder (5 samples, 60% win rate) is a FLOOR, not the gate —
  * a 4-1 record at N=5 is statistically indistinguishable from a coin flip.
  * Confirmation additionally requires the Wilson interval of the followed
  * evidence to separate from the control win rate (or, cold-start with no
@@ -614,7 +614,7 @@ export const confirmationCiGate = (
     control?: { wins: number; losses: number },
 ): boolean => ciGatePasses(meta.kind, meta.wins, meta.losses, control);
 
-/** §8.3d: control-group evidence for the CI comparison — the settled
+/** Control-group evidence for the CI comparison — the settled
  *  outcomes of the skill's controlIds (matched-but-not-injected trades). */
 const controlStatsFrom = (
     meta: SkillMeta,
@@ -648,7 +648,7 @@ const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number 
         && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
     ) return 'candidate';
 
-    // ── §8.2a birth certificate ──
+    // ── birth certificate ──
     // The skill's own pre-registered claim, tested against its followed
     // evidence. evaluateClaim is pure arithmetic, so the ladder can consume
     // it directly: a claim that has reached its horizon and FAILED blocks
@@ -728,13 +728,13 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         // ── Evidence decay ──
         // Authority expires with its evidence: counts >30 days stale are
         // halved before counting this trade. Regime mismatch NO LONGER
-        // halves (§8.3b) — "works in trend, fails in chop" is CONDITIONAL,
+        // halves — "works in trend, fails in chop" is CONDITIONAL,
         // not fading; the per-regime split below routes divergence to a
         // re-scope proposal instead of decay. deriveStatus then naturally
         // demotes genuinely stale skills to candidate.
         applyEvidenceDecay(meta, trade.marketRegime);
 
-        // ── Weighted attribution (§8.3a three-state adherence) ──
+        // ── Weighted attribution (three-state adherence) ──
         // Full credit ONLY when retrieval actually injected this skill in the
         // run that produced this trade AND the verdict did not override it.
         // The join is EXACT on the originating runId (persisted on both sides)
@@ -793,7 +793,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             continue;
         }
 
-        // §8.5b eval-verdict agreement: the first FOLLOWED trade after a
+        // Eval-verdict agreement: the first FOLLOWED trade after a
         // helps/hurts verdict era is one agreement sample (once per era).
         if ((meta.evalVerdict === 'helps' || meta.evalVerdict === 'hurts') && meta.lastEvalAt) {
             void recordEvalAgreement(
@@ -809,7 +809,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             meta.losses += 1;
             meta.consecutiveLosses += 1;
         }
-        // §8.3b: per-regime split, written alongside the global counters —
+        // Per-regime split, written alongside the global counters —
         // the substrate that lets a conditional pattern be RE-SCOPED instead
         // of decayed into oblivion.
         if (trade.marketRegime) {
@@ -821,7 +821,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             meta.regimeStats = stats;
             maybeQueueRescopeProposal(file.name, meta, username);
         }
-        // §8.3c: a pending shadow refinement observes the same matched
+        // A pending shadow refinement observes the same matched
         // trades — its counterfactual window fills while the live version
         // keeps the injection slot. At window close the comparison settles.
         if (meta.shadow) {
@@ -833,7 +833,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             };
             if (meta.shadow.seen >= SHADOW_WINDOW_TRADES) {
                 const settled = settleShadow(meta, { wins: meta.shadow.wins, losses: meta.shadow.losses });
-                // §8.5b: this refinement settled — one recovery sample.
+                // This refinement settled — one recovery sample.
                 void recordRefinementOutcome(username, settled.promoted);
                 if (settled.promoted) {
                     meta.previousVersion = {
@@ -890,13 +890,13 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
                 && meta.evalVerdict === 'hurts'
                 && evalDemotionActive(meta)
                 && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK;
-            // §8.5b worth-gate precision: a gate-approved skill confirming is
+            // Worth-gate precision: a gate-approved skill confirming is
             // one delivery of the gate's promise.
             if (derived === 'confirmed' && meta.status !== 'confirmed') {
                 void recordWorthGateConfirm(username, meta.ifCondition);
             }
-            // §8.4b: a retire-band transition records WHICH reason, not just
-            // 'evidence'. Regime-mix divergence (§8.5d) distinguishes a real
+            // A retire-band transition records WHICH reason, not just
+            // 'evidence'. Regime-mix divergence distinguishes a real
             // shift from a simple evidence dry-up — a conditional library
             // gets re-scoped, not deleted.
             const transitionReason = derived === 'retired'
@@ -943,7 +943,7 @@ const evidenceAgeDays = (meta: SkillMeta): number => {
 
 /**
  * Halve wins/losses when the skill's evidence is stale (>30 days since the
- * last counted trade). The regime-mismatch halving was REMOVED here (§8.3b):
+ * last counted trade). The regime-mismatch halving was REMOVED here :
  * a skill that works in one regime and fails in another is conditional, not
  * fading — regimeStats + the re-scope proposal handle that case without
  * erasing the skill's earned authority. `incomingRegime` is kept in the
@@ -963,7 +963,7 @@ export const EVIDENCE_STALE_DAYS = 30;
 export const OVERRIDE_RATE_FOR_AMENDMENT = 3;
 
 /**
- * §8.3b divergence test: one regime carries ≥3W/≤1L while another carries
+ * Divergence test: one regime carries ≥3W/≤1L while another carries
  * ≥3L/≤1W. Returns [strongRegime, weakRegime] or null.
  */
 export const findRegimeDivergence = (
@@ -1057,7 +1057,7 @@ const craftRefinement = async (
 /**
  * Write phase of skill refinement — MUST run under the notebook write lock.
  * Re-reads the skill so evidence that landed during the LLM round-trip is
- * preserved. §8.3c: the refined version does NOT swap into the live slot —
+ * Preserved. the refined version does NOT swap into the live slot —
  * it enters an eval-only SHADOW while the prior version keeps the injection
  * slot for SHADOW_WINDOW_TRADES matched trades. A panicked refinement after
  * a bad-luck streak used to replace a good skill with a worse one,
@@ -1096,7 +1096,7 @@ const applyRefinementUnlocked = async (
 };
 
 /**
- * §8.3c shadow verdict at window close. The shadow is never injected, so
+ * Shadow verdict at window close. The shadow is never injected, so
  * both versions faced identical outcomes — the only honest comparison is
  * the incumbent's record INSIDE the window: if the live trigger kept
  * losing (worse than the kind's coin-flip band), the tightened refinement
@@ -1140,7 +1140,7 @@ const settleShadowUnlocked = async (
     const windowEvidence = { wins: meta.shadow.wins, losses: meta.shadow.losses };
     const verdict = settleShadow(meta, windowEvidence);
     if (!verdict.promoted && !verdict.discarded) return 'pending';
-    // §8.5b: refinement recovery — a settled shadow is one sample.
+    // Refinement recovery — a settled shadow is one sample.
     void recordRefinementOutcome(username, verdict.promoted);
     if (verdict.promoted && meta.shadow) {
         meta.previousVersion = {
@@ -1263,7 +1263,7 @@ const maybeMergeSkillUnlocked = async (
             const latestFile = getMemoryFiles().files.find(f => f.id === file.id);
             const latest = latestFile ? parseSkillMarkdown(latestFile.content) : null;
             if (latest && refined) {
-                // §8.3c: merge-driven refinements enter the shadow too —
+                // Merge-driven refinements enter the shadow too —
                 // the live trigger keeps its slot until the window settles.
                 latest.shadow = {
                     kind: refined.kind,
@@ -1402,7 +1402,7 @@ const maybeUpsertSkillUnlocked = async (
     const clause = (preferredClause?.ifCondition || preferredClause?.thenAction)
         ? { ifCondition: preferredClause.ifCondition ?? '', thenAction: preferredClause.thenAction ?? '' }
         : parseIfThenClauses(trade.postMortem ?? '')[0];
-    // §8.4a: never silently re-create a retired twin. An archive match drafts
+    // Never silently re-create a retired twin. An archive match drafts
     // a REVIVAL review card instead of a fresh skill — the graveyard is how
     // the system remembers what didn't work.
     if (clause?.ifCondition) {
@@ -1438,7 +1438,7 @@ const maybeUpsertSkillUnlocked = async (
         tradeIds: cluster.map(t => t.id),
         ifCondition: clause?.ifCondition,
         thenAction: clause?.thenAction,
-        // §8.2a birth certificate: the worth-gate's judged claim when it
+        // Birth certificate: the worth-gate's judged claim when it
         // carried one, else the deterministic default from the cluster's
         // scope. Every new skill leaves with a falsifiable prediction.
         prediction: preferredClause?.prediction ?? defaultPrediction({
@@ -1460,7 +1460,7 @@ const maybeUpsertSkillUnlocked = async (
     if (!folder) return null;
     const content = serializeSkill(meta, titleFromMeta(meta));
     const created = await createMemoryFileUnlocked(folder.id, fileNameFromMeta(meta), content, username, true);
-    // §8.5b: the worth-gate judged this clause — count it as a gate approval
+    // The worth-gate judged this clause — count it as a gate approval
     // so weekly meta-calibration can measure how many approvals confirm.
     if (created && preferredClause?.ifCondition) {
         void recordWorthGateApproval(username, preferredClause.ifCondition);
@@ -1496,7 +1496,7 @@ const ingestCraftedSkillUnlocked = async (
         const meta = parseSkillMarkdown(f.content);
         return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
     });
-    // §8.4a: retired twin → REVIVAL card, not a duplicate birth.
+    // Retired twin → REVIVAL card, not a duplicate birth.
     const twin = findArchiveTwin(username, crafted.ifCondition);
     if (twin) {
         queueRevivalProposal(username, twin);
@@ -1774,7 +1774,7 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
             for (const f of retired) {
                 if (f.folderId !== archive.id) {
                     await updateMemoryFileUnlocked(f.id, { folderId: archive.id, enabled: false }, username);
-                    // §8.4a: every retirement leaves a graveyard row — the
+                    // Every retirement leaves a graveyard row — the
                     // worth gate reads it so a retired twin is never
                     // re-created without a REVIVAL review card.
                     const m = parseSkillMarkdown(f.content);
@@ -1797,7 +1797,7 @@ export const consolidateSkills = (username: string): Promise<void> =>
     withNotebookWriteLock(() => consolidateSkillsUnlocked(username));
 
 /**
- * §8.2b comparative worth gate. Confirmed skills are unbounded while the
+ * Comparative worth gate. Confirmed skills are unbounded while the
  * injection budgets are fixed (900/400/600 chars), so every new skill
  * silently taxes every existing skill's chance of being seen — unbounded
  * libraries are how memory systems drown.
@@ -1808,7 +1808,7 @@ export const consolidateSkills = (username: string): Promise<void> =>
  * gate just judged (challenger) against the weakest incumbent's realized
  * record (the same quantity MemoryProvenanceService's lift ranks on). A new
  * skill that wins displaces the weakest — but displacement is a SUGGESTION
- * queued for approval (§10.3): the gate proposes, the inbox disposes.
+ * queued for approval: the gate proposes, the inbox disposes.
  *
  * Returns 'create' when the caller should proceed with creation (below cap,
  * or at the cap but the challenger beats the weakest incumbent — the winner
@@ -1888,7 +1888,7 @@ export const applyDisplacementProposal = async (
         content: serializeSkill(meta, titleFromMeta(meta)),
         enabled: false,
     }, username);
-    // The displaced skill moves to the archive so the graveyard dedup (§8.4a)
+    // The displaced skill moves to the archive so the graveyard dedup 
     // can see it on the next creation pass.
     const archive = await ensureSkillsArchiveFolderUnlocked(username);
     if (archive) {
@@ -1926,7 +1926,7 @@ export const applyDisplacementProposal = async (
 });
 
 /**
- * Act on an APPROVED revival proposal (§8.4a): the retired twin comes back
+ * Act on an APPROVED revival proposal: the retired twin comes back
  * as a CANDIDATE (never straight to confirmed — it must re-earn its tier),
  * moved out of the archive back into the live skills folder.
  */
@@ -1954,7 +1954,7 @@ export const applyRevivalProposal = async (
 });
 
 /**
- * Act on an APPROVED demote proposal (§8.4e): a zero-evidence confirmed skill
+ * Act on an APPROVED demote proposal: a zero-evidence confirmed skill
  * is expelled from injection by dropping it to candidate. Reversible in the
  * grid; never automatic.
  */
@@ -2028,7 +2028,7 @@ export const syncClosedTradeToNotebook = async (
                         const judgedClause = {
                             ifCondition: decision.ifCondition,
                             thenAction: decision.thenAction,
-                            // §8.2a: the gate's claim rides through so the
+                            // The gate's claim rides through so the
                             // persisted skill carries the validated artifact.
                             prediction: decision.prediction,
                         };
@@ -2044,7 +2044,7 @@ export const syncClosedTradeToNotebook = async (
                             const err = validateCraftedSkill(decision,
                                 cluster.filter(t => t.outcome === TradeOutcome.WIN).length,
                                 cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
-                            // §8.2b: at the library cap the gate turns
+                            // At the library cap the gate turns
                             // comparative — creation is blocked and a
                             // displacement proposal naming the weakest
                             // incumbent rides the learning queue instead.

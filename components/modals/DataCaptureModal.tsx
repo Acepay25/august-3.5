@@ -38,7 +38,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     // The mistake-cost and adherence analytics build themselves from these.
     const checklistCfg = React.useMemo(() => loadChecklistConfig(), []);
     const [checklistChecked, setChecklistChecked] = useState<Set<string>>(new Set());
-    // "Watched, chose not to" free-text on the skip path (plan §4.1).
+    // "Watched, chose not to" free-text on the skip path.
     const [skipNote, setSkipNote] = useState('');
     const toggleChecklistItem = (id: string): void =>
         setChecklistChecked(cur => {
@@ -115,12 +115,12 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
             ...(emotionalState ? { emotionalState } : {}),
             ...(followedPlan !== null ? { followedPlan } : {}),
             // Checklist completion rides the tags only when the checklist is
-            // enabled AND the user actually engaged it (plan §4.3, off by
+            // Enabled AND the user actually engaged it (plan, off by
             // default — untouched trades stay unrecorded, never {0,n}).
             ...(checklistCfg.enabled && checklistChecked.size > 0
                 ? { checklistCompleted: summarizeChecklist(checklistCfg.items, checklistChecked) }
                 : {}),
-            // Passes become data (plan §4.1): the skip path carries the
+            // Passes become data: the skip path carries the
             // "watched, chose not to" reason onto the logged trade.
             ...(skipReason && skipReason.trim() ? { skipReason: skipReason.trim() } : {}),
         };
@@ -390,7 +390,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 </button>
                             ))}
                         </div>
-                        {/* Pre-trade checklist (plan §4.3) — only rendered when
+                        {/* Pre-trade checklist — only rendered when
                             enabled in Settings; completion rides onto the trade. */}
                         {checklistCfg.enabled && (
                             <>

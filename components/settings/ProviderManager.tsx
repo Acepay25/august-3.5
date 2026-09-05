@@ -120,7 +120,7 @@ function getContextBadge(modelId: string): string {
 }
 
 /**
- * Live provider-health read-out (plan §9.2 read side — the Settings view the
+ * Live provider-health read-out (plan read side — the Settings view the
  * ProviderHealthService header comment always promised). Reads the in-memory
  * telemetry fed by GenericProviderService on every call: requests/errors,
  * rate limits, last error, latency, and whether the roster cooldown bench
@@ -696,11 +696,11 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 </button>
                             </div>
 
-                            {/* Live health (plan §9.2 read side): the
+                            {/* Live health (plan read side): the
                                 per-provider telemetry GenericProviderService
                                 already feeds — last error, latency, rate
                                 limits, and the roster-cooldown bench state.
-                                In-memory by design (§14-10): it reflects THIS
+                                In-memory by design: it reflects THIS
                                 session's runs. */}
                             <ProviderHealthBlock providerId={selected.id} />
 

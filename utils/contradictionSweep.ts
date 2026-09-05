@@ -1,5 +1,5 @@
 /**
- * §8.4c — contradiction sweep (plan §8.4c).
+ * Contradiction sweep.
  *
  * Nothing detected two LIVE skills with overlapping IF conditions and
  * conflicting THEN actions: both could inject (ranking independently) and

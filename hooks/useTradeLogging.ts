@@ -259,7 +259,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             promptVersion: message.runStats?.promptVersion,
             promptLane: message.runStats?.promptLane,
             sourceRunId: message.runStats?.runId,
-            // Pre-read capture (§5a): the committed prior rides the message —
+            // Pre-read capture: the committed prior rides the message —
             // copy it onto the trade so the journal can score it.
             userPriorCall: message.userPriorCall,
             // Discipline tags (Batch 5): quick-tap at capture time; R-multiple

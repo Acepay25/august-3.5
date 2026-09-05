@@ -1,5 +1,5 @@
 /**
- * Store unification (plan §8.1) — the attributed-insight store now lives in
+ * Store unification — the attributed-insight store now lives in
  * the trader notebook (distilled/ memory files) instead of a standalone
  * Preferences key.
  *
@@ -78,7 +78,7 @@ describe('generateMandatoryPatternCheck — verdict snapshot over notebook-backe
         const gate = generateMandatoryPatternCheck(setup, trades);
         expect(gate.gateResult).toBe('HALT');
         expect(gate.allowed).toBe(false);
-        // Snapshot: exact pre-migration strings (gate code unchanged by §8.1).
+        // Snapshot: exact pre-migration strings (gate code unchanged by).
         expect(gate.reason).toBe('📛 HALT: 3 of the most similar historical trades were LOSSES. Pattern has consistent failure mode.');
         expect(gate.mandatoryQuestions).toEqual([
             'What fundamental change would make this trade succeed where others failed?',

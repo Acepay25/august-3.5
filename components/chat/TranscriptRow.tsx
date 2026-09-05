@@ -157,7 +157,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
 
     const isSelected = selectedMessageIds?.has(message.id);
 
-    // Pre-read gate (§5a): the toggle is read once per mounted card; the
+    // Pre-read gate: the toggle is read once per mounted card; the
     // gate only stands between the user and a SETTLED verdict that has no
     // committed prior yet. Skip (local) reveals without committing; a
     // committed prior (persisted on the message) reveals everywhere.
@@ -176,7 +176,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
     if (!message.analysis) return null;
     const analysis = message.analysis;
 
-    // Pre-read gate (§5a): only the NEWEST message can be gated — older
+    // Pre-read gate: only the NEWEST message can be gated — older
     // settled cards must stay readable (the gate is a before-the-reveal
     // device; re-hiding history the user already read is not training,
     // it's a wall). latestMessageId is the last message in the thread, so
@@ -348,7 +348,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                             {/* The settled analysis transcript: summary + deep
                                 surfaces (Replay · Run log · Audit) + signal card
                                 + harness details. Pre-read training mode
-                                (§5a, opt-in): while enabled and no prior is
+                                (opt-in): while enabled and no prior is
                                 committed for this card, the verdict panel
                                 stays behind the gate — commit first, reveal
                                 after. Skip reveals without committing. */}
@@ -540,7 +540,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                         >
                                             {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
                                         </button>
-                                        {/* Per-message context disclosure (§10.1):
+                                        {/* Per-message context disclosure :
                                             the run's actual memory injections —
                                             the trust surface for the learning
                                             system itself. */}
@@ -549,7 +549,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                             messageFinishedAt={message.runStats?.finishedAt}
                                             isDebating={message.isDebating}
                                         />
-                                        {/* Skill-citation chips (§10.1): the
+                                        {/* Skill-citation chips: the
                                             skills actually injected into this
                                             run — tap opens the card, ⚑ flags
                                             negative evidence. */}

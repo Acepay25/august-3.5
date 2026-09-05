@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §4.6 — self-improvement loop (plan §4.6 A→E): episodes → fingerprints →
+// Self-improvement loop (plan A→E): episodes → fingerprints →
 // tier-1 scoring → (judge-gated) distilling → measurement. Default is
 // extract-only: the judge gate must be recorded before ANYTHING is drafted,
 // and every distill step ends in a human-gated queue, never an action.

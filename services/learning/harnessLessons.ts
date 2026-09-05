@@ -162,7 +162,7 @@ registerWireRoutePins((route, providerId) =>
     ));
 
 /**
- * P7 write path from the P5 audit stream (plan §14-5): a clarification call
+ * P7 write path from the P5 audit stream: a clarification call
  * on a chat_completions seat where NO reasoning knob could be applied
  * (fail-closed 'none' route) is a budget lesson — the harness cannot tell
  * this wire shape to stop thinking, so a thinking-default model on it will
@@ -190,7 +190,7 @@ export const recordBudgetLessonFromAudit = (
 };
 
 /**
- * P7 read path for the moderator (plan §14-5): a compact digest of the
+ * P7 read path for the moderator: a compact digest of the
  * harness's own wire/budget beliefs, injected into the verdict context so
  * the arbiter weighs known provider quirks ("this seat 200-accepts but
  * ignores reasoning_effort"). Capability-class scoped, capped, newest
@@ -249,7 +249,7 @@ export const probeWireSupport = async (
             { ...config, apiKey: config.apiKey?.trim() || 'not-needed' },
             [{ role: 'user', content: 'Reply with exactly: OK' }],
             {
-                // 512, not 64 (plan §14-3): a thinking-default model spends
+                // 512, not 64: a thinking-default model spends
                 // part of the budget reasoning; at 64 the visible reply can
                 // legitimately come back empty and the probe would pin off
                 // a WORKING provider.
@@ -276,7 +276,7 @@ export const probeWireSupport = async (
             : audit.route === 'glm-thinking' || audit.route === 'deepseek-thinking' ? 'thinking'
                 : audit.route === 'responses-effort' ? 'reasoning'
                     : 'thinking';
-        // Tightened heuristic (plan §14-3): the provider must name the knob
+        // Tightened heuristic: the provider must name the knob
         // field in a REJECTION context — a bare substring match on
         // 'thinking' caught unrelated error text.
         const rejection = /unrecognized|invalid|not\s+(a\s+)?(valid|supported|allowed)|unsupported|unknown|extra.*argument|argument.*not|rejected/i.test(message);
@@ -323,7 +323,7 @@ export const probeAndLearn = async (
     } else if (result.audit.applied) {
         // Only HARD evidence pins: the call failed and the provider did not
         // name the knob (a broken route). "200 + no OK" is INCONCLUSIVE
-        // (plan §14-3) — a thinking-default model can legitimately return
+        // — a thinking-default model can legitimately return
         // no visible text — and must never pin off a working provider.
         if (result.evidence.startsWith('inconclusive')) {
             // No lesson; the probe simply taught nothing.

@@ -1,6 +1,6 @@
 import React from 'react';
 
-// Skill-citation chips (Batch 13, plan §10.1 — with a premise correction).
+// Skill-citation chips (Batch 13, — with a premise correction).
 //
 // The plan claimed attachVerdictCitations "already parses cited skill slugs
 // into turn metadata". It does not — that function parses ANALYST-SEAT

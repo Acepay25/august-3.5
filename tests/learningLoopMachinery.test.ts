@@ -491,7 +491,7 @@ describe('sequential eval verdict gating', () => {
 // ─── 4. Control attribution ─────────────────────────────────────────────────
 // NOTE: the REAL MemoryInjectionService is used — the shared Preferences
 // store is seeded with injection records (or left empty), which exercises
-// skillAdherenceForRun's actual runId join instead of a mock. §8.3a: the
+// SkillAdherenceForRun's actual runId join instead of a mock. the
 // join is EXACT on the originating run (trade.sourceRunId === record.runId);
 // a time window anchored on trade.timestamp looked at the WRONG side of the
 // log click and mislabeled every followed skill as CONTROL.

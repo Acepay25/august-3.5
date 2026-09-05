@@ -299,7 +299,7 @@ const recordEvalVerdictUnlocked = async (
     meta.evalVerdict = result.verdict;
     meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
     meta.lastEvalAt = new Date().toISOString();
-    // §8.2a: the birth certificate rides the same pass — test the skill's
+    // The birth certificate rides the same pass — test the skill's
     // OWN claim against its followed evidence and stamp the sample size at
     // which it was judged (deriveStatus consumes the verdict on every
     // ladder pass; this records WHEN it was last tested + surfaces the
@@ -356,7 +356,7 @@ const recordEvalVerdictUnlocked = async (
     ) {
         const last = meta.history?.[meta.history.length - 1];
         const isRehabilitation = last?.status === 'candidate' && /^eval hurts/i.test(last.reason ?? '');
-        // §8.2a: a fresh promotion also has to honor the skill's OWN claim —
+        // A fresh promotion also has to honor the skill's OWN claim —
         // an unmet birth certificate blocks promotion through this path too
         // (same semantics as deriveStatus's ladder). Rehabilitation is
         // exempt: it restores what an eval wrongly benched, not a first tier.

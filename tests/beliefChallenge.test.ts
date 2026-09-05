@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.4d — settled beliefs need a challenge path: a deterministic rolling-window
+// Settled beliefs need a challenge path: a deterministic rolling-window
 // counter per belief slug for WIN trades whose direction contradicts the
 // belief's claim; ≥3 in 30 days → FLAG for review (queued proposal) — NEVER
 // auto-invalidation; a human decides.

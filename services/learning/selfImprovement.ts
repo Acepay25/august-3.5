@@ -1,5 +1,5 @@
 /**
- * §4.6 — self-improvement loop (Part 16 port; plan §4.6 A→E).
+ * Self-improvement loop (Part 16 port; A→E).
  *
  * Episodes, not conversations: closed-trade post-mortems resolving against
  * ground truth (price resolved). Tier-1 FREE heuristics over everything

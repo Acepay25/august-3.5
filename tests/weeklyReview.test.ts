@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Weekly review (Batch 5 §4.5): deterministic week-stats + one-impulse digest.
+// Weekly review: deterministic week-stats + one-impulse digest.
 
 const sendMock = vi.fn();
 vi.mock('../services/providers/GenericProviderService', () => ({

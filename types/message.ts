@@ -90,7 +90,7 @@ export interface EnsembleProgress {
 
 /** Lightweight per-run summary — durations, gate cap, Monte Carlo snapshot. */
 export interface RunStats {
-  /** §8.3a: id of the user message that triggered this run — the join key
+  /** Id of the user message that triggered this run — the join key
    *  between injection records and trades logged from this verdict. */
   runId?: string;
   startedAt: string;
@@ -112,7 +112,7 @@ export interface RunStats {
    * signal card as a provenance chip.
    */
   protocol?: string;
-  /** §8.5a: true when this run was an ε-holdout run — skill injection was
+  /** True when this run was an ε-holdout run — skill injection was
    * withheld so the run's outcomes belong to the CONTROL group for lift. */
   skillHoldout?: boolean;
   /** First analyst's Monte Carlo win rate (%), if computed. */
@@ -311,7 +311,7 @@ export interface Message {
   /** "What would I do today?" — fresh forward-looking re-assessment of the
    *  closed trade's setup against the current market price. */
   todayReassessment?: TodayReassessment;
-  /** Pre-read capture (Batch 5 §5a, opt-in training mode): the user's own
+  /** Pre-read capture (Batch 5, opt-in training mode): the user's own
    *  direction + confidence committed BEFORE the verdict card revealed.
    *  Rides the message so the journal can show user-prior vs verdict vs
    *  outcome — the human-Brier vs ensemble-Brier anti-automation display. */
@@ -323,7 +323,7 @@ export interface Message {
   toolActions?: ToolAction[];
 }
 
-/** A committed pre-read call (plan §5a). `confidencePct` is the user's own
+/** A committed pre-read call. `confidencePct` is the user's own
  *  0-100 belief that their direction plays out (TP before SL). */
 export interface UserPriorCall {
   direction: 'Long' | 'Short' | 'Flat';

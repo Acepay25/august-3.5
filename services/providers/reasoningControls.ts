@@ -31,7 +31,7 @@
  * knob is indistinguishable from a no-op at the provider, so every applied
  * route is also logged for P5's runStats audit and P6's behavior probes.
  *
- * Knob coexistence note (plan §14-11d): the transport's
+ * Knob coexistence note: the transport's
  * requestReasoningSideChannel separately sets `include_reasoning: true`
  * on openrouter/deepseek/groq/together/fireworks/siliconflow hosts. On a
  * deepSeek-detected chat_completions provider BOTH `thinking` (here) and

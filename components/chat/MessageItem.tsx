@@ -88,7 +88,7 @@ export interface ChatContextProps {
     onApprovalNever?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
     onApprovalShow?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
     onFollowUpTicket?: (messageId: string, text: string) => void;
-    /** Pre-read capture (§5a): commit the user's prior call for a settled
+    /** Pre-read capture: commit the user's prior call for a settled
      *  verdict card (direction + confidence made BEFORE the reveal). */
     onPreReadCommit?: (messageId: string, prior: { direction: 'Long' | 'Short' | 'Flat'; confidencePct: number }) => void;
     /** Edit a sent user message's text in place (persisted to history). */

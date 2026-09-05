@@ -14,7 +14,7 @@ import {
 import { getActiveUsername } from '../../utils/activeUser';
 
 /**
- * CoachThreadPanel (§10.1) — the Coach thread: the learning loop's inbox as
+ * CoachThreadPanel — the Coach thread: the learning loop's inbox as
  * a conversation surface. Everything the harness wants the trader to decide
  * — skill drafts awaiting approval, and lifecycle proposals (cap
  * displacement, graveyard revival, zero-evidence demote, re-scope,

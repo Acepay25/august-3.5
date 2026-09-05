@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.4c — contradiction sweep: two LIVE skills with overlapping conditions and
+// Contradiction sweep: two LIVE skills with overlapping conditions and
 // conflicting actions must surface a merge/priority proposal, deduped so the
 // same pair is not re-queued every week.
 

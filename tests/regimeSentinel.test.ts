@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.5d — regime-mix drift sentinel: the market's 30-day regime mix vs the
+// Regime-mix drift sentinel: the market's 30-day regime mix vs the
 // mix during which a skill's evidence accumulated. Divergence ⇒
 // stale-by-regime ⇒ downweighted in retrieval until fresh evidence in the
 // current mix re-converges (the flag is derived live, so it auto-clears).

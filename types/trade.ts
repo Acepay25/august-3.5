@@ -13,7 +13,7 @@ export interface LoggedTrade {
   /** Prompt-layer fingerprint from the originating run (journal A/B). */
   promptVersion?: string;
   promptLane?: 'live' | 'control';
-  /** §8.3a: runId of the originating verdict run (runStats.runId). Skill
+  /** RunId of the originating verdict run (runStats.runId). Skill
    *  evidence attribution joins the injection log on THIS — exact — instead
    *  of a time window around the log click. Absent on legacy trades. */
   sourceRunId?: string;
@@ -106,7 +106,7 @@ export interface LoggedTrade {
    */
   triggeredEntryIndices?: number[];
 
-  // ===== Journal discipline fields (Batch 5, plan §4.1 — all optional) =====
+  // ===== Journal discipline fields (Batch 5, — all optional) =====
   /** What went wrong, in the trader's own taxonomy. Drives the mistake-cost table. */
   mistakeTags?: ('failed_thesis' | 'boredom' | 'overtrading' | 'greed' | 'revenge' | 'moved_stop' | 'early_entry' | 'late_exit')[];
   /** Self-rated state at entry (quick-tap at capture time). */
@@ -121,9 +121,9 @@ export interface LoggedTrade {
   maxFavorableExcursion?: number;
   /** Why a SKIPPED trade was passed on ("watched, chose not to") — passes become data. */
   skipReason?: string;
-  /** Pre-trade checklist completion at log time (plan §4.3): items checked / shown. */
+  /** Pre-trade checklist completion at log time: items checked / shown. */
   checklistCompleted?: { done: number; total: number };
-  /** Pre-read capture (plan §5a): the user's committed prior call from
+  /** Pre-read capture: the user's committed prior call from
    *  BEFORE the verdict reveal, copied from the source message at log time.
    *  Feeds the journal's user-prior vs verdict vs outcome calibration row. */
   userPriorCall?: import('./message').UserPriorCall;
@@ -147,9 +147,9 @@ export interface CaptureJournalTags {
   emotionalState?: LoggedTrade['emotionalState'];
   followedPlan?: boolean;
   planDeviationNote?: string;
-  /** Pre-trade checklist completion (plan §4.3): items checked / items shown. */
+  /** Pre-trade checklist completion: items checked / items shown. */
   checklistCompleted?: { done: number; total: number };
-  /** Why a pass was taken (plan §4.1) — rides the capture modal's skip path. */
+  /** Why a pass was taken — rides the capture modal's skip path. */
   skipReason?: string;
 }
 

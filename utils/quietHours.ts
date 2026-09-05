@@ -1,5 +1,5 @@
 /**
- * quietHours — configurable silent window for alerts (Batch 7, plan §5.5).
+ * quietHours — configurable silent window for alerts.
  *
  * A 24/7 market with 24/7 notifications is a sleep-tax; the research on
  * alert fatigue is blunt that constant pings get ignored anyway. Alerts

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// §8.2c — pass mining: SKIPPED trades were invisible to the learning loop
+// Pass mining: SKIPPED trades were invisible to the learning loop
 // (skill creation required a closed-trade cluster). This service resolves a
 // pass post-hoc against post-skip klines: SL first = CORRECT_PASS (clusters
 // of ≥3 draft an avoid-skill through the approval inbox); TP first =

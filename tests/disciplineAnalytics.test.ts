@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Discipline analytics (Batch 5 §4.4): adherence split, mistake cost,
+// Discipline analytics: adherence split, mistake cost,
 // post-first-red split, giveback days, R-multiple computation.
 
 import {

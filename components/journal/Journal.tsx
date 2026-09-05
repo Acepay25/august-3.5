@@ -348,7 +348,7 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = 
 const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
   const stats = useMemo(() => computeJournalStats(trades), [trades]);
   const humanCal = useMemo(() => buildHumanCalibration(trades), [trades]);
-  // §8.2c pass-mining counter-metric: the sweep resolves SKIPPED trades
+  // Pass-mining counter-metric: the sweep resolves SKIPPED trades
   // post-hoc; the journal shows the two sides of discipline — passes the
   // market vindicated (CORRECT_PASS) and passes that cost a move
   // (MISSED_OPPORTUNITY). Read-only over the stored records.
@@ -374,7 +374,7 @@ const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }
         sub={`best ${stats.bestWinStreak}W / ${-stats.bestLossStreak}L`}
       />
       <Stat label="Top strategy" value={top?.key ?? '—'} sub={top ? `${top.trades} trades · ${top.winRate}% WR` : undefined} />
-      {/* Pre-read capture (§5a): the human-Brier vs verdict-Brier row — only
+      {/* Pre-read capture: the human-Brier vs verdict-Brier row — only
           when the user has committed priors. Anti-automation-bias display. */}
       {humanCal && (
         <Stat
@@ -383,7 +383,7 @@ const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }
           sub={humanCalLine(humanCal) || `${humanCal.n} pre-read trade(s)`}
         />
       )}
-      {/* §8.2c: the pass ledger — vindicated skips draft avoid-skills;
+      {/* the pass ledger — vindicated skips draft avoid-skills;
           missed opportunities are a counter-metric ONLY (we never teach
           the system to take more trades). */}
       {passCounts && (passCounts.correct > 0 || passCounts.missed > 0) && (

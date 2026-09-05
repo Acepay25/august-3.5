@@ -151,7 +151,7 @@ const consolidateDoctrineUnlocked = async (
             return f?.enabled ? f.content : '';
         })();
 
-        // Per-lens memory (§8.19): the doctrine rewriter reads all three seat
+        // Per-lens memory: the doctrine rewriter reads all three seat
         // notebooks and writes one doctrine. Pass each seat's actual (capped)
         // content — a heading alone would give the rewriter nothing to fold in.
         const lensMemory = [
@@ -163,7 +163,7 @@ const consolidateDoctrineUnlocked = async (
             .map(l => `${l.label}:\n${l.body}`)
             .join('\n\n');
 
-        // Regime ledger (§8.6): one summary line per coin the harness has
+        // Regime ledger: one summary line per coin the harness has
         // observed, so regime-dependent stances are grounded in actual history.
         const regimeLines = listLedgerCoins()
             .map(coin => {

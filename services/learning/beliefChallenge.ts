@@ -1,5 +1,5 @@
 /**
- * §8.4d — settled beliefs need a challenge path (plan §8.4d).
+ * Settled beliefs need a challenge path.
  *
  * Only the doctrine rewriter can INVALIDATE a belief — a `settled` belief is
  * effectively unchallengeable by data. This module gives one: a deterministic

@@ -1,15 +1,15 @@
 /**
- * §8.5d — regime-mix drift sentinel (plan §8.5d).
+ * Regime-mix drift sentinel.
  *
  * Time-based decay is the only staleness axis applyEvidenceDecay has left
- * (§8.3b moved the per-skill regime mismatch out of decay, because
+ * (moved the per-skill regime mismatch out of decay, because
  * "works in trend, fails in chop" is CONDITIONAL not fading). This sentinel
  * catches a DIFFERENT failure: the market's overall regime MIX shifting — the
  * main way a whole skill library goes quietly wrong at once, because a fast
  * shift is invisible to a 30-day age constant.
  *
  * Compare the mix during which a skill's evidence accumulated (regimeStats,
- * §8.3b — normalized to weights) against the market's current 30-day mix
+ * Normalized to weights) against the market's current 30-day mix
  * (regimeLedger's sync cache). When the L1 distance breaches the threshold,
  * the skill is stale-by-regime (distinct from stale-by-time) and is
  * DOWNWEIGHTED in retrieval ranking until fresh evidence in the current mix
@@ -43,7 +43,7 @@ export const currentRegimeMix = (coin: string | undefined): RegimeMix | null => 
     return Object.keys(out).length > 0 ? out : null;
 };
 
-/** The skill's evidence mix (from §8.3b regimeStats) as weights. Raw keys are
+/** The skill's evidence mix (from regimeStats) as weights. Raw keys are
  *  passed through the ledger's own mapping so 'chop'/'trend' style values
  *  land on the same regime set. Null when the skill has no regime-resolved
  *  evidence at all. */

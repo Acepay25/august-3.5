@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { listHarnessLessons, clearHarnessLesson, HarnessLesson } from '../../services/learning/harnessLessons';
 
 /**
- * Harness lessons browser (plan §14-5(c), deferred to the batch-13 UI pass) —
+ * Harness lessons browser (plan -5(c), deferred to the batch-13 UI pass) —
  * the P7 store's human surface: what the harness believes about provider
  * behavior (wire/budget/fabrication/injection), newest first, each clearable.
  * Clearing a wire lesson un-pins the thinking-off fail-closed until the next

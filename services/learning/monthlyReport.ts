@@ -1,5 +1,5 @@
 /**
- * Monthly report card (Batch 5 remainder, plan §4.5) — deterministic
+ * Monthly report card (Batch 5 remainder,) — deterministic
  * month-stats assembly ("what happened / what was learned / needs
  * attention") plus the GRADE-THE-PANEL section: per-provider and
  * ensemble-line Brier for the period, i.e. which seats were actually
@@ -232,7 +232,7 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
     if (moderator?.brier != null && ensembleLine?.brier != null && ensembleLine.brier < moderator.brier - 0.02) {
         needsAttention.push(`Ensemble line beat the moderator this period (Brier ${ensembleLine.brier.toFixed(2)} vs ${moderator.brier.toFixed(2)}) — worth a look at verdict inputs`);
     }
-    // §8.5c: context-budget economics — the most expensive skill per unit of
+    // Context-budget economics — the most expensive skill per unit of
     // measured lift gets named on the scoreboard, so the cost side of the
     // library is audited on a cadence instead of being invisible.
     if (injections && injections.length > 0) {

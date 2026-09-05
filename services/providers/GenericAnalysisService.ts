@@ -828,7 +828,7 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
         [{ role: 'user', content: analysisPrompt }],
         // 0.4: a forensic post-mortem must not roll dice on its lesson —
         // the 0.7 default sampled "brutally honest" post-mortems randomly.
-        // P2 effort tier (plan §14): structured reporting runs medium.
+        // P2 effort tier: structured reporting runs medium.
         { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem, temperature: 0.4, reasoningEffort: EFFORT_BY_TASK.postMortem }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");

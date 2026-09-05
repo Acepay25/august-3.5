@@ -19,7 +19,7 @@ import { avatarRoleForName, type RolePreset } from '../components/desk/pixelAvat
 import type { AgentTeam } from '../services/agents/agentRoster';
 
 /** The debate engine rejects fewer than 2 analysts. Teams seat 2–5 on the
- *  flat floor; 6–10 run as LENS PODS (plan §9.1) — three pods whose
+ * flat floor; 6–10 run as LENS PODS — three pods whose
  *  representatives take the floor while every seat still emits its own
  *  sealed conviction. */
 export const TEAM_MIN_SEATS = 2;

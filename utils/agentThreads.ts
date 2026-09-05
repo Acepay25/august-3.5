@@ -252,7 +252,7 @@ export const unreadInSlice = (
     return ai.filter(m => Date.parse(m.createdAt) > openedMs).length;
 };
 
-// ─── last-opened persistence (plan §10.1 unread badges) ────────────────────
+// ─── last-opened persistence (plan unread badges) ────────────────────
 
 const openedKey = (username: string): string =>
     `agent_threads_opened_v1_${(username || 'default').trim() || 'default'}`;

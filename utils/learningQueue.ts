@@ -1,5 +1,5 @@
 /**
- * Learning queue (plan §4.6 ruling 5 / §8.2b): the gate proposes, the inbox
+ * Learning queue (plan ruling 5 /): the gate proposes, the inbox
  * disposes. Lifecycle machinery that wants to change a belief — displace the
  * weakest skill at the library cap, re-scope a conditional skill, revive a
  * retired twin — writes a PROPOSAL here instead of mutating the notebook.

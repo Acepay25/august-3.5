@@ -1,5 +1,5 @@
 /**
- * CalibrationLedgerService — the trust ledger (Batch 7, plan §5f).
+ * CalibrationLedgerService — the trust ledger .
  *
  * "When the verdict says 70%+, it hits X% of the time over N trades." The
  * aggregation is client-side over the closed journal rows: predicted vs

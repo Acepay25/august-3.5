@@ -1,5 +1,5 @@
 /**
- * Pass mining (§8.2c) — the learning loop used to see only closed trades:
+ * Pass mining — the learning loop used to see only closed trades:
  * skill creation required a closed-trade cluster, so SKIPPED trades (the
  * discipline the research says matters most) were invisible to it.
  *
@@ -11,7 +11,7 @@
  *               sharing a {coin|direction|family} fingerprint draft an
  *               avoid-skill through the existing approval-inbox path.
  *   TP first  → MISSED OPPORTUNITY — surfaced as a journal counter-metric
- *               ONLY. We do not teach the system to take more trades; §3's
+ * ONLY. We do not teach the system to take more trades; 's
  *               breakers own that side.
  *   neither   → still open / inconclusive — stays pending for a later sweep.
  *

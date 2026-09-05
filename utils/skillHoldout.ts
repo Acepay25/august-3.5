@@ -1,5 +1,5 @@
 /**
- * §8.5a — permanent ε-holdout (plan §8.5a).
+ * Permanent ε-holdout.
  *
  * The single most important long-run mechanism in the addendum: once a skill
  * is confirmed it is injected on every matching run, so its controlIds stop

@@ -1,5 +1,5 @@
 /**
- * Pre-read capture (Batch 5, plan §5a) — an OPT-IN training mode. When on,
+ * Pre-read capture — an OPT-IN training mode. When on,
  * the settled verdict card stays hidden until the user commits their own
  * direction + confidence BEFORE the reveal (cognitive forcing). The journal
  * then shows user-prior vs verdict vs outcome: the human-Brier vs
@@ -16,7 +16,7 @@ import { LoggedTrade } from '../types/trade';
 
 const PREF_KEY = 'pre_read_capture_v1';
 
-/** The toggle (Settings → Harness). Default OFF per plan §5a. */
+/** The toggle (Settings → Harness). Default OFF per. */
 export const loadPreReadEnabled = (): boolean => {
     try {
         return localStorage.getItem(PREF_KEY) === 'true';

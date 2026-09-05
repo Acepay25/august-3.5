@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Batch 13 (§10.2 + §10.1): the pure substrates behind floor observability
+// Batch 13 (+): the pure substrates behind floor observability
 // and skill citations — audit-line parsing, glyph rendering, slug extraction.
 
 import { deriveSeatWireStates, seatWireGlyphs } from '../utils/floorSeatWire';

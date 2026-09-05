@@ -16,11 +16,11 @@ import { getPreferenceObject, setPreferenceObject } from '../infrastructure/Pref
 export interface InjectedSource {
     path: string;
     kind: string;
-    /** §8.5c: actual chars of this block that made it into the prompt —
+    /** Actual chars of this block that made it into the prompt —
      *  the per-source cost half of budget economics. Absent on legacy
      *  records (cost falls back to the block-class average). */
     chars?: number;
-    /** §8.3a adherence linkage: TRUE when the verdict actually CITED this
+    /** Adherence linkage: TRUE when the verdict actually CITED this
      *  skill (followed), FALSE when it was injected and ignored
      *  (overridden), undefined on legacy records / non-skill sources —
      *  callers must treat undefined as UNKNOWN and keep the old behavior. */
@@ -33,10 +33,10 @@ export interface MemoryInjectionRecord {
     audience: string;
     coin?: string;
     sources: InjectedSource[];
-    /** §8.5a: true when this run was an ε-holdout run (skill injection
+    /** True when this run was an ε-holdout run (skill injection
      *  withheld, so matched skills' outcomes belong to the CONTROL group). */
     holdout?: boolean;
-    /** §8.3a: the originating run's id (the user message that triggered it).
+    /** The originating run's id (the user message that triggered it).
      *  Trades carry the same id via runStats, so evidence attribution joins
      *  on THIS — exact, immune to log-time drift — instead of a time window
      *  (a window from trade.timestamp looks the WRONG way: the run that
@@ -78,14 +78,14 @@ export const getRecentMemoryInjections = async (
 };
 
 /**
- * §8.3a three-state adherence join outcomes (see skillAdherenceForRun).
+ * Three-state adherence join outcomes (see skillAdherenceForRun).
  * The evidence path gives full credit to followed + injected-unknown, routes
  * overridden to the amendment counter, and CONTROL to controlIds.
  */
 export type SkillAdherence = 'followed' | 'overridden' | 'injected-unknown' | 'not-injected';
 
 /**
- * §8.3a three-state adherence join for one skill, scoped to the run that
+ * Three-state adherence join for one skill, scoped to the run that
  * produced the trade. The join is EXACT (runId = the user message that
  * triggered the run, persisted on both the injection record and the trade):
  * a time window anchored on trade.timestamp cannot work — the run that
@@ -125,7 +125,7 @@ export const skillAdherenceForRun = async (
 };
 
 /**
- * §8.3a citation stamp — called once at verdict commit with the final
+ * Citation stamp — called once at verdict commit with the final
  * verdict's own text. For every skill source in the NEWEST verdict-stage
  * record that carries it, set `cited` by a deterministic textual join:
  * the verdict echoes the skill's file stem, its title words, or a majority

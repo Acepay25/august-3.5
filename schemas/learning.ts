@@ -116,7 +116,7 @@ export const CraftedSkillSchema = z.object({
   approval: z.string().min(4),
   ifCondition: z.string().min(8),
   thenAction: z.string().min(8),
-  // Birth certificate (plan §8.2a): the falsifiable claim the skill must
+  // Birth certificate: the falsifiable claim the skill must
   // pre-register. Optional at the schema edge (legacy crafts + refinements
   // carry none) — the persistence layer fills a deterministic default so
   // every NEW skill ships with a claim the eval scheduler can test.

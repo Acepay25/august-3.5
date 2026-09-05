@@ -1,6 +1,6 @@
 import React from 'react';
 
-// Per-message context disclosure (Batch 13, plan §10.1): "what this seat
+// Per-message context disclosure: "what this seat
 // saw". InjectionContextBar shows what the NEXT send will include; this is
 // its retrospective twin — the memory injections that ACTUALLY went into
 // this run, from the MemoryInjectionService log (stage, audience, sources
