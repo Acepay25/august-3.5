@@ -95,41 +95,52 @@ export interface GroupMemberKey {
 }
 
 /**
- * Derive a group's slice: prompts + replies from ANY member bot
- * (matched by provider+model). Unlike 1:1 threads, trailing prompts
- * are KEPT — a just-sent prompt with replies still streaming renders
- * as an open thread ("X is thinking…").
+ * Derive a group's slice, SCOPED TO THE ROOM: only rows the room runner
+ * stamped with this exact `roomId` (AgentGroup.id) enter the thread. AI /
+ * system rows additionally require a member match (provider+model); user
+ * prompts are claimed by room identity alone — the runner stamps the prompt
+ * and its replies with the same id, so a prompt can never leak into another
+ * room. Unlike 1:1 threads, trailing prompts are KEPT — a just-sent prompt
+ * with replies still streaming renders as an open thread ("X is thinking…").
+ *
+ * Room-identity scoping is what makes a RECREATED group start EMPTY: delete
+ * a room and rebuild it with the same bots and the new id matches none of
+ * the old rows, so the old transcript stays hidden (provider+model alone
+ * would have re-claimed it).
  */
-export const threadForGroup = (messages: Message[], members: GroupMemberKey[]): Message[] => {
+export const threadForGroup = (
+    messages: Message[],
+    members: GroupMemberKey[],
+    roomId: string,
+): Message[] => {
     const out: Message[] = [];
     let pendingUser: Message[] = [];
+    const memberMatch = (m: Message): boolean => {
+        const keys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
+        return keys.length === 1 && members.some(
+            mem => keys[0] === mem.providerId && (!mem.modelId || m.modelsUsed?.[keys[0]] === mem.modelId),
+        );
+    };
     for (const m of messages) {
         if (m.role === MessageRole.USER) {
-            pendingUser.push(m);
+            if (m.roomId === roomId) pendingUser.push(m);
             continue;
         }
+        // Attributed system rows (failed replies) claim like member replies
+        // so the error lands inside the group thread.
         if (m.role === MessageRole.SYSTEM) {
-            // Attributed system rows (failed replies) claim like member
-            // replies so the error lands inside the group thread.
-            const sysKeys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
-            const sysMine = sysKeys.length === 1 && members.some(
-                mem => sysKeys[0] === mem.providerId && (!mem.modelId || m.modelsUsed?.[sysKeys[0]] === mem.modelId),
-            );
-            if (sysMine) {
+            if (m.roomId === roomId && memberMatch(m)) {
                 out.push(...pendingUser, m);
                 pendingUser = [];
             }
             continue;
         }
-        const keys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
-        const mine = keys.length === 1 && members.some(
-            mem => keys[0] === mem.providerId && (!mem.modelId || m.modelsUsed?.[keys[0]] === mem.modelId),
-        );
-        if (mine) {
+        if (m.roomId !== roomId) continue; // another room's row — not ours
+        if (memberMatch(m)) {
             out.push(...pendingUser, m);
             pendingUser = [];
-        } else if (pendingUser.length > 0) {
-            // A non-member replied first — the prompts belonged to it.
+        } else {
+            // A non-member row carrying this room's id consumed the prompt.
             pendingUser = [];
         }
     }

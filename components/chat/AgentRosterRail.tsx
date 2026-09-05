@@ -214,7 +214,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                 || threadMatchesQuery(threadForGroup(messages, g.memberIds
                     .map(id => bots.find(b => b.id === id))
                     .filter((b): b is AgentBot => Boolean(b))
-                    .map(m => ({ providerId: m.providerId, modelId: m.modelId })))))
+                    .map(m => ({ providerId: m.providerId, modelId: m.modelId })), g.id)))
             : groups),
         [groups, bots, q, messages],
     );
@@ -346,7 +346,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                         const members = g.memberIds
                             .map(id => bots.find(b => b.id === id))
                             .filter((b): b is AgentBot => Boolean(b));
-                        const slice = threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId })));
+                        const slice = threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId })), g.id);
                         const last = lastOf(slice);
                         const active = selection.kind === 'group' && selection.groupId === g.id;
                         const unread = active ? 0 : unreadInSlice(slice, lastOpenedMap?.[g.id]);

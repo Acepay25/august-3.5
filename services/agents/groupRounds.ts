@@ -9,6 +9,7 @@
 
 import type { AgentBot } from './agentRoster';
 import { botHandle, resolveRosterHandle } from './botMailbox';
+import { seatHasPersona, seatPersonaPrompt } from './seatPersonas';
 
 /** Max rounds per send (Hermes group-rounds parity). */
 export const ROOM_ROUND_CAP = 3;
@@ -79,7 +80,11 @@ export const buildRoomProtocolSection = (bot: AgentBot, members: AgentBot[]): st
     ].join('\n');
 };
 
-/** Persona (system.md) + notes (memory.md) + room protocol. */
+/** Persona (system.md) + debate role (seatPersonaPrompt) + notes + room
+ *  protocol. A bot with a role or trader instructions carries that persona
+ *  into every room turn (Group Settings edits it); an unroled bot keeps the
+ *  plain identity line — the room protocol, not the general-analyst desk
+ *  mandate, is its default voice. */
 export const buildRoomSystemPrompt = (
     bot: AgentBot,
     opts: { persona?: string | null; notes?: string | null; members: AgentBot[] },
@@ -89,6 +94,7 @@ export const buildRoomSystemPrompt = (
         opts.persona?.trim()
             || `You are ${bot.name}${bot.title ? `, ${bot.title}` : ''}. ${bot.description ?? ''}`.trim(),
     );
+    if (seatHasPersona(bot)) parts.push(`## Your role\n${seatPersonaPrompt(bot)}`);
     if (opts.notes?.trim()) parts.push(`## Your private notes\n${opts.notes.trim()}`);
     parts.push(buildRoomProtocolSection(bot, opts.members));
     return parts.join('\n\n');

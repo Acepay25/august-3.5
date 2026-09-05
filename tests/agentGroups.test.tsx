@@ -72,7 +72,7 @@ describe('useAgentGroups', () => {
         ];
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, 'analyze btc', bots);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, 'analyze btc', bots);
         });
 
         // One prompt + one empty streaming reply per member.
@@ -81,6 +81,9 @@ describe('useAgentGroups', () => {
         expect(store.messages[0].text).toBe('analyze btc');
         expect(store.messages[1].modelsUsed).toEqual({ p1: 'model-a' });
         expect(store.messages[2].modelsUsed).toEqual({ p1: 'model-b' });
+        // Every row is stamped with the ROOM id — the transcript is scoped
+        // by room identity, so a recreated group never re-claims these.
+        expect(store.messages.map(m => m.roomId)).toEqual(['g1', 'g1', 'g1']);
         // Each reply was finalized with the stream result (not the partial).
         expect(store.messages[1].text).toBe('reply from model-a');
         expect(store.messages[1].isStreaming).toBe(false);
@@ -109,7 +112,7 @@ describe('useAgentGroups', () => {
         ];
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@ledger check funding', bots);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@ledger check funding', bots);
         });
 
         expect(streamMock).toHaveBeenCalledTimes(1);
@@ -127,7 +130,7 @@ describe('useAgentGroups', () => {
 
         await act(async () => {
             await result.current.runGroupThread(
-                { memberIds: ['b1'] },
+                { id: 'g1', memberIds: ['b1'] },
                 'hello',
                 [bot({ id: 'b1', name: 'Scout' })],
             );
@@ -149,7 +152,7 @@ describe('useAgentGroups', () => {
         streamMock.mockRejectedValue(new Error('Kilocode · step-3.7: rate limit or quota reached. Please wait and try again.'));
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bot({ id: 'b1', name: 'Raven' })]);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1'] }, 'analyze btc', [bot({ id: 'b1', name: 'Raven' })]);
         });
 
         const bubble = store.messages.find(m => m.role === MessageRole.AI);
@@ -173,7 +176,7 @@ describe('useAgentGroups', () => {
         });
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bot({ id: 'b1', name: 'Raven' })]);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1'] }, 'analyze btc', [bot({ id: 'b1', name: 'Raven' })]);
         });
 
         const bubble = store.messages.find(m => m.role === MessageRole.AI);
@@ -206,7 +209,7 @@ describe('useAgentGroups room engine (G2)', () => {
             .mockResolvedValueOnce('Size is fine');
         const { store, result } = setupRoom();
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro analyze', bots3);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@macro analyze', bots3);
         });
         // Round 1: only Macro (mention routing). Round 2: Risk (re-mention).
         expect(streamMock).toHaveBeenCalledTimes(2);
@@ -224,7 +227,7 @@ describe('useAgentGroups room engine (G2)', () => {
             .mockResolvedValueOnce('I concur');
         const { store, result } = setupRoom();
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro @risk go', bots3);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@macro @risk go', bots3);
         });
         const ai = store.messages.filter(m => m.role === MessageRole.AI);
         // The pass row exists (attribution) but is hidden and empty.
@@ -239,7 +242,7 @@ describe('useAgentGroups room engine (G2)', () => {
         streamMock.mockResolvedValue('(pass)');
         const { result } = setupRoom();
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@everyone react', bots3);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@everyone react', bots3);
         });
         // @everyone = both speak once; nobody mentioned anyone → settled.
         expect(streamMock).toHaveBeenCalledTimes(2);
@@ -252,7 +255,7 @@ describe('useAgentGroups room engine (G2)', () => {
             .mockResolvedValueOnce('M2');
         const { result } = setupRoom();
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro start', bots3);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@macro start', bots3);
         });
         expect(streamMock).toHaveBeenCalledTimes(3);
         // Macro turn 1: only the prompt.
@@ -277,7 +280,7 @@ describe('useAgentGroups room engine (G2)', () => {
             String(prompt).includes('Macro:') ? '@macro your turn' : '@risk your turn');
         const { result } = setupRoom();
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, '@macro start', bots3);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@macro start', bots3);
         });
         // ROOM_ROUND_CAP (3) rounds serial bounds it well under turn cap.
         expect(streamMock.mock.calls.length).toBeLessThanOrEqual(6);
@@ -306,7 +309,7 @@ describe('useAgentGroups cancel + hybrid (R54)', () => {
 
         let runPromise: Promise<void> = Promise.resolve();
         act(() => {
-            runPromise = result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, 'analyze btc', bots2);
+            runPromise = result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, 'analyze btc', bots2);
         });
         expect(result.current.isRunning).toBe(true);
         expect(streamMock).toHaveBeenCalledTimes(1);
@@ -344,7 +347,7 @@ describe('useAgentGroups cancel + hybrid (R54)', () => {
         }));
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1', 'b2'] }, 'analyze btc', bots2);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, 'analyze btc', bots2);
         });
         expect(streamMock).toHaveBeenCalledTimes(2);
         expect(String(streamMock.mock.calls[0][3])).toContain('LIVE BTC DATA');
@@ -368,7 +371,7 @@ describe('useAgentGroups cancel + hybrid (R54)', () => {
         }));
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bots2[0]]);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1'] }, 'analyze btc', [bots2[0]]);
         });
         expect(hybridFetch).not.toHaveBeenCalled();
         expect(String(streamMock.mock.calls[0][3])).not.toContain('LIVE BTC DATA');
@@ -390,7 +393,7 @@ describe('useAgentGroups cancel + hybrid (R54)', () => {
         }));
 
         await act(async () => {
-            await result.current.runGroupThread({ memberIds: ['b1'] }, 'analyze btc', [bots2[0]]);
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1'] }, 'analyze btc', [bots2[0]]);
         });
         expect(streamMock).toHaveBeenCalledTimes(1);
         expect(result.current.isRunning).toBe(false);

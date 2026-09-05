@@ -156,48 +156,64 @@ describe('threadForProvider model scoping', () => {
 describe('threadForGroup', () => {
     it('collects prompts with replies from any member bot (provider+model match)', () => {
         const messages: Message[] = [
-            msg({ role: MessageRole.USER, text: 'analyze btc' }),
-            msg({ role: MessageRole.AI, text: 'trend up', modelsUsed: { a1: 'model-a' } }),
-            msg({ role: MessageRole.USER, text: 'and eth' }),
-            msg({ role: MessageRole.AI, text: 'funding hot', modelsUsed: { b1: 'model-b' } }),
+            msg({ role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'trend up', modelsUsed: { a1: 'model-a' }, roomId: 'g1' }),
+            msg({ role: MessageRole.USER, text: 'and eth', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'funding hot', modelsUsed: { b1: 'model-b' }, roomId: 'g1' }),
         ];
         const members = [
             { providerId: 'a1', modelId: 'model-a' },
             { providerId: 'b1', modelId: 'model-b' },
         ];
-        expect(threadForGroup(messages, members).map(m => m.text))
+        expect(threadForGroup(messages, members, 'g1').map(m => m.text))
             .toEqual(['analyze btc', 'trend up', 'and eth', 'funding hot']);
     });
 
     it('ignores replies from non-members and drops the prompts they claimed', () => {
         const messages: Message[] = [
-            msg({ role: MessageRole.USER, text: 'team question' }),
-            msg({ role: MessageRole.AI, text: 'outsider answer', modelsUsed: { z9: 'model-z' } }),
-            msg({ role: MessageRole.USER, text: 'member question' }),
-            msg({ role: MessageRole.AI, text: 'member answer', modelsUsed: { a1: 'model-a' } }),
+            msg({ role: MessageRole.USER, text: 'member question', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'outsider answer', modelsUsed: { z9: 'model-z' }, roomId: 'g1' }),
+            msg({ role: MessageRole.USER, text: 'member question 2', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'member answer', modelsUsed: { a1: 'model-a' }, roomId: 'g1' }),
         ];
-        const slice = threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }]);
-        expect(slice.map(m => m.text)).toEqual(['member question', 'member answer']);
+        const slice = threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }], 'g1');
+        expect(slice.map(m => m.text)).toEqual(['member question 2', 'member answer']);
     });
 
     it('keeps trailing prompts so a just-sent prompt renders as an open thread', () => {
         const messages: Message[] = [
-            msg({ role: MessageRole.USER, text: 'analyze btc' }),
-            msg({ role: MessageRole.AI, text: 'trend up', modelsUsed: { a1: 'model-a' } }),
-            msg({ role: MessageRole.USER, text: 'now eth?' }),
+            msg({ role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'trend up', modelsUsed: { a1: 'model-a' }, roomId: 'g1' }),
+            msg({ role: MessageRole.USER, text: 'now eth?', roomId: 'g1' }),
         ];
-        expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }]).map(m => m.text))
+        expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }], 'g1').map(m => m.text))
             .toEqual(['analyze btc', 'trend up', 'now eth?']);
     });
 
     it('system messages never enter the group slice', () => {
         const messages: Message[] = [
             msg({ role: MessageRole.SYSTEM, text: 'hidden' }),
-            msg({ role: MessageRole.USER, text: 'q' }),
-            msg({ role: MessageRole.AI, text: 'r', modelsUsed: { a1: 'model-a' } }),
+            msg({ role: MessageRole.USER, text: 'q', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'r', modelsUsed: { a1: 'model-a' }, roomId: 'g1' }),
         ];
-        expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }]).map(m => m.text))
+        expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }], 'g1').map(m => m.text))
             .toEqual(['q', 'r']);
+    });
+
+    it('a recreated room (same bots, new id) starts EMPTY — old rows stay stamped to the dead room', () => {
+        const messages: Message[] = [
+            msg({ role: MessageRole.USER, text: 'old prompt', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'old reply', modelsUsed: { a1: 'model-a' }, roomId: 'g1' }),
+        ];
+        const members = [{ providerId: 'a1', modelId: 'model-a' }];
+        // The new group (g2) with the SAME member identity sees nothing.
+        expect(threadForGroup(messages, members, 'g2')).toEqual([]);
+        // And un-stamped rows (1:1s, DMs, ensemble verdicts) never leak in.
+        const unscoped: Message[] = [
+            msg({ role: MessageRole.USER, text: 'dm prompt' }),
+            msg({ role: MessageRole.AI, text: 'dm reply', modelsUsed: { a1: 'model-a' } }),
+        ];
+        expect(threadForGroup(unscoped, members, 'g2')).toEqual([]);
     });
 });
 
@@ -254,10 +270,10 @@ describe('attributed system errors (failed replies)', () => {
 
     it('a group member’s failed reply (attributed system error) lands in the group slice', () => {
         const messages: Message[] = [
-            msg({ role: MessageRole.USER, text: 'go' }),
-            msg({ role: MessageRole.SYSTEM, text: 'Openocode Zen: request failed (400).', modelsUsed: { a1: 'model-a' } }),
+            msg({ role: MessageRole.USER, text: 'go', roomId: 'g1' }),
+            msg({ role: MessageRole.SYSTEM, text: 'Openocode Zen: request failed (400).', modelsUsed: { a1: 'model-a' }, roomId: 'g1' }),
         ];
-        expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }]).map(m => m.text))
+        expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }], 'g1').map(m => m.text))
             .toEqual(['go', 'Openocode Zen: request failed (400).']);
     });
 });

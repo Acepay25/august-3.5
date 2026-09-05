@@ -50,7 +50,7 @@ export interface UseAgentGroupsResult {
     workingBotId: string | null;
     isRunning: boolean;
     activity: GroupActivityEntry[];
-    runGroupThread: (group: { memberIds: string[] }, prompt: string, bots: AgentBot[]) => Promise<void>;
+    runGroupThread: (group: { id: string; memberIds: string[] }, prompt: string, bots: AgentBot[]) => Promise<void>;
     /** Abort the in-flight room round: streams are aborted, the loop stops
      *  at the next member boundary, and partial bubbles are marked done. */
     cancelRun: () => void;
@@ -98,7 +98,7 @@ export const useAgentGroups = ({
         pushActivityRef.current({ kind: 'passed', botName: 'Room', detail: 'cancelled' });
     }, []);
 
-    const runGroupThread = useCallback(async (group: { memberIds: string[] }, prompt: string, bots: AgentBot[]): Promise<void> => {
+    const runGroupThread = useCallback(async (group: { id: string; memberIds: string[] }, prompt: string, bots: AgentBot[]): Promise<void> => {
         const trimmed = prompt.trim();
         if (!trimmed || group.memberIds.length === 0) return;
         const nonce = ++runNonce.current;
@@ -121,6 +121,7 @@ export const useAgentGroups = ({
             role: MessageRole.USER,
             text: trimmed,
             createdAt: new Date().toISOString(),
+            roomId: group.id,
         });
         pushActivity({ kind: 'sent' });
         setIsRunning(true);
@@ -187,6 +188,7 @@ export const useAgentGroups = ({
                         createdAt: new Date().toISOString(),
                         modelsUsed: { [provider.id]: bot.modelId },
                         isStreaming: true,
+                        roomId: group.id,
                     });
 
                     let visible = '';
