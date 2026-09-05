@@ -25,7 +25,7 @@ import { TrashIcon, CloseIcon } from './Icons';
  * ("Type X to confirm").
  */
 
-interface ConfirmOptions {
+export interface ConfirmOptions {
     title: string;
     message?: string;
     confirmLabel?: string;
