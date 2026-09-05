@@ -245,4 +245,42 @@ describe('useUserProfileLoader', () => {
         expect(dbService.saveUserProfile).toHaveBeenCalledWith('fresh_user', expect.any(Object));
         expect(result.current.profileReady).toBe(true);
     });
+
+    it('workspace bootstrap runs once on mount — changed hook args must not reload the profile', async () => {
+        sessionStorage.setItem('activeUsername', 'user1');
+        vi.mocked(dbService.getUserProfile).mockResolvedValue({
+            username: 'user1',
+            conversations: [],
+            tradeLog: [],
+            savedAnalyses: [],
+            tradeSummaries: [],
+            settings: {},
+        } as any);
+
+        const args = createMockArgs();
+        const { rerender } = renderHook(
+            ({ hookArgs }: { hookArgs: UseUserProfileLoaderArgs }) => useUserProfileLoader(hookArgs),
+            { initialProps: { hookArgs: args } },
+        );
+
+        await act(async () => { /* let the mount bootstrap settle */ });
+        const loadsAfterBoot = vi.mocked(dbService.getUserProfile).mock.calls.length;
+        expect(loadsAfterBoot).toBe(1);
+
+        // A mid-session provider edit changes providerConfigs (and every
+        // vi.fn() setter identity when the args object is rebuilt). The
+        // bootstrap must stay asleep — no second profile load, no second
+        // workspace scan.
+        const editedArgs: UseUserProfileLoaderArgs = {
+            ...args,
+            providerConfigs: [{ ...args.providerConfigs[0], name: 'Renamed' }],
+            setSummarizationProvider: vi.fn(),
+            setSummarizationModel: vi.fn(),
+        };
+        rerender({ hookArgs: editedArgs });
+        await act(async () => {});
+
+        expect(vi.mocked(dbService.getAllUsernames).mock.calls.length).toBe(1);
+        expect(vi.mocked(dbService.getUserProfile).mock.calls.length).toBe(loadsAfterBoot);
+    });
 });
