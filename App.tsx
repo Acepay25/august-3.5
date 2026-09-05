@@ -19,6 +19,7 @@ import { useConversationHousekeeping } from './hooks/useConversationHousekeeping
 import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
 import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
+import { useFloorProjection } from './hooks/useFloorProjection';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -2276,98 +2277,24 @@ const App: React.FC = () => {
         );
         toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
     }, [activeUsername]);
-    // Live task-flow stats for the office header gauges. The four
-    // values are normalized inside CompanyRoom, so we feed raw counts
-    // here. "Shipped" = total settled analyses; "Running" = in-flight
-    // (debate or post-mortem); "Tasks" = everything; "Approvals" =
-    // queued approval cards awaiting the trader.
-    const gaugeStats = useMemo(() => ({
-        tasks: messages.length,
-        running: isAnalysisInProgress || isPostMortemInProgress ? 1 : 0,
-        shipped: messages.filter(m => m.analysis).length,
-        approvals: approvalItems.length,
-    }), [messages, isAnalysisInProgress, isPostMortemInProgress, approvalItems]);
-
-    // ─── Floor mode data (components/floor/FloorScene.tsx) ────────────────
-    // Positions: newest trades first for the rail's positions table.
-    const floorPositions = useMemo<FloorPosition[]>(
-        () => loggedTrades.slice(0, 20).map(t => ({
-            id: t.id,
-            symbol: t.analysis.coinName || '—',
-            direction: t.analysis.direction,
-            pnl: t.pnlAmount,
-            outcome: t.outcome,
-        })),
-        [loggedTrades],
-    );
-    // Squawk: newest-first tape derived from the conversation —
-    // printed analyses and filed post-mortems. Capped so the memo
-    // stays cheap on long threads.
-    const floorSquawk = useMemo<FloorSquawkEvent[]>(() => {
-        const events: FloorSquawkEvent[] = [];
-        for (let i = messages.length - 1; i >= 0 && events.length < 30; i -= 1) {
-            const m = messages[i];
-            const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            if (m.analysis) {
-                events.push({
-                    id: `print-${m.id}`,
-                    time,
-                    text: `PRINT ${m.analysis.coinName} · ${m.analysis.direction} · ${m.analysis.confidence} confidence`,
-                });
-            } else if (m.postMortem) {
-                events.push({ id: `review-${m.id}`, time, text: 'REVIEW post-mortem filed' });
-            }
-        }
-        // Harness-lesson system lines: what the harness learned
-        // about the wires prints on the tape — the floor is where you SEE it
-        // managing itself. Newest few, merged into time order.
-        for (const l of listHarnessLessons().slice(0, 5)) {
-            const at = Date.parse(l.at);
-            if (!Number.isFinite(at)) continue;
-            events.push({
-                id: `lesson-${l.id}`,
-                time: new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-                text: `LESSON ${l.kind} · ${l.scope}${l.provider ? ` · ${l.provider}` : ''}: ${l.lesson}`,
-            });
-        }
-        // Seat activity (u2 — reference parity): the debate's own run log is
-        // already an append-only feed of seat events (rounds, drops, tool
-        // calls, verdict). Project the newest few onto the tape so the floor
-        // reads like a trading desk: WHO is working, who got benched, what
-        // the moderator charged. Plus per-turn "working/passed/replied"
-        // derived from the transcript for replays of pre-log debates.
-        const debateLogSource = deskSceneMessage?.debateRunLog ?? [];
-        for (const ev of debateLogSource.slice(-8)) {
-            const at = Date.parse(ev.at);
-            const time = Number.isFinite(at)
-                ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-                : '';
-            const who = ev.speaker ? `${ev.speaker} · ` : '';
-            events.push({ id: `runlog-${ev.at}-${ev.kind}-${ev.detail.slice(0, 12)}`, time, text: `${who}${ev.detail}` });
-        }
-        for (const t of (deskSceneMessage?.debateTurns ?? []).slice(-6)) {
-            const at = t.createdAt ? Date.parse(t.createdAt) : NaN;
-            const time = Number.isFinite(at)
-                ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-                : '';
-            const text = t.text.trim();
-            const verb = !text || text === '(pass)'
-                ? 'passed'
-                : t.to?.length
-                    ? `replied to ${t.to.join(', ')}`
-                    : 'submitted an argument';
-            events.push({ id: `turn-${t.speaker}-${t.createdAt ?? t.text.slice(0, 12)}`, time, text: `${t.speaker} ${verb}` });
-        }
-        events.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0));
-        return events;
-    }, [messages, deskSceneMessage]);
-    // Day PnL for the floor top bar: today's settled tickets only.
-    const floorDayPnl = useMemo(() => {
-        const today = new Date().toDateString();
-        return loggedTrades
-            .filter(t => new Date(t.timestamp).toDateString() === today)
-            .reduce((sum, t) => sum + (t.pnlAmount ?? 0), 0);
-    }, [loggedTrades]);
+    // Floor projection (extracted to hooks/useFloorProjection.ts): gauge
+    // stats, positions rail, squawk tape, day PnL, seat wires, tickers,
+    // and the seat-click thread opener — all derived from the running
+    // conversation and the projected desk message.
+    const {
+        gaugeStats,
+        floorPositions,
+        floorSquawk,
+        floorDayPnl,
+        floorSeatWire,
+        floorTickers,
+        openSeatChat,
+    } = useFloorProjection({
+        messages, loggedTrades, approvalItems,
+        isAnalysisInProgress, isPostMortemInProgress,
+        deskSceneMessage, deskSceneActors, providerNameToId,
+        bots, selectBotThread, setActiveThread, setIsEnsembleEnabled, setUiMode,
+    });
     // Skill-citation chip tap: open Settings → Skills so the
     // grid mounts and consumes the pending slug (SkillsGrid listens for the
     // same event when already mounted).
@@ -2379,48 +2306,6 @@ const App: React.FC = () => {
         window.addEventListener('august:open-skill', onOpenSkill);
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
     }, []);
-    // Seat-wire observability: per seat, what the harness sent
-    // The wire (thinking/effort/pin) + cooldown/fitness from health.
-    // Derived from the projected run's wire-audit lines — no new state.
-    const floorSeatWire = useMemo(
-        () => deriveSeatWireStates({
-            runLog: deskSceneMessage?.debateRunLog,
-            providerNameToId,
-            healthFor: getProviderHealth,
-            cooldownFor: providerCooldownRemainingMs,
-            seatNames: deskSceneActors.map(a => a.name),
-        }),
-        // Re-derived per run-log growth; cooldown minutes refresh on any
-        // App re-render (the floor's own clock drives the Big Board).
-        [deskSceneMessage, deskSceneActors, providerNameToId],
-    );
-    // Floor seat click → open that agent's 1:1 thread in chat mode.
-    // Seat names match a named bot first; without one, land on the Coach
-    // inbox (ensemble stays armed for the next group analysis).
-    const openSeatChat = useCallback((seatName: string) => {
-        const name = seatName.trim().toLowerCase();
-        const botMatch = bots.find(b => b.name.toLowerCase() === name);
-        if (botMatch) {
-            selectBotThread(botMatch.id);
-        } else {
-            setActiveThread({ kind: 'coach' });
-            setIsEnsembleEnabled(true);
-        }
-        setUiMode('chat');
-    }, [bots, selectBotThread, setIsEnsembleEnabled, setUiMode]);
-    // Tickers: symbols from recent analyses topped up with the majors.
-    // Prices arrive via the floor market hook (floor phase).
-    const floorTickers = useMemo<{ symbol: string; last?: number; changePct?: number }[]>(() => {
-        const syms: string[] = [];
-        const push = (s?: string | null): void => {
-            if (s && !syms.includes(s)) syms.push(s);
-        };
-        for (let i = messages.length - 1; i >= 0 && syms.length < 6; i -= 1) {
-            push(messages[i].analysis?.coinName);
-        }
-        for (const major of ['BTC', 'ETH', 'SOL']) push(major);
-        return syms.slice(0, 8).map(symbol => ({ symbol }));
-    }, [messages]);
 
 
     useWatchSideEffects({
