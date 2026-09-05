@@ -452,6 +452,16 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setVisionModel, toast,
     ]);
 
+    // The workspace scan is a MOUNT-ONLY bootstrap. It must never re-run when
+    // loadUserData's identity changes: its deps include providerConfigs and
+    // the lens/ensemble settings, which legitimately change mid-session, and
+    // a re-run would reload the whole profile from disk (loading flash,
+    // autopilot reset, re-running migrations and startup backups) and wipe
+    // any work not yet covered by the debounced save. The ref keeps each
+    // invocation fresh without re-arming the effect.
+    const loadUserDataRef = useRef(loadUserData);
+    loadUserDataRef.current = loadUserData;
+
     useEffect(() => {
         let isMounted = true;
         const openWorkspaceIfNeeded = async (): Promise<void> => {
@@ -461,7 +471,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 setExistingUsernames(users);
                 const sessionUser = sessionStorage.getItem('activeUsername');
                 if (sessionUser && users.includes(sessionUser)) {
-                    void loadUserData(sessionUser);
+                    void loadUserDataRef.current(sessionUser);
                 } else if (!profileSelectionStartedRef.current) {
                     setIsUserModalOpen(true);
                 }
@@ -473,7 +483,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         };
         void openWorkspaceIfNeeded();
         return () => { isMounted = false; };
-    }, [loadUserData, setExistingUsernames, setIsUserModalOpen]);
+    }, [setExistingUsernames, setIsUserModalOpen]);
 
     return {
         loadUserData,
