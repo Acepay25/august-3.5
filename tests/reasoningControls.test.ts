@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Reasoning-control plane (Batch 1 P1): route translation, effort maps,
-// fail-closed doctrine, and the P7 pin consult.
+// fail-closed doctrine, and the wire-route pin consult.
 
 import {
     EFFORT_BY_TASK,
@@ -135,7 +135,7 @@ describe('buildReasoningPatch translation', () => {
         expect(result.audit.reason).toContain('fail closed');
     });
 
-    it('every patch carries an audit entry (P5 labels all calls)', () => {
+    it('every patch carries an audit entry (the audit labels all calls)', () => {
         for (const effort of ['low', 'medium', 'high', 'max', 'auto'] as ReasoningEffort[]) {
             const result = buildReasoningPatch(makeConfig({ selectedModel: 'glm-4.6' }), effort);
             expect(result.audit.effort).toBe(effort);
@@ -165,7 +165,7 @@ describe('applyReasoningToChatParams', () => {
     });
 });
 
-describe('P7 wire-route pins (harness lessons override detection)', () => {
+describe('wire-route pins (harness lessons override detection)', () => {
     beforeEach(() => {
         // Reset to no-op between tests.
         registerWireRoutePins(() => false);

@@ -102,4 +102,20 @@ describe('clampProbabilityToGate', () => {
     expect(clampProbabilityToGate(80, 1, 1.3).probability).toBe(69);
     expect(clampProbabilityToGate(60, 1, 1.3).probability).toBe(60); // below threshold — untouched
   });
+
+  it('floors negative and non-finite inputs to 0 instead of passing them through', () => {
+    const neg = clampProbabilityToGate(-12, 0.9);
+    expect(neg.probability).toBe(0);
+    expect(neg.wasClamped).toBe(true);
+    expect(neg.reason).toMatch(/negative/);
+    expect(clampProbabilityToGate(Number.NaN, 0.9).probability).toBe(0);
+    // a negative input with a gate cap still lands at 0, not the cap
+    expect(clampProbabilityToGate(-5, 0.65).probability).toBe(0);
+  });
+
+  it('caps inputs above 100', () => {
+    const over = clampProbabilityToGate(140, 1);
+    expect(over.probability).toBe(100);
+    expect(over.wasClamped).toBe(true);
+  });
 });

@@ -50,7 +50,7 @@ const isClosed = (t: LoggedTrade): boolean =>
     t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
 
 /** Dollar PnL of a row — pnlAmount authoritative, pnlPercent converted
- * Through the position's margin or the planned risk base (plan -7:
+ * Through the position's margin or the planned risk base (
  *  the old formula divided by 100 twice and treated a leveraged POSITION
  *  percent as percent-of-equity, deflating autopilot rows ~100×). Shares
  *  the SessionGuard converter so the two surfaces can't disagree. */

@@ -6,6 +6,9 @@ export interface TicketSize {
     reason: string;
 }
 
+/** The sizing reason callers match on when equity is unconfigured. */
+export const EQUITY_NOT_SET = 'Equity not set';
+
 export interface ContractSize extends TicketSize {
     equityUsd: number;
     leverage: number;
@@ -54,11 +57,31 @@ export const computeContractSize = (
     riskPercent = 1,
 ): ContractSize => {
     const base = computeTicketSize(analysis);
-    const eq = equityUsd > 0 ? equityUsd : 10_000;
     const lev = leverage > 0 ? leverage : 1;
     const riskPct = Number.isFinite(riskPercent) && riskPercent > 0
         ? Math.min(10, Math.max(0.1, riskPercent))
         : 1;
+    const eq = equityUsd > 0 ? equityUsd : 0;
+    // Fail closed on unknown equity. The previous $10,000 stand-in sized a
+    // phantom position and printed a confident risk line for a user who never
+    // configured an account — the number looked real and was not. A trade the
+    // ticket already vetoes keeps its own (more specific) reason below.
+    if (eq <= 0 && base.fraction > 0) {
+        return {
+            ...base,
+            label: 'none',
+            fraction: 0,
+            reason: EQUITY_NOT_SET,
+            equityUsd: 0,
+            leverage: lev,
+            riskUsd: 0,
+            notionalUsd: 0,
+            qty: null,
+            unit: '',
+            line: 'Equity not set — add your account equity in Settings to size this trade',
+            riskPercent: riskPct,
+        };
+    }
     if (base.fraction <= 0) {
         return {
             ...base,

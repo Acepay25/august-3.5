@@ -972,6 +972,33 @@ const MAX_NOTE_SECTIONS = 30;
 const MAX_NOTES_PER_FOLDER = 40;
 const NOTE_SECTION_SEP = '\n\n---\n\n';
 
+/**
+ * The (folder, file) pairs the harness REGENERATES WHOLESALE from its own
+ * data — profile sync, pattern memory, recurring mistakes, doctrine,
+ * suggestions, settled beliefs, the three lens seats. A model append into
+ * one of these is silently clobbered on the next rebuild, so writeModelNote
+ * rejects it; the amend_memory proposal flow is the only sanctioned write
+ * path (it rejects these targets too, by design). Model notes (lessons/,
+ * session-timing/, …) are autoManaged but NOT regenerated — they stay
+ * appendable. The trader-diary and distilled folders are banned outright
+ * (checked at folder level above).
+ */
+const HARNESS_REGENERATED_FILES: ReadonlySet<string> = new Set([
+    'profile/memory.md',
+    'profile/pattern-memory.md',
+    'profile/doctrine.md',
+    'profile/suggestions.md',
+    'rules/recurring-mistakes.md',
+    'settled-beliefs/settled-beliefs.md',
+    // settledBeliefs falls back to the profile folder when its own is absent.
+    'profile/settled-beliefs.md',
+    'lens/macro.md',
+    'lens/technical.md',
+    'lens/risk.md',
+]);
+const isHarnessRegeneratedFile = (folderName: string, fileName: string): boolean =>
+    HARNESS_REGENERATED_FILES.has(`${folderName}/${fileName}`);
+
 export const writeModelNoteUnlocked = async (note: ModelNote, username: string): Promise<MemoryFile> => {
     let cleanFolder = slugifyName(note.folder) || 'lessons';
     if (cleanFolder === 'skills') cleanFolder = 'lessons';
@@ -981,6 +1008,15 @@ export const writeModelNoteUnlocked = async (note: ModelNote, username: string):
 
     let folder = memoryCache.folders.find(f => f.name === cleanFolder);
     if (!folder) folder = await createMemoryFolderUnlocked(cleanFolder, username);
+
+    // The diary and the distilled-fact store are the harness's OWN
+    // namespaces — every file there is written (or regenerated) by a sync
+    // service, so a model note landing in either would collide with, or be
+    // clobbered by, the harness's next pass. Model notes belong in their
+    // own folders (lessons/, rules/, market-conditions/, …).
+    if (folder.name === 'trader-diary' || folder.name === 'distilled') {
+        throw new Error(`Cannot write model notes into the harness-owned '${folder.name}' folder — pick lessons/ or another note folder.`);
+    }
 
     // Append: extend an existing file when one matches (same stem, or one
     // name contains the other) — never overwrite, the note is a new section.
@@ -992,6 +1028,14 @@ export const writeModelNoteUnlocked = async (note: ModelNote, username: string):
                 || baseName.includes(f.name.replace(/\.md$/i, ''))
             );
         if (target) {
+            // Harness-owned files are REGENERATED WHOLESALE by their owning
+            // service (profile sync, doctrine consolidation, lens memory, …) —
+            // an append here would be silently clobbered on the next rebuild.
+            // Model notes (also autoManaged) live OUTSIDE this set and stay
+            // appendable; the amendment proposal flow rejects all of them.
+            if (isHarnessRegeneratedFile(folder.name, target.name)) {
+                throw new Error(`Cannot append to a harness-managed file — ${folder.name}/${target.name} is rewritten by the harness. Use the amend_memory proposal flow instead.`);
+            }
             // Bound append-mode growth: keep the file head (everything before
             // the first section separator) plus the newest sections only.
             const parts = target.content.split(NOTE_SECTION_SEP);

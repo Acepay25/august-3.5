@@ -1101,7 +1101,7 @@ const applyRefinementUnlocked = async (
  * the incumbent's record INSIDE the window: if the live trigger kept
  * losing (worse than the kind's coin-flip band), the tightened refinement
  * earned the slot; if the live version held up, the rewrite was an
- * overfit reaction to bad luck and gets discarded with a P7 lesson.
+ * overfit reaction to bad luck and gets discarded with a harness wire lesson.
  */
 export const settleShadow = (
     meta: SkillMeta,

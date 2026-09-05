@@ -144,8 +144,9 @@ const HarnessControls: React.FC = () => {
                 <input
                     type="number"
                     min={100}
-                    value={settings.equityUsd}
-                    onChange={e => persist({ equityUsd: Number(e.target.value) || 10_000 })}
+                    value={settings.equityUsd || ''}
+                    placeholder="Not set"
+                    onChange={e => persist({ equityUsd: Math.max(0, Number(e.target.value) || 0) })}
                     className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
             </label>
@@ -173,7 +174,7 @@ const HarnessControls: React.FC = () => {
                     <option value="0.5">50%</option>
                 </select>
             </label>
-            {/* Session-guard limits (plan -8): preset + overrides.
+            {/* Session-guard limits: preset + overrides.
                 Takes effect immediately here; the in-the-moment cap change
                 rule (typed confirm) applies to the banner, not this panel. */}
             <label className="block text-[11px] text-zinc-400">
@@ -238,7 +239,7 @@ const HarnessControls: React.FC = () => {
                 />
                 Pre-read capture: commit your call before the verdict reveals (off by default)
             </label>
-            {/* P7 harness lessons: browse + clear what the harness
+            {/* Harness wire lessons: browse + clear what the harness
                 believes about provider wires. */}
             <HarnessLessonsBrowser />
             <label className="block text-[11px] text-zinc-400">

@@ -444,9 +444,9 @@ failed**, build clean, eslint 0 errors on touched files.
   last-opened marking effect (its badge is a backlog count, not unread
   messages).
 - **Learning/memory/skill loop wiring re-verified end-to-end:** verdict →
-  citations (F1) → adherence (P0-2 runId join) → evidence ladder + birth
-  claim (P0-3) → proposals → Coach thread + Settings→Skills queue panel
-  (P0-1) → apply paths → notebook. Drafts → Inbox + Coach cards → ingest.
+  citations → adherence (exact-runId join) → evidence ladder + birth
+  claim → proposals → Coach thread + Settings→Skills queue panel
+  → apply paths → notebook. Drafts → Inbox + Coach cards → ingest.
   Pass mining → weekly sweep → drafts → same approval surface. Every queue
   now has a human-visible, human-actionable exit.
 
@@ -655,7 +655,7 @@ Learning Profile header (LearningDashboard) and on the weekly digest.
   gate-approved triggers; `computeMetaCalibrationRatios` (null when no
   sample); `runWeeklyMetaCalibration` (called by the weekly review pass)
   persists the ratios and, when worth-gate precision < 40% at sample ≥ 10,
-  emits a P7 harness-lesson (`worth-gate-precision-decay`) with a
+  emits a harness wire lesson (`worth-gate-precision-decay`) with a
   default-change proposal (raise `MIN_SAMPLE_CONFIRMED` / tighten the Wilson
   band) — a decayed gate gets a proposal, never a silent threshold tweak.
 - **Worth-gate precision** — `recordWorthGateApproval` at the gate fold's
@@ -816,13 +816,13 @@ passed, vite build clean).
 regression tests in tests/auditFixes.test.ts + tests/probeSelfHarm.test.ts):**
 Kelly advisory sign bug (journal losses are negative — the advisory never
 rendered in production; now normalized at both function and call site).
-P5 wire audit now fires on the messages (Claude) and google (Gemini)
+The wire audit now fires on the messages (Claude) and google (Gemini)
 transports too — every apiFormat gets a budget line. The known-answer
 probe no longer pins off a WORKING provider: 64→512 probe budget,
 "200 + no OK" is inconclusive (no lesson), and the knob-rejection
-heuristic requires rejection wording. P6 wire-shape assertions added to
+heuristic requires rejection wording. Wire-shape assertions added to
 debateFlow (rebuttals carry effort 'high', verdict 'max', audit sink on
-every call). P7 loop closed: the clarification audit stream writes budget
+every call). The lesson loop closed: the clarification audit stream writes budget
 lessons, and the moderator verdict now sees a capped HARNESS NOTES block.
 Trade cap buckets by OPEN time (analysis.createdAt); realized P&L keeps
 close time. Shared rowPnlUsd converter (margin = investmentAmount, else

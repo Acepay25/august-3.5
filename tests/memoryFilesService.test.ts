@@ -441,6 +441,34 @@ describe('MemoryFilesService', () => {
       expect(file.content).toContain('## Extra');
     });
 
+    it('append REJECTS harness-regenerated files but allows model notes', async () => {
+      // profile/memory.md is rewritten wholesale by syncProfileMemory — an
+      // append would be silently clobbered, so the write must fail visibly.
+      const profileFolder = getMemoryFiles().folders.find(f => f.name === 'profile')!;
+      await createMemoryFile(profileFolder.id, 'memory.md', '# Profile\nseed', 'test-user', true);
+      await expect(writeModelNote(
+        { decision: 'append', folder: 'profile', fileName: 'memory', content: '## Rogue note' },
+        'test-user',
+      )).rejects.toThrow(/harness-managed/);
+      // lens/macro.md — same story for the seat memory files.
+      const lensFolder = getMemoryFiles().folders.find(f => f.name === 'lens')!;
+      await createMemoryFile(lensFolder.id, 'macro.md', '# Macro lens\nseed', 'test-user', true);
+      await expect(writeModelNote(
+        { decision: 'append', folder: 'lens', fileName: 'macro.md', content: '## Rogue' },
+        'test-user',
+      )).rejects.toThrow(/harness-managed/);
+      // trader-diary is the harness's own namespace — model notes are banned
+      // at the folder level (a stem-miss would otherwise silently create one).
+      await expect(writeModelNote(
+        { decision: 'append', folder: 'trader-diary', fileName: 'BTC', content: '## Rogue' },
+        'test-user',
+      )).rejects.toThrow(/harness-owned/);
+      // A model note (lessons/, autoManaged but NOT regenerated) still appends.
+      await writeModelNote({ decision: 'create', folder: 'lessons', fileName: 'keep-appendable.md', content: '# First' }, 'test-user');
+      const ok = await writeModelNote({ decision: 'append', folder: 'lessons', fileName: 'keep-appendable.md', content: '## Second' }, 'test-user');
+      expect(ok.content).toContain('## Second');
+    });
+
     it('append falls back to creating the file when the target does not exist', async () => {
       const file = await writeModelNote({ decision: 'append', folder: 'rules', fileName: 'new-rule.md', content: '# New Rule\nBody.' }, 'test-user');
       expect(file.name).toBe('new-rule.md');

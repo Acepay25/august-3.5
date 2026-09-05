@@ -1322,6 +1322,19 @@ export const clampProbabilityToGate = (
     let wasClamped = false;
     let reason: string | undefined;
 
+    // 0. Probability is a percentage in [0, 100]. Both gates below only clamp
+    // DOWN, so a negative (or >100) input used to pass through untouched and
+    // reach the UI as e.g. "-12% confidence". Floor and cap first.
+    if (!Number.isFinite(clamped) || clamped < 0) {
+        clamped = 0;
+        wasClamped = true;
+        reason = 'Clamped to 0% (negative probability)';
+    } else if (clamped > 100) {
+        clamped = 100;
+        wasClamped = true;
+        reason = 'Clamped to 100%';
+    }
+
     // 1. Gate cap
     const gateCapPercent = confidenceCap * 100;
     if (clamped > gateCapPercent) {

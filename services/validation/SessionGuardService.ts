@@ -57,7 +57,7 @@ export const FTMO_SESSION_GUARD: SessionGuardConfig = {
 };
 
 /**
- * Dollar P&L of one journal row (plan -7, corrected during
+ * Dollar P&L of one journal row (corrected during
  * implementation): pnlAmount is authoritative when present. pnlPercent is
  * a LEVERAGED POSITION percent (autopilot rows carry e.g. -200 = the
  * position lost 200% of its margin). Dollars = margin × pct/100, where the
@@ -160,10 +160,34 @@ export const assessSession = (
     config: SessionGuardConfig = DEFAULT_SESSION_GUARD,
     now: Date = new Date(),
 ): SessionGuardVerdict => {
+    // Fail closed: with no configured equity there is no loss budget to
+    // measure, so the guard cannot honestly say 'clear'. The old $10,000
+    // stand-in handed a confident verdict to a user who never set an
+    // account. Trades/streaks are still counted — only the dollar tiers
+    // depend on equity.
+    if (!(equityUsd > 0)) {
+        const tradesTodayNoEq = trades.filter(t =>
+            isOpenOfDay(t.analysis?.createdAt ?? t.timestamp, utcDayStart(now).getTime(), now.getTime())
+            && t.outcome !== TradeOutcome.SKIPPED
+            && t.outcome !== TradeOutcome.ENTRY_NOT_HIT,
+        ).length;
+        return {
+            level: 'standdown',
+            dayPnlUsd: 0,
+            dayPnlPct: 0,
+            tradesToday: tradesTodayNoEq,
+            lossStreak: currentLossStreak(trades, now.getTime()),
+            dailyLossHit: false,
+            tradeCapHit: false,
+            streakPauseActive: false,
+            warnings: ['Equity not set — add your account equity in Settings before trading.'],
+            lossBudgetUsed: 0,
+        };
+    }
     const nowMs = now.getTime();
     const dayStart = utcDayStart(now).getTime();
     const pnl = dayPnl(trades, dayStart, nowMs, equityUsd, config.tradeRiskPercent ?? 1);
-    const eq = equityUsd > 0 ? equityUsd : 10_000;
+    const eq = equityUsd;
     const lossBudgetUsd = eq * config.dailyLossLimitPct;
     // Only losses consume the budget — a green day never trips the breaker.
     const lossConsumedUsd = Math.min(0, pnl);
@@ -173,7 +197,7 @@ export const assessSession = (
     const tradesToday = trades.filter(t =>
         // Trade cap buckets by OPEN time (the signal's createdAt), not the
         // close timestamp — a trade opened 23:50 UTC and closed 00:10 is
-        // Still a trade of yesterday's session (plan -6, corrected by
+        // Still a trade of yesterday's session (corrected by
         // review: `timestamp` is stamped at outcome-capture, so it is
         // already close time and is right for P&L/streak/cooldown).
         isOpenOfDay(t.analysis?.createdAt ?? t.timestamp, dayStart, nowMs)

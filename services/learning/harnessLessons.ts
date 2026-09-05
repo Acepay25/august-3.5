@@ -4,7 +4,7 @@
  * The skills store learns TRADING beliefs (what setups to repeat/avoid);
  * this store learns HARNESS beliefs — which wire shapes, prompt patterns
  * and budget knobs actually work on the providers the user runs. Written
- * by the P5 wire audit and the P6 known-answer probes; read by roster
+ * by the wire audit and the known-answer probes; read by roster
  * build, reasoningControls, and the run-snapshot assembler.
  *
  * Capability-class doctrine (2026-08-29): lessons key on CAPABILITY CLASSES
@@ -148,7 +148,7 @@ export const isWireRoutePinnedOff = (
     );
 
 /**
- * P7 read path into reasoningControls: a provider whose probe FAILED while a
+ * Harness-lesson read path into reasoningControls: a provider whose probe FAILED while a
  * knob was sent gets its route pinned off (the store keeps the lesson until
  * a re-probe clears it). The provider id here narrows a CAPABILITY-CLASS
  * lesson to the endpoints that demonstrated the failure — the lesson's scope
@@ -162,7 +162,7 @@ registerWireRoutePins((route, providerId) =>
     ));
 
 /**
- * P7 write path from the P5 audit stream: a clarification call
+ * Harness-lesson write path from the wire-audit stream: a clarification call
  * on a chat_completions seat where NO reasoning knob could be applied
  * (fail-closed 'none' route) is a budget lesson — the harness cannot tell
  * this wire shape to stop thinking, so a thinking-default model on it will
@@ -190,7 +190,7 @@ export const recordBudgetLessonFromAudit = (
 };
 
 /**
- * P7 read path for the moderator: a compact digest of the
+ * Harness-lesson read path for the moderator: a compact digest of the
  * harness's own wire/budget beliefs, injected into the verdict context so
  * the arbiter weighs known provider quirks ("this seat 200-accepts but
  * ignores reasoning_effort"). Capability-class scoped, capped, newest
@@ -300,7 +300,7 @@ export const probeWireSupport = async (
 };
 
 /**
- * Run a probe and record what it proved as a harness lesson (P6 → P7 write
+ * Run a probe and record what it proved as a harness lesson (probe → lesson write
  * path). A probe that finds a fail-closed no-op where the user EXPECTS a knob
  * records a 'wire' lesson; a probe that proves the knob reaches the wire
  * clears any stale pin recorded against it.

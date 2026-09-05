@@ -330,7 +330,7 @@ const getModeratorAnalysisStream = async function* (
     /** Which debate round the moderator turn belongs
      *  to — DM receipts used to print "(Round 0)" in the verdict transcript. */
     mailboxRound?: number,
-    /** P5 audit sink — receives the applied reasoning-route label so the
+    /** Wire-audit sink — receives the applied reasoning-route label so the
      *  run log explains the verdict's reasoning depth. */
     onWireAudit?: (entry: import('./reasoningControls').WireAuditEntry) => void,
     /** model side-effects from the arbiter's desk tools. */
@@ -2975,7 +2975,7 @@ export const conductRealDebate = async function* (
                             reasoningEffort: 'low',
                             onWireAudit: entry => {
                                 emitLog('budget', `wire: ${analyst.provider.name} clarification ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, answerRound, analyst.provider.name);
-                                // P7 write path: a clarification
+                                // Harness-lesson write path: a clarification
                                 // that could not be told to think less records
                                 // a budget lesson for the thinkingDefault class.
                                 recordBudgetLessonFromAudit(entry, 'clarification', analyst.provider.config.id);
@@ -3263,7 +3263,7 @@ export const conductRealDebate = async function* (
             return formatEnsembleLineBlock(computeEnsembleLine(convictions));
         })(),
         buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never) ? `\n\n${buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never)}` : '',
-        // Harness notes (P7 read path, plan -5): the harness's own
+        // Harness notes (the harness's own read path): the harness's own
         // code-observed beliefs about provider behavior (wire/budget) —
         // capped, newest first. The moderator weighs known quirks ("this
         // seat 200-accepts but ignores reasoning_effort") when grading.

@@ -3400,7 +3400,7 @@ const App: React.FC = () => {
     }, []);
     // Seat-wire observability: per seat, what the harness sent
     // The wire (thinking/effort/pin) + cooldown/fitness from health.
-    // Derived from the projected run's P5 audit lines — no new state.
+    // Derived from the projected run's wire-audit lines — no new state.
     const floorSeatWire = useMemo(
         () => deriveSeatWireStates({
             runLog: deskSceneMessage?.debateRunLog,

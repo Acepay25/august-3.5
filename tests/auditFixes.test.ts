@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Batch 14 regression tests — audit fixes for landed batches.
 
-// ─── 14-1: Kelly accepts the journal's NEGATIVE loss magnitudes ────────────
+// ─── Kelly accepts the journal's NEGATIVE loss magnitudes ─────────────────
 
 import { kellyAdvisory } from '../utils/ticketSize';
 
@@ -20,7 +20,7 @@ describe('kellyAdvisory sign normalization', () => {
     });
 });
 
-// ─── 14-2: messages + google transports emit the P5 wire audit ─────────────
+// ─── messages + google transports emit the wire audit ─────────────────────
 
 // The transport builds real fetch calls — stub fetch so no network happens.
 // jsdom's location.hostname is 'localhost', which routes sendChatRequest
@@ -97,7 +97,7 @@ describe('wire audit on every transport', () => {
     });
 });
 
-// ─── 14-6: trade cap buckets by OPEN time; P&L stays close-time ────────────
+// ─── trade cap buckets by OPEN time; P&L stays close-time ─────────────────
 
 import { assessSession, DEFAULT_SESSION_GUARD, rowPnlUsd } from '../services/validation/SessionGuardService';
 import { TradeOutcome } from '../types/enums';
@@ -130,7 +130,7 @@ describe('open-time trade cap', () => {
     });
 });
 
-// ─── 14-7: rowPnlUsd converts leveraged percents through the margin ────────
+// ─── rowPnlUsd converts leveraged percents through the margin ─────────────
 
 describe('rowPnlUsd', () => {
     it('uses investmentAmount as the margin when present', () => {
@@ -147,7 +147,7 @@ describe('rowPnlUsd', () => {
     });
 });
 
-// ─── 14-8: guard config resolution (preset + overrides + clamps) ───────────
+// ─── guard config resolution (preset + overrides + clamps) ────────────────
 
 import { getSessionGuardConfig } from '../utils/harnessSettings';
 
@@ -176,5 +176,22 @@ describe('getSessionGuardConfig', () => {
     it('carries the harness risk percent for the autopilot conversion', () => {
         localStorage.setItem('harness_settings_v1', JSON.stringify({ riskPercent: 0.5 }));
         expect(getSessionGuardConfig().tradeRiskPercent).toBe(0.5);
+    });
+});
+
+import { getHarnessSettings } from '../utils/harnessSettings';
+
+describe('getHarnessSettings — unconfigured equity is 0, not a phantom $10,000', () => {
+    beforeEach(() => localStorage.clear());
+    it('reports 0 when nothing is stored', () => {
+        expect(getHarnessSettings().equityUsd).toBe(0);
+    });
+    it('reports 0 for junk (negative / NaN) stored values', () => {
+        localStorage.setItem('harness_settings_v1', JSON.stringify({ equityUsd: -5 }));
+        expect(getHarnessSettings().equityUsd).toBe(0);
+    });
+    it('keeps a configured positive equity', () => {
+        localStorage.setItem('harness_settings_v1', JSON.stringify({ equityUsd: 25_000 }));
+        expect(getHarnessSettings().equityUsd).toBe(25_000);
     });
 });

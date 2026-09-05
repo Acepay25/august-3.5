@@ -103,7 +103,7 @@ import { buildLevelCitations } from '../utils/levelEvidence';
 import { enforceUngroundedLevels } from '../utils/ungroundedGate';
 import { rescueSoftAvoid } from '../utils/avoidReason';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
-import { computeContractSize, gradeRiskTier, kellyAdvisory } from '../utils/ticketSize';
+import { computeContractSize, gradeRiskTier, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
 import { planAmendmentDiff } from '../utils/trustSurface';
 import { withFinComMetadata, flagBannedVocabulary } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
@@ -1885,6 +1885,12 @@ ${reflectionBlock}`
                         fraction: sized.fraction,
                         label: sized.label,
                     };
+                    // Visible failure: an unsized ticket because equity is
+                    // unconfigured must say so out loud, not just render a
+                    // smaller line. Automation runs stay quiet (no user).
+                    if (sized.reason === EQUITY_NOT_SET && !isAutomationRun) {
+                        toast.warning('Equity not set', 'Add your account equity in Settings → Risk to size trades.');
+                    }
                     finalAnalysis.sessionGuard = {
                         level: guardVerdict.level,
                         summary: guardVerdict.warnings.length > 0
