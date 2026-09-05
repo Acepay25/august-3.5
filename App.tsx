@@ -1375,6 +1375,17 @@ const App: React.FC = () => {
     const activeGroup = useMemo(() => (
         activeThread.kind === 'group' ? groups.find(g => g.id === activeThread.groupId) ?? null : null
     ), [activeThread, groups]);
+    // Stable handlers for the memoized GroupChatView — inline arrows here
+    // would defeat the memo on every App render.
+    const handleEditActiveGroup = useCallback(() => {
+        if (!activeGroup) return;
+        setGroupEditTarget(activeGroup);
+        setIsNewGroupOpen(true);
+    }, [activeGroup]);
+    const handleDeleteActiveGroup = useCallback(() => {
+        if (!activeGroup) return;
+        deleteGroup(activeGroup.id);
+    }, [activeGroup, deleteGroup]);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -2628,6 +2639,11 @@ const App: React.FC = () => {
         | null
     >(null);
 
+    const handleApprovalShow = useCallback((item: import('./utils/approvalInbox').ApprovalItem) => {
+        setHighlightedAnalysisId(item.messageId);
+        setIsApprovalInboxVisible(false);
+    }, []);
+
     const handleToggleWatch = useCallback((messageId: string, conversationId?: string | null) => {
         const convId = conversationId || activeConversationId;
         if (!convId) return;
@@ -3669,7 +3685,7 @@ const App: React.FC = () => {
         onFollowUpTicket: handleFollowUpTicket,
         onPreReadCommit: handlePreReadCommit,
         onForkDebate: handleForkDebate,
-        onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
+        onToggleWatch: handleToggleWatch,
         onReplacementChoice: handleReplacementChoice,
         // Per-seat controls: steer or bench one debate seat mid-run.
         onSteerSeat: handleSteerSeat,
@@ -3680,10 +3696,7 @@ const App: React.FC = () => {
         onApprovalDeny: approvalHandlers.deny,
         onApprovalAlways: approvalHandlers.always,
         onApprovalNever: approvalHandlers.never,
-        onApprovalShow: (item) => {
-            setHighlightedAnalysisId(item.messageId);
-            setIsApprovalInboxVisible(false);
-        },
+        onApprovalShow: handleApprovalShow,
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
@@ -3698,7 +3711,7 @@ const App: React.FC = () => {
             tradesToday: sessionGuard.tradesToday,
             maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
         } : undefined,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handlePreReadCommit, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handlePreReadCommit, handleForkDebate, handleToggleWatch, handleApprovalShow, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
         // The inline-approval surface reads these —
         // missing them froze cards on stale drafts/handlers.
         approvalItems, approvalHandlers, sessionGuard]);
@@ -4255,15 +4268,8 @@ const App: React.FC = () => {
                         onCancelRun={cancelGroupRun}
                         hybridEnabled={isHybridIntelligenceEnabled}
                         onToggleHybrid={toggleGroupHybrid}
-                        onEditGroup={() => {
-                            if (!activeGroup) return;
-                            setGroupEditTarget(activeGroup);
-                            setIsNewGroupOpen(true);
-                        }}
-                        onDeleteGroup={() => {
-                            if (!activeGroup) return;
-                            deleteGroup(activeGroup.id);
-                        }}
+                        onEditGroup={handleEditActiveGroup}
+                        onDeleteGroup={handleDeleteActiveGroup}
                     />
                 </React.Suspense>
             ) : (

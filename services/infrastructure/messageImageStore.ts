@@ -29,7 +29,32 @@ export interface StoredMessageImages {
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 // Session cache: saves one IDB round-trip per key on the rehydration path.
+// Bounded LRU — the values are base64 image payloads, so an unbounded Map
+// grew for the whole session (every image ever viewed stayed resident).
+// Map iteration order is insertion order, so re-inserting on read makes the
+// first key the least-recently-used one, evictable when the cap is passed.
+// Eviction only drops the in-memory mirror; the IndexedDB row is untouched.
+const SESSION_CACHE_CAP = 100;
 const sessionCache = new Map<string, string[] | null>();
+
+const cacheSet = (key: string, value: string[] | null): void => {
+  if (sessionCache.has(key)) sessionCache.delete(key);
+  sessionCache.set(key, value);
+  while (sessionCache.size > SESSION_CACHE_CAP) {
+    const oldest = sessionCache.keys().next().value;
+    if (oldest === undefined) break;
+    sessionCache.delete(oldest);
+  }
+};
+
+const cacheGet = (key: string): string[] | null | undefined => {
+  if (!sessionCache.has(key)) return undefined;
+  const value = sessionCache.get(key) ?? null;
+  // Re-insert so this key becomes the most-recently-used.
+  sessionCache.delete(key);
+  sessionCache.set(key, value);
+  return value;
+};
 
 const makeKey = (conversationId: string, messageId: string): string =>
   `${conversationId}${KEY_SEP}${messageId}`;
@@ -78,7 +103,7 @@ export const putMessageImages = async (
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-    sessionCache.set(key, images);
+    cacheSet(key, images);
     return true;
   } catch {
     return false;
@@ -95,7 +120,8 @@ export const getMessageImages = async (
 ): Promise<string[] | undefined> => {
   if (!conversationId || !messageId) return undefined;
   const key = makeKey(conversationId, messageId);
-  if (sessionCache.has(key)) return sessionCache.get(key) ?? undefined;
+  const cached = cacheGet(key);
+  if (cached !== undefined) return cached ?? undefined;
   try {
     const db = await openDb();
     const row = await new Promise<StoredMessageImages | undefined>((resolve) => {
@@ -105,7 +131,7 @@ export const getMessageImages = async (
       req.onerror = () => resolve(undefined);
     });
     const images = row?.images?.length ? row.images : undefined;
-    sessionCache.set(key, images ?? null);
+    cacheSet(key, images ?? null);
     return images;
   } catch {
     return undefined;
@@ -135,7 +161,7 @@ export const getConversationImages = async (
       if (!row?.images?.length) continue;
       const messageId = row.key.slice(conversationId.length + KEY_SEP.length);
       result[messageId] = row.images;
-      sessionCache.set(row.key, row.images);
+      cacheSet(row.key, row.images);
     }
     return result;
   } catch {

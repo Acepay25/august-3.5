@@ -52,6 +52,9 @@ class PriceAlertServiceClass {
     private subscribers: Set<AlertCallback> = new Set();
     private pollingInterval: ReturnType<typeof setInterval> | null = null;
     private wsReconnectAttempts = 0;
+    /** Last price accepted per symbol — identical consecutive ticks are
+     *  deduped (the Binance ticker repeats its close across frames). */
+    private lastTickPrices = new Map<string, number>();
     // Tracked so pause()/stopMonitoring() can cancel a pending reconnect —
     // an untracked timer would reopen the socket (and its monitoring loop)
     // after the user disabled alerts or backgrounded the app.
@@ -408,8 +411,7 @@ class PriceAlertServiceClass {
                     if (data.data && data.data.s && data.data.c) {
                         const symbol = data.data.s; // e.g., BTCUSDT
                         const price = parseFloat(data.data.c); // Current price
-                        this.prices.set(symbol, price);
-                        this.checkAlerts(symbol, price);
+                        this.acceptTick(symbol, price);
                     }
                 } catch (e) {
                     console.error('[PriceAlertService] WebSocket message error:', e);
@@ -422,7 +424,11 @@ class PriceAlertServiceClass {
 
             this.ws.onclose = () => {
                 console.log('[PriceAlertService] WebSocket closed');
-                // Attempt reconnect
+                // Attempt reconnect — but NEVER while paused: pause() closes
+                // the socket, and close() fires onclose asynchronously, so
+                // without this guard a backgrounded app re-spawns the socket
+                // (and the poll) five seconds later.
+                if (this.isPaused) return;
                 if ((this.alerts.size > 0 || this.trackedSymbols.size > 0) && this.wsReconnectAttempts < this.maxReconnectAttempts) {
                     this.wsReconnectAttempts++;
                     this.wsReconnectTimer = setTimeout(() => {
@@ -437,27 +443,50 @@ class PriceAlertServiceClass {
     }
 
     /**
-     * Start polling as fallback
+     * One price observation from any source (WS or poll). Dedupes identical
+     * ticks — Binance's ticker repeats the same close price across frames,
+     * and re-running alert checks + subscriber fan-out for an unchanged
+     * number is pure waste.
+     */
+    private acceptTick(symbol: string, price: number): void {
+        if (!Number.isFinite(price) || price <= 0) return;
+        if (this.lastTickPrices.get(symbol) === price) return;
+        this.lastTickPrices.set(symbol, price);
+        this.prices.set(symbol, price);
+        this.checkAlerts(symbol, price);
+    }
+
+    /**
+     * Start polling as fallback. The interval stays cheap while the
+     * WebSocket is healthy (it returns without fetching) and takes over the
+     * moment the socket drops — so the poll is a true fallback, not a
+     * parallel second feed. Symbols are fetched in ONE batched request
+     * instead of one sequential fetch per symbol.
      */
     private startPolling(): void {
         this.pollingInterval = setInterval(async () => {
+            if (this.isPaused) return;
+            // WS healthy → the socket is the feed; skip the poll entirely.
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
             const symbols = [...new Set([
                 ...Array.from(this.alerts.values()).map(a => a.symbol),
                 ...Array.from(this.trackedSymbols.keys()),
             ])];
+            if (symbols.length === 0) return;
 
-            for (const symbol of symbols) {
-                try {
-                    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
-                    const data = await response.json();
-                    if (data.price) {
-                        const price = parseFloat(data.price);
-                        this.prices.set(symbol, price);
-                        this.checkAlerts(symbol, price);
-                    }
-                } catch (e) {
-                    console.error(`[PriceAlertService] Polling error for ${symbol}:`, e);
+            try {
+                const query = symbols.map(s => `"${s}"`).join(',');
+                const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=[${query}]`);
+                if (!response.ok) return;
+                const data = await response.json();
+                const rows = Array.isArray(data) ? data : [data];
+                for (const row of rows) {
+                    const symbol = typeof row?.symbol === 'string' ? row.symbol : null;
+                    const price = typeof row?.price === 'string' ? parseFloat(row.price) : NaN;
+                    if (symbol && Number.isFinite(price)) this.acceptTick(symbol, price);
                 }
+            } catch (e) {
+                console.error(`[PriceAlertService] Batched poll error (${symbols.length} symbols):`, e);
             }
         }, 10000); // Poll every 10 seconds
     }
@@ -479,6 +508,9 @@ class PriceAlertServiceClass {
             this.wsReconnectTimer = null;
         }
         this.wsReconnectAttempts = 0;
+        // Forget the dedup memory: the next monitoring start must fan out its
+        // first tick even if the price never changed while we were stopped.
+        this.lastTickPrices.clear();
     }
 
     /**

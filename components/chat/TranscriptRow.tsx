@@ -89,7 +89,12 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
     // Ensemble reasoning is presented in the analyst progress/output card.
     // Do not duplicate it in the generic chat-level Thinking disclosure.
     const isEnsembleMessage = isEnsembleMessageOf(message);
-    const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
+    // Stable reference for the memoized DebateSidePanel — the ?? fallback
+    // would otherwise mint a fresh array on every render.
+    const debateTurns = React.useMemo(
+        () => message.debateTurns ?? message.postMortemDebateTurns ?? [],
+        [message.debateTurns, message.postMortemDebateTurns],
+    );
 
     // Debate floor: one thinking bubble per debater in the chat
     // area; the full transcript streams in the right-hand side panel.
@@ -100,6 +105,14 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
         (): DebateStageActor[] => stageActorsForMessage(message),
         [message],
     );
+    // Stable props for the memoized DebateSidePanel: fresh arrows/arrays per
+    // render would defeat the memo on every stream chunk.
+    const closeDebatePanel = React.useCallback(() => setDebatePanelActor(null), []);
+    const selectDebateActor = React.useCallback((id: string) => setDebatePanelActor(id), []);
+    const debateActorIds = React.useMemo(() => stageActors.map(a => a.id), [stageActors]);
+    const chooseReplacement = React.useCallback((providerId: string | null) => {
+        onReplacementChoice?.(message.id, providerId);
+    }, [onReplacementChoice, message.id]);
 
     // Live phase line for the floor caption — "Round 2 · Rebuttal rounds" —
     // so the watcher always knows where in the protocol the debate is.
@@ -261,11 +274,11 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                     )}
                                     <DebateSidePanel
                                         open={debatePanelActor !== null}
-                                        onClose={() => setDebatePanelActor(null)}
+                                        onClose={closeDebatePanel}
                                         turns={debateTurns}
-                                        actorIds={stageActors.map(a => a.id)}
+                                        actorIds={debateActorIds}
                                         activeActor={debatePanelActor}
-                                        onSelectActor={id => setDebatePanelActor(id)}
+                                        onSelectActor={selectDebateActor}
                                         isLive={Boolean(message.isDebating)}
                                         liveToolEvents={message.liveToolEvents}
                                         reasoningProcesses={message.reasoningProcesses}
@@ -274,9 +287,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                         messageId={message.id}
                                         onForkDebate={onForkDebate}
                                         replacementOffer={message.replacementOffer}
-                                        onReplacementChoice={onReplacementChoice
-                                            ? providerId => onReplacementChoice(message.id, providerId)
-                                            : undefined}
+                                        onReplacementChoice={onReplacementChoice ? chooseReplacement : undefined}
                                     />
                                 </div>
                             )}

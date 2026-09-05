@@ -165,8 +165,13 @@ class VetoLedgerServiceClass {
      * Evaluate all pending vetoes against current prices; expire stale ones.
      * Returns how many entries transitioned state (settled) this pass. MFE
      * updates are in-memory only and do not count as a transition.
+     *
+     * `tick` (symbol + price) is the price-feed hint: when a tick caused
+     * this pass, only that symbol's records need the price math — every
+     * other pending record is untouched by a BTC tick. Expiry is still
+     * swept for all records (a symbol that never ticks must still expire).
      */
-    async evaluateVetoes(username: string): Promise<number> {
+    async evaluateVetoes(username: string, tick?: { symbol: string; price: number }): Promise<number> {
         const list = await this.loadList(username);
         let changed = 0;
         // MFE is a running max kept for diagnostics — persisting it on every
@@ -188,7 +193,12 @@ class VetoLedgerServiceClass {
                 settledNow.push(rec.symbol);
                 return { ...rec, outcome: 'EXPIRED' as VetoOutcome, settledAt: new Date().toISOString() };
             }
-            const price = PriceAlertService.getCurrentPrice(rec.symbol);
+            // A tick for another symbol cannot change THIS record's price
+            // state — skip the price math (the dominant per-tick cost) for it.
+            if (tick && tick.symbol !== rec.symbol) return rec;
+            const price = tick && tick.symbol === rec.symbol
+                ? tick.price
+                : PriceAlertService.getCurrentPrice(rec.symbol);
             if (price == null || !isFinite(price) || price <= 0) return rec;
 
             // Track favorable excursion for diagnostics (in-memory only).
@@ -286,10 +296,16 @@ class VetoLedgerServiceClass {
     private ensureFeed(): void {
         if (this.unsubscribePrices) return;
         this.releaseMonitor = PriceAlertService.acquireMonitor();
-        this.unsubscribePrices = PriceAlertService.subscribePrices(() => {
-            // Tick-driven evaluation is debounced through the microtask queue;
-            // actual state changes only happen inside evaluateVetoes.
-            void this.evaluateVetoes(this.currentUsername ?? 'default');
+        this.unsubscribePrices = PriceAlertService.subscribePrices((symbol, price) => {
+            // Pass the tick through when the feed gave us a usable
+            // (symbol, price) pair: evaluateVetoes then only runs the price
+            // math for records on THIS symbol instead of re-scanning every
+            // pending record. Without a usable pair, fall back to the full
+            // scan.
+            const tick = typeof symbol === 'string' && Number.isFinite(price)
+                ? { symbol, price }
+                : undefined;
+            void this.evaluateVetoes(this.currentUsername ?? 'default', tick);
         });
     }
 

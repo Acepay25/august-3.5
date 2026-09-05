@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { Bookmark } from 'lucide-react';
 import { AIProvider, LoggedTrade, TradeOutcome, TradeSummary } from '../../types';
@@ -375,10 +375,13 @@ const TradeDetailView: React.FC<{
 /**
  * Compact list row — clicking it NAVIGATES to the full trade detail screen
  * (with its own Back button) instead of expanding inline.
+ * Memoized: the journal can hold hundreds of rows and the list re-renders on
+ * every selection/filter change. The open-detail handler takes the id so its
+ * identity stays stable across parent renders.
  */
-const TradeLogRow: React.FC<{
+const TradeLogRowImpl: React.FC<{
     trade: LoggedTrade;
-    onOpenDetail: () => void;
+    onOpenDetail: (id: string) => void;
     isSelected: boolean;
     onSelect: (id: string) => void;
     isInsight: boolean;
@@ -406,7 +409,7 @@ const TradeLogRow: React.FC<{
                     className="form-checkbox h-4 w-4 bg-zinc-950 border-zinc-600 text-zinc-300 rounded focus:ring-zinc-500 cursor-pointer"
                 />
             </div>
-            <button type="button" onClick={onOpenDetail} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+            <button type="button" onClick={() => onOpenDetail(trade.id)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
                 <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
@@ -424,6 +427,8 @@ const TradeLogRow: React.FC<{
         </div>
     );
 };
+
+const TradeLogRow = React.memo(TradeLogRowImpl);
 
 const PatternMemoryDetailView: React.FC<{
     markdown: string;
@@ -570,11 +575,15 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
         );
     }
 
-    const handleSelect = (id: string) => {
+    const handleSelect = useCallback((id: string) => {
         setSelectedIds(prev =>
             prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
         );
-    };
+    }, []);
+
+    // Stable detail-open handler for the memoized row — an inline arrow per
+    // row would rebuild on every render and defeat React.memo.
+    const openDetailForTrade = useCallback((id: string) => setDetailTradeId(id), []);
 
     const handleSelectActiveInsights = () => {
         const validIds = currentInsightIds.filter(id => trades.some(t => t.id === id));
@@ -752,7 +761,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                                 <div className="border-b border-zinc-800 last:border-b-0">
                                     <TradeLogRow
                                         trade={trade}
-                                        onOpenDetail={() => setDetailTradeId(trade.id)}
+                                        onOpenDetail={openDetailForTrade}
                                         isSelected={selectedIds.includes(trade.id)}
                                         onSelect={handleSelect}
                                         isInsight={currentInsightIds.includes(trade.id)}

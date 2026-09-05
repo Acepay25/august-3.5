@@ -190,6 +190,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             ['@Macro', '@Technical', '@Risk'][i] ?? `@Seat${i + 1}`,
         ).filter(Boolean) as string[];
     }, [isEnsembleEnabled, lensConfig.enabled, ensembleModelSelection, botMentionNames]);
+    // The keydown effect below reads the composer text only inside
+    // handleTrySkill. Mirroring it through a ref keeps `input` out of the
+    // deps — otherwise every keystroke tore down and re-registered all
+    // three document listeners.
+    const composerTextRef = React.useRef('');
+    composerTextRef.current = input;
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
@@ -213,8 +219,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
             if (!slug) return;
             const marker = `/${slug}`;
-            if (!input.includes(marker)) {
-                setInput(`${marker} ${parseComposerIntent(input).rest}`.trim());
+            const current = composerTextRef.current;
+            if (!current.includes(marker)) {
+                setInput(`${marker} ${parseComposerIntent(current).rest}`.trim());
             }
             document.getElementById('chat-composer')?.focus();
         };
@@ -224,7 +231,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             document.removeEventListener('keydown', handleSlash);
             document.removeEventListener('august:try-skill', handleTrySkill);
         };
-    }, [isAnalysisInProgress, handleCancelAnalysis, mentionOpen, setInput, input]);
+    }, [isAnalysisInProgress, handleCancelAnalysis, mentionOpen, setInput]);
     React.useEffect(() => {
         if (isAnalysisInProgress) setMentionOpen(false);
         else if (input.includes('@') && mentionCandidates.length > 0) setMentionOpen(true);

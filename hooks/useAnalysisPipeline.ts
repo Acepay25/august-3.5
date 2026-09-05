@@ -2311,20 +2311,20 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     // the re-indexed `results` array): if an analyst at index 0
                     // fails, results[0] would be provider #1's data labeled as
                     // provider #0. Same bug class as the earlier thoughtMap fix.
-                    // Runs off the main thread via a Web Worker (with a
+                    // Runs off the main thread via a Web Worker pool (with a
                     // synchronous fallback) so 1000 simulations per analyst
-                    // never block the debate UI.
-                    for (const [index, settled] of settledResults.entries()) {
-                        if (!isCurrentRequest()) assertCurrentRequest();
-                        if (settled.status !== 'fulfilled') continue; // failed analyst has no analysis
+                    // never block the debate UI. The seats are dispatched
+                    // concurrently — a single worker would serialize them —
+                    // and collected in settled-result order, so the labels
+                    // stay index-aligned exactly as the serial loop had them.
+                    const mcTasks = settledResults.map(async (settled, index): Promise<LabeledMonteCarloResult | null> => {
+                        if (settled.status !== 'fulfilled') return null; // failed analyst has no analysis
                         const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
                         const analysis = settled.value?.analysis;
 
-                        devLog(`[PerAI-MonteCarlo] Checking ${providerName}...`);
-
                         if (!analysis) {
                                 console.warn(`[PerAI-MonteCarlo] ${providerName} - Missing analysis object`);
-                                continue;
+                                return null;
                         }
 
                         // Validate specific fields
@@ -2332,36 +2332,38 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         const hasSL = !!analysis.stopLoss;
                         const hasTP = analysis.takeProfit && analysis.takeProfit.length > 0;
 
-                        if (hasEntry && hasSL && hasTP) {
-                                try {
-                                    const mcResult = await runMonteCarloForSetupAsync({
-                                        direction: analysis.direction,
-                                        entryPoints: analysis.entryPoints,
-                                        stopLoss: analysis.stopLoss,
-                                        takeProfit: analysis.takeProfit
-                                    }, hybridDataForMC);
-
-                                    if (!isCurrentRequest()) assertCurrentRequest();
-                                    if (mcResult) {
-                                        perAIMC.push({
-                                            provider: providerName,
-                                            result: mcResult,
-                                            isModeratorFinal: false
-                                        });
-                                        devLog(`[PerAI-MonteCarlo] ${providerName}: Success (WinRate=${mcResult.winRate}%)`);
-                                    }
-                                } catch (err) {
-                                    // A user cancel must abort the whole run, not
-                                    // just this simulation — swallowing it wrote
-                                    // partial post-cancel state (per-AI results +
-                                    // an isDebating placeholder) before the debate
-                                    // loop noticed the aborted signal.
-                                    if ((err as { name?: string })?.name === 'AbortError') throw err;
-                                    console.error(`[PerAI-MonteCarlo] ${providerName} failed execution:`, err);
-                                }
-                        } else {
+                        if (!(hasEntry && hasSL && hasTP)) {
                                 console.warn(`[PerAI-MonteCarlo] ${providerName} - Skipped (Missing components: Entry=${hasEntry}, SL=${hasSL}, TP=${hasTP})`);
+                                return null;
                         }
+                        try {
+                            const mcResult = await runMonteCarloForSetupAsync({
+                                direction: analysis.direction,
+                                entryPoints: analysis.entryPoints,
+                                stopLoss: analysis.stopLoss,
+                                takeProfit: analysis.takeProfit
+                            }, hybridDataForMC);
+                            if (mcResult) {
+                                devLog(`[PerAI-MonteCarlo] ${providerName}: Success (WinRate=${mcResult.winRate}%)`);
+                                return { provider: providerName, result: mcResult, isModeratorFinal: false };
+                            }
+                            return null;
+                        } catch (err) {
+                            // A user cancel must abort the whole run, not
+                            // just this simulation — swallowing it wrote
+                            // partial post-cancel state (per-AI results +
+                            // an isDebating placeholder) before the debate
+                            // loop noticed the aborted signal.
+                            if ((err as { name?: string })?.name === 'AbortError') throw err;
+                            console.error(`[PerAI-MonteCarlo] ${providerName} failed execution:`, err);
+                            return null;
+                        }
+                    });
+                    const mcSettled = await Promise.allSettled(mcTasks);
+                    if (!isCurrentRequest()) assertCurrentRequest();
+                    for (const s of mcSettled) {
+                        if (s.status === 'rejected') throw s.reason; // cancels propagate
+                        if (s.value) perAIMC.push(s.value);
                     }
 
                     // Store per-AI Monte Carlo results

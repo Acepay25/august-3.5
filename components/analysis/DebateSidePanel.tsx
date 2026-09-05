@@ -480,7 +480,7 @@ const ToolEventFeed: React.FC<{ events?: Record<string, string> }> = ({ events }
 
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
-export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
+const DebateSidePanelImpl: React.FC<DebateSidePanelProps> = ({
     open,
     onClose,
     turns,
@@ -998,5 +998,12 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
         </div>
     );
 };
+
+/**
+ * Memoized: the transcript re-renders on every stream chunk and price tick.
+ * The panel only needs to repaint when its own inputs move — call sites pass
+ * stable handlers/arrays (see MessageItem/TranscriptRow) so the memo holds.
+ */
+export const DebateSidePanel = React.memo(DebateSidePanelImpl);
 
 export default DebateSidePanel;

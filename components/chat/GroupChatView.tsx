@@ -63,7 +63,7 @@ const ACTIVITY_ICON: Record<GroupActivityEntry['kind'], string> = {
     passed: '○',
 };
 
-export const GroupChatView: React.FC<GroupChatViewProps> = ({
+const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
     group,
     bots,
     messages,
@@ -408,5 +408,9 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
         </div>
     );
 };
+
+// Memoized: the room re-renders on every price tick and activity change,
+// but the transcript only needs to repaint when its own props move.
+export const GroupChatView = React.memo(GroupChatViewImpl);
 
 export default GroupChatView;

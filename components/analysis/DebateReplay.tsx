@@ -58,9 +58,13 @@ const DebateReplay: React.FC<DebateReplayProps> = ({ turns, onClose }) => {
         return () => window.clearInterval(timer);
     }, [cursor, shown, speed, playable, done]);
 
+    // `done` is deliberately NOT a dep: the only way it flips false is
+    // restart(), which also resets cursor to 0 — and that change re-runs
+    // this effect with a fresh closure anyway. Keeping `done` out avoids a
+    // redundant effect pass on every settle.
     useEffect(() => {
         if (cursor >= playable.length && !done) setDone(true);
-    }, [cursor, playable.length, done]);
+    }, [cursor, playable.length]);
 
     useEffect(() => {
         // jsdom has no Element.scrollTo — assign scrollTop so the first
