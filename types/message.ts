@@ -285,6 +285,12 @@ export interface Message {
   /** G2: a room turn that resolved to "(pass)" — the row exists for thread
    *  attribution but renders nowhere (silence is a first-class outcome). */
   hidden?: boolean;
+  /** The group ROOM this row belongs to (AgentGroup.id). Stamped by the room
+   *  runner on every message it writes so a room's transcript is scoped by
+   *  identity, not just by provider+model — recreating a group with the same
+   *  bots starts an EMPTY room instead of re-claiming the old one. Absent on
+   *  1:1/DM/ensemble rows (they never carry a room). */
+  roomId?: string;
   /** Notebook files / skills retrieved for this run (inspectable on the card). */
   memoryRetrieved?: Array<{ path: string; kind: string }>;
   /** Verdict evidence pack: the journal evidence assembled for

@@ -144,8 +144,8 @@ describe('AgentRosterRail (bots + groups)', () => {
 
     it('shows the group preview from the group slice (member replies, You: prefix on prompts)', () => {
         const messages: Message[] = [
-            msg({ role: MessageRole.USER, text: 'analyze btc' }),
-            msg({ role: MessageRole.AI, text: 'Trend is up.', modelsUsed: { p1: 'model-a' } }),
+            msg({ role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
+            msg({ role: MessageRole.AI, text: 'Trend is up.', modelsUsed: { p1: 'model-a' }, roomId: 'g1' }),
         ];
         render(
             <AgentRosterRail

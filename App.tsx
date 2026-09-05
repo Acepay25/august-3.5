@@ -95,7 +95,7 @@ import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
 import {
-    getBots, getGroups, saveBot, saveGroup, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
+    getBots, getGroups, saveBot, saveGroup, updateBot, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
     groupDisplayName, newId,
     type AgentBot, type AgentGroup,
 } from './services/agents/agentRoster';
@@ -1215,14 +1215,25 @@ const App: React.FC = () => {
             setIsEnsembleEnabled(false);
         }
     }, [setSelectedChatModel, setIsEnsembleEnabled]);
-    const createGroup = useCallback((memberIds: string[]) => {
+    const createGroup = useCallback((memberIds: string[], memberRoles: Record<string, AnalystRole> = {}) => {
         const group: AgentGroup = { id: `grp-${Date.now()}`, memberIds, createdAt: new Date().toISOString() };
+        // Group Settings role picks ride the bots themselves (the persona
+        // follows the bot into every room turn and the ensemble pipeline).
+        // UNASSIGNED is stored as absent — an explicit "General" pick must
+        // behave exactly like a bot that never had a role.
+        for (const [botId, role] of Object.entries(memberRoles)) {
+            updateBot(botId, { role: role === AnalystRole.UNASSIGNED ? undefined : role });
+        }
         saveGroup(group);
         setActiveThread({ kind: 'group', groupId: group.id });
     }, []);
     // R4: the group header gear reuses the New Group dialog as an editor —
-    // the Create button becomes Save (update-membership) instead.
-    const updateGroupMembers = useCallback((groupId: string, memberIds: string[]) => {
+    // the Create button becomes Save (update-membership + member roles)
+    // instead.
+    const updateGroupMembers = useCallback((groupId: string, memberIds: string[], memberRoles: Record<string, AnalystRole> = {}) => {
+        for (const [botId, role] of Object.entries(memberRoles)) {
+            updateBot(botId, { role: role === AnalystRole.UNASSIGNED ? undefined : role });
+        }
         updateGroup(groupId, { memberIds });
     }, []);
     // Deleting a bot pulls it from its groups (agentRoster.removeBot);

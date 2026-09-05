@@ -74,9 +74,9 @@ describe('GroupChatView (room UX)', () => {
     it('Reply in thread opens an inline composer and sends via onReplyInThread', () => {
         const onReplyInThread = vi.fn();
         const messages: Message[] = [
-            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc' }),
-            msg({ id: 'm2', role: MessageRole.AI, text: 'Trend is up.', modelsUsed: { p1: 'model-a' } }),
-            msg({ id: 'm3', role: MessageRole.AI, text: 'Funding cooling.', modelsUsed: { p1: 'model-b' } }),
+            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
+            msg({ id: 'm2', role: MessageRole.AI, text: 'Trend is up.', modelsUsed: { p1: 'model-a' }, roomId: 'g1' }),
+            msg({ id: 'm3', role: MessageRole.AI, text: 'Funding cooling.', modelsUsed: { p1: 'model-b' }, roomId: 'g1' }),
         ];
         render(<GroupChatView {...base} messages={messages} onReplyInThread={onReplyInThread} />);
         fireEvent.click(screen.getByTestId('reply-link-m1'));
@@ -90,7 +90,7 @@ describe('GroupChatView (room UX)', () => {
 
     it('the working indicator line renders while a member runs', () => {
         const messages: Message[] = [
-            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc' }),
+            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
         ];
         render(<GroupChatView {...base} messages={messages} workingBotId="b1" isRunning />);
         expect(screen.getByTestId('group-thinking').textContent).toContain('Scout is thinking');
@@ -115,7 +115,7 @@ describe('GroupChatView (room UX)', () => {
     it('with a thread in flight, an inline Stop sits next to the thinking line', () => {
         const onCancelRun = vi.fn();
         const messages: Message[] = [
-            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc' }),
+            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
         ];
         render(<GroupChatView {...base} messages={messages} workingBotId="b1" isRunning onCancelRun={onCancelRun} />);
         expect(screen.getByTestId('group-thinking').textContent).toContain('Scout is thinking');
@@ -152,8 +152,8 @@ describe('GroupChatView (room UX)', () => {
 
     it('member replies render markdown (bold survives as a <strong>) with a hover copy button', { timeout: 30_000 }, async () => {
         const messages: Message[] = [
-            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc' }),
-            msg({ id: 'm2', role: MessageRole.AI, text: '**Spot:** $77,648 · below the 7d mean', modelsUsed: { p1: 'model-a' } }),
+            msg({ id: 'm1', role: MessageRole.USER, text: 'analyze btc', roomId: 'g1' }),
+            msg({ id: 'm2', role: MessageRole.AI, text: '**Spot:** $77,648 · below the 7d mean', modelsUsed: { p1: 'model-a' }, roomId: 'g1' }),
         ];
         const { container } = render(<GroupChatView {...base} messages={messages} />);
         expect(screen.getByTestId('group-copy-m2')).toBeTruthy();

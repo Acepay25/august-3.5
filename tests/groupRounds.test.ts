@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AgentBot } from '../services/agents/agentRoster';
+import { AnalystRole } from '../types/enums';
 import {
     PASS_TOKEN,
     ROOM_HUMAN_LABEL,
@@ -98,5 +99,20 @@ describe('room protocol', () => {
         expect(a).toContain('P');
         expect(a).toContain('## Your private notes');
         expect(a).toContain('## Group room');
+    });
+
+    it('a member with a debate role carries that persona into the room turn', () => {
+        const roled = bot({ id: 'b9', name: 'Macro Bot', role: AnalystRole.TECHNICAL_ANALYST });
+        const prompt = buildRoomSystemPrompt(roled, { persona: null, notes: null, members: [roled] });
+        expect(prompt).toContain('## Your role');
+        // The built-in Technical Analyst prompt prefix lands in the section.
+        expect(prompt).toContain('## Group room');
+    });
+
+    it('an unroled member gets no role section (plain identity + room protocol)', () => {
+        const plain = bot({ id: 'b8', name: 'Plain' });
+        const prompt = buildRoomSystemPrompt(plain, { persona: null, notes: null, members: [plain] });
+        expect(prompt).not.toContain('## Your role');
+        expect(prompt).toContain('You are Plain');
     });
 });

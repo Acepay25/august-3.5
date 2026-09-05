@@ -5,6 +5,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { NewBotDialog } from '../components/chat/NewBotDialog';
 import { NewGroupDialog } from '../components/chat/NewGroupDialog';
 import { AgentBot, AgentGroup } from '../services/agents/agentRoster';
+import { AnalystRole } from '../types/enums';
 import { ProviderConfig } from '../types/provider';
 
 afterEach(cleanup);
@@ -87,7 +88,35 @@ describe('NewGroupDialog — edit mode (R4 gear)', () => {
         fireEvent.click(screen.getByTestId('group-member-b3'));
         expect(save.disabled).toBe(false);
         fireEvent.click(save);
-        expect(onUpdate).toHaveBeenCalledWith('g1', ['b1', 'b2', 'b3']);
+        expect(onUpdate).toHaveBeenCalledWith('g1', ['b1', 'b2', 'b3'], {});
+    });
+
+    it('a member role change enables Save and rides onUpdate as a botId→role patch', () => {
+        const onUpdate = vi.fn();
+        render(<NewGroupDialog {...base} initialGroup={grp} onUpdate={onUpdate} />);
+        const save = screen.getByTestId('create-group') as HTMLButtonElement;
+        // Membership untouched → role picker visible for checked members.
+        expect(screen.getByTestId('group-role-row-b1')).toBeTruthy();
+        expect(save.disabled).toBe(true);
+        fireEvent.click(screen.getByTestId('group-role-b1'));
+        fireEvent.click(screen.getByText('Risk'));
+        expect(save.disabled).toBe(false);
+        fireEvent.click(save);
+        expect(onUpdate).toHaveBeenCalledWith('g1', ['b1', 'b2'], { b1: 'risk_execution' });
+    });
+
+    it('create mode reports only the roles that differ from the bots’ stored persona', () => {
+        const onCreate = vi.fn();
+        const roled = [
+            bot({ id: 'b1', name: 'Scout', role: AnalystRole.RISK_EXECUTION }),
+            bot({ id: 'b2', name: 'Ledger' }),
+        ];
+        render(<NewGroupDialog open onClose={() => {}} onCreate={onCreate} bots={roled} />);
+        fireEvent.click(screen.getByTestId('group-member-b1'));
+        fireEvent.click(screen.getByTestId('group-member-b2'));
+        // b1 already carries Risk — leaving it untouched is not a change.
+        fireEvent.click(screen.getByTestId('create-group'));
+        expect(onCreate).toHaveBeenCalledWith(['b1', 'b2'], {});
     });
 
     it('without edit props it stays the plain create dialog', () => {
