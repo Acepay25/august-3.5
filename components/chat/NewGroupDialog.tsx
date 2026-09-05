@@ -13,7 +13,7 @@ import { SelectMenu } from '../shared/SelectMenu';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { AnalystRole } from '../../types/enums';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
-import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
+import { findBotById, type AgentBot, type AgentGroup } from '../../services/agents/agentRoster';
 
 /** Role options for a member's debate persona (UNASSIGNED = general default). */
 const MEMBER_ROLE_OPTIONS: { value: AnalystRole; label: string }[] = [
@@ -35,7 +35,7 @@ export const roleChangesFor = (
 ): Record<string, AnalystRole> => {
     const out: Record<string, AnalystRole> = {};
     for (const id of selected) {
-        const bot = bots.find(b => b.id === id);
+        const bot = findBotById(bots, id);
         if (!bot) continue;
         const next = roles[id] ?? AnalystRole.UNASSIGNED;
         if (memberRoleOf(bot) !== next) out[id] = next;
@@ -86,7 +86,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
             next.delete(id);
         } else {
             next.add(id);
-            const bot = bots.find(b => b.id === id);
+            const bot = findBotById(bots, id);
             if (bot) setRoles(prev => ({ ...prev, [id]: memberRoleOf(bot) }));
         }
         setSelected(next);

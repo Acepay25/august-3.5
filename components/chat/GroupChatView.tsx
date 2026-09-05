@@ -13,7 +13,7 @@ import React from 'react';
 import { Settings, Trash2, Square, Copy, Check, Activity as ActivityIcon } from 'lucide-react';
 import { BotAvatar } from './BotAvatar';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
-import { groupDisplayName } from '../../services/agents/agentRoster';
+import { findBotById, groupDisplayName } from '../../services/agents/agentRoster';
 import type { GroupActivityEntry } from '../../hooks/useAgentGroups';
 import { GroupThread, splitGroupThreads, threadForGroup } from '../../utils/agentThreads';
 import { MessageRole } from '../../types/enums';
@@ -86,7 +86,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const members = React.useMemo(
         () => group.memberIds
-            .map(id => bots.find(b => b.id === id))
+            .map(id => findBotById(bots, id))
             .filter((b): b is AgentBot => Boolean(b)),
         [group.memberIds, bots],
     );

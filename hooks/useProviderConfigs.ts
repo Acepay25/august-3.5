@@ -16,6 +16,7 @@ import {
     updateModelInProvider,
     getReadyProviders,
 } from '../services/infrastructure/ProviderConfigService';
+import { findProviderById } from '../utils/providerUtils';
 
 export function useProviderConfigs() {
     const [configs, setConfigs] = useState<ProviderConfig[]>([]);
@@ -90,9 +91,7 @@ export function useProviderConfigs() {
     const readyProviders = useMemo(() => getReadyProviders(configs), [configs]);
 
     // Get a specific provider config by ID
-    const getProviderById = useCallback((id: string) => {
-        return configs.find(c => c.id === id);
-    }, [configs]);
+    const getProviderById = useCallback((id: string) => findProviderById(configs, id), [configs]);
 
     return {
         configs,

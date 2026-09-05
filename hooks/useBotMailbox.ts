@@ -12,6 +12,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { AgentBot } from '../services/agents/agentRoster';
+import { findProviderById } from '../utils/providerUtils';
 import type { ProviderConfig } from '../types/provider';
 import type { Message } from '../types';
 import { MessageRole } from '../types/enums';
@@ -65,7 +66,7 @@ export interface UseBotMailboxResult {
 }
 
 const isProviderReadyFor = (configs: ProviderConfig[], providerId: string, modelId: string): boolean => {
-    const p = configs.find(c => c.id === providerId);
+    const p = findProviderById(configs, providerId);
     return !!p && p.isEnabled && p.apiKey.trim().length > 0 && p.models.includes(modelId);
 };
 

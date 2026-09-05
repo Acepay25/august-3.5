@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatModelDisplayName, formatSeatLabel, isFreeModelId, sortModelsFreeFirst, mergeDiscoveredModels, resolveModelLabel } from '../utils/providerUtils';
+import { formatModelDisplayName, formatSeatLabel, isFreeModelId, sortModelsFreeFirst, mergeDiscoveredModels, resolveModelLabel, findProviderById } from '../utils/providerUtils';
 
 describe('formatModelDisplayName', () => {
     it('turns slugs into readable labels', () => {
@@ -57,5 +57,16 @@ describe('sortModelsFreeFirst / mergeDiscoveredModels', () => {
             'paid-model',
             'custom-local',
         ]);
+    });
+});
+
+describe('findProviderById', () => {
+    it('finds a provider by id or returns undefined', () => {
+        const configs = [
+            { id: 'p1', name: 'OpenAI' },
+            { id: 'p2', name: 'Anthropic' },
+        ] as any;
+        expect(findProviderById(configs, 'p2')).toBe(configs[1]);
+        expect(findProviderById(configs, 'unknown')).toBeUndefined();
     });
 });

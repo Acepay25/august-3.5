@@ -14,7 +14,7 @@ import React from 'react';
 import { Trash2, SlidersHorizontal, Bot as BotIcon, Users, Swords, GraduationCap, ChevronDown, Repeat } from 'lucide-react';
 import { BotAvatar, PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
-import { groupDisplayName } from '../../services/agents/agentRoster';
+import { findBotById, groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
 import { nextCronTime, humanizeCron } from '../../services/automation/cronParser';
 import { MessageRole } from '../../types/enums';
@@ -212,7 +212,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
             ? groups.filter(g =>
                 groupDisplayName(g, bots).toLowerCase().includes(q)
                 || threadMatchesQuery(threadForGroup(messages, g.memberIds
-                    .map(id => bots.find(b => b.id === id))
+                    .map(id => findBotById(bots, id))
                     .filter((b): b is AgentBot => Boolean(b))
                     .map(m => ({ providerId: m.providerId, modelId: m.modelId })), g.id)))
             : groups),
@@ -300,7 +300,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                 <div className="status-surface px-3 pb-2" data-testid="active-now">
                     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-200">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                        {bots.find(b => b.id === workingBotId)?.name ?? 'Bot'} is working
+                        {findBotById(bots, workingBotId)?.name ?? 'Bot'} is working
                     </span>
                 </div>
             )}
@@ -344,7 +344,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                     {/* Groups — stacked avatars */}
                     {visibleGroups.map(g => {
                         const members = g.memberIds
-                            .map(id => bots.find(b => b.id === id))
+                            .map(id => findBotById(bots, id))
                             .filter((b): b is AgentBot => Boolean(b));
                         const slice = threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId })), g.id);
                         const last = lastOf(slice);

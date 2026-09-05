@@ -17,6 +17,7 @@ import { ProviderConfig } from '../types/provider';
 import { formatModelDisplayName } from './providerUtils';
 import { avatarRoleForName, type RolePreset } from '../components/desk/pixelAvatars';
 import type { AgentTeam } from '../services/agents/agentRoster';
+import { findProviderById } from './providerUtils';
 
 /** The debate engine rejects fewer than 2 analysts. Teams seat 2–5 on the
  * flat floor; 6–10 run as LENS PODS — three pods whose
@@ -96,7 +97,7 @@ export const buildTeamRoster = (
  *  the rail. Seat N on one provider reads "Kilocode · model #N". */
 export const teamSlots = (team: AgentTeam, providers: ProviderConfig[]): TeamSlot[] =>
     (team.seats || []).slice(0, TEAM_MAX_SEATS).map((seat, index) => {
-        const provider = providers.find(p => p.id === seat.providerId);
+        const provider = findProviderById(providers, seat.providerId);
         const label = provider?.name || formatModelDisplayName(seat.modelId);
         return {
             initial: `${index + 1}`,
