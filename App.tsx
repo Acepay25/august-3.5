@@ -14,6 +14,7 @@ import { subscribeMemoryFilesChanged, syncPatternMemory } from './services/learn
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { useUserProfileLoader } from './hooks/useUserProfileLoader';
 import { useTradeJournalActions } from './hooks/useTradeJournalActions';
+import { useProfilePersistence } from './hooks/useProfilePersistence';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -1488,175 +1489,23 @@ const App: React.FC = () => {
     // (Ctrl+N + "/" handler lives next to handleNewConversation below.)
 
 
-    // ─── Save-on-unload flush ──────────────────────────────────────
-    // The debounced saves below lose data if the tab closes mid-window.
-    // This ref tracks the last successfully persisted snapshot so the
-    // useSaveOnUnload hook can skip IO when nothing has changed.
-    const lastSavedSnapshotRef = useRef<Partial<Omit<UserProfile, 'username'>> | null>(null);
-    const buildProfileSnapshot = useCallback((): Partial<Omit<UserProfile, 'username'>> => ({
-        conversations: conversationHistory,
-        tradeLog: loggedTrades,
-        savedAnalyses: savedAnalyses,
-        tradeSummaries: tradeSummaries,
-        finalTradeSummary: finalTradeSummary,
-        globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
-        lastActiveConversationId: activeConversationId || undefined,
-        // AI Learning data
-        insightKnowledgeBase: insightKnowledgeBase,
-        // Learning rules used to live ONLY in WebView localStorage — they were
-        // excluded from SQLite, backups and migrations, so a WebView data
-        // clear silently destroyed them. Snapshotting them here populates the
-        // users.learningRules column and BackupService payload.
-        learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
-
-    // ─── Split save into DATA (heavy) + SETTINGS (light) ───────────
-    // Previously a single effect re-serialized ALL conversations (with base64
-    // images) + ALL trades on ANY of 22 dependency changes, including trivial
-    // settings toggles. Now:
-    //   - The DATA effect only re-serializes when conversations/trades/
-    //     summaries/memory actually change (the heavy payload).
-    //   - The SETTINGS effect handles cheap settings toggles (activeFrameworks,
-    //     summaryCharLimit, etc.) with the same 1500ms debounce but a much
-    //     smaller payload (no base64 images, no trade log).
-    // Both write to the same profile; dbService merges them. The net effect:
-    // toggling a settings checkbox no longer triggers a multi-MB re-serialize.
-
-    // (1) DATA save — heavy payload, only on real data changes.
-    useEffect(() => {
-        if (!activeUsername) return;
-
-        // Bail out when already SAVING — this effect re-arms on EVERY stream
-        // chunk, and a state write to the same value would still schedule a
-        // full App render each time (setSaveStatus was a raw setter).
-        setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
-
-        const handler = setTimeout(async () => {
-            try {
-                // buildProfileSnapshot deliberately stays OUT of this effect's
-                // deps (see dep list below): settings-only toggles would re-arm
-                // a heavy full-snapshot save that the SETTINGS effect already
-                // covers. heartbeatSnapshotRef (synced every render, below)
-                // always holds the freshest snapshot without re-arming here.
-                const profileData = heartbeatSnapshotRef.current();
-                await dbService.saveUserProfile(activeUsername, profileData);
-                lastSavedSnapshotRef.current = profileData;
-                setSaveStatus('SAVED');
-            } catch (err) {
-                console.error("Failed to save user profile (data):", err);
-                setSaveStatus('ERROR');
-            }
-        }, 1500);
-
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, activeConversationId]);
-
-    // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
-    // longer debounce (2500ms) since settings changes are low-risk and we
-    // don't want every checkbox tick to trigger a save storm.
-    useEffect(() => {
-        if (!activeUsername) return;
-
-        // Surface settings saves in the header status too — the old path
-        // failed silently (console.error only), so a broken write looked
-        // like a successful toggle. Same bail-out as the DATA effect.
-        setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
-
-        const handler = setTimeout(async () => {
-            try {
-                // Only the settings sub-object — no conversations, no trades,
-                // no base64 images. This is a cheap write.
-                await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
-                });
-                setSaveStatus('SAVED');
-            } catch (err) {
-                console.error("Failed to save user profile (settings):", err);
-                setSaveStatus('ERROR');
-                toast.error('Settings not saved', 'Your changes could not be saved. Check storage permissions and try again.');
-            }
-        }, 2500);
-
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel, activeUsername, toast]);
-
-    // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
-    // change, so nothing is persisted for the ENTIRE duration of a run (the
-    // RAF-throttled debate updates keep resetting it). A native kill or
-    // background termination mid-run then loses the whole run. Flush every
-    // 15s while a run is active instead.
-    // buildProfileSnapshot changes identity on every conversationHistory
-    // mutation — using it directly in deps would re-arm this interval every
-    // frame during a run (the exact bug this heartbeat exists to fix). Keep
-    // the freshest snapshot in a ref instead. The ref is synced during RENDER
-    // (like loggedTradesRef): the effect body only runs when the run starts,
-    // so an assignment inside it would freeze the snapshot at run-start data
-    // and the mid-run flush would overwrite the profile with stale state.
-    const heartbeatSnapshotRef = useRef(buildProfileSnapshot);
-    heartbeatSnapshotRef.current = buildProfileSnapshot;
-    useEffect(() => {
-        if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
-        const interval = setInterval(async () => {
-            try {
-                const last = lastSavedSnapshotRef.current;
-                const snapshot = heartbeatSnapshotRef.current();
-                // Skip the write when nothing changed since the last persisted
-                // snapshot (reference compare — same as the unload-flush dirty
-                // check). Pure typing or a settled run must not force a
-                // full-profile stringify every 15s.
-                const dirty = !last
-                    || last.conversations !== snapshot.conversations
-                    || last.tradeLog !== snapshot.tradeLog
-                    || last.tradeSummaries !== snapshot.tradeSummaries
-                    || last.savedAnalyses !== snapshot.savedAnalyses
-                    || last.finalTradeSummary !== snapshot.finalTradeSummary
-                    || last.globalMemory !== snapshot.globalMemory
-                    || last.insightKnowledgeBase !== snapshot.insightKnowledgeBase;
-                if (!dirty) return;
-                await dbService.saveUserProfile(activeUsername, snapshot);
-                lastSavedSnapshotRef.current = snapshot;
-            } catch (err) {
-                console.error('Failed to save user profile (heartbeat):', err);
-            }
-        }, 15000);
-        return () => clearInterval(interval);
-    }, [activeUsername, isAnalysisInProgress, isPostMortemInProgress]);
-
-    // Flush pending state on tab close / hide. The hook keeps an internal
-    // ref to the freshest snapshot (updated every render via getSnapshot)
-    // so the synchronous unload handler always persists the latest data.
-    useSaveOnUnload({
-        enabled: !!activeUsername,
-        getSnapshot: buildProfileSnapshot,
-        isDirty: () => {
-            const last = lastSavedSnapshotRef.current;
-            if (!last) return true; // never saved yet
-            // Shallow reference check on the heavy arrays is sufficient —
-            // any state mutation produces a new array reference (immutable updates).
-            return last.conversations !== conversationHistory
-                || last.tradeLog !== loggedTrades
-                || last.tradeSummaries !== tradeSummaries
-                || last.savedAnalyses !== savedAnalyses
-                || last.finalTradeSummary !== finalTradeSummary
-                || last.globalMemory !== globalMemory
-                || last.insightKnowledgeBase !== insightKnowledgeBase
-                || last.lastActiveConversationId !== (activeConversationId || undefined);
-        },
-        save: async (snapshot) => {
-            if (!activeUsername) return;
-            await dbService.saveUserProfile(activeUsername, snapshot);
-            lastSavedSnapshotRef.current = snapshot;
-        },
-        onFlushed: () => {
-            // Don't touch React state during unload — just log for diagnostics.
-            console.log('[App] Flushed pending save on unload');
-        },
+    // Profile persistence (extracted to hooks/useProfilePersistence.ts):
+    // heavy DATA save, light SETTINGS save, mid-run heartbeat, unload flush.
+    useProfilePersistence({
+        activeUsername, activeConversationId, setSaveStatus, toast,
+        conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
+        finalTradeSummary, globalMemory, insightKnowledgeBase,
+        memoryConfig, memoryModel,
+        isAnalysisInProgress, isPostMortemInProgress,
+        activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel,
+        visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
+        isAccuracyModeEnabled, accuracySubMode, customInstructions,
+        isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
+        isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing,
+        isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
+        confidenceCalibration,
     });
+
 
     // --- ACCURACY MODE THEME HANDLER ---
     // Maintain consistent dark theme regardless of mode
