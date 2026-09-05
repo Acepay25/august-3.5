@@ -4,7 +4,7 @@ import { TrashIcon, CloseIcon } from './Icons';
 /**
  * ConfirmDialog — a non-blocking, styled replacement for window.confirm().
  *
- * P2-13: Native confirm() is blocking, unstyled, has no undo, and (combined
+ * Native confirm() is blocking, unstyled, has no undo, and (combined
  * with the debounced-save risk) a delete can appear to succeed in the UI but
  * be lost on close. This component renders an in-app modal and, after a
  * confirmed destructive action, shows an undo toast for a short grace period.

@@ -289,7 +289,7 @@ export interface AnalyzeTradingViewParams {
     /** Wire-audit sink (P5) — receives the applied reasoning-route label for
      *  this call so the debate run log can show what the wire received. */
     onWireAudit?: (entry: WireAuditEntry) => void;
-    /** R54: model side-effects from this seat's desk-tool loop
+    /** model side-effects from this seat's desk-tool loop
      *  (forge_tool / amend_memory / custom_* receipts). */
     onToolAction?: (action: ToolAction) => void;
 }

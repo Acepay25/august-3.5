@@ -1,5 +1,5 @@
 /**
- * Bot Mailbox (plan botmode-scan G1) — teammate DMs, Hermes Bot Mode style.
+ * Bot Mailbox  — teammate DMs, Hermes Bot Mode style.
  *
  * Hermes runs its bots as separate gateway processes and needs a socket
  * relay; august's bots are IN-PROCESS — same message array, same provider
@@ -124,7 +124,7 @@ const rulesFor = (me: AgentBot, rosterLines: string): string => [
 ].join('\n');
 
 /**
- * The persona system prompt for one bot's casual/DM turn (G1 also fixes a
+ * The persona system prompt for one bot's casual/DM turn (and fixes a
  * pre-existing gap: bot threads used the generic assistant prompt).
  * Persona (system.md) + the bot's own notes (memory.md) + the teammate
  * protocol. Deterministic for stable inputs.

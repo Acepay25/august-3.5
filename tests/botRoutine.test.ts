@@ -15,7 +15,7 @@ import {
 } from '../services/agents/botRoutine';
 import { DM_MAX_HOPS } from '../services/agents/botMailbox';
 
-// Bot Mode G5 (plan botmode-scan): bot-scoped Routines — the pure executor.
+// bot-scoped Routines — the pure executor.
 // The transport is injected, so no module mocks are needed at all.
 
 const bot = (over: Partial<AgentBot> & Pick<AgentBot, 'id' | 'name'>): AgentBot => ({
@@ -58,7 +58,7 @@ const automation = (over: Partial<AutomationConfig> = {}): AutomationConfig => (
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
 });
 
-describe('botRoutine — readiness (G5)', () => {
+describe('botRoutine — readiness', () => {
     it('resolves the ready provider for a roster bot', () => {
         const r = botRoutineProvider([macro], CONFIGS, 'b1');
         expect(r?.bot.id).toBe('b1');
@@ -84,7 +84,7 @@ describe('botRoutine — readiness (G5)', () => {
     });
 });
 
-describe('botRoutine — the turn (G5)', () => {
+describe('botRoutine — the turn', () => {
     it('runs as the bot: persona system prompt, its provider/model, thread-scoped history', async () => {
         const seen: { provider: ProviderConfig; prompt: string; history: Message[]; system: string }[] = [];
         const history: Message[] = [
@@ -154,7 +154,7 @@ describe('botRoutine — the turn (G5)', () => {
     });
 });
 
-describe('botRoutine — persistence rows (G5)', () => {
+describe('botRoutine — persistence rows', () => {
     it('message row is attributed to the bot identity pair (files into its thread)', () => {
         const row = botRoutineMessageRow(macro, 'the reply', 'r1');
         expect(row.role).toBe(MessageRole.AI);

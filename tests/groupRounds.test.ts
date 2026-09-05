@@ -12,7 +12,7 @@ import {
     renderRoomTurn,
 } from '../services/agents/groupRounds';
 
-// Bot Mode G2 (plan botmode-scan): the room engine's pure half —
+// the room engine's pure half —
 // deterministic mention routing, "(pass)" silence, incremental per-member
 // context, and the byte-stable room protocol.
 

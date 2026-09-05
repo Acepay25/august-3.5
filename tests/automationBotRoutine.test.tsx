@@ -6,7 +6,7 @@ import type { Message } from '../types';
 import { MessageRole } from '../types/enums';
 import type { AutomationConfig, AutomationRun } from '../types/automation';
 
-// Bot Mode G5 (plan botmode-scan): bot-scoped Routines through the
+// bot-scoped Routines through the
 // useAutomations engine — the run executes AS the bot (persona prompt +
 // its provider/model via streamQuickResponse), files the reply into the
 // bot's thread through the bridge, and never touches the ensemble path.
@@ -77,7 +77,7 @@ beforeEach(() => {
     prefStore.clear();
 });
 
-describe('useAutomations — bot-scoped routines (G5)', () => {
+describe('useAutomations — bot-scoped routines', () => {
     it('runs AS the bot: persona + its provider/model, reply filed into its thread', async () => {
         const { h, messages, toast } = await setup();
         const config = automation({ botId: 'b1' });

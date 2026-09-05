@@ -1,5 +1,5 @@
 /**
- * useBotMailbox (plan botmode-scan G1) — the async half of teammate DMs.
+ * the async half of teammate DMs.
  *
  * Pure logic (validation, protocol text, marker grammar) lives in
  * services/agents/botMailbox.ts. This hook owns the per-target queues and

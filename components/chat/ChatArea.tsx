@@ -313,7 +313,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setSelectedIds(new Set());
     }, []);
 
-    // P1-6b: depend on the LAST MESSAGE ID (a primitive) instead of the whole
+    // depend on the LAST MESSAGE ID (a primitive) instead of the whole
     // `messages` array — a streaming chunk grows the last message's text but
     // not its id, so enhancedContext (and every memoized MessageItem) stays
     // stable and only the streaming card re-renders.

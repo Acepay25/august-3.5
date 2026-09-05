@@ -4,7 +4,7 @@ import { SettingsIcon, PlusIcon } from './Icons';
 /**
  * OnboardingCard — first-run setup guidance.
  *
- * P2-12: New users with no API keys configured previously landed on an empty
+ * New users with no API keys configured previously landed on an empty
  * chat with no guidance. This card detects the no-keys state and shows a
  * guided CTA to open Settings. It dismisses itself when keys become available
  * or when the user explicitly closes it (dismissal is remembered in

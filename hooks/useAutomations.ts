@@ -82,7 +82,7 @@ export interface UseAutomationsParams {
         warning: (t: string, m?: string) => void;
     };
     /**
-     * G5 (plan botmode-scan): the bot roster. Bot-scoped routines run AS a
+     * the bot roster. Bot-scoped routines run AS a
      * roster bot (persona + its provider/model) instead of the ensemble.
      * Accepts a live snapshot getter (App's roster state lives below this
      * hook in its body) or a plain array. Optional so existing call sites
@@ -171,7 +171,7 @@ export function useAutomations(params: UseAutomationsParams) {
     const inFlightRef = useRef<string | null>(null);
     const conversationHistoryRef = useRef(conversationHistory);
     conversationHistoryRef.current = conversationHistory;
-    // G5 bridge — live roster/messages/DM-delivery read at FIRE time (the
+    // live roster/messages/DM-delivery read at FIRE time (the
     // roster can change between render and a cron fire, and App's roster
     // state is declared below this hook, so a getter must not be invoked
     // during render — only once a run actually fires).
@@ -224,7 +224,7 @@ export function useAutomations(params: UseAutomationsParams) {
     }, []);
     const runsByAutomationRef = useRef<Record<string, AutomationRun[]>>({});
 
-    // ─── G5: bot-scoped routine execution ─────────────────────────────────
+    // ─── bot-scoped routine execution ─────────────────────────────────
     // Runs the automation AS a roster bot: persona system prompt + the
     // bot's own provider/model, reply appended as an AI row attributed to
     // the bot's identity pair (threadForProvider files it in the bot's
@@ -325,7 +325,7 @@ export function useAutomations(params: UseAutomationsParams) {
         const username = usernameRef.current;
         if (!username || !config.enabled) return;
 
-        // ─── G5: bot-scoped routine — run AS the bot, not the ensemble ─────
+        // ─── bot-scoped routine — run AS the bot, not the ensemble ─────
         // A bot-scoped run is the bot's own casual turn (persona prompt +
         // provider/model, reply filed into its thread) instead of the
         // ensemble debate. No-op prompts and a dangling bot/provider are
@@ -569,7 +569,7 @@ export function useAutomations(params: UseAutomationsParams) {
     }, [loadRuns]);
 
     /**
-     * G5 bridge — App wires the automations hook to the Bot Mode half after
+     * App wires the automations hook to the Bot Mode half after
      * both hooks exist (the roster state and mailbox live below useAuto-
      * mations in App's body). Assigned refs, never re-rendering state.
      */

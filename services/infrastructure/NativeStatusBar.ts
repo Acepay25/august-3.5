@@ -10,7 +10,7 @@
  *     against the dark header
  *   - Overlays the WebView so `env(safe-area-inset-top)` padding applies
  *
- * P1-8: Without this, the header sits under the status bar / camera cutout
+ * Without this, the header sits under the status bar / camera cutout
  * on notched Android devices.
  */
 

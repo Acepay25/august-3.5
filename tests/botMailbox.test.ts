@@ -12,7 +12,7 @@ import {
     validateDM,
 } from '../services/agents/botMailbox';
 
-// Bot Mode G1 (plan botmode-scan): the DM transport's pure half — marker
+// the DM transport's pure half — marker
 // grammar, roster-handle resolution, validation refusals, and the
 // byte-stable teammate protocol. The async queue lives in
 // hooks/useBotMailbox.ts and is exercised through these functions.

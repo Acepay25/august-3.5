@@ -4,7 +4,7 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
-## ROUND-54 extension 4 — reviewer follow-ups: dead code, per-file import, sweep backoff
+## reviewer follow-ups: dead code, per-file import, sweep backoff
 
 Follow-ups from the R54 independent code review (all non-blocking
 suggestions, now landed):
@@ -36,7 +36,7 @@ errors · dev boot 200.
 
 ---
 
-## ROUND-54 extension 3 — bot failure visibility + reasoning-budget starvation fix
+## bot failure visibility + reasoning-budget starvation fix
 
 - **Why "(Raven could not reply — provider error)" appeared while models
   worked elsewhere.** Two distinct failure modes were both rendered as
@@ -67,7 +67,7 @@ build clean · eslint 0 errors.
 
 ---
 
-## ROUND-54 extension 2 — group room: cancel, hybrid toggle, reference reply styling
+## group room: cancel, hybrid toggle, reference reply styling
 
 - **Cancel a group request.** While a room round runs, the composer's
   New Thread button becomes **Stop** (and an inline Stop sits next to
@@ -94,7 +94,7 @@ errors · dev boot 200.
 
 ---
 
-## ROUND-54 extension — Team→Group merge, group-tabs-only strip, member personas, skill import
+## Team→Group merge, group-tabs-only strip, member personas, skill import
 
 - **Team and Group are now ONE concept — the Group.** The group UI
   (Activity timeline, reply-in-thread, member tabs, gear/trash) is kept
@@ -126,7 +126,7 @@ errors · dev boot 200.
 
 ---
 
-## ROUND-54 — Bot Mode UI parity: unified sidebar panes, thread tabs, bot page, room actions
+## Bot Mode UI parity: unified sidebar panes, thread tabs, bot page, room actions
 
 The six Hermes Bot Mode screenshots as the reference; the app's chat
 surface rebuilt to match, in four slices:
@@ -231,7 +231,7 @@ Tests: +47 net across the round. Gates: tsc 0 · 2013 passed /
 
 ---
 
-## ROUND-53 — Learning flow: seat diversity, ToolForge, manual A/B eval, memory self-correction
+## Learning flow: seat diversity, ToolForge, manual A/B eval, memory self-correction
 
 Four upgrades to how the harness learns and what the models may build:
 
@@ -279,7 +279,7 @@ Gates: tsc 0 · 1966 passed / 11 skipped · build clean.
 
 ---
 
-## ROUND-52 — Teams: seat roles, the 3-provider cap removed, living defaults
+## Teams: seat roles, the 3-provider cap removed, living defaults
 
 The Standard-mode debate blocked at 3 providers even though teams seat
 up to 10 — the stale cap now matches the Team menu (`TEAM_MAX_SEATS`,
@@ -306,7 +306,7 @@ tests in `tests/seatPersonas.test.ts` (7), `tests/teamDialog.test.tsx`
 
 ---
 
-## ROUND-51 — Bot Mode G2–G5: rooms, attention badges, @mentions, bot Routines
+## Bot Mode: rooms, attention badges, @mentions, bot Routines
 
 Finished the port plan (`.hermes/plans/botmode-scan-and-plan.md`): group
 rooms become real coordination, bots surface their own failure states,
@@ -363,7 +363,7 @@ touched files (new files fully clean).
 
 ---
 
-## ROUND-50 — Bot Mode G1: teammate DMs (the Grok/Hermes heartbeat)
+## Bot Mode: teammate DMs (the Grok/Hermes heartbeat)
 
 Deep-scanned Hermes Bot Mode at source level (plugin
 `apps/desktop/src/plugins/hermes-bots/`, core `tools/bot_mode_probe.py`,
@@ -408,7 +408,7 @@ build clean · eslint 0 errors.
 
 ---
 
-## ROUND-49 — Reference-parity UI pass + Coach thread (§10.1)
+## Reference-parity UI pass + Coach thread
 
 Target: the Hermes-style reference screenshot (flat dark rows, fill-hover
 selection, checkmark on the current row, avatar+name+time+preview list,
@@ -437,8 +437,8 @@ failed**, build clean, eslint 0 errors on touched files.
   inbox as cards in the reference vocabulary — drafts (If→then clauses,
   Save-as-skill / Discard routed through App's existing ingest + tombstone
   handlers, "View the trade" jumps back to the highlighted verdict card)
-  and proposals (Apply for displacement/revival/demote via the ROUND-48
-  actuation paths, Dismiss for the human-edit kinds). Live on the same
+  and proposals (Apply for displacement/revival/demote via the
+  learning-queue actuation paths, Dismiss for the human-edit kinds). Live on the same
   `august-skill-drafts` / `august-learning-queue` events. 8 tests
   (tests/coachThread.test.tsx). The coach thread is exempt from the
   last-opened marking effect (its badge is a backlog count, not unread
@@ -452,9 +452,9 @@ failed**, build clean, eslint 0 errors on touched files.
 
 ---
 
-## ROUND-48 — Post-batch audit + review fixes: the learning loop's silent breaks
+## Post-batch audit + review fixes: the learning loop's silent breaks
 
-Full review of the uncommitted ROUND-41→47 work (plan batches 5–14): every
+Full review of the uncommitted work from the preceding seven rounds: every
 changelog claim re-verified against source, UI/UX wiring audited component by
 component, three deep logic reviews. Gates after: tsc 0, **1861 passed / 11
 skipped / 0 failed**, build clean, eslint 0 errors on all touched files.
@@ -528,7 +528,7 @@ functional gap. Deferred pending user go-ahead.
 
 ---
 
-## ROUND-47 — §8.4a–d: graveyard + retirement taxonomy, contradiction sweep, settled-belief challenge
+## Graveyard + retirement taxonomy, contradiction sweep, settled-belief challenge
 
 **§8.4a + §8.4b — `services/learning/skillGraveyard.ts`:**
 - Tombstone index per user (cap 40, newest-first): one line per retired skill —
@@ -557,7 +557,7 @@ functional gap. Deferred pending user go-ahead.
   claim extraction, flag threshold, context/direction guards, status stays
   settled.
 
-**ROUND-48 — Batch 6: §4.6 self-improvement loop A→E**
+**Batch 6: self-improvement loop A→E**
 - **A extractor** (`extractEpisodes`): post-hoc, read-only, outcome-linked
   episodes from closed post-mortems (rootCauseClass, key lesson, clause),
   180-day retention. **B fingerprints**: failure class + setup identity,
@@ -585,7 +585,7 @@ vite build clean.
 
 ---
 
-## ROUND-46 — §8.5d regime-mix drift sentinel (stale-by-regime, not stale-by-time)
+## Regime-mix drift sentinel (stale-by-regime, not stale-by-time)
 
 Time-decay is the only staleness axis skill evidence had; a fast crypto
 regime shift is invisible to a 30-day age constant. The sentinel compares the
@@ -616,7 +616,7 @@ Gates: tsc exit 0, 1806 passed / 11 skipped / 0 failed, vite build clean.
 
 ---
 
-## ROUND-45 — §8.5c context-budget economics (cost vs benefit of every injected skill)
+## Context-budget economics (cost vs benefit of every injected skill)
 
 Injection chars are the scarce resource; now the cost side is measured,
 ranked, and audited on a cadence.
@@ -645,7 +645,7 @@ Gates: tsc exit 0, 1797 passed / 11 skipped / 0 failed, vite build clean.
 
 ---
 
-## ROUND-44 — §8.5b meta-calibration (the loop learns about the loop)
+## Meta-calibration (the loop learns about the loop)
 
 Three deterministic ratios, maintained by recorders at ground-truth points
 and computed weekly into a per-user Preferences blob; surfaced in the AI
@@ -677,7 +677,7 @@ Gates: tsc exit 0, 1791 passed / 11 skipped / 0 failed, vite build clean.
 
 ---
 
-## ROUND-43 — §8.5a permanent ε-holdout (the long-run honesty mechanism)
+## Permanent ε-holdout (the long-run honesty mechanism)
 
 ~10% of runs now withhold skill injection so the CONTROL group keeps growing
 and counterfactual lift stays honest after year one. Seeded per run id and
@@ -710,12 +710,12 @@ documented skillsGrid issue), vite build clean.
 
 ---
 
-## ROUND-42 — Stabilize ROUND-41 tree: restore harnessSettings regression, fix §8.2a type errors, reconcile tests to §8.3c/§8.3d
+## Stabilize the debate-pods tree: restore harnessSettings regression, fix type errors, reconcile tests
 
-ROUND-41's tree was NOT green: `tsc` exited 2 and 3 tests failed. A mid-flight
+The debate-pods tree was NOT green: `tsc` exited 2 and 3 tests failed. A mid-flight
 edits broke a foundational settings module and left the birth-certificate +
 §8.3 work half-integrated. This round gets it green again (gates: tsc exit 0,
-1775 passed / 0 failed, build clean) without disturbing the ROUND-41 feature
+1775 passed / 0 failed, build clean) without disturbing the debate-pods feature
 surface.
 
 - **Restore `utils/harnessSettings.ts` (regression).** The §8.2b library-cap
@@ -742,7 +742,7 @@ surface.
 
 ---
 
-## ROUND-41 — Debate pods + chat/floor observability (§9–§10), journal remainder (§4.5/§5a), memory index (§4.7), store unification (§8.1)
+## Debate pods + chat/floor observability, journal remainder, memory index, store unification
 
 All uncommitted work in this tree, gated green (tsc exit 0, 1775 tests
 passed, vite build clean).
@@ -810,7 +810,7 @@ passed, vite build clean).
 
 ---
 
-## ROUND-40 — Audit-fix batch (plan §14), dead-code cleanup (§8.0), weekly review (§4.5)
+## Audit-fix batch, dead-code cleanup, weekly review
 
 **Batch 14 (all audit findings from the v5 plan review, fixed with
 regression tests in tests/auditFixes.test.ts + tests/probeSelfHarm.test.ts):**
@@ -852,7 +852,7 @@ Gates: tsc 0, full suite 1715 passed / 0 failed, build clean.
 
 ---
 
-## ROUND-39 — zcode/claude UI parity, debate hardening, learning-loop review fixes
+## zcode/claude UI parity, debate hardening, learning-loop review fixes
 
 **UI parity with the reference screenshots.** The whole app moved onto the
 Claude-dark gray ramp (#111111 page / #1a1a1a panels / #262626 composer /
@@ -893,7 +893,7 @@ errors, typecheck clean, production build green.
 
 ---
 
-## ROUND-36 — Conviction drift tracking + recall_chat session search
+## Conviction drift tracking + recall_chat session search
 
 **D2.2: conviction drift.** New `services/analysis/convictionDrift.ts`:
 extracts each seat's ordered sealed-conviction trajectory from stored debate
@@ -914,9 +914,9 @@ movable/rigid profiles) + sessionSearch (rank, no-match, digest bounds).
 
 ---
 
-## ROUND-35 — Debate-stage polish: inline steer input + cost tooltips
+## Debate-stage polish: inline steer input + cost tooltips
 
-The two known-open polish items from ROUND-34:
+The two known-open polish items from the graph-ranking round:
 
 **Inline steer input.** Clicking a seat's paper-plane no longer opens a
 browser `window.prompt` — an inline row appears under the debate stage
@@ -932,7 +932,7 @@ stop button).
 
 ---
 
-## ROUND-34 — Graph-scored ranking, temporal skill ledger, per-seat controls, jobs drawer
+## Graph-scored ranking, temporal skill ledger, per-seat controls, jobs drawer
 
 The four queued deep-scan items, implemented together:
 
@@ -969,7 +969,7 @@ queries, and frontmatter round-tripping.
 
 ---
 
-## ROUND-32 — Root-cause failure patterns in the evidence pack (2026-08-23)
+## Root-cause failure patterns in the evidence pack (2026-08-23)
 
 The first production payoff from the graph-engineering research (GraphRAG /
 Zep / LightRAG): the memory system's root-cause classification — which until
@@ -992,10 +992,10 @@ just reading data that already existed.
 
 ---
 
-## ROUND-31 — Memory honesty fixes + composer declutter (2026-08-23)
+## Memory honesty fixes + composer declutter (2026-08-23)
 
 **Edge decay now actually reaches prompts (M1).** The 120-day exponential
-decay documented in ROUND-26 lived only in the dashboard's memory graph —
+decay documented in the seat-trust round lived only in the dashboard's memory graph —
 `getMemoryFilesContext` fed prompts from raw similarity. `findRelevantTrades`
 gains a `decayByAge` option and both prompt consumers (similar-trades block,
 verdict evidence pack) now use it: old trades still appear with their lessons,
@@ -1025,7 +1025,7 @@ evidence-count round-tripping.
 
 ---
 
-## ROUND-29 — DeepSeek-parity chat polish (2026-08-23)
+## DeepSeek-parity chat polish (2026-08-23)
 
 Component-by-component comparison against the DeepSeek harness UI (thinking
 row, settled turn, composer) drove three polish items — all view-layer:
@@ -1051,7 +1051,7 @@ while running and markdown on settle. Hover-copy affordance also matched.
 
 ---
 
-## ROUND-28 — Arbiter evidence, setup-stats tool, run contract UI (2026-08-23)
+## Arbiter evidence, setup-stats tool, run contract UI (2026-08-23)
 
 **The moderator can finally see its own journal.** `getModeratorAnalysisStream`
 now accepts the trade log, so the `recall` desk tool works at every moderator
@@ -1097,7 +1097,7 @@ this repo.
 
 ---
 
-## ROUND-26 — Seat trust, provenance, edge decay (2026-08-22)
+## Seat trust, provenance, edge decay (2026-08-22)
 
 **Seat-trust weighting.** The moderator verdict prompt now includes each seat's historical record: Brier calibration score, overconfidence gap, and average sealed conviction from stored debates. Seats with proven accuracy are flagged trustworthy; overconfident seats get an explicit discount instruction when they dissent from better-calibrated peers. Data comes entirely from the existing trade log.
 
@@ -1105,7 +1105,7 @@ this repo.
 
 **Per-skill lift measurement.** New `MemoryProvenanceService` computes whether a skill actually improved outcomes: win rate on matching setups *after* the skill existed versus before it. Positive lift = the skill helps; negative = it misleads despite plausible evidence. Surfaced in the Learning Dashboard Skills card (`lift +12pp`) and folded into its color coding.
 
-**Memory-graph edge decay.** `similarTo` edges now fade with trade age (~120-day exponential half-life). Old associations stop surfacing without deletion — the same decay philosophy applied to skill counts in ROUND-24m, extended to the graph.
+**Memory-graph edge decay.** `similarTo` edges now fade with trade age (~120-day exponential half-life). Old associations stop surfacing without deletion — the same decay philosophy applied to skill counts during memory simplification, extended to the graph.
 
 **Settings: audience toggle.** Skill files in Settings → Memory files show an `audience:` button cycling all → analyst → moderator, controlling which debate audience may load them.
 
@@ -1113,7 +1113,7 @@ Also: changelog.md created (this file).
 
 ---
 
-## ROUND-25c — Fully-automated skill self-evaluation (2026-08-22)
+## Fully-automated skill self-evaluation (2026-08-22)
 
 The harness audits its own knowledge with zero user action:
 
@@ -1127,18 +1127,18 @@ The loop is closed end-to-end without human intervention: write → count eviden
 
 ---
 
-## ROUND-25 / 25b — Progressive disclosure + eval engine; IF/THEN removal (2026-08-22)
+## Progressive disclosure + eval engine; IF/THEN removal (2026-08-22)
 
 - **modified:** timestamps on every skill write; injection surfaces human-readable freshness ("evidence 12d old").
 - **Tiered skill injection:** openings/rebuttals get a one-line index (`AVOID [confirmed · 1W/6L · …] IF…THEN…`); verdicts + recall serve full bodies.
 - **audience frontmatter** (analyst/moderator/all) controls which debate seat may load a skill.
 - **Dynamic context:** `${SYMBOL}`/`${REGIME}`/`${DIRECTION}` substituted live at assembly.
 - **SkillEvalService**: with-skill vs without-skill benchmarking engine (deterministic flip scoring).
-- **IF/THEN rules system removed** (ROUND-25b + completion): post-mortem lessons flow only through skills; validation-gate structured rules retired; CONFIDENCE_RULES safety rails kept as constants; legacy rule data migrates mechanically to candidate skills.
+- **IF/THEN rules system removed** (completed alongside the eval engine): post-mortem lessons flow only through skills; validation-gate structured rules retired; CONFIDENCE_RULES safety rails kept as constants; legacy rule data migrates mechanically to candidate skills.
 
 ---
 
-## ROUND-24m — Memory simplification (2026-08-22)
+## Memory simplification (2026-08-22)
 
 Fewer, truer memories:
 
@@ -1155,4 +1155,4 @@ Fewer, truer memories:
 
 ## Earlier rounds
 
-See git history for rounds before ROUND-24m (Brier calibration summaries, skill effectiveness review, debate upgrades B1–B4, memory-as-own-knowledge voice work, UI surfacing).
+See git history for the earlier work (Brier calibration summaries, skill effectiveness review, debate upgrades B1–B4, memory-as-own-knowledge voice work, UI surfacing).

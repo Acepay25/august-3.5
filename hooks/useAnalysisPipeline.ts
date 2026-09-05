@@ -190,7 +190,7 @@ export interface UseAnalysisPipelineParams {
     // Casual-chat model: used when ensemble off; falls back to the first
     // ready provider's model when empty/stale.
     selectedChatModel: string;
-    /** ── Bot Mode (plan botmode-scan G1) ──
+    /** ── Bot Mode ──
      *  When a bot's 1:1 thread is open, casual sends run AS that bot:
      *  persona system prompt, thread-scoped history, and the reply is
      *  handed to onBotReply so the mailbox can dispatch [[dm:@…]] markers.
@@ -363,7 +363,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         onPartialOutput: (chunk: string) => void;
         /** Wire-audit sink (P5) — applied reasoning-route label per call. */
         onWireAudit?: (entry: WireAuditEntry) => void;
-        /** R54: model side-effects from this seat's desk tools. */
+        /** model side-effects from this seat's desk tools. */
         onToolAction?: (action: ToolAction) => void;
     }
 
@@ -415,7 +415,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         return result;
     }, []);
 
-    // ─── P1-5: RAF-throttled debate stream updates ────────────────────────
+    // ─── RAF-throttled debate stream updates ────────────────────────
     // The debate `for await` loop below calls updateMessages on EVERY token
     // chunk, rebuilding the messages array and re-rendering the chat subtree
     // hundreds of times per response. This throttled wrapper coalesces those
@@ -564,7 +564,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // Live desk-tool chips: speaker -> latest tool line. Transient — cleared
     // when the debate concludes (never persisted).
     const liveToolEventsRef = useRef<Record<string, string>>({});
-    // R54: persisted model side-effects for the CURRENT run — proposal tools
+    // persisted model side-effects for the CURRENT run — proposal tools
     // (forge_tool/amend_memory) and custom tools. Reset at run start, merged
     // into the AI message when it lands (Hermes-style status rows).
     const toolActionsRef = useRef<ToolAction[]>([]);
@@ -973,7 +973,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Memory**.`,
                         createdAt: new Date().toISOString(),
                         isDebating: false,
-                        // R54: status row for the model-authored write.
+                        // status row for the model-authored write.
                         toolActions: [{
                             at: toolActionStamp(), speaker: 'Coach', tool: 'notebook_note', ok: true,
                             verb: note.decision === 'append' ? 'appended' : 'created',
@@ -2281,7 +2281,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         .filter((turn): turn is DebateTurn => Boolean(turn));
 
                     const thoughtMap: Record<string, string> = {};
-                    // P1-6 (pre-existing fix): iterate settledResults, NOT the
+                    // iterate settledResults, NOT the
                     // re-indexed `results` array — otherwise a failed provider
                     // at index 0 would cause results[0] (actually provider #1's
                     // data) to be attributed to enabledProviders[0].thoughtsKey.
@@ -2303,7 +2303,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     // Align per-analyst Monte Carlo by settled-result index (NOT
                     // the re-indexed `results` array): if an analyst at index 0
                     // fails, results[0] would be provider #1's data labeled as
-                    // provider #0. Same bug class as the P1-6 thoughtMap fix.
+                    // provider #0. Same bug class as the earlier thoughtMap fix.
                     // Runs off the main thread via a Web Worker (with a
                     // synchronous fallback) so 1000 simulations per analyst
                     // never block the debate UI.
@@ -2600,7 +2600,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 // Assignments are resolved so stale model ids
                                 // still resolve to the right persona.
                                 runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined,
-                                // R54: model side-effects — same ledger as standard mode.
+                                // model side-effects — same ledger as standard mode.
                                 { onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); } },
                         );
                     } else {
@@ -2950,7 +2950,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 getHarnessSettings().equityUsd,
                                 getSessionGuardConfig(),
                             )),
-                            // R54: model side-effects — proposals + custom tools
+                            // model side-effects — proposals + custom tools
                             // land on the message as ToolAction status rows.
                             { onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); } },
                         );
@@ -3087,7 +3087,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 }
                             }
 
-                            // P1-5: Coalesce per-token updates into one per frame.
+                            // Coalesce per-token updates into one per frame.
                             // REPLY-TO markers become `to` and leave the display text.
                             const normalizedTurns = currentTurns.map(applyReplyTo);
                             debateTurnsRef.current = normalizedTurns;
@@ -3538,7 +3538,7 @@ ${accuracyVerificationNote}`
                             // Always set tradingStyle regardless of Lens mode
                             tradingStyle: effectiveTradingStyle,
                             debateRunLog: [...debateRunLogRef.current],
-                            // R54: persisted model side-effects for this run.
+                            // persisted model side-effects for this run.
                             toolActions: toolActionsRef.current.length > 0 ? [...toolActionsRef.current] : undefined,
                             debateCheckpoint: undefined,
                             memoryRetrieved,
@@ -3709,7 +3709,7 @@ ${accuracyVerificationNote}`
 
                         // Save each analyst's reasoning + analysis JSON. Aligned
                         // by settled-result index so a failed analyst doesn't shift
-                        // attribution (same bug class as the P1-6 thoughtMap fix),
+                        // attribution (same bug class as the earlier thoughtMap fix),
                         // and the unreliable name-vs-id string matching is removed.
                         settledResults.forEach((settled, idx) => {
                             if (settled.status !== 'fulfilled') return;
@@ -3944,7 +3944,7 @@ ${accuracyVerificationNote}`
                 // Casual chat: use the user-selected model when it maps to a
                 // ready provider; otherwise fall back to the first ready
                 // provider (previous behavior).
-                // ── Bot Mode G1: inside a bot's 1:1 thread, the send runs
+                // ── Bot Mode: inside a bot's 1:1 thread, the send runs
                 // AS the bot — its exact provider+model, its persona system
                 // prompt, and only its own thread's history (threads are
                 // derived views; threadForProvider is the same slice the
@@ -4015,7 +4015,7 @@ ${accuracyVerificationNote}`
                     thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
                 } : m), requestConversationId);
                 throttledCasualStream.flush();
-                // ── Bot Mode G1: hand the settled reply (raw, markers
+                // ── Bot Mode: hand the settled reply (raw, markers
                 // included) to the mailbox — it strips [[dm:@…]] markers
                 // from the bubble and delivers the DMs. Fire-and-forget.
                 if (useBotThread && activeBot && onBotReply) {

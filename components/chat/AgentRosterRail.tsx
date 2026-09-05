@@ -53,11 +53,11 @@ export interface AgentRosterRailProps {
     /** Per-thread last-opened ISO timestamps (keyed by bot.id / group.id)
      *  — drives the unread count badges (plan §10.1). Absent = never opened. */
     lastOpenedMap?: Record<string, string>;
-    /** G3 (plan botmode-scan): botId → one-line fix hint when the bot
+    /** botId → one-line fix hint when the bot
      *  cannot do its job (missing provider/key/model, auth, quota, bench).
      *  The row shows a ⚠ badge with the hint as tooltip. */
     attentionMap?: Record<string, string>;
-    /** G5 (plan botmode-scan): routines scoped to a bot, keyed by botId.
+    /** routines scoped to a bot, keyed by botId.
      *  When a bot has routines, its row gains a Routines disclosure with
      *  the schedule, next fire, and Run-now affordance. */
     botRoutines?: Record<string, AutomationConfig[]>;
@@ -96,7 +96,7 @@ const formatRelative = (iso: string | null): string => {
 
 const lastOf = (slice: Message[]): Message | null => (slice.length > 0 ? slice[slice.length - 1] : null);
 
-/** G5 (plan botmode-scan): a bot's Routines disclosure — one row per
+/** a bot's Routines disclosure — one row per
  *  bot-scoped automation (name, humanized schedule, next fire) with a
  *  Run-now affordance. Only rendered when the bot actually has routines;
  *  monochrome, dense, stopPropagation so the bot row stays selected. */
@@ -433,7 +433,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                                 : <span className="ml-auto shrink-0 text-[10px] text-zinc-500 transition-opacity group-hover/row:opacity-0">
                                                     {formatRelative(last?.createdAt ?? null)}
                                                 </span>}
-                                            {/* G3: needs-attention — the row
+                                            {/* needs-attention — the row
                                                 says WHY (tooltip), never a
                                                 silent failure. Monochrome. */}
                                             {attentionMap?.[bot.id] && (
@@ -458,7 +458,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                         onPress={() => onDeleteBot(bot.id)}
                                     />
                                 )}
-                                {/* G5: this bot's routines — schedule peek + Run now. */}
+                                {/* this bot's routines — schedule peek + Run now. */}
                                 {onRunRoutine && botRoutines?.[bot.id] ? (
                                     <RoutineDisclosure routines={botRoutines[bot.id]} onRun={onRunRoutine} />
                                 ) : null}

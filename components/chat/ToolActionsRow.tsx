@@ -1,6 +1,6 @@
 /**
  * ToolActionsRow — Hermes-style transcript status rows for model
- * side-effects (R54). When a seat proposes a tool (forge_tool), amends
+ * side-effects. When a seat proposes a tool (forge_tool), amends
  * memory (amend_memory), or runs a custom tool, the run persists
  * ToolAction entries and this renders them the way the reference does:
  * compact status rows with a count chip ("Saved to memory · 6 entries")

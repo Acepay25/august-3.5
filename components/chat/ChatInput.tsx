@@ -161,7 +161,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
     const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
     const [mentionOpen, setMentionOpen] = useState(false);
-    // G4 (plan botmode-scan): @mention autocomplete from the LIVE roster —
+    // @mention autocomplete from the LIVE roster —
     // the `bots` prop (authoritative, subscription-backed), collapsed to
     // the same handles the room engine and the mailbox resolve. The old
     // implementation read a raw localStorage key and truncated names at

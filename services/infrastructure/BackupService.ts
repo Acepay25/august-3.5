@@ -2,7 +2,7 @@
  * BackupService - Automated backup management
  * Handles auto-save, versioned backups, and import validation
  *
- * P1-9: On native platforms (Android/iOS), backups are persisted via the
+ * On native platforms (Android/iOS), backups are persisted via the
  * Capacitor Filesystem API to a non-evictable directory, because WebView
  * IndexedDB can be cleared by the OS under storage pressure. On web, the
  * original IndexedDB store is used.
@@ -144,7 +144,7 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
         };
 
         if (useNativeStorage()) {
-            // P1-9: Persist to Filesystem (non-evictable) on native.
+            // Persist to Filesystem (non-evictable) on native.
             await ensureNativeDir();
             const { Filesystem, Directory, Encoding } = await getFilesystem();
             // Write the profile + a sidecar metadata file. We encode the

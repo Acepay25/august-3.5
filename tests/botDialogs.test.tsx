@@ -33,7 +33,7 @@ const provider = (over: Partial<ProviderConfig>): ProviderConfig => ({
     ...over,
 } as ProviderConfig);
 
-describe('NewBotDialog — Upload tab (R3)', () => {
+describe('NewBotDialog — Upload tab', () => {
     const base = {
         open: true,
         onClose: () => {},
@@ -66,7 +66,7 @@ describe('NewBotDialog — Upload tab (R3)', () => {
     });
 });
 
-describe('NewGroupDialog — edit mode (R4 gear)', () => {
+describe('NewGroupDialog — edit mode', () => {
     const bots = [bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' }), bot({ id: 'b3', name: 'Raven' })];
     const grp: AgentGroup = { id: 'g1', memberIds: ['b1', 'b2'], createdAt: new Date().toISOString() };
     const base = {

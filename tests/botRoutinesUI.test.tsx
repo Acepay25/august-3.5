@@ -10,7 +10,7 @@ import type { AutomationConfig, AutomationRun } from '../types/automation';
 import { MessageRole } from '../types/enums';
 import type { Message } from '../types/message';
 
-// Bot Mode G5 (plan botmode-scan): the Routines disclosure on the roster
+// the Routines disclosure on the roster
 // rail + the "Run as bot" selector in the automation editor.
 
 afterEach(() => { cleanup(); window.localStorage.clear(); });
@@ -45,7 +45,7 @@ const railBase = {
     onNewGroup: () => {},
 };
 
-describe('AgentRosterRail — Routines disclosure (G5)', () => {
+describe('AgentRosterRail — Routines disclosure', () => {
     it('shows no disclosure for bots without routines', () => {
         render(<AgentRosterRail {...railBase} bots={[bot({ id: 'b1' })]} />);
         expect(screen.queryByTestId('routine-disclosure')).toBeNull();
@@ -85,7 +85,7 @@ describe('AgentRosterRail — Routines disclosure (G5)', () => {
     });
 });
 
-describe('AutomationEditorModal — Run as bot (G5)', () => {
+describe('AutomationEditorModal — Run as bot', () => {
     const editorBase = {
         modelOptions: [],
         providers: [],
@@ -145,7 +145,7 @@ describe('AutomationEditorModal — Run as bot (G5)', () => {
     });
 });
 
-describe('AutomationRunCard — bot runs & skips (G5)', () => {
+describe('AutomationRunCard — bot runs & skips', () => {
     const botRun = (over: Partial<AutomationRun>): AutomationRun => ({
         id: 'run1', automationId: 'a1', status: 'complete',
         startedAt: '2026-09-02T09:00:00.000Z', finishedAt: '2026-09-02T09:00:05.000Z',

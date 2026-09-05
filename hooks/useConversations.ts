@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Conversation, Message } from '../types';
 
-// P2-16: Cap messages per conversation. Without this, conversations grow
+// Cap messages per conversation. Without this, conversations grow
 // unbounded and the whole messages array (with base64 images) is re-serialized
 // on every 1500ms debounce save. The cap is high enough that real trading
 // sessions won't hit it, but it prevents pathological growth from silently
@@ -40,7 +40,7 @@ export function useConversations() {
             return prevHistory.map(conv => {
                 if (conv.id === conversationId) {
                     const next = updater(conv.messages);
-                    // P2-16: Enforce the message cap. Pure FIFO would evict the
+                    // Enforce the message cap. Pure FIFO would evict the
                     // FIRST user message — the conversation's anchor request
                     // that later re-analyses reference as chatHistory — so keep
                     // it and trim the oldest messages AFTER it.

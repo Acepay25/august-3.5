@@ -29,7 +29,7 @@ import type { ToolAction } from '../../types/message';
 import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
 
 /**
- * Classify a desk-tool result into a persisted model side-effect (R54):
+ * Classify a desk-tool result into a persisted model side-effect:
  * proposal tools (forge_tool / amend_memory) and custom_ tools become
  * ToolAction rows the transcript renders Hermes-style. Data lookups stay
  * out — they're reads, not changes. ok = the proposal was accepted as a
@@ -908,7 +908,7 @@ export async function runDeskToolLoop(params: {
      *  ground itself with at least one real lookup before arguing — used by
      *  debates running WITHOUT live hybrid market data. */
     requireFirstToolRound?: boolean;
-    /** R54: fires once per proposal/custom tool result so the caller can
+    /** fires once per proposal/custom tool result so the caller can
      *  persist model side-effects (ToolAction rows) on the message. The
      *  action carries `speaker: ''` — the CALLER stamps the seat name
      *  (only the moderator path can default it here). */
@@ -1031,7 +1031,7 @@ export async function runDeskToolLoop(params: {
         const results = [...extraResults, ...forgedResults, ...coreResults];
         usedTools.push(...results.map(r => r.name));
         onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
-        // R54: persist proposal/custom tool side-effects (the transcript's
+        // persist proposal/custom tool side-effects (the transcript's
         // "Saved to memory"-style status rows). The loop does not know seat
         // names — the caller stamps them; the moderator path defaults here.
         if (onToolAction) {
@@ -1076,7 +1076,7 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     allowedTools?: string[];
     /** Closed-trade log for the `recall` notebook tool. */
     trades?: LoggedTrade[];
-    /** R54: fires once per proposal/custom tool result (forge_tool,
+    /** fires once per proposal/custom tool result (forge_tool,
      *  amend_memory, custom_*) so the caller can persist ToolAction rows.
      *  Actions arrive with `speaker: ''` — stamp the seat name in the
      *  wrapper (streamChatWithDeskTools knows mailboxSeat / speaker). */

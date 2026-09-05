@@ -185,8 +185,8 @@ describe('useAgentGroups', () => {
     });
 });
 
-// ── G2: bounded rounds, (pass) silence, incremental room context ──────────
-describe('useAgentGroups room engine (G2)', () => {
+// ── bounded rounds, (pass) silence, incremental room context ──────────
+describe('useAgentGroups room engine', () => {
     const bots3 = [
         bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
         bot({ id: 'b2', name: 'Risk', modelId: 'model-b' }),
@@ -288,8 +288,8 @@ describe('useAgentGroups room engine (G2)', () => {
     });
 });
 
-// ── R54: cancel + hybrid injection ─────────────────────────────────────────
-describe('useAgentGroups cancel + hybrid (R54)', () => {
+// ── cancel + hybrid injection ─────────────────────────────────────────
+describe('useAgentGroups cancel + hybrid', () => {
     const bots2 = [
         bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
         bot({ id: 'b2', name: 'Risk', modelId: 'model-b' }),
