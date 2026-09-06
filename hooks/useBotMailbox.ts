@@ -24,6 +24,7 @@ import {
 import { threadForProvider } from '../utils/agentThreads';
 import {
     DM_ENVELOPE_TTL_MS,
+    DM_MAX_FANOUT,
     DM_RATE_LIMIT,
     DM_RATE_WINDOW_MS,
     buildBotSystemPrompt,
@@ -121,7 +122,7 @@ export const useBotMailbox = ({
         // below claims via threadForProvider's pending-user rule.
         if (opts.triggeredBy) {
             appendMessage(dmMessageRow(
-                dmEnvelopeText(opts.triggeredBy.from.name, opts.triggeredBy.envelope.text),
+                dmEnvelopeText(opts.triggeredBy.from.name, opts.triggeredBy.envelope),
                 `dmr-in-${opts.triggeredBy.envelope.id}`,
             ));
         }
@@ -195,7 +196,7 @@ export const useBotMailbox = ({
                     continue;
                 }
                 rate.current.push(Date.now());
-                await runBotTurn(target, dmEnvelopeText(from?.name ?? 'a teammate', env.text), {
+                await runBotTurn(target, dmEnvelopeText(from?.name ?? 'a teammate', env), {
                     triggeredBy: from ? { envelope: env, from } : undefined,
                 });
             }
@@ -231,10 +232,27 @@ export const useBotMailbox = ({
         if (marks.length === 0) return false;
         processed.current.add(messageId);
         patchMessage(messageId, { text: clean });
+        // Fanout cap (DM_MAX_FANOUT): the protocol ASKS for at most two
+        // teammates per reply; this enforces it. Extra marks get a
+        // model-actionable refusal instead of a delivery. An identical
+        // (handle, text) pair repeated within one reply is deduplicated
+        // silently — the first copy already delivered, and a second notice
+        // would say the same thing twice.
+        let delivered = 0;
+        const seen = new Set<string>();
         for (const mark of marks) {
+            const key = `${mark.handle.toLowerCase()}\u0000${mark.text}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
             const v = validateDM(botsRef.current, bot, mark.handle, mark.text, hop,
-                (pid, mid) => isProviderReadyFor(configsRef.current, pid, mid));
+                (pid, mid) => isProviderReadyFor(configsRef.current, pid, mid),
+                { constraints: mark.constraints, expecting: mark.expecting });
             if (v.ok) {
+                if (delivered >= DM_MAX_FANOUT) {
+                    notice(bot, refuseText('fanout_cap', mark.handle));
+                    continue;
+                }
+                delivered += 1;
                 deliverDM(v.envelope, bot);
             } else {
                 notice(bot, refuseText(v.reason, mark.handle));

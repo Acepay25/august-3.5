@@ -2,6 +2,70 @@
 
 Plain-English log of change rounds. Newest first.
 
+## Chat readability batch: streaming markdown repair, queued sends, handoff envelopes, invoked skills
+
+Ports the highest-value mechanics from a deep review of CopilotKit/OpenBot
+(the harness used for this app's peer review), adapted to august's
+architecture. Two commits: the transcript/composer work, then the
+bot-to-bot and skill work.
+
+- **Streaming markdown repairs itself.** The live tail of a streaming
+  reply used to render as raw pre-wrapped text — unfinished bold and code
+  fences flashed as literal asterisks and backticks, and the tail's line
+  breaking differed from the settled markdown, so text visibly reflowed
+  the moment the stream moved on. The tail now renders through the same
+  markdown pipeline as the settled text, after a repair pass that closes
+  half-open fences, bold, inline code, and strikethrough (unambiguous
+  closers only — a lone `*` is as often a bullet as an emphasis opener).
+  Covered by ten new unit tests.
+- **Typing while a run is live parks your words instead of chipping
+  them.** Mid-run sends render as real, faded message bubbles above the
+  composer with a "Queued · Remove" footer — the toast and the tiny chips
+  are gone. When the run ends — however it ends — everything parked
+  drains as ONE follow-up turn (newline-joined) that auto-runs. Park a
+  correction, press Stop, and the correction is what runs next. This also
+  fixed a real gap: notes queued during non-debate runs (casual chat,
+  solo analysis) were never consumed by anything.
+- **Send wins over Stop.** With a draft mid-run, the send button parks
+  the message (screen-reader label says "Queue message") instead of
+  killing the run; Stop is only stop when the box is empty.
+- **New rows arrive instead of popping.** Message rows fade in with an
+  8px rise — transform/opacity only so the virtualizer's measurements
+  hold, 0.2s, reduced-motion keeps the fade and drops the movement. While
+  a run has started but no AI row exists yet, a shimmering "Thinking"
+  line fills the reply slot (shown only while the newest row is still the
+  user's own message, so it never doubles up under a half-written
+  answer).
+- **Streaming no longer re-renders the whole transcript.** The per-run
+  context maps were rebuilt on every chunk, defeating every memoized row;
+  they are now keyed on a stream-stable signature (message ids plus a
+  hash of user texts, so edits still rebuild), and only the streaming row
+  redraws.
+- **Bot-to-bot DMs are typed handoffs.** The `[[dm:@handle]]` grammar
+  gains two optional follow-up lines — `[[constraints:…]]` (what the
+  teammate must respect) and `[[expecting:…]]` (what you want back) —
+  which attach to the most recent DM and ride the envelope. The target's
+  visible DM row and its prompt carry the task plus "Constraints:" /
+  "Wanted back:" lines; the teammate protocol teaches the fields. The
+  protocol's "at most two teammates" rule is now ENFORCED: a reply that
+  tries to DM a third teammate gets a model-actionable refusal, and an
+  identical (handle, text) marker repeated in one reply is deduplicated.
+  The prompt also now says why `[[expecting:…]]` matters: a handoff
+  without an expected answer comes back as prose nobody asked for.
+- **Invoked skills carry their content.** `/slug` in the composer used to
+  send only the NAME ("Apply notebook skill(s): x") — a wish, not an
+  instruction. Invoked slugs now resolve against the notebook and their
+  actual markdown body rides the run's instructions lane (every seat and
+  the moderator receive it), labeled with kind and status; a slug that
+  matches nothing is stated in place instead of silently dropped.
+- **Chart series get a fixed palette with red/green reserved.** The model
+  performance chart's gray ramp had duplicate colors — two models could
+  share one line color. Series colors are now positional from a fixed
+  palette (`utils/seriesPalette.ts`) that never reuses a slot and never
+  borrows rose/red (LOSS) or emerald/green (WIN) — a chart series in the
+  loss color would read as a verdict. Colors stay positional, never
+  provider-derived.
+
 ## App.tsx split into orchestration hooks, shared lookup helpers, one review fix
 
 Continues the approved implementation plan. App.tsx went from 4,588 to

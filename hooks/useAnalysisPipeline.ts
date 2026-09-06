@@ -81,7 +81,7 @@ import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWrite
 import { toolActionStamp } from '../utils/toolActions';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
-import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor } from '../services/learning/SkillMemoryService';
+import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
 import { sortByFitness, recordPreflightResult } from '../services/learning/providerFitness';
 import { buildPreflightBlock, applyPreflightGate } from '../services/learning/preflight';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
@@ -893,6 +893,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Debate template marker ([[Scalp check]] etc.) — extract before the
         // composer-intent parse so the marker never reaches the models.
         let runDebateTemplate: DebateTemplate | null = null;
+        // /slug skill invocations, captured before the steer-rewrite folds
+        // the message into prose — resolved into actual skill content below
+        // (a name alone teaches the seats nothing).
+        let invokedSkillSlugs: string[] = [];
         {
             const extracted = extractDebateTemplate(effectiveInput);
             if (extracted.template) {
@@ -902,6 +906,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }
         if (effectiveInput.trim()) {
             const intent = parseComposerIntent(effectiveInput);
+            invokedSkillSlugs = intent.skills;
             const steered = formatComposerSteer(intent);
             if (steered) effectiveInput = steered;
         }
@@ -1258,9 +1263,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // Debate template steering rides the custom instructions so every
             // seat + the moderator see the framing (Scalp / Swing / Devil's
             // advocate / Risk-only).
-            const instructionsToUse = runDebateTemplate
-                ? [getActiveCustomInstructions(), runDebateTemplate.steering].filter(Boolean).join('\n\n')
-                : getActiveCustomInstructions();
+            // Invoked notebook skills (/slug) resolve to their ACTUAL content
+            // and ride the same lane — OpenBot's skills-as-system-turn shape:
+            // "apply skill X" without skill X's text is a wish, not an
+            // instruction. Missing slugs are stated, never silently dropped.
+            const invokedSkillsSection = formatInvokedSkillSection(
+                invokedSkillSlugs.length > 0 ? resolveInvokedSkills(invokedSkillSlugs) : [],
+            );
+            const instructionsToUse = [
+                getActiveCustomInstructions(),
+                runDebateTemplate?.steering,
+                invokedSkillsSection,
+            ].filter(Boolean).join('\n\n');
 
             // These steps describe the ensemble analysis pipeline only. Casual
             // chat must not render analysis/fetching progress at all.

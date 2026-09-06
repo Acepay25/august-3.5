@@ -19,6 +19,7 @@ import {
 } from '../../services/backtesting/ModelPerformanceService';
 import { MarketRegime } from '../../services/analysis/TechnicalAnalysisService';
 import { getUnderperformerStatus } from '../../services/learning/UnderperformerFeedbackService';
+import { seriesColor } from '../../utils/seriesPalette';
 
 interface ModelCardData {
     provider: AIProvider;
@@ -37,14 +38,14 @@ interface ModelPerformanceDashboardProps {
     selectedModels?: Record<string, string>; // provider -> model name
 }
 
-// Neutral monochrome palette — no provider brand hints (providers are
-// user-configured, so ids render as their display name).
-const FALLBACK_PALETTE = ['#f5f5f6', '#d2d2d6', '#b0b0b6', '#8a8a92', '#b0b0b6', '#6b6b73', '#6b6b73', '#8a8a92', '#dedee2', '#6b6b73'];
-
+// Series colors are POSITIONAL (utils/seriesPalette), never provider-derived:
+// no brand hints (providers are user-configured), and the old duplicate-gray
+// ramp is gone — two models sharing one color made the lines unreadable.
+// Rose/green stay reserved for loss/win; see utils/seriesPalette.
 const resolveModelDisplay = (provider: AIProvider, index: number): { provider: AIProvider; name: string; color: string } => ({
     provider,
     name: provider,
-    color: FALLBACK_PALETTE[index % FALLBACK_PALETTE.length],
+    color: seriesColor(index),
 });
 
 /** Provider ids that contributed to a trade (dynamic first, legacy fallback). */
