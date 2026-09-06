@@ -265,7 +265,11 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const draftThinkingEffective = draftFormat === 'messages'
         ? draftThinking
         : 'auto';
-    const draftThinkingDirty = draftThinkingEffective !== (selected.thinkingCapable === true ? 'on' : selected.thinkingCapable === false ? 'off' : 'auto');
+    // `selected` is undefined in a fresh workspace (no provider rows yet) —
+    // the dirty probe must not read through it. isDirty below already
+    // short-circuits on !selected; this preview has to do the same or the
+    // whole Settings dialog crashes on first-run onboarding.
+    const draftThinkingDirty = !!selected && draftThinkingEffective !== (selected.thinkingCapable === true ? 'on' : selected.thinkingCapable === false ? 'off' : 'auto');
 
     const isDirty = useMemo(() => {
         if (!selected) return false;
