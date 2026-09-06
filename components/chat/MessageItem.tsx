@@ -183,6 +183,21 @@ const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animat
     );
 };
 
+// Teammate DM rows render as the envelope they are: the task as the body,
+// constraints and the expected answer as muted lines. The flat text stays
+// on the row for prompt/history replay — this is presentation only.
+const DmEnvelopeBody: React.FC<{ envelope: NonNullable<Message['dmEnvelope']> }> = ({ envelope }) => (
+    <div className="space-y-1">
+        <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-zinc-100">{envelope.task}</p>
+        {envelope.constraints && (
+            <p className="text-[12px] leading-5 text-zinc-500">Constraints: {envelope.constraints}</p>
+        )}
+        {envelope.expecting && (
+            <p className="text-[12px] leading-5 text-zinc-500">Wanted back: {envelope.expecting}</p>
+        )}
+    </div>
+);
+
 const MessageItem = React.memo(({ message, context }: { message: Message, context: ChatContextProps }) => {
     const {
         typingMessageState, highlightedAnalysisId, expandedPostMortems, setExpandedPostMortems,
@@ -583,10 +598,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
                             {/* Reference pattern: "You" + relative time header
-                                on the user card (identity, not decoration). */}
+                                on the user card (identity, not decoration).
+                                A teammate DM names the SENDER — in the target's
+                                thread "You" would be a lie about who spoke. */}
                             {isUserMessage && (
                                 <p className="mb-1 text-[12px]">
-                                    <span className="font-bold text-zinc-100">You</span>
+                                    <span className="font-bold text-zinc-100">{message.dmEnvelope?.fromName ?? 'You'}</span>
                                     <span className="ml-2 text-zinc-500">{relTime(message.createdAt)}</span>
                                     {message.dmFrom && (
                                         <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border border-zinc-700/70 rounded-full px-2 py-0.5">DM · teammate</span>
@@ -632,6 +649,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <div className="overflow-x-auto min-w-0">
                                     <MarkdownContent content={displayContent} className="text-zinc-100" />
                                 </div>
+                            ) : isUserMessage && message.dmEnvelope ? (
+                                <DmEnvelopeBody envelope={message.dmEnvelope} />
                             ) : (message.isDebating || message.ensembleProgress) ? null : (
                                 <div className="prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
                                     {message.isStreaming ? (

@@ -465,11 +465,19 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                             </li>
                         );
                     })}
-                    {bots.length === 0 && groups.length === 0 && (
+                    {/* Two different nothings: a search with no matches
+                        quotes the query back (a person holding a typo must
+                        read their bots as unfound, not gone); a genuinely
+                        empty roster explains what will appear here. */}
+                    {q && visibleBots.length === 0 && visibleGroups.length === 0 ? (
+                        <li className="px-2.5 py-3 text-[11px] leading-snug text-zinc-500">
+                            Nothing matches “{query.trim()}” — no bot, group, or thread here is named that or contains it.
+                        </li>
+                    ) : !q && bots.length === 0 && groups.length === 0 ? (
                         <li className="px-2.5 py-3 text-[11px] leading-snug text-zinc-500">
                             No bots yet — create one and pick a model for it to think with.
                         </li>
-                    )}
+                    ) : null}
                 </ul>
             </nav>
 
