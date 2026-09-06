@@ -11,6 +11,10 @@ import { MessageRole } from '../types/enums';
 
 const streamQuickResponse = vi.hoisted(() => vi.fn());
 vi.mock('../services/providers/GenericAnalysisService', () => ({ streamQuickResponse }));
+const tryFetchHybridDataFromPromptWithCalibration = vi.hoisted(() => vi.fn());
+vi.mock('../services/analysis/HybridIntelligenceService', () => ({
+    tryFetchHybridDataFromPromptWithCalibration,
+}));
 vi.mock('../services/bots/BotMemoryService', () => ({
     readBotSystemMarkdown: () => null,
     readBotMemoryMarkdown: () => null,
@@ -40,7 +44,7 @@ const envelope = (over: Partial<Parameters<ReturnType<typeof useBotMailbox>['del
     ...over,
 });
 
-const setup = (bots: AgentBot[] = [macro, risk]) => {
+const setup = (bots: AgentBot[] = [macro, risk], extra: { hybridEnabled?: boolean } = {}) => {
     const messages: Message[] = [];
     const ref = { current: messages };
     const h = renderHook(() => useBotMailbox({
@@ -53,12 +57,14 @@ const setup = (bots: AgentBot[] = [macro, risk]) => {
             const m = messages.find(x => x.id === id);
             if (m) Object.assign(m, patch);
         },
+        ...extra,
     }));
     return { h, messages };
 };
 
 beforeEach(() => {
     streamQuickResponse.mockReset();
+    tryFetchHybridDataFromPromptWithCalibration.mockReset();
 });
 
 describe('useBotMailbox', () => {
@@ -135,6 +141,37 @@ describe('useBotMailbox', () => {
         const { h } = setup([dead]);
         expect(await h.result.current.runUserBotTurn(dead, 'hi')).toBe(false);
         expect(streamQuickResponse).not.toHaveBeenCalled();
+    });
+
+    it('with hybrid ON, a bot turn fetches live data and injects it into the system prompt', async () => {
+        streamQuickResponse.mockResolvedValue('Long bias.');
+        tryFetchHybridDataFromPromptWithCalibration.mockResolvedValue({
+            enhancedInjection: 'LIVE MARKET SNAPSHOT: BTC 4h RSI 61, funding +0.01%.',
+        });
+        const { h } = setup([macro, risk], { hybridEnabled: true });
+        act(() => { void h.result.current.runUserBotTurn(risk, 'Should I long BTC?'); });
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(1));
+        expect(tryFetchHybridDataFromPromptWithCalibration).toHaveBeenCalledTimes(1);
+        expect(tryFetchHybridDataFromPromptWithCalibration).toHaveBeenCalledWith('Should I long BTC?');
+        const sysArg = String(streamQuickResponse.mock.calls[0][3] ?? '');
+        expect(sysArg).toContain('LIVE MARKET SNAPSHOT');
+    });
+
+    it('with hybrid off (default), no fetch happens and the prompt stays clean', async () => {
+        streamQuickResponse.mockResolvedValue('reply');
+        const { h } = setup();
+        act(() => { void h.result.current.runUserBotTurn(risk, 'Should I long BTC?'); });
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(1));
+        expect(tryFetchHybridDataFromPromptWithCalibration).not.toHaveBeenCalled();
+    });
+
+    it('a failed hybrid fetch never fails the turn (silent fallback)', async () => {
+        streamQuickResponse.mockResolvedValue('reply');
+        tryFetchHybridDataFromPromptWithCalibration.mockRejectedValue(new Error('offline'));
+        const { h, messages } = setup([macro, risk], { hybridEnabled: true });
+        act(() => { void h.result.current.runUserBotTurn(risk, 'BTC?'); });
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(1));
+        expect(messages.some(m => m.role === MessageRole.AI && m.text === 'reply')).toBe(true);
     });
 
     it('caps fanout: only the first two teammates per reply deliver, the rest get a refusal', async () => {

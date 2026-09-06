@@ -999,6 +999,19 @@ code,
   }
 }
 
+/* ===== MEMBER TINT (scoped color exception) =====
+   Same doctrine as .status-surface: one narrow scope where color carries
+   meaning. The empty-room member cards take a faint identity gradient
+   driven by --member-tint (each bot's own avatar hue — identity, not
+   decoration). Chroma stays low (color-mix at ~15% into zinc-900) so the
+   cards read as tinted zinc, never as colored chrome. */
+.member-tint {
+  background:
+    radial-gradient(140% 140% at 15% 0%, color-mix(in srgb, var(--member-tint) 15%, transparent) 0%, transparent 55%),
+    radial-gradient(130% 130% at 95% 115%, color-mix(in srgb, var(--member-tint) 10%, transparent) 0%, transparent 50%),
+    #18181b;
+}
+
 .animate-slide-in-right {
   /* Identical to slideLeft — shared keyframe (was a byte-for-byte duplicate). */
   animation: slideLeft 0.3s ease-out forwards;

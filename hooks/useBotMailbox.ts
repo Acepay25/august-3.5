@@ -17,6 +17,7 @@ import type { ProviderConfig } from '../types/provider';
 import type { Message } from '../types';
 import { MessageRole } from '../types/enums';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
+import { tryFetchHybridDataFromPromptWithCalibration } from '../services/analysis/HybridIntelligenceService';
 import {
     readBotSystemMarkdown,
     readBotMemoryMarkdown,
@@ -45,6 +46,12 @@ export interface UseBotMailboxArgs {
     messagesRef: React.MutableRefObject<Message[]>;
     appendMessage: (msg: Message) => void;
     patchMessage: (id: string, patch: Partial<Message>) => void;
+    /** Hybrid Intelligence: when ON, a bot answering in its own thread
+     *  gets the same live-market injection the debate analysts and room
+     *  members receive — fetched once per turn, keyed on the symbol the
+     *  prompt names. Without it a DM'd bot reasons blind while the rest
+     *  of the harness sees live prices. */
+    hybridEnabled?: boolean;
 }
 
 export interface UseBotMailboxResult {
@@ -73,6 +80,7 @@ const isProviderReadyFor = (configs: ProviderConfig[], providerId: string, model
 
 export const useBotMailbox = ({
     bots, providerConfigs, username, messagesRef, appendMessage, patchMessage,
+    hybridEnabled = false,
 }: UseBotMailboxArgs): UseBotMailboxResult => {
     // Per-target serial queues (Hermes's per-profile lock, in-memory).
     const queues = useRef<Map<string, DMEnvelope[]>>(new Map());
@@ -113,7 +121,18 @@ export const useBotMailbox = ({
         }
         const persona = username ? readBotSystemMarkdown(bot.id) : null;
         const notes = username ? readBotMemoryMarkdown(bot.id) : null;
-        const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current });
+        // Hybrid Intelligence for the turn: one fetch, keyed on the symbol
+        // the prompt names; silent fallback to the bot's own knowledge when
+        // the fetch fails or no symbol is present (the rooms' exact pattern).
+        let hybridInjection = '';
+        if (hybridEnabled) {
+            try {
+                const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(prompt);
+                if (hybridResult) hybridInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
+            } catch { /* offline / no symbol — the turn runs without live data */ }
+        }
+        const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current })
+            + (hybridInjection ? `\n\n${hybridInjection}` : '');
         const history = threadForProvider(messagesRef.current, bot.providerId, bot.modelId);
 
         const replyId = `dmr-${Date.now()}-${bot.id}`;
@@ -178,7 +197,7 @@ export const useBotMailbox = ({
                 isStreaming: false,
             });
         }
-    }, [appendMessage, patchMessage, messagesRef, notice, username]);
+    }, [appendMessage, patchMessage, messagesRef, notice, username, hybridEnabled]);
 
     const drain = useCallback(async (botId: string): Promise<void> => {
         if (busy.current.has(botId)) return; // serial per target
