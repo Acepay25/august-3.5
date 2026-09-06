@@ -1147,6 +1147,9 @@ const App: React.FC = () => {
         messagesRef,
         appendMessage: appendGroupMessage,
         patchMessage: patchGroupMessage,
+        // Same live-data gate the rooms use: with Hybrid Intelligence ON,
+        // a bot in its own thread reasons over live prices too.
+        hybridEnabled: isHybridIntelligenceEnabled,
     });
     mailboxRef.current = mailbox;
     botThreadStateRef.current = { thread: activeThread, bots };

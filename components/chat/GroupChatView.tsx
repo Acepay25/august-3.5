@@ -20,6 +20,16 @@ import { MessageRole } from '../../types/enums';
 import { Message } from '../../types/message';
 import MarkdownContent from '../shared/MarkdownContent';
 import { formatModelDisplayName } from '../../utils/providerUtils';
+import { faceForName, type BotFaceSpec } from './BotFace';
+
+/** The card tint IS the bot's identity: face-kind bots wear their own
+ *  avatar hue; auto/pixel/upload avatars derive one from the name (the
+ *  same hash that draws the auto face), so the gradient never changes
+ *  between renders. */
+const tintForBot = (bot: { name: string; avatar: AgentBot['avatar'] }): string => {
+    const spec: BotFaceSpec = bot.avatar.kind === 'face' ? bot.avatar.spec : faceForName(bot.name);
+    return spec.hue;
+};
 
 export interface GroupChatViewProps {
     group: AgentGroup;
@@ -275,7 +285,8 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                             {members.map(m => (
                                 <div
                                     key={m.id}
-                                    className="flex min-w-0 items-center gap-2.5 rounded-xl border border-white/[0.06] bg-zinc-900/60 py-2 pl-2 pr-3"
+                                    className="member-tint flex min-w-0 items-center gap-2.5 rounded-xl border border-white/[0.06] py-2 pl-2 pr-3"
+                                    style={{ '--member-tint': tintForBot(m) } as React.CSSProperties}
                                 >
                                     <BotAvatar bot={m} size={28} />
                                     <span className="min-w-0">
