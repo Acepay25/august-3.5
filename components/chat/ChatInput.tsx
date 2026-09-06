@@ -17,6 +17,7 @@ import ModelPicker from '../shared/ModelPicker';
 import { parseComposerIntent } from '../../utils/composerMentions';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { buildTeamRoster, LENS_ROSTER_ROLES } from '../../utils/teamRoster';
+import { listSkills, titleFromMeta } from '../../services/learning/SkillMemoryService';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { botHandle } from '../../services/agents/botMailbox';
 
@@ -161,6 +162,52 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
     const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
     const [mentionOpen, setMentionOpen] = useState(false);
+    const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+
+    // ─── Skill autocomplete (/slug) ─────────────────────────────────────────
+    // Skills are invoked by slug, but a slug you cannot see is a feature
+    // nobody can use. Typing `/` (start of a word) opens a menu of the
+    // notebook's skills with their summaries; picking one completes the
+    // token. Same interaction grammar as the @mention menu: click to
+    // insert, Escape to dismiss.
+    const skillTokenMatch = /(?:^|\s)\/([a-z0-9_-]*)$/i.exec(input);
+    const skillToken = skillTokenMatch?.[1]?.toLowerCase() ?? null;
+    const skillCandidates = React.useMemo(() => {
+        if (skillToken === null) return [];
+        const q = skillToken;
+        return listSkills()
+            .filter(({ file, meta }) => {
+                const slug = file.name.replace(/\.md$/i, '').toLowerCase();
+                return !q || slug.includes(q)
+                    || (meta.description ?? '').toLowerCase().includes(q)
+                    || titleFromMeta(meta).toLowerCase().includes(q);
+            })
+            .slice(0, 8)
+            .map(({ file, meta }) => ({
+                slug: file.name.replace(/\.md$/i, ''),
+                title: titleFromMeta(meta),
+                description: meta.description ?? '',
+                kind: meta.kind,
+                status: meta.status,
+            }));
+    }, [skillToken]);
+    const insertSkill = (slug: string): void => {
+        setInput(input.replace(/\/([a-z0-9_-]*)$/i, `/${slug} `));
+        setSkillMenuOpen(false);
+        document.getElementById('chat-composer')?.focus();
+    };
+
+    // ─── Composer auto-grow ──────────────────────────────────────────────────
+    // rows=1 never grew, and `overflow: hidden` CLIPPED anything past one
+    // line — multi-line prompts were invisible to the person typing them.
+    // Grow with content up to the max-h cap, then scroll.
+    const composerRef = React.useRef<HTMLTextAreaElement | null>(null);
+    React.useEffect(() => {
+        const el = composerRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+    }, [input]);
     // @mention autocomplete from the LIVE roster —
     // the `bots` prop (authoritative, subscription-backed), collapsed to
     // the same handles the room engine and the mailbox resolve. The old
@@ -200,6 +247,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
             if (mentionOpen) { setMentionOpen(false); return; }
+            if (skillMenuOpen) { setSkillMenuOpen(false); return; }
             setIsTeamModalOpen(false);
             if (isAnalysisInProgress) handleCancelAnalysis();
         };
@@ -231,12 +279,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             document.removeEventListener('keydown', handleSlash);
             document.removeEventListener('august:try-skill', handleTrySkill);
         };
-    }, [isAnalysisInProgress, handleCancelAnalysis, mentionOpen, setInput]);
+    }, [isAnalysisInProgress, handleCancelAnalysis, mentionOpen, skillMenuOpen, setInput]);
     React.useEffect(() => {
         if (isAnalysisInProgress) setMentionOpen(false);
         else if (input.includes('@') && mentionCandidates.length > 0) setMentionOpen(true);
         else setMentionOpen(false);
     }, [input, isAnalysisInProgress, mentionCandidates.length]);
+    // Skill menu follows the token: typing `/x…` opens it, moving off the
+    // token (or clearing) closes it. Escape closes via the handler below.
+    React.useEffect(() => {
+        if (skillToken === null || skillCandidates.length === 0) setSkillMenuOpen(false);
+        else setSkillMenuOpen(true);
+    }, [skillToken, skillCandidates.length]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -359,10 +413,36 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <button type="button" className="ml-auto text-[10px] text-zinc-500 hover:text-zinc-300" onClick={() => setMentionOpen(false)}>Dismiss</button>
                         </div>
                     )}
+                    {/* Skill autocomplete — notebook skills, filtered by the
+                        /token being typed. Picking one completes the token;
+                        the skill's CONTENT rides the run when it sends. */}
+                    {skillMenuOpen && skillCandidates.length > 0 && (
+                        <div className="mb-1.5 rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5">
+                            <span className="mr-1 text-[10px] uppercase tracking-widest text-zinc-500">Skills</span>
+                            <div className="mt-1 max-h-52 space-y-0.5 overflow-y-auto">
+                                {skillCandidates.map(s => (
+                                    <button
+                                        key={s.slug}
+                                        type="button"
+                                        className="flex w-full items-baseline gap-2 rounded px-1.5 py-1 text-left hover:bg-zinc-800"
+                                        onClick={() => insertSkill(s.slug)}
+                                    >
+                                        <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">/{s.slug}</span>
+                                        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">
+                                            {s.title}{s.description ? ` — ${s.description}` : ''}
+                                        </span>
+                                        <span className="shrink-0 text-[9px] uppercase tracking-wider text-zinc-600">{s.kind} · {s.status}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <button type="button" className="mt-1 text-[10px] text-zinc-500 hover:text-zinc-300" onClick={() => setSkillMenuOpen(false)}>Dismiss</button>
+                        </div>
+                    )}
                     {/* Main Input Row */}
                     <div className="flex items-end gap-2 px-1">
                         <textarea
                             id="chat-composer"
+                            ref={composerRef}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
@@ -370,7 +450,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             className={`flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 ${threadMode ? 'placeholder:text-left' : 'placeholder:text-center focus:placeholder:text-left'}`}
                             rows={1}
                             disabled={isRateLimited}
-                            style={{ overflow: 'hidden' }}
+                            style={{ overflowY: 'auto', overflowX: 'hidden' }}
                         />
                     </div>
                     {/* The Templates ▾ row is gone — the composer carries
@@ -473,7 +553,16 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 queue, so stopping is how a parked correction
                                 jumps the line rather than a way to give up. */}
                             <button
-                                onClick={stopMode ? handleCancelAnalysis : handleSendMessage}
+                                onClick={() => {
+                                    if (stopMode) { handleCancelAnalysis(); return; }
+                                    handleSendMessage();
+                                    // A completed send owes the caret back:
+                                    // click-send leaves focus on a button that
+                                    // is about to swap meaning. Enter-send
+                                    // never leaves the textarea, so only the
+                                    // click path needs this.
+                                    document.getElementById('chat-composer')?.focus();
+                                }}
                                 disabled={isSummarizing || (!isAnalysisInProgress && (!hasDraft || isRateLimited || !isAnyProviderEnabled))}
                                 className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${stopMode ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-zinc-200 text-zinc-900 hover:bg-white shadow-sm'}`}
                                 title={stopMode ? 'Stop generating' : parkMode ? 'Queue message' : 'Send'}
