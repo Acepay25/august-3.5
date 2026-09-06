@@ -70,7 +70,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
     };
     if (actors.length === 0) return null;
     return (
-        <div className="rounded-xl border border-white/5 bg-zinc-900/60 p-3">
+        <div className="rounded-xl border border-white/5 bg-zinc-900/60 p-3" aria-label="Floor">
             {(caption || phase) && (
                 <div className="flex flex-wrap items-baseline gap-x-2 pb-2">
                     {caption && (
@@ -120,6 +120,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                             type="button"
                             onClick={() => onOpenActor?.(actor.id)}
                             title={actor.meta ? `${actor.name} — ${actor.meta}` : `Open ${actor.name}'s transcript`}
+                            aria-label={`Open ${actor.name} analysis`}
                             className="flex w-full items-center gap-2.5 rounded-lg border border-white/5 bg-zinc-900 px-2.5 py-2 text-left transition-colors hover:border-zinc-700"
                         >
                         <DebateBotAvatar

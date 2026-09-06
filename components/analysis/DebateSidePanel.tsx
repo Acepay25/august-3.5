@@ -748,7 +748,12 @@ const DebateSidePanelImpl: React.FC<DebateSidePanelProps> = ({
     if (!open || !activeActor) return null;
 
     return (
-        <div className="fixed inset-y-0 right-0 z-40 flex w-[min(480px,94vw)] flex-col border-l border-white/10 bg-zinc-950 shadow-2xl animate-fade-in">
+        <aside
+            data-testid="debate-side-panel"
+            role="complementary"
+            aria-label={`${activeActor ?? 'Debate'} transcript`}
+            className="fixed inset-y-0 right-0 z-40 flex w-[min(480px,94vw)] flex-col border-l border-white/10 bg-zinc-950 shadow-2xl animate-fade-in"
+        >
             <div className="flex shrink-0 items-center gap-1 border-b border-white/10 px-3 py-2">
                 <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto custom-scrollbar">
                     {actorIds.map(id => {
@@ -995,7 +1000,7 @@ const DebateSidePanelImpl: React.FC<DebateSidePanelProps> = ({
                     Back to live
                 </button>
             )}
-        </div>
+        </aside>
     );
 };
 

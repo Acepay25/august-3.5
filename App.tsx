@@ -2262,6 +2262,7 @@ const App: React.FC = () => {
         [approvalItems, learningQueueNonce, activeUsername],
     );
     const selectCoachThread = useCallback(() => setActiveThread({ kind: 'coach' }), []);
+    const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
         takeSkillDraft(draft.id, activeUsername || undefined);
         const trade = loggedTradesRef.current.find(t => t.id === draft.tradeId);
@@ -2927,6 +2928,7 @@ const App: React.FC = () => {
                                     onNewBot={() => setIsNewBotOpen(true)}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onSelectCoach={selectCoachThread}
+                                    onSelectTeam={selectTeamThread}
                                     coachCount={coachCount}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
                                     lastOpenedMap={threadOpenedMap}
@@ -2980,8 +2982,7 @@ const App: React.FC = () => {
                     {/* Chat body. Bot threads render directly (reference BOT
                         CHAT): no detail landing page, no tab — the reasoning
                         rows + message cards ARE the surface. */}
-                    {(activeThread.kind === 'coach' ? (
-                <div className="min-h-0 flex-1 overflow-y-auto chat-scroll">
+                    {(activeThread.kind === 'coach' ? (                <div className="min-h-0 flex-1 overflow-y-auto chat-scroll">
                     <React.Suspense fallback={null}>
                         <CoachThreadPanel
                             onAllowDraft={coachAllowDraft}
