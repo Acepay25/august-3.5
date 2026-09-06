@@ -39,5 +39,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: End-to-end smoke
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+
       - name: Production build
         run: npm run build
