@@ -19,6 +19,7 @@ import { GroupThread, splitGroupThreads, threadForGroup } from '../../utils/agen
 import { MessageRole } from '../../types/enums';
 import { Message } from '../../types/message';
 import MarkdownContent from '../shared/MarkdownContent';
+import { formatModelDisplayName } from '../../utils/providerUtils';
 
 export interface GroupChatViewProps {
     group: AgentGroup;
@@ -194,7 +195,10 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                 )}
             </div>
 
-            {/* Activity feed */}
+            {/* Activity feed — hidden while the room is virgin: an empty
+                feed's only content was a hint duplicating the hero below,
+                and a collapsed disclosure bar reads as noise, not invite. */}
+            {(activity.length > 0 || isRunning) && (
             <div className="border-b border-white/[0.06] px-4 py-1.5" data-testid="group-activity">
                 <button
                     type="button"
@@ -247,14 +251,58 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                     </ul>
                 )}
             </div>
+            )}
 
             {/* Threads */}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 {threads.length === 0 ? (
-                    <div className="flex h-full items-center justify-center">
-                        <p className="max-w-sm text-center text-[12px] leading-relaxed text-zinc-500">
-                            New thread in {groupDisplayName(group, bots)} — one prompt, every member answers in turn.
+                    /* Empty room — OpenBot's onboarding shape, grounded in the
+                        real members: a headline, who is on this floor (cards,
+                        not a sentence), and starter prompts that prefill the
+                        composer. Never auto-send; prefill is a hand on the
+                        wheel, not a turn taken. */
+                    <div className="flex h-full flex-col items-center justify-center px-6 py-10">
+                        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                            {members.length} bots · every member answers in turn
                         </p>
+                        <h1 className="mb-2 text-center font-serif text-[26px] tracking-tight text-zinc-100 sm:text-[32px]">
+                            Start a new thread
+                        </h1>
+                        <p className="mb-8 max-w-md text-center text-[12px] leading-relaxed text-zinc-500">
+                            One prompt opens the floor. @name to direct one member, @everyone for all.
+                        </p>
+                        <div className="mb-8 flex max-w-xl flex-wrap justify-center gap-2" data-testid="group-members-strip">
+                            {members.map(m => (
+                                <div
+                                    key={m.id}
+                                    className="flex min-w-0 items-center gap-2.5 rounded-xl border border-white/[0.06] bg-zinc-900/60 py-2 pl-2 pr-3"
+                                >
+                                    <BotAvatar bot={m} size={28} />
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-[12px] font-semibold text-zinc-200">{m.name}</span>
+                                        <span className="block truncate text-[10px] text-zinc-500">
+                                            {m.title || formatModelDisplayName(m.modelId)}
+                                        </span>
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-2">
+                            {['Introduce yourselves', 'Debate the current BTC setup', 'What is the biggest risk right now?'].map(starter => (
+                                <button
+                                    key={starter}
+                                    type="button"
+                                    data-testid={`group-starter-${starter.slice(0, 8)}`}
+                                    onClick={() => {
+                                        setInput(starter);
+                                        document.getElementById('group-room-composer')?.focus();
+                                    }}
+                                    className="rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-[11px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+                                >
+                                    {starter}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-8">
@@ -370,18 +418,21 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
             </div>
 
             {/* Composer — New thread in … (@name to direct, @everyone for all);
-                becomes a Stop control while the room is running. */}
+                becomes a Stop control while the room is running. Centered on
+                the column like the main composer, with a focus ring so the
+                room's one interactive surface reads as one. */}
             <div className="border-t border-white/[0.06] px-4 py-3">
-                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-zinc-900 px-3 py-2">
+                <div className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl border border-white/10 bg-zinc-900 px-4 py-3 transition-colors focus-within:border-zinc-500">
                     <input
                         type="text"
+                        id="group-room-composer"
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
                         placeholder={`New thread in ${groupDisplayName(group, bots)}… (@name to direct, @everyone for all)`}
                         data-testid="group-composer"
                         aria-label="New group thread"
-                        className="min-w-0 flex-1 bg-transparent text-[13px] text-zinc-100 placeholder-zinc-600 outline-none"
+                        className="min-w-0 flex-1 bg-transparent text-[14px] text-zinc-100 placeholder-zinc-600 outline-none"
                     />
                     {isRunning && onCancelRun ? (
                         <button

@@ -602,12 +602,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             </div>
 
             {visibleBot && processedMessages.length === 0 ? (
-                /* Bot thread with no messages yet — muted hint, composer
-                    stays docked at the bottom (Hermes layout). */
-                <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-                    <p className="max-w-xs text-center text-[12px] leading-relaxed text-zinc-500">
-                        No messages with <span className="font-semibold text-zinc-300">{visibleBot.name}</span> yet — say hello.
-                        Team debates stay in the Team thread.
+                /* Bot thread, no messages yet — the bot IS the empty state:
+                    face, name, title, one honest line. */
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10">
+                    <BotAvatar bot={{ name: visibleBot.name, avatar: visibleBot.avatar ?? { kind: 'auto' } }} size={56} />
+                    <h1 className="mt-4 text-center font-serif text-[24px] tracking-tight text-zinc-100 sm:text-[28px]">
+                        {visibleBot.name}
+                    </h1>
+                    <p className="mt-2 max-w-xs text-center text-[12px] leading-relaxed text-zinc-500">
+                        No messages with {visibleBot.name} yet — say hello. Team debates stay in the Team thread.
                     </p>
                 </div>
             ) : messages.length > 0 && (
