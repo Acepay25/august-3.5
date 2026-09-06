@@ -938,6 +938,67 @@ code,
   animation: fadeIn 0.3s ease-out forwards;
 }
 
+/* ===== MESSAGE ENTRANCE ===== */
+/* New transcript rows fade in and rise 8px. Transform + opacity only, so
+   the list's layout measurements (virtualizer sizing) never see the
+   animation; `both` fill holds the hidden state until the animation starts.
+   Rows remount on scroll (virtualized), so a row re-entering the viewport
+   replays this — a 0.2s settle reads as content arriving, not a glitch. */
+@keyframes msg-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.msg-arriving {
+  animation: msg-arrive 0.2s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes msg-fade-only {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* A row that is still running — "Thinking", an in-flight action — shimmers
+   instead of pulsing: a light band sweeps through the glyphs via
+   background-clip so the text never changes size. Only background-position
+   animates (compositor-friendly). currentColor keeps it working wherever
+   the row's tone (muted/destructive) is set. */
+.shimmer-text {
+  background-image: linear-gradient(
+    100deg,
+    currentColor 40%,
+    color-mix(in srgb, currentColor 25%, transparent) 50%,
+    currentColor 60%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 1.6s linear infinite;
+}
+
+@keyframes shimmer-sweep {
+  from { background-position: 150% 0; }
+  to { background-position: -150% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-arriving {
+    animation-name: msg-fade-only;
+  }
+  .shimmer-text {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 .animate-slide-in-right {
   /* Identical to slideLeft — shared keyframe (was a byte-for-byte duplicate). */
   animation: slideLeft 0.3s ease-out forwards;

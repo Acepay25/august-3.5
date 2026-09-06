@@ -241,6 +241,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
 
+    // Send/Stop arbitration: with a draft mid-run the button parks the draft
+    // (Send wins); only an EMPTY box mid-run makes it Stop.
+    const hasDraft = input.trim().length > 0 || images.length > 0;
+    const parkMode = isAnalysisInProgress && hasDraft;
+    const stopMode = isAnalysisInProgress && !hasDraft;
+
     // Casual-chat model dropdown (ensemble off): every model of every ready
     // provider. Falls back to the first ready provider's model when the
     // stored selection is empty or no longer available.
@@ -292,6 +298,36 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             ? 'w-full'
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'chat-column pointer-events-auto'}>
+                {/* Queued sends — parked words typed while a run is live.
+                    They render as real message bubbles (faded, with a Queued
+                    footer) rather than status chips, so the words visibly
+                    landed and stay removable. When the run ends — however it
+                    ends — everything parked drains as one follow-up turn. */}
+                {isAnalysisInProgress && steeringNotes.length > 0 && (
+                    <div className="mb-2 max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                        {steeringNotes.map((note, i) => (
+                            <div
+                                key={`queued-${i}-${note.slice(0, 16)}`}
+                                className="rounded-xl border border-white/[0.06] bg-zinc-900/60 px-4 py-3 opacity-60"
+                            >
+                                <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-zinc-200">{note}</p>
+                                <p className="mt-1 text-[11px] text-zinc-500">
+                                    Queued
+                                    <span aria-hidden="true"> · </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveSteeringNote?.(i)}
+                                        className="underline underline-offset-2 hover:text-zinc-300"
+                                        aria-label={`Remove queued message: ${note}`}
+                                    >
+                                        Remove
+                                    </button>
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {/* Main Input Container — pill proportions:
                     ~16px radius, generous ~20px inner padding, solid #262626
                     fill, no border/shadow. */}
@@ -299,29 +335,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
-
-                    {isAnalysisInProgress && (
-                        <div className="mb-1.5 px-2">
-                            <p className="text-[10px] uppercase tracking-widest text-zinc-500">
-                                {steeringNotes.length > 0 ? `${steeringNotes.length} note${steeringNotes.length === 1 ? '' : 's'} queued for the next debate step` : 'Type a note and send — it queues until the next debate step'}
-                            </p>
-                            {steeringNotes.length > 0 && (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                    {steeringNotes.map((note, i) => (
-                                        <button
-                                            key={`${i}-${note.slice(0, 12)}`}
-                                            type="button"
-                                            onClick={() => onRemoveSteeringNote?.(i)}
-                                            className="max-w-full truncate rounded-md border border-white/10 bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-rose-500/40 hover:text-zinc-100"
-                                            title="Remove queued note"
-                                        >
-                                            {note}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
 
                     {mentionOpen && mentionCandidates.length > 0 && (
                         <div className="mb-1.5 flex flex-wrap gap-1 rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5">
@@ -353,7 +366,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
-                            placeholder={placeholderOverride ?? (isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?')}
+                            placeholder={placeholderOverride ?? (isAnalysisInProgress ? 'Add a note — it steers this run, or runs next…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?')}
                             className={`flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 ${threadMode ? 'placeholder:text-left' : 'placeholder:text-center focus:placeholder:text-left'}`}
                             rows={1}
                             disabled={isRateLimited}
@@ -452,14 +465,21 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     mode="model-only"
                                 />
                             )}
+                            {/* Send wins over Stop when both apply (a draft
+                                exists mid-run): pressing it parks the draft as
+                                a queued message instead of killing the run.
+                                Stop is only the button's meaning when the box
+                                is empty — and killing the run then drains the
+                                queue, so stopping is how a parked correction
+                                jumps the line rather than a way to give up. */}
                             <button
-                                onClick={isAnalysisInProgress ? handleCancelAnalysis : handleSendMessage}
-                                disabled={isSummarizing || (!isAnalysisInProgress && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
-                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${isAnalysisInProgress ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-zinc-200 text-zinc-900 hover:bg-white shadow-sm'}`}
-                                title={isAnalysisInProgress ? 'Stop generating' : 'Send'}
-                                aria-label={isAnalysisInProgress ? 'Stop generating' : 'Send message'}
+                                onClick={stopMode ? handleCancelAnalysis : handleSendMessage}
+                                disabled={isSummarizing || (!isAnalysisInProgress && (!hasDraft || isRateLimited || !isAnyProviderEnabled))}
+                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${stopMode ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-zinc-200 text-zinc-900 hover:bg-white shadow-sm'}`}
+                                title={stopMode ? 'Stop generating' : parkMode ? 'Queue message' : 'Send'}
+                                aria-label={stopMode ? 'Stop generating' : parkMode ? 'Queue message' : 'Send message'}
                             >
-                                {isSummarizing ? <LoadingIcon className="h-4 w-4" /> : isAnalysisInProgress ? <StopIcon className="h-3.5 w-3.5" fill="currentColor" /> : <SendIcon className="h-4 w-4" />}
+                                {isSummarizing ? <LoadingIcon className="h-4 w-4" /> : stopMode ? <StopIcon className="h-3.5 w-3.5" fill="currentColor" /> : <SendIcon className="h-4 w-4" />}
                             </button>
                         </div>
                     </div>

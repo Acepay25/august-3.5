@@ -613,6 +613,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // duplicate user message and aborted run #1. Set synchronously before any
     // await; cleared in the finally.
     const analysisInFlightRef = useRef(false);
+    // Latest handleSendMessage closure, for the queued-send drain effect at
+    // the bottom of this hook — the drain fires after commit, so it must
+    // call through the freshest closure, not the one that started the run.
+    // Assigned after handleSendMessage below.
+    const drainSendRef = useRef<((text?: string) => Promise<void>) | null>(null);
     // Which pipeline phase is running — used to fail the CORRECT step when a
     // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
     // failures marked the wrong step and the finally force-completed everything).
@@ -671,6 +676,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         analysisAbortController.current = null;
         analysisConversationIdRef.current = null;
         analysisInFlightRef.current = false; // keep the double-submit guard consistent
+        // Parked sends belong to the conversation they were typed in — the
+        // queue is memory, not an outbox. Leaving them would drain into the
+        // WRONG conversation when the abort settles.
+        steeringQueueRef.current = [];
+        setSteeringNotes([]);
         setLoadingMessage(null);
         setIsAnalysisInProgress(false);
         setIsPostMortemInProgress(false);
@@ -803,8 +813,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // Drafting stays enabled during a run, but a send attempt while a
             // debate is live must not silently eat the message (the composer
             // only disables during loadingMessage, which is null mid-debate).
-            // Automation runs skip the toast — the scheduler checks the
-            // in-flight state itself before firing.
+            // The words park in steeringQueueRef and render as faded queued
+            // bubbles above the composer — no toast, the bubbles ARE the
+            // receipt. At the next debate step they steer in-run; anything
+            // still parked when the run ends drains as one follow-up turn
+            // (see the drain effect). Automation runs skip queueing — the
+            // scheduler checks the in-flight state itself before firing.
             if (!isAutomationRun) {
                 const draft = typeof customPrompt === 'string' ? customPrompt : input;
                 if (draft.trim()) {
@@ -812,7 +826,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     steeringQueueRef.current = [...steeringQueueRef.current, formatComposerSteer(intent) || draft.trim()];
                     setSteeringNotes(steeringQueueRef.current);
                     setInput('');
-                    toast.success?.('Queued for debate', 'Shown under the composer — applied at the next debate step.');
                 }
             }
             return;
@@ -4169,6 +4182,14 @@ ${accuracyVerificationNote}`
                 setIsAnalysisInProgress(false);
                 analysisInFlightRef.current = false;
             }
+            // NOTE: queued sends are NOT drained here. The drain (see the
+            // effect below) keys on the isAnalysisInProgress false-transition
+            // AFTER React commits, because this closure's captured state is
+            // stale — draining here would start the next run with a
+            // mid-run-era closure. When a drain does start a new run before
+            // this finally executes (fast cancel), the ownership guard above
+            // sees a replaced controller and skips this cleanup — the new run
+            // owns the state from there on.
         }
     }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
 
@@ -4210,6 +4231,35 @@ ${accuracyVerificationNote}`
             : confirm(`Delete ${ids.length} messages?`);
         if (ok) updateMessages(prev => prev.filter(m => !ids.includes(m.id)));
     };
+
+    // ─── Queued-send drain: the run ends, the queue runs ───────────────────
+    // Everything parked while a run was live drains as ONE follow-up turn
+    // when the run ends — however it ended. Settling is not the same as
+    // succeeding: a complete, errored, or user-stopped run all drain, which
+    // is what makes Stop a way of steering rather than a way of giving up
+    // (park a correction, press Stop, and the correction is what runs next).
+    // One turn and not one per message, newline-joined: three quick
+    // corrections are usually one correction typed in three breaths. Keyed on
+    // the isAnalysisInProgress FALSE-TRANSITION — not on run completion —
+    // so it fires after React has committed the idle state and the send runs
+    // with a fresh closure. A conversation switch clears the queue first (the
+    // switch effect above), so parked words never drain into the wrong
+    // thread; the queue is memory in one mount, not an outbox.
+    drainSendRef.current = handleSendMessage;
+    const wasRunActiveRef = useRef(false);
+    useEffect(() => {
+        if (isAnalysisInProgress) {
+            wasRunActiveRef.current = true;
+            return;
+        }
+        if (!wasRunActiveRef.current) return;
+        wasRunActiveRef.current = false;
+        const queuedDrain = steeringQueueRef.current;
+        if (queuedDrain.length === 0) return;
+        steeringQueueRef.current = [];
+        setSteeringNotes([]);
+        void drainSendRef.current?.(queuedDrain.join('\n'));
+    }, [isAnalysisInProgress]);
 
     return {
         // State
