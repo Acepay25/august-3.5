@@ -2,6 +2,54 @@
 
 Plain-English log of change rounds. Newest first.
 
+## CI gates the e2e smoke on every push
+
+The release run caught three weeks of UI rot because the e2e smoke suite
+only executed on version tags — the CI workflow stopped at
+typecheck/tests/lint, so nothing exercised the real boot path between
+releases. The End-to-end smoke step (Playwright, same suite the release
+runs) now gates every push and PR to main. UI drift gets caught the day
+it lands, not three weeks later at the tag.
+
+## Release-blocking fixes: boot surface, a11y tree, and the smoke suite
+
+The v1.0.18 release run failed its end-to-end smoke step — 9 of 11 tests.
+Root-causing them surfaced three real app bugs (plus stale tests pinning
+a removed surface), all fixed:
+
+- **Booting landed in the Coach inbox, orphaning your conversation.**
+  The chat-mode rework defaulted the active thread to the Coach panel —
+  the learning-loop inbox — so the app opened on drafts-and-proposals
+  while the actual trading transcript sat one click away, and the main
+  ChatArea surface was unreachable without a room. A new `team` thread
+  kind restores the ensemble transcript as the boot surface: a pinned
+  Team row sits at the top of the roster (the rail's docstring always
+  promised one), deleted rooms/bots fall back to it, and Coach demotes
+  to the opt-in row it should be.
+- **The Playbook drawer claimed `aria-modal` while closed.** It is
+  permanently mounted (CSS-transform hidden), so with `aria-modal="true"`
+  the ENTIRE rest of the app vanished from the accessibility tree —
+  screen readers and the e2e role engine both saw a bare drawer and no
+  Trading Journal, Live Market, or anything else. Modal semantics now
+  ride real visibility, with `aria-hidden` + `inert` while closed.
+- **Quick actions vanished with the unified sidebar.** The Journal /
+  Live Market / Watch list rows lived inside the sessions-only sidebar
+  fragment, so switching the sidebar to the BOTS pane removed the only
+  entry points to them. The nav now renders in both panes.
+- **Debate surfaces lost their labels.** The in-transcript debate stage
+  regained `aria-label="Floor"`, each seat button carries
+  `aria-label="Open {name} analysis"`, and the side panel is a labelled
+  complementary landmark (`{name} transcript`).
+- **Floor smoke tests rewritten to the current contract.** They pinned
+  the removed bubble/ticker floor (`.debate-stage-bubble`,
+  `data-thought`), which died in the floor-polish round; the suite only
+  runs on release tags, so nothing caught it for three weeks. The
+  rewritten tests pin today's contract — settled debate turns render
+  one seat card per speaker with a bounded reasoning line, no
+  cross-seat leakage, the verdict lives in the seat transcript rather
+  than the card — seeded the way a reload actually persists (live
+  debate flags are stripped on load, so seeded fixtures are settled).
+
 ## Skill creation traced end-to-end and pinned by a file-integrity suite
 
 The question was "how do skills get created, and is the created skill
