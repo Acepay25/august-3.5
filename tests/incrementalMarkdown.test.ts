@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitStreamingBlocks, UNSTABLE_TAIL_BLOCKS } from '../utils/incrementalMarkdown';
+import { repairStreamTail, splitStreamingBlocks, UNSTABLE_TAIL_BLOCKS } from '../utils/incrementalMarkdown';
 
 describe('splitStreamingBlocks', () => {
   it('returns a single tail block for short text', () => {
@@ -39,5 +39,54 @@ describe('splitStreamingBlocks', () => {
     const { frozen, tail } = splitStreamingBlocks('');
     expect(frozen).toEqual([]);
     expect(tail).toBe('');
+  });
+});
+
+describe('repairStreamTail', () => {
+  it('leaves fully-closed markdown untouched', () => {
+    expect(repairStreamTail('Plain text.')).toBe('Plain text.');
+    expect(repairStreamTail('**bold** and `code`')).toBe('**bold** and `code`');
+    expect(repairStreamTail('- a\n- b\n\ndone')).toBe('- a\n- b\n\ndone');
+  });
+
+  it('closes an unclosed bold marker', () => {
+    expect(repairStreamTail('The bias is **bullish but')).toBe('The bias is **bullish but**');
+  });
+
+  it('closes an unclosed strikethrough', () => {
+    expect(repairStreamTail('old view ~~wrong')).toBe('old view ~~wrong~~');
+  });
+
+  it('closes an unclosed inline code span', () => {
+    expect(repairStreamTail('watch the `RSI level')).toBe('watch the `RSI level`');
+  });
+
+  it('closes an unclosed code fence with a matching marker', () => {
+    const repaired = repairStreamTail('Plan:\n```js\nconst x = 1;');
+    expect(repaired.endsWith('\n```')).toBe(true);
+  });
+
+  it('closes a tilde fence with a tilde marker', () => {
+    const repaired = repairStreamTail('~~~\ncode');
+    expect(repaired.endsWith('\n~~~')).toBe(true);
+  });
+
+  it('does not append inline closers while inside a fence', () => {
+    const repaired = repairStreamTail('```\nunpaired ** and ` stay literal');
+    expect(repaired).toBe('```\nunpaired ** and ` stay literal\n```');
+  });
+
+  it('handles a closed fence followed by new text', () => {
+    expect(repairStreamTail('```\ncode\n```\n\nafter')).toBe('```\ncode\n```\n\nafter');
+  });
+
+  it('does not touch lone asterisks or underscores (ambiguous emphasis)', () => {
+    expect(repairStreamTail('3 * 4 = 12 and snake_case_name')).toBe('3 * 4 = 12 and snake_case_name');
+  });
+
+  it('repairs the streaming tail of a live reply end to end', () => {
+    const text = 'Intro paragraph.\n\nSecond **paragraph still';
+    const { tail } = splitStreamingBlocks(text);
+    expect(repairStreamTail(tail)).toBe('Intro paragraph.\n\nSecond **paragraph still**');
   });
 });

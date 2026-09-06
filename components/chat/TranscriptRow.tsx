@@ -204,7 +204,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
     return (
         <div
             id={`message-${message.id}`}
-            className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-3 sm:px-4 lg:px-8 transition-all duration-200 chat-column
+            className={`msg-arriving status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-3 sm:px-4 lg:px-8 transition-all duration-200 chat-column
             ${isHighlighted ? 'rounded-2xl' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
         `}

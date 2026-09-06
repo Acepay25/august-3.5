@@ -17,13 +17,32 @@ import { threadForProvider } from '../../utils/agentThreads';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
+
+// djb2 over user-message text — cheap membership-proof for the context
+// signature below (edits must rebuild the prior-user-message map even when
+// the edit keeps the same length).
+const hashText = (s: string): number => {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return h;
+};
 // Reserve the full vertical footprint of the fixed composer so the final
 // message can always scroll above it instead of being hidden underneath it.
-const ListFooter: React.FC<{ isLoading?: boolean }> = ({ isLoading = false }) => (
+// While a run has started but no AI row exists yet (the reply slot is still
+// empty), a shimmering "Thinking" line fills the gap — shown only while the
+// last row is the user's own message, so it never doubles up under a
+// half-written answer.
+const ListFooter: React.FC<{ isLoading?: boolean; thinking?: boolean }> = ({ isLoading = false, thinking = false }) => (
     <div
         className={isLoading ? 'h-52 sm:h-56' : 'h-36 sm:h-40'}
         aria-hidden="true"
-    />
+    >
+        {thinking && (
+            <div className="flex h-7 items-center px-3 sm:px-4 lg:px-8">
+                <span className="shimmer-text text-sm text-zinc-500">Thinking</span>
+            </div>
+        )}
+    </div>
 );
 
 interface ChatAreaProps {
@@ -318,6 +337,23 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // not its id, so enhancedContext (and every memoized MessageItem) stays
     // stable and only the streaming card re-renders.
     const latestMessageId = messages[messages.length - 1]?.id ?? null;
+    const handleViewImage = useCallback((url: string) => setViewerImageUrl(url), []);
+
+    // A streaming chunk grows the last message's text but changes nothing the
+    // two id-keyed maps below derive from: membership (and, for user rows,
+    // the editable text — hashed so even a same-length edit rebuilds). Keying
+    // the memos on a cheap string signature instead of the `messages` array
+    // keeps their object identity — and therefore enhancedContext's — stable
+    // across every stream chunk, so the memoized MessageItem/TranscriptRow
+    // rows skip re-rendering entirely and only the streaming row redraws.
+    // Without this the maps (and the whole context) were rebuilt per chunk,
+    // defeating every row memo.
+    const contextSignature = useMemo(
+        () => messages.map(m => (
+            m.role === MessageRole.USER ? `${m.id}:${hashText(m.text)}` : m.id
+        )).join('\u0000'),
+        [messages],
+    );
     const priorAnalysisById = useMemo(() => {
         const map: Record<string, NonNullable<typeof messages[number]['analysis']>> = {};
         let prev: (typeof messages)[number]['analysis'];
@@ -327,7 +363,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             prev = m.analysis;
         }
         return map;
-    }, [messages]);
+        // contextSignature stands in for `messages`: see the comment above.
+    }, [contextSignature]);
     // The user prompt that started each run — the thread view renders it as
     // the "You" bubble at the top of the debate thread.
     const priorUserMessageById = useMemo(() => {
@@ -338,8 +375,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             if (lastUser) map[m.id] = { text: lastUser.text, createdAt: lastUser.createdAt };
         }
         return map;
-    }, [messages]);
-    const handleViewImage = useCallback((url: string) => setViewerImageUrl(url), []);
+        // contextSignature stands in for `messages`: see the comment above.
+    }, [contextSignature]);
 
     // Stable Virtuoso `components`: the inline arrow created a NEW component
     // type on every render, so the footer remounted on every stream chunk.
@@ -348,9 +385,19 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // identity flipping.
     const loadingMessageRef = useRef(loadingMessage);
     loadingMessageRef.current = loadingMessage;
+    // "Thinking" fills the reply slot only while the run has started and the
+    // newest row is still the user's own message — the first AI row (stream
+    // or debate floor) replaces it. The flag is assigned below, after
+    // processedMessages exists (read fresh inside the Footer on each render).
+    const thinkingLineRef = useRef(false);
     const virtuosoComponents = useMemo(() => ({
         Header: ListHeader,
-        Footer: () => <ListFooter isLoading={Boolean(loadingMessageRef.current)} />,
+        Footer: () => (
+            <ListFooter
+                isLoading={Boolean(loadingMessageRef.current)}
+                thinking={thinkingLineRef.current}
+            />
+        ),
     }), []);
 
     const enhancedContext = useMemo(() => ({
@@ -380,6 +427,11 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         () => (visibleBot ? threadForProvider(messages, visibleBot.providerId, visibleBot.modelId) : messages),
         [messages, visibleBot],
     );
+
+    // Footer "Thinking" flag — assigned here because processedMessages is
+    // declared above; the memoized Footer reads the ref fresh on render.
+    const lastRow = processedMessages[processedMessages.length - 1];
+    thinkingLineRef.current = isAnalysisInProgress && !!lastRow && lastRow.role === MessageRole.USER && !lastRow.analysis;
 
     // Leaving a thread (or switching agents) cancels any in-progress
     // bulk-selection — selection operates on conversation ids the row
