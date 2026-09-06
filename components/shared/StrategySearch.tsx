@@ -161,9 +161,23 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
       <div 
         className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
+        aria-hidden={!isVisible}
       ></div>
 
-      <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label="Playbook & Strategy Search" className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
+      {/* aria-modal/aria-hidden ride the REAL visibility: a permanently
+          mounted drawer that claims modal while closed hides the entire
+          rest of the app from the accessibility tree (screen readers AND
+          Playwright's role engine) — closed, the drawer must not exist
+          a11y-wise. inert blocks the tab ring into the off-screen panel. */}
+      <aside
+        ref={drawerRef}
+        role={isVisible ? 'dialog' : undefined}
+        aria-modal={isVisible || undefined}
+        aria-hidden={!isVisible}
+        inert={!isVisible}
+        aria-label="Playbook & Strategy Search"
+        className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+      >
         <div className="flex flex-col h-full">
           <header className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-zinc-800">
             <h2 className="text-lg sm:text-xl font-bold text-cyan-400 tracking-tight">Playbook & Discovery</h2>

@@ -51,7 +51,12 @@ export interface UseAgentThreadsResult {
 export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResult => {
     const { activeUsername, setSelectedChatModel, setIsEnsembleEnabled, confirmDialog } = args;
 
-    const [activeThread, setActiveThread] = useState<ThreadSelection>({ kind: 'coach' });
+    // Boot surface = the main ensemble transcript ('team'). The chat-mode
+    // rework briefly defaulted to the Coach inbox, which orphaned the
+    // conversation: you booted into drafts-and-proposals while your actual
+    // trading session sat one click away. Coach is a roster row, not a
+    // landing page.
+    const [activeThread, setActiveThread] = useState<ThreadSelection>({ kind: 'team' });
     // Unread badges: per-thread last-opened timestamps, keyed
     // by bot.id / group.id. Focusing a thread marks it opened (effect below).
     const [threadOpenedMap, setThreadOpenedMap] = useState<Record<string, string>>(
@@ -90,9 +95,9 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
     }, [setIsEnsembleEnabled]);
 
     // Unread badges: focusing a bot/group thread marks it opened
-    // (markThreadOpened + persist).
+    // (markThreadOpened + persist). Team/coach have no badge key.
     useEffect(() => {
-        if (activeThread.kind === 'coach' || !activeUsername) return;
+        if ((activeThread.kind !== 'bot' && activeThread.kind !== 'group') || !activeUsername) return;
         const key = activeThread.kind === 'bot' ? activeThread.botId : activeThread.groupId;
         setThreadOpenedMap(prev => {
             const next = markThreadOpened(prev, key);
@@ -156,7 +161,7 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
             if (!ok) return;
             removeBot(botId);
             if (activeThread.kind === 'bot' && activeThread.botId === botId) {
-                setActiveThread({ kind: 'coach' });
+                setActiveThread({ kind: 'team' });
             }
         });
     }, [bots, activeThread, confirmDialog]);
@@ -171,7 +176,7 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
             if (!ok) return;
             removeGroup(groupId);
             if (activeThread.kind === 'group' && activeThread.groupId === groupId) {
-                setActiveThread({ kind: 'coach' });
+                setActiveThread({ kind: 'team' });
             }
         });
     }, [groups, bots, activeThread, confirmDialog]);

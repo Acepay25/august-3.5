@@ -46,6 +46,8 @@ export interface AgentRosterRailProps {
     onNewGroup: () => void;
     /** Coach thread: the learning loop's inbox as a conversation. */
     onSelectCoach?: () => void;
+    /** Team thread: the pinned ensemble debate room (boot surface). */
+    onSelectTeam?: () => void;
     /** Pending drafts + proposals waiting on the trader (badge count). */
     coachCount?: number;
     /** Bot id currently working (active-now strip + pulse). */
@@ -180,6 +182,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
     onNewBot,
     onNewGroup,
     onSelectCoach,
+    onSelectTeam,
     coachCount,
     workingBotId,
     lastOpenedMap,
@@ -308,6 +311,36 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
             {/* Roster */}
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
                 <ul className="space-y-0.5">
+                    {/* Team — the pinned ensemble debate room (the main
+                        conversation). The boot surface: your last session's
+                        transcript lives here, not in the Coach inbox. */}
+                    {onSelectTeam && (
+                    <li className="group/team relative">
+                        <button
+                            type="button"
+                            onClick={onSelectTeam}
+                            data-testid="roster-team"
+                            data-active={selection.kind === 'team' ? '1' : '0'}
+                            title="Team — the ensemble debate room"
+                            className={`${rowBase} ${selection.kind === 'team' ? rowActive : rowIdle}`}
+                        >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
+                                <Users className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="flex items-baseline gap-2">
+                                    <span className="truncate text-[13px] font-semibold text-zinc-100">Team</span>
+                                    {selection.kind === 'team' && (
+                                        <span className="ml-auto shrink-0 text-[10px] text-zinc-500">open</span>
+                                    )}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                                    Ensemble debate room — the main transcript
+                                </span>
+                            </span>
+                        </button>
+                    </li>
+                    )}
                     {/* Coach thread — the learning loop's inbox as a
                         conversation: pending skill drafts + queue proposals.
                         Badge = items waiting on the trader. */}

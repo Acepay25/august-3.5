@@ -172,50 +172,51 @@ test('seeded analysis exposes an inspectable analysis trace', async ({ page }) =
     await expect(page.getByText(/2 public debate turns attached/i)).toBeVisible();
 });
 
-test('Floor shows analyst and moderator thinking before public text exists', async ({ page }) => {
-    await seedWorkspace(page, 'Floor Workspace', false, true);
+test('Floor shows one seat card per speaker with its thinking line', async ({ page }) => {
+    await seedMessages(page, 'Floor Workspace', [floorMessage({
+        debateTurns: [
+            { speaker: 'Model A', round: 1, text: '', reasoning: 'Alpha sees support holding at 95k.', createdAt: new Date().toISOString() },
+            { speaker: 'Model B', round: 1, text: '', reasoning: 'Beta sees the sweep failing at 95k.', createdAt: new Date().toISOString() },
+            { speaker: 'Moderator', round: 2, text: '', reasoning: 'Waiting for the opening evidence.', createdAt: new Date().toISOString() },
+        ],
+    })]);
     const floor = page.getByLabel('Floor');
     await expect(floor).toBeVisible({ timeout: 15_000 });
+    // One seat card per speaker, no seat missing.
+    await expect(floor.getByRole('button', { name: 'Open Model A analysis' })).toHaveCount(1);
+    await expect(floor.getByRole('button', { name: 'Open Model B analysis' })).toHaveCount(1);
+    await expect(floor.getByRole('button', { name: 'Open Moderator analysis' })).toHaveCount(1);
+    // Each seat's private thinking line renders on its own card.
+    await expect(floor).toContainText('Alpha sees support holding at 95k.');
+    await expect(floor).toContainText('Beta sees the sweep failing at 95k.');
     await expect(floor).toContainText('Waiting for the opening evidence.');
-    await expect(floor.locator('.debate-stage-bubble')).toHaveCount(3);
 });
 
-test('Floor keeps the moderator to one bubble: public speech wins over thinking', async ({ page }) => {
+test('Floor keeps the thinking lane out of a seat card once public speech exists', async ({ page }) => {
     await seedMessages(page, 'Floor Single Bubble Workspace', [floorMessage({
-        debateTurns: [{ speaker: 'Moderator', round: 2, text: 'I want your strongest counter, please.' }],
+        debateTurns: [{ speaker: 'Moderator', round: 2, text: 'I want your strongest counter, please.', reasoning: 'Weighing the sweep against the failed retest.', createdAt: new Date().toISOString() }],
     })]);
-    const floor = page.getByLabel('Floor');
-    await expect(floor).toBeVisible({ timeout: 15_000 });
-
-    // One bubble per seat: two analyst thought bubbles + one moderator balloon.
-    await expect(floor.locator('.debate-stage-bubble')).toHaveCount(3);
-    const moderatorBubble = page.getByRole('button', { name: 'Open Moderator analysis' }).locator('.debate-stage-bubble');
-    await expect(moderatorBubble).toHaveCount(1);
-    await expect(moderatorBubble).toHaveClass(/debate-stage-balloon/);
-    await expect(moderatorBubble).toContainText('I want your strongest counter, please.');
-
-    // The thinking trace stays in the thought channel — no second bubble.
-    await expect(moderatorBubble).not.toContainText('Waiting for the opening evidence.');
-    await expect(floor.locator('.debate-stage-thought')).toHaveCount(2);
+    const moderatorSeat = page.getByRole('button', { name: 'Open Moderator analysis' });
+    await expect(moderatorSeat).toBeVisible({ timeout: 15_000 });
+    // A settled seat shows its thinking line as the card body...
+    await expect(moderatorSeat).toContainText('Weighing the sweep');
 });
 
-test('Floor bubble tickers rotate to the newest sentence and reveal it fully', async ({ page }) => {
+test('Floor seat card bounds the preview to the derivation slice', async ({ page }) => {
     await seedMessages(page, 'Floor Ticker Workspace', [floorMessage({
-        debateTurns: [{ speaker: 'Moderator', round: 2, text: 'The reclaim failed. The sweep is shallow. Wait for the close above 95,500.' }],
+        debateTurns: [{ speaker: 'Model A', round: 1, text: 'The reclaim failed.', reasoning: 'Alpha walks the 15m structure: the sweep took the lows, the reclaim stalled under the 21 EMA, and volume diverged across the second push into resistance.', createdAt: new Date().toISOString() }],
     })]);
-    const ticker = page.getByRole('button', { name: 'Open Moderator analysis' }).locator('.debate-stage-ticker');
-    await expect(ticker).toBeVisible({ timeout: 15_000 });
-
-    // The ticker bounds the bubble to the newest sentence (no stale rotation)
-    // and reveals the full sentence instead of freezing at the width limit.
-    await expect.poll(() => ticker.getAttribute('aria-label'), { timeout: 5_000 })
-        .toBe('Wait for the close above 95,500.');
-    await expect(ticker).not.toContainText('The reclaim failed');
+    const seatA = page.getByRole('button', { name: 'Open Model A analysis' });
+    await expect(seatA).toBeVisible({ timeout: 15_000 });
+    // The card carries the bounded slice (72 chars)...
+    await expect(seatA).toContainText('Alpha walks the 15m structure: the sweep took the lows, the reclaim');
+    // ...and never the full reasoning (that lives in the seat transcript).
+    await expect(seatA).not.toContainText('volume diverged across the second push');
 });
 
-test('final verdict stays separate from the moderator thinking lane', async ({ page }) => {
+test('final verdict stays out of the seat card; the seat transcript carries it', async ({ page }) => {
     await seedMessages(page, 'Floor Verdict Workspace', [floorMessage({
-        debateTurns: [{ speaker: 'Moderator', round: 4, text: 'FINAL TRADE PLAN: Long BTCUSDT.' }],
+        debateTurns: [{ speaker: 'Moderator', round: 4, text: 'FINAL TRADE PLAN: Long BTCUSDT.', reasoning: 'Weighing the sweep against the failed retest.', createdAt: new Date().toISOString() }],
         reasoningProcesses: { moderator: 'Weighing the sweep against the failed retest.' },
         activeDebateSpeakers: { Moderator: 1 },
         ensembleProgress: {
@@ -226,48 +227,43 @@ test('final verdict stays separate from the moderator thinking lane', async ({ p
             moderator: { status: 'reviewing' },
         },
     })]);
-    const moderatorBubble = page.getByRole('button', { name: 'Open Moderator analysis' }).locator('.debate-stage-bubble');
-    await expect(moderatorBubble).toBeVisible({ timeout: 15_000 });
-
-    // Public verdict in the speech balloon only…
-    await expect(moderatorBubble).toContainText('Long BTCUSDT');
-    await expect(moderatorBubble).not.toContainText('Weighing the sweep');
-    // …and the thinking lane survives in the thought channel, never mixed in.
-    await expect(moderatorBubble).toHaveAttribute('data-thought', /Weighing the sweep/);
-    await expect(moderatorBubble).not.toHaveAttribute('data-thought', /FINAL TRADE PLAN/);
+    const moderatorSeat = page.getByRole('button', { name: 'Open Moderator analysis' });
+    await expect(moderatorSeat).toBeVisible({ timeout: 15_000 });
+    // Card body = the thinking line; the public verdict is NOT on the card.
+    await expect(moderatorSeat).toContainText('Weighing the sweep');
+    await expect(moderatorSeat).not.toContainText('Long BTCUSDT');
+    // Open the seat transcript: the public verdict lives there.
+    await moderatorSeat.click();
+    const panel = page.getByRole('complementary', { name: 'Moderator transcript' });
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('FINAL TRADE PLAN: Long BTCUSDT.');
 });
 
 test('analyst identity never crosses seats in the Floor', async ({ page }) => {
     await seedMessages(page, 'Floor Seats Workspace', [floorMessage({
-        ensembleProgress: {
-            analysts: [
-                { key: 'analyst-a', providerId: 'a', providerName: 'Model A', modelId: 'a-model', modelName: 'A', displayName: 'Model A', status: 'analyzing', reasoning: 'Alpha sees support holding at 95k.' },
-                { key: 'analyst-b', providerId: 'b', providerName: 'Model B', modelId: 'b-model', modelName: 'B', displayName: 'Model B', status: 'analyzing', reasoning: 'Beta sees the sweep failing at 95k.' },
-            ],
-            moderator: { status: 'waiting' },
-        },
-        reasoningProcesses: {},
+        debateTurns: [
+            { speaker: 'Model A', round: 1, text: 'Long thesis from the reclaim.', reasoning: 'Alpha sees support holding at 95k.', createdAt: new Date().toISOString() },
+            { speaker: 'Model B', round: 1, text: 'Short read from the sweep.', reasoning: 'Beta sees the sweep failing at 95k.', createdAt: new Date().toISOString() },
+        ],
         activeDebateSpeakers: { 'Model A': 1, 'Model B': 1 },
     })]);
     const floor = page.getByLabel('Floor');
     await expect(floor).toBeVisible({ timeout: 15_000 });
 
-    // Stage bubbles carry only their own seat's reasoning.
+    // Each seat card carries ONLY its own reasoning line.
     const actorA = page.getByRole('button', { name: 'Open Model A analysis' });
-    await expect(actorA.locator('.debate-stage-thought')).toContainText('Alpha sees support holding at 95k.');
-    await expect(actorA.locator('.debate-stage-thought')).not.toContainText('Beta sees');
+    await expect(actorA).toContainText('Alpha sees support holding at 95k.');
+    await expect(actorA).not.toContainText('Beta sees');
+    const actorB = page.getByRole('button', { name: 'Open Model B analysis' });
+    await expect(actorB).toContainText('Beta sees the sweep failing at 95k.');
+    await expect(actorB).not.toContainText('Alpha sees');
 
-    // Seat transcripts do not leak the neighbouring analyst's reasoning.
+    // The per-seat transcript panel does not leak either.
     await actorA.click();
-    const seatA = page.getByRole('dialog', { name: 'Model A analysis' });
-    await expect(seatA).toContainText('Alpha sees support holding at 95k.');
-    await expect(seatA).not.toContainText('Beta sees');
-    await page.getByLabel('Close Model A analysis').click();
-
-    await page.getByRole('button', { name: 'Open Model B analysis' }).click();
-    const seatB = page.getByRole('dialog', { name: 'Model B analysis' });
-    await expect(seatB).toContainText('Beta sees the sweep failing at 95k.');
-    await expect(seatB).not.toContainText('Alpha sees');
+    const seatA = page.getByRole('complementary', { name: 'Model A transcript' });
+    await expect(seatA).toBeVisible();
+    await expect(seatA).toContainText('Long thesis from the reclaim.');
+    await expect(seatA).not.toContainText('Short read from the sweep');
 });
 
 test('journal and live market are reachable as labelled dialogs', async ({ page }) => {
@@ -278,7 +274,7 @@ test('journal and live market are reachable as labelled dialogs', async ({ page 
     await expect(settings).toBeVisible({ timeout: 10_000 });
     await settings.getByRole('button', { name: 'Journal', exact: true }).click();
     await expect(settings.getByRole('heading', { name: 'Journal' })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: /Back to workspace/i }).click();
+    await page.getByRole('button', { name: 'Close settings' }).click();
 
     await page.getByRole('button', { name: 'Live Market', exact: true }).first().click();
     await expect(page.getByRole('dialog', { name: 'Live Market' })).toBeVisible({ timeout: 10_000 });

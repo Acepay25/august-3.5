@@ -419,23 +419,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 )}
             </div>
 
-            {/* Quick actions */}
-            <nav className="px-2">
-                <div className="space-y-0">
-                    <NavRow collapsed={collapsed} icon={<ActivityIcon className="h-4 w-4" />} label="Live Market" onClick={act(onOpenLiveMarket)} />
-                    {hasVisionData && (
-                        <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
-                    )}
-                    <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
-                    {onOpenBotManager && (
-                        <NavRow collapsed={collapsed} icon={<BotIcon className="h-4 w-4" />} label="Bots" onClick={act(onOpenBotManager)} />
-                    )}
-                    {onOpenWatchList && (
-                        <NavRow collapsed={collapsed} icon={<EyeIcon className="h-4 w-4" />} label="Watch list" onClick={act(onOpenWatchList)} />
-                    )}
-                </div>
-            </nav>
-
             {/* Automations — scheduled analyses, one card feed each */}
             <div className={collapsed ? 'px-2 pt-3' : 'px-2 pt-4'}>
                 {!collapsed && (
@@ -575,6 +558,26 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
             {/* BOTS pane — the full agent roster rail, embedded. App builds
                 the element (it owns the roster state); here it just mounts. */}
+            {/* Quick actions — OUTSIDE the sessions-only fragment: journal,
+                live market, and watch list must stay reachable from the
+                unified BOTS pane too, or they vanish exactly when the
+                roster is the active surface. */}
+            <nav className="px-2">
+                <div className="space-y-0">
+                    <NavRow collapsed={collapsed} icon={<ActivityIcon className="h-4 w-4" />} label="Live Market" onClick={act(onOpenLiveMarket)} />
+                    {hasVisionData && (
+                        <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
+                    )}
+                    <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
+                    {onOpenBotManager && (
+                        <NavRow collapsed={collapsed} icon={<BotIcon className="h-4 w-4" />} label="Bots" onClick={act(onOpenBotManager)} />
+                    )}
+                    {onOpenWatchList && (
+                        <NavRow collapsed={collapsed} icon={<EyeIcon className="h-4 w-4" />} label="Watch list" onClick={act(onOpenWatchList)} />
+                    )}
+                </div>
+            </nav>
+
             {showBotsBody && rosterSlot}
 
             {/* User footer — opens an account popover (Settings,
