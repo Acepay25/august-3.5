@@ -8,6 +8,7 @@ import {
     dmEnvelopeText,
     dmReplyNoticeText,
     parseDmMarkers,
+    refuseText,
     resolveRosterHandle,
     validateDM,
 } from '../services/agents/botMailbox';
@@ -105,9 +106,82 @@ describe('validateDM', () => {
     });
 });
 
+describe('handoff envelope (task / constraints / expecting)', () => {
+    it('attaches [[constraints:…]] and [[expecting:…]] to the most recent DM and strips them', () => {
+        const raw = [
+            'Need a second pair of eyes.',
+            '[[dm:@riskbot]] Size my BTC short: entry 111k, stop 113k.',
+            '[[constraints: max 1R risk, 4h timeframe only]]',
+            '[[expecting: a position size and one invalidation level]]',
+            'Back to the chart: the supply zone is holding.',
+        ].join('\n');
+        const { clean, marks } = parseDmMarkers(raw);
+        expect(marks).toHaveLength(1);
+        expect(marks[0].constraints).toBe('max 1R risk, 4h timeframe only');
+        expect(marks[0].expecting).toBe('a position size and one invalidation level');
+        expect(clean).not.toContain('constraints');
+        expect(clean).not.toContain('expecting');
+        expect(clean).toContain('supply zone is holding');
+    });
+
+    it('attaches fields to the right mark when two DMs are present', () => {
+        const raw = [
+            '[[dm:@riskbot]] risk check please',
+            '[[expecting: yes/no]]',
+            '[[dm:@macro]] macro read please',
+            '[[expecting: one paragraph]]',
+        ].join('\n');
+        const { marks } = parseDmMarkers(raw);
+        expect(marks[0].expecting).toBe('yes/no');
+        expect(marks[1].expecting).toBe('one paragraph');
+    });
+
+    it('drops a field marker with no DM in front of it', () => {
+        const { clean, marks } = parseDmMarkers('[[expecting: nothing yet]]\n\nPlain text.');
+        expect(marks).toHaveLength(0);
+        expect(clean).not.toContain('expecting');
+    });
+
+    it('renders the envelope as task + muted constraint/expecting lines', () => {
+        const text = dmEnvelopeText('Macro', {
+            text: 'size my short?',
+            constraints: 'max 1R',
+            expecting: 'a size',
+        });
+        expect(text).toContain('📩 Macro (teammate DM): size my short?');
+        expect(text).toContain('Constraints: max 1R');
+        expect(text).toContain('Wanted back: a size');
+    });
+
+    it('carries the envelope fields through validateDM', () => {
+        const v = validateDM([macro, risk], macro, 'riskbot', 'size it', 0, ready, {
+            constraints: 'max 1R',
+            expecting: 'a size',
+        });
+        expect(v.ok).toBe(true);
+        if (v.ok) {
+            expect(v.envelope.constraints).toBe('max 1R');
+            expect(v.envelope.expecting).toBe('a size');
+        }
+    });
+
+    it('offers a sentence refusal when the fanout cap is hit', () => {
+        const text = refuseText('fanout_cap', 'riskbot');
+        expect(text).toContain('at most');
+        expect(text).toContain('@riskbot');
+    });
+
+    it('teaches the envelope fields in the teammate protocol', () => {
+        const section = buildTeammateProtocolSection([macro, risk], macro);
+        expect(section).toContain('[[expecting:…]]');
+        expect(section).toContain('[[constraints:…]]');
+        expect(section).toContain('at most two');
+    });
+});
+
 describe('attribution + protocol', () => {
     it('prefixes sender attribution harness-side', () => {
-        expect(dmEnvelopeText('Macro', 'size my short?')).toContain('Macro (teammate DM)');
+        expect(dmEnvelopeText('Macro', { text: 'size my short?' })).toContain('Macro (teammate DM)');
         expect(dmReplyNoticeText('Risk Bot', 'size 0.5R')).toContain('Risk Bot replied to your DM');
     });
 

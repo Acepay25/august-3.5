@@ -36,6 +36,9 @@ export const DM_ENVELOPE_TTL_MS = 15 * 60_000;
 /** A DM chain deeper than this stops auto-running; the text becomes a
  *  plain notice in the target thread instead. */
 export const DM_MAX_HOPS = 3;
+/** A reply can hand work to at most this many teammates (the protocol's
+ *  "at most two" rule, now enforced — the prompt asks, the cap guarantees). */
+export const DM_MAX_FANOUT = 2;
 /** Global anti-storm budget: DM turns per rolling window. */
 export const DM_RATE_LIMIT = 12;
 export const DM_RATE_WINDOW_MS = 60_000;
@@ -44,6 +47,10 @@ export interface DMMark {
     /** Raw handle as the model typed it (without @). */
     handle: string;
     text: string;
+    /** What the teammate must respect (budget, timeframe, do-not-do). */
+    constraints?: string;
+    /** What the sender wants back (a level, a number, a yes/no). */
+    expecting?: string;
 }
 
 /** Collapse a display name to its mention handle: lowercase, alphanumerics
@@ -69,6 +76,12 @@ export const resolveRosterHandle = (bots: AgentBot[], handle: string): AgentBot 
  * cleaned display text (markers stripped) and the marks in order. The
  * model composes the message; the harness owns delivery + attribution —
  * exactly the message_agent split.
+ *
+ * A handoff is a TYPED envelope, not free text (the OpenBot message_bot
+ * shape): on the lines after a DM marker, `[[constraints:…]]` and
+ * `[[expecting:…]]` attach to the most recent mark and are stripped from
+ * the display text. A field with no DM in front of it is dropped — a
+ * constraint for nobody is noise.
  */
 export const parseDmMarkers = (raw: string): { clean: string; marks: DMMark[] } => {
     const marks: DMMark[] = [];
@@ -76,18 +89,37 @@ export const parseDmMarkers = (raw: string): { clean: string; marks: DMMark[] } 
     // one marker per line, at the end of the reply). A line-scoped body
     // means prose AFTER the marker stays in the bubble instead of being
     // swallowed into the DM.
-    const re = /\[\[dm:@([^\]\s]+)\]\][ \t]*([^\n]*?)(?=\[\[dm:@|\n|$)/g;
-    const clean = raw.replace(re, (_all, handle: string, text: string) => {
-        const trimmed = text.trim();
-        if (trimmed) marks.push({ handle, text: trimmed });
+    const re = /\[\[dm:@([^\]\s]+)\]\][ \t]*([^\n]*?)(?=\[\[dm:@|\n|$)|\[\[(constraints|expecting):[ \t]*([^\]\n]*)\]\]/g;
+    const clean = raw.replace(re, (_all, handle: string | undefined, text: string | undefined, field: string | undefined, fieldValue: string | undefined) => {
+        if (field) {
+            const last = marks[marks.length - 1];
+            const value = (fieldValue ?? '').trim();
+            if (last && value) {
+                if (field === 'constraints') {
+                    last.constraints = [last.constraints, value].filter(Boolean).join(' ');
+                } else {
+                    last.expecting = [last.expecting, value].filter(Boolean).join(' ');
+                }
+            }
+            return '';
+        }
+        const trimmed = (text ?? '').trim();
+        if (trimmed && handle) marks.push({ handle, text: trimmed });
         return '';
     }).trimEnd();
     return { clean, marks };
 };
 
 /** The sender-attribution prefix, applied by the harness (never the model). */
-export const dmEnvelopeText = (fromName: string, text: string): string =>
-    `📩 ${fromName} (teammate DM): ${text}`;
+export const dmEnvelopeText = (
+    fromName: string,
+    envelope: Pick<DMEnvelope, 'text' | 'constraints' | 'expecting'>,
+): string => {
+    const lines = [`📩 ${fromName} (teammate DM): ${envelope.text}`];
+    if (envelope.constraints?.trim()) lines.push(`Constraints: ${envelope.constraints.trim()}`);
+    if (envelope.expecting?.trim()) lines.push(`Wanted back: ${envelope.expecting.trim()}`);
+    return lines.join('\n');
+};
 
 /** The wake-up notice delivered into the SENDER's thread when the target
  *  replies — the completion-notification shape Hermes uses. */
@@ -110,6 +142,9 @@ export const buildTeammateProtocolSection = (bots: AgentBot[], me: AgentBot): st
         '## Messaging teammates',
         `You share this app with other analyst bots. To hand work to one of them, end your reply with a DM marker on its own line:`,
         `[[dm:@handle]] your message to them`,
+        `Right after a marker you may add ONE line each of:`,
+        `[[constraints:…]] what the teammate must respect (budget, timeframe, do-not-do)`,
+        `[[expecting:…]] what you want back (a level, a number, a yes/no)`,
         rulesFor(me, lines.join('\n')),
     ].join('\n');
 };
@@ -119,7 +154,8 @@ const rulesFor = (me: AgentBot, rosterLines: string): string => [
     `- You are @${botHandle(me.name)}. Teammates currently reachable:`,
     rosterLines || '- (none — you are the only bot; do not emit DM markers)',
     '- DMs are fire-and-forget like texting: emit the marker, finish your reply, and the answer arrives later in YOUR thread as a "replied to your DM" notice. Never invent or predict a teammate\'s answer.',
-    '- Only DM for work you genuinely need from them (a second opinion, a risk check, data you cannot compute). One DM per teammate per reply, at most two teammates.',
+    '- Only DM for work you genuinely need from them (a second opinion, a risk check, data you cannot compute). One DM per teammate per reply, at most two teammates — a reply may hand work to at most two.',
+    '- Say what you want back ([[expecting:…]]); a handoff without an expected answer tends to come back as prose nobody asked for.',
     '- If a teammate DMs YOU, answer it in your reply; add your own [[dm:@…]] marker only if the chain truly needs another hop.',
 ].join('\n');
 
@@ -150,11 +186,13 @@ export interface DMEnvelope {
     fromBotId: string;
     toBotId: string;
     text: string;
+    constraints?: string;
+    expecting?: string;
     hop: number;
     queuedAt: number;
 }
 
-export type RefuseReason = 'unknown_target' | 'self_dm' | 'no_provider' | 'expired' | 'rate_limited' | 'hop_cap' | 'malformed';
+export type RefuseReason = 'unknown_target' | 'self_dm' | 'no_provider' | 'expired' | 'rate_limited' | 'hop_cap' | 'fanout_cap' | 'malformed';
 
 export const refuseText = (reason: RefuseReason, handle: string): string => {
     switch (reason) {
@@ -164,6 +202,7 @@ export const refuseText = (reason: RefuseReason, handle: string): string => {
         case 'expired': return `(undeliverable: the DM to @${handle} sat queued past its TTL and expired)`;
         case 'rate_limited': return `(undeliverable: DM budget exhausted for this minute)`;
         case 'hop_cap': return `(held: @${handle} — the DM chain reached its hop cap; answer without pinging back)`;
+        case 'fanout_cap': return `(held: @${handle} — one reply can hand work to at most ${DM_MAX_FANOUT} teammates; ask the rest next reply)`;
         case 'malformed': return `(undeliverable: the DM to @${handle} was empty)`;
     }
 };
@@ -186,6 +225,7 @@ export const validateDM = (
     text: string,
     hop: number,
     isReady: (providerId: string, modelId: string) => boolean,
+    fields?: { constraints?: string; expecting?: string },
 ): { ok: true; envelope: DMEnvelope } | { ok: false; reason: RefuseReason } => {
     const target = resolveRosterHandle(bots, handle);
     if (!target) return { ok: false, reason: 'unknown_target' };
@@ -200,6 +240,8 @@ export const validateDM = (
             fromBotId: from.id,
             toBotId: target.id,
             text: text.trim(),
+            constraints: fields?.constraints?.trim() || undefined,
+            expecting: fields?.expecting?.trim() || undefined,
             hop,
             queuedAt: Date.now(),
         },

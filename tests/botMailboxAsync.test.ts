@@ -136,4 +136,56 @@ describe('useBotMailbox', () => {
         expect(await h.result.current.runUserBotTurn(dead, 'hi')).toBe(false);
         expect(streamQuickResponse).not.toHaveBeenCalled();
     });
+
+    it('caps fanout: only the first two teammates per reply deliver, the rest get a refusal', async () => {
+        streamQuickResponse.mockResolvedValue('on it');
+        // A third teammate so three valid targets exist.
+        const third = bot({ id: 'b3', name: 'Third Bot', providerId: 'openai', modelId: 'gpt-4.1' });
+        const { h, messages } = setup([macro, risk, third]);
+        act(() => {
+            messages.push({ id: 'r5', role: MessageRole.AI, text: 'raw', createdAt: new Date().toISOString() } as Message);
+            h.result.current.dispatchFromBotReply(macro, 'r5', [
+                'a',
+                '[[dm:@riskbot]] one',
+                '[[dm:@thirdbot]] two',
+                '[[dm:@riskbot]] three — different text, so no dedupe',
+            ].join('\n'), 0);
+        });
+        // Exactly two turns run; the third mark gets the fanout sentence.
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(2));
+        expect(messages.some(m => m.dmNotice && m.text.includes('at most 2 teammates'))).toBe(true);
+    });
+
+    it('dedupes an identical (handle, text) marker repeated in one reply', async () => {
+        streamQuickResponse.mockResolvedValue('on it');
+        const { h, messages } = setup();
+        act(() => {
+            messages.push({ id: 'r6', role: MessageRole.AI, text: 'raw', createdAt: new Date().toISOString() } as Message);
+            h.result.current.dispatchFromBotReply(macro, 'r6', 'a\n[[dm:@riskbot]] ping\n[[dm:@riskbot]] ping', 0);
+        });
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(1));
+    });
+
+    it('delivers the envelope fields into the target thread', async () => {
+        streamQuickResponse.mockResolvedValue('0.5R, invalidation 113k.');
+        const { h, messages } = setup();
+        act(() => {
+            messages.push({ id: 'r7', role: MessageRole.AI, text: 'raw', createdAt: new Date().toISOString() } as Message);
+            h.result.current.dispatchFromBotReply(macro, 'r7', [
+                'a',
+                '[[dm:@riskbot]] size my short',
+                '[[constraints: max 1R risk]]',
+                '[[expecting: a size and a level]]',
+            ].join('\n'), 0);
+        });
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(1));
+        // The prompt the target received carries the task AND the fields.
+        const prompt = String(streamQuickResponse.mock.calls[0][1]);
+        expect(prompt).toContain('size my short');
+        expect(prompt).toContain('Constraints: max 1R risk');
+        expect(prompt).toContain('Wanted back: a size and a level');
+        // The visible dmFrom row in the target thread carries them too.
+        const row = messages.find(m => m.dmFrom);
+        expect(row?.text).toContain('Constraints: max 1R risk');
+    });
 });

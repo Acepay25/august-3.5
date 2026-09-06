@@ -222,6 +222,63 @@ export const isSkillFile = (file: MemoryFile): boolean =>
 export const listSkillSlugs = (): string[] =>
     getMemoryFiles().files.filter(isSkillFile).map(f => f.name.replace(/\.md$/i, ''));
 
+/** Instruction body of a skill file — the markdown minus its frontmatter. */
+export const skillBody = (content: string): string =>
+    content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+
+// ─── Invoked skills (/slug → system section) ────────────────────────────────
+// The composer parses `/slug` out of the message, but a name alone is dead
+// weight: "apply skill X" teaches the seats nothing unless the CONTENT of
+// skill X rides the run. The resolution + formatting below turns invoked
+// slugs into a system-section block (OpenBot's skills-as-system-turn shape,
+// adapted to the instructions lane every seat already receives).
+
+export interface InvokedSkillRow {
+    slug: string;
+    found: boolean;
+    kind?: SkillKind;
+    status?: SkillStatus;
+    body?: string;
+}
+
+/** Resolve invoked slugs against the notebook, case-insensitively. Slugs
+ *  that match no skill file come back as `found: false` rows so the
+ *  formatted section can say so instead of silently dropping them. */
+export const resolveInvokedSkills = (slugs: string[]): InvokedSkillRow[] => {
+    const files = getMemoryFiles().files.filter(isSkillFile);
+    return slugs.map(slug => {
+        const hit = files.find(f => f.name.replace(/\.md$/i, '').toLowerCase() === slug.toLowerCase());
+        if (!hit) return { slug, found: false };
+        const meta = parseSkillMarkdown(hit.content);
+        return {
+            slug,
+            found: true,
+            kind: meta?.kind,
+            status: meta?.status,
+            body: skillBody(hit.content),
+        };
+    });
+};
+
+/** System-section text for the skills the trader invoked with `/slug`.
+ *  Empty string when nothing was invoked (falsy slots drop out of the
+ *  instructions join). Pure — feed it `resolveInvokedSkills` output. */
+export const formatInvokedSkillSection = (rows: InvokedSkillRow[]): string => {
+    if (rows.length === 0) return '';
+    const blocks = rows.map(row => {
+        if (!row.found) {
+            return `### ${row.slug} — not found\n(No notebook skill named "${row.slug}" exists. Continue without it; mention it is missing only if it changes the read.)`;
+        }
+        const label = [row.kind ? `${row.kind} skill` : undefined, row.status].filter(Boolean).join(' · ');
+        return `### ${row.slug}${label ? ` — ${label}` : ''}\n${row.body?.trim() || '(empty skill body)'}`;
+    });
+    return [
+        '## Invoked notebook skills',
+        'The trader explicitly invoked these notebook skills for THIS run. They are hard constraints on the read — apply them and say where they bit.',
+        blocks.join('\n\n'),
+    ].join('\n\n');
+};
+
 export const parseSkillMarkdown = (content: string): SkillMeta | null => {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
     if (!match) return null;
