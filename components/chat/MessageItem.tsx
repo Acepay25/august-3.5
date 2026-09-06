@@ -679,6 +679,22 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </button>
                             )}
 
+                            {/* Copy affordance for plain AI replies (hover).
+                                Settled analysis rows carry their own copy in
+                                TranscriptRow; ensemble/debate rows render as
+                                cards, not prose. */}
+                            {!isUserMessage && !message.isStreaming && !message.isDebating && !message.isPostMortem
+                                && !message.analysis && !isEnsembleMessage && displayContent.trim() && handleCopy && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopy(message)}
+                                    className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300"
+                                    aria-label="Copy message"
+                                >
+                                    {copiedMessageId === message.id ? '✓ Copied' : '⧉ Copy'}
+                                </button>
+                            )}
+
                             {/* Failed-run retry: rebuild the same prompt + charts. */}
                             {message.retryOf && onRetryFailedRun && (
                                 <button
