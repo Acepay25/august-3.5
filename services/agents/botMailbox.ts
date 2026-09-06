@@ -249,13 +249,21 @@ export const validateDM = (
 };
 
 /** A DM message row for the target thread (user-role: the thread derives
- *  it into place and the model treats it as an incoming turn). */
-export const dmMessageRow = (text: string, id: string): Message => ({
+ *  it into place and the model treats it as an incoming turn). The text is
+ *  the full envelope (what the model reads in history); the structured
+ *  `dmEnvelope` view rides alongside so the renderer can draw the task,
+ *  constraints, and expectation as separate lines instead of one blob. */
+export const dmMessageRow = (
+    text: string,
+    id: string,
+    envelope?: { fromName: string; task: string; constraints?: string; expecting?: string },
+): Message => ({
     id,
     role: MessageRole.USER,
     text,
     createdAt: new Date().toISOString(),
     dmFrom: true,
+    dmEnvelope: envelope,
 });
 
 /** A notice row for a thread (system-role, attributed so threadForProvider

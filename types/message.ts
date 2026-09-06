@@ -279,6 +279,16 @@ export interface Message {
    *  user bubble). The target's turn runs from it; the reply wakes the
    *  sender with a `dmNotice` row in THEIR thread instead. */
   dmFrom?: boolean;
+  /** Structured view of the DM above: who sent it, the task, and the
+   *  optional handoff fields. The renderer uses this to draw the envelope
+   *  (sender header, task, muted constraint/expectation lines) instead of
+   *  the flat prompt text; rows from before it existed render as before. */
+  dmEnvelope?: {
+    fromName: string;
+    task: string;
+    constraints?: string;
+    expecting?: string;
+  };
   /** A system notice produced by the DM machinery (reply wake-up, refusal,
    *  hop-cap hold). Rendered muted; never fed back into a model prompt. */
   dmNotice?: boolean;

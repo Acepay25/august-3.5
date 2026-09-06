@@ -124,6 +124,12 @@ export const useBotMailbox = ({
             appendMessage(dmMessageRow(
                 dmEnvelopeText(opts.triggeredBy.from.name, opts.triggeredBy.envelope),
                 `dmr-in-${opts.triggeredBy.envelope.id}`,
+                {
+                    fromName: opts.triggeredBy.from.name,
+                    task: opts.triggeredBy.envelope.text,
+                    constraints: opts.triggeredBy.envelope.constraints,
+                    expecting: opts.triggeredBy.envelope.expecting,
+                },
             ));
         }
         appendMessage({

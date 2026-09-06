@@ -79,7 +79,7 @@ describe('ToolActionsRow (Hermes-style status rows)', () => {
         expect(row.textContent).toContain('Macro, Ledger');
     });
 
-    it('failed proposals render the ⚠ nothing-stored row', () => {
+    it('failed proposals render the destructive Blocked row (nothing stored)', () => {
         render(
             <ToolActionsRow
                 actions={[
@@ -89,7 +89,21 @@ describe('ToolActionsRow (Hermes-style status rows)', () => {
         );
         const row = screen.getByTestId('tool-actions-row');
         expect(row.textContent).toContain('⚠');
-        expect(row.textContent).toContain('rejected — nothing stored');
+        expect(row.textContent).toContain('Blocked');
+        expect(row.textContent).toContain('amend_memory rejected, nothing stored');
+    });
+
+    it('rows expand to the per-item detail with the review location', () => {
+        render(
+            <ToolActionsRow
+                actions={[
+                    { at: new Date().toISOString(), speaker: 'Macro', tool: 'forge_tool', ok: true, verb: 'proposed', label: 'tool-a', review: 'Settings → AI Models' },
+                ]}
+            />,
+        );
+        const row = screen.getByTestId('tool-actions-row');
+        // Expanded detail: verb + label + where to review it.
+        expect(row.textContent).toContain('proposed tool-a — review: Settings → AI Models');
     });
 
     it('renders nothing without actions', () => {

@@ -2,10 +2,11 @@
  * ToolActionsRow — Hermes-style transcript status rows for model
  * side-effects. When a seat proposes a tool (forge_tool), amends
  * memory (amend_memory), or runs a custom tool, the run persists
- * ToolAction entries and this renders them the way the reference does:
- * compact status rows with a count chip ("Saved to memory · 6 entries")
- * and a ⚠ row for rejected/failed proposals. Monochrome; the review
- * location rides the row so the human knows where to act.
+ * ToolAction entries and this renders them as one-line status rows
+ * (count chip on grouped rows). A row expands to its per-item detail
+ * with the review location — the human knows where to act without a
+ * hover. Rejected proposals render DESTRUCTIVE ("Blocked — nothing
+ * stored"): a refusal is a status, not a footnote.
  */
 
 import React from 'react';
@@ -74,41 +75,66 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
             {[...groups.values()].map(g => {
                 const n = g.items.length;
                 const who = g.speakers.filter(Boolean).join(', ');
-                if (!g.ok) {
-                    return (
-                        <p
-                            key={`${g.tool}-fail`}
-                            className="flex items-center gap-2 text-[11px] text-zinc-400"
-                            title={`${g.tool} was rejected by the harness — nothing was stored.`}
-                        >
-                            <span className="w-3.5 shrink-0 text-center text-zinc-400">⚠</span>
-                            <span className="min-w-0 flex-1 truncate">
-                                {who ? `${who}: ` : ''}{g.tool} rejected — nothing stored
-                            </span>
-                        </p>
-                    );
-                }
                 const icon = ICON_OK[g.tool] ?? ICON_OK.custom;
                 const label = actionLabel(g.tool, g.items);
-                return (
-                    <p
-                        key={`${g.tool}-ok`}
-                        className="flex items-center gap-2 text-[11px] text-zinc-400"
-                        title={`${who ? `${who} — ` : ''}${n} item${n === 1 ? '' : 's'} awaiting human review`}
-                    >
-                        {icon}
-                        <span className="min-w-0 flex-1 truncate">
-                            {who ? <span className="text-zinc-500">{who} · </span> : null}
-                            {label}
-                        </span>
-                        {n > 1 && (
-                            <span
-                                className="shrink-0 rounded-full border border-zinc-600 px-1.5 py-px text-[9px] font-bold tabular-nums leading-tight text-zinc-300"
-                            >
-                                {n}
+                // One-line action rows (OpenBot ToolLine shape): muted while
+                // fine, DESTRUCTIVE when the harness refused — a rejection is
+                // a status, not a footnote, and zinc-400 read as a normal
+                // row. Every row expands to the per-item detail with where
+                // each item is reviewed — that location used to live only in
+                // a hover tooltip.
+                const summary = g.ok
+                    ? (
+                        <>
+                            {icon}
+                            <span className="min-w-0 flex-1 truncate">
+                                {who ? <span className="text-zinc-500">{who} · </span> : null}
+                                {label}
                             </span>
-                        )}
-                    </p>
+                            {n > 1 && (
+                                <span className="shrink-0 rounded-full border border-zinc-600 px-1.5 py-px text-[9px] font-bold tabular-nums leading-tight text-zinc-300">
+                                    {n}
+                                </span>
+                            )}
+                        </>
+                    )
+                    : (
+                        <>
+                            <span className="w-3.5 shrink-0 text-center">⚠</span>
+                            <span className="min-w-0 flex-1 truncate">
+                                <span className="font-semibold">Blocked</span>
+                                {' — '}{who ? `${who}: ` : ''}{g.tool} rejected, nothing stored
+                            </span>
+                        </>
+                    );
+                return (
+                    <details
+                        key={`${g.tool}-${g.ok ? 'ok' : 'fail'}`}
+                        className="group/tool-line"
+                    >
+                        <summary
+                            className={`flex cursor-pointer list-none items-center gap-2 text-[11px] [&::-webkit-details-marker]:hidden ${g.ok ? 'text-zinc-400' : 'text-rose-300'}`}
+                            title={g.ok
+                                ? `${who ? `${who} — ` : ''}${n} item${n === 1 ? '' : 's'} awaiting human review`
+                                : `${g.tool} was rejected by the harness — nothing was stored.`}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="shrink-0 text-[9px] text-zinc-500 transition-transform group-open/tool-line:rotate-90"
+                            >
+                                ▸
+                            </span>
+                            {summary}
+                        </summary>
+                        <div className="mb-1 mt-1 space-y-0.5 border-l border-white/10 pl-4">
+                            {g.items.map((a, i) => (
+                                <p key={`${a.at}-${i}`} className="truncate text-[10px] leading-4 text-zinc-500">
+                                    <span className="text-zinc-400">{a.verb}</span> {a.label}
+                                    {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
+                                </p>
+                            ))}
+                        </div>
+                    </details>
                 );
             })}
         </div>

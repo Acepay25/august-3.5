@@ -8,6 +8,7 @@ import {
     dmEnvelopeText,
     dmReplyNoticeText,
     parseDmMarkers,
+    dmMessageRow,
     refuseText,
     resolveRosterHandle,
     validateDM,
@@ -163,6 +164,16 @@ describe('handoff envelope (task / constraints / expecting)', () => {
             expect(v.envelope.constraints).toBe('max 1R');
             expect(v.envelope.expecting).toBe('a size');
         }
+    });
+
+    it('stamps the structured envelope view onto the target-thread row', () => {
+        const row = dmMessageRow('📩 Macro (teammate DM): size it\nConstraints: max 1R', 'dmr-in-1', {
+            fromName: 'Macro',
+            task: 'size it',
+            constraints: 'max 1R',
+        });
+        expect(row.dmFrom).toBe(true);
+        expect(row.dmEnvelope).toEqual({ fromName: 'Macro', task: 'size it', constraints: 'max 1R' });
     });
 
     it('offers a sentence refusal when the fanout cap is hit', () => {
