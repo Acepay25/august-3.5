@@ -2,6 +2,162 @@
 
 Plain-English log of change rounds. Newest first.
 
+## Skill creation traced end-to-end and pinned by a file-integrity suite
+
+The question was "how do skills get created, and is the created skill
+PROPER?" — answered by tracing every creation path and then pinning the
+artifact's shape with tests.
+
+**The paths a skill can be born from** (all funnel through the same
+locked writer, `maybeUpsertSkill`):
+
+1. **Evidence mining** — a closed trade joins a cluster of similar
+   closed trades (same coin + direction + pattern family + regime).
+   At `MIN_CLUSTER_FOR_SKILL` (3) similar outcomes with no matching
+   skill already on file, the cluster is proposed to the worth gate.
+2. **The LLM worth gate** (`skillWorthGate.evaluateSkillWorth`) — an
+   LLM judge decides create / merge / skip, and when it says create it
+   also writes the IF/THEN clauses and a falsifiable prediction. The
+   gate's JUDGED clauses are what gets persisted (validated ≡ persisted
+   — the writer never re-parses the raw post-mortem behind the gate's
+   back). Verdicts: `create` validates and writes; `merge` tightens the
+   named overlapping skill; `skip` stays skip.
+3. **Post-mortem IF/THEN ingestion** — a hand-written IF/THEN in a
+   trade's post-mortem promotes to a skill on the first closed trade
+   (execution-error post-mortems are excluded — a broker rejection is
+   not a market claim).
+4. **Coach-crafted skills** (`SkillCraftService`) — verdict-evidence
+   drafts, human-approved, ingested via `skill_ingest`.
+
+**The guards that make a created skill proper** — cluster ≥ 3, no
+duplicate matching skill, graveyard check (a retired twin drafts a
+REVIVAL review card instead of a fresh re-create), a real lesson is
+required (cluster statistics alone never fabricate a procedure), the
+library cap turns creation into a displacement proposal at the cap,
+and every write holds the notebook write lock.
+
+**What a created file carries**: slug-named markdown in the skills
+folder with valid frontmatter — status (`candidate` until evidence
+promotes it), kind (avoid/repeat from the cluster's W/L balance), scope
+(coin/direction/family/regime), win/loss counts with a monotonic
+evidence counter, trade-id provenance, the loss streak, the IF/THEN
+clause, a falsifiable prediction birth certificate, and a derived
+one-line description (what the /slug menu and index lines show).
+
+**New test suite** (`tests/skillFileIntegrity.test.ts`): creates a skill
+through the real writer and pins the contract — slug-named file in the
+skills folder, frontmatter round-trips through serialize/parse, complete
+evidence (counts, provenance, streak, prediction, description), a
+non-empty instruction body, and downstream usability: it matches the
+setup that birthed it, resolves via /slug with kind and status, and
+renders in the invoked-skills section. Five tests, all green.
+
+## Bot threads get live data, member cards get identity, learning loop audit
+
+Three things to land together: make Hybrid Intelligence reach every
+bot (DMs were running blind), give the empty-room member cards the
+identity tint we agreed to, and confirm the learning loop is actually
+cycling so the harness improves run over run.
+
+- **Hybrid data now reaches bot threads.** With the HYBRID toggle on, a
+  bot answering in its own thread used to reason blind while the debate
+  analysts and group-room members saw live prices. The mailbox now
+  fetches the same live snapshot (once per turn, keyed on the symbol the
+  prompt names) and appends it to the bot's system prompt — same gate
+  the rooms and analysts use, silent fallback when the fetch fails or
+  no symbol is present. Verified by three new hook tests: ON injects,
+  off doesn't fetch, and a fetch failure never fails the turn.
+- **Member cards wear the bot's identity.** The empty-room cards are
+  now tinted with the bot's own avatar hue (a face-kind bot's spec, or
+  the deterministic name hash for auto/pixel/upload). A new scoped CSS
+  exception `.member-tint` (same doctrine as `.status-surface`) layers
+  two faint radial gradients of that hue over a zinc base — the cards
+  read as tinted, not as colored chrome, and the gradient is identity
+  (same bot = same tint across renders), never decoration.
+- **Learning loop audit.** The end-to-end cycle is intact: trade close
+  in `useTradeLogging` → `syncClosedTradeToNotebook` (skill creation +
+  eval scheduler kick) → attribution writes via `recordMemoryInjection`
+  and `skillAdherenceForRun` → read-back into the next run's moderator
+  bundle, the final card, and the veto lane. Nothing was missing;
+  nothing needed patching. `applyNotebookSkillsToAnalysis` carries the
+  current regime into the strict matcher so a regime-scoped skill
+  doesn't veto in another regime. Skills become enforced telemetry
+  only when a username is active — otherwise writes are still kept as
+  history but cannot be attributed to a run.
+
+## Empty rooms get an onboarding hero (side-by-side with OpenBot's)
+
+A side-by-side against OpenBot's empty channel showed august's empty group
+room losing badly: one muted sentence floating in a black void, an
+"Activity" bar whose only content was a second hint, and a squished flat
+composer bar. OpenBot answered the same moment with a headline, a big
+inviting composer, a routing hint, and an agent gallery.
+
+- **Empty group rooms now onboard.** The void is replaced with a hero:
+  an eyebrow ("N bots · every member answers in turn"), a serif "Start a
+  new thread" headline matching the home greeting, the @directing hint,
+  a member card per bot on the floor (face, name, role or model — the
+  grounded version of OpenBot's agent gallery), and starter prompts
+  ("Introduce yourselves", "Debate the current BTC setup", …) that
+  prefill the composer and focus it — never auto-send; prefill is a hand
+  on the wheel, not a turn taken.
+- **The Activity bar stops shouting into an empty room.** It now renders
+  only when there is activity or a run in flight; an empty feed's sole
+  content was a hint duplicating the hero.
+- **The room composer reads as one surface.** Centered on the column
+  like the main composer, pill radius, larger type, and a focus ring on
+  the whole pill (focus-within) instead of none.
+- **1:1 bot threads match.** The bare "No messages with X yet" line is
+  now a hero: the bot's face, its name in serif, and the same honest
+  line.
+
+## Composer round: the input finally grows, skills are discoverable, replies are copyable
+
+- **The composer textarea grows with its content.** It was fixed at one
+  row with `overflow: hidden`, so anything past the first line was
+  CLIPPED — multi-line prompts were invisible to the person typing them.
+  It now grows with the text up to the cap, then scrolls.
+- **Typing `/` opens the skill menu.** Skills are invoked by slug, but a
+  slug you cannot see is a feature nobody can use. The composer now
+  offers the notebook's skills (slug, summary, kind · status) as you
+  type the token, filtered as you go; picking one completes it. Same
+  grammar as the @mention menu: click to insert, Escape to dismiss. The
+  skill's actual content still rides the run at send time.
+- **Plain AI replies get a hover Copy affordance.** `handleCopy` existed
+  and analysis cards used it, but ordinary chat replies had no copy
+  affordance at all. It now appears on hover with the same ✓/⧉
+  confirmation the cards use.
+- **Click-send returns the caret to the composer.** Enter-send never
+  leaves the textarea, but clicking send parked focus on a button that
+  was about to swap meaning; focus now goes back to the input.
+
+## Bot-mode UI: envelopes read like envelopes, tool rows expand, empty states tell the truth
+
+The UI half of the bot-mode batch — the handoff envelope landed as logic
+and prompt text first; this round makes what the human SEES match it.
+
+- **Teammate DMs render as envelopes, not blobs.** The target thread's
+  DM row used to be one flat string ("📩 Macro (teammate DM): …
+  Constraints: … Wanted back: …" all inline, with the sender's name
+  buried in the text). The row now carries a structured view: the header
+  names the SENDER (in the target's thread, "You" was a lie about who
+  spoke), the task is the body, and constraints and the expected answer
+  render as separate muted lines. The flat text stays on the row for
+  prompt/history replay — presentation only.
+- **Tool action rows expand and rejections are loud.** Model side-effect
+  rows (memory amendments, desk tool proposals, skill drafts) now open to
+  their per-item detail with the review location — which previously lived
+  only in a hover tooltip. A rejected proposal renders destructive
+  ("Blocked — … rejected, nothing stored") instead of a zinc footnote;
+  a refusal is a status.
+- **The roster distinguishes its two nothings.** With a search query
+  active and no matches, the rail used to render completely blank (the
+  "No bots yet" line only fired when the roster was truly empty). A
+  no-match search now quotes the query back — "Nothing matches '…' — no
+  bot, group, or thread here is named that or contains it" — so a typo
+  reads as a miss, not as lost bots; the genuinely-empty roster keeps its
+  own explanation.
+
 ## Chat readability batch: streaming markdown repair, queued sends, handoff envelopes, invoked skills
 
 Ports the highest-value mechanics from a deep review of CopilotKit/OpenBot
