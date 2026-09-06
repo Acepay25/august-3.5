@@ -15,7 +15,8 @@ export default tseslint.config(
       'playwright-report/**',
       'tests/test-rl.cjs',
       'tests/test-rule-extraction.cjs',
-      'scripts/*.cjs',
+      // Desk tooling — one-off CJS scripts, never shipped.
+      'scripts/**/*.cjs',
     ],
   },
   {
