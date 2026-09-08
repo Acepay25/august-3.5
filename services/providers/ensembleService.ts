@@ -43,6 +43,7 @@ import {
 } from '../../constants/prompts';
 import { CLARIFICATION_DONE_MARKER, CLARIFICATION_MARKERS_RE, CONVICTION_RETRY_MARKER, MODERATOR_RETRY_MARKER, replacementTimeoutText } from '../../constants/debateMarkers';
 import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../constants/schemas';
+import { archetypeDirectiveLine } from '../../constants/prompts/archetypePrompts';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { extractDebateLevels, formatDebateLevelsTable, summarizeFinalPositions } from '../../utils/debateLevels';
@@ -2323,7 +2324,11 @@ export const conductRealDebate = async function* (
                         lensConfig.assignments,
                         lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
                     )
-                    : '';
+                    // Flat floor (no lens, no team/bot persona): the seat keeps
+                    // its strategy archetype from the opening — same index,
+                    // same persona — so structural disagreement survives the
+                    // rebuttal rounds instead of drifting to a generic analyst.
+                    : archetypeDirectiveLine(debateRoster.findIndex(o => o.provider.name === analyst.provider.name));
         const otherAnalystNames = debateRoster
             .map(o => o.provider.name)
             .filter(n => n !== analyst.provider.name);

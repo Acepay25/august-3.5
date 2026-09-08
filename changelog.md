@@ -2,6 +2,42 @@
 
 Plain-English log of change rounds. Newest first.
 
+## The harness learns strategy families, not just setups
+
+Ported the transferable framework from Kakushadze & Serur's *151 Trading
+Strategies* (SSRN 3247865) — the book's taxonomy, strategy template,
+regime-dependence and alpha-decay theses — into six connected changes:
+
+- **Controlled strategy vocabulary.** Every analysis now carries a
+  `strategyFamily` from a fixed eight-family enum (trend-following,
+  mean-reversion, breakout, range-fade, pairs/stat-arb, volatility,
+  event-driven, market-neutral). The moderator names it in the trade plan;
+  when it doesn't, the free-text strategy is keyword-classified into a
+  family, and legacy rows backfill at parse time. Learning-loop statistics
+  can finally aggregate over comparable buckets instead of strings the
+  models invent.
+- **Strategy template on skills.** Skills gained the book's template fields
+  (signals, invalidation, horizon, sizing, family) so mined skills,
+  imported skills and PDF-extracted strategies share one shape; the
+  book-summarizer prompt now emits that shape.
+- **Regime × family scoreboard.** Closed trades accumulate a family-per-
+  regime win-rate matrix. Retrieval tilts skill ranking by how the family
+  has been performing in the CURRENT regime, and the moderator's verdict
+  prompt gets a compact "which playbook does the tape favor" line.
+- **Alpha-decay demotion.** Confirmed skills now also track their last 12
+  counted outcomes; a skill whose recent window decayed below 35% is
+  demoted to candidate even while lifetime stats look fine — edges fade,
+  and cumulative counters used to hide it.
+- **Strategy archetypes at the flat floor.** Debate seats rotate through
+  five strategy archetypes (trend-follower, mean-reverter, breakout
+  hunter, range fade, stat-arb) by seat index, in openings and rebuttals
+  alike, so seats disagree structurally instead of converging on one
+  style. Lens mode and team personas are untouched.
+- **Seed corpus.** Twelve crypto-executable strategies from the book land
+  as `prior: book` candidate skills on boot — injected from birth (labeled
+  as priors, not earned evidence) and then tested by the existing worth
+  gate, so the library starts with hypotheses instead of a blank slate.
+
 ## CI gates the e2e smoke on every push
 
 The release run caught three weeks of UI rot because the e2e smoke suite

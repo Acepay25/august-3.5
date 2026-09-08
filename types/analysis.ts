@@ -1,5 +1,7 @@
 // Trade analysis types
 
+import type { StrategyFamily } from './strategy';
+
 export interface MarketConditions {
   pattern: string;
   candleBehavior: string;
@@ -76,6 +78,11 @@ export interface TradeAnalysis {
   probability: number;
   grade?: 'A' | 'B' | 'C' | 'D' | 'F'; // Trade setup grade (A=80-95%, B=70-79%, C=55-69%, D=40-54%, F=<40%)
   strategy: string;
+  /** Controlled strategy-family vocabulary (types/strategy). Derived at the
+   *  schema boundary: the model's explicit `strategyFamily` when it speaks
+   *  the enum, else a keyword classification of the free-text `strategy`.
+   *  Undefined only when neither carries a family signal. */
+  strategyFamily?: StrategyFamily;
   activeStrategies: string[];
   entryPoints: EntryPoint[];
   stopLoss: string;

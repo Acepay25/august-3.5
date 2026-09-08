@@ -47,6 +47,7 @@ import { buildDecisionReflectionContext } from '../services/learning/DecisionRef
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { COMMON_WORDS } from '../constants/commonWords';
+import { archetypeDirectiveLine } from '../constants/prompts/archetypePrompts';
 import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useRafThrottle } from './useRafThrottle';
@@ -2162,9 +2163,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // mandate stays so ad-hoc ensembles behave
                             // exactly as before.
                             const teamSeat = teamSeatFor(provider.config.id, provider.model);
+                            // Strategy archetype (Kakushadze & Serur style
+                            // taxonomy): in the flat floor, seats differ by
+                            // mandate AND by strategy style — a trend-follower
+                            // and a mean-reverter disagree structurally, which
+                            // is what the conviction auction feeds on. Team
+                            // personas and lens mode already differentiate
+                            // seats deliberately, so they win and skip rotation.
                             const persona = !runLensConfig.enabled && runGroupMemberPersonas.length > 0
                                 ? seatPersonaPrompt(teamSeat)
-                                : `Your specialty: ${seatMandates[analystIndex % seatMandates.length]}.`;
+                                : `Your specialty: ${seatMandates[analystIndex % seatMandates.length]}. ${archetypeDirectiveLine(analystIndex)}`;
                             // Seat differentiation lives in the SYSTEM prompt
                             // (rendered near the front by GenericAnalysisService),
                             // NOT as a suffix on the shared user message — a
@@ -2718,7 +2726,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 ? enabledProviders.findIndex(p => p.config.id === dropped.provider.config.id && p.model === dropped.provider.model)
                                 : -1;
                             const replacementSeatDirective = !runLensConfig.enabled
-                                ? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${!runLensConfig.enabled && runGroupMemberPersonas.length > 0 ? seatPersonaPrompt(droppedSeat) : `Your specialty: ${seatMandates[seatIdx >= 0 ? seatIdx % seatMandates.length : 0]}.`} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
+                                ? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${!runLensConfig.enabled && runGroupMemberPersonas.length > 0 ? seatPersonaPrompt(droppedSeat) : `Your specialty: ${seatMandates[seatIdx >= 0 ? seatIdx % seatMandates.length : 0]}. ${archetypeDirectiveLine(seatIdx >= 0 ? seatIdx : 0)}`} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
                                 : undefined;
                             const runStartedAtMs = performance.now();
                             const result = await runAnalyzeTradingView(

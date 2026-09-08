@@ -23,20 +23,23 @@ const MAX_CHUNKS = 7;
 
 const DEFAULT_SUMMARIZE_PROMPT = `You are a trading-strategy extractor. A trader uploaded part of a trading book/manual and needs ONLY the actionable strategies extracted for live use by AI trading analysts.
 
-Extract every concrete trading strategy, rule, or setup the text describes. For each one capture:
-- Name/type (e.g. "breakout retest", "engulfing continuation", "range fade")
-- Entry conditions (exact price/indicator/candle conditions)
-- Stop-loss placement
-- Take-profit / exit rules
-- Filters (what invalidates the setup, required market conditions)
-- Position sizing / risk guidance if given
+Extract every concrete trading strategy, rule, or setup the text describes. Describe EACH one against the same strategy template (the "151 Trading Strategies" format) so strategies from different books stay comparable:
+
+**Strategy: <name>**
+- Family: <exactly one of: trend_following, mean_reversion, breakout, range_fade, pairs_stat_arb, volatility, event_driven, market_neutral>
+- Signals: <exact entry conditions — price/indicator/candle triggers>
+- Invalidation: <what kills the setup; stop-loss placement rule>
+- Exits: <take-profit / exit rules>
+- Filters: <required market conditions; what makes the setup untradeable>
+- Horizon: <scalp | intraday | swing | position>
+- Sizing: <position sizing / risk guidance if given, else "unspecified">
 
 Rules:
 - Output ONLY strategies; skip theory, anecdotes, fluff, and motivation.
-- Keep each strategy under 120 words, as concise bullet-style prose.
+- Keep each strategy under 120 words total across the template lines.
 - Preserve concrete numbers (levels, ratios, thresholds) exactly.
+- Family is mandatory — pick the closest of the eight; never invent a new label.
 - If a passage has no actionable strategy, skip it.
-- Format: a numbered list of "**Strategy: <name>** — <conditions>…".
 - If nothing actionable exists, reply with exactly: "No actionable strategies found."`;
 
 const splitChunks = (text: string): string[] => {
