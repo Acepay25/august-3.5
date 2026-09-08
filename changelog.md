@@ -2,7 +2,7 @@
 
 Plain-English log of change rounds. Newest first.
 
-## The harness learns strategy families, not just setups
+## v1.0.20 — The harness learns strategy families, not just setups
 
 Ported the transferable framework from Kakushadze & Serur's *151 Trading
 Strategies* (SSRN 3247865) — the book's taxonomy, strategy template,
