@@ -38,6 +38,7 @@ import {
     retirementReasonFromHistory,
 } from './skillGraveyard';
 import { isStaleByRegime } from '../../utils/regimeSentinel';
+import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { familiesRelate } from '../../utils/patternMatch';
@@ -148,6 +149,37 @@ export interface SkillMeta {
     evidenceCount?: number;
     ifCondition?: string;
     thenAction?: string;
+    /** ── strategy-template fields (Kakushadze & Serur, "151 Trading
+     *  Strategies") ──
+     *  The book describes every strategy against one template: data,
+     *  universe, signals, portfolio construction, execution, risk
+     *  management. These fields pull that shape into the skill schema so a
+     *  mined skill, an imported skill and a book-extracted strategy share
+     *  one comparable structure. All optional — legacy files parse
+     *  unchanged. */
+    /** Controlled family vocabulary (types/strategy) this skill trades. */
+    strategyFamily?: string;
+    /** Exact entry conditions (price/indicator/candle triggers). */
+    signals?: string;
+    /** What kills the setup — stop style + invalidation level logic. */
+    invalidation?: string;
+    /** Intended holding horizon. */
+    horizon?: 'scalp' | 'intraday' | 'swing' | 'position';
+    /** Position sizing / risk guidance the strategy carries, if any. */
+    sizing?: string;
+    /** Provenance marker for curated book-prior skills (seed corpus):
+     *  'book' means the procedure comes from external literature, not this
+     *  trader's evidence — exempt from the zero-evidence injection ban,
+     *  clearly labeled as a prior so the model can weigh it as such. */
+    prior?: 'book';
+    /** ── alpha-decay window ──
+     *  The last N counted outcomes as a 'W'/'L' string (oldest first,
+     *  tail-capped at RECENT_WINDOW). Lifetime counters hide DECAY — a
+     *  skill that was great for six months and mediocre lately keeps its
+     *  confirmed badge on cumulative stats alone. deriveStatus demotes on
+     *  a decayed recent window; the lifetime record still protects it from
+     *  retirement. */
+    recentOutcomes?: string;
     body: string;
     /** ISO timestamp of the last LLM refinement pass, if any. */
     refinedAt?: string;
@@ -190,6 +222,14 @@ export interface SkillMeta {
 export const MIN_CLUSTER_FOR_SKILL = 3;
 export const MIN_SAMPLE_CONFIRMED = 5;
 export const MIN_SAMPLE_RETIRE = 6;
+/** Counted outcomes kept in the alpha-decay window (`recentOutcomes`). */
+export const RECENT_WINDOW = 12;
+/** Minimum windowed outcomes before decay demotion can fire. */
+export const DECAY_MIN_SAMPLES = 8;
+/** A confirmed skill whose recent window win-rate falls below this (repeat;
+ *  mirrored above for avoid) is DEMOTED to candidate — decayed, not dead.
+ *  Lifetime stats still guard retirement. */
+export const DECAY_RECENT_WINRATE = 0.35;
 /**
  * Counted trades a CANDIDATE avoid skill needs before code-side enforcement
  * may size a trade down. Prompt injection already excludes zero-evidence
@@ -334,6 +374,19 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         })(),
         ifCondition: pick('ifCondition'),
         thenAction: pick('thenAction'),
+        strategyFamily: pick('strategyFamily'),
+        signals: pick('signals'),
+        invalidation: pick('invalidation'),
+        horizon: (() => {
+            const h = (pick('horizon') || '').toLowerCase();
+            return h === 'scalp' || h === 'intraday' || h === 'swing' || h === 'position' ? h : undefined;
+        })(),
+        sizing: pick('sizing'),
+        prior: pick('prior') === 'book' ? 'book' as const : undefined,
+        recentOutcomes: (() => {
+            const r = (pick('recentOutcomes') || '').toUpperCase().replace(/[^WL]/g, '');
+            return r ? r.slice(-RECENT_WINDOW) : undefined;
+        })(),
         body,
         refinedAt: pick('refinedAt'),
         modifiedAt: pick('modified'),
@@ -516,6 +569,13 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
+        ...(meta.strategyFamily ? [`strategyFamily: ${meta.strategyFamily}`] : []),
+        ...(meta.signals ? [`signals: ${meta.signals.replace(/\n/g, ' ')}`] : []),
+        ...(meta.invalidation ? [`invalidation: ${meta.invalidation.replace(/\n/g, ' ')}`] : []),
+        ...(meta.horizon ? [`horizon: ${meta.horizon}`] : []),
+        ...(meta.sizing ? [`sizing: ${meta.sizing.replace(/\n/g, ' ')}`] : []),
+        ...(meta.prior ? [`prior: ${meta.prior}`] : []),
+        ...(meta.recentOutcomes ? [`recentOutcomes: ${meta.recentOutcomes}`] : []),
         ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
         ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
@@ -688,6 +748,31 @@ const controlStatsFrom = (
     return wins + losses > 0 ? { wins, losses } : undefined;
 };
 
+/** Win/loss counts inside the alpha-decay window (recentOutcomes).
+ *  Null when the skill has no windowed evidence yet. */
+export const recentWindowStats = (meta: SkillMeta): { wins: number; losses: number } | null => {
+    if (!meta.recentOutcomes) return null;
+    const wins = (meta.recentOutcomes.match(/W/g) || []).length;
+    const losses = meta.recentOutcomes.length - wins;
+    return { wins, losses };
+};
+
+/** True when the recent window carries enough samples to judge and has
+ *  decayed below the bar for the skill's kind (repeat: below; avoid: above). */
+export const isDecayed = (meta: SkillMeta): boolean => {
+    const r = recentWindowStats(meta);
+    if (!r || r.wins + r.losses < DECAY_MIN_SAMPLES) return false;
+    const wr = r.wins / (r.wins + r.losses);
+    return meta.kind === 'repeat' ? wr < DECAY_RECENT_WINRATE : wr > 1 - DECAY_RECENT_WINRATE;
+};
+
+/** Append one counted outcome to the alpha-decay window (tail-capped).
+ *  Called everywhere the global wins/losses counters move, so the decay
+ *  view can never drift from the lifetime record. */
+export const appendRecentOutcome = (meta: SkillMeta, win: boolean): void => {
+    meta.recentOutcomes = ((meta.recentOutcomes ?? '') + (win ? 'W' : 'L')).slice(-RECENT_WINDOW);
+};
+
 const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number }): SkillStatus => {
     // ── Causal override ──
     // An automated A/B eval that shows the skill HURTS decisions demotes it
@@ -722,6 +807,14 @@ const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number 
         if (meta.kind === 'repeat' && winRate < 0.4) return 'retired';
         if (meta.kind === 'avoid' && winRate > 0.6) return 'retired';
     }
+    // ── alpha decay ──
+    // A CONFIRMED skill whose recent window has decayed below the bar is
+    // demoted to candidate even while lifetime stats look fine — the
+    // "151 Trading Strategies" decay thesis: edges fade, and cumulative
+    // counters hide it. Demotion, not retirement: the lifetime record
+    // protects the skill, and fresh evidence re-confirms it through the
+    // normal ladder if the edge returns.
+    if (meta.status === 'confirmed' && isDecayed(meta)) return 'candidate';
     if (sample >= MIN_SAMPLE_CONFIRMED) {
         const rawSaysConfirmed = meta.kind === 'repeat'
             ? winRate >= 0.6
@@ -866,6 +959,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             meta.losses += 1;
             meta.consecutiveLosses += 1;
         }
+        appendRecentOutcome(meta, trade.outcome === TradeOutcome.WIN);
         // Per-regime split, written alongside the global counters —
         // the substrate that lets a conditional pattern be RE-SCOPED instead
         // of decayed into oblivion.
@@ -1489,6 +1583,10 @@ const maybeUpsertSkillUnlocked = async (
         direction: setup.direction,
         family: trade.analysis?.detectedPatternFamily,
         regime: trade.marketRegime,
+        // Controlled strategy-family vocabulary: the analysis's explicit
+        // family when it carries one, else classify the free-text strategy.
+        strategyFamily: trade.analysis?.strategyFamily
+            ?? classifyStrategyFamily(trade.analysis?.strategy),
         wins,
         losses,
         consecutiveLosses: streak,
@@ -1688,6 +1786,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             if (!meta.tradeIds.includes(trade.id)) {
                 if (trade.outcome === TradeOutcome.WIN) meta.wins += 1;
                 else meta.losses += 1;
+                appendRecentOutcome(meta, trade.outcome === TradeOutcome.WIN);
                 meta.tradeIds = [...meta.tradeIds, trade.id];
             }
             meta.thenAction = clause.thenAction;
@@ -2049,6 +2148,11 @@ export const syncClosedTradeToNotebook = async (
     await syncRecurringMistakes(allTrades, username);
     await applySkillEvidence(trade, username, allTrades);
     await ingestIfThenFromTrade(trade, username);
+    // Family × regime scoreboard (strategyRegimeMatrix): fire-and-forget —
+    // the matrix is telemetry, never allowed to break settlement.
+    void import('./strategyRegimeMatrix')
+        .then(m => m.recordSettledTradeForMatrix(trade, username))
+        .catch(() => { /* best-effort */ });
     try {
         const { evaluateSkillWorth, validateCraftedSkill } = await import('./skillWorthGate');
         await ensureHarnessFoldersUnlocked(username);

@@ -10,6 +10,8 @@
 
 import { TradeAnalysis, ConfidenceCalibration, DebateTurn } from '../types';
 import { parseTradeAnalysis } from '../schemas/tradeAnalysis';
+import { normalizeStrategyFamily } from '../types/strategy';
+import { classifyStrategyFamily } from './strategyFamily';
 import { FAMILY_UI_DATA } from '../constants/models';
 import { CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_RE } from '../constants/debateMarkers';
 
@@ -475,6 +477,9 @@ export interface MarkdownTradePlan extends ProseTradePlan {
     validityWindow?: string;
     historicalCorrelation?: string;
     strategy?: string;
+    /** Controlled family vocabulary (types/strategy) — the plan's explicit
+     *  "Strategy Family" line when the moderator named one. */
+    strategyFamily?: string;
     marketConditions?: {
         pattern?: string;
         candleBehavior?: string;
@@ -618,6 +623,9 @@ export const parseMarkdownTradePlan = (text: string): MarkdownTradePlan | null =
 
     // ── Strategy ──
     out.strategy = field(['Strategy']);
+    // "Strategy Family" is a distinct label — the field() regex anchors the
+    // colon right after the label, so it never steals the "Strategy" line.
+    out.strategyFamily = field(['Strategy Family']);
     out.historicalCorrelation = field(['Historical Correlation']);
 
     // ── Market Conditions ──
@@ -764,6 +772,10 @@ export const tradePlanToAnalysis = (plan: MarkdownTradePlan): Record<string, unk
         probability: plan.probability,
         grade: plan.grade,
         strategy: plan.strategy,
+        // Explicit plan line first; free-text strategy as the classifier
+        // fallback. Undefined stays undefined — no forced bucket.
+        strategyFamily: normalizeStrategyFamily(plan.strategyFamily, classifyStrategyFamily)
+            ?? classifyStrategyFamily(plan.strategy),
         historicalCorrelation: plan.historicalCorrelation,
         detectedPatternFamily: plan.patternFamily,
         validityDurationMinutes: validityMinutes,

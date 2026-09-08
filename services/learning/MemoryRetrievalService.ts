@@ -19,6 +19,9 @@
 import { LoggedTrade } from '../../types';
 import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { regimeRankFactor } from '../../utils/regimeSentinel';
+import { classifyStrategyFamily } from '../../utils/strategyFamily';
+import { normalizeStrategyFamily } from '../../types/strategy';
+import { familyEdgeFactor, matrixSummaryBlock } from './strategyRegimeMatrix';
 import { getMemoryFiles } from './MemoryFilesService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
 import { settledBeliefsBlock } from './settledBeliefs';
@@ -78,6 +81,13 @@ const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
  *  (the memory graph's semantics now drive production retrieval,
  *  not just the dashboard — with the M3 reconciliation that moderators see
  *  matched skills at index tier rather than being excluded entirely). */
+/** The controlled strategy family a skill trades: its explicit
+ *  strategyFamily when canonical, else a keyword classification of the
+ *  pattern family + body. Undefined = no family signal (neutral factor). */
+const skillStrategyFamily = (meta: SkillMeta): string | undefined =>
+    normalizeStrategyFamily(meta.strategyFamily, classifyStrategyFamily)
+    ?? classifyStrategyFamily(`${meta.family ?? ''} ${meta.body ?? ''}`);
+
 const rankedMatchedSkills = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
@@ -110,7 +120,10 @@ const rankedMatchedSkills = (
         // basis to weigh it against — and contradicted the dashboard's own
         // "stays unenforced until it earns a record" message. The recall tool
         // still serves the full body when a model asks explicitly.
-        if ((meta.wins + meta.losses) === 0) continue;
+        // EXCEPTION: `prior: book` skills (the seed corpus) carry external
+        // evidence — curated literature, not a hunch — so they inject from
+        // birth, visibly labeled 0W/0L so the model weighs them as priors.
+        if ((meta.wins + meta.losses) === 0 && !meta.prior) continue;
         // Graph score: status weight (confirmed 2 / candidate 1)
         // × dimension overlap count × evidence-freshness decay. Mirrors the
         // appliesWhen weights the dashboard graph assigns, so the two views
@@ -120,7 +133,11 @@ const rankedMatchedSkills = (
         // A skill whose evidence mix diverges from the market's current
         // 30-day regime mix is downweighted (stale-by-regime, distinct from
         // stale-by-time) until fresh evidence in the current mix re-converges.
-        const score = statusWeight * overlap * evidenceDecay(meta) * regimeRankFactor(meta, query?.coin);
+        // The family × regime matrix adds the strategy-layer tilt: a skill
+        // trading a family that has proven edge (or decay) in the CURRENT
+        // regime moves accordingly — the book's regime-gating as evidence.
+        const score = statusWeight * overlap * evidenceDecay(meta) * regimeRankFactor(meta, query?.coin)
+            * familyEdgeFactor(skillStrategyFamily(meta), typeof query?.regime === 'string' ? query.regime : undefined);
         candidates.push({ file, meta, score });
     }
     candidates.sort((a, b) => b.score - a.score || (b.meta.wins + b.meta.losses) - (a.meta.wins + a.meta.losses));
@@ -233,7 +250,10 @@ const skillIndexLine = (name: string, meta: SkillMeta): string => {
         : meta.ifCondition
             ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
             : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
-    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidenceFreshness(meta)}] ${rule}`;
+    const evidence = meta.prior === 'book' && (meta.wins + meta.losses) === 0
+        ? 'book prior — no local record yet'
+        : evidenceFreshness(meta);
+    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidence}] ${rule}`;
 };
 
 /**
@@ -543,6 +563,12 @@ export const getMemoryFilesContext = (
     if (stage === 'verdict') {
         const similarChars = push(similarTradesBlock(query, trades));
         if (similarChars > 0) injected.push({ path: 'journal/similar-trades', kind: 'similar', chars: similarChars });
+        // Family × regime scoreboard: which strategy families the settled
+        // record currently favors in THIS regime. Compact, capped, and only
+        // when the matrix has evidence — the moderator sees nothing rather
+        // than an empty table.
+        const edgeChars = push(matrixSummaryBlock(typeof query?.regime === 'string' ? query.regime : undefined));
+        if (edgeChars > 0) injected.push({ path: 'matrix/family-regime', kind: 'similar', chars: edgeChars });
     }
 
     const doctrine = doctrineBlock();

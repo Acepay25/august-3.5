@@ -20,6 +20,8 @@ import {
     syncRecurringMistakes,
 } from '../services/learning/MemoryFilesService';
 import { hydrateRegimeLedger } from '../services/learning/regimeLedger';
+import { hydrateStrategyRegimeMatrix } from '../services/learning/strategyRegimeMatrix';
+import { ensureSeedSkills } from '../services/learning/seedStrategies';
 import { runWeeklyRollupIfDue } from '../services/learning/weeklyRollup';
 import { runWeeklyReviewIfDue } from '../services/learning/weeklyReview';
 import { runMonthlyReportIfDue } from '../services/learning/monthlyReport';
@@ -237,6 +239,11 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             await initMemoryFiles(username);
 
             void hydrateRegimeLedger(username).catch(() => { /* ledger is best-effort */ });
+            void hydrateStrategyRegimeMatrix(username).catch(() => { /* matrix is best-effort */ });
+            // Book-prior seed corpus (Kakushadze & Serur): create any missing
+            // seed skills once per boot. Idempotent by slug — user edits,
+            // retirements and graveyard moves are never overwritten.
+            void ensureSeedSkills(username).catch(() => { /* seeding is best-effort */ });
             void runWeeklyRollupIfDue(username).then(res => {
                 if (res) console.log('[WeeklyRollup] pass complete:', res);
             }).catch(e => {

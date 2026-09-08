@@ -49,6 +49,7 @@ export const MASTER_TRADE_PLAN_MARKDOWN = `**FINAL TRADE PLAN**
 
 **Strategy**
 - **Strategy:** Trend continuation on pullback
+- **Strategy Family:** trend_following
 - **Historical Correlation:** Similar to past winning setups
 
 **Market Conditions**

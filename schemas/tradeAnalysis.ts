@@ -12,6 +12,8 @@
 
 import { z } from 'zod';
 import { cleanPriceField, sanitizeJSONString } from '../utils/sanitizers';
+import { classifyStrategyFamily } from '../utils/strategyFamily';
+import { STRATEGY_FAMILIES, normalizeStrategyFamily } from '../types/strategy';
 import type { TradeAnalysis, MarketConditions, LevelProbabilities, ProbabilityReasoning } from '../types';
 
 // =============================================================================
@@ -174,6 +176,7 @@ export const TradeAnalysisSchema = z.object({
   probability: z.number().min(0).max(100),
   grade: z.enum(['A', 'B', 'C', 'D', 'F']).optional(),
   strategy: z.string(),
+  strategyFamily: z.enum(STRATEGY_FAMILIES).optional(),
   activeStrategies: z.array(z.string()).default([]),
   entryPoints: z.array(EntryPointSchema).min(1),
   stopLoss: z.string(),
@@ -359,6 +362,13 @@ export const CoercedTradeAnalysisSchema = z.object({
       : undefined
   ),
   strategy: coercedString(),
+  // The controlled family vocabulary: accept the enum verbatim, a known
+  // alias ("momentum", "stat-arb"), or free text — anything that is not a
+  // family resolves through the keyword classifier. applySemanticFixups
+  // backfills from `strategy` when this field is absent entirely.
+  strategyFamily: z.any().optional().transform((v) =>
+    typeof v === 'string' ? normalizeStrategyFamily(v, classifyStrategyFamily) : undefined
+  ),
   activeStrategies: coercedStringArray(),
   entryPoints: z.any().optional().transform((v) => {
     if (Array.isArray(v)) {
@@ -454,6 +464,7 @@ export const createDefaultTradeAnalysis = (): TradeAnalysis => ({
   confidence: 'Medium',
   probability: 65, // Default to Medium/65 to prevent the "always 15%" bug
   strategy: 'Analysis unavailable',
+  strategyFamily: undefined,
   activeStrategies: [],
   entryPoints: [],
   stopLoss: '',
@@ -548,6 +559,9 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
     probability: 65,
     grade: raw.grade,
     strategy: raw.strategy,
+    // Backfill the family from the free-text strategy when the model did not
+    // name one — legacy rows and enum-blind models still land in a bucket.
+    strategyFamily: raw.strategyFamily ?? classifyStrategyFamily(raw.strategy),
     activeStrategies: raw.activeStrategies,
     entryPoints: raw.entryPoints,
     stopLoss: raw.stopLoss,
