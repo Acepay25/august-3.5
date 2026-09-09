@@ -77,6 +77,7 @@ const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioS
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
+const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
@@ -1089,6 +1090,8 @@ const App: React.FC = () => {
 
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
+    // Strategy Studio — the browse/annotate surface for the playbook library.
+    const [isStrategyStudioOpen, setIsStrategyStudioOpen] = useState(false);
 
     // ─── Desk view (opt-in overlay projecting the current debate) ──────────
     const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
@@ -1293,7 +1296,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen || isStrategyStudioOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1307,6 +1310,7 @@ const App: React.FC = () => {
                 if (isWatchListVisible) setIsWatchListVisible(false);
                 if (isApprovalInboxVisible) setIsApprovalInboxVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
+                if (isStrategyStudioOpen) setIsStrategyStudioOpen(false);
                 return;
             }
             if (isAnalysisInProgress || isPostMortemInProgress) {
@@ -1319,7 +1323,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen, isStrategyStudioOpen]);
 
     const {
         comparePrimary,
@@ -1761,6 +1765,12 @@ const App: React.FC = () => {
             label: 'Open Strategy Search',
             hint: 'Playbook',
             run: () => setIsStrategySearchVisible(true),
+        },
+        {
+            id: 'strategy-studio',
+            label: 'Open Strategy Studio',
+            hint: 'Playbook',
+            run: () => setIsStrategyStudioOpen(true),
         },
         {
             id: 'toggle-ensemble',
@@ -2564,6 +2574,7 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 onOpenSavedAnalyses={() => { setIsSavedAnalysesVisible(true); setIsSettingsMenuVisible(false); }}
                 onOpenStrategySearch={() => { setIsStrategySearchVisible(true); setIsSettingsMenuVisible(false); }}
+                onOpenStrategyStudio={() => { setIsStrategyStudioOpen(true); setIsSettingsMenuVisible(false); }}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}
                 onSetSummarizationProvider={handleSetSummarizationProvider}
@@ -3315,6 +3326,28 @@ const App: React.FC = () => {
                         onLocateMessage={handleLocateMessage}
                         onClose={() => setIsSavedGalleryOpen(false)}
                     />
+                </React.Suspense>
+            )}
+
+            {/* Strategy Studio — browse + annotate the playbook library. */}
+            {isStrategyStudioOpen && (
+                <React.Suspense fallback={null}>
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 sm:p-8"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Strategy Studio"
+                        onMouseDown={(e) => { if (e.target === e.currentTarget) setIsStrategyStudioOpen(false); }}
+                    >
+                        <div className="flex h-full max-h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                            <StrategyStudio
+                                trades={loggedTrades}
+                                username={activeUsername || undefined}
+                                currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
+                                onClose={() => setIsStrategyStudioOpen(false)}
+                            />
+                        </div>
+                    </div>
                 </React.Suspense>
             )}
 

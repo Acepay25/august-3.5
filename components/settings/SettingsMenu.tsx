@@ -80,6 +80,8 @@ interface SettingsMenuProps {
     onOpenPlaybook?: () => void;
     onOpenUserProfile?: () => void;
     onOpenStrategySearch?: () => void;
+    /** Opens the Strategy Studio — the browse/annotate playbook library. */
+    onOpenStrategyStudio?: () => void;
     onSwitchUser?: () => void;
     onExportData?: () => Promise<void> | void;
     /** Active profile — enables the backup management section. */
@@ -203,6 +205,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         onOpenPlaybook,
         onOpenUserProfile,
         onOpenStrategySearch,
+        onOpenStrategyStudio,
         onOpenJournal,
         onSwitchUser,
         onExportData,
@@ -937,6 +940,18 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                             {activeTab === 'strategies' && (
                                 <div className="h-full min-h-0 animate-fade-in flex flex-col">
+                                    {onOpenStrategyStudio && (
+                                        <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-2.5">
+                                            <p className="text-[11px] text-zinc-500">Upload playbooks below — or browse everything the harness knows as one library.</p>
+                                            <button
+                                                type="button"
+                                                onClick={onOpenStrategyStudio}
+                                                className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                                            >
+                                                Strategy Studio
+                                            </button>
+                                        </div>
+                                    )}
                                     <StrategiesManager
                                         username={props.username}
                                         providerConfigs={providerConfigs ?? []}
