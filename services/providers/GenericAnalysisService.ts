@@ -1540,6 +1540,31 @@ Return ONLY the new compressed summary text.
     return sanitizeAIResponse(result || "Memory compression failed.");
 }
 
+/** Object-root JSON Schema for the GlobalMemory wire shape (see
+ *  types/learning.ts GlobalMemory). Non-strict by design: the lenient zod
+ *  parseGlobalMemory stays the validator — this only constrains decoding
+ *  where the capability class proves the route works. insightKnowledgeBase
+ *  is intentionally unconstrained (its shape is app-managed, not model-
+ *  generated; the model must not need to reproduce it). */
+const GLOBAL_MEMORY_JSON_SCHEMA: Record<string, unknown> = {
+    type: 'object',
+    properties: {
+        totalTradesAnalyzed: { type: 'number' },
+        familyPerformance: { type: 'object', additionalProperties: { type: 'string' } },
+        aiPatternMemory: { type: 'array', items: { type: 'string' } },
+        globalCorrections: { type: 'array', items: { type: 'string' } },
+        userPreferences: {
+            type: 'object',
+            properties: {
+                leverageDefault: { type: 'number' },
+                favoriteAssets: { type: 'array', items: { type: 'string' } },
+                preferredSetup: { type: 'string' },
+            },
+        },
+        lastUpdated: { type: 'string' },
+    },
+};
+
 export async function updateGlobalMemory(
     config: ProviderConfig,
     recentTrades: LoggedTrade[],
@@ -1572,7 +1597,18 @@ ${tradeSummaries}
 Generate the updated Global Memory JSON object.
     `;
 
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, maxTokens: 2048, signal, temperature: 0.25 });
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], {
+        jsonMode: true,
+        // Capability-gated constrained decoding: on hosts with a verified
+        // json_schema route the response arrives shaped like GlobalMemory
+        // instead of merely "some JSON". jsonMode stays true so the degrade
+        // chain falls back to json_object → free text, and parseGlobalMemory
+        // remains the validator of record either way.
+        jsonSchema: { name: 'global_memory', schema: GLOBAL_MEMORY_JSON_SCHEMA },
+        maxTokens: 2048,
+        signal,
+        temperature: 0.25,
+    });
     try {
         const parsed = parseGlobalMemory(extractAndParseJson(result) || {});
         if (parsed) return parsed;
