@@ -19,7 +19,7 @@ declaration, which is initialized at module instantiation and immune to
 evaluation order. Verified by booting the real production bundle
 headlessly: the splash now clears and the console is clean.
 
-## v1.0.21-pre — Renamed to August Trading
+## Renamed to August Trading
 
 The app and the GitHub repository are now **August Trading** (repo
 `Acepay25/august-trading`). Every user-facing string (window title, header,
