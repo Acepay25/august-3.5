@@ -1273,7 +1273,12 @@ const App: React.FC = () => {
     const deskSceneVerdictDetail = useMemo(() => {
         const a = deskSceneMessage?.analysis;
         if (!a) return undefined;
-        return { direction: a.direction, confidence: a.confidence, grade: (a as { grade?: string | null }).grade ?? null };
+        return {
+            direction: a.direction,
+            confidence: a.confidence,
+            grade: (a as { grade?: string | null }).grade ?? null,
+            review: a.verdictReview,
+        };
     }, [deskSceneMessage]);
 
     // Esc cancels an in-progress analysis (including the debate phase). Never

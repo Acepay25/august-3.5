@@ -83,6 +83,10 @@ export interface SkillEvalResult {
 export interface SkillEvalAnalysisOutput {
     confidence?: string;
     direction?: string;
+    /** The arm's verdict was quarantined (parse/integrity failure) — its
+     *  direction says nothing about the skill's effect, so the pair must not
+     *  be graded as a flip. */
+    review?: boolean;
 }
 
 /** Everything a runner needs to render the WITH-skill arm itself. */
@@ -190,6 +194,10 @@ export const evaluateSkill = async (
             withDirection: withSkill.direction,
         };
         pairs.push(pair);
+
+        // A quarantined arm is a measurement failure, not a verdict — grading
+        // its "flip" would attribute moderator parse errors to the skill.
+        if (baseline.review || withSkill.review) continue;
 
         const changed = baseline.confidence !== withSkill.confidence
             || baseline.direction !== withSkill.direction;

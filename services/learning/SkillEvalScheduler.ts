@@ -252,6 +252,7 @@ export const buildDefaultRunner = (
             return {
                 confidence: typeof analysis.confidence === 'string' ? analysis.confidence : undefined,
                 direction: typeof analysis.direction === 'string' ? analysis.direction : undefined,
+                review: analysis.verdictReview ? true : undefined,
             };
         } catch (e) {
             console.warn('[SkillEvalScheduler] runner call failed:', e instanceof Error ? e.message : e);

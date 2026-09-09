@@ -100,6 +100,27 @@ describe('SkillEvalService (with-skill vs without-skill A/B)', () => {
         expect(res.verdict).toBe('inconclusive');
     });
 
+    it('skips flip grading when an arm was quarantined (verdictReview)', async () => {
+        await initMemoryFiles('eval-review');
+        const fileId = await seedSkill('eval-review');
+        const trades = [makeTrade({ id: 'm1' })];
+        // The with-skill arm "flips" to Avoid/Neutral — but it is a
+        // quarantined parse failure, so the pair must count as evidence
+        // (cases) without grading the flip toward or against the skill.
+        const runner = async (_t: LoggedTrade, { skillEnabled }: { skillEnabled: boolean }) =>
+            skillEnabled
+                ? { confidence: 'Avoid', direction: 'Neutral', review: true }
+                : { confidence: 'High', direction: 'Short' };
+
+        const res = await evaluateSkill(fileId, 'eval-review', trades, {} as never, runner);
+        expect(res.error).toBeUndefined();
+        expect(res.flips).toBe(0);
+        expect(res.alignedFlips).toBe(0);
+        expect(res.misalignedFlips).toBe(0);
+        expect(res.cases.length).toBe(1);
+        expect(res.verdict).toBe('inconclusive');
+    });
+
     it('never mutates the notebook and hands the real skill to the enabled arm', async () => {
         await initMemoryFiles('eval-restore');
         const fileId = await seedSkill('eval-restore');

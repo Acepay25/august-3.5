@@ -31,6 +31,7 @@ import {
     parseSkillMarkdown,
     skillMatchesSetup,
     skillInScopeForLens,
+    skillStatusAt,
     type SkillMeta,
 } from './SkillMemoryService';
 import {
@@ -88,11 +89,43 @@ const skillStrategyFamily = (meta: SkillMeta): string | undefined =>
     normalizeStrategyFamily(meta.strategyFamily, classifyStrategyFamily)
     ?? classifyStrategyFamily(`${meta.family ?? ''} ${meta.body ?? ''}`);
 
+/** Resolve the status a skill held at a point in time (existence + ledger
+ *  replay). Undefined asOf ⇒ today's status. Returns null when the skill must
+ *  be excluded from an as-of retrieval: created after the cutoff, or retired
+ *  at it. A never-transitioned skill (empty ledger) existed with its current
+ *  status since creation, so it passes. */
+const statusAtTime = (
+    meta: SkillMeta,
+    file: { createdAt?: string | number },
+    asOfMs: number | undefined,
+): SkillMeta['status'] | null => {
+    if (asOfMs === undefined) return meta.status;
+    // MemoryFile stores epoch-ms numbers; tolerate ISO strings too.
+    const created = typeof file.createdAt === 'number'
+        ? file.createdAt
+        : typeof file.createdAt === 'string'
+            ? Date.parse(file.createdAt)
+            : NaN;
+    // The status ledger is also proof of existence: a transition cannot
+    // predate the skill's creation.
+    const earliestTransition = (meta.history ?? [])
+        .map(h => Date.parse(h.validFrom))
+        .filter(Number.isFinite)
+        .reduce<number>((min, t) => Math.min(min, t), Number.POSITIVE_INFINITY);
+    const existedAt = (Number.isFinite(created) && created <= asOfMs)
+        || earliestTransition <= asOfMs;
+    if (!existedAt) return null; // didn't exist yet
+    const replayed = skillStatusAt(meta, asOfMs);
+    if (replayed === null) return meta.status; // predates ledger ⇒ never changed
+    return replayed === 'retired' ? null : replayed;
+};
+
 const rankedMatchedSkills = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
     activeLens?: string,
-): Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number }> => {
+    asOfMs?: number,
+): Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number; status: SkillMeta['status'] }> => {
     if (!query) return [];
     const setup = {
         coin: query.coin,
@@ -101,11 +134,16 @@ const rankedMatchedSkills = (
         pattern: query.pattern,
         regime: typeof query.regime === 'string' ? query.regime : undefined,
     };
-    const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number }> = [];
+    const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number; status: SkillMeta['status'] }> = [];
     for (const file of getMemoryFiles().files) {
         if (!file.enabled || !isSkillFile(file)) continue;
         const meta = parseSkillMarkdown(file.content);
-        if (!meta || meta.status === 'retired') continue;
+        if (!meta) continue;
+        // Point-in-time: a skill created (or retired) after the cutoff is
+        // invisible — an older run must not learn from a lesson the future
+        // wrote. Without asOf this is exactly the old retired-check.
+        const status = statusAtTime(meta, file, asOfMs);
+        if (status === null || status === 'retired') continue;
         if (!skillMatchesSetup(meta, setup)) continue;
         // Audience filtering happens BEFORE ranking (#4 invocation control): a
         // blocked best-match must surface the second-best skill, not an empty slot.
@@ -128,7 +166,7 @@ const rankedMatchedSkills = (
         // × dimension overlap count × evidence-freshness decay. Mirrors the
         // appliesWhen weights the dashboard graph assigns, so the two views
         // can never disagree about what matters.
-        const statusWeight = meta.status === 'confirmed' ? 2 : 1;
+        const statusWeight = status === 'confirmed' ? 2 : 1;
         const overlap = dimsOverlap(meta, query);
         // A skill whose evidence mix diverges from the market's current
         // 30-day regime mix is downweighted (stale-by-regime, distinct from
@@ -136,9 +174,9 @@ const rankedMatchedSkills = (
         // The family × regime matrix adds the strategy-layer tilt: a skill
         // trading a family that has proven edge (or decay) in the CURRENT
         // regime moves accordingly — the book's regime-gating as evidence.
-        const score = statusWeight * overlap * evidenceDecay(meta) * regimeRankFactor(meta, query?.coin)
+        const score = statusWeight * overlap * evidenceDecay(meta, asOfMs) * regimeRankFactor(meta, query?.coin)
             * familyEdgeFactor(skillStrategyFamily(meta), typeof query?.regime === 'string' ? query.regime : undefined);
-        candidates.push({ file, meta, score });
+        candidates.push({ file, meta, score, status });
     }
     candidates.sort((a, b) => b.score - a.score || (b.meta.wins + b.meta.losses) - (a.meta.wins + a.meta.losses));
     return candidates;
@@ -156,12 +194,13 @@ const dimsOverlap = (meta: SkillMeta, query: MemoryRetrievalQuery): number => {
     return Math.max(n, 0.5); // a bare trigger match still scores, just low
 };
 
-/** Evidence-age decay for scoring — same 120-day constant as MemoryGraph. */
-const evidenceDecay = (meta: SkillMeta): number => {
+/** Evidence-age decay for scoring — same 120-day constant as MemoryGraph.
+ *  Age is measured from `asOfMs` when a point-in-time replay is running. */
+const evidenceDecay = (meta: SkillMeta, asOfMs?: number): number => {
     if (!meta.lastEvidenceAt) return 0.75;
     const t = Date.parse(meta.lastEvidenceAt);
     if (!Number.isFinite(t)) return 0.75;
-    const ageDays = Math.max(0, (Date.now() - t) / 86_400_000);
+    const ageDays = Math.max(0, ((asOfMs ?? Date.now()) - t) / 86_400_000);
     return Math.exp(-ageDays / 120);
 };
 
@@ -186,8 +225,9 @@ const bestMatchedSkill = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
     activeLens?: string,
-): { file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta } | null =>
-    rankedMatchedSkills(query, audience, activeLens)[0] ?? null;
+    asOfMs?: number,
+): { file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; status: SkillMeta['status'] } | null =>
+    rankedMatchedSkills(query, audience, activeLens, asOfMs)[0] ?? null;
 
 /**
  * Doctrine block — the ONE narrative voice, fixed slot on every stage.
@@ -243,7 +283,7 @@ export function substituteSkillContext(text: string, query?: MemoryRetrievalQuer
 }
 
 /** One-line index entry (progressive disclosure tier 1 — near-zero tokens). */
-const skillIndexLine = (name: string, meta: SkillMeta): string => {
+const skillIndexLine = (name: string, meta: SkillMeta, status?: SkillMeta['status']): string => {
     // The stored one-sentence description wins when present (zcode memory
     // pattern) — it was written to be read by models and humans alike.
     const rule = meta.description
@@ -254,7 +294,7 @@ const skillIndexLine = (name: string, meta: SkillMeta): string => {
     const evidence = meta.prior === 'book' && (meta.wins + meta.losses) === 0
         ? 'book prior — no local record yet'
         : evidenceFreshness(meta);
-    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidence}] ${rule}`;
+    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${status ?? meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidence}] ${rule}`;
 };
 
 /**
@@ -263,13 +303,14 @@ const skillIndexLine = (name: string, meta: SkillMeta): string => {
  */
 const matchedSkillBlock = (
     query?: MemoryRetrievalQuery,
-    audience: 'analyst' | 'moderator' = 'analyst',
+    audience?: 'analyst' | 'moderator',
     stage: MemoryStage = 'opening',
     activeLens?: string,
+    asOfMs?: number,
 ): { text: string; meta: SkillMeta | null; name: string } => {
-    const match = bestMatchedSkill(query, audience, activeLens);
+    const match = bestMatchedSkill(query, audience, activeLens, asOfMs);
     if (!match) return { text: '', meta: null, name: '' };
-    const header = `[skills/${match.file.name} · ${match.meta.status} · ${Math.round(match.meta.wins)}W/${Math.round(match.meta.losses)}L]`;
+    const header = `[skills/${match.file.name} · ${match.status} · ${Math.round(match.meta.wins)}W/${Math.round(match.meta.losses)}L]`;
     if (stage !== 'verdict') {
         return { text: `${header}\n${skillIndexLine(match.file.name, match.meta)}`, meta: match.meta, name: match.file.name };
     }
@@ -398,7 +439,7 @@ const conflictNote = (query?: MemoryRetrievalQuery): string => {
 };
 
 /** Similar closed trades — verdict-stage history (and the recall tool). */
-const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
+const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[], asOfMs?: number): string => {
     if (!trades || trades.length === 0 || !query) return '';
     // Age-decayed similarity — old associations weigh less in
     // prompts, honoring the edge-decay contract end to end.
@@ -408,7 +449,7 @@ const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: Lo
         pattern: query.pattern,
         family: query.family,
         regime: query.regime as 'trending' | 'ranging' | 'volatile' | 'compression' | undefined,
-    }, trades, { decayByAge: true }).slice(0, 5);
+    }, trades, { decayByAge: true, cutoffMs: asOfMs }).slice(0, 5);
     if (relevant.length === 0) return '';
     const lines = relevant.map(t =>
         `- ${t.coin} ${t.direction} ${t.outcome} (${t.similarity}% similar)${t.keyLesson ? ` — ${t.keyLesson}` : ''}`
@@ -493,6 +534,12 @@ export interface MemoryContextOptions {
     /** Per-run id used to seed the reproducible ε-holdout decision.
      *  Omitted ⇒ this retrieval never holds out (conservative default). */
     runId?: string;
+    /** Point-in-time replay cutoff (epoch ms). When set, skills created after
+     *  it — or retired at it — are invisible, and evidence freshness is aged
+     *  from it. Evidence COUNTS are not replayed (the status ledger records
+     *  transitions, not samples), so this gates existence and status only.
+     *  Omitted ⇒ today's behavior, byte-identical. */
+    asOfMs?: number;
 }
 
 export function getMemoryFilesContext(
@@ -528,11 +575,11 @@ export function getMemoryFilesContext(
     if (identChars > 0) injected.push({ path: 'profile/memory', kind: 'identity', chars: identChars });
     if (stage === 'verdict') push(conflictNote(query)); // a flag, not a notebook source
     const primary = (() => {
-        if (!exclude) return matchedSkillBlock(query, audience, stage, activeLens);
-        const firstNonExcluded = rankedMatchedSkills(query, audience, activeLens)
+        if (!exclude) return matchedSkillBlock(query, audience, stage, activeLens, options?.asOfMs);
+        const firstNonExcluded = rankedMatchedSkills(query, audience, activeLens, options?.asOfMs)
             .find(m => m.file.name.toLowerCase().replace(/\.md$/i, '') !== exclude);
         return firstNonExcluded
-            ? { text: `[skills/${firstNonExcluded.file.name}] ${skillIndexLine(firstNonExcluded.file.name, firstNonExcluded.meta)}`, meta: firstNonExcluded.meta, name: firstNonExcluded.file.name }
+            ? { text: `[skills/${firstNonExcluded.file.name}] ${skillIndexLine(firstNonExcluded.file.name, firstNonExcluded.meta, firstNonExcluded.status)}`, meta: firstNonExcluded.meta, name: firstNonExcluded.file.name }
             : { text: '', meta: null as SkillMeta | null, name: '' };
     })();
     if (!holdout) {
@@ -546,12 +593,12 @@ export function getMemoryFilesContext(
         // lines — one matching skill is a coincidence, two a pattern.
         // The primary skill is already pushed above — skip it
         // here so it never renders twice when no exclusion is set.
-        const ranked = rankedMatchedSkills(query, undefined, activeLens).filter(
+        const ranked = rankedMatchedSkills(query, undefined, activeLens, options?.asOfMs).filter(
             m => (!exclude || m.file.name.toLowerCase().replace(/\.md$/i, '') !== exclude)
                 && m.file.name !== primary.name,
         );
         for (const extra of ranked.slice(0, VERDICT_EXTRA_SKILLS)) {
-            const extraChars = push(`[skills/${extra.file.name}] ${skillIndexLine(extra.file.name, extra.meta)}`);
+            const extraChars = push(`[skills/${extra.file.name}] ${skillIndexLine(extra.file.name, extra.meta, extra.status)}`);
             if (extraChars > 0) {
                 injected.push({ path: `skills/${extra.file.name}`, kind: 'skill', chars: extraChars });
             }
@@ -562,7 +609,7 @@ export function getMemoryFilesContext(
     const mistakeChars = push(uncoveredMistakeLine(query));
     if (mistakeChars > 0) injected.push({ path: 'rules/recurring-mistakes', kind: 'rules', chars: mistakeChars });
     if (stage === 'verdict') {
-        const similarChars = push(similarTradesBlock(query, trades));
+        const similarChars = push(similarTradesBlock(query, trades, options?.asOfMs));
         if (similarChars > 0) injected.push({ path: 'journal/similar-trades', kind: 'similar', chars: similarChars });
         // Family × regime scoreboard: which strategy families the settled
         // record currently favors in THIS regime. Compact, capped, and only

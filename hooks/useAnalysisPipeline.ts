@@ -1409,6 +1409,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 similarSetupsContext,
                 regimeWeightingContext,
                 lossPrimingRows,
+                asOfMs: memoryAsOfMs,
             } = assemblePipelineMemoryContext(effectiveInput, loggedTrades, freshHybridData ?? null, userMessage.id);
 
             // One context bundle for every moderator surface (autoplay debate,
@@ -3397,6 +3398,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             coinName: canRescue ? (prosePlan?.coinName ?? finalSymbol ?? undefined) : (finalSymbol ?? undefined),
                             direction: canRescue ? (prosePlan?.direction ?? 'Neutral') : 'Neutral',
                             confidence: canRescue ? (prosePlan?.confidence ?? 'Low') : 'Avoid',
+                            // A verdict nobody could parse is a measurement failure,
+                            // not a neutral opinion — quarantine it (never graded,
+                            // flagged in the UI and journal).
+                            verdictReview: canRescue ? undefined : { reason: 'incomplete-plan' },
                             probability: canRescue ? prosePlan?.probability : undefined,
                             entryPoints: canRescue && prosePlan?.entry ? [{ price: prosePlan.entry }] : undefined,
                             stopLoss: canRescue ? prosePlan?.stopLoss : undefined,
@@ -3631,6 +3636,9 @@ ${accuracyVerificationNote}`
                             // the same seeded decision the retrieval layer made
                             // when it withheld skill injection.
                             skillHoldout: shouldSkillHoldout(userMessage.id),
+                            // Point-in-time cutoff the notebook replayed to
+                            // (recorded posture; absent on live runs).
+                            asOfMs: memoryAsOfMs,
                             gateCap: capturedGateResult?.confidenceCap,
                             mcWinRate: perAIMC[0]?.result?.winRate,
                             mcEV: perAIMC[0]?.result?.expectedValue,

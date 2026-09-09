@@ -75,12 +75,17 @@ export type PendingSetup = {
 export const summarizeSimilarSetups = (
     setup: PendingSetup,
     trades: LoggedTrade[],
-    currentRegime?: string
+    currentRegime?: string,
+    /** Point-in-time cutoff (epoch ms): the track record is drawn only from
+     *  trades logged by it. Omitted ⇒ live (unchanged). */
+    asOfMs?: number
 ): SimilarSetupSummary | null => {
-    const closed = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
+    const knownBy = (t: LoggedTrade): boolean =>
+        asOfMs === undefined || Date.parse(t.timestamp) <= asOfMs;
+    const closed = trades.filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && knownBy(t));
     if (closed.length < 3 || !setup.coinName) return null;
     try {
-        const result = backtestSimilarSetups(setup as TradeAnalysis, trades, currentRegime as any);
+        const result = backtestSimilarSetups(setup as TradeAnalysis, trades, currentRegime as any, { asOfMs });
         if (result.totalMatches === 0) return null;
 
         const recent = [...result.matchedTrades]
@@ -124,9 +129,11 @@ export const summarizeSimilarSetups = (
 export const buildSimilarSetupsContext = (
     setup: PendingSetup,
     trades: LoggedTrade[],
-    currentRegime?: string
+    currentRegime?: string,
+    /** Point-in-time cutoff (epoch ms) — see summarizeSimilarSetups. */
+    asOfMs?: number
 ): string => {
-    const s = summarizeSimilarSetups(setup, trades, currentRegime);
+    const s = summarizeSimilarSetups(setup, trades, currentRegime, asOfMs);
     if (!s) return '';
 
     const lines: string[] = [

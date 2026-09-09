@@ -285,13 +285,18 @@ export function findRelevantTrades(
     trades: LoggedTrade[],
     /** Apply the 120-day exponential edge decay to the similarity
      *  score itself, so old associations weigh less at ranking time — not
-     *  just in the dashboard graph. Prompt-side consumers pass true. */
-    options?: { decayByAge?: boolean },
+     *  just in the dashboard graph. Prompt-side consumers pass true.
+     *  cutoffMs — point-in-time replay: only trades logged by the cutoff are
+     *  visible and age-decay is measured FROM it, so an older (simulated)
+     *  run cannot see settlements the future produced. Omitted ⇒ live. */
+    options?: { decayByAge?: boolean; cutoffMs?: number },
 ): RelevantTrade[] {
     const decayByAge = options?.decayByAge ?? false;
-    // Filter trades with outcomes
+    const cutoffMs = options?.cutoffMs;
+    // Filter trades with outcomes (and, under a cutoff, trades logged by it)
     const completedTrades = trades.filter(t =>
         t.outcome && t.outcome !== 'PENDING' && t.analysis
+        && (cutoffMs === undefined || Date.parse(t.timestamp) <= cutoffMs)
     );
 
     // Score each trade
@@ -322,17 +327,18 @@ export function findRelevantTrades(
         keyLesson: extractKeyLesson(trade.postMortem),
         // Decay AFTER ranking so old trades still appear (with their honest,
         // reduced weight) but cannot crowd out fresh ones by raw similarity.
-        similarity: decayByAge ? Math.round(similarity * ageDecay(trade)) : similarity,
+        similarity: decayByAge ? Math.round(similarity * ageDecay(trade, cutoffMs)) : similarity,
         date: new Date(trade.timestamp).toLocaleDateString(),
         pnlR: calculatePnlR(trade),
     }));
 }
 
-/** 120-day exponential half-life-ish decay — same constant as MemoryGraph. */
-const ageDecay = (trade: LoggedTrade): number => {
+/** 120-day exponential half-life-ish decay — same constant as MemoryGraph.
+ *  Age is measured from `referenceMs` when a point-in-time replay is running. */
+const ageDecay = (trade: LoggedTrade, referenceMs?: number): number => {
     const ts = trade.timestamp ? Date.parse(trade.timestamp) : NaN;
     if (!Number.isFinite(ts)) return 1;
-    const ageDays = Math.max(0, (Date.now() - ts) / 86_400_000);
+    const ageDays = Math.max(0, ((referenceMs ?? Date.now()) - ts) / 86_400_000);
     return Math.exp(-ageDays / 120);
 };
 

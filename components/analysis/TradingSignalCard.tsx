@@ -65,6 +65,12 @@ const directionChip = (direction?: string): string => {
     return 'border-white/10 bg-zinc-800 text-zinc-300';
 };
 
+const VERDICT_REVIEW_LABEL: Record<'uncited' | 'ungrounded' | 'incomplete-plan', string> = {
+    uncited: 'the kept line cited no aligned analyst',
+    ungrounded: 'entry/stop levels had no traceable source',
+    'incomplete-plan': 'the moderator plan could not be parsed',
+};
+
 const confidenceColor = (confidence?: string): string => {
     if (confidence === 'High') return 'text-emerald-400';
     if (confidence === 'Medium') return 'text-amber-400';
@@ -339,6 +345,22 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Verdict quarantine (REVIEW sentinel): an overridden verdict is a
+                measurement failure — surface it, never let it read as a quiet
+                "Neutral opinion the panel actually agreed on". */}
+            {analysis.verdictReview && (
+                <div className="border-t border-amber-500/20 bg-amber-500/10 px-4 py-2 sm:px-5">
+                    <p className="text-xs font-semibold text-amber-300">
+                        Verdict quarantined — {VERDICT_REVIEW_LABEL[analysis.verdictReview.reason]}
+                        {analysis.verdictReview.from ? ` (the moderator originally called ${analysis.verdictReview.from})` : ''}
+                        .
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-amber-200/70">
+                        This is a parse/integrity failure, not a neutral opinion — excluded from skill grading. Review the floor transcript or regenerate.
+                    </p>
+                </div>
+            )}
 
             <div className="space-y-3 border-t border-white/5 px-4 py-3 sm:px-5">
                 {levelRows.length > 0 && (

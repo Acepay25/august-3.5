@@ -113,8 +113,12 @@ export interface RunStats {
    */
   protocol?: string;
   /** True when this run was an ε-holdout run — skill injection was
-   * withheld so the run's outcomes belong to the CONTROL group for lift. */
+   *  withheld so the run's outcomes belong to the CONTROL group for lift. */
   skillHoldout?: boolean;
+  /** Point-in-time cutoff (epoch ms) the run's learning injections replayed
+   *  to — a simulated/older run that saw the journal/skills as of this
+   *  instant. Absent ⇒ live run (retrieval used today's state, unchanged). */
+  asOfMs?: number;
   /** First analyst's Monte Carlo win rate (%), if computed. */
   mcWinRate?: number;
   /** First analyst's Monte Carlo expected value (R), if computed. */

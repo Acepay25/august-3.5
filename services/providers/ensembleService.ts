@@ -958,8 +958,16 @@ export const attachVerdictCitations = (
     return { ...consensus, citations };
 };
 
-/** If nobody aligned with a directional call, the merge is an average — force Neutral. */
-export const enforceCitedVerdict = <T extends { direction?: string; confidence?: string; originalConfidence?: string; validationWarnings?: string[] }>(
+/** If nobody aligned with a directional call, the merge is an average — force Neutral.
+ *  The override is quarantined (verdictReview): a measurement failure is not a
+ *  neutral opinion, and the journal/UI must be able to tell them apart. */
+export const enforceCitedVerdict = <T extends {
+    direction?: string;
+    confidence?: string;
+    originalConfidence?: string;
+    validationWarnings?: string[];
+    verdictReview?: TradeAnalysis['verdictReview'];
+}>(
     verdict: T,
     consensus?: AnalystConsensus | null,
     keptName?: string | null,
@@ -976,6 +984,10 @@ export const enforceCitedVerdict = <T extends { direction?: string; confidence?:
         originalConfidence: verdict.originalConfidence ?? verdict.confidence,
         direction: 'Neutral',
         confidence: 'Avoid',
+        verdictReview: {
+            reason: 'uncited',
+            from: verdict.direction === 'Long' || verdict.direction === 'Short' ? verdict.direction : undefined,
+        },
         validationWarnings: [
             ...(verdict.validationWarnings ?? []),
             'Verdict had no cited analyst — forced Neutral (moderator must quote, not average).',

@@ -55,6 +55,10 @@ export interface PipelineMemoryContext {
         direction?: string;
         timestamp?: string;
     }>;
+    /** The point-in-time cutoff this context was assembled under, if any —
+     *  mirrored onto runStats.asOfMs so a simulated run records its own
+     *  leak-prevention posture. Absent on live runs. */
+    asOfMs?: number;
 }
 
 export const assemblePipelineMemoryContext = (
@@ -62,6 +66,10 @@ export const assemblePipelineMemoryContext = (
     loggedTrades: LoggedTrade[],
     freshHybridData: HybridDataPacket | null | undefined,
     runId?: string,
+    /** Point-in-time replay cutoff (epoch ms). When set, every journal-derived
+     *  slice below (skills, similar setups/trades, loss priming) sees only
+     *  what was KNOWN by that moment. Omitted ⇒ live behavior, unchanged. */
+    asOfMs?: number,
 ): PipelineMemoryContext => {
     const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
     const detectedLearningCoin = detectedCoinRaw && !COMMON_WORDS.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
@@ -110,8 +118,8 @@ export const assemblePipelineMemoryContext = (
     // the verdict slice (full skill bodies, conflict flags, runner-up skills,
     // similar trades) — the arbiter binds the decision, so it needs verdict
     // depth even though its context bundle is assembled at send time.
-    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
-    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
     const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
     // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the analysts
@@ -119,7 +127,8 @@ export const assemblePipelineMemoryContext = (
     const similarSetupsContext = buildSimilarSetupsContext(
         { coinName: detectedLearningCoin, direction: pendingDirection, detectedPatternFamily: pendingPattern },
         loggedTrades,
-        freshHybridData?.regime?.regime
+        freshHybridData?.regime?.regime,
+        asOfMs
     );
     const regimeWeightingContext = buildRegimeWeightingContext(
         loggedTrades,
@@ -128,10 +137,13 @@ export const assemblePipelineMemoryContext = (
 
     // Loss priming rows (B4): this setup's recent closed trades, compact —
     // the debate seats recall their own losses on setups like this first.
+    // Under a point-in-time cutoff, a lesson counts only once it was KNOWN
+    // (post-mortem written), not merely once the trade was logged.
     const lossPrimingRows = loggedTrades
         .filter(t => (t.outcome === 'WIN' || t.outcome === 'LOSS')
             && (!detectedLearningCoin || t.analysis?.coinName?.toLowerCase() === detectedLearningCoin.toLowerCase())
-            && (pendingDirection === 'Neutral' || t.analysis?.direction === pendingDirection))
+            && (pendingDirection === 'Neutral' || t.analysis?.direction === pendingDirection)
+            && (asOfMs === undefined || Date.parse(t.postMortemCreatedAt ?? t.timestamp) <= asOfMs))
         .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
         .slice(0, 6)
         .map(t => {
@@ -158,5 +170,6 @@ export const assemblePipelineMemoryContext = (
         similarSetupsContext,
         regimeWeightingContext,
         lossPrimingRows,
+        asOfMs,
     };
 };

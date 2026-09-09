@@ -415,6 +415,14 @@ const TradeLogRowImpl: React.FC<{
                     <div className="flex items-center gap-2 min-w-0">
                         <span className="text-sm font-medium text-zinc-100 truncate">{coinName}.md</span>
                         <OutcomeBadge outcome={outcome} />
+                        {analysis?.verdictReview && (
+                            <span
+                                className="status-surface px-2 py-0.5 text-[10px] font-semibold tracking-widest rounded-md uppercase border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                                title={`Quarantined verdict (${analysis.verdictReview.reason}) — a parse/integrity failure, not a neutral opinion`}
+                            >
+                                Review
+                            </span>
+                        )}
                         {isInsight && <span className="text-[10px] uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
                     <p className="text-xs text-zinc-500 mt-1 truncate">
