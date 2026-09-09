@@ -171,7 +171,7 @@ const evidenceDecay = (meta: SkillMeta): number => {
  * + risk rules + mistake line + verdict extras; typical opening ≈ half that.
  * ~4 chars/token for English prose. Display-only.
  */
-export const estimateMemoryTokensPerRun = (): { worstCase: number; typical: number } => {
+export function estimateMemoryTokensPerRun(): { worstCase: number; typical: number } {
     const chars =
         DOCTRINE_SLOT_CHARS +
         SKILL_BLOCK_MAX +
@@ -207,7 +207,7 @@ const doctrineBlock = (): string => {
 
 /** The single best-matched skill body, capped. */
 /** Human-readable evidence freshness for a skill (relative-time label). */
-export const evidenceFreshness = (meta: SkillMeta): string => {
+export function evidenceFreshness(meta: SkillMeta): string {
     if (!meta.lastEvidenceAt) return 'no counted evidence yet';
     const t = Date.parse(meta.lastEvidenceAt);
     if (!Number.isFinite(t)) return 'no counted evidence yet';
@@ -235,11 +235,12 @@ const skillAllowedFor = (meta: SkillMeta, audience: 'analyst' | 'moderator'): bo
  * ${REGIME} / ${DIRECTION}; substituted with the live setup at assembly
  * time so the model reads facts, not placeholders.
  */
-export const substituteSkillContext = (text: string, query?: MemoryRetrievalQuery): string =>
-    text
+export function substituteSkillContext(text: string, query?: MemoryRetrievalQuery): string {
+    return text
         .replace(/\$\{SYMBOL\}/g, (query?.coin ?? 'this coin').toUpperCase())
         .replace(/\$\{REGIME\}/g, (typeof query?.regime === 'string' && query.regime) || 'the current regime')
         .replace(/\$\{DIRECTION\}/g, (query?.direction === 'Long' || query?.direction === 'Short') ? query.direction : 'either direction');
+}
 
 /** One-line index entry (progressive disclosure tier 1 — near-zero tokens). */
 const skillIndexLine = (name: string, meta: SkillMeta): string => {
@@ -296,10 +297,10 @@ const matchedSkillBlock = (
  * how a lens seat sees its OWN top skill even when a higher-ranked
  * out-of-scope skill occupies the shared slot.
  */
-export const lensSkillSupplementLine = (
+export function lensSkillSupplementLine(
     query: MemoryRetrievalQuery | undefined,
     activeLens: string,
-): string => {
+): string {
     const globalBest = rankedMatchedSkills(query, 'analyst')[0] ?? null;
     const lensBest = rankedMatchedSkills(query, 'analyst', activeLens)[0] ?? null;
     if (!lensBest) return '';
@@ -448,12 +449,12 @@ const dedupeContentLines = (sections: string[]): string[] => {
     return out;
 };
 
-export const listRetrievedMemorySources = (
+export function listRetrievedMemorySources(
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
     activeLens?: string,
-): RetrievedMemorySource[] => {
+): RetrievedMemorySource[] {
     const out: RetrievedMemorySource[] = [];
     try {
         if (settledBeliefsBlock()) out.push({ path: 'profile/settled-beliefs', kind: 'identity' });
@@ -494,13 +495,13 @@ export interface MemoryContextOptions {
     runId?: string;
 }
 
-export const getMemoryFilesContext = (
+export function getMemoryFilesContext(
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
     stage: MemoryStage = 'opening',
     options?: MemoryContextOptions,
-): string => {
+): string {
     const budget = STAGE_BUDGET_CHARS[stage];
     const blocks: string[] = [];
     /** What ACTUALLY made it into the prompt — recorded for attribution. */
@@ -631,10 +632,10 @@ export interface RecallRequest {
  * skills (top 3, one-line each), similar closed trades, uncovered mistakes,
  * and the current doctrine header. Budget-capped like every other slice.
  */
-export const handleRecallTool = (
+export function handleRecallTool(
     args: RecallRequest,
     trades?: LoggedTrade[],
-): string => {
+): string {
     const raw = (args.topic || '').trim();
     if (!raw) return JSON.stringify({ error: 'recall requires a topic, e.g. {"topic": "BTC long"}' });
 

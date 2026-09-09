@@ -2,7 +2,24 @@
 
 Plain-English log of change rounds. Newest first.
 
-## Renamed to August Trading
+## v1.0.21 — Fix the stuck-on-loading boot crash
+
+The v1.0.20 desktop build could hang on the splash screen forever: the
+production bundle threw `Cannot access 'Sc' before initialization` during
+module evaluation, killing React before it mounted (dev mode never runs
+that code path, which is why CI's e2e smoke stayed green).
+
+Root cause: the memory-retrieval module exported its functions as `const`
+arrow bindings. Those initialize only when the module's body executes, and
+that module sits inside several long-standing import cycles through the
+notebook barrel — the bundle init order after v1.0.20's new modules
+touched one of those cycles mid-flight and read the binding too early.
+The fix makes every export in that module a hoisted `function`
+declaration, which is initialized at module instantiation and immune to
+evaluation order. Verified by booting the real production bundle
+headlessly: the splash now clears and the console is clean.
+
+## v1.0.21-pre — Renamed to August Trading
 
 The app and the GitHub repository are now **August Trading** (repo
 `Acepay25/august-trading`). Every user-facing string (window title, header,
