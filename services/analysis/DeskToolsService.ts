@@ -109,6 +109,15 @@ export const MAX_DESK_TOOL_ROUNDS = 3;
 export const TOOL_CACHE_TTL_MS = 30_000;
 const toolCache = new Map<string, { at: number; content: string }>();
 
+/** Machine-readable "the source failed" sentinel. A failed fetch must reach
+ *  the model as UNKNOWN — prose like "no results" reads as evidence of
+ *  absence ("there is no news"), which is a fabricated conclusion built on an
+ *  outage. Never cache a sentinel; it would freeze an outage into the TTL. */
+export const DATA_UNAVAILABLE_PREFIX = 'DATA_UNAVAILABLE:';
+const dataUnavailable = (tool: string, reason: string): string =>
+    `${DATA_UNAVAILABLE_PREFIX} ${tool} — ${reason}. The source FAILED; treat this as UNKNOWN, not as absence of evidence.`;
+export const isDataUnavailable = (content: string): boolean => content.startsWith(DATA_UNAVAILABLE_PREFIX);
+
 const toolCacheKey = (call: DeskToolCall): string =>
     `${call.name}:${JSON.stringify(call.arguments ?? {}, Object.keys(call.arguments ?? {}).sort())}`;
 
@@ -293,7 +302,8 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'web_search',
             description:
-                'Search the public web for crypto news, macro events (FOMC, CPI, NFP), exchange incidents, or coin-specific catalysts that could affect the trade.',
+                'Search the public web for crypto news, macro events (FOMC, CPI, NFP), exchange incidents, or coin-specific catalysts that could affect the trade. ' +
+                'A result starting with DATA_UNAVAILABLE means the search itself failed — it is NOT evidence that no news exists.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -517,9 +527,11 @@ async function runWebSearch(query: string, signal?: AbortSignal): Promise<string
                 lines.push('Related:');
                 lines.push(...related.slice(0, 6));
             }
+        } else {
+            lines.push(dataUnavailable('web_search:instant-answer', `HTTP ${res.status}`));
         }
     } catch (e) {
-        lines.push(`Instant Answer unavailable: ${e instanceof Error ? e.message : String(e)}`);
+        lines.push(dataUnavailable('web_search:instant-answer', e instanceof Error ? e.message : String(e)));
     }
 
     // HTML lite scrape for headline-style results when Instant Answer is thin.
@@ -544,14 +556,20 @@ async function runWebSearch(query: string, signal?: AbortSignal): Promise<string
                     lines.push('Headlines:');
                     lines.push(...results);
                 }
+            } else {
+                lines.push(dataUnavailable('web_search:headlines', `HTTP ${res.status}`));
             }
         } catch (e) {
-            lines.push(`Headline search unavailable: ${e instanceof Error ? e.message : String(e)}`);
+            lines.push(dataUnavailable('web_search:headlines', e instanceof Error ? e.message : String(e)));
         }
     }
 
-    if (lines.length <= 1) {
-        lines.push('No useful results. Proceed with chart data and note the search gap.');
+    // Nothing but the query line survived (or every non-query line is itself
+    // a failure sentinel) — collapse to ONE machine-readable sentinel rather
+    // than a prose sentence a model can read as "there was no news".
+    const substantive = lines.slice(1).filter(l => !isDataUnavailable(l));
+    if (substantive.length === 0) {
+        return dataUnavailable('web_search', `no reachable results for "${q}"`);
     }
     return lines.join('\n');
 }
@@ -752,7 +770,11 @@ export async function executeDeskTool(
                 return { toolCallId: call.id, name: call.name, ok: false, content };
         }
         content = budgetToolContent(call.name, content);
-        toolCache.set(cacheKey, { at: Date.now(), content });
+        // A failure sentinel must not be cached — that would freeze an
+        // outage into the TTL even after the source recovers.
+        if (!isDataUnavailable(content)) {
+            toolCache.set(cacheKey, { at: Date.now(), content });
+        }
         return { toolCallId: call.id, name: call.name, ok: true, content };
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -760,7 +782,7 @@ export async function executeDeskTool(
             toolCallId: call.id,
             name: call.name,
             ok: false,
-            content: `Tool ${call.name} failed: ${message}`,
+            content: dataUnavailable(call.name, message),
         };
     }
 }

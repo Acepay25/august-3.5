@@ -102,6 +102,16 @@ export interface TradeAnalysis {
   devilsAdvocate?: DevilsAdvocateData; // Devil's advocate analysis
   validationWarnings?: string[]; // Warnings from validation gate
   originalConfidence?: 'High' | 'Medium' | 'Low' | 'Avoid'; // Original confidence before validation adjustments
+  /** Quarantine stamp: the direction was OVERRIDDEN by an integrity gate (no
+   *  aligned analyst cited, ungrounded levels, or an unparseable plan).
+   *  `direction` stays 'Neutral' so every downstream consumer remains safe,
+   *  but this tells the UI and journal the card is a measurement failure —
+   *  never a deliberate no-trade opinion — and must not be graded as one. */
+  verdictReview?: {
+    reason: 'uncited' | 'ungrounded' | 'incomplete-plan';
+    /** The moderator's directional call before it was overridden. */
+    from?: 'Long' | 'Short';
+  };
   // Entry Timing Score (display only, calculated during validation)
   entryTimingScore?: {
     score: number;

@@ -249,16 +249,26 @@ const calculatePnlPercent = (trade: LoggedTrade): number => {
 // =============================================================================
 
 /**
- * Find and analyze similar historical trades
+ * Find and analyze similar historical trades.
+ *
+ * options.asOfMs — point-in-time cutoff (epoch ms) for simulated/older runs:
+ * only trades LOGGED by it enter the sample. Caveat kept honest: the outcome
+ * of a logged trade was written when it settled (no settle timestamp is
+ * stored), so a trade logged just before the cutoff may carry an outcome
+ * confirmed after it — keep a healthy margin between asOf and the simulated
+ * moment. Omitted ⇒ live behavior, unchanged.
  */
 export const backtestSimilarSetups = (
     currentAnalysis: TradeAnalysis,
     tradeLog: LoggedTrade[],
-    currentRegime?: MarketRegime
+    currentRegime?: MarketRegime,
+    options?: { asOfMs?: number }
 ): LiveBacktestResult => {
-    // Filter to completed trades
+    const asOfMs = options?.asOfMs;
+    // Filter to completed trades (and, under a cutoff, trades logged by it)
     const completedTrades = tradeLog.filter(t =>
-        t.outcome === 'WIN' || t.outcome === 'LOSS'
+        (t.outcome === 'WIN' || t.outcome === 'LOSS')
+        && (asOfMs === undefined || (Date.parse(t.timestamp) <= asOfMs))
     );
 
     // Score each trade by similarity

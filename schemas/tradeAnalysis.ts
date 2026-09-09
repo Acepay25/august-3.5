@@ -195,6 +195,10 @@ export const TradeAnalysisSchema = z.object({
   devilsAdvocate: DevilsAdvocateSchema.optional(),
   validationWarnings: z.array(z.string()).optional(),
   originalConfidence: z.enum(['High', 'Medium', 'Low', 'Avoid']).optional(),
+  verdictReview: z.object({
+    reason: z.enum(['uncited', 'ungrounded', 'incomplete-plan']),
+    from: z.enum(['Long', 'Short']).optional(),
+  }).optional(),
   entryTimingScore: z.object({
     score: z.number(),
     timingQuality: z.string(),
@@ -443,6 +447,17 @@ export const CoercedTradeAnalysisSchema = z.object({
   originalConfidence: z.any().optional().transform((v) =>
     typeof v === 'string' ? normalizeConfidence(v) : undefined
   ),
+  // Quarantine stamp (REVIEW sentinel) — validated, never coerced into
+  // something else: an unknown reason must drop, not fabricate a state.
+  verdictReview: z.any().optional().transform((v): TradeAnalysis['verdictReview'] => {
+    if (!v || typeof v !== 'object') return undefined;
+    const rec = v as Record<string, unknown>;
+    if (rec.reason !== 'uncited' && rec.reason !== 'ungrounded' && rec.reason !== 'incomplete-plan') return undefined;
+    return {
+      reason: rec.reason,
+      from: rec.from === 'Long' || rec.from === 'Short' ? rec.from : undefined,
+    };
+  }),
   entryTimingScore: z.any().optional(),
   gateResult: z.any().optional(),
   dualScenarioAnalysis: z.any().optional(),
@@ -579,6 +594,7 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
     updateInterval: raw.updateInterval,
     validationWarnings: raw.validationWarnings,
     originalConfidence: raw.originalConfidence,
+    verdictReview: raw.verdictReview,
     validityDurationMinutes: raw.validityDurationMinutes,
     levelCitations: Array.isArray(raw.levelCitations) ? raw.levelCitations : undefined,
   };

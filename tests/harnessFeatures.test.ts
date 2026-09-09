@@ -123,6 +123,22 @@ describe('moderator citation gate', () => {
         expect(next.confidence).toBe('Avoid');
     });
 
+    it('quarantines the override: verdictReview records reason + original direction (REVIEW sentinel)', () => {
+        const next = enforceCitedVerdict(
+            { direction: 'Short', confidence: 'High' },
+            { citations: [{ name: 'Macro', aligned: false }] } as any,
+        ) as { direction: string; confidence: string; verdictReview?: unknown };
+        expect(next.verdictReview).toEqual({ reason: 'uncited', from: 'Short' });
+    });
+
+    it('does not quarantine a verdict that was already no-trade', () => {
+        const next = enforceCitedVerdict(
+            { direction: 'Neutral', confidence: 'Medium' },
+            { citations: [] } as any,
+        ) as { direction: string; confidence: string; verdictReview?: unknown };
+        expect(next.verdictReview).toBeUndefined();
+    });
+
     it('keeps a directional call when KEPT names an aligned analyst', () => {
         const next = enforceCitedVerdict(
             { direction: 'Long', confidence: 'High' },
@@ -151,6 +167,17 @@ describe('ungrounded gate', () => {
         } as any);
         expect(next.confidence).toBe('Avoid');
         expect(next.direction).toBe('Neutral');
+    });
+
+    it('quarantines the override: verdictReview records the ungrounded reason + original direction', () => {
+        const next = enforceUngroundedLevels({
+            direction: 'Long',
+            confidence: 'High',
+            entryPoints: [{ price: '100' }],
+            stopLoss: '90',
+            evidence: [],
+        } as any);
+        expect(next.verdictReview).toEqual({ reason: 'ungrounded', from: 'Long' });
     });
 });
 

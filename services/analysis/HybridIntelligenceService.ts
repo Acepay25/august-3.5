@@ -870,7 +870,8 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
                 : `ADX ${data.regime.adx} weak — require extra confluence.`;
 
     const sections: string[] = [
-        `## Hybrid market packet`,
+        `## Hybrid market packet — VERIFIED SOURCE OF TRUTH`,
+        `Before stating ANY price or indicator value, check it against this packet. If your own chart reading contradicts a cell below, NAME the discrepancy in your report — never invent a number that "reconciles" the two.`,
         mdTable(
             ['Symbol', 'Price', '24h', 'High', 'Low', 'Vol 24h', 'Funding', 'Age', 'Quality'],
             [[
@@ -1029,6 +1030,7 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         options?.compact ? '' : ohlcBlocks,
         `### Read rules`,
         `- Numbers above are code-calculated. Cite a table cell when you name a level.`,
+        `- A value you cannot trace to a cell here must be labeled as your own estimate — an untraceable number stated as fact is a hallucination, not analysis.`,
         `- ADX regime is authoritative vs the chart-structure table. ${adxRule}`,
         `- 1H ATR for stops: $${data.indicators['1h']?.atr ?? '—'}. Volume: ${av.trend}. OBV divergence: ${av.obvDivergence}.`,
     ].filter(Boolean);

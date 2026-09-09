@@ -69,7 +69,12 @@ export interface FloorSceneProps {
     exchanges: DebateExchange[];
     stages?: RunContractStage[];
     convictions: { name: string; value: number }[];
-    verdictDetail?: { direction: string; confidence: string; grade?: string | null };
+    verdictDetail?: {
+        direction: string;
+        confidence: string;
+        grade?: string | null;
+        review?: { reason: 'uncited' | 'ungrounded' | 'incomplete-plan'; from?: 'Long' | 'Short' };
+    };
     /** Raw order-flow counters (mirrors CompanyRoom's gaugeStats). */
     gaugeStats: { tasks: number; running: number; shipped: number; approvals: number };
     /** Human approval queue — rendered as the RISK GATE lane. */
@@ -586,6 +591,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                         direction={verdictDetail.direction}
                                         confidence={verdictDetail.confidence}
                                         grade={verdictDetail.grade ?? undefined}
+                                        review={verdictDetail.review}
                                         seats={convictions.map(c => ({ name: c.name, value: c.value }))}
                                     />
                                 </div>

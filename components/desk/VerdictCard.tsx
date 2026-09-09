@@ -18,6 +18,9 @@ export interface VerdictCardProps {
     direction: 'Long' | 'Short' | 'Neutral' | string;
     confidence: string;
     grade?: string | null;
+    /** Set when the verdict was quarantined by an integrity gate — the
+     *  direction here is a forced override, not a neutral opinion. */
+    review?: { reason: 'uncited' | 'ungrounded' | 'incomplete-plan'; from?: 'Long' | 'Short' };
     seats: VerdictSeat[];
     'data-testid'?: string;
 }
@@ -41,7 +44,7 @@ export const extractConvictions = (turns: Array<{ speaker: string; text: string 
     return [...bySeat.entries()].map(([name, value]) => ({ name, value }));
 };
 
-export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence, grade, seats, 'data-testid': testId }) => {
+export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence, grade, review, seats, 'data-testid': testId }) => {
     if (!direction) return null;
     const values = seats.map(s => s.value).filter((v): v is number => v !== null);
     const spread = values.length > 1 ? Math.max(...values) - Math.min(...values) : 0;
@@ -61,6 +64,18 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence,
                 {grade && (
                     <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300">
                         {grade}
+                    </span>
+                )}
+                {review && (
+                    <span
+                        className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-300"
+                        title={
+                            review.from
+                                ? `Quarantined ${review.reason} override — moderator originally called ${review.from}`
+                                : `Quarantined: ${review.reason}`
+                        }
+                    >
+                        Review
                     </span>
                 )}
             </div>

@@ -17,6 +17,10 @@ export const enforceUngroundedLevels = <T extends TradeAnalysis>(analysis: T): T
         originalConfidence: analysis.originalConfidence ?? analysis.confidence,
         direction: 'Neutral',
         confidence: 'Avoid',
+        verdictReview: {
+            reason: 'ungrounded',
+            from: analysis.direction === 'Long' || analysis.direction === 'Short' ? analysis.direction : undefined,
+        },
         validationWarnings: [
             ...(analysis.validationWarnings ?? []),
             `Ungrounded ${missing.join(' / ')} — forced Neutral (cite hybrid/OCR or do not trade).`,

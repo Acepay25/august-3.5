@@ -266,6 +266,27 @@ describe('parseTradeAnalysis — robustness', () => {
   });
 });
 
+describe('parseTradeAnalysis — verdictReview quarantine stamp (REVIEW sentinel)', () => {
+  it('preserves a well-formed stamp through coercion', () => {
+    const parsed = parseTradeAnalysis(rawAnalysis({ verdictReview: { reason: 'uncited', from: 'Long' } }));
+    expect(parsed.verdictReview).toEqual({ reason: 'uncited', from: 'Long' });
+  });
+
+  it('drops an unknown reason instead of fabricating a state', () => {
+    const parsed = parseTradeAnalysis(rawAnalysis({ verdictReview: { reason: 'bogus', from: 'Long' } }));
+    expect(parsed.verdictReview).toBeUndefined();
+  });
+
+  it('coerces a bogus "from" to undefined but keeps a valid reason', () => {
+    const parsed = parseTradeAnalysis(rawAnalysis({ verdictReview: { reason: 'ungrounded', from: 'Neutral' } }));
+    expect(parsed.verdictReview).toEqual({ reason: 'ungrounded', from: undefined });
+  });
+
+  it('is absent on a normal parse', () => {
+    expect(parseTradeAnalysis(rawAnalysis()).verdictReview).toBeUndefined();
+  });
+});
+
 describe('secondary boundaries', () => {
   it('parseGlobalMemory validates and defaults', () => {
     const mem = parseGlobalMemory({ totalTradesAnalyzed: 5, aiPatternMemory: ['a'], lastUpdated: 'now' });

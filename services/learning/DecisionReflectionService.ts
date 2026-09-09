@@ -11,10 +11,22 @@ import { LoggedTrade, TradeOutcome } from '../../types';
  */
 export const buildDecisionReflectionContext = (
     trades: LoggedTrade[],
-    symbol?: string | null
+    symbol?: string | null,
+    /** Point-in-time cutoff (epoch ms): only lessons KNOWN by that moment are
+     *  eligible — a simulated/older run must never see a post-mortem the
+     *  future wrote. Lesson age is measured from postMortemCreatedAt (when the
+     *  lesson was actually written), falling back to the trade log time.
+     *  Undated rows are excluded when a cutoff is set (conservative). */
+    asOfMs?: number
 ): string => {
+    const knownBy = (t: LoggedTrade): boolean => {
+        if (asOfMs === undefined) return true;
+        const raw = t.postMortemCreatedAt ?? t.timestamp;
+        const ms = raw ? Date.parse(raw) : NaN;
+        return Number.isFinite(ms) ? ms <= asOfMs : false;
+    };
     const closed = trades.filter(t =>
-        t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS
+        (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && knownBy(t)
     );
     if (closed.length === 0) return '';
 
