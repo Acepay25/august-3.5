@@ -5,6 +5,26 @@ import { TradeAnalysis } from './analysis';
 import { Message, DebateTurn, PatternMemoryGateView } from './message';
 import { RootCauseClass } from './learning';
 
+/**
+ * Benchmark-relative alpha settled at outcome time (skill vs tide): the
+ * trade's realized direction-adjusted move minus what buy-and-hold of the
+ * benchmark (BTCUSDT; ETHUSDT for ETH pairs) returned over the same window.
+ * `alphaPct` NaN with `unavailableReason` set means the benchmark could not
+ * be fetched — a measurement gap is recorded as a gap, never as a number.
+ */
+export interface BenchmarkAlpha {
+  benchmarkSymbol: string;
+  /** Benchmark buy-and-hold return over the window, percent. */
+  benchmarkPct: number;
+  /** The trade's unleveraged direction-adjusted move, percent. */
+  tradePct: number;
+  /** tradePct − benchmarkPct (NaN when unavailable). */
+  alphaPct: number;
+  /** Entry→exit window in ms. */
+  windowMs: number;
+  unavailableReason?: string;
+}
+
 export interface LoggedTrade {
   id: string;
   analysis: TradeAnalysis;
@@ -47,6 +67,12 @@ export interface LoggedTrade {
    * writing a percent into pnlAmount corrupts dashboard PnL math.
    */
   pnlPercent?: number;
+  /**
+   * Benchmark-relative alpha (skill vs tide) settled when the outcome was
+   * verified against real candles. Absent on trades logged before this
+   * feature, or where the benchmark fetch was unavailable.
+   */
+  benchmark?: BenchmarkAlpha;
   marketSnapshot?: unknown; // Stored market context for algorithmic recalculation
   // Ensemble fields — keyed by provider id (ProviderConfig.id)
   modelsUsed?: Record<string, string>;       // providerId → model id

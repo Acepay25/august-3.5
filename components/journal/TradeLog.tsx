@@ -398,6 +398,11 @@ const TradeLogRowImpl: React.FC<{
         : pnlPercent !== undefined
             ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
             : null;
+    // Skill vs tide: alpha against holding the benchmark over the same
+    // window. Only rendered when the settle actually produced a number.
+    const alphaLabel = trade.benchmark && Number.isFinite(trade.benchmark.alphaPct)
+        ? `α ${trade.benchmark.alphaPct >= 0 ? '+' : ''}${trade.benchmark.alphaPct.toFixed(1)}%`
+        : null;
 
     return (
         <div className={`flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors ${isSelected ? 'bg-zinc-800' : ''}`}>
@@ -428,6 +433,7 @@ const TradeLogRowImpl: React.FC<{
                     <p className="text-xs text-zinc-500 mt-1 truncate">
                         {direction}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
+                        {alphaLabel ? ` · ${alphaLabel}` : ''}
                     </p>
                 </div>
                 <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />

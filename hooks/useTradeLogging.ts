@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider } from '../types';
+import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
 import * as MemoryService from '../services/learning/MemoryService';
@@ -221,7 +221,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; }) => {
         // Persist the market regime captured at analysis time (7-value
         // hybrid regime normalized to the 4-key trade regime). Falls back to
         // undefined when no snapshot exists.
@@ -238,6 +238,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             investmentAmount: undefined,
             pnlAmount: feedback.pnlAmount,
             pnlPercent: feedback.pnlPercent,
+            // Skill vs tide: settled only when the verify path resolved both
+            // exit price and benchmark candles; otherwise stays undefined —
+            // a gap is a gap, never a fabricated alpha.
+            benchmark: feedback.benchmark,
             correctedStopLoss: feedback.correctedStopLoss,
             correctedTakeProfit: feedback.correctedTakeProfit,
             triggeredEntryIndices: feedback.selectedEntryIndices, // Store which entries were triggered
@@ -415,7 +419,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 console.log('[AutoCapture] Comparison block length:', autoCaptureSummary.length);
 
                 // Log the trade AFTER successful capture
-                logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, feedback);
+                logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, {
+                    ...feedback,
+                    // Carry the skill-vs-tide alpha settled during verification.
+                    benchmark: result.historicalOutcome?.benchmark,
+                });
 
                 // Start post-mortem with auto-captured data
                 startPostMortemAnalysis(

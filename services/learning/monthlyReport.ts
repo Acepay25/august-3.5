@@ -65,6 +65,10 @@ export interface MonthlyReportCard {
         biggestMistake: string | null;
         /** Best closed trade by dollar P&L. */
         bestTrade: { label: string; pnlUsd: number } | null;
+        /** Skill vs tide: among benchmark-settled closed trades, the % whose
+         *  alpha beat holding the benchmark and the average alpha (pct).
+         *  Null when no trade in the period was benchmark-settled. */
+        tide?: { n: number; beatPct: number; avgAlpha: number } | null;
     };
     needsAttention: string[];
     /** GRADE-THE-PANEL: per-provider + ensemble-line Brier for the period. */
@@ -257,6 +261,17 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
         ? Math.round((followedN / (followedN + brokenN)) * 100)
         : null;
 
+    // Skill vs tide (period): among benchmark-settled trades, how many beat
+    // simply HOLDING the benchmark over their window, and by how much on
+    // average. Trades whose alpha was never settled are not counted — a
+    // missing measurement is not a loss.
+    const settledTide = period.filter(t => t.benchmark && Number.isFinite(t.benchmark.alphaPct));
+    const tide = settledTide.length > 0 ? {
+        n: settledTide.length,
+        beatPct: Math.round((settledTide.filter(t => (t.benchmark?.alphaPct ?? 0) > 0).length / settledTide.length) * 100),
+        avgAlpha: Math.round((settledTide.reduce((s, t) => s + (t.benchmark?.alphaPct ?? 0), 0) / settledTide.length) * 10) / 10,
+    } : null;
+
     return {
         generatedAt: new Date(nowMs).toISOString(),
         periodStart: new Date(since).toISOString(),
@@ -267,7 +282,7 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
             netPnlUsd: period.reduce((s, t) => s + (typeof t.pnlAmount === 'number' ? t.pnlAmount : 0), 0),
             avgR: rs.length > 0 ? rs.reduce((s, r) => s + r, 0) / rs.length : null,
         },
-        whatLearned: { adherenceFollowedPct, biggestMistake: topCost && topCost.totalPnlUsd < 0 ? topCost.tag : null, bestTrade },
+        whatLearned: { adherenceFollowedPct, biggestMistake: topCost && topCost.totalPnlUsd < 0 ? topCost.tag : null, bestTrade, tide },
         needsAttention,
         panel: { seats, moderator, ensembleLine },
     };

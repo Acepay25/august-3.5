@@ -190,6 +190,14 @@ export interface TradeAnalysis {
     riskUsd: number;
     fraction: number;
     label: 'full' | 'half' | 'none';
+    /** Every labeled sizing step that produced this ticket (gate caps, vetoes,
+     *  downgrades, grade tier, equity state) — the explainable-sizing trail.
+     *  Empty when the ticket runs at full risk uncapped. */
+    adjustments?: Array<{
+      type: 'neutral' | 'risk-veto' | 'skill-veto' | 'gate-cap' | 'downgrade' | 'grade-tier' | 'equity';
+      label: string;
+      fractionEffect: number;
+    }>;
   };
   /**
    * Session-guard verdict at analysis time (Batch 2): the deterministic

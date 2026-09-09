@@ -1,9 +1,23 @@
 import { TradeAnalysis } from '../types';
 
+/** One labeled step in the sizing decision — every multiplier the ticket
+ *  applies is recorded with its reason and shown to the user, mirroring the
+ *  Clodds kelly.ts transparency trail. A size is never an unexplained number. */
+export interface SizeAdjustment {
+    type: 'neutral' | 'risk-veto' | 'skill-veto' | 'gate-cap' | 'downgrade' | 'grade-tier' | 'equity';
+    /** Human label explaining this specific step. */
+    label: string;
+    /** Multiplier this step imposes on the full size (0 = zeroed, 1 = no change). */
+    fractionEffect: number;
+}
+
 export interface TicketSize {
     label: 'full' | 'half' | 'none';
     fraction: number;
     reason: string;
+    /** The full trail of labeled downgrades that produced this ticket, in the
+     *  order evaluated. Empty only for an uncapped FULL ticket. */
+    adjustments: SizeAdjustment[];
 }
 
 /** The sizing reason callers match on when equity is unconfigured. */
@@ -29,18 +43,35 @@ export interface LiquidationBuffer {
 
 export const computeTicketSize = (analysis: TradeAnalysis): TicketSize => {
     if (analysis.confidence === 'Avoid' || analysis.direction === 'Neutral' || analysis.riskVeto) {
-        return { label: 'none', fraction: 0, reason: analysis.riskVeto || 'No trade' };
+        const label = analysis.riskVeto || 'No trade';
+        return {
+            label: 'none',
+            fraction: 0,
+            reason: label,
+            adjustments: [{ type: analysis.riskVeto ? 'risk-veto' : 'neutral', label, fractionEffect: 0 }],
+        };
     }
     const skill = (analysis.validationWarnings ?? []).find(w => /SKILL VETO|NOTEBOOK SKILL VETO/i.test(w));
-    if (skill) return { label: 'none', fraction: 0, reason: 'Skill veto' };
+    if (skill) return {
+        label: 'none', fraction: 0, reason: 'Skill veto',
+        adjustments: [{ type: 'skill-veto', label: 'Skill veto — a learned notebook rule blocks this setup', fractionEffect: 0 }],
+    };
     const cap = analysis.gateResult?.confidenceCap;
     if (typeof cap === 'number' && cap < 0.7) {
-        return { label: 'half', fraction: 0.5, reason: `Gate cap ${Math.round(cap * 100)}%` };
+        const label = `Gate cap ${Math.round(cap * 100)}%`;
+        return {
+            label: 'half', fraction: 0.5, reason: label,
+            adjustments: [{ type: 'gate-cap', label: `${label} — the risk gate caps confidence below 70%`, fractionEffect: 0.5 }],
+        };
     }
     if (analysis.originalConfidence === 'High' && analysis.confidence !== 'High') {
-        return { label: 'half', fraction: 0.5, reason: `Downgraded from ${analysis.originalConfidence}` };
+        const label = `Downgraded from ${analysis.originalConfidence}`;
+        return {
+            label: 'half', fraction: 0.5, reason: label,
+            adjustments: [{ type: 'downgrade', label: `${label} — a validation penalty cut the confidence`, fractionEffect: 0.5 }],
+        };
     }
-    return { label: 'full', fraction: 1, reason: 'Uncapped' };
+    return { label: 'full', fraction: 1, reason: 'Uncapped', adjustments: [] };
 };
 
 const parseNum = (value?: string): number | undefined => {
@@ -49,14 +80,19 @@ const parseNum = (value?: string): number | undefined => {
     return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 
-/** Equity risk scaled by ticket fraction, sized off Entry→SL. */
+/** Equity risk scaled by ticket fraction, sized off Entry→SL.
+ *  extraAdjustments carries the caller-computed grade-tier step (risk% is
+ *  folded into the riskPercent argument upstream, so it can't be recovered
+ *  here) — it is appended to the ticket-level trail. */
 export const computeContractSize = (
     analysis: TradeAnalysis,
     equityUsd: number,
     leverage: number,
     riskPercent = 1,
+    extraAdjustments: SizeAdjustment[] = [],
 ): ContractSize => {
     const base = computeTicketSize(analysis);
+    const trail = [...base.adjustments, ...extraAdjustments];
     const lev = leverage > 0 ? leverage : 1;
     const riskPct = Number.isFinite(riskPercent) && riskPercent > 0
         ? Math.min(10, Math.max(0.1, riskPercent))
@@ -72,6 +108,7 @@ export const computeContractSize = (
             label: 'none',
             fraction: 0,
             reason: EQUITY_NOT_SET,
+            adjustments: [...trail, { type: 'equity', label: 'Nothing sized — set your account equity in Settings → Risk', fractionEffect: 0 }],
             equityUsd: 0,
             leverage: lev,
             riskUsd: 0,
@@ -85,6 +122,7 @@ export const computeContractSize = (
     if (base.fraction <= 0) {
         return {
             ...base,
+            adjustments: trail,
             equityUsd: eq,
             leverage: lev,
             riskUsd: 0,
@@ -107,6 +145,7 @@ export const computeContractSize = (
         : `${lev}x notional`;
     return {
         ...base,
+        adjustments: trail,
         equityUsd: eq,
         leverage: lev,
         riskUsd,
@@ -186,6 +225,24 @@ export const gradeRiskTier = (
         return { riskPercent: base / 4, line: `Grade ${grade} — quarter risk only (${(base / 4).toFixed(2)}%), treat as no-trade guidance` };
     }
     return { riskPercent: base, line: `${base}% risk` };
+};
+
+/** Grade-tier risk PLUS its sizing-trail entry, computed in one place so the
+ *  pipeline stamp and the card (two producers of the same math) always agree
+ *  on the adjustment that appears in the trail. */
+export const gradeRiskTierWithAdjustment = (
+    grade: TradeAnalysis['grade'],
+    baseRiskPercent: number,
+): RiskTier & { adjustment: SizeAdjustment } => {
+    const tier = gradeRiskTier(grade, baseRiskPercent);
+    const base = Number.isFinite(baseRiskPercent) && baseRiskPercent > 0 ? baseRiskPercent : 1;
+    const multiplier = tier.riskPercent / base;
+    const adjustment: SizeAdjustment = {
+        type: 'grade-tier',
+        label: tier.line,
+        fractionEffect: Number.isFinite(multiplier) ? Math.round(multiplier * 100) / 100 : 1,
+    };
+    return { ...tier, adjustment };
 };
 
 export interface KellyAdvisory {

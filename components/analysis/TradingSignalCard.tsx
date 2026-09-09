@@ -7,7 +7,7 @@ import { describeModelCalibration } from '../../utils/avoidReason';
 import { WhyAvoidPanel, WaitForConfirmationBanner } from './WhyAvoidPanel';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
-import { computeContractSize, computeLiquidationBuffer, gradeRiskTier, EQUITY_NOT_SET } from '../../utils/ticketSize';
+import { computeContractSize, computeLiquidationBuffer, gradeRiskTierWithAdjustment, EQUITY_NOT_SET } from '../../utils/ticketSize';
 import { fundingCarryCost } from '../../utils/trustSurface';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { ticketExpiryLine } from '../../utils/paperPnl';
@@ -206,14 +206,15 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const [riskPercent, setRiskPercent] = useState(() => getHarnessSettings().riskPercent);
     // Grade tier over the user's base risk — the pipeline sizes the actual
     // verdict through this same tier, so the card's what-if calculator applies
-    // it too (the two lines must never disagree).
+    // it too (the two lines must never disagree). The shared helper also
+    // yields the grade trail entry so the recomputed trail matches the stamp.
     const tier = useMemo(
-        () => gradeRiskTier(analysis.grade, riskPercent),
+        () => gradeRiskTierWithAdjustment(analysis.grade, riskPercent),
         [analysis.grade, riskPercent],
     );
     const size = useMemo(
-        () => computeContractSize(analysis, equityUsd, leverage || 1, tier.riskPercent),
-        [analysis, equityUsd, leverage, tier.riskPercent],
+        () => computeContractSize(analysis, equityUsd, leverage || 1, tier.riskPercent, [tier.adjustment]),
+        [analysis, equityUsd, leverage, tier.riskPercent, tier.adjustment],
     );
     const liq = useMemo(
         () => computeLiquidationBuffer(analysis.entryPoints?.[0]?.price, analysis.stopLoss, leverage || 1),
@@ -397,9 +398,28 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     {size.notionalUsd > 0 ? ` · $${Math.round(size.notionalUsd).toLocaleString()} notional` : ''}
                     {` · ${lev}x`}
                 </p>
-                {size.fraction > 0 && (
-                    <p className="text-xs text-zinc-500">{tier.line}</p>
-                )}
+                {/* Explainable sizing: every step that shaped the ticket, each
+                    labeled with its reason — never an unexplained number. */}
+                {size.fraction > 0 || size.reason === EQUITY_NOT_SET ? (
+                    size.adjustments.length > 0 ? (
+                        <ul className="space-y-0.5">
+                            {size.adjustments.map((a, i) => (
+                                <li key={`${a.type}-${i}`} className="flex items-baseline gap-1.5 text-[11px] text-zinc-500">
+                                    <span className="text-zinc-600">↳</span>
+                                    <span>{a.label}</span>
+                                    {a.fractionEffect < 1 && a.fractionEffect > 0 && (
+                                        <span className="tabular-nums text-zinc-600">×{a.fractionEffect}</span>
+                                    )}
+                                    {a.fractionEffect === 0 && (
+                                        <span className="font-semibold uppercase tracking-wide text-zinc-600">→ no size</span>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-[11px] text-zinc-600">Full size — uncapped, no downgrades applied.</p>
+                    )
+                ) : null}
                 {(size.fraction > 0 || size.reason === EQUITY_NOT_SET) && (
                     <div className="grid grid-cols-2 gap-2">
                         <label className="block text-[11px] text-zinc-500">
