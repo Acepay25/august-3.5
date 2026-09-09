@@ -1,5 +1,5 @@
 {
-  "name": "august-3.5",
+  "name": "august-trading",
   "private": true,
   "version": "1.0.20",
   "engines": {
@@ -7,11 +7,11 @@
   },
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "Team-debate trading analysis desktop app: runtime AI providers, hybrid market data, journal, and learning memory",
-  "author": "August 3.5",
+  "description": "August Trading — team-debate trading analysis desktop app: runtime AI providers, hybrid market data, journal, and learning memory",
+  "author": "August Trading",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Acepay25/august-3.5.git"
+    "url": "https://github.com/Acepay25/august-trading.git"
   },
   "scripts": {
     "dev": "vite",
@@ -87,7 +87,7 @@
   },
   "build": {
     "appId": "com.august35.tradingapp",
-    "productName": "August 3.5",
+    "productName": "August Trading",
     "directories": {
       "output": "dist_electron"
     },
@@ -106,12 +106,12 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "August 3.5"
+      "shortcutName": "August Trading"
     },
     "publish": {
       "provider": "github",
       "owner": "Acepay25",
-      "repo": "august-3.5",
+      "repo": "august-trading",
       "releaseType": "release"
     }
   }

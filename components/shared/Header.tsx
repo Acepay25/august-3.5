@@ -202,7 +202,7 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100 leading-none">August 3.5</h1>
+                            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100 leading-none">August Trading</h1>
 
                             {/* Chat / Floor mode toggle — the two ways to
                                 see the company: converse (chat) or watch
@@ -427,7 +427,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                         <BotIcon />
                                     </div>
                                     <div>
-                                        <h2 className="font-bold text-white">August 3.5</h2>
+                                        <h2 className="font-bold text-white">August Trading</h2>
                                         <span className="text-[10px] text-zinc-500">{activeUsername}</span>
                                     </div>
                                 </div>

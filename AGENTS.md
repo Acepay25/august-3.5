@@ -4,7 +4,7 @@ This file contains guidelines and commands for agentic coding agents working in 
 
 ## Project Overview
 
-August 3.5 is a React + TypeScript trading analysis application that uses multiple AI
+August Trading is a React + TypeScript trading analysis application that uses multiple AI
 providers to deliver trading insights, pattern recognition, and post-trade analysis.
 The app features ensemble AI debates, accuracy mode validation, hybrid intelligence with
 real-time market data, comprehensive trade logging with learning capabilities, and an

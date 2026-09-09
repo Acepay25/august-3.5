@@ -2,7 +2,7 @@
 /**
  * StorageService.ts
  * 
- * Unified Storage Facade for August 3.5.
+ * Unified Storage Facade for August Trading.
  * 
  * Purpose:
  * - Abstracts underlying storage mechanisms (IndexedDB, SQLite, LocalStorage).

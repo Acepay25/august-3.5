@@ -83,7 +83,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                       <BotIcon />
                   </div>
               </div>
-              <h1 className="text-3xl font-black text-white tracking-tight mb-2">August 3.5</h1>
+              <h1 className="text-3xl font-black text-white tracking-tight mb-2">August Trading</h1>
               <p className="text-zinc-400 text-sm font-medium">Advanced Trading Intelligence Terminal</p>
           </div>
 

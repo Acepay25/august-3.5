@@ -7,6 +7,41 @@ const { autoUpdater } = require('electron-updater');
 const isDev = !app.isPackaged;
 
 // =============================================================================
+// USERDATA PATH PRESERVATION (rename: "August 3.5" → "August Trading")
+// =============================================================================
+// Electron derives %APPDATA%/<productName> from package.json's build
+// productName. The rename would otherwise strand every existing user's
+// data (safeStorage-encrypted provider keys, SQLite/IndexedDB journals,
+// preferences) in the old folder. Before anything else touches userData,
+// carry the old folder's contents across exactly once, then mark it
+// migrated so later boots never re-copy.
+
+const LEGACY_PRODUCT_NAME = 'August 3.5';
+
+const preserveLegacyUserData = () => {
+    try {
+        const current = app.getPath('userData');
+        if (path.basename(current) === LEGACY_PRODUCT_NAME) return; // dev / already legacy
+        const legacy = path.join(path.dirname(current), LEGACY_PRODUCT_NAME);
+        if (!fs.existsSync(legacy)) return; // fresh install, nothing to carry over
+        const stamp = path.join(legacy, '.migrated-to-august-trading');
+        if (fs.existsSync(stamp)) return; // one-time migration already done
+        fs.mkdirSync(current, { recursive: true });
+        for (const entry of fs.readdirSync(legacy)) {
+            const from = path.join(legacy, entry);
+            const to = path.join(current, entry);
+            if (fs.existsSync(to)) continue; // never clobber files the new install already wrote
+            try { fs.renameSync(from, to); } catch {
+                try { fs.cpSync(from, to, { recursive: true }); } catch { /* skip unreadable entry */ }
+            }
+        }
+        fs.writeFileSync(stamp, new Date().toISOString());
+    } catch { /* never let data migration break boot */ }
+};
+
+preserveLegacyUserData();
+
+// =============================================================================
 // WINDOW-STATE PERSISTENCE
 // =============================================================================
 

@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 /**
- * E2E smoke tests for August 3.5.
+ * E2E smoke tests for August Trading.
  * Boots the Vite dev server, opens the app and verifies the core render path
  * (boot, user modal/chat, onboarding card, settings).
  *

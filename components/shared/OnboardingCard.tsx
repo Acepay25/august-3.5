@@ -45,7 +45,7 @@ export const OnboardingCard: React.FC<OnboardingCardProps> = ({ hasAnyApiKey, on
                     <SettingsIcon className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h2 className="text-base font-semibold text-zinc-100">Welcome to August 3.5</h2>
+                    <h2 className="text-base font-semibold text-zinc-100">Welcome to August Trading</h2>
                     <p className="mt-1 text-sm text-zinc-400 leading-relaxed">
                         To start analyzing charts, add at least one AI provider API key.
                         Open <span className="font-medium text-zinc-200">Settings → AI setup</span> and add a provider, then paste its key.

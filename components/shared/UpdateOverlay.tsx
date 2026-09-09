@@ -100,7 +100,7 @@ export const UpdateOverlay: React.FC = () => {
                         </div>
                         <h2 className="text-lg font-semibold text-zinc-100 mb-2">Installing update…</h2>
                         <p className="text-sm text-zinc-500">
-                            August 3.5 will relaunch in a moment. Please don't close this window.
+                            August Trading will relaunch in a moment. Please don't close this window.
                         </p>
                         {/* Animated dots */}
                         <div className="flex gap-1.5 mt-4">

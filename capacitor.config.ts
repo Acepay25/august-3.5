@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
     appId: 'com.august35.tradingapp',
-    appName: 'August 3.5',
+    appName: 'August Trading',
     webDir: 'dist',
     server: {
         androidScheme: 'https',

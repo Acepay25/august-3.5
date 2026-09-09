@@ -270,7 +270,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
             <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-zinc-900/80 px-4 py-2 backdrop-blur">
                 <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold tracking-tight text-zinc-100">
-                        August 3.5
+                        August Trading
                     </span>
                     {isDebating ? (
                         <span

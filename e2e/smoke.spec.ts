@@ -129,7 +129,7 @@ test('app boots and shows the user modal on first run', async ({ page }) => {
     await page.waitForLoadState('domcontentloaded');
 
     // Splash → React mounts → user modal or chat appears.
-    await expect(page.locator('body')).toContainText(/August 3.5|Trading|Journal|Select|Profile|User/i, {
+    await expect(page.locator('body')).toContainText(/August Trading|Trading|Journal|Select|Profile|User/i, {
         timeout: 15_000,
     });
 
