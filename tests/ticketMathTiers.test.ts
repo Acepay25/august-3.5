@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 // Grade-tiered risk + Kelly advisory (Batch 2) — the deterministic ticket-math
 // extensions layered onto the existing sizing.
 
-import { computeContractSize, computeLiquidationBuffer, gradeRiskTier, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
+import { computeContractSize, computeLiquidationBuffer, computeTicketSize, gradeRiskTier, gradeRiskTierWithAdjustment, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
 
 describe('gradeRiskTier', () => {
     it('Grade A keeps the full base risk', () => {
@@ -121,5 +121,66 @@ describe('computeLiquidationBuffer — margin mode', () => {
     });
     it('cross returns null — liquidation depends on the whole account, not this ticket', () => {
         expect(computeLiquidationBuffer('100', '99', 10, 'cross')).toBeNull();
+    });
+});
+
+describe('sizing adjustments trail — every multiplier carries its reason', () => {
+    const baseTrade = {
+        direction: 'Long',
+        confidence: 'High',
+        coinName: 'BTCUSDT',
+        entryPoints: [{ price: '100' }],
+        stopLoss: '90',
+    } as any;
+
+    it('an uncapped full ticket has an empty trail', () => {
+        const t = computeTicketSize(baseTrade);
+        expect(t.label).toBe('full');
+        expect(t.adjustments).toEqual([]);
+    });
+
+    it('gate cap records one labeled half step', () => {
+        const t = computeTicketSize({ ...baseTrade, confidence: 'Medium', gateResult: { confidenceCap: 0.55 } });
+        expect(t.label).toBe('half');
+        expect(t.adjustments).toHaveLength(1);
+        expect(t.adjustments[0].type).toBe('gate-cap');
+        expect(t.adjustments[0].label).toContain('Gate cap 55%');
+        expect(t.adjustments[0].fractionEffect).toBe(0.5);
+    });
+
+    it('skill veto zeros the ticket with its own step', () => {
+        const t = computeTicketSize({ ...baseTrade, validationWarnings: ['NOTEBOOK SKILL VETO: skip'] });
+        expect(t.label).toBe('none');
+        expect(t.adjustments[0].type).toBe('skill-veto');
+        expect(t.adjustments[0].fractionEffect).toBe(0);
+    });
+
+    it('a confidence downgrade is labeled as such', () => {
+        const t = computeTicketSize({ ...baseTrade, confidence: 'Medium', originalConfidence: 'High' });
+        expect(t.adjustments[0].type).toBe('downgrade');
+        expect(t.adjustments[0].label).toContain('Downgraded from High');
+    });
+
+    it('riskVeto uses the veto text as the step label', () => {
+        const t = computeTicketSize({ ...baseTrade, riskVeto: 'Crowded trade' });
+        expect(t.adjustments[0].type).toBe('risk-veto');
+        expect(t.adjustments[0].label).toBe('Crowded trade');
+    });
+
+    it('gradeRiskTierWithAdjustment mirrors the tier math', () => {
+        const b = gradeRiskTierWithAdjustment('B', 1);
+        expect(b.riskPercent).toBe(0.5);
+        expect(b.adjustment.type).toBe('grade-tier');
+        expect(b.adjustment.fractionEffect).toBe(0.5);
+        // Grade A is not a downgrade: multiplier 1 with the explanatory line.
+        const a = gradeRiskTierWithAdjustment('A', 1);
+        expect(a.adjustment.fractionEffect).toBe(1);
+    });
+
+    it('equity fail-close APPENDS its step after the grade step', () => {
+        const tier = gradeRiskTierWithAdjustment('B', 1);
+        const sized = computeContractSize(baseTrade, 0, 10, tier.riskPercent, [tier.adjustment]);
+        expect(sized.reason).toBe(EQUITY_NOT_SET);
+        expect(sized.adjustments.map(a => a.type)).toEqual(['grade-tier', 'equity']);
     });
 });

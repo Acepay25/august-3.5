@@ -8,6 +8,7 @@
 
 import { TradeAnalysis } from '../../types';
 import { parsePrice } from '../../utils/analysisUtils';
+import { BenchmarkAlpha, settleBenchmarkAlpha } from '../../utils/benchmarkAlpha';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
 import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';
@@ -72,6 +73,10 @@ export interface HistoricalOutcomeResult {
     // Note: With 150% extended SL zone, TPs hit within the zone are recorded as real hits
     analysisSnapshot?: HistoricalIndicatorSnapshot;
     outcomeSnapshot?: HistoricalIndicatorSnapshot;
+    /** Benchmark-relative alpha (skill vs tide), settled over analysis→exit.
+     *  Undefined for open/unverifiable trades; the block may itself carry an
+     *  unavailableReason instead of a number when the benchmark fetch failed. */
+    benchmark?: BenchmarkAlpha;
     verificationDetails: string;
 }
 
@@ -486,6 +491,23 @@ export const verifyHistoricalOutcome = async (
         const outcomeSnapshotIndex = finalOutcomeIndex || (tpHits.length > 0 ? tpHits[tpHits.length - 1].candleIndex : null);
         const outcomeSnapshot = outcomeSnapshotIndex ? calculateSnapshotAtCandle(klines, outcomeSnapshotIndex) : null;
 
+        // Benchmark-relative alpha (skill vs tide): the direction-adjusted
+        // unleveraged move the call captured over analysis→exit, minus what
+        // simply HOLDING BTC (or ETH) over that same window returned. Guarded
+        // and fail-safe — a missing benchmark degrades to unavailableReason,
+        // never to a fabricated number. A STILL_OPEN trade has no exit yet.
+        let benchmark: BenchmarkAlpha | undefined;
+        if (hitCandleTime && priceAtHit && entryPrice > 0) {
+            const dirSign = isLong ? 1 : -1;
+            const tradePct = dirSign * ((priceAtHit - entryPrice) / entryPrice) * 100;
+            benchmark = await settleBenchmarkAlpha({
+                symbol,
+                entryTimeMs: analysisTime,
+                exitTimeMs: new Date(hitCandleTime).getTime(),
+                tradePct,
+            });
+        }
+
         return {
             verified: true,
             outcome,
@@ -498,6 +520,7 @@ export const verifyHistoricalOutcome = async (
             slHit,
             analysisSnapshot: analysisSnapshot || undefined,
             outcomeSnapshot: outcomeSnapshot || undefined,
+            benchmark,
             verificationDetails: details
         };
 

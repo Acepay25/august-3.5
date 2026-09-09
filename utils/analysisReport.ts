@@ -94,6 +94,9 @@ export const buildTicketSheet = (analysis: TradeAnalysis): string => {
         `${analysis.coinName || 'Ticket'} · ${analysis.direction || '—'} · ${analysis.confidence || '—'}`,
         `Entry ${analysis.entryPoints?.[0]?.price || '—'}  SL ${analysis.stopLoss || '—'}  TP ${(analysis.takeProfit || []).map(t => t.price).join(', ') || '—'}`,
         analysis.positionSize?.line ? `Size ${analysis.positionSize.line}` : '',
+        analysis.positionSize?.adjustments?.length
+            ? `Sizing steps: ${analysis.positionSize.adjustments.map(a => `${a.label}${a.fractionEffect < 1 ? ` (x${a.fractionEffect})` : ''}`).join('; ')}`
+            : '',
         analysis.recommendationContract
             ? `Contract ${analysis.recommendationContract.action} · ${analysis.recommendationContract.riskBoundary}${analysis.recommendationContract.validityMinutes ? ` · ${analysis.recommendationContract.validityMinutes}m` : ''}`
             : '',

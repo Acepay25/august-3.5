@@ -104,7 +104,7 @@ import { buildLevelCitations } from '../utils/levelEvidence';
 import { enforceUngroundedLevels } from '../utils/ungroundedGate';
 import { rescueSoftAvoid } from '../utils/avoidReason';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
-import { computeContractSize, gradeRiskTier, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
+import { computeContractSize, gradeRiskTierWithAdjustment, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
 import { planAmendmentDiff } from '../utils/trustSurface';
 import { withFinComMetadata, flagBannedVocabulary } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
@@ -1891,7 +1891,7 @@ ${reflectionBlock}`
                     // history; the session-guard verdict is snapshotted onto the
                     // analysis so the journal records the state the moderator saw.
                     const harnessSettingsNow = getHarnessSettings();
-                    const tier = gradeRiskTier(finalAnalysis.grade, harnessSettingsNow.riskPercent);
+                    const tier = gradeRiskTierWithAdjustment(finalAnalysis.grade, harnessSettingsNow.riskPercent);
                     const guardVerdict = assessSession(loggedTradesRef.current, harnessSettingsNow.equityUsd, getSessionGuardConfig());
                     const closedTrades = loggedTradesRef.current.filter(t =>
                         t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
@@ -1908,12 +1908,14 @@ ${reflectionBlock}`
                         harnessSettingsNow.equityUsd,
                         activeConversation?.leverage || DEFAULT_LEVERAGE,
                         tier.riskPercent,
+                        [tier.adjustment],
                     );
                     finalAnalysis.positionSize = {
                         line: sized.line,
                         riskUsd: sized.riskUsd,
                         fraction: sized.fraction,
                         label: sized.label,
+                        adjustments: sized.adjustments,
                     };
                     // Visible failure: an unsized ticket because equity is
                     // unconfigured must say so out loud, not just render a

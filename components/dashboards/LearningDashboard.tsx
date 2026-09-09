@@ -162,6 +162,16 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const evidenceQuality = useMemo(() => computeEvidenceQualityStats(closedWindowed), [closedWindowed]);
     const promptVersions = useMemo(() => summarizePromptVersions(closedWindowed), [closedWindowed]);
     const promptLanes = useMemo(() => summarizePromptLanes(closedWindowed), [closedWindowed]);
+    // Skill vs tide: the same win-rate question asked the honest way — did the
+    // call beat just HOLDING the benchmark (BTC, or the ETH pairs' own ETH)
+    // over its window? Trades without a settled alpha are simply not counted.
+    const tideStats = useMemo(() => {
+        const withAlpha = closedWindowed.filter(t => t.benchmark && Number.isFinite(t.benchmark.alphaPct));
+        if (withAlpha.length === 0) return { n: 0, beatPct: null as number | null, avgAlpha: null as number | null };
+        const beat = withAlpha.filter(t => (t.benchmark?.alphaPct ?? 0) > 0).length;
+        const avg = withAlpha.reduce((s, t) => s + (t.benchmark?.alphaPct ?? 0), 0) / withAlpha.length;
+        return { n: withAlpha.length, beatPct: Math.round((beat / withAlpha.length) * 100), avgAlpha: Math.round(avg * 10) / 10 };
+    }, [closedWindowed]);
     const notebookSkills = useMemo(() => listSkills(), [notebook]);
     // What retrieval ACTUALLY injected (MemoryInjectionService) — drives the
     // "Learned Skills" list, the review caveat, and precise lift windows.
@@ -854,6 +864,23 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                         color: meta.status === 'confirmed' ? 'text-emerald-400' : meta.status === 'retired' ? 'text-zinc-600' : 'text-cyan-300',
                     }))}
                     emptyText="No skills learned yet — close trades with post-mortems to grow skill memory"
+                />
+
+                <StatCard
+                    title="Skill vs tide"
+                    items={tideStats.n > 0 ? [
+                        {
+                            name: `Beat holding BTC/ETH (${tideStats.n} settled)`,
+                            value: `${tideStats.beatPct}%`,
+                            color: getWinRateColor(tideStats.beatPct ?? 0),
+                        },
+                        {
+                            name: 'Average alpha vs hold',
+                            value: `${(tideStats.avgAlpha ?? 0) >= 0 ? '+' : ''}${tideStats.avgAlpha}%`,
+                            color: (tideStats.avgAlpha ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400',
+                        },
+                    ] : []}
+                    emptyText="No benchmark-settled trades yet — outcomes verified from this version forward get a skill-vs-tide reading"
                 />
 
                 <StatCard

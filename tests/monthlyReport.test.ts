@@ -63,6 +63,21 @@ describe('buildMonthReport', () => {
         expect(r.whatHappened.wins).toBe(2);
         expect(r.whatHappened.losses).toBe(0);
     });
+    it('summarizes skill-vs-tide over benchmark-settled trades only', () => {
+        const mk = (alpha: number) => trade({
+            outcome: TradeOutcome.WIN,
+            benchmark: { benchmarkSymbol: 'BTCUSDT', benchmarkPct: 5, tradePct: alpha + 5, alphaPct: alpha, windowMs: 2 * 3_600_000 },
+        });
+        const r = buildMonthReport([
+            mk(3), mk(1), mk(-2),
+            trade({ outcome: TradeOutcome.LOSS }), // never settled → not counted
+        ], NOW);
+        expect(r.whatLearned.tide).toEqual({ n: 3, beatPct: 67, avgAlpha: 0.7 });
+    });
+    it('tide is null when nothing in the period was benchmark-settled', () => {
+        const r = buildMonthReport([trade({ outcome: TradeOutcome.WIN, pnlAmount: 10 })], NOW);
+        expect(r.whatLearned.tide).toBeNull();
+    });
     it('grades the panel: per-provider Brier from the confidence anchor', () => {
         const mk = (provider: string, confidence: 'High' | 'Medium' | 'Low', win: boolean) =>
             trade({
