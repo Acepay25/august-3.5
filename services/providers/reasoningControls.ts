@@ -43,6 +43,7 @@
 
 import type { ProviderConfig } from '../../types/provider';
 import type { ChatMessage, ChatRequestOptions } from './GenericProviderService';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 
 // ─── Effort tiers ──────────────────────────────────────────────────────────
 
@@ -70,9 +71,25 @@ export const EFFORT_BY_TASK = {
 
 export type EffortTask = keyof typeof EFFORT_BY_TASK;
 
-/** The effort a task maps to, with 'auto' passthrough for unknown tasks. */
-export const effortForTask = (task: EffortTask | string | undefined): ReasoningEffort =>
-    (task && task in EFFORT_BY_TASK ? EFFORT_BY_TASK[task as EffortTask] : 'auto');
+/** Composer speed profile (Fast/Quality toggle): 'quality' keeps the
+ *  built-in role→effort schedule; 'fast' steps every task ONE tier down
+ *  (max→high, high→medium, medium→low; already-low quick tiers never drop
+ *  further, and 'auto' passes through untouched). */
+export type EffortProfile = 'fast' | 'quality';
+
+const stepEffortDown = (e: ReasoningEffort): ReasoningEffort =>
+    e === 'max' ? 'high' : e === 'high' ? 'medium' : e === 'medium' ? 'low' : e;
+
+/** The effort a task maps to, with 'auto' passthrough for unknown tasks.
+ *  Omitted profile ⇒ the user's stored Fast/Quality dial. */
+export const effortForTask = (
+    task: EffortTask | string | undefined,
+    profile?: EffortProfile,
+): ReasoningEffort => {
+    const base: ReasoningEffort = task && task in EFFORT_BY_TASK ? EFFORT_BY_TASK[task as EffortTask] : 'auto';
+    const p = profile ?? getHarnessSettings().responseEffort;
+    return p === 'fast' ? stepEffortDown(base) : base;
+};
 
 // ─── Capability-class detection ────────────────────────────────────────────
 

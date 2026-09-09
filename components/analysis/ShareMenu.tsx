@@ -4,12 +4,13 @@ import { LoadingIcon, ShareIcon } from '../shared/Icons';
 import { TradeShareService } from '../../services/ui/TradeShareService';
 import { exportTextAsFile } from '../../services/infrastructure/ExportService';
 import { buildAnalysisReportHtml, buildAnalysisReportJson, buildAnalysisReportMarkdown } from '../../utils/analysisReport';
+import { buildVerdictReportDocument, openReportWindow } from '../../utils/researchReport';
 
 interface ShareMenuProps {
     analysis: TradeAnalysis;
     outcome?: TradeOutcome;
     tradingStyle?: Exclude<TradingStyle, 'auto'>;
-    message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog'> & { text?: string };
+    message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog' | 'modelsUsed' | 'runStats'> & { text?: string };
 }
 
 const ShareMenu: React.FC<ShareMenuProps> = ({
@@ -63,6 +64,24 @@ const ShareMenu: React.FC<ShareMenuProps> = ({
         setOpen(false);
     };
 
+    const handleResearchReport = (): void => {
+        // Structured, printable verdict document (Minara-style shareable
+        // research report): open → browser print → save as PDF.
+        try {
+            openReportWindow(buildVerdictReportDocument(
+                analysis,
+                message?.debateTurns,
+                message?.modelsUsed,
+                message?.runStats ? { promptVersion: message.runStats.promptVersion, protocol: message.runStats.protocol } : undefined,
+            ));
+            flash('Opened');
+        } catch (e) {
+            console.error('Report error:', e);
+            flash('Error');
+        }
+        setOpen(false);
+    };
+
     return (
         <div className="relative">
             <button
@@ -82,6 +101,7 @@ const ShareMenu: React.FC<ShareMenuProps> = ({
             )}
             {open && (
                 <div className="relative z-20 mt-1 min-w-[140px] rounded-lg border border-white/10 bg-zinc-950 py-1 shadow-xl">
+                    <button type="button" className="block w-full px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800" onClick={handleResearchReport}>Research report (print/PDF)</button>
                     <button type="button" className="block w-full px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800" onClick={() => void handleShareImage()}>Image card</button>
                     <button type="button" className="block w-full px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800" onClick={() => void handleReport('md')}>Markdown</button>
                     <button type="button" className="block w-full px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800" onClick={() => void handleReport('json')}>JSON</button>

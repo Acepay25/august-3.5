@@ -267,6 +267,9 @@ export interface Message {
   confluenceData?: ConfluenceData;
   // Per-run execution summary (durations, gate cap, Monte Carlo snapshot)
   runStats?: RunStats;
+  /** The composer slash-mode chip that produced this reply (persisted
+   *  provenance: 'research' replies are pipeline reports, not chat). */
+  composerMode?: 'research' | 'visualize';
   /** Transient mid-debate analyst-replacement offer (generator suspends until
    *  the user chooses). Cleared when the debate ends or is cancelled. */
   replacementOffer?: ReplacementOffer;

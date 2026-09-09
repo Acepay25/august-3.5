@@ -664,6 +664,7 @@ const App: React.FC = () => {
     // Analysis pipeline state, refs, and handlers (extracted to hooks/useAnalysisPipeline.ts)
     const {
         input, setInput,
+        composerMode, setComposerMode,
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
@@ -3086,6 +3087,8 @@ const App: React.FC = () => {
                 input={input}
                 setInput={setInput}
                 handleSendMessage={handleSendMessage}
+                composerMode={composerMode}
+                setComposerMode={setComposerMode}
                 isSummarizing={isSummarizing}
                 isAnyProviderEnabled={isAnyProviderEnabled}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}

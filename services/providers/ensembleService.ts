@@ -8,6 +8,7 @@ import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learnin
 import { persuasionProfile } from '../analysis/convictionDrift';
 import type { HermesBot } from '../../types/bot';
 import { TASK_BUDGETS } from './taskBudgets';
+import { effortForTask } from './reasoningControls';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
@@ -353,8 +354,9 @@ const getModeratorAnalysisStream = async function* (
             temperature: 0.1,
             maxTokens: 12288,
             // P2: the moderator's final verdict is the run's single most
-            // important output — schedule it at the maximum effort tier.
-            reasoningEffort: 'max',
+            // important output — schedule it at the maximum effort tier
+            // (Fast profile steps it to high, never lower).
+            reasoningEffort: effortForTask('moderatorVerdict'),
             // P5: label what the wire actually received (applied route or
             // fail-closed no-op) so the run log explains the verdict's depth.
             onWireAudit,
@@ -2430,8 +2432,8 @@ export const conductRealDebate = async function* (
                     trades: fullTradesForRecall,
                     maxTokens: TASK_BUDGETS.rebuttal,
                     // P2: rebuttals keep depth — the seat must argue its case
-                    // under attack, not phone in a summary.
-                    reasoningEffort: 'high',
+                    // under attack, not phone in a summary (Fast steps to medium).
+                    reasoningEffort: effortForTask('rebuttal'),
                     // P5: every seat turn is labeled with the wire route that
                     // carried it (or why no knob applied).
                     onWireAudit: entry => emitLog('budget', `wire: ${analyst.provider.name} r${round} ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, round, analyst.provider.name),

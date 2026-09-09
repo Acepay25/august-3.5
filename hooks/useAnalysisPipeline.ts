@@ -553,6 +553,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
     // ─── State ─────────────────────────────────────────────────────────────
     const [input, setInput] = useState('');
+    // Composer slash-mode chip (Deep Research / Visualize — Minara port).
+    // Lives beside `input` because the SEND path is what consumes it: the
+    // handler reads the ref, routes the run, and clears the chip.
+    const [composerMode, setComposerMode] = useState<'research' | 'visualize' | null>(null);
+    const composerModeRef = useRef<'research' | 'visualize' | null>(null);
+    composerModeRef.current = composerMode;
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
@@ -786,8 +792,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         resumeMessageId?: string;
         /** Same-thread ticket follow-up: reuse OCR, skip leftover composer charts. */
         followUpFromMessageId?: string;
+        /** Slash-mode chip (Deep Research / Visualize). Absent ⇒ the active
+         *  composer chip (read from the ref); null-like ⇒ a plain send. */
+        composerMode?: 'research' | 'visualize';
     }) => {
         const isAutomationRun = !!options?.automation;
+        // The mode chip is consumed by exactly one send — and never by
+        // parked/queued drafts (the chip stays visible for the real send).
+        const activeComposerMode = options?.composerMode ?? composerModeRef.current ?? undefined;
         let stopTokenUsage: (() => void) | undefined;
         const tokenByProvider = new Map<string, TokenUsage>();
         // Automation runs redirect message writes to a private list and mute
@@ -831,6 +843,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
             return;
         }
+
+        // A real send consumes the chip (a parked draft above returned early
+        // and leaves the chip armed for the next genuine send).
+        if (!isAutomationRun && composerModeRef.current) setComposerMode(null);
 
         // --- ROUTING LOGIC: Standard vs Accuracy Mode ---
         // Ensemble participants are model-level entries, not just provider
@@ -4017,7 +4033,56 @@ ${accuracyVerificationNote}`
                 const provider = chosen
                     ? { config: { ...chosen, selectedModel: useBotThread && activeBot ? activeBot.modelId : selectedChatModel }, name: chosen.name, model: useBotThread && activeBot ? activeBot.modelId : selectedChatModel, useImages: false, thoughtsKey: chosen.id }
                     : enabledProviders[0];
-                setLoadingMessage("Thinking...");
+                if (activeComposerMode === 'research' && provider?.config) {
+                    // Deep Research (Minara port, option 2): a multi-stage
+                    // evidence-grounded pipeline replaces the single-turn
+                    // reply — decompose → per-subtask desk-tool grounding →
+                    // cross-validate → cited report. Progress streams into
+                    // the bubble; the final text is the report itself.
+                    const researchId = `ai-${Date.now()}`;
+                    casualMessageId = researchId;
+                    updateRequestMessages(prev => [...prev, {
+                        id: researchId,
+                        role: MessageRole.AI,
+                        text: '',
+                        createdAt: new Date().toISOString(),
+                        modelsUsed: { [provider.config.id]: provider.model },
+                        isStreaming: true,
+                        composerMode: 'research' as const,
+                    }]);
+                    setIsAnalysisInProgress(true);
+                    setLoadingMessage('Deep Research…');
+                    startStep('analysis');
+                    try {
+                        const { runDeepResearch } = await import('../services/research/ResearchService');
+                        const report = await runDeepResearch({
+                            config: provider.config,
+                            question: effectiveInput,
+                            signal: currentAbortController.signal,
+                            onProgress: p => updateRequestMessages(prev => prev.map(m => m.id === researchId
+                                ? { ...m, text: `${m.text}${m.text ? '\n' : ''}▸ ${p.detail}` }
+                                : m)),
+                        });
+                        updateRequestMessages(prev => prev.map(m => m.id === researchId ? { ...m, text: report.report, isStreaming: false } : m));
+                    } catch (researchError) {
+                        console.warn('[Research] pipeline failed:', researchError);
+                        updateRequestMessages(prev => prev.map(m => m.id === researchId ? {
+                            ...m,
+                            text: 'Deep Research stopped before producing a report — the provider never answered. Nothing was written to memory, because nothing was learned.',
+                            isStreaming: false,
+                        } : m));
+                    } finally {
+                        completeStep('analysis');
+                        setLoadingMessage(null);
+                        setIsAnalysisInProgress(false);
+                    }
+                } else {
+                    // Visualize Data chip: same model, different artifact —
+                    // the reply must be tables + numeric series, not prose.
+                    const chatPrompt = activeComposerMode === 'visualize'
+                        ? 'VISUALIZE DATA MODE — answer with markdown tables and explicit numeric series (timestamp + value rows the app can plot); keep prose to one or two framing sentences.\n\n' + promptToSend
+                        : promptToSend;
+                    setLoadingMessage("Thinking...");
                 setIsAnalysisInProgress(true);
                 startStep('analysis');
                 // Stream the reply into the bubble as it generates (perceived
@@ -4037,7 +4102,7 @@ ${accuracyVerificationNote}`
                 let visibleContent = '';
                 const responseText = await streamQuickResponse(
                     provider.config,
-                    promptToSend,
+                    chatPrompt,
                     // Bot threads see ONLY their own thread (derived view);
                     // ordinary casual chat keeps the full conversation.
                     useBotThread && activeBot
@@ -4080,6 +4145,7 @@ ${accuracyVerificationNote}`
                 // from the bubble and delivers the DMs. Fire-and-forget.
                 if (useBotThread && activeBot && onBotReply) {
                     try { onBotReply(streamingMessageId, casualSplit.output || responseText); } catch { /* mailbox must never break the reply */ }
+                }
                 }
             }
         } catch (error: any) {
@@ -4296,6 +4362,7 @@ ${accuracyVerificationNote}`
     return {
         // State
         input, setInput,
+        composerMode, setComposerMode,
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,

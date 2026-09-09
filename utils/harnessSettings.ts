@@ -23,6 +23,12 @@ export interface HarnessSettings {
     guardPostLossCooldownMin?: number;
     /** Confirmed-skills cap before the worth gate turns comparative. */
     skillLibraryCap?: number;
+    /** Composer speed dial (port of Minara's Fast/Quality toggle):
+     *  'quality' (default) = the built-in role→effort schedule; 'fast' =
+     *  one step down on every reasoning task (verdicts still reason, just
+     *  less; quick tiers never drop below low). Never affects what the
+     *  pipeline DOES — only how hard each call thinks. */
+    responseEffort: 'fast' | 'quality';
 }
 
 const KEY = 'harness_settings_v1';
@@ -63,6 +69,7 @@ export const getHarnessSettings = (): HarnessSettings => {
         guardMaxTradesPerDay: typeof stored.guardMaxTradesPerDay === 'number' && stored.guardMaxTradesPerDay >= 1 ? stored.guardMaxTradesPerDay : undefined,
         guardPostLossCooldownMin: typeof stored.guardPostLossCooldownMin === 'number' && stored.guardPostLossCooldownMin >= 0 ? stored.guardPostLossCooldownMin : undefined,
         skillLibraryCap: typeof cap === 'number' && Number.isFinite(cap) ? cap : undefined,
+        responseEffort: stored.responseEffort === 'fast' ? 'fast' : 'quality',
     };
 };
 
