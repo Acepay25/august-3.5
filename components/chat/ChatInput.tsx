@@ -15,6 +15,8 @@ import { LeverageSection } from './LeverageSection';
 import ModelPicker from '../shared/ModelPicker';
 
 import { parseComposerIntent } from '../../utils/composerMentions';
+import { COMPOSER_COMMANDS, composerCommandFor, matchComposerCommand, type ComposerMode } from '../../utils/composerModes';
+import EffortToggle from '../shared/EffortToggle';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { buildTeamRoster, LENS_ROSTER_ROLES } from '../../utils/teamRoster';
 import { listSkills, titleFromMeta } from '../../services/learning/SkillMemoryService';
@@ -34,6 +36,10 @@ interface ChatInputProps {
     input: string;
     setInput: (value: string) => void;
     handleSendMessage: () => void;
+    /** Active slash-mode chip (Minara-style composer modes). The chip rides
+     *  the NEXT send — the pipeline consumes and clears it. */
+    composerMode?: ComposerMode | null;
+    setComposerMode?: (mode: ComposerMode | null) => void;
     handleCancelAnalysis: () => void;
     loadingMessage: string | null;
     isSummarizing: boolean;
@@ -116,6 +122,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     input,
     setInput,
     handleSendMessage,
+    composerMode = null,
+    setComposerMode,
     handleCancelAnalysis,
     loadingMessage,
     isSummarizing,
@@ -193,6 +201,26 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     }, [skillToken]);
     const insertSkill = (slug: string): void => {
         setInput(input.replace(/\/([a-z0-9_-]*)$/i, `/${slug} `));
+        setSkillMenuOpen(false);
+        document.getElementById('chat-composer')?.focus();
+    };
+
+    // ─── Composer commands (slash modes — Minara port) ─────────────────────
+    // The `/` menu is Commands first, Skills second. Picking a command
+    // CONSUMES the `/token` (unlike a skill, which stays in the text): the
+    // mode is composer state shown as a removable chip, never prose the
+    // model has to parse.
+    const commandCandidates = React.useMemo(() => {
+        if (skillToken === null) return [];
+        const seen = new Set<string>();
+        return COMPOSER_COMMANDS
+            .filter(c => !skillToken || c.token.startsWith(skillToken) || (c.aliases ?? []).some(a => a.startsWith(skillToken)) || matchComposerCommand(skillToken)?.id === c.id)
+            .filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)))
+            .slice(0, 4);
+    }, [skillToken]);
+    const selectCommand = (mode: ComposerMode): void => {
+        setInput(input.replace(/(^|\s)\/([a-z0-9_-]*)$/i, '$1').replace(/\s+$/, ''));
+        setComposerMode?.(mode);
         setSkillMenuOpen(false);
         document.getElementById('chat-composer')?.focus();
     };
@@ -288,9 +316,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // Skill menu follows the token: typing `/x…` opens it, moving off the
     // token (or clearing) closes it. Escape closes via the handler below.
     React.useEffect(() => {
-        if (skillToken === null || skillCandidates.length === 0) setSkillMenuOpen(false);
+        if (skillToken === null || (skillCandidates.length === 0 && commandCandidates.length === 0)) setSkillMenuOpen(false);
         else setSkillMenuOpen(true);
-    }, [skillToken, skillCandidates.length]);
+    }, [skillToken, skillCandidates.length, commandCandidates.length]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -416,26 +444,74 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     {/* Skill autocomplete — notebook skills, filtered by the
                         /token being typed. Picking one completes the token;
                         the skill's CONTENT rides the run when it sends. */}
-                    {skillMenuOpen && skillCandidates.length > 0 && (
+                    {skillMenuOpen && (commandCandidates.length > 0 || skillCandidates.length > 0) && (
                         <div className="mb-1.5 rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5">
-                            <span className="mr-1 text-[10px] uppercase tracking-widest text-zinc-500">Skills</span>
-                            <div className="mt-1 max-h-52 space-y-0.5 overflow-y-auto">
-                                {skillCandidates.map(s => (
-                                    <button
-                                        key={s.slug}
-                                        type="button"
-                                        className="flex w-full items-baseline gap-2 rounded px-1.5 py-1 text-left hover:bg-zinc-800"
-                                        onClick={() => insertSkill(s.slug)}
-                                    >
-                                        <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">/{s.slug}</span>
-                                        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">
-                                            {s.title}{s.description ? ` — ${s.description}` : ''}
-                                        </span>
-                                        <span className="shrink-0 text-[9px] uppercase tracking-wider text-zinc-600">{s.kind} · {s.status}</span>
-                                    </button>
-                                ))}
-                            </div>
+                            {commandCandidates.length > 0 && (
+                                <>
+                                    <span className="mr-1 text-[10px] uppercase tracking-widest text-zinc-500">Commands</span>
+                                    <div className="mt-1 space-y-0.5">
+                                        {commandCandidates.map(c => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                data-testid={`composer-command-${c.id}`}
+                                                className="flex w-full items-baseline gap-2 rounded px-1.5 py-1 text-left hover:bg-zinc-800"
+                                                onClick={() => selectCommand(c.id)}
+                                            >
+                                                <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">/{c.token}</span>
+                                                <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">
+                                                    {c.label} — {c.hint}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                            {skillCandidates.length > 0 && (
+                                <>
+                                    <span className="mr-1 mt-1 block text-[10px] uppercase tracking-widest text-zinc-500">Skills</span>
+                                    <div className="mt-1 max-h-52 space-y-0.5 overflow-y-auto">
+                                        {skillCandidates.map(s => (
+                                            <button
+                                                key={s.slug}
+                                                type="button"
+                                                className="flex w-full items-baseline gap-2 rounded px-1.5 py-1 text-left hover:bg-zinc-800"
+                                                onClick={() => insertSkill(s.slug)}
+                                            >
+                                                <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">/{s.slug}</span>
+                                                <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">
+                                                    {s.title}{s.description ? ` — ${s.description}` : ''}
+                                                </span>
+                                                <span className="shrink-0 text-[9px] uppercase tracking-wider text-zinc-600">{s.kind} · {s.status}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
                             <button type="button" className="mt-1 text-[10px] text-zinc-500 hover:text-zinc-300" onClick={() => setSkillMenuOpen(false)}>Dismiss</button>
+                        </div>
+                    )}
+
+                    {/* Mode chip (Minara port): the active slash-mode rides
+                        the next send and is removable — a framing, never a
+                        rewrite of what the user typed. */}
+                    {composerMode && composerCommandFor(composerMode) && (
+                        <div className="mb-1.5 flex items-center gap-2">
+                            <span
+                                data-testid="composer-mode-chip"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-zinc-800 py-0.5 pl-2 pr-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-200"
+                            >
+                                {composerCommandFor(composerMode)!.label}
+                                <button
+                                    type="button"
+                                    aria-label={`Clear ${composerCommandFor(composerMode)!.label} mode`}
+                                    className="flex h-4 w-4 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200"
+                                    onClick={() => setComposerMode?.(null)}
+                                >
+                                    ×
+                                </button>
+                            </span>
+                            <span className="min-w-0 truncate text-[10px] text-zinc-500">{composerCommandFor(composerMode)!.hint}</span>
                         </div>
                     )}
                     {/* Main Input Row */}
@@ -536,6 +612,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             Team menu so the composer bar reads
                             + modes … send only. */}
                         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            {/* Fast/Quality dial — how hard each call reasons
+                                (never what the pipeline does). */}
+                            <EffortToggle />
                             {/* Casual chat model — bare selector */}
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
                                 <ModelPicker

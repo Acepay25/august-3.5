@@ -43,6 +43,20 @@ describe('EFFORT_BY_TASK schedule (P2)', () => {
         expect(effortForTask(undefined)).toBe('auto');
         expect(effortForTask('analysis')).toBe('high');
     });
+
+    it('Quality profile keeps the schedule; Fast steps every task one tier down', () => {
+        expect(effortForTask('analysis', 'quality')).toBe('high');
+        expect(effortForTask('analysis', 'fast')).toBe('medium');
+        expect(effortForTask('moderatorVerdict', 'quality')).toBe('max');
+        expect(effortForTask('moderatorVerdict', 'fast')).toBe('high');
+        expect(effortForTask('rebuttal', 'fast')).toBe('medium');
+        // Already-low quick tiers never drop further under Fast.
+        expect(effortForTask('clarification', 'fast')).toBe('low');
+        expect(effortForTask('chat', 'fast')).toBe('low');
+        expect(effortForTask('postMortem', 'fast')).toBe('low');
+        // Unknown still passes auto through, unscaled.
+        expect(effortForTask('nope', 'fast')).toBe('auto');
+    });
 });
 
 describe('detectWireCapabilities (capability classes, not provider identity)', () => {

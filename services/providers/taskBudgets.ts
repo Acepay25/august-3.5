@@ -21,4 +21,12 @@ export const TASK_BUDGETS = {
   chat: 2048,
   /** Post-mortem report (WIN/LOSS/ENTRY_NOT_HIT sections + IF/THEN rule). */
   postMortem: 8192,
+  /** Deep Research: subtask decomposition (a JSON list, tiny output). */
+  researchPlan: 512,
+  /** Deep Research: one grounded finding per subtask. */
+  researchFinding: 1536,
+  /** Deep Research: cross-validation pass (contradictions only). */
+  researchValidate: 1024,
+  /** Deep Research: the final cited markdown report. */
+  researchReport: 8192,
 } as const;

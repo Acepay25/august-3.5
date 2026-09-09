@@ -29,7 +29,7 @@ import {
     sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
 import { TASK_BUDGETS } from './taskBudgets';
-import { EFFORT_BY_TASK, WireAuditEntry } from './reasoningControls';
+import { EFFORT_BY_TASK, effortForTask, WireAuditEntry } from './reasoningControls';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { getMemoryFilesContext } from '../learning/MemoryFilesService';
 import { composePrompt } from '../../utils/composePrompt';
@@ -505,7 +505,7 @@ export async function analyzeTradingView(
     // sharing one prompt still sample independently.
     // P2: the analysis phase IS the opening-statements phase — schedule it
     // at high effort (seat opinions are the debate's raw material).
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: temperature ?? 0.35, signal, onReasoning, reasoningEffort: EFFORT_BY_TASK.analysis, onWireAudit };
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: temperature ?? 0.35, signal, onReasoning, reasoningEffort: effortForTask('analysis'), onWireAudit };
     let responseText = '';
     let reasoningAccumulated = '';
     try {
@@ -829,7 +829,7 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
         // 0.4: a forensic post-mortem must not roll dice on its lesson —
         // the 0.7 default sampled "brutally honest" post-mortems randomly.
         // P2 effort tier: structured reporting runs medium.
-        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem, temperature: 0.4, reasoningEffort: EFFORT_BY_TASK.postMortem }
+        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem, temperature: 0.4, reasoningEffort: effortForTask('postMortem') }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");
 }
@@ -969,7 +969,7 @@ export async function getQuickResponse(
         if (reasoning.trim()) reasoningSeen = true;
         onReasoning?.(reasoning);
     };
-    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning: noteReasoning, reasoningEffort: EFFORT_BY_TASK.chat });
+    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning: noteReasoning, reasoningEffort: effortForTask('chat') });
     // Defensive: some apiFormats leave  bodies in the final content.
     // Strip them here (idempotent — chat_completions already peeled them via
     // splitChatContent) and route any leftover to the reasoning side channel
@@ -1020,7 +1020,7 @@ export async function streamQuickResponse(
     // here guarantees the live bubble never shows scratchpad markup.
     const pump = async (maxTokens: number): Promise<void> => {
         const gate = createThinkingStreamGate();
-        for await (const chunk of streamChatRequest(config, messages, { maxTokens, signal, onReasoning: noteReasoning, reasoningEffort: EFFORT_BY_TASK.chat })) {
+        for await (const chunk of streamChatRequest(config, messages, { maxTokens, signal, onReasoning: noteReasoning, reasoningEffort: effortForTask('chat') })) {
             if (!chunk) continue;
             const gated = gate.push(chunk);
             if (gated.thinking) noteReasoning(gated.thinking);
@@ -1150,7 +1150,7 @@ export async function summarizeChartImage(
             ],
         }];
 
-        const fullSummary = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.ocr, signal, reasoningEffort: EFFORT_BY_TASK.ocr });
+        const fullSummary = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.ocr, signal, reasoningEffort: effortForTask('ocr') });
 
         const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
         const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);

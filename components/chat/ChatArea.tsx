@@ -92,6 +92,9 @@ interface ChatAreaProps {
     input: string;
     setInput: (value: string) => void;
     handleSendMessage: () => void;
+    /** Composer slash-mode chip state (owned by useAnalysisPipeline). */
+    composerMode?: 'research' | 'visualize' | null;
+    setComposerMode?: (mode: 'research' | 'visualize' | null) => void;
     isSummarizing: boolean;
     isAnyProviderEnabled: boolean;
     isAccuracyModeEnabled: boolean;
@@ -198,6 +201,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     input,
     setInput,
     handleSendMessage,
+    composerMode,
+    setComposerMode,
     isSummarizing,
     isAnyProviderEnabled,
     isAccuracyModeEnabled,
@@ -473,6 +478,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         input,
         setInput,
         handleSendMessage,
+        composerMode,
+        setComposerMode,
         handleCancelAnalysis,
         loadingMessage,
         isSummarizing,
@@ -518,6 +525,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         handlePresetLeverage, fileInputRef,
         isImageUploadDisabled, handleImageUpload, input, setInput,
         handleSendMessage, handleCancelAnalysis, loadingMessage, isSummarizing,
+        composerMode, setComposerMode,
         isAnalysisInProgress, steeringNotes, onRemoveSteeringNote, isRateLimited, isAnyProviderEnabled, providers,
         onUpdateProvider, selectedVisionModel, setSelectedVisionModel,
         lensConfig, setLensConfig, ensembleModelSelection,
