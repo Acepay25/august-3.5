@@ -87,6 +87,11 @@ export interface WireCapabilities {
     anthropicThinking: boolean;
     /** OpenAI responses reasoning.effort. */
     responsesEffort: boolean;
+    /** chat_completions json_schema constrained decoding. Host strings are
+     *  evidence provenance (which routes were verified); ProviderConfig
+     *  .jsonSchemaCapable overrides either way. Downstream requests must
+     *  still degrade gracefully — json_object → free text — on a 400. */
+    jsonSchema: boolean;
 }
 
 /**
@@ -96,7 +101,7 @@ export interface WireCapabilities {
  * vendor that accepts the same body still gets the same treatment).
  */
 export const detectWireCapabilities = (
-    config: Pick<ProviderConfig, 'baseUrl' | 'apiFormat' | 'selectedModel'>,
+    config: Pick<ProviderConfig, 'baseUrl' | 'apiFormat' | 'selectedModel' | 'jsonSchemaCapable'>,
 ): WireCapabilities => {
     const host = `${config.baseUrl || ''}`.toLowerCase();
     const model = `${config.selectedModel || ''}`.toLowerCase();
@@ -109,6 +114,12 @@ export const detectWireCapabilities = (
         deepseekThinking: isChat && /deepseek/.test(host + model),
         anthropicThinking: config.apiFormat === 'messages',
         responsesEffort: config.apiFormat === 'responses',
+        jsonSchema: isChat && (
+            config.jsonSchemaCapable === undefined
+                // Hosts where structured-outputs json_schema is verified.
+                ? /api\.openai\.com|openai\.azure\.com|azure-api\.net|x\.ai|xai\.org/.test(host)
+                : config.jsonSchemaCapable
+        ),
     };
 };
 

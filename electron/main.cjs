@@ -202,7 +202,18 @@ function providerRequestDetails(request) {
             max_tokens: request.maxTokens ?? 4096,
             temperature: request.temperature ?? 0.7,
         };
-        if (request.jsonMode) body.response_format = { type: 'json_object' };
+        if (request.jsonSchema && request.jsonSchema.schema) {
+            // Pre-resolved by the renderer's jsonSchema capability class —
+            // apply as-is; the degrade below is the safety net either way.
+            body.response_format = {
+                type: 'json_schema',
+                json_schema: {
+                    name: request.jsonSchema.name || 'august_json',
+                    strict: false,
+                    schema: request.jsonSchema.schema,
+                },
+            };
+        } else if (request.jsonMode) body.response_format = { type: 'json_object' };
         if (Array.isArray(request.tools) && request.tools.length > 0) {
             body.tools = request.tools;
             body.tool_choice = request.toolChoice || 'auto';
@@ -401,15 +412,29 @@ async function sendProviderRequest(request) {
             body: JSON.stringify(body),
             signal: controller.signal,
         });
-        if (!response.ok && request.jsonMode && (response.status === 400 || response.status === 422) && body.response_format) {
+        if (!response.ok && (request.jsonMode || request.jsonSchema) && (response.status === 400 || response.status === 422) && body.response_format) {
+            // Degrade chain mirroring the renderer: json_schema → json_object → none.
             const fallbackBody = { ...body };
-            delete fallbackBody.response_format;
+            if (body.response_format.type === 'json_schema' && request.jsonMode) {
+                fallbackBody.response_format = { type: 'json_object' };
+            } else {
+                delete fallbackBody.response_format;
+            }
             response = await net.fetch(url, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(fallbackBody),
                 signal: controller.signal,
             });
+            if (!response.ok && (response.status === 400 || response.status === 422) && fallbackBody.response_format) {
+                delete fallbackBody.response_format;
+                response = await net.fetch(url, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(fallbackBody),
+                    signal: controller.signal,
+                });
+            }
         }
     } finally {
         clearTimeout(timeout);
@@ -419,7 +444,7 @@ async function sendProviderRequest(request) {
     let data = {};
     try { data = raw ? JSON.parse(raw) : {}; } catch { /* handled by fallback below */ }
 
-    if (response.ok && request.jsonMode && body.response_format) {
+    if (response.ok && (request.jsonMode || request.jsonSchema) && body.response_format) {
         const message = data?.choices?.[0]?.message || {};
         const content = Array.isArray(message.content)
             ? message.content.filter(block => typeof block?.text === 'string').map(block => block.text).join('')

@@ -21,7 +21,7 @@ import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
-import { applyReasoningToChatParams, buildReasoningPatch } from './reasoningControls';
+import { applyReasoningToChatParams, buildReasoningPatch, detectWireCapabilities } from './reasoningControls';
 // Side-effect import: harnessLessons registers the wire-route pin checker
 // into reasoningControls at module init (harness-lesson read path). Importing here (the
 // transport) guarantees the registration happens before any reasoning patch
@@ -41,6 +41,9 @@ interface ElectronProviderBridge {
         maxTokens?: number;
         temperature?: number;
         jsonMode?: boolean;
+        /** Pre-resolved (capability-checked) constrained-decoding schema for
+         *  chat_completions; undefined = never send json_schema. */
+        jsonSchema?: ChatRequestOptions['jsonSchema'];
         tools?: ChatRequestOptions['tools'];
         toolChoice?: ChatRequestOptions['toolChoice'];
     }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; toolCalls?: ChatTurnResult['toolCalls']; assistantMessage?: ChatMessage; status?: number; code?: string; message?: string }>;
@@ -99,6 +102,12 @@ export interface ChatRequestOptions {
         };
     }>;
     toolChoice?: 'auto' | 'none' | 'required';
+    /** Constrained decoding (chat_completions, capability-gated): sends
+     *  response_format json_schema with the given object-root JSON Schema
+     *  instead of plain json_object. Non-strict — the zod boundary stays
+     *  the validator; a rejected format degrades (json_object → none), it
+     *  never blocks the call. Ignored by the other wire formats. */
+    jsonSchema?: { name?: string; schema: Record<string, unknown> };
 }
 
 export interface ChatTurnResult {
@@ -346,6 +355,48 @@ function createOpenAIClient(config: ProviderConfig): OpenAI {
     });
 }
 
+/** response_format for chat_completions: constrained json_schema when the
+ *  jsonSchema capability class allows it and the caller supplied a schema,
+ *  else plain json_object when requested, else none. Rejections are handled
+ *  by the degrade chain in chatCompletionsTurn / chatCompletionsStream. */
+const buildJsonResponseFormat = (
+    config: ProviderConfig,
+    options?: ChatRequestOptions,
+): Record<string, unknown> | undefined => {
+    if (options?.jsonSchema?.schema && detectWireCapabilities(config).jsonSchema) {
+        return {
+            type: 'json_schema',
+            json_schema: {
+                name: options.jsonSchema.name || 'august_json',
+                // Non-strict on purpose: optional fields stay optional and
+                // the zod schema at the analysis boundary remains the real
+                // validator. Strict mode would require all-keys rewrites.
+                strict: false,
+                schema: options.jsonSchema.schema,
+            },
+        };
+    }
+    if (options?.jsonMode) return { type: 'json_object' };
+    return undefined;
+};
+
+/** Capability decision for the OUT-of-process transports (Electron bridge +
+ *  dev proxy, which build the body themselves): resolve the jsonSchema class
+ *  here so those transports only ever see a schema the config supports. */
+const resolveWireJsonSchema = (
+    config: ProviderConfig,
+    options?: ChatRequestOptions,
+): ChatRequestOptions['jsonSchema'] =>
+    options?.jsonSchema?.schema && detectWireCapabilities(config).jsonSchema ? options.jsonSchema : undefined;
+
+/** First degrade step under a 400/422: json_schema falls back to
+ *  json_object (when it was also requested), anything else is removed. */
+const degradeResponseFormatOnce = (params: Record<string, unknown>, jsonMode?: boolean): void => {
+    const rf = params.response_format as { type?: string } | undefined;
+    if (rf?.type === 'json_schema' && jsonMode) params.response_format = { type: 'json_object' };
+    else delete params.response_format;
+};
+
 // ─── Timeout & Retry Helpers ────────────────────────────────────────────────
 
 /** Abort a request if it exceeds this wall-clock duration (per attempt). */
@@ -386,9 +437,8 @@ async function chatCompletionsTurn(
         max_tokens: options?.maxTokens ?? 4096,
         temperature: options?.temperature ?? 0.7,
     };
-    if (options?.jsonMode) {
-        (params as any).response_format = { type: 'json_object' };
-    }
+    const rf = buildJsonResponseFormat(config, options);
+    if (rf) (params as any).response_format = rf;
     if (options?.tools?.length) {
         (params as any).tools = options.tools;
         (params as any).tool_choice = options.toolChoice ?? 'auto';
@@ -399,10 +449,22 @@ async function chatCompletionsTurn(
     try {
         response = await client.chat.completions.create(params, { signal: withTimeoutSignal(options?.signal) });
     } catch (error: any) {
-        if (options?.jsonMode && (error?.status === 400 || error?.status === 422)) {
+        if ((options?.jsonMode || options?.jsonSchema) && (error?.status === 400 || error?.status === 422)) {
+            // Degrade chain: json_schema → json_object → no response_format.
+            // A gateway that rejects the constrained format must still
+            // answer — the pipeline never blocks on an optional hardening.
             const fallbackParams = { ...params } as Record<string, unknown>;
-            delete fallbackParams.response_format;
-            response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
+            degradeResponseFormatOnce(fallbackParams, options?.jsonMode);
+            try {
+                response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
+            } catch (second: any) {
+                if ((second?.status === 400 || second?.status === 422) && fallbackParams.response_format) {
+                    delete fallbackParams.response_format;
+                    response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
+                } else {
+                    throw second;
+                }
+            }
         } else if (options?.tools?.length && (error?.status === 400 || error?.status === 422)) {
             // Gateway rejects tools — retry without them so the text-protocol fallback can run.
             const fallbackParams = { ...params } as Record<string, unknown>;
@@ -423,7 +485,7 @@ async function chatCompletionsTurn(
     ].filter(Boolean).join('\n');
     const content = splitContent.text;
     if (!content && !reasoning && !message?.tool_calls?.length && options?.jsonMode) {
-        return chatCompletionsTurn(config, messages, { ...options, jsonMode: false });
+        return chatCompletionsTurn(config, messages, { ...options, jsonMode: false, jsonSchema: undefined });
     }
     if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
     reportUsage(config, response, options);
@@ -476,12 +538,25 @@ async function* chatCompletionsStream(
         stream: true,
         stream_options: { include_usage: true },
     };
-    if (options?.jsonMode) {
-        (params as any).response_format = { type: 'json_object' };
-    }
+    const streamRf = buildJsonResponseFormat(config, options);
+    if (streamRf) (params as any).response_format = streamRf;
     requestReasoningSideChannel(config, params);
     applyReasoningToChatParams(config, params as unknown as Record<string, unknown>, options);
-    const stream = await client.chat.completions.create(params, { signal: withStreamTimeoutSignal(options?.signal) });
+    let stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+    try {
+        stream = await client.chat.completions.create(params, { signal: withStreamTimeoutSignal(options?.signal) });
+    } catch (error: any) {
+        // Same degrade chain as the non-streaming turn — previously the
+        // stream path had NO json fallback, so a gateway that rejected
+        // response_format failed the whole stream at creation time.
+        if ((options?.jsonMode || options?.jsonSchema) && (error?.status === 400 || error?.status === 422)) {
+            const fallbackParams = { ...params } as Record<string, unknown>;
+            degradeResponseFormatOnce(fallbackParams, options?.jsonMode);
+            stream = await client.chat.completions.create(fallbackParams as any, { signal: withStreamTimeoutSignal(options?.signal) }) as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+        } else {
+            throw error;
+        }
+    }
     const gate = createThinkingStreamGate();
     for await (const chunk of stream) {
         reportUsage(config, chunk, options);
@@ -879,6 +954,7 @@ export async function sendChatRequest(
                         maxTokens: options?.maxTokens,
                         temperature: options?.temperature,
                         jsonMode: options?.jsonMode,
+                        jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                         tools: options?.tools,
                         toolChoice: options?.toolChoice,
                     }).then(result => {
@@ -906,6 +982,7 @@ export async function sendChatRequest(
                             maxTokens: options?.maxTokens,
                             temperature: options?.temperature,
                             jsonMode: options?.jsonMode,
+                            jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
                             toolChoice: options?.toolChoice,
                         }),
@@ -1023,6 +1100,7 @@ export async function sendChatTurn(
                             maxTokens: options?.maxTokens,
                             temperature: options?.temperature,
                             jsonMode: options?.jsonMode,
+                            jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
                             toolChoice: options?.toolChoice,
                         });
@@ -1058,6 +1136,7 @@ export async function sendChatTurn(
                             maxTokens: options?.maxTokens,
                             temperature: options?.temperature,
                             jsonMode: options?.jsonMode,
+                            jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
                             toolChoice: options?.toolChoice,
                         }),
@@ -1260,6 +1339,7 @@ async function* streamViaProxy(
                 maxTokens: options?.maxTokens,
                 temperature: options?.temperature,
                 jsonMode: options?.jsonMode,
+                jsonSchema: resolveWireJsonSchema(config, options),
                 stream: true,
             }),
             signal: withStreamTimeoutSignal(options?.signal),

@@ -41,6 +41,15 @@ export interface ProviderConfig {
    * block). Set from the provider editor.
    */
   thinkingCapable?: boolean;
+  /**
+   * Override for json_schema constrained decoding on chat_completions
+   * providers. undefined = decide by verified-host detection; true = always
+   * send response_format json_schema when requested (an OpenAI-compatible
+   * gateway that supports it); false = never (a host known to 400 on it).
+   * Set from the provider editor. The 400-degrade chain stays as a safety
+   * net either way.
+   */
+  jsonSchemaCapable?: boolean;
 }
 
 /**

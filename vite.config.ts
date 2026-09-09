@@ -15,6 +15,13 @@ function devProviderProxy() {
   return {
     name: 'dev-provider-proxy',
     configureServer(server: any) {
+      // Degrade chain shared with the renderer + Electron main:
+      // json_schema → json_object (only when jsonMode was also asked) → none.
+      const stepDownResponseFormat = (b: Record<string, unknown>, jsonMode?: unknown): void => {
+        const rf = b.response_format as { type?: string } | undefined;
+        if (rf?.type === 'json_schema' && jsonMode) b.response_format = { type: 'json_object' };
+        else delete b.response_format;
+      };
       server.middlewares.use('/__provider_proxy', async (req: any, res: any, next: any) => {
         if (req.method !== 'POST') return next();
         try {
@@ -77,7 +84,17 @@ function devProviderProxy() {
             url = `${baseUrl}/chat/completions`;
             if (apiKey && apiKey !== 'not-needed') headers.Authorization = `Bearer ${apiKey}`;
             body = { model: config.selectedModel, messages: request.messages || [], max_tokens: request.maxTokens ?? 4096, temperature: request.temperature ?? 0.7 };
-            if (request.jsonMode) body.response_format = { type: 'json_object' };
+            if (request.jsonSchema && request.jsonSchema.schema) {
+              // Pre-resolved by the renderer's jsonSchema capability class.
+              body.response_format = {
+                type: 'json_schema',
+                json_schema: {
+                  name: request.jsonSchema.name || 'august_json',
+                  strict: false,
+                  schema: request.jsonSchema.schema,
+                },
+              };
+            } else if (request.jsonMode) body.response_format = { type: 'json_object' };
             if (Array.isArray(request.tools) && request.tools.length > 0) {
               body.tools = request.tools;
               body.tool_choice = request.toolChoice || 'auto';
@@ -134,10 +151,14 @@ function devProviderProxy() {
           if (request.stream) {
             const streamBody: Record<string, unknown> = { ...body, stream: true, stream_options: { include_usage: true } };
             let sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(streamBody), signal: AbortSignal.timeout(300000) });
-            if (!sse.ok && request.jsonMode && (sse.status === 400 || sse.status === 422) && streamBody.response_format) {
+            if (!sse.ok && (request.jsonMode || request.jsonSchema) && (sse.status === 400 || sse.status === 422) && streamBody.response_format) {
               const fallbackBody = { ...streamBody };
-              delete fallbackBody.response_format;
+              stepDownResponseFormat(fallbackBody, request.jsonMode);
               sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
+              if (!sse.ok && (sse.status === 400 || sse.status === 422) && fallbackBody.response_format) {
+                delete fallbackBody.response_format;
+                sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
+              }
             }
             if (!sse.ok || !sse.body) {
               const text = await sse.text();
@@ -174,13 +195,17 @@ function devProviderProxy() {
             return;
           }
           let upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
-          if (!upstream.ok && request.jsonMode && (upstream.status === 400 || upstream.status === 422) && body.response_format) {
+          if (!upstream.ok && (request.jsonMode || request.jsonSchema) && (upstream.status === 400 || upstream.status === 422) && body.response_format) {
             const fallbackBody = { ...body };
-            delete fallbackBody.response_format;
+            stepDownResponseFormat(fallbackBody, request.jsonMode);
             upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+            if (!upstream.ok && (upstream.status === 400 || upstream.status === 422) && fallbackBody.response_format) {
+              delete fallbackBody.response_format;
+              upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+            }
           }
           let text = await upstream.text();
-          if (upstream.ok && request.jsonMode && body.response_format) {
+          if (upstream.ok && (request.jsonMode || request.jsonSchema) && body.response_format) {
             try {
               const parsed = JSON.parse(text);
               const message = parsed?.choices?.[0]?.message || {};
