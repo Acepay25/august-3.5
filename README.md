@@ -1,6 +1,6 @@
-# August 3.5
+# August Trading
 
-August 3.5 is a **local-first AI trading harness**: a React + TypeScript desktop/web
+August Trading is a **local-first AI trading harness**: a React + TypeScript desktop/web
 app where an ensemble of AI analysts debates a trade setup under an explicit
 harness contract, a moderator issues the binding verdict, and every outcome feeds
 a self-auditing memory loop (skills + doctrine) that is re-verified against the

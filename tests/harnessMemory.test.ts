@@ -148,7 +148,12 @@ ${extra}tradeIds: a,b,c,d,e,f,g
   };
 
   it('refines a confirmed skill via the LLM after 3 consecutive losses spanning >=48h', async () => {
-    await seedConfirmedSkill('consecutiveLosses: 1\nlastEvidenceAt: 2026-08-09T12:00:00.000Z\n');
+    // Dates are RELATIVE to now: the 30-day evidence-decay gate halves stale
+    // counts, which demotes the skill before the refinement gate can fire —
+    // fixed 2026-08 dates rotted exactly that way once they aged past 30 days.
+    const iso = (daysAgo: number): string =>
+      new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+    await seedConfirmedSkill(`consecutiveLosses: 1\nlastEvidenceAt: ${iso(6)}\n`);
     loadConfigsMock.mockResolvedValue([readyConfig]);
     quickResponseMock.mockResolvedValue(JSON.stringify({
       name: 'Avoid BTC short without reclaim',
@@ -164,10 +169,10 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     }));
 
     // Two more losses, 3 days apart - past both gates (count + span).
-    const lossA = makeTrade({ id: 'loss-2', timestamp: '2026-08-12T12:00:00.000Z' });
-    const lossB = makeTrade({ id: 'loss-3', timestamp: '2026-08-15T12:00:00.000Z' });
+    const lossA = makeTrade({ id: 'loss-2', timestamp: iso(3) });
+    const lossB = makeTrade({ id: 'loss-3', timestamp: iso(0) });
     const history = [
-      makeTrade({ id: 'g', outcome: TradeOutcome.LOSS, timestamp: '2026-08-09T12:00:00.000Z' }),
+      makeTrade({ id: 'g', outcome: TradeOutcome.LOSS, timestamp: iso(6) }),
       lossA,
       lossB,
     ];
@@ -200,7 +205,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
   });
 
   it('resets the consecutive-loss streak on a WIN without an LLM call', async () => {
-    await seedConfirmedSkill('consecutiveLosses: 1\nlastEvidenceAt: 2026-08-21T15:29:28.000Z\n');
+    await seedConfirmedSkill(`consecutiveLosses: 1\nlastEvidenceAt: ${new Date().toISOString()}\n`);
     loadConfigsMock.mockResolvedValue([readyConfig]);
 
     await applySkillEvidence(makeTrade({ id: 'win-1', outcome: TradeOutcome.WIN }), 'test-user');
@@ -213,7 +218,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
   });
 
   it('keeps the skill untouched when the refinement LLM call fails', async () => {
-    await seedConfirmedSkill('consecutiveLosses: 1\nlastEvidenceAt: 2026-08-21T15:29:28.000Z\n');
+    await seedConfirmedSkill(`consecutiveLosses: 1\nlastEvidenceAt: ${new Date().toISOString()}\n`);
     loadConfigsMock.mockResolvedValue([readyConfig]);
     quickResponseMock.mockRejectedValue(new Error('provider down'));
 

@@ -2,6 +2,27 @@
 
 Plain-English log of change rounds. Newest first.
 
+## Renamed to August Trading
+
+The app and the GitHub repository are now **August Trading** (repo
+`Acepay25/august-trading`). Every user-facing string (window title, header,
+onboarding, update overlay, reports, PWA manifest, Capacitor app name) and the
+package identity (`august-trading`, installer `August-Trading-Setup-*.exe`)
+follow. Two things deliberately did NOT change: the app ids
+(`com.august35.tradingapp` — the invisible NSIS/update identity; changing it
+would parallel-install instead of upgrading) and the localStorage keys
+(rename would orphan saved settings). Because Electron derives the local data
+directory from the product name, the desktop shell now carries the old
+folder's contents across to the new one exactly once on first boot, so
+provider keys, journals and preferences survive the rename. Old release URLs
+and the auto-update feed keep working through GitHub's redirect.
+
+Also defused a time-bomb in the harness-memory tests: three of them seeded
+skills with fixed August dates, and once those aged past the 30-day
+evidence-decay gate the decay halving demoted the skill before the
+refinement gate could fire. The seeds are now relative to the clock, so
+they cannot rot again.
+
 ## v1.0.20 — The harness learns strategy families, not just setups
 
 Ported the transferable framework from Kakushadze & Serur's *151 Trading
