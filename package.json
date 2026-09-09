@@ -1,7 +1,7 @@
 {
   "name": "august-trading",
   "private": true,
-  "version": "1.0.20",
+  "version": "1.0.21",
   "engines": {
     "node": ">=22"
   },
@@ -111,7 +111,7 @@
     "publish": {
       "provider": "github",
       "owner": "Acepay25",
-      "repo": "august-trading",
+      "repo": "august-3.5",
       "releaseType": "release"
     }
   }
