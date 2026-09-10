@@ -2,15 +2,38 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-// TradeView render smoke: the Minara arrangement (stats strip, chart shell,
-// book column, chat dock) mounts, the symbol select re-points the panels,
-// and the chat's empty state offers quick prompts. All network + the
-// TradingView widget are mocked — this tests composition, not data.
+// TradeView render smoke: the Minara arrangement (stats strip, local canvas
+// chart, book column, chat dock) mounts, the symbol select re-points the
+// panels, and the chat's empty state offers quick prompts. The canvas chart,
+// klines and market services are mocked — this tests composition, not data.
 
+vi.mock('lightweight-charts', () => {
+    const series = () => ({ setData: vi.fn(), update: vi.fn(), createPriceLine: vi.fn() });
+    const chart = () => ({
+        addSeries: vi.fn(series),
+        removeSeries: vi.fn(),
+        applyOptions: vi.fn(),
+        priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
+        timeScale: vi.fn(() => ({ fitContent: vi.fn() })),
+        resize: vi.fn(),
+        remove: vi.fn(),
+        data: () => [],
+    });
+    return {
+        createChart: vi.fn(chart),
+        CandlestickSeries: { defaultOptions: {} },
+        HistogramSeries: { defaultOptions: {} },
+        LineSeries: { defaultOptions: {} },
+    };
+});
+vi.mock('../../services/analysis/KlineService', () => ({
+    fetchKlines: vi.fn(async () => []),
+}));
 vi.mock('../../services/analysis/MarketDataService', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../services/analysis/MarketDataService')>();
     return {
         ...actual,
+        fetchTopFuturesSymbols: vi.fn(async () => []),
         fetchMarkIndex: vi.fn(async () => ({
             markPrice: 100.5, indexPrice: 100.4, lastFundingRate: 0.0001,
             nextFundingTime: Date.now() + 3_600_000, available: true,
