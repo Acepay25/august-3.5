@@ -127,7 +127,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-bold text-zinc-100">Backups</h4>
+          <h4 className="text-sm font-bold text-white">Backups</h4>
           <p className="text-xs text-zinc-500 mt-0.5">
             Auto-backups run every 30 minutes — stored per profile, newest 5 kept.
           </p>

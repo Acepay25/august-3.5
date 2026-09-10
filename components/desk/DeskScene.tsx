@@ -396,7 +396,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         <div
             role="dialog"
             aria-label="Desk view of the current debate"
-            className="floor-dark fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/85 backdrop-blur-sm"
+            className="fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/85 backdrop-blur-sm"
             onClick={onClose}
         >
             {ResetDialog}

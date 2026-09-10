@@ -569,7 +569,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${selectedIds.size > 0 && selectedIds.size === messages.length ? 'bg-zinc-700/40 border-white/20 text-zinc-200' : 'bg-zinc-800 border-white/10 text-zinc-400 hover:text-white'}`}
                         >
                             <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedIds.size > 0 && selectedIds.size === messages.length ? 'bg-zinc-200 border-zinc-200' : 'border-zinc-500'}`}>
-                                {selectedIds.size > 0 && selectedIds.size === messages.length && <CheckIcon className="w-3 h-3 text-zinc-100" />}
+                                {selectedIds.size > 0 && selectedIds.size === messages.length && <CheckIcon className="w-3 h-3 text-white" />}
                             </div>
                             <span className="text-xs font-bold uppercase tracking-wider">Select All</span>
                         </button>
@@ -700,7 +700,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
             )}
 
-            {isRateLimited && <div className="status-surface absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-700 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} aria-label="Dismiss rate limit notice" className="text-red-600 hover:text-zinc-100 ml-4"><CloseIcon /></button></div>}
+            {isRateLimited && <div className="status-surface absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} aria-label="Dismiss rate limit notice" className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
 
             <div className="fixed bottom-28 right-6 z-30 flex flex-col gap-2">
                 {showScrollUp && !isSelectionMode && (
@@ -804,15 +804,12 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </>
             ) : messages.length === 0 && !visibleBot ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
-                    {/* Home hero — Minara's arrangement: a small greeting
-                        kicker over a large black serif question (their
-                        "What Are We Watching Today?"). Solid ink, not
-                        gradient: the brand gradient stays on the wordmark
-                        and active nav only. */}
-                    <div className="mb-8 flex flex-col items-center justify-center gap-2 text-center">
-                        <span className="ui-kicker">{heroGreeting}</span>
-                        <h1 className="font-serif text-[32px] leading-tight tracking-tight text-zinc-100 sm:text-[44px]">
-                            What Are We Watching Today?
+                    {/* Home hero: serif greeting (DM Serif Text via --font-serif)
+                        in Minara's brand gradient — the one place the gradient
+                        lives besides the wordmark and active nav. */}
+                    <div className="mb-10 flex items-center justify-center">
+                        <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text text-center font-serif text-[32px] tracking-tight text-transparent sm:text-[40px]">
+                            {heroGreeting}
                         </h1>
                     </div>
                     <div className="w-full max-w-[880px]">

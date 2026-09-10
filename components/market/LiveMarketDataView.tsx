@@ -77,7 +77,7 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
       >
         <div className="flex items-center gap-3">
             <span className="text-sm font-bold text-cyan-400 uppercase tracking-wider w-8">{label}</span>
-            <span className="text-xs font-mono text-zinc-400">Price: <span className="text-zinc-100 font-bold">{price}</span></span>
+            <span className="text-xs font-mono text-zinc-400">Price: <span className="text-white font-bold">{price}</span></span>
             {patterns.length > 0 ? (
                 <span className="text-[10px] px-2 py-0.5 rounded border bg-purple-500/20 border-purple-500/30 text-purple-300 animate-pulse">
                     {patterns.length} Pattern{patterns.length > 1 ? 's' : ''}
@@ -257,7 +257,7 @@ const LiveMarketDataView: React.FC<{ jsonString: string }> = ({ jsonString }) =>
                 <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-widest">Live Market Extraction</h3>
             </div>
             <div className="text-right">
-                <div className="text-sm font-black text-zinc-100">{data.asset || 'Unknown'}</div>
+                <div className="text-sm font-black text-white">{data.asset || 'Unknown'}</div>
                 <div className="text-[9px] text-zinc-500 font-mono">{data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : ''}</div>
             </div>
         </div>

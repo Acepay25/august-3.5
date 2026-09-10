@@ -222,7 +222,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                         aria-label={`${isSelected ? 'Deselect' : 'Select'} message`}
                         aria-pressed={isSelected}
                     >
-                        {isSelected && <CheckIcon className="w-3 h-3 text-zinc-100" />}
+                        {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
                     </button>
                 </div>
             )}

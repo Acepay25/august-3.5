@@ -148,7 +148,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                     <span className="text-xl"></span>
                                 </div>
                                 <div>
-                                    <h2 className="text-base font-semibold text-zinc-100 tracking-tight">Analytics</h2>
+                                    <h2 className="text-base font-semibold text-white tracking-tight">Analytics</h2>
                                     <p className="text-[11px] text-zinc-500">Real-time AI insights</p>
                                 </div>
                             </div>
