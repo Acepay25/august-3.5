@@ -229,7 +229,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                                             opt.disabled
                                                 ? 'cursor-not-allowed text-zinc-600'
                                                 : isActive
-                                                    ? 'bg-zinc-800 text-white'
+                                                    ? 'bg-zinc-800 text-zinc-100'
                                                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                         }`}
                                     >

@@ -164,7 +164,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 {content.title}
                             </h3>
                             <p className="text-sm text-zinc-400 mt-0.5">
-                                <span className="text-white font-semibold">{coinName}</span>
+                                <span className="text-zinc-100 font-semibold">{coinName}</span>
                             </p>
                         </div>
                     </div>
@@ -186,7 +186,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     value={pnl}
                                     onChange={e => setPnl(e.target.value)}
                                     placeholder="250"
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-white font-mono text-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-zinc-100 font-mono text-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                                     autoFocus
                                 />
                             </div>
@@ -221,7 +221,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                             />
                                             <span className="ml-3 text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
                                                 <span className="text-zinc-500">Entry {idx + 1}:</span>{' '}
-                                                <span className="font-mono text-white">${entry.price}</span>
+                                                <span className="font-mono text-zinc-100">${entry.price}</span>
                                                 {entry.description && (
                                                     <span className="text-zinc-500 text-xs ml-2">({entry.description})</span>
                                                 )}
@@ -262,7 +262,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     value={correctedValue}
                                     onChange={e => setCorrectedValue(e.target.value)}
                                     placeholder={content.advancedPlaceholder}
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                                 />
                                 <p className="mt-1.5 text-xs text-zinc-500">{content.advancedHelp}</p>
                             </div>
@@ -315,7 +315,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         <div className="flex items-start gap-4">
                             <div className="text-3xl"></div>
                             <div className="flex-1">
-                                <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
+                                <div className="font-bold text-zinc-100 group-hover:text-cyan-300 transition-colors">
                                     Upload Screenshot & Log
                                 </div>
                                 <div className="text-xs text-zinc-500 mt-1 leading-relaxed">

@@ -162,22 +162,33 @@ Optional build-time variables:
 
 ## Development Notes
 
-- Vite 7 + Tailwind v4. Theme is **Minara-derived** (user decision, 2026-09-10 —
-  this SUPERSEDES the earlier "monochrome zinc" doctrine): warm near-black chrome
-  (page `#0b0b0a`, panels `zinc-900 #141412`, raised surfaces `zinc-800 #1f1f1c`,
-  hairlines `zinc-700 #2f2f2f`), warm ink ramp, and REAL semantic colors defined
-  once in `index.css` `@theme` — emerald = gains/up (`#07b56a` family),
-  rose/red = losses/down (`#f75d5f` family), yellow/amber = warnings (`#f08800`).
-  Neutral utility names (`zinc-*`, `cyan-*`) were intentionally kept so components
-  recolor through the token block; do not re-add gray remappings for color families.
-- **Brand gradient**: `--color-brand-start #eb53ff → --color-brand-mid #ff538e →
-  --color-brand-end #ff9a32` is reserved for the wordmark, the active-nav indicator,
-  and hero display type only — never for body text, tables, or chart fills.
-- `.status-surface` / `.analysis-card` classes remain in JSX for compatibility but
-  no longer remap colors (the global theme IS semantic now).
+- Vite 7 + Tailwind v4. Theme is **Minara-derived LIGHT** (user decision
+  2026-09-10, copying Minara's actual app — supersedes both the old
+  "monochrome zinc" rule and the interim dark re-skin): light page
+  `zinc-950 #f7f7f7`, panels/popovers `zinc-900 #ffffff`, inputs/chips
+  `zinc-800 #f4f4f3`, hairlines `zinc-700 #ececec`, ink `zinc-100 #141416`,
+  secondary text `zinc-500 #717171`. REAL semantic colors in `index.css`
+  `@theme`: emerald = gains/up (`#07b56a` family), rose/red = losses/down
+  (`#f75d5f`), yellow/amber = warnings (`#f08800`). Neutral utility names
+  (`zinc-*`) were kept so the app re-themes through the token block alone;
+  white-alpha overlay utilities (`border-white/10`, `bg-white/5`,
+  `hover:text-white`…) are inverted to ink-alpha by the **LIGHT-MODE OVERLAY
+  COMPAT** layer at the bottom of `index.css` — do not "fix" components by
+  rewriting those class names; extend the compat layer if a new overlay
+  variant appears.
+- The **trading floor and desk scenes stay dark theater**: add/keep the
+  `floor-dark` class on their roots — it re-declares the warm dark zinc ramp
+  for that subtree (Tailwind v4 utilities compile to `var(--color-zinc-*)`).
+- **Brand gradient** `--color-brand-start #eb53ff → #ff538e → #ff9a32`:
+  reserved for the wordmark and the active-nav indicator only — never body
+  text, tables, or chart fills.
+- Home hero is Minara's arrangement: small `ui-kicker` greeting over a large
+  **black serif** "What Are We Watching Today?" (DM Serif Text via
+  `--font-serif` / `font-serif`).
+- `.status-surface` / `.analysis-card` classes remain in JSX for compatibility
+  but no longer remap colors (the global theme IS semantic now).
 - Typography: **Geist Variable** for UI (`--font-sans`), **DM Serif Text** for
-  display/serif (`--font-serif` — hero headings, brand moments), JetBrains Mono
-  for data. All self-hosted via @fontsource.
+  display/serif, JetBrains Mono for data. All self-hosted via @fontsource.
 - Radius/motion tokens: `rounded-bubble` (12px, chat bubbles), `rounded-control`
   (8px, inputs/buttons), `--ease-snappy` + `.12s` transitions (Minara's numbers).
 - React 19 strict mode; TypeScript strict

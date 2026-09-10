@@ -415,7 +415,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                                 onClick={() => sendReply(thread.prompt.id)}
                                                 disabled={!(replyDrafts[thread.prompt.id] ?? '').trim() || isRunning}
                                                 data-testid={`reply-send-${thread.prompt.id}`}
-                                                className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                                                className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
                                             >
                                                 Reply
                                             </button>
@@ -460,7 +460,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                             onClick={send}
                             disabled={!input.trim()}
                             data-testid="new-thread-button"
-                            className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                            className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             New Thread
                         </button>

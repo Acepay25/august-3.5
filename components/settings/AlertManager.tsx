@@ -81,7 +81,7 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
     <>
     <div className="space-y-4">
       <div>
-        <h4 className="text-sm font-bold text-white">Price Alerts</h4>
+        <h4 className="text-sm font-bold text-zinc-100">Price Alerts</h4>
         <p className="text-xs text-zinc-500 mt-0.5">
           Alerts fire while the app is open (price crosses entry / stop / take-profit within the threshold).
         </p>

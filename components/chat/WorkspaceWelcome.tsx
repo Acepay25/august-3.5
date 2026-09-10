@@ -109,7 +109,7 @@ const WorkspaceWelcome: React.FC<WorkspaceWelcomeProps> = ({
                 <button
                     type="button"
                     onClick={onStartAnalysis}
-                    className="status-surface rounded-xl bg-zinc-100 px-4 py-2 text-xs font-bold text-zinc-950 transition-colors hover:bg-white"
+                    className="status-surface rounded-xl bg-zinc-100 px-4 py-2 text-xs font-bold text-zinc-950 transition-colors hover:bg-zinc-50"
                 >
                     Analyze a chart
                 </button>

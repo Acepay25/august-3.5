@@ -41,7 +41,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                                 Entry Not Hit - Capture Data
                             </h3>
                             <p className="text-sm text-zinc-400 mt-0.5">
-                                <span className="text-white font-semibold">{coinName}</span>
+                                <span className="text-zinc-100 font-semibold">{coinName}</span>
                                 {correctedEntry && (
                                     <span className="text-zinc-500 ml-2">
                                         (Corrected entry: {correctedEntry})
@@ -112,7 +112,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                         <div className="flex items-start gap-4">
                             <div className="text-3xl"></div>
                             <div className="flex-1">
-                                <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
+                                <div className="font-bold text-zinc-100 group-hover:text-cyan-300 transition-colors">
                                     Upload Screenshot
                                 </div>
                                 <div className="text-xs text-zinc-500 mt-1 leading-relaxed">

@@ -696,7 +696,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {activeTab === 'general' && (
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-white/5 pb-3">
-                                        <h3 className="text-lg font-bold text-white">Analysis</h3>
+                                        <h3 className="text-lg font-bold text-zinc-100">Analysis</h3>
                                         <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning is under Advanced.</p>
                                     </div>
 
@@ -805,7 +805,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         aria-expanded={isAdvancedOpen}
                                     >
                                         <div className="text-left">
-                                            <h4 className="text-sm font-bold text-white">Advanced</h4>
+                                            <h4 className="text-sm font-bold text-zinc-100">Advanced</h4>
                                             <p className="text-xs text-zinc-500 mt-0.5">Prompt injection and capture behavior — most users can leave these as-is.</p>
                                         </div>
                                         <span className={`text-zinc-500 text-sm transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`}>▾</span>
@@ -816,7 +816,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
                                                 <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4 animate-fade-in">
                                                     <div>
-                                                        <h4 className="text-sm font-bold text-white">Pure AI Context</h4>
+                                                        <h4 className="text-sm font-bold text-zinc-100">Pure AI Context</h4>
                                                         <p className="text-xs text-zinc-400 mt-0.5">Choose which structured context is injected during Pure AI analysis. All default: off.</p>
                                                     </div>
                                                     <div className="space-y-3">
@@ -845,7 +845,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             {/* Auto-Capture Options */}
                                             <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
                                                 <div>
-                                                    <h4 className="text-sm font-bold text-white">Automated Capture Prompts</h4>
+                                                    <h4 className="text-sm font-bold text-zinc-100">Automated Capture Prompts</h4>
                                                     <p className="text-xs text-zinc-400 mt-0.5">Ask for trade results automatically. All default: off.</p>
                                                 </div>
                                                 <div className="space-y-3">
@@ -877,7 +877,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {activeTab === 'lenses' && (
                                 <div className="space-y-4 animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-lg font-bold text-white">Analyst roles</h3>
+                                        <h3 className="text-lg font-bold text-zinc-100">Analyst roles</h3>
                                         <p className="text-xs text-zinc-500 mt-1">Assign Technical, Risk, and Macro personas to models.</p>
                                     </div>
                                     <AnalystLensSettings
@@ -966,7 +966,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {activeTab === 'actions' && (
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Data</h3>
+                                        <h3 className="text-base font-bold text-zinc-100">Data</h3>
                                         <p className="text-xs text-zinc-500 mt-1">Usage, backups, and price alerts.</p>
                                     </div>
 

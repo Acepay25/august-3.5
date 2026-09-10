@@ -215,11 +215,11 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
             <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-purple-500/30 shadow-2xl shadow-purple-500/10 overflow-hidden flex flex-col">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-950/50 to-zinc-950">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-100/70 to-zinc-900">
                     <div className="flex items-center gap-4">
                         <span className="text-2xl"></span>
                         <div>
-                            <h2 className="text-lg font-black text-white tracking-tight">
+                            <h2 className="text-lg font-black text-zinc-100 tracking-tight">
                                 SCENARIO SIMULATOR
                             </h2>
                             <div className="flex items-center gap-2 mt-0.5">
@@ -448,7 +448,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         }`}>
                                         <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">Scenario</span>
                                         <div className={`text-3xl font-black mt-1 ${comparison && comparison.rrChange > 0 ? 'text-emerald-400' :
-                                            comparison && comparison.rrChange < 0 ? 'text-rose-400' : 'text-white'
+                                            comparison && comparison.rrChange < 0 ? 'text-rose-400' : 'text-zinc-100'
                                             }`}>
                                             1:{currentMetrics?.rrRatio || '—'}
                                         </div>

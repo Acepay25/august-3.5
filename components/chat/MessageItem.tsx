@@ -390,7 +390,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                         aria-label={`${isSelected ? 'Deselect' : 'Select'} message`}
                         aria-pressed={isSelected}
                     >
-                        {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
+                        {isSelected && <CheckIcon className="w-3 h-3 text-zinc-100" />}
                     </button>
                 </div>
             )}

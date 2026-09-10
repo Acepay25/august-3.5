@@ -153,7 +153,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         <div className="mt-2 flex-1 flex flex-col min-w-0">{children}</div>
                     ) : (
                         <>
-                            <div className="text-3xl font-light text-white tracking-tight">{value}</div>
+                            <div className="text-3xl font-light text-zinc-100 tracking-tight">{value}</div>
                             <div className="text-xs text-white/40 mt-2 font-light">{subtitle}</div>
                         </>
                     )}
@@ -206,7 +206,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 1.2 Skill Library (replaced the retired IF/THEN rule extraction) */}
                         <ModernCard title="Skill Library" accent="purple" icon={<Icons.Brain className="w-5 h-5" />}>
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-2xl font-light text-white">{rules.length}</div>
+                                <div className="text-2xl font-light text-zinc-100">{rules.length}</div>
                                 <div className="text-xs text-white/40">Active Skills</div>
                             </div>
 
@@ -253,7 +253,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 1.4 Memory */}
                         <ModernCard title="Knowledge Base" accent="amber" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-2xl font-light text-white">{insights.length}</div>
+                                <div className="text-2xl font-light text-zinc-100">{insights.length}</div>
                                 <div className="text-xs text-white/40">Stored Insights</div>
                             </div>
 
@@ -394,7 +394,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 3.4 Storage - Real Output */}
                         <ModernCard title="Unified Storage" accent="blue" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="mt-1">
-                                <span className="text-3xl font-light text-white">{storageCount}</span>
+                                <span className="text-3xl font-light text-zinc-100">{storageCount}</span>
                                 <span className="text-xs text-blue-400 ml-2">Items</span>
                             </div>
                             <div className="mt-2 text-xs text-white/40">Across IndexedDB & Local</div>
@@ -403,7 +403,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 3.3 Job Queue - Real Output */}
                         <ModernCard title="Job Queue" accent="emerald" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="mt-1 flex items-baseline">
-                                <span className={`text-3xl font-light ${queueSize > 0 ? 'text-emerald-400 animate-pulse' : 'text-white'}`}>{queueSize}</span>
+                                <span className={`text-3xl font-light ${queueSize > 0 ? 'text-emerald-400 animate-pulse' : 'text-zinc-100'}`}>{queueSize}</span>
                                 <span className="text-xs text-emerald-400/60 ml-2">Pending Jobs</span>
                             </div>
                             <div className="mt-2 text-xs text-white/40">{queueSize === 0 ? 'Workers Idle' : 'Processing...'}</div>
@@ -433,7 +433,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             </div>
                         </div>
                         <div>
-                            <h1 className="text-xl font-medium text-white tracking-tight">System Intelligence</h1>
+                            <h1 className="text-xl font-medium text-zinc-100 tracking-tight">System Intelligence</h1>
                             <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono mt-0.5">
                                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(176, 176, 182,0.5)]"></span>
                                 v6.0.0 Live
@@ -475,7 +475,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 className={`
                        px-6 py-2 rounded-xl text-sm font-medium transition-all duration-300
                        ${activeTab === tab
-                                        ? 'bg-zinc-800 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
+                                        ? 'bg-zinc-800 text-zinc-100 shadow-lg shadow-black/20 ring-1 ring-white/10'
                                         : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}
                     `}
                             >

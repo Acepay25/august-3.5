@@ -102,7 +102,7 @@ const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }
                 />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-lg font-bold text-white">{Math.round(percentage)}%</span>
+                <span className="text-lg font-bold text-zinc-100">{Math.round(percentage)}%</span>
             </div>
         </div>
     );
@@ -176,7 +176,7 @@ const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
             {/* Header */}
             <div className="flex items-center justify-between mb-3">
                 <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white text-sm">{name}</h3>
+                    <h3 className="font-semibold text-zinc-100 text-sm">{name}</h3>
                     {modelName && (
                         <p className="text-[10px] text-zinc-500 truncate" title={modelName}>
                             {modelName}
@@ -368,7 +368,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                 <div className="flex items-center gap-3">
                     <span className="text-2xl"></span>
                     <div>
-                        <h2 className="text-lg font-semibold text-white">AI Model Performance</h2>
+                        <h2 className="text-lg font-semibold text-zinc-100">AI Model Performance</h2>
                         <p className="text-xs text-zinc-500">
                             Rolling window: Last 20 trades per model
                         </p>
@@ -406,7 +406,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
             {/* Dynamic Weights */}
             {weights && modelData.length > 0 && (
                 <div className="p-4 rounded-xl bg-zinc-800 border border-zinc-700/50">
-                    <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-zinc-100 mb-4 flex items-center gap-2">
                          Dynamic Weights
                         <span className="text-xs font-normal text-zinc-500">
                             (Confidence: {weights.confidence})

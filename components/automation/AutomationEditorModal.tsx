@@ -261,7 +261,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/60">
-                    <h3 className="text-sm font-bold text-white tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
+                    <h3 className="text-sm font-bold text-zinc-100 tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
                     <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors text-lg leading-none" aria-label="Close">✕</button>
                 </div>
 

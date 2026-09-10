@@ -70,7 +70,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                     </div>
 
                     <div className="p-4 rounded-xl bg-zinc-800 border border-white/10 text-sm text-zinc-300 space-y-2">
-                        <p className="font-semibold text-white">Analysis:</p>
+                        <p className="font-semibold text-zinc-100">Analysis:</p>
                         <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
                             {tpFirstTime && (
                                 <li>
