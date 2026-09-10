@@ -843,7 +843,9 @@ body.desk-idle-motion-off {
 /* Shared column for messages + composer so they share one width. */
 .chat-column {
   width: 100%;
-  max-width: 48rem;
+  /* Minara's chat measure (--chat-v2-measure): 880px reading column shared
+     by messages and composer. */
+  max-width: 880px;
   margin-left: auto;
   margin-right: auto;
 }
