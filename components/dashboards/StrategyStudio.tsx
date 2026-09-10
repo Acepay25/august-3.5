@@ -110,8 +110,8 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                     <p className="text-[11px] text-zinc-500">{skills.length} playbooks · browse, filter, and try them in chat</p>
                 </div>
                 {onClose && (
-                    <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-300 hover:border-white/20 hover:bg-zinc-800">
-                        Close
+                    <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
+                        Back to Chat
                     </button>
                 )}
             </div>
