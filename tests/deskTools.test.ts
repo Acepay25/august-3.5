@@ -25,6 +25,8 @@ describe('DeskToolsService', () => {
             'get_order_book',
             'get_liquidations',
             'get_btc_context',
+            'get_market_packet',
+            'get_chart_view',
             'get_session_context',
             'get_price_snapshot',
             'get_setup_history_stats',

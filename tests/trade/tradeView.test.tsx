@@ -29,6 +29,12 @@ vi.mock('lightweight-charts', () => {
 vi.mock('../../services/analysis/KlineService', () => ({
     fetchKlines: vi.fn(async () => []),
 }));
+// The live feed hook opens real websockets — pin it to the polling state so
+// the render test exercises the fallback path deterministically.
+vi.mock('../../hooks/useFuturesLiveFeed', () => ({
+    useFuturesLiveFeed: () => ({ markIndex: null, ticker: null, depth: null, kline: null, status: 'polling' }),
+    klineInterval: (i: string) => i.toLowerCase(),
+}));
 vi.mock('../../services/analysis/MarketDataService', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../services/analysis/MarketDataService')>();
     return {

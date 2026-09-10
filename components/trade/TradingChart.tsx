@@ -15,11 +15,13 @@ import {
     HistogramSeries,
     LineSeries,
     type IChartApi,
+    type IPriceLine,
     type ISeriesApi,
     type UTCTimestamp,
 } from 'lightweight-charts';
 import { fetchKlines } from '../../services/analysis/KlineService';
-import { toCandles, toVolumes, verdictLevels, type ChartLevel } from '../../services/trade/chartData';
+import { toCandles, toVolumes, verdictLevels, VOLUME_UP, VOLUME_DOWN, type ChartLevel } from '../../services/trade/chartData';
+import type { LiveKline } from '../../services/trade/futuresStreams';
 import { TradeAnalysis } from '../../types';
 
 export const CHART_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1D'] as const;
@@ -39,6 +41,14 @@ interface TradingChartProps {
     verdict?: TradeAnalysis | null;
     /** Optional moving average overlay (SMA20) — cheap context, one line. */
     showSma?: boolean;
+    /** Websocket kline stream is up: the initial history load still happens,
+     *  but the 15s refresh stops — liveKline drives the last bar instead. */
+    live?: boolean;
+    liveKline?: LiveKline | null;
+    /** Live trade/mark price from the ticker stream — drawn as a dedicated
+     *  dashed price line ("mark") that ticks every second, faster than the
+     *  built-in last-close line can move while a bar is still open. */
+    lastPrice?: number | null;
 }
 
 const sma = (closes: number[], period: number): (number | null)[] => closes.map((_, i) => {
@@ -48,13 +58,14 @@ const sma = (closes: number[], period: number): (number | null)[] => closes.map(
     return sum / period;
 });
 
-const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, verdict, showSma = false }) => {
+const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, verdict, showSma = false, live = false, liveKline, lastPrice }) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
     const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
     const smaRef = useRef<ISeriesApi<'Line'> | null>(null);
     const levelLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
+    const markLineRef = useRef<IPriceLine | null>(null);
     const [status, setStatus] = useState<'loading' | 'live' | 'unavailable'>('loading');
     const [levels, setLevels] = useState<ChartLevel[]>([]);
 
@@ -98,13 +109,13 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             volumeRef.current = null;
             smaRef.current = null;
             levelLinesRef.current = [];
+            markLineRef.current = null;
         };
     }, []);
 
-    // Data lifecycle: full load on symbol/interval change, then refresh.
-    // While EMPTY (first load / failed load) retry fast — a slow first
-    // response shouldn't leave the chart blank for a quarter-minute; once
-    // there are candles, the 15s tail keeps them moving.
+    // Data lifecycle: the history load always runs (the stream only pushes
+    // the CURRENT bar). Refresh cadence after that: while live the websocket
+    // drives updates and no timer is armed; otherwise 15s (4s while empty).
     useEffect(() => {
         let cancelled = false;
         let timer = 0;
@@ -120,7 +131,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 vs.setData(toVolumes(klines).map(v => ({ ...v, time: v.time as UTCTimestamp })));
                 setStatus('live');
                 if (!timer) chartRef.current?.timeScale().fitContent();
-                timer = window.setTimeout(() => void load(), REFRESH_MS);
+                if (!live) timer = window.setTimeout(() => void load(), REFRESH_MS);
             } catch {
                 if (!cancelled) setStatus('unavailable');
                 timer = window.setTimeout(() => void load(), 4000);
@@ -128,7 +139,46 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         };
         void load();
         return () => { cancelled = true; window.clearTimeout(timer); };
-    }, [symbol, interval]);
+    }, [symbol, interval, live]);
+
+    // Live kline stream: patch the last bar in place (sub-second ticks).
+    useEffect(() => {
+        if (!liveKline || !candlesRef.current || !volumeRef.current) return;
+        const t = Math.floor(liveKline.openTime / 1000);
+        candlesRef.current.update({
+            time: t as UTCTimestamp,
+            open: liveKline.open, high: liveKline.high, low: liveKline.low, close: liveKline.close,
+        });
+        volumeRef.current.update({
+            time: t as UTCTimestamp,
+            value: liveKline.volume,
+            color: liveKline.close >= liveKline.open ? VOLUME_UP : VOLUME_DOWN,
+        });
+    }, [liveKline]);
+
+    // Realtime price line: the live ticker/mark price gets its own dashed
+    // "mark" line updated on every tick — visible immediately, unlike the
+    // built-in last-close line which only moves when the open bar updates.
+    useEffect(() => {
+        const cs = candlesRef.current;
+        if (!cs) return;
+        const removeLine = (): void => {
+            if (markLineRef.current) {
+                try { cs.removePriceLine?.(markLineRef.current); } catch { /* already gone */ }
+                markLineRef.current = null;
+            }
+        };
+        if (lastPrice == null || !Number.isFinite(lastPrice)) { removeLine(); return; }
+        if (markLineRef.current) {
+            try { markLineRef.current.applyOptions({ price: lastPrice }); return; } catch { removeLine(); }
+        }
+        try {
+            markLineRef.current = cs.createPriceLine({
+                price: lastPrice, color: '#399ef7', lineWidth: 1, lineStyle: 2,
+                axisLabelVisible: true, title: 'mark',
+            }) ?? null;
+        } catch { /* series without price-line support (test mock) */ }
+    }, [lastPrice, status]);
 
     // SMA overlay.
     useEffect(() => {

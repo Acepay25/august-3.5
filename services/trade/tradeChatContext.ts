@@ -22,7 +22,7 @@ export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetche
     return [
         `[LIVE CHART CONTEXT — ${symbol} · ${interval} chart · fetched ${when} UTC — code-calculated, treat as ground truth]`,
         packet,
-        'If you need data newer than this packet, CALL THE DESK TOOLS (get_price_snapshot, get_order_book, get_derivatives, get_liquidations, get_session_context) — never invent a number the packet lacks.',
+        'If you need data newer than this packet, CALL THE DESK TOOLS — get_chart_view (the exact candles, timeframe, live mark and verdict levels drawn on the user\'s chart), get_market_packet (the full hybrid pull: every timeframe, indicators, funding, OI, book walls, liquidations, session), or the granular ones (get_price_snapshot, get_order_book, get_derivatives, get_liquidations, get_session_context) — never invent a number the packet lacks.',
     ].join('\n\n');
 };
 
