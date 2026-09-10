@@ -145,6 +145,9 @@ import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatc
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useUiMode } from './hooks/useUiMode';
+import { useSurface, type AppSurface } from './hooks/useSurface';
+import NavRail from './components/shell/NavRail';
+import { Journal } from './components/journal/Journal';
 import { useSidebarPane } from './hooks/useSidebarPane';
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
 import type { FloorPosition, FloorSquawkEvent } from './components/floor/FloorScene';
@@ -399,6 +402,9 @@ const App: React.FC = () => {
     }, [isSidebarCollapsed]);
     // Chat vs floor presentation mode (see hooks/useUiMode.ts).
     const { uiMode, setUiMode, toggleUiMode } = useUiMode();
+    // Minara arrangement: top-level surfaces chosen from the icon rail
+    // (hooks/useSurface.ts). Floor remains a presentation mode INSIDE chat.
+    const { surface, setSurface } = useSurface();
     // Unified sidebar pane (sessions | bots | terminal) — the BOTS tab
     // embeds the roster rail; floor mode hides the roster (below).
     const { sidebarPane, setSidebarPane } = useSidebarPane();
@@ -1091,7 +1097,7 @@ const App: React.FC = () => {
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
     // Strategy Studio — the browse/annotate surface for the playbook library.
-    const [isStrategyStudioOpen, setIsStrategyStudioOpen] = useState(false);
+    // Strategy Studio moved to a surface (useSurface) — no overlay flag.
 
     // ─── Desk view (opt-in overlay projecting the current debate) ──────────
     const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
@@ -1296,7 +1302,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen || isStrategyStudioOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1310,7 +1316,6 @@ const App: React.FC = () => {
                 if (isWatchListVisible) setIsWatchListVisible(false);
                 if (isApprovalInboxVisible) setIsApprovalInboxVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
-                if (isStrategyStudioOpen) setIsStrategyStudioOpen(false);
                 return;
             }
             if (isAnalysisInProgress || isPostMortemInProgress) {
@@ -1323,7 +1328,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen, isStrategyStudioOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -1381,10 +1386,19 @@ const App: React.FC = () => {
                 e.preventDefault();
                 toggleUiMode();
             }
+            // Alt+1..5 jumps the icon-rail surfaces (Minara nav; Alt keeps
+            // the browser/Electron Ctrl+number tab-switching intact).
+            const SURFACE_KEYS: Record<string, AppSurface> = {
+                '1': 'chat', '2': 'boards', '3': 'journal', '4': 'studio', '5': 'agents',
+            };
+            if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
+                e.preventDefault();
+                setSurface(SURFACE_KEYS[e.key]);
+            }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [toggleUiMode]);
+    }, [toggleUiMode, setSurface]);
 
 
 
@@ -1770,7 +1784,7 @@ const App: React.FC = () => {
             id: 'strategy-studio',
             label: 'Open Strategy Studio',
             hint: 'Playbook',
-            run: () => setIsStrategyStudioOpen(true),
+            run: () => setSurface('studio'),
         },
         {
             id: 'toggle-ensemble',
@@ -2574,7 +2588,7 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 onOpenSavedAnalyses={() => { setIsSavedAnalysesVisible(true); setIsSettingsMenuVisible(false); }}
                 onOpenStrategySearch={() => { setIsStrategySearchVisible(true); setIsSettingsMenuVisible(false); }}
-                onOpenStrategyStudio={() => { setIsStrategyStudioOpen(true); setIsSettingsMenuVisible(false); }}
+                onOpenStrategyStudio={() => { setSurface('studio'); setIsSettingsMenuVisible(false); }}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}
                 onSetSummarizationProvider={handleSetSummarizationProvider}
@@ -2889,6 +2903,15 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
+                {/* Minara arrangement, first column: the surface rail. */}
+                <NavRail
+                    surface={surface}
+                    onSelect={setSurface}
+                    onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                    username={activeUsername || undefined}
+                />
+                {surface === 'chat' && (
+                    <>
                 {/* Dark shell: the rail sits LIGHTER than the page
                     (#141412 over #0b0b0a) with NO dividing border —
                     separation reads from the fill step alone. */}
@@ -3211,6 +3234,116 @@ const App: React.FC = () => {
                         )}
                     </div>
                 )}
+                    </>
+                )}
+
+                {/* Non-chat surfaces (Minara arrangement): pages, not modals.
+                    Each embeds an existing component — presentation only, no
+                    new data paths. */}
+                {surface !== 'chat' && (
+                    <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
+                        {surface === 'boards' && (
+                            <LiveMarket
+                                isEmbedded
+                                isVisible
+                                onClose={() => setSurface('chat')}
+                                onAnalyze={handleLiveMarketAnalyze}
+                            />
+                        )}
+                        {surface === 'journal' && (
+                            <Journal
+                                isVisible={true}
+                                onClose={() => setSurface('chat')}
+                                initialTab="log"
+                                isEmbedded={true}
+                                username={activeUsername || undefined}
+                                trades={loggedTrades}
+                                onDeleteTrades={handleDeleteTrades}
+                                onClearAllTrades={handleClearAllTrades}
+                                modelIdToName={modelIdToName}
+                                onUpdateInsights={handleManualInsightsUpdate}
+                                isSummarizing={isSummaryInProgress}
+                                currentInsightIds={currentInsightIds}
+                                onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                                onUpdateOutcome={handleUpdateTradeOutcome}
+                                onUpdatePnL={handleUpdateTradePnL}
+                                finalSummary={finalTradeSummary}
+                                individualSummaries={tradeSummaries}
+                                isLoading={isLoading}
+                                isInsightGenerating={isInsightGenerating}
+                                insightProgress={insightProgress}
+                                newlyAddedInsightIds={newlyAddedInsightIds}
+                                summarizationProvider={summarizationProvider}
+                                summarizationModel={summarizationModel}
+                                onSetSummarizationProvider={handleSetSummarizationProvider}
+                                onSetSummarizationModel={setSummarizationModel}
+                                providers={providerConfigs}
+                                summaryCharLimit={summaryCharLimit}
+                                onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
+                                onRegenerateSummary={handleRegenerateFinalSummary}
+                                onDeleteInsight={handleDeleteInsight}
+                                useAlgorithmicSummary={useAlgorithmicSummary}
+                                onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
+                                useAlgorithmicInsights={useAlgorithmicInsights}
+                                onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
+                                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
+                                familyWinRates={familyWinRates}
+                                enabledProviders={journalEnabledProviders}
+                                selectedModels={journalSelectedModels}
+                            />
+                        )}
+                        {surface === 'studio' && (
+                            <React.Suspense fallback={null}>
+                                <StrategyStudio
+                                    trades={loggedTrades}
+                                    username={activeUsername || undefined}
+                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
+                                    onClose={() => setSurface('chat')}
+                                />
+                            </React.Suspense>
+                        )}
+                        {surface === 'agents' && (
+                            <div className="flex h-full min-h-0">
+                                <div className="flex w-80 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50">
+                                    <React.Suspense fallback={null}>
+                                        <AgentRosterRail
+                                            variant="embedded"
+                                            bots={bots}
+                                            groups={groups}
+                                            messages={messages}
+                                            selection={activeThread}
+                                            onSelectBot={(id) => { selectBotThread(id); setSurface('chat'); }}
+                                            onSelectGroup={(id) => { selectGroupThread(id); setSurface('chat'); }}
+                                            onDeleteBot={deleteBot}
+                                            onDeleteGroup={deleteGroup}
+                                            onEditGroup={groupId => {
+                                                const target = groups.find(g => g.id === groupId);
+                                                if (!target) return;
+                                                setGroupEditTarget(target);
+                                                setIsNewGroupOpen(true);
+                                            }}
+                                            onNewBot={() => setIsNewBotOpen(true)}
+                                            onNewGroup={() => setIsNewGroupOpen(true)}
+                                            onSelectCoach={() => { selectCoachThread(); setSurface('chat'); }}
+                                            onSelectTeam={() => { selectTeamThread(); setSurface('chat'); }}
+                                            coachCount={coachCount}
+                                            workingBotId={workingBotId ?? dmWorkingBotId}
+                                            lastOpenedMap={threadOpenedMap}
+                                            attentionMap={attentionMap}
+                                            botRoutines={botRoutinesMap}
+                                            onRunRoutine={runRoutineFromRail}
+                                        />
+                                    </React.Suspense>
+                                </div>
+                                <div className="hidden flex-1 items-center justify-center md:flex">
+                                    <p className="max-w-sm text-center text-sm leading-6 text-zinc-600">
+                                        Pick an agent to open its thread, or start a new one from the rail.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                )}
 
                 </div>
 
@@ -3329,27 +3462,8 @@ const App: React.FC = () => {
                 </React.Suspense>
             )}
 
-            {/* Strategy Studio — browse + annotate the playbook library. */}
-            {isStrategyStudioOpen && (
-                <React.Suspense fallback={null}>
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 sm:p-8"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label="Strategy Studio"
-                        onMouseDown={(e) => { if (e.target === e.currentTarget) setIsStrategyStudioOpen(false); }}
-                    >
-                        <div className="flex h-full max-h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                            <StrategyStudio
-                                trades={loggedTrades}
-                                username={activeUsername || undefined}
-                                currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
-                                onClose={() => setIsStrategyStudioOpen(false)}
-                            />
-                        </div>
-                    </div>
-                </React.Suspense>
-            )}
+            {/* Strategy Studio is a surface now (surface === 'studio' in the
+                main row) — no overlay state to manage. */}
 
             {/* Side-by-side compare */}
             {comparePrimary && (
