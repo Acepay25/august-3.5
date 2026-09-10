@@ -13,6 +13,9 @@ interface LiveMarketProps {
     isVisible: boolean;
     onClose: () => void;
     onAnalyze: (data: string) => void;
+    /** Rendered inside a surface page instead of the full-screen overlay:
+     *  no fixed positioning, no close button, Esc does not navigate. */
+    isEmbedded?: boolean;
 }
 
 interface Alert {
@@ -191,9 +194,9 @@ const identifyCandlePattern = (klines: Kline[]) => {
     return "Normal";
 };
 
-const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }) => {
+const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, isEmbedded = false }) => {
     // Esc closes the overlay (was a navigation dead-end).
-    useEscapeClose(isVisible, onClose);
+    useEscapeClose(isVisible && !isEmbedded, onClose);
     const [symbol, setSymbol] = useState('ETHUSDT');
     // Renamed from `interval` — a state variable named `interval` shadows the
     // global setInterval, making any future bare setInterval(...) call throw
@@ -702,7 +705,7 @@ ${JSON.stringify(marketData, null, 2)}
     if (!isVisible) return null;
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Live Market" className="status-surface fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
+        <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={`status-surface flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-50 animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
             {/* Header - 2 rows on mobile for spacious feel */}
             <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}
@@ -740,6 +743,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 Loading...
                             </span>
                         </div>
+                        {!isEmbedded && (
                         <button
                             onClick={onClose}
                             className="p-3 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors active:scale-95"
@@ -747,6 +751,7 @@ ${JSON.stringify(marketData, null, 2)}
                         >
                             <CloseIcon className="w-5 h-5" />
                         </button>
+                        )}
                     </div>
                 </div>
 
