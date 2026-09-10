@@ -804,12 +804,13 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </>
             ) : messages.length === 0 && !visibleBot ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
-                    {/* Home hero: serif greeting (DM Serif Text via --font-serif)
-                        in Minara's brand gradient — the one place the gradient
-                        lives besides the wordmark and active nav. */}
-                    <div className="mb-10 flex items-center justify-center">
-                        <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text text-center font-serif text-[32px] tracking-tight text-transparent sm:text-[40px]">
-                            {heroGreeting}
+                    {/* Home hero — Minara's arrangement: small greeting kicker
+                        over a large light serif question. The brand gradient
+                        stays on the wordmark and active-nav indicator only. */}
+                    <div className="mb-8 flex flex-col items-center justify-center gap-2 text-center">
+                        <span className="ui-kicker">{heroGreeting}</span>
+                        <h1 className="font-serif text-[32px] leading-tight tracking-tight text-zinc-100 sm:text-[44px]">
+                            What Are We Watching Today?
                         </h1>
                     </div>
                     <div className="w-full max-w-[880px]">
