@@ -38,7 +38,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
             <button
                 ref={closeButtonRef}
                 onClick={onClose}
-                className="absolute top-4 right-4 p-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full transition-colors z-10"
+                className="absolute top-4 right-4 p-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-full transition-colors z-10"
                 aria-label="Close image"
             >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

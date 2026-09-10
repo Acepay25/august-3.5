@@ -43,7 +43,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
               <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-zinc-600">
                 <CloseIcon className="w-8 h-8 text-zinc-400" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Disable Accuracy Mode?</h2>
+              <h2 className="text-2xl font-bold text-zinc-100 mb-2">Disable Accuracy Mode?</h2>
               <p className="text-zinc-400 text-sm mb-6">
                 Analysis will return to normal speed. Dropdowns will be restored.
               </p>

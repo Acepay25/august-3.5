@@ -372,9 +372,9 @@ const TeamRosterMenu: React.FC<TeamRosterMenuProps> = ({
                                         onClick={() => setHoveredProviderId(provider.id)}
                                         className={`flex w-full items-center justify-between px-3 py-2 text-[13px] transition-colors ${
                                             isActive
-                                                ? 'bg-zinc-800 text-white'
+                                                ? 'bg-zinc-800 text-zinc-100'
                                                 : isCurrentProvider
-                                                    ? 'text-white'
+                                                    ? 'text-zinc-100'
                                                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                         }`}
                                     >
@@ -406,7 +406,7 @@ const TeamRosterMenu: React.FC<TeamRosterMenuProps> = ({
                                                     taken
                                                         ? 'cursor-not-allowed text-zinc-600'
                                                         : isCurrent
-                                                            ? 'bg-zinc-800 text-white'
+                                                            ? 'bg-zinc-800 text-zinc-100'
                                                             : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                                 }`}
                                             >

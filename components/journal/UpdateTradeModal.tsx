@@ -80,7 +80,7 @@ export const UpdateTradeModal: React.FC<{
                                 Update Trade Setup
                             </h3>
                             <p className="text-sm text-zinc-400 mt-0.5">
-                                Re-evaluate <span className="text-white font-semibold">{coinName}</span>
+                                Re-evaluate <span className="text-zinc-100 font-semibold">{coinName}</span>
                             </p>
                         </div>
                     </div>
@@ -135,7 +135,7 @@ export const UpdateTradeModal: React.FC<{
                             value={updateText}
                             onChange={(e) => setUpdateText(e.target.value)}
                             placeholder="Describe market changes..."
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 min-h-[80px] resize-none"
+                            className="w-full bg-zinc-800 border border-white/10 rounded-xl p-3 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 min-h-[80px] resize-none"
                             disabled={isCapturing}
                         />
                     </div>

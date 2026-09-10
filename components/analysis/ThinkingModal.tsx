@@ -39,7 +39,7 @@ const ThinkingModal: React.FC<ThinkingModalProps> = ({ isOpen, onClose, title, s
                     <div className="flex min-w-0 items-start gap-3">
                         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><BrainIcon className="h-4 w-4" /></div>
                         <div className="min-w-0">
-                            <h2 id="thinking-modal-title" className="truncate text-sm font-bold text-white sm:text-base">{title}</h2>
+                            <h2 id="thinking-modal-title" className="truncate text-sm font-bold text-zinc-100 sm:text-base">{title}</h2>
                             {subtitle && <p className="mt-0.5 truncate text-[10px] text-zinc-500">{subtitle}</p>}
                         </div>
                     </div>

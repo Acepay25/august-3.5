@@ -146,7 +146,7 @@ const TeamModal: React.FC<TeamModalProps> = ({
             <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                     <div>
-                        <p className="text-sm font-medium text-white">Analyst team</p>
+                        <p className="text-sm font-medium text-zinc-100">Analyst team</p>
                         <p className="mt-0.5 text-[11px] text-zinc-500">Who analyzes your charts before you send.</p>
                     </div>
                     <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close team sheet">
@@ -310,7 +310,7 @@ const TeamModal: React.FC<TeamModalProps> = ({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-950 transition-colors hover:bg-white"
+                            className="rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-950 transition-colors hover:bg-zinc-50"
                         >
                             Done
                         </button>

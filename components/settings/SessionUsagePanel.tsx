@@ -56,7 +56,7 @@ const SessionUsagePanel: React.FC = () => {
     return (
         <div className="space-y-3">
             <div>
-                <h4 className="text-sm font-bold text-white">Usage</h4>
+                <h4 className="text-sm font-bold text-zinc-100">Usage</h4>
                 <p className="text-xs text-zinc-500 mt-0.5">Tokens from provider responses when available; otherwise estimated from output size.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">

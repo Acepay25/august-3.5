@@ -74,7 +74,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
               else if (e.key === 'Enter' && filtered[highlighted]) { e.preventDefault(); run(filtered[highlighted]); }
             }}
             placeholder="Type a command…"
-            className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
+            className="flex-1 min-w-0 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
           />
         </div>
 
@@ -91,7 +91,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
               type="button"
               onClick={() => run(action)}
               onMouseEnter={() => setHighlighted(index)}
-              className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${index === highlighted ? 'bg-zinc-700/70 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+              className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${index === highlighted ? 'bg-zinc-700/70 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-800'}`}
             >
               <span className="min-w-0 truncate">{action.label}</span>
               {action.hint && <span className="shrink-0 text-[10px] text-zinc-500">{action.hint}</span>}

@@ -379,7 +379,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                                     <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-full uppercase animate-pulse">Active</span>
                                 </div>
                                 <div className="text-zinc-400 text-xs mt-0.5 flex items-center gap-2">
-                                    <span className="text-white">{steps[loadingStep]}</span>
+                                    <span className="text-zinc-100">{steps[loadingStep]}</span>
                                     <span className="flex gap-0.5">
                                         <span className="w-1 h-1 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
                                         <span className="w-1 h-1 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
@@ -436,7 +436,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                     <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${data.marketData.priceChangePercent24h >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} border border-black animate-pulse pointer-events-none`}></div>
                     <div className="absolute left-14 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none">
                         <div className="text-[10px] text-zinc-300 font-bold">{data.symbol}</div>
-                        <div className="text-white font-bold text-sm">${formatPrice(data.marketData.currentPrice)}</div>
+                        <div className="text-zinc-100 font-bold text-sm">${formatPrice(data.marketData.currentPrice)}</div>
                         <div className={`text-[10px] ${priceChangeColor}`}>
                             {data.marketData.priceChangePercent24h >= 0 ? '+' : ''}{data.marketData.priceChangePercent24h.toFixed(2)}%
                         </div>
@@ -511,7 +511,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                                     {data.session.isKillZone ? 'KILL ZONE' : 'Standard'}
                                 </div>
                             </div>
-                            <div className="text-xs text-white font-medium mb-1">{data.session.sessionName}</div>
+                            <div className="text-xs text-zinc-100 font-medium mb-1">{data.session.sessionName}</div>
                             <div className="flex justify-between text-[9px] text-zinc-400 mb-2">
                                 <span>{data.session.sessionStart} - {data.session.sessionEnd} UTC</span>
                                 <span>{data.session.minutesToSessionEnd}m remaining</span>
@@ -536,7 +536,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                     {/* Price Card */}
                     <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                         <div className="flex items-baseline justify-between">
-                            <div className="text-white font-bold text-xl">${formatPrice(data.marketData.currentPrice)}</div>
+                            <div className="text-zinc-100 font-bold text-xl">${formatPrice(data.marketData.currentPrice)}</div>
                             <div className={`text-sm font-bold ${priceChangeColor}`}>
                                 {data.marketData.priceChangePercent24h >= 0 ? '+' : ''}{data.marketData.priceChangePercent24h.toFixed(2)}%
                             </div>
@@ -558,7 +558,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                         <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Market Regime</div>
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-xs font-bold text-white">{data.regime.regime.replace(/_/g, ' ').toUpperCase()}</div>
+                                <div className="text-xs font-bold text-zinc-100">{data.regime.regime.replace(/_/g, ' ').toUpperCase()}</div>
                                 <div className="text-[9px] text-zinc-400">ADX: {data.regime.adx}</div>
                             </div>
                             <div className="text-[9px] text-zinc-400 italic border-l-2 border-zinc-700 pl-2">

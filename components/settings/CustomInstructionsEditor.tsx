@@ -47,7 +47,7 @@ const InstructionCard: React.FC<{
                                 type="text"
                                 value={instruction.title}
                                 onChange={(e) => onUpdate(instruction.id, { title: e.target.value })}
-                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white font-bold focus:border-cyan-500/50 outline-none"
+                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-100 font-bold focus:border-cyan-500/50 outline-none"
                                 placeholder="Instruction Title"
                             />
                         ) : (
@@ -163,7 +163,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <div className="flex space-x-1 bg-zinc-900 p-1 rounded-xl border border-white/5">
                 <button
                     onClick={() => onTabChange('general')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'general' ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Standard
                 </button>

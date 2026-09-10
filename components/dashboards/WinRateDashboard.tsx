@@ -169,7 +169,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 sm:gap-3">
                         <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#399ef7]"></div>
-                        <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
+                        <h2 className="text-base sm:text-xl font-black text-zinc-100 uppercase tracking-wide">Analytics</h2>
                     </div>
                     <span className="text-[10px] text-zinc-500 font-mono">
                         {filteredTrades.length} trades
@@ -232,7 +232,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 {/* Total Trades */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
                     <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Trades</div>
-                    <div className="text-xl sm:text-3xl font-black text-white">{overallStats.totalTrades}</div>
+                    <div className="text-xl sm:text-3xl font-black text-zinc-100">{overallStats.totalTrades}</div>
                 </div>
 
                 {/* Net PnL — dollar PnL from manual captures; autopilot
@@ -311,7 +311,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 <tr key={r.key} className="border-t border-white/5 text-zinc-300">
                                     <td className="py-1 text-left">{r.label}</td>
                                     <td className="py-1 text-right tabular-nums">{r.n}</td>
-                                    <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                    <td className="py-1 text-right tabular-nums text-zinc-100">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
                                     <td className="py-1 text-right tabular-nums text-zinc-500">{r.avgDeclaredPct !== null ? `${Math.round(r.avgDeclaredPct)}%` : '—'}</td>
                                 </tr>
                             ))}
@@ -334,7 +334,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                     <tr key={r.label} className="border-t border-white/5 text-zinc-300">
                                         <td className="py-1">{r.label}</td>
                                         <td className="py-1 text-right tabular-nums">{r.n} trades</td>
-                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                        <td className="py-1 text-right tabular-nums text-zinc-100">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
                                         <td className="py-1 text-right tabular-nums text-zinc-500">{r.n > 0 && Number.isFinite(r.profitFactor) ? `${r.profitFactor.toFixed(2)} PF` : '—'}</td>
                                     </tr>
                                 ))}
@@ -372,7 +372,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                     <tr key={r.label} className="border-t border-white/5 text-zinc-300">
                                         <td className="py-1">{r.label}</td>
                                         <td className="py-1 text-right tabular-nums">{r.n} trades</td>
-                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                        <td className="py-1 text-right tabular-nums text-zinc-100">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -486,7 +486,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 <div key={coin.coin} className="flex items-center justify-between p-2 bg-zinc-800 rounded-lg">
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] text-zinc-600 font-mono w-4">#{idx + 1}</span>
-                                        <span className="font-bold text-sm text-white">{coin.coin}</span>
+                                        <span className="font-bold text-sm text-zinc-100">{coin.coin}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         {coin.pnl !== 0 ? (

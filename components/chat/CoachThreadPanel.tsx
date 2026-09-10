@@ -62,7 +62,7 @@ const ActionButton: React.FC<{
         onClick={onPress}
         className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors ${
             variant === 'solid'
-                ? 'bg-zinc-200 text-zinc-900 hover:bg-white'
+                ? 'bg-zinc-200 text-zinc-900 hover:bg-zinc-50'
                 : 'border border-white/10 text-zinc-300 hover:bg-zinc-800 hover:text-white'
         }`}
     >

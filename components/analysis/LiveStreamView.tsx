@@ -189,7 +189,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
       <div className="flex flex-col w-full h-full max-w-7xl mx-auto">
         <header className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-3">
+            <h2 className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${config.dotColor} animate-pulse ${config.dotShadow}`}></span>
               {config.title}
             </h2>

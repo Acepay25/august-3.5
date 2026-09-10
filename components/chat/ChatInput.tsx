@@ -425,10 +425,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     </div>
                 )}
 
-                {/* Main Input Container — Minara composer proportions:
-                    16px radius, generous inner padding, warm raised fill
-                    (#1f1f1c) under a single hairline. */}
-                <div className="rounded-2xl border border-white/[0.07] bg-zinc-800 p-3 sm:p-5 transition-colors">
+                {/* Main Input Container — Minara composer: white card, 16px
+                    radius, generous inner padding, single light hairline. */}
+                <div className="rounded-2xl border border-white/[0.07] bg-zinc-900 p-3 sm:p-5 shadow-sm shadow-black/[0.03] transition-colors">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -538,7 +537,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
                             placeholder={placeholderOverride ?? (isAnalysisInProgress ? 'Add a note — it steers this run, or runs next…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?')}
-                            className={`flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 ${threadMode ? 'placeholder:text-left' : 'placeholder:text-center focus:placeholder:text-left'}`}
+                            className={`flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-zinc-100 placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 ${threadMode ? 'placeholder:text-left' : 'placeholder:text-center focus:placeholder:text-left'}`}
                             rows={1}
                             disabled={isRateLimited}
                             style={{ overflowY: 'auto', overflowX: 'hidden' }}
@@ -658,7 +657,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     document.getElementById('chat-composer')?.focus();
                                 }}
                                 disabled={isSummarizing || (!isAnalysisInProgress && (!hasDraft || isRateLimited || !isAnyProviderEnabled))}
-                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${stopMode ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-zinc-200 text-zinc-900 hover:bg-white shadow-sm'}`}
+                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${stopMode ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-zinc-200 text-zinc-900 hover:bg-zinc-50 shadow-sm'}`}
                                 title={stopMode ? 'Stop generating' : parkMode ? 'Queue message' : 'Send'}
                                 aria-label={stopMode ? 'Stop generating' : parkMode ? 'Queue message' : 'Send message'}
                             >
