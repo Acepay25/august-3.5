@@ -7,7 +7,7 @@ import { HarnessLessonsBrowser } from './HarnessLessonsBrowser';
 import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 
-const SLICE_COLORS = ['#8aabd8', '#b0b0b6', '#648dc6', '#6f6f78', '#d2d2d6', '#39587f', '#85858d'];
+const SLICE_COLORS = ['#42a1ff', '#b7b7b1', '#399ef7', '#6e6e68', '#d6d6d0', '#1d64a8', '#8c8c86'];
 
 const startOfToday = (): number => {
     const d = new Date();
@@ -82,7 +82,7 @@ const SessionUsagePanel: React.FC = () => {
                                 acc.offset += sweep;
                                 return acc;
                             }, { offset: 0, nodes: [] }).nodes}
-                            <circle cx="40" cy="40" r="18" fill="#161618" />
+                            <circle cx="40" cy="40" r="18" fill="#141412" />
                         </svg>
                         <div className="min-w-0 flex-1">
                             <p className="text-sm text-zinc-100">{today.tokensExact ? '' : '~'}{formatChars(todayTokens)} tok today</p>

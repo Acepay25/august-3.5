@@ -274,8 +274,8 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
         }
 
         .style-button.active {
-          background: #8a8a92;
-          border-color: #8a8a92;
+          background: #8c8c86;
+          border-color: #8c8c86;
           color: #fff;
         }
 
@@ -370,11 +370,11 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
 
         .provider-select:focus {
           outline: none;
-          border-color: #8a8a92;
+          border-color: #8c8c86;
         }
 
         .provider-select option {
-          background: #161618;
+          background: #141412;
           color: #fff;
         }
 
@@ -399,14 +399,14 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
         }
 
         .info-value {
-          color: #8a8a92;
+          color: #8c8c86;
           font-weight: 500;
         }
 
         .info-warning {
           margin-top: 10px;
           font-size: 12px;
-          color: #b0b0b6;
+          color: #b7b7b1;
         }
 
         @media (max-width: 768px) {

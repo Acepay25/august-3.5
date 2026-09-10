@@ -20,7 +20,7 @@ const hashName = (name: string): number => {
 };
 
 const BOT_FILLS = [
-    '#111111',
+    '#0b0b0a',
     '#1e3a5f',
     '#3d2b1f',
     '#1d3d2f',

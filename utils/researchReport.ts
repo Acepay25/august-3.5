@@ -35,19 +35,19 @@ const SHELL = (title: string, body: string): string => `<!doctype html>
 <title>${escapeHtml(title)}</title>
 <style>
   :root { color-scheme: light; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #161618; margin: 2rem auto; max-width: 820px; padding: 0 1.5rem; line-height: 1.5; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #141416; margin: 2rem auto; max-width: 820px; padding: 0 1.5rem; line-height: 1.5; }
   h1 { font-size: 1.35rem; margin: 0 0 .15rem; }
-  h2 { font-size: 1rem; margin: 1.4rem 0 .4rem; border-bottom: 1px solid #d2d2d6; padding-bottom: .2rem; text-transform: uppercase; letter-spacing: .04em; color: #4f4f57; }
+  h2 { font-size: 1rem; margin: 1.4rem 0 .4rem; border-bottom: 1px solid #ececec; padding-bottom: .2rem; text-transform: uppercase; letter-spacing: .04em; color: #717171; }
   h3 { font-size: .9rem; margin: 1rem 0 .3rem; }
-  .sub { color: #4f4f57; font-size: .8rem; margin-bottom: 1.4rem; }
+  .sub { color: #717171; font-size: .8rem; margin-bottom: 1.4rem; }
   table { width: 100%; border-collapse: collapse; font-size: .82rem; margin: .5rem 0; }
-  th, td { border-bottom: 1px solid #d2d2d6; padding: .4rem .5rem; text-align: left; }
-  th { background: #eef0f2; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #4f4f57; }
-  .chip { display: inline-block; border: 1px solid #b0b0b6; border-radius: 999px; padding: .05rem .55rem; font-size: .72rem; margin-right: .3rem; }
+  th, td { border-bottom: 1px solid #ececec; padding: .4rem .5rem; text-align: left; }
+  th { background: #eaeaec; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #717171; }
+  .chip { display: inline-block; border: 1px solid #d9d9d9; border-radius: 999px; padding: .05rem .55rem; font-size: .72rem; margin-right: .3rem; }
   ul { margin: .3rem 0 .6rem; padding-left: 1.1rem; }
-  .steps li { list-style: none; margin: .1rem 0; color: #3a3a41; }
-  .quote { border-left: 3px solid #c2c2c8; padding-left: .7rem; color: #2e2e34; margin: .4rem 0; white-space: pre-wrap; }
-  .foot { margin-top: 1.6rem; color: #4f4f57; font-size: .7rem; border-top: 1px solid #d2d2d6; padding-top: .6rem; }
+  .steps li { list-style: none; margin: .1rem 0; color: #3f3f44; }
+  .quote { border-left: 3px solid #d9d9d9; padding-left: .7rem; color: #2b2b2f; margin: .4rem 0; white-space: pre-wrap; }
+  .foot { margin-top: 1.6rem; color: #717171; font-size: .7rem; border-top: 1px solid #ececec; padding-top: .6rem; }
   @media print { body { margin: 0; max-width: none; } }
 </style>
 </head>

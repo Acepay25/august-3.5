@@ -411,7 +411,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 )}
 
                 {/* Main Input Container — pill proportions:
-                    ~16px radius, generous ~20px inner padding, solid #262626
+                    ~16px radius, generous ~20px inner padding, solid #1f1f1c
                     fill, no border/shadow. */}
                 <div className="rounded-2xl bg-zinc-800 p-3 sm:p-5 transition-colors">
 

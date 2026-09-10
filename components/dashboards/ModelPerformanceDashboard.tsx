@@ -190,7 +190,7 @@ const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
             <div className="flex justify-center mb-3">
                 <WinRateRing
                     percentage={stats.last20WinRate}
-                    color={stats.isDemoted ? '#4f4f57' : color}
+                    color={stats.isDemoted ? '#56564f' : color}
                 />
             </div>
 
