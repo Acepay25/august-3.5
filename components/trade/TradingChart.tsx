@@ -42,9 +42,8 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     const [widgetId] = useState(() => `tradingview_${Math.random().toString(36).slice(2, 10)}`);
 
     useEffect(() => {
-        let cancelled = false;
         const init = () => {
-            if (cancelled || !window.TradingView || !containerRef.current) return;
+            if (!window.TradingView || !containerRef.current) return;
             containerRef.current.innerHTML = '';
             widgetRef.current = new window.TradingView.widget({
                 autosize: true,
@@ -65,15 +64,22 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         };
         if (window.TradingView) {
             init();
-        } else if (!document.querySelector('script[src*="tradingview"]')) {
-            const script = document.createElement('script');
-            script.src = 'https://s3.tradingview.com/tv.js';
-            script.async = true;
-            script.onload = init;
-            document.head.appendChild(script);
+        } else {
+            // A prior mount may already be loading tv.js (StrictMode re-runs,
+            // or the other TradingView surface). Attach to that in-flight
+            // script instead of racing it — a second <script> would double-load.
+            const existing = document.querySelector<HTMLScriptElement>('script[src*="tradingview"]');
+            if (existing) {
+                existing.addEventListener('load', init);
+            } else {
+                const script = document.createElement('script');
+                script.src = 'https://s3.tradingview.com/tv.js';
+                script.async = true;
+                script.onload = init;
+                document.head.appendChild(script);
+            }
         }
         return () => {
-            cancelled = true;
             try { widgetRef.current?.remove?.(); } catch { /* older builds lack remove */ }
             widgetRef.current = null;
             if (containerRef.current) containerRef.current.innerHTML = '';
