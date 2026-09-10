@@ -338,6 +338,21 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         || chatProviders[0]?.selectedModel
         || chatProviders[0]?.models[0]
         || '';
+
+    // Minara's suggestion row, August's verbs: seeds that fill the composer
+    // or arm a mode chip — they never send on their own. The coin guess just
+    // personalizes the seed text; an empty composer after clicking is fine.
+    const suggestionChips = React.useMemo(() => {
+        const coin = /\b([A-Za-z]{2,10})(?:USDT?)?\b/.exec(input)?.[1]?.toUpperCase() || 'BTC';
+        return [
+            { label: 'Trending', run: () => onOpenLiveMarket?.() },
+            { label: 'Macro', run: () => setInput(`What's the macro backdrop for ${coin} right now — funding, session, upcoming events?`) },
+            { label: 'Sentiment', run: () => setInput(`How positioned is the ${coin} tape — funding, open interest, liquidations, crowd?`) },
+            { label: 'Deep Research', run: () => setComposerMode?.('research') },
+            { label: 'Visualize', run: () => setComposerMode?.('visualize') },
+            { label: 'Journal', run: () => onOpenSettings?.('journal') },
+        ];
+    }, [input, setInput, setComposerMode, onOpenLiveMarket, onOpenSettings]);
     const rosterSlots = React.useMemo(
         () => buildTeamRoster(lensConfig, ensembleModelSelection, providers),
         [providers, ensembleModelSelection, lensConfig],
@@ -410,10 +425,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     </div>
                 )}
 
-                {/* Main Input Container — pill proportions:
-                    ~16px radius, generous ~20px inner padding, solid #1f1f1c
-                    fill, no border/shadow. */}
-                <div className="rounded-2xl bg-zinc-800 p-3 sm:p-5 transition-colors">
+                {/* Main Input Container — Minara composer proportions:
+                    16px radius, generous inner padding, warm raised fill
+                    (#1f1f1c) under a single hairline. */}
+                <div className="rounded-2xl border border-white/[0.07] bg-zinc-800 p-3 sm:p-5 transition-colors">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -659,6 +674,26 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         again at the composer was redundant with the model
                         picker and the Team chip. */}
                 </div>
+
+                {/* Suggestion tab strip (Minara arrangement): ready-made
+                    starting points UNDER the input — the bottom of the chat
+                    box, exactly where Minara puts its Trending/Crypto/Macro
+                    row. Hidden mid-run (the dock is a Stop control then) and
+                    inside 1:1 threads (the thread header carries context). */}
+                {!isAnalysisInProgress && !threadMode && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5" data-testid="composer-suggestions">
+                        {suggestionChips.map(s => (
+                            <button
+                                key={s.label}
+                                type="button"
+                                onClick={s.run}
+                                className="rounded-full border border-white/[0.07] bg-zinc-900/70 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-white/15 hover:text-zinc-200"
+                            >
+                                {s.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Prompt editor modal — view/modify the prompt of the current mode. */}

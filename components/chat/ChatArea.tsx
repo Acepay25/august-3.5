@@ -804,14 +804,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </>
             ) : messages.length === 0 && !visibleBot ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
-                    {/* Home hero: serif greeting ALONE on the page
-                        background — no spark/asterisk mark beside it. */}
+                    {/* Home hero: serif greeting (DM Serif Text via --font-serif)
+                        in Minara's brand gradient — the one place the gradient
+                        lives besides the wordmark and active nav. */}
                     <div className="mb-10 flex items-center justify-center">
-                        <h1 className="text-center font-serif text-[32px] tracking-tight text-white sm:text-[40px]">
+                        <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text text-center font-serif text-[32px] tracking-tight text-transparent sm:text-[40px]">
                             {heroGreeting}
                         </h1>
                     </div>
-                    <div className="w-full max-w-[680px]">
+                    <div className="w-full max-w-[880px]">
                         <ChatInput {...chatInputProps} centered />
                     </div>
                 </div>

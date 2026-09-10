@@ -202,7 +202,7 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100 leading-none">August Trading</h1>
+                            <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text font-serif text-lg leading-none tracking-tight text-transparent sm:text-xl">August Trading</h1>
 
                             {/* Chat / Floor mode toggle — the two ways to
                                 see the company: converse (chat) or watch
