@@ -89,6 +89,10 @@ export interface OrderBookData {
     spread: number;
     spreadPercent: number;
 
+    // Raw price/qty ladders (best-first) for a DOM order-book column.
+    bids: { price: number; qty: number }[];
+    asks: { price: number; qty: number }[];
+
     // Aggregated depth (within 1% of current price)
     bidDepth: number;              // Total bid volume within 1%
     askDepth: number;              // Total ask volume within 1%
@@ -590,6 +594,47 @@ export const fetchFundingRate = async (symbol: string): Promise<number> => {
 };
 
 /**
+ * Mark / index price + funding clock from the SAME premiumIndex payload
+ * fetchFundingRate already reads (it discarded these fields). The trade
+ * surface's stats strip shows Mark and Oracle (index) like Minara's perps
+ * header; nextFundingTime drives the countdown.
+ */
+export interface MarkIndexData {
+    markPrice: number;
+    indexPrice: number;
+    lastFundingRate: number;
+    nextFundingTime: number; // epoch ms
+    available: boolean;
+}
+
+export const fetchMarkIndex = async (symbol: string): Promise<MarkIndexData> => {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const cacheKey = `markindex_${normalizedSymbol}`;
+    const cached = getCached<MarkIndexData>(cacheKey);
+    if (cached) return cached;
+    const empty: MarkIndexData = { markPrice: 0, indexPrice: 0, lastFundingRate: 0, nextFundingTime: 0, available: false };
+    try {
+        const response = await robustFuturesFetch(`/fapi/v1/premiumIndex?symbol=${normalizedSymbol}`);
+        const data = await response.json();
+        const num = (v: unknown): number => (typeof v === 'string' || typeof v === 'number') ? parseFloat(String(v)) : NaN;
+        const markPrice = num(data?.markPrice);
+        const indexPrice = num(data?.indexPrice);
+        const result: MarkIndexData = {
+            markPrice: Number.isFinite(markPrice) ? markPrice : 0,
+            indexPrice: Number.isFinite(indexPrice) ? indexPrice : 0,
+            lastFundingRate: Number.isFinite(num(data?.lastFundingRate)) ? num(data.lastFundingRate) : 0,
+            nextFundingTime: Number.isFinite(num(data?.nextFundingTime)) ? num(data.nextFundingTime) : 0,
+            available: Number.isFinite(markPrice) || Number.isFinite(indexPrice),
+        };
+        setCache(cacheKey, result);
+        return result;
+    } catch (error) {
+        console.warn(`Failed to fetch mark/index for ${normalizedSymbol}:`, error);
+        return empty;
+    }
+};
+
+/**
  * Fetch Open Interest from Binance Futures (PUBLIC - No API Key Required)
  */
 export const fetchOpenInterest = async (symbol: string): Promise<{ oi: number; oiValue: number }> => {
@@ -921,6 +966,8 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
             bestAsk,
             spread,
             spreadPercent,
+            bids: bids.slice(0, 25),
+            asks: asks.slice(0, 25),
             bidDepth,
             askDepth,
             depthImbalance,
@@ -944,6 +991,8 @@ const getDefaultOrderBook = (): OrderBookData => ({
     bestAsk: 0,
     spread: 0,
     spreadPercent: 0,
+    bids: [],
+    asks: [],
     bidDepth: 0,
     askDepth: 0,
     depthImbalance: 0,
