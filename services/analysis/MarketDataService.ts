@@ -656,7 +656,7 @@ export const fetchTopFuturesSymbols = async (limit = 20): Promise<SymbolTicker[]
         const data = await response.json();
         if (!Array.isArray(data)) return [];
         const rows: SymbolTicker[] = data
-            .filter((t: any) => typeof t?.symbol === 'string' && t.symbol.endsWith('USDT') && !/[_\-]/.test(t.symbol))
+            .filter((t: any) => typeof t?.symbol === 'string' && t.symbol.endsWith('USDT') && !/[_-]/.test(t.symbol))
             .map((t: any) => ({
                 symbol: t.symbol as string,
                 lastPrice: parseFloat(t.lastPrice) || 0,

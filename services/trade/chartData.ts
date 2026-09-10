@@ -21,8 +21,8 @@ export interface VolumePoint {
     color: string;
 }
 
-const UP = 'rgba(7, 181, 106, 0.45)';   // theme green
-const DOWN = 'rgba(247, 93, 95, 0.45)'; // theme red
+export const VOLUME_UP = 'rgba(7, 181, 106, 0.45)';   // theme green
+export const VOLUME_DOWN = 'rgba(247, 93, 95, 0.45)'; // theme red
 
 export const toCandles = (klines: Kline[]): CandlePoint[] => klines
     .filter(k => Number.isFinite(k.open) && Number.isFinite(k.high) && Number.isFinite(k.low) && Number.isFinite(k.close))
@@ -30,7 +30,7 @@ export const toCandles = (klines: Kline[]): CandlePoint[] => klines
 
 export const toVolumes = (klines: Kline[]): VolumePoint[] => klines
     .filter(k => Number.isFinite(k.volume))
-    .map(k => ({ time: Math.floor(k.time / 1000), value: k.volume, color: k.close >= k.open ? UP : DOWN }));
+    .map(k => ({ time: Math.floor(k.time / 1000), value: k.volume, color: k.close >= k.open ? VOLUME_UP : VOLUME_DOWN }));
 
 export interface ChartLevel {
     label: string;

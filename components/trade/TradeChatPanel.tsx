@@ -3,11 +3,15 @@
  * a chat docked beside the chart where EVERY message carries a freshly
  * fetched, code-calculated market packet (the chart in words — candles
  * state, indicators, funding, OI, book walls, liquidations, session) and the
- * model can pull even newer data itself through the desk tools. No order
- * execution — this is the copilot read of the tape, not a trade button.
+ * model can pull even newer data itself through the desk tools — including
+ * get_market_packet (the full hybrid pull) and get_chart_view (exactly what
+ * the user is looking at: timeframe, last 60 candles, live mark, drawn
+ * verdict levels). No order execution — this is the copilot read of the
+ * tape, not a trade button.
  *
- * Ephemeral by design (like BotManagerDrawer): the panel is a live
- * assistant, not a journal; the persistent record stays in the main chat.
+ * The panel supports parallel chat sessions (new / switch / delete) that
+ * persist per user via services/trade/chatSessions; capped, validated, and
+ * only committed to storage once the in-flight stream settles.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -16,6 +20,9 @@ import { ChatMessage } from '../../services/providers/GenericProviderService';
 import { streamChatWithDeskTools } from '../../services/analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../../services/analysis/HybridIntelligenceService';
 import { buildTradeChatContext, TRADE_CHAT_SYSTEM_PROMPT } from '../../services/trade/tradeChatContext';
+import {
+    ChatSession, StoredChatEntry, createSession, loadSessions, saveSessions, titleFromMessage,
+} from '../../services/trade/chatSessions';
 import { getFirstReadyProvider, isProviderReady } from '../../utils/providerUtils';
 import { TASK_BUDGETS } from '../../services/providers/taskBudgets';
 import { effortForTask } from '../../services/providers/reasoningControls';
@@ -23,13 +30,9 @@ import ModelPicker from '../shared/ModelPicker';
 import { SendIcon, StopIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 
-interface ChatEntry {
-    id: string;
-    role: 'user' | 'ai';
-    text: string;
-    tools: string[];
-    streaming?: boolean;
-}
+/** Stored shape + the non-persisted streaming flag for the in-flight answer. */
+type LiveEntry = StoredChatEntry & { streaming?: boolean };
+type LiveSession = Omit<ChatSession, 'entries'> & { entries: LiveEntry[] };
 
 interface TradeChatPanelProps {
     symbol: string;
@@ -37,17 +40,28 @@ interface TradeChatPanelProps {
     providers: ProviderConfig[];
     selectedChatModel: string;
     onSelectChatModel: (modelId: string) => void;
+    /** Websocket feed status label for the header hint only — the panel's
+     *  context packet is fetched fresh per send regardless. */
+    live?: boolean;
+    /** Levels currently drawn on the chart (Entry/SL/TP) — forwarded to the
+     *  desk tools so get_chart_view can report what the user sees. */
+    chartLevels?: { label: string; price: number }[];
 }
 
 const TRADE_TOOLS = [
     'get_price_snapshot', 'get_order_book', 'get_derivatives',
-    'get_liquidations', 'get_session_context', 'web_search',
+    'get_liquidations', 'get_session_context', 'get_market_packet', 'get_chart_view',
+    'web_search',
 ];
 
 const QUICK_PROMPTS = ['Read this chart', 'Key levels?', 'What is the bias?', 'Order-flow pressure?'];
 
-const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, providers, selectedChatModel, onSelectChatModel }) => {
-    const [entries, setEntries] = useState<ChatEntry[]>([]);
+const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false, chartLevels }) => {
+    const [sessions, setSessions] = useState<LiveSession[]>(() => {
+        const loaded = loadSessions();
+        return loaded.length > 0 ? loaded : [createSession()];
+    });
+    const [activeId, setActiveId] = useState<string>(() => sessions[0].id);
     const [draft, setDraft] = useState('');
     const [busy, setBusy] = useState(false);
     const [contextAt, setContextAt] = useState<number | null>(null);
@@ -55,10 +69,24 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, provi
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+    const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
+    const entries = activeSession.entries;
+
     const provider = useMemo(() =>
         providers.find(c => isProviderReady(c) && (c.selectedModel === selectedChatModel || c.models.includes(selectedChatModel)))
         ?? getFirstReadyProvider(providers),
     [providers, selectedChatModel]);
+
+    // Persist once streams settle (not per token), debounced. Streaming flags
+    // are stripped so a half-finished answer never reaches storage.
+    useEffect(() => {
+        if (sessions.some(s => s.entries.some(e => e.streaming))) return;
+        const id = window.setTimeout(() => saveSessions(sessions.map(s => ({
+            ...s,
+            entries: s.entries.map(({ streaming: _streaming, ...stored }) => stored),
+        }))), 400);
+        return () => window.clearTimeout(id);
+    }, [sessions]);
 
     // Follow the bottom while the answer streams.
     useEffect(() => {
@@ -68,15 +96,26 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, provi
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
+    const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
+        setSessions(prev => prev.map(s => (s.id === id ? fn(s) : s)));
+    };
+
     const send = useCallback(async (raw: string): Promise<void> => {
         const text = raw.trim();
         if (!text || busy) return;
         if (!provider) return;
         setDraft('');
-        const userEntry: ChatEntry = { id: `u-${Date.now()}`, role: 'user', text, tools: [] };
-        const aiEntry: ChatEntry = { id: `a-${Date.now()}`, role: 'ai', text: '', tools: [], streaming: true };
-        const history = entries;
-        setEntries(prev => [...prev, userEntry, aiEntry]);
+        const sid = activeId;
+        const session = sessions.find(s => s.id === sid);
+        const history = session?.entries ?? [];
+        const userEntry: LiveEntry = { id: `u-${Date.now()}`, role: 'user', text, tools: [] };
+        const aiEntry: LiveEntry = { id: `a-${Date.now()}`, role: 'ai', text: '', tools: [], streaming: true };
+        mutate(sid, s => ({
+            ...s,
+            title: s.entries.some(e => e.role === 'user') ? s.title : titleFromMessage(text),
+            updatedAt: Date.now(),
+            entries: [...s.entries, userEntry, aiEntry],
+        }));
         setBusy(true);
         const controller = new AbortController();
         abortRef.current = controller;
@@ -100,8 +139,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, provi
             { role: 'user', content: `${contextBlock}\n\n${text}` },
         ];
 
-        const patch = (fn: (e: ChatEntry) => ChatEntry): void => {
-            setEntries(prev => prev.map(e => (e.id === aiEntry.id ? fn(e) : e)));
+        const patch = (fn: (e: LiveEntry) => LiveEntry): void => {
+            mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: s.entries.map(e => (e.id === aiEntry.id ? fn(e) : e)) }));
         };
         try {
             const stream = streamChatWithDeskTools(
@@ -114,6 +153,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, provi
                     maxTokens: TASK_BUDGETS.chat,
                     temperature: 0.4,
                     reasoningEffort: effortForTask('chat'),
+                    chartInterval: interval,
+                    chartLevels,
                     onToolEvent: (line: string) => patch(e => ({ ...e, tools: [...e.tools, line] })),
                 },
             );
@@ -129,14 +170,40 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, provi
             setBusy(false);
             abortRef.current = null;
         }
-    }, [busy, entries, interval, provider, symbol]);
+    }, [busy, chartLevels, activeId, interval, provider, sessions, symbol]);
+
+    const addSession = useCallback((): void => {
+        abortRef.current?.abort();
+        const fresh = createSession();
+        setSessions(prev => [...prev, fresh]);
+        setActiveId(fresh.id);
+    }, []);
+
+    const switchTo = useCallback((id: string): void => {
+        if (id === activeId) return;
+        abortRef.current?.abort();
+        setActiveId(id);
+    }, [activeId]);
+
+    const removeSession = useCallback((id: string): void => {
+        abortRef.current?.abort();
+        const next = sessions.filter(s => s.id !== id);
+        if (next.length === 0) {
+            const fresh = createSession();
+            setSessions([fresh]);
+            setActiveId(fresh.id);
+            return;
+        }
+        setSessions(next);
+        if (id === activeId) setActiveId(next[next.length - 1].id);
+    }, [sessions, activeId]);
 
     const ready = !!provider;
 
     return (
         <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40" data-testid="trade-chat-panel">
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-3 py-2">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : 'bg-emerald-500'}`} aria-hidden />
+                <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
                 <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-300">Chart AI</span>
                 <span className="truncate font-mono text-[10px] text-zinc-600" title={contextAt ? `Live packet fetched ${new Date(contextAt).toISOString()}` : 'No packet yet'}>
                     {contextAt ? `ctx ${new Date(contextAt).toLocaleTimeString()}` : `${symbol} · ${interval}`}
@@ -146,11 +213,35 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({ symbol, interval, provi
                 </div>
             </div>
 
+            {/* Session tabs: parallel chats about the tape, persisted per user. */}
+            <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.06] px-2 py-1" data-testid="chat-sessions">
+                <button type="button" onClick={addSession} aria-label="New chat session"
+                    className="shrink-0 rounded-full border border-white/[0.07] px-2 py-0.5 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
+                    + New
+                </button>
+                {sessions.map(s => (
+                    <span key={s.id}
+                        className={`group flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                            s.id === activeId ? 'border-white/15 bg-zinc-700 text-zinc-100' : 'border-white/[0.07] text-zinc-500 hover:text-zinc-200'
+                        }`}>
+                        <button type="button" onClick={() => switchTo(s.id)} className="max-w-[110px] truncate" title={s.title}>
+                            {s.title}
+                        </button>
+                        {sessions.length > 1 && (
+                            <button type="button" onClick={() => removeSession(s.id)} aria-label={`Delete session ${s.title}`}
+                                className="px-0.5 text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-400">
+                                ×
+                            </button>
+                        )}
+                    </span>
+                ))}
+            </div>
+
             <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto custom-scrollbar px-3 py-3">
                 {entries.length === 0 && (
                     <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
                         <p className="text-[11px] leading-5 text-zinc-500">
-                            The model sees this chart live — a fresh code-calculated market packet rides every message, and it can pull the book, funding and liquidations itself.
+                            The model sees this chart live — a fresh code-calculated market packet rides every message, and it can pull the book, funding, liquidations, the full hybrid packet or the exact candles on screen itself.
                         </p>
                         <div className="flex flex-wrap justify-center gap-1.5">
                             {QUICK_PROMPTS.map(q => (

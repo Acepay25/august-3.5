@@ -6,15 +6,28 @@
  * + futures rate budget keep the polling honest.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { fetchOrderBookDepth, type OrderBookData } from '../../services/analysis/MarketDataService';
+import type { LiveDepth } from '../../services/trade/futuresStreams';
 
 interface OrderBookPanelProps {
     symbol: string;
+    /** Websocket depth20@100ms is up: the ladder comes from liveDepth and
+     *  the 5s REST poll stops (it stays as the fallback). */
+    live?: boolean;
+    liveDepth?: LiveDepth | null;
 }
 
 const fmtQty = (n: number): string => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toFixed(n >= 10 ? 1 : 3);
 const fmtPrice = (n: number): string => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: n >= 1000 ? 2 : 4 });
+
+/** Wall = level ≥3× the average size of the visible ladder (the same rule
+ *  the REST OrderBookData uses, recomputed locally for the live snapshot). */
+const wallPrices = (levels: { price: number; qty: number }[]): Set<number> => {
+    if (levels.length === 0) return new Set();
+    const avg = levels.reduce((s, l) => s + l.qty, 0) / levels.length;
+    return new Set(levels.filter(l => l.qty >= avg * 3).map(l => l.price));
+};
 
 const Row: React.FC<{ side: 'bid' | 'ask'; price: number; qty: number; maxQty: number; wall: boolean }> = ({ side, price, qty, maxQty, wall }) => (
     <div className="relative flex items-center justify-between px-2 py-[1.5px] font-mono text-[10.5px] tabular-nums">
@@ -28,12 +41,12 @@ const Row: React.FC<{ side: 'bid' | 'ask'; price: number; qty: number; maxQty: n
     </div>
 );
 
-const isWall = (level: { price: number }, walls: { price: number }[]): boolean => walls.some(w => w.price === level.price);
-
-const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol }) => {
+const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, liveDepth }) => {
     const [book, setBook] = useState<OrderBookData | null>(null);
 
+    // Fallback poll only while the socket is down.
     useEffect(() => {
+        if (live) return;
         let cancelled = false;
         let timer = 0;
         const load = async (): Promise<void> => {
@@ -45,37 +58,45 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol }) => {
         };
         void load();
         return () => { cancelled = true; window.clearTimeout(timer); };
-    }, [symbol]);
+    }, [symbol, live]);
 
-    const asks = book?.asks ?? [];
-    const bids = book?.bids ?? [];
+    const usingLive = live && !!liveDepth;
+    const asks = usingLive ? liveDepth!.asks : book?.asks ?? [];
+    const bids = usingLive ? liveDepth!.bids : book?.bids ?? [];
     // Minara shows asks best-at-bottom: reverse so the spread sits between.
     const asksView = [...asks].reverse().slice(0, 12);
     const bidsView = bids.slice(0, 12);
     const maxQty = Math.max(1, ...asksView.map(a => a.qty), ...bidsView.map(b => b.qty));
+    const sellWalls = useMemo(() => wallPrices(asksView), [asksView]);
+    const buyWalls = useMemo(() => wallPrices(bidsView), [bidsView]);
+    const bestBid = bidsView[0]?.price ?? book?.bestBid ?? 0;
+    const bestAsk = asksView[asksView.length - 1]?.price ?? book?.bestAsk ?? 0;
+    const spreadPercent = bestAsk && bestBid ? ((bestAsk - bestBid) / bestAsk) * 100 : 0;
+    const dominant: 'buyers' | 'sellers' | 'balanced' = usingLive
+        ? (bidsView.reduce((s, l) => s + l.qty, 0) > asksView.reduce((s, l) => s + l.qty, 0) * 1.15 ? 'buyers'
+            : asksView.reduce((s, l) => s + l.qty, 0) > bidsView.reduce((s, l) => s + l.qty, 0) * 1.15 ? 'sellers' : 'balanced')
+        : book?.dominantSide ?? 'balanced';
 
     return (
         <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40">
             <div className="flex shrink-0 items-center justify-between px-2 py-1.5">
                 <span className="ui-kicker">Order Book</span>
-                {book?.available && (
-                    <span className={`font-mono text-[10px] tabular-nums ${book.dominantSide === 'buyers' ? 'text-emerald-400' : book.dominantSide === 'sellers' ? 'text-rose-400' : 'text-zinc-500'}`}>
-                        {book.dominantSide}
-                    </span>
-                )}
+                <span className={`font-mono text-[10px] ${usingLive ? 'text-emerald-400' : 'text-zinc-600'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
+                    {usingLive ? 'live' : `${dominant}`}
+                </span>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">
                 {asksView.map(a => (
-                    <Row key={`a${a.price}`} side="ask" price={a.price} qty={a.qty} maxQty={maxQty} wall={isWall(a, book?.sellWalls ?? [])} />
+                    <Row key={`a${a.price}`} side="ask" price={a.price} qty={a.qty} maxQty={maxQty} wall={sellWalls.has(a.price)} />
                 ))}
                 <div className="my-1 flex items-center justify-between border-y border-white/[0.06] bg-zinc-900/60 px-2 py-1 font-mono text-[10px] tabular-nums text-zinc-400">
-                    <span className={book && book.spreadPercent > 0.05 ? 'text-amber-400' : ''}>spread {book ? `${book.spreadPercent.toFixed(3)}%` : '—'}</span>
-                    <span className="text-zinc-300">{book?.bestAsk ? fmtPrice(book.bestAsk) : '—'}</span>
+                    <span className={spreadPercent > 0.05 ? 'text-amber-400' : ''}>spread {spreadPercent.toFixed(3)}%</span>
+                    <span className="text-zinc-300">{bestAsk ? fmtPrice(bestAsk) : '—'}</span>
                 </div>
                 {bidsView.map(b => (
-                    <Row key={`b${b.price}`} side="bid" price={b.price} qty={b.qty} maxQty={maxQty} wall={isWall(b, book?.buyWalls ?? [])} />
+                    <Row key={`b${b.price}`} side="bid" price={b.price} qty={b.qty} maxQty={maxQty} wall={buyWalls.has(b.price)} />
                 ))}
-                {!book && <p className="px-2 py-3 text-[11px] text-zinc-600">Loading book…</p>}
+                {asksView.length === 0 && bidsView.length === 0 && <p className="px-2 py-3 text-[11px] text-zinc-600">Loading book…</p>}
             </div>
         </div>
     );

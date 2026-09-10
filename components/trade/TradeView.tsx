@@ -1,15 +1,18 @@
 /**
  * TradeView — August's take on Minara's /app/trade/perps/BTC screen, dark:
  * a stats strip (Mark / Oracle / 24h / Volume / OI / Funding + countdown)
- * over a full-height TradingView chart, with the order-book ladder and the
- * live-context Chart AI chat docked to the right. Presentation over the
- * existing Binance services — no order execution (there is none to hang).
+ * over a full-height canvas chart, with the order-book ladder and the
+ * live-context Chart AI chat docked to the right. Push-first: one websocket
+ * bundle per symbol drives strip + book + candles; REST polling takes over
+ * the moment the socket drops. Presentation only — no order execution.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis } from '../../types';
 import { fetchMarkIndex, fetchMarketData, fetchDerivativesData, fetchTopFuturesSymbols, type SymbolTicker } from '../../services/analysis/MarketDataService';
+import { verdictLevels } from '../../services/trade/chartData';
+import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import TradingChart, { CHART_INTERVALS, type ChartInterval } from './TradingChart';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel from './TradeChatPanel';
@@ -62,6 +65,12 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [symbols, setSymbols] = useState<SymbolTicker[]>(FALLBACK_SYMBOLS);
 
+    // Push-first feed: markPrice@1s + depth20@100ms + ticker + kline over two
+    // websockets. `live` gates every REST poll below — polling is the
+    // fallback, never the primary path while the socket is up.
+    const feed = useFuturesLiveFeed(symbol, interval);
+    const live = feed.status === 'live';
+
     // Dynamic universe: top USDT perps by 24h volume, one public call, 60s
     // refresh; the static fallback keeps the picker usable offline.
     useEffect(() => {
@@ -75,9 +84,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         return () => { cancelled = true; window.clearInterval(poll); };
     }, []);
 
-    // Stats strip: 15s refresh (service caches dedupe the fan-out), 1s tick
-    // only for the funding countdown.
+    // Fallback strip (only while the socket is down): 15s refresh.
     useEffect(() => {
+        if (live) return;
         let cancelled = false;
         const load = async (): Promise<void> => {
             try {
@@ -101,14 +110,41 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         };
         void load();
         const poll = window.setInterval(() => void load(), 15_000);
+        return () => { cancelled = true; window.clearInterval(poll); };
+    }, [symbol, live]);
+
+    // OI has no public stream — seed/refresh it on the slow poll even when
+    // the rest of the strip is live.
+    useEffect(() => {
+        let cancelled = false;
+        void fetchDerivativesData(symbol).then(d => {
+            if (!cancelled) setStrip(prev => (prev ? { ...prev, oiValue: d.openInterestValue ?? prev.oiValue } : prev));
+        }).catch(() => { /* keep last */ });
+        return () => { cancelled = true; };
+    }, [symbol, live]);
+
+    // 1s tick for the funding countdown.
+    useEffect(() => {
         const tick = window.setInterval(() => setNowMs(Date.now()), 1000);
-        return () => { cancelled = true; window.clearInterval(poll); window.clearInterval(tick); };
-    }, [symbol]);
+        return () => window.clearInterval(tick);
+    }, []);
+
+    // Live values override polled ones while the socket is up.
+    const markPrice = feed.markIndex?.markPrice ?? strip?.markPrice;
+    const indexPrice = feed.markIndex?.indexPrice ?? strip?.indexPrice;
+    const fundingRate = feed.markIndex?.fundingRate ?? strip?.lastFundingRate;
+    const nextFundingTime = feed.markIndex?.nextFundingTime ?? strip?.nextFundingTime;
+    const changePct = feed.ticker?.changePercent24h ?? strip?.changePercent24h;
+    const quoteVolume = feed.ticker?.quoteVolume24h ?? strip?.volume24h;
+    const lastPrice = feed.ticker?.lastPrice ?? markPrice;
+    // What's drawn on the chart right now — forwarded to the chat so its
+    // get_chart_view tool can tell the model what the user is looking at.
+    const chartLevels = useMemo(() => verdictLevels(verdict, symbol), [verdict, symbol]);
 
     const changeTone = useMemo(() => {
-        const v = strip?.changePercent24h ?? 0;
+        const v = changePct ?? 0;
         return v > 0 ? 'text-emerald-400' : v < 0 ? 'text-rose-400' : 'text-zinc-300';
-    }, [strip]);
+    }, [changePct]);
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trade-view">
@@ -126,28 +162,40 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         </option>)}
                     </select>
                 </div>
-                <Stat label="Mark" value={strip?.markPrice ? fmtPrice(strip.markPrice) : '—'} />
-                <Stat label="Oracle" value={strip?.indexPrice ? fmtPrice(strip.indexPrice) : '—'} />
-                <Stat label="24h Change" value={strip ? `${strip.changePercent24h >= 0 ? '+' : ''}${strip.changePercent24h.toFixed(2)}%` : '—'} />
-                <Stat label="24h Volume" value={strip ? fmtUsd(strip.volume24h) : '—'} />
+                <span
+                    data-testid="feed-status"
+                    title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 15s'}
+                    className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
+                        feed.status === 'live' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                            : feed.status === 'connecting' ? 'border-white/10 bg-zinc-800 text-zinc-400'
+                                : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                    }`}
+                >
+                    {feed.status === 'live' ? '● live' : feed.status === 'connecting' ? 'connecting' : 'polling'}
+                </span>
+                <Stat label="Mark" value={Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'} />
+                <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
+                <Stat label="24h Change" value={Number.isFinite(changePct) ? `${changePct! >= 0 ? '+' : ''}${changePct!.toFixed(2)}%` : '—'} />
+                <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
-                <Stat label="Funding / Countdown" value={strip ? (
-                    <span className={strip.lastFundingRate >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                        {(strip.lastFundingRate * 100).toFixed(4)}% <span className="text-zinc-500">{fundingCountdown(strip.nextFundingTime, nowMs)}</span>
+                <Stat label="Funding / Countdown" value={Number.isFinite(fundingRate) ? (
+                    <span className={fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                        {(fundingRate! * 100).toFixed(4)}% <span className="text-zinc-500">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
                     </span>
                 ) : '—'} />
                 <span className={`ml-auto hidden shrink-0 pr-1 font-mono text-[15px] font-bold tabular-nums sm:block ${changeTone}`}>
-                    {strip?.markPrice ? fmtPrice(strip.markPrice) : ''}
+                    {Number.isFinite(lastPrice) ? fmtPrice(lastPrice!) : ''}
                 </span>
             </div>
 
             {/* Chart + book + AI chat */}
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
                 <div className="min-h-[420px] flex-1 lg:min-h-0">
-                    <TradingChart symbol={symbol} interval={interval} onIntervalChange={setInterval_} verdict={verdict} />
+                    <TradingChart symbol={symbol} interval={interval} onIntervalChange={setInterval_} verdict={verdict} live={live} liveKline={feed.kline}
+                        lastPrice={Number.isFinite(lastPrice) ? lastPrice : null} />
                 </div>
                 <div className="hidden w-48 shrink-0 md:block">
-                    <OrderBookPanel symbol={symbol} />
+                    <OrderBookPanel symbol={symbol} live={live} liveDepth={feed.depth} />
                 </div>
                 <div className="h-96 w-full shrink-0 lg:h-auto lg:w-80 xl:w-96">
                     <TradeChatPanel
@@ -156,6 +204,8 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         providers={providers}
                         selectedChatModel={selectedChatModel}
                         onSelectChatModel={onSelectChatModel}
+                        live={live}
+                        chartLevels={chartLevels}
                     />
                 </div>
             </div>

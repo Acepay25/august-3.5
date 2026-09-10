@@ -15,6 +15,7 @@ import {
     extractSymbolFromPrompt,
     fetchDerivativesData,
     fetchFundingRate,
+    fetchMarkIndex,
     fetchMarketData,
     fetchOHLCV,
     fetchOrderBookDepth,
@@ -384,6 +385,37 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
     {
         type: 'function',
         function: {
+            name: 'get_market_packet',
+            description:
+                'Pull the FULL hybrid-intelligence packet for a symbol in one call: live price + 24h, code-calculated indicators across 15m/1h/4h/1d, regime + confluence, funding + derivatives sentiment, open interest, long/short + taker ratios, liquidation pressure, order-book walls, session, VWAP, Ichimoku, momentum, key levels, detected patterns and liquidity sweeps. Call it when you need everything the harness knows about a market at once instead of separate lookups.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Symbol to pull the packet for (default: the current chart symbol).' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_chart_view',
+            description:
+                'See exactly what the user sees on the Trade chart RIGHT NOW: the chart timeframe, the last 60 candles (OHLCV, oldest→newest), the live mark price, and the verdict levels currently drawn on the chart (Entry/Stop/TPs). Call it before answering "this chart", "this candle", "here", or "what do I see" questions.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Override symbol (default: the chart\'s current symbol).' },
+                    interval: { type: 'string', description: 'Override timeframe, e.g. 15m or 1d (default: the chart\'s current interval).' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'get_session_context',
             description:
                 'Current trading session, kill zones, weekend/weekly-close flags, and timing warnings. Call when session risk matters.',
@@ -645,7 +677,7 @@ async function runPriceSnapshot(symbol: string, interval: string): Promise<strin
 
 export async function executeDeskTool(
     call: DeskToolCall,
-    context: { defaultSymbol?: string | null; signal?: AbortSignal; trades?: LoggedTrade[] } = {},
+    context: { defaultSymbol?: string | null; signal?: AbortSignal; trades?: LoggedTrade[]; chartInterval?: string; chartLevels?: { label: string; price: number }[] } = {},
 ): Promise<DeskToolResult> {
     const fallback = context.defaultSymbol || 'BTCUSDT';
     // Repeat calls within the TTL (every seat asks the same desk) are served
@@ -716,6 +748,42 @@ export async function executeDeskTool(
             case 'get_btc_context':
                 content = await runBtcContext(asSymbol(call.arguments.symbol, fallback));
                 break;
+            case 'get_market_packet': {
+                // The whole hybrid packet in one call — lazy-imported so the
+                // desk-tool layer never statically depends on the intelligence
+                // service (same cycle discipline as the eval scheduler).
+                const sym = asSymbol(call.arguments.symbol, fallback);
+                const { fetchHybridData, generateHybridPromptInjection } = await import('./HybridIntelligenceService');
+                const packet = await fetchHybridData(sym);
+                content = generateHybridPromptInjection(packet, { compact: true });
+                break;
+            }
+            case 'get_chart_view': {
+                const sym = asSymbol(call.arguments.symbol, fallback);
+                const rawInterval = String(call.arguments.interval || context.chartInterval || '15m');
+                const ivl = rawInterval.toLowerCase();
+                const { fetchKlines } = await import('./KlineService');
+                const [klines, mi] = await Promise.all([
+                    fetchKlines(sym, ivl, 60),
+                    fetchMarkIndex(sym),
+                ]);
+                if (klines.length === 0) {
+                    content = `DATA_UNAVAILABLE: get_chart_view — no candles returned for ${sym} ${ivl}. The source failed; do not infer an empty chart.`;
+                    break;
+                }
+                const rows = klines.map(k =>
+                    `${new Date(k.time).toISOString().slice(5, 16)} O${k.open} H${k.high} L${k.low} C${k.close} V${k.volume}`,
+                ).join('\n');
+                content = [
+                    `CHART VIEW — ${sym} · ${ivl} · last ${klines.length} candles (oldest→newest)`,
+                    `Live mark price: ${mi.available ? mi.markPrice : 'unavailable'}`,
+                    context.chartLevels && context.chartLevels.length > 0
+                        ? `Levels drawn on the chart: ${context.chartLevels.map(l => `${l.label} ${l.price}`).join(' · ')}`
+                        : 'No verdict levels are drawn on the chart right now.',
+                    rows,
+                ].join('\n');
+                break;
+            }
             case 'get_session_context':
                 content = runSession();
                 break;
@@ -789,7 +857,7 @@ export async function executeDeskTool(
 
 export async function executeDeskTools(
     calls: DeskToolCall[],
-    context: { defaultSymbol?: string | null; signal?: AbortSignal; trades?: LoggedTrade[] } = {},
+    context: { defaultSymbol?: string | null; signal?: AbortSignal; trades?: LoggedTrade[]; chartInterval?: string; chartLevels?: { label: string; price: number }[] } = {},
 ): Promise<DeskToolResult[]> {
     return Promise.all(calls.map(call => executeDeskTool(call, context)));
 }
@@ -915,6 +983,9 @@ export async function runDeskToolLoop(params: {
     ) => Promise<import('../providers/GenericProviderService').ChatTurnResult>;
     options?: import('../providers/GenericProviderService').ChatRequestOptions;
     defaultSymbol?: string | null;
+    /** Trade-chart context so get_chart_view can report what the USER sees. */
+    chartInterval?: string;
+    chartLevels?: { label: string; price: number }[];
     onToolEvent?: (line: string) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
@@ -944,6 +1015,8 @@ export async function runDeskToolLoop(params: {
         sendTurn,
         options,
         defaultSymbol,
+        chartInterval,
+        chartLevels,
         onToolEvent,
         onToolAction,
         speaker = '',
@@ -1048,6 +1121,8 @@ export async function runDeskToolLoop(params: {
                 defaultSymbol,
                 signal: options?.signal,
                 trades,
+                chartInterval,
+                chartLevels,
             })
             : [];
         const results = [...extraResults, ...forgedResults, ...coreResults];
@@ -1088,6 +1163,10 @@ export async function runDeskToolLoop(params: {
 
 export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     defaultSymbol?: string | null;
+    /** Trade-chart context forwarded to get_chart_view (the model sees what
+     *  the user sees: the panel's interval + drawn verdict levels). */
+    chartInterval?: string;
+    chartLevels?: { label: string; price: number }[];
     /** Override harness setting. Default: follow Settings → Desk Tools. */
     enabled?: boolean;
     /** Final-turn nudge after tools ran. */
@@ -1159,6 +1238,8 @@ export async function* streamChatWithDeskTools(
         defaultSymbol,
         afterToolsNudge,
         enabled: _enabled,
+        chartInterval,
+        chartLevels,
         onToolEvent,
         onToolAction,
         allowedTools,
@@ -1201,6 +1282,8 @@ export async function* streamChatWithDeskTools(
         sendTurn: sendChatTurn,
         options: chatOptions,
         defaultSymbol,
+        chartInterval,
+        chartLevels,
         nativeTools,
         allowedTools: mergedAllowed,
         trades,
