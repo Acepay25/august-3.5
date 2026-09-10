@@ -162,8 +162,10 @@ Optional build-time variables:
 
 ## Development Notes
 
-- Vite 7 + Tailwind v4. Theme is **Minara-derived** (user decision, 2026-09-10 —
-  this SUPERSEDES the earlier "monochrome zinc" doctrine): warm near-black chrome
+- Vite 7 + Tailwind v4. Theme is **Minara-derived DARK** (user decision,
+  2026-09-10; a light-theme experiment was tried the same day and REVERTED —
+  the user wants black, matching Minara's actual trade screen. Do not
+  re-flip to light). Warm near-black chrome
   (page `#0b0b0a`, panels `zinc-900 #141412`, raised surfaces `zinc-800 #1f1f1c`,
   hairlines `zinc-700 #2f2f2f`), warm ink ramp, and REAL semantic colors defined
   once in `index.css` `@theme` — emerald = gains/up (`#07b56a` family),
@@ -171,8 +173,8 @@ Optional build-time variables:
   Neutral utility names (`zinc-*`, `cyan-*`) were intentionally kept so components
   recolor through the token block; do not re-add gray remappings for color families.
 - **Brand gradient**: `--color-brand-start #eb53ff → --color-brand-mid #ff538e →
-  --color-brand-end #ff9a32` is reserved for the wordmark, the active-nav indicator,
-  and hero display type only — never for body text, tables, or chart fills.
+  --color-brand-end #ff9a32` is reserved for the wordmark and the active-nav
+  indicator only — never hero/body text, tables, or chart fills.
 - `.status-surface` / `.analysis-card` classes remain in JSX for compatibility but
   no longer remap colors (the global theme IS semantic now).
 - Typography: **Geist Variable** for UI (`--font-sans`), **DM Serif Text** for
