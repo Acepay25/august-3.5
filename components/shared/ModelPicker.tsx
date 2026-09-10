@@ -368,9 +368,9 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                         onMouseEnter={() => mode !== 'provider-only' && setHoveredProvider(provider.id)}
                                         className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
                                             isActive
-                                                ? 'bg-zinc-800 text-zinc-100'
+                                                ? 'bg-zinc-800 text-white'
                                                 : isCurrentProvider
-                                                    ? 'text-zinc-100'
+                                                    ? 'text-white'
                                                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                         }`}
                                     >
@@ -416,7 +416,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                                 disabled
                                                     ? 'text-zinc-600 cursor-not-allowed'
                                                     : isCurrent
-                                                        ? 'text-zinc-100 bg-zinc-800'
+                                                        ? 'text-white bg-zinc-800'
                                                         : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                             }`}
                                         >

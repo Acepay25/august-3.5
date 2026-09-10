@@ -74,7 +74,7 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search symbol or prompt…"
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-cyan-400/40"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-950 px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400/40"
           />
           <DirectionFilter value={direction} onChange={setDirection} />
         </div>

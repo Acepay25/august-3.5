@@ -194,7 +194,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search..."
-                        className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-4 sm:pl-5 pr-10 sm:pr-12 py-3 sm:py-4 text-sm sm:text-base text-zinc-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                        className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-4 sm:pl-5 pr-10 sm:pr-12 py-3 sm:py-4 text-sm sm:text-base text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                     />
                     <button
                         type="submit"

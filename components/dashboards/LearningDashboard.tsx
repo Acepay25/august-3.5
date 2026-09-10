@@ -36,7 +36,7 @@ const StatCard: React.FC<{
                     <div key={i} className="flex items-center justify-between">
                         <span className="text-sm text-zinc-300 truncate pr-2">{item.name}</span>
                         <div className="text-right">
-                            <span className={`text-sm font-bold ${item.color || 'text-zinc-100'}`}>{item.value}</span>
+                            <span className={`text-sm font-bold ${item.color || 'text-white'}`}>{item.value}</span>
                             {item.subtext && <span className="text-[10px] text-zinc-500 ml-1">{item.subtext}</span>}
                         </div>
                     </div>
@@ -640,12 +640,12 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
                     <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Setups indexed</p>
-                    <p className="text-xl font-black text-zinc-100">{poolStats.indexed}</p>
+                    <p className="text-xl font-black text-white">{poolStats.indexed}</p>
                     <p className="text-[9px] text-zinc-600">closed trades in pool</p>
                 </div>
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
                     <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Avg matches / query</p>
-                    <p className="text-xl font-black text-zinc-100">{poolStats.avgMatches.toFixed(1)}</p>
+                    <p className="text-xl font-black text-white">{poolStats.avgMatches.toFixed(1)}</p>
                     <p className="text-[9px] text-zinc-600">sampled {poolStats.sampled} queries</p>
                 </div>
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
@@ -817,19 +817,19 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 <div className="grid grid-cols-3 gap-2 sm:gap-4">
                     <div className="bg-zinc-900 rounded-xl p-2 sm:p-3 border border-white/5">
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Worth-gate precision</p>
-                        <p className="text-sm sm:text-base font-bold text-zinc-100">
+                        <p className="text-sm sm:text-base font-bold text-white">
                             {metaCalibration.worthGatePrecision !== null ? `${Math.round(metaCalibration.worthGatePrecision * 100)}%` : '—'}
                         </p>
                     </div>
                     <div className="bg-zinc-900 rounded-xl p-2 sm:p-3 border border-white/5">
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Refinement recovery</p>
-                        <p className="text-sm sm:text-base font-bold text-zinc-100">
+                        <p className="text-sm sm:text-base font-bold text-white">
                             {metaCalibration.refinementRecovery !== null ? `${Math.round(metaCalibration.refinementRecovery * 100)}%` : '—'}
                         </p>
                     </div>
                     <div className="bg-zinc-900 rounded-xl p-2 sm:p-3 border border-white/5">
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Eval agreement</p>
-                        <p className="text-sm sm:text-base font-bold text-zinc-100">
+                        <p className="text-sm sm:text-base font-bold text-white">
                             {metaCalibration.evalAgreement !== null ? `${Math.round(metaCalibration.evalAgreement * 100)}%` : '—'}
                         </p>
                     </div>
@@ -838,15 +838,15 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
 
             {/* Overall Performance */}
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                <div className="bg-gradient-to-br from-cyan-100/70 to-zinc-900 rounded-xl p-3 sm:p-4 border border-cyan-500/20">
+                <div className="bg-gradient-to-br from-cyan-950/50 to-zinc-900 rounded-xl p-3 sm:p-4 border border-cyan-500/20">
                     <p className="text-[9px] sm:text-xs text-cyan-400/70 uppercase tracking-wider mb-1">Win Rate</p>
                     <p className={`text-2xl sm:text-3xl font-black ${getWinRateColor(profile.overallWinRate)}`}>
                         {profile.overallWinRate}%
                     </p>
                 </div>
-                <div className="bg-gradient-to-br from-purple-100/70 to-zinc-900 rounded-xl p-3 sm:p-4 border border-purple-500/20">
+                <div className="bg-gradient-to-br from-purple-950/50 to-zinc-900 rounded-xl p-3 sm:p-4 border border-purple-500/20">
                     <p className="text-[9px] sm:text-xs text-purple-400/70 uppercase tracking-wider mb-1">Trades</p>
-                    <p className="text-2xl sm:text-3xl font-black text-zinc-100">
+                    <p className="text-2xl sm:text-3xl font-black text-white">
                         {profile.totalAnalyzedTrades}
                     </p>
                 </div>
@@ -969,7 +969,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                 ? 'text-red-400'
                                 : review?.recommendation === 'promote' || lift?.verdict === 'positive'
                                     ? 'text-emerald-400'
-                                    : 'text-zinc-100',
+                                    : 'text-white',
                         };
                     })}
                     emptyText="Closed trades with an IF/THEN become skills"

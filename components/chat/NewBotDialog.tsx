@@ -412,7 +412,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         onClick={create}
                         disabled={!canCreate}
                         data-testid="create-bot"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-[13px] font-bold text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-lg bg-zinc-200 px-4 py-2 text-[13px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         Create Bot
                     </button>

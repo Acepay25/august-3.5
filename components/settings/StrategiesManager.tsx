@@ -228,7 +228,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
             <div className="px-6 py-4 border-b border-zinc-800/80 shrink-0 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <h3 className="text-sm font-bold text-zinc-100 tracking-tight">Strategies</h3>
+                        <h3 className="text-sm font-bold text-white tracking-tight">Strategies</h3>
                         <p className="text-[11px] text-zinc-500 mt-0.5">
                             Upload trading books (PDF) — a model summarizes them into strategies every analyst and the moderator follow.
                         </p>

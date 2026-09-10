@@ -79,11 +79,11 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                   </button>
               )}
               <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl shadow-xl shadow-cyan-500/20 flex items-center justify-center text-zinc-100 transform rotate-3 hover:rotate-0 transition-transform duration-500">
+                  <div className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl shadow-xl shadow-cyan-500/20 flex items-center justify-center text-white transform rotate-3 hover:rotate-0 transition-transform duration-500">
                       <BotIcon />
                   </div>
               </div>
-              <h1 className="text-3xl font-black text-zinc-100 tracking-tight mb-2">August Trading</h1>
+              <h1 className="text-3xl font-black text-white tracking-tight mb-2">August Trading</h1>
               <p className="text-zinc-400 text-sm font-medium">Advanced Trading Intelligence Terminal</p>
           </div>
 
@@ -120,7 +120,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                         value={newUsername} 
                         onChange={(e) => { setNewUsername(e.target.value); setFormError(''); }} 
                         placeholder="Create New Workspace" 
-                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
+                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
                         autoFocus
                         aria-invalid={!!formError}
                         aria-describedby={formError ? 'username-error' : undefined}

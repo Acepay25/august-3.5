@@ -289,7 +289,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                         <div key={session.id} className="flex items-center justify-between text-xs py-0.5">
                                                             <div className="flex items-center gap-2 min-w-0">
                                                                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(176, 176, 182,0.5)]' : 'bg-zinc-700'}`} />
-                                                                <span className={session.isOpen ? 'text-zinc-100 font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
+                                                                <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                                                 <span className={`text-[9px] px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-red-500/30 text-red-400 bg-red-500/10' :
@@ -427,7 +427,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                         <BotIcon />
                                     </div>
                                     <div>
-                                        <h2 className="font-bold text-zinc-100">August Trading</h2>
+                                        <h2 className="font-bold text-white">August Trading</h2>
                                         <span className="text-[10px] text-zinc-500">{activeUsername}</span>
                                     </div>
                                 </div>

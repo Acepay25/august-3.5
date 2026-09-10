@@ -765,7 +765,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 value={symbol}
                                 onChange={(e) => setSymbol(e.target.value)}
                                 aria-label="Market symbol"
-                                className="appearance-none bg-zinc-800 text-zinc-100 text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[112px]"
+                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[112px]"
                             >
                                 {ASSETS.map(a => <option key={a} value={a}>{a.replace('USDT', '')}</option>)}
                             </select>
@@ -780,7 +780,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 value={chartInterval}
                                 onChange={(e) => setChartInterval(e.target.value)}
                                 aria-label="Chart interval"
-                                className="appearance-none bg-zinc-800 text-zinc-100 text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
+                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
                             >
                                 {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}
                             </select>
@@ -803,7 +803,7 @@ ${JSON.stringify(marketData, null, 2)}
                         <button
                             onClick={handleExtractAndAnalyze}
                             disabled={!!analysisProgress}
-                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-zinc-100 text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
+                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
                         >
                             {analysisProgress ? <LoadingIcon className="w-4 h-4" /> : <CameraIcon className="w-4 h-4" />}
                             <span>{analysisProgress || 'Analyze'}</span>
@@ -850,7 +850,7 @@ ${JSON.stringify(marketData, null, 2)}
                                                     <span className={level.type === 'resistance' ? 'text-rose-400' : 'text-emerald-400'}>
                                                         {level.type === 'resistance' ? 'R' : 'S'}
                                                     </span>
-                                                    <span className="font-mono text-zinc-100">${level.price.toLocaleString()}</span>
+                                                    <span className="font-mono text-white">${level.price.toLocaleString()}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -999,7 +999,7 @@ ${JSON.stringify(marketData, null, 2)}
                             value={newAlertPrice}
                             onChange={(e) => setNewAlertPrice(e.target.value)}
                             placeholder="Target Price"
-                            className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-zinc-100 focus:border-cyan-500 outline-none"
+                            className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-cyan-500 outline-none"
                         />
                         <button
                             type="button"
