@@ -78,6 +78,7 @@ const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
+const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
@@ -1389,7 +1390,7 @@ const App: React.FC = () => {
             // Alt+1..5 jumps the icon-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
-                '1': 'chat', '2': 'boards', '3': 'journal', '4': 'studio', '5': 'agents',
+                '1': 'chat', '2': 'trade', '3': 'journal', '4': 'studio', '5': 'agents',
             };
             if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
                 e.preventDefault();
@@ -3242,13 +3243,14 @@ const App: React.FC = () => {
                     new data paths. */}
                 {surface !== 'chat' && (
                     <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
-                        {surface === 'boards' && (
-                            <LiveMarket
-                                isEmbedded
-                                isVisible
-                                onClose={() => setSurface('chat')}
-                                onAnalyze={handleLiveMarketAnalyze}
-                            />
+                        {surface === 'trade' && (
+                            <React.Suspense fallback={null}>
+                                <TradeView
+                                    providers={providerConfigs}
+                                    selectedChatModel={selectedChatModel}
+                                    onSelectChatModel={setSelectedChatModel}
+                                />
+                            </React.Suspense>
                         )}
                         {surface === 'journal' && (
                             <Journal

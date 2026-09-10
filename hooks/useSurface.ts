@@ -7,15 +7,17 @@
 
 import { useEffect, useState } from 'react';
 
-export type AppSurface = 'chat' | 'boards' | 'journal' | 'studio' | 'agents';
+export type AppSurface = 'chat' | 'trade' | 'journal' | 'studio' | 'agents';
 
 const KEY = 'august_surface_v1';
-const VALID: readonly string[] = ['chat', 'boards', 'journal', 'studio', 'agents'];
+const VALID: readonly string[] = ['chat', 'trade', 'journal', 'studio', 'agents'];
 
 export const useSurface = (): { surface: AppSurface; setSurface: (s: AppSurface) => void } => {
     const [surface, setSurface] = useState<AppSurface>(() => {
         try {
             const stored = localStorage.getItem(KEY);
+            // 'boards' was the first name of the trade surface — migrate it.
+            if (stored === 'boards') return 'trade';
             return stored && VALID.includes(stored) ? stored as AppSurface : 'chat';
         } catch { return 'chat'; }
     });

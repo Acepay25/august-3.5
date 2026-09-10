@@ -25,7 +25,7 @@ interface NavRailProps {
 
 const ITEMS: Array<{ id: AppSurface; label: string; Icon: React.FC<{ className?: string }> }> = [
     { id: 'chat', label: 'Chat', Icon: MessageSquareIcon },
-    { id: 'boards', label: 'Boards', Icon: ActivityIcon },
+    { id: 'trade', label: 'Trade', Icon: ActivityIcon },
     { id: 'journal', label: 'Journal', Icon: FileTextIcon },
     { id: 'studio', label: 'Studio', Icon: SparklesIcon },
     { id: 'agents', label: 'Agents', Icon: BotIcon },
