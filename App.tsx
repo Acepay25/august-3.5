@@ -3249,6 +3249,7 @@ const App: React.FC = () => {
                                     providers={providerConfigs}
                                     selectedChatModel={selectedChatModel}
                                     onSelectChatModel={setSelectedChatModel}
+                                    verdict={deskSceneMessage?.analysis}
                                 />
                             </React.Suspense>
                         )}

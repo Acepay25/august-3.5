@@ -48,6 +48,7 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
     "idb": "8.0.0",
+    "lightweight-charts": "^5.2.1",
     "lucide-react": "^1.26.0",
     "openai": "4.52.7",
     "pdfjs-dist": "^4.10.38",
