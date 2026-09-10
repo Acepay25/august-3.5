@@ -101,8 +101,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         };
     }, []);
 
-    // Data lifecycle: full load on symbol/interval change, then a 15s refresh
-    // that re-sets the series (300 points is trivial; keeps zoom position).
+    // Data lifecycle: full load on symbol/interval change, then refresh.
+    // While EMPTY (first load / failed load) retry fast — a slow first
+    // response shouldn't leave the chart blank for a quarter-minute; once
+    // there are candles, the 15s tail keeps them moving.
     useEffect(() => {
         let cancelled = false;
         let timer = 0;
@@ -112,7 +114,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 if (cancelled) return;
                 const cs = candlesRef.current;
                 const vs = volumeRef.current;
-                if (!cs || !vs || klines.length === 0) { setStatus('unavailable'); return; }
+                if (!cs || !vs || klines.length === 0) { setStatus('unavailable'); timer = window.setTimeout(() => void load(), 4000); return; }
                 const candles = toCandles(klines);
                 cs.setData(candles.map(c => ({ ...c, time: c.time as UTCTimestamp })));
                 vs.setData(toVolumes(klines).map(v => ({ ...v, time: v.time as UTCTimestamp })));
@@ -121,7 +123,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 timer = window.setTimeout(() => void load(), REFRESH_MS);
             } catch {
                 if (!cancelled) setStatus('unavailable');
-                timer = window.setTimeout(() => void load(), REFRESH_MS);
+                timer = window.setTimeout(() => void load(), 4000);
             }
         };
         void load();
@@ -196,7 +198,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 <div ref={hostRef} className="absolute inset-0" />
                 {status === 'unavailable' && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <p className="text-[11px] text-zinc-600">Candles unavailable — Binance fetch failed; retrying in {Math.round(REFRESH_MS / 1000)}s.</p>
+                        <p className="text-[11px] text-zinc-600">Candles unavailable — Binance fetch failed; retrying in 4s.</p>
                     </div>
                 )}
             </div>
