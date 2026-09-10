@@ -44,14 +44,14 @@ class TradeShareServiceClass {
         // Direction colors
         const isLong = analysis.direction === 'Long';
         const isShort = analysis.direction === 'Short';
-        const primaryColor = isLong ? '#b0b0b6' : isShort ? '#6b6b73' : '#8a8a92';
-        const primaryDark = isLong ? '#b0b0b6' : isShort ? '#6b6b73' : '#8a8a92';
+        const primaryColor = isLong ? '#07b56a' : isShort ? '#f75d5f' : '#8c8c86';
+        const primaryDark = isLong ? '#067947' : isShort ? '#bd3538' : '#6e6e68';
 
         // === BACKGROUND ===
         const bgGradient = ctx.createLinearGradient(0, 0, w, h);
-        bgGradient.addColorStop(0, '#0f0f0f');
-        bgGradient.addColorStop(0.5, '#171717');
-        bgGradient.addColorStop(1, '#0a0a0a');
+        bgGradient.addColorStop(0, '#121210');
+        bgGradient.addColorStop(0.5, '#1a1a18');
+        bgGradient.addColorStop(1, '#0b0b0a');
         ctx.fillStyle = bgGradient;
         ctx.fillRect(0, 0, w, h);
 
@@ -93,7 +93,7 @@ class TradeShareServiceClass {
         if (tradingStyle) {
             const styleX = 32 * s + pillW + 12 * s;
             const styleW = 80 * s;
-            const styleColor = tradingStyle === 'scalp' ? '#8a8a92' : '#8a8a92'; // Orange for scalp, purple for swing
+            const styleColor = tradingStyle === 'scalp' ? '#f08800' : '#a142ff'; // orange scalp, purple swing — Minara chart hues
             const styleEmoji = tradingStyle === 'scalp' ? '' : '';
 
             ctx.fillStyle = styleColor + '25';
@@ -118,9 +118,9 @@ class TradeShareServiceClass {
 
         // Confidence badge
         const confY = headerY + 110 * s;
-        const confColor = analysis.confidence === 'High' ? '#b0b0b6' :
-            analysis.confidence === 'Medium' ? '#8a8a92' :
-                analysis.confidence === 'Low' ? '#6b6b73' : '#6b6b73';
+        const confColor = analysis.confidence === 'High' ? '#2fc97f' :
+            analysis.confidence === 'Medium' ? '#f7a83e' :
+                analysis.confidence === 'Low' ? '#f97d80' : '#8c8c86';
         ctx.fillStyle = confColor + '20';
         this.roundRect(ctx, 32 * s, confY, 180 * s, 32 * s, 8 * s);
         ctx.fill();
@@ -149,67 +149,67 @@ class TradeShareServiceClass {
         let curY = cardY + 36 * s;
 
         // Entry section
-        ctx.fillStyle = '#8a8a92';
+        ctx.fillStyle = '#8c8c86';
         ctx.beginPath();
         ctx.arc(secX, curY + 8 * s, 6 * s, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowColor = '#8a8a92';
+        ctx.shadowColor = '#8c8c86';
         ctx.shadowBlur = 10;
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        ctx.fillStyle = '#6b6b73';
+        ctx.fillStyle = '#6e6e68';
         ctx.font = `${12 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillText('ENTRY ZONE', secX + 20 * s, curY + 4 * s);
 
-        ctx.fillStyle = '#d2d2d6';
+        ctx.fillStyle = '#d6d6d0';
         ctx.font = `bold ${24 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         const entryPrice = analysis.entryPoints?.[0]?.price || 'N/A';
         ctx.fillText(typeof entryPrice === 'string' ? entryPrice : 'N/A', secX + 20 * s, curY + 32 * s);
 
         // Stop Loss section
         curY += 80 * s;
-        ctx.fillStyle = '#6b6b73';
+        ctx.fillStyle = '#6e6e68';
         ctx.beginPath();
         ctx.arc(secX, curY + 8 * s, 6 * s, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowColor = '#6b6b73';
+        ctx.shadowColor = '#6e6e68';
         ctx.shadowBlur = 10;
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        ctx.fillStyle = '#6b6b73';
+        ctx.fillStyle = '#6e6e68';
         ctx.font = `${12 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillText('STOP LOSS', secX + 20 * s, curY + 4 * s);
 
-        ctx.fillStyle = '#d2d2d6';
+        ctx.fillStyle = '#d6d6d0';
         ctx.font = `bold ${24 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillText(analysis.stopLoss || 'N/A', secX + 20 * s, curY + 32 * s);
 
         // SL percentage badge
         if (analysis.stopLossPercentage) {
             const slW = ctx.measureText(analysis.stopLoss || 'N/A').width;
-            ctx.fillStyle = '#6b6b7330';
+            ctx.fillStyle = '#6e6e6830';
             ctx.font = `bold ${16 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
             const pctW = ctx.measureText(analysis.stopLossPercentage).width + 20 * s;
             this.roundRect(ctx, secX + 20 * s + slW + 16 * s, curY + 12 * s, pctW, 28 * s, 8 * s);
             ctx.fill();
-            ctx.fillStyle = '#6b6b73';
+            ctx.fillStyle = '#6e6e68';
             ctx.fillText(analysis.stopLossPercentage, secX + 20 * s + slW + 26 * s, curY + 32 * s);
         }
 
         // Take Profit section
         curY += 80 * s;
-        ctx.fillStyle = '#b0b0b6';
+        ctx.fillStyle = '#b7b7b1';
         ctx.beginPath();
         ctx.arc(secX, curY + 8 * s, 6 * s, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowColor = '#b0b0b6';
+        ctx.shadowColor = '#b7b7b1';
         ctx.shadowBlur = 10;
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        ctx.fillStyle = '#6b6b73';
+        ctx.fillStyle = '#6e6e68';
         ctx.font = `${12 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillText('TAKE PROFIT', secX + 20 * s, curY + 4 * s);
 
@@ -217,24 +217,24 @@ class TradeShareServiceClass {
         if (tps.length > 0) {
             tps.slice(0, 3).forEach((tp, i) => {
                 const yOff = curY + 28 * s + (i * 34 * s);
-                ctx.fillStyle = '#b0b0b6';
+                ctx.fillStyle = '#b7b7b1';
                 ctx.font = `bold ${20 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
                 const tpText = `TP${i + 1}: ${typeof tp.price === 'string' ? tp.price : 'N/A'}`;
                 ctx.fillText(tpText, secX + 20 * s, yOff);
 
                 if (tp.percentage && typeof tp.percentage === 'string') {
                     const tpW = ctx.measureText(tpText).width;
-                    ctx.fillStyle = '#b0b0b630';
+                    ctx.fillStyle = '#b7b7b130';
                     ctx.font = `bold ${14 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
                     const pctW = ctx.measureText(tp.percentage).width + 16 * s;
                     this.roundRect(ctx, secX + 20 * s + tpW + 16 * s, yOff - 16 * s, pctW, 22 * s, 6 * s);
                     ctx.fill();
-                    ctx.fillStyle = '#b0b0b6';
+                    ctx.fillStyle = '#b7b7b1';
                     ctx.fillText(tp.percentage, secX + 20 * s + tpW + 24 * s, yOff);
                 }
             });
         } else {
-            ctx.fillStyle = '#4f4f57';
+            ctx.fillStyle = '#56564f';
             ctx.font = `italic ${16 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
             ctx.fillText('No targets defined', secX + 20 * s, curY + 28 * s);
         }
@@ -244,7 +244,7 @@ class TradeShareServiceClass {
 
         // R:R badge
         if (analysis.rrRatio) {
-            const rrColor = analysis.rrRatio >= 2 ? '#b0b0b6' : analysis.rrRatio >= 1.2 ? '#8a8a92' : '#6b6b73';
+            const rrColor = analysis.rrRatio >= 2 ? '#2fc97f' : analysis.rrRatio >= 1.2 ? '#f7a83e' : '#f97d80';
             ctx.fillStyle = rrColor + '15';
             this.roundRect(ctx, 32 * s, botY, 80 * s, 40 * s, 12 * s);
             ctx.fill();
@@ -262,7 +262,7 @@ class TradeShareServiceClass {
 
         // Outcome badge
         if (outcome && outcome !== TradeOutcome.PENDING) {
-            const oColor = outcome === TradeOutcome.WIN ? '#b0b0b6' : outcome === TradeOutcome.LOSS ? '#6b6b73' : '#6b6b73';
+            const oColor = outcome === TradeOutcome.WIN ? '#2fc97f' : outcome === TradeOutcome.LOSS ? '#f97d80' : '#8c8c86';
             const oText = outcome === TradeOutcome.WIN ? '✓ WIN' : outcome === TradeOutcome.LOSS ? '✗ LOSS' : 'SKIPPED';
 
             ctx.fillStyle = oColor + '20';

@@ -6,6 +6,10 @@ import { ToastProvider } from './components/shared/Toast';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 
 // Self-hosted fonts (offline-capable, no external CDN dependency)
+// Minara-derived type pairing: Geist for UI, DM Serif Text for display
+// (font-serif resolves to it in index.css @theme), JetBrains Mono for data.
+import '@fontsource-variable/geist';
+import '@fontsource/dm-serif-text';
 import '@fontsource/inter/300.css';
 import '@fontsource/inter/400.css';
 import '@fontsource/inter/500.css';

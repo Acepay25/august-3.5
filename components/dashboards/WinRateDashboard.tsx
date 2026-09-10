@@ -32,19 +32,18 @@ interface WinRateDashboardProps {
     trades: LoggedTrade[];
 }
 
-// Color constants — distinct monochrome shades so chart series / confidence
-// buckets stay visually separable without breaking the black/gray theme.
-// (The old map reused #6b6b73 for rose/orange/blue and #8a8a92 for
-// yellow/purple, so e.g. Family A and Family C drew identical lines.)
+// Color constants — Minara chart palette; each series/bucket is a distinct
+// hue so families stay separable (the old monochrome map reused grays, so
+// e.g. Family A and Family C drew identical lines).
 const COLORS = {
-    cyan: '#b0b0b6',
-    emerald: '#d2d2d6',
-    rose: '#6b6b73',
-    yellow: '#8a8a92',
-    orange: '#9e9ea6',
-    purple: '#7c7c84',
-    blue: '#5f5f67',
-    zinc: '#55555d'
+    cyan: '#42d0ff',
+    emerald: '#2fc97f',
+    rose: '#f75d5f',
+    yellow: '#f08800',
+    orange: '#ff9a32',
+    purple: '#a142ff',
+    blue: '#42a1ff',
+    zinc: '#8c8c86'
 };
 
 const FAMILY_COLORS: Record<string, string> = {
@@ -169,7 +168,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="flex flex-col gap-2 sm:gap-3 border-b border-white/5 pb-3 sm:pb-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#b0b0b6]"></div>
+                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#399ef7]"></div>
                         <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
                     <span className="text-[10px] text-zinc-500 font-mono">
@@ -395,8 +394,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                         <stop offset="95%" stopColor={COLORS.cyan} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b6b73' }} axisLine={false} tickLine={false} />
-                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#6b6b73' }} axisLine={false} tickLine={false} width={25} />
+                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6e6e68' }} axisLine={false} tickLine={false} />
+                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#6e6e68' }} axisLine={false} tickLine={false} width={25} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Area
                                     type="monotone"
@@ -422,8 +421,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={confidenceChartData} layout="vertical">
-                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: '#6b6b73' }} axisLine={false} tickLine={false} />
-                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: '#8a8a92', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
+                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: '#6e6e68' }} axisLine={false} tickLine={false} />
+                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: '#8c8c86', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Bar dataKey="winRate" radius={[0, 6, 6, 0]} barSize={20}>
                                     {confidenceChartData.map((entry, index) => (

@@ -162,14 +162,24 @@ Optional build-time variables:
 
 ## Development Notes
 
-- Vite 7 + Tailwind v4 (monochrome zinc theme — color tokens are remapped to gray
-  in `index.css` `@theme`; do not reintroduce colored utilities)
-- **Exception — status surfaces**: the `.status-surface` scope (and the existing
-  `.analysis-card` scope) in `index.css` restores real semantic colors (emerald WIN,
-  rose LOSS, amber warnings, destructive actions). Use `status-surface` only where
-  status meaning would otherwise be lost (hybrid panel, toasts, header indicators,
-  destructive buttons, post-mortem accents) — keep everything else monochrome.
+- Vite 7 + Tailwind v4. Theme is **Minara-derived** (user decision, 2026-09-10 —
+  this SUPERSEDES the earlier "monochrome zinc" doctrine): warm near-black chrome
+  (page `#0b0b0a`, panels `zinc-900 #141412`, raised surfaces `zinc-800 #1f1f1c`,
+  hairlines `zinc-700 #2f2f2f`), warm ink ramp, and REAL semantic colors defined
+  once in `index.css` `@theme` — emerald = gains/up (`#07b56a` family),
+  rose/red = losses/down (`#f75d5f` family), yellow/amber = warnings (`#f08800`).
+  Neutral utility names (`zinc-*`, `cyan-*`) were intentionally kept so components
+  recolor through the token block; do not re-add gray remappings for color families.
+- **Brand gradient**: `--color-brand-start #eb53ff → --color-brand-mid #ff538e →
+  --color-brand-end #ff9a32` is reserved for the wordmark, the active-nav indicator,
+  and hero display type only — never for body text, tables, or chart fills.
+- `.status-surface` / `.analysis-card` classes remain in JSX for compatibility but
+  no longer remap colors (the global theme IS semantic now).
+- Typography: **Geist Variable** for UI (`--font-sans`), **DM Serif Text** for
+  display/serif (`--font-serif` — hero headings, brand moments), JetBrains Mono
+  for data. All self-hosted via @fontsource.
+- Radius/motion tokens: `rounded-bubble` (12px, chat bubbles), `rounded-control`
+  (8px, inputs/buttons), `--ease-snappy` + `.12s` transitions (Minara's numbers).
 - React 19 strict mode; TypeScript strict
 - Electron shell in `electron/` (custom `app://` protocol for production, safeStorage,
   auto-updater); Capacitor config for mobile
-- The UI is intentionally black/gray: avoid colored text/borders/gradients

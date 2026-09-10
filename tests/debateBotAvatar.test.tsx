@@ -18,8 +18,8 @@ describe('DebateBotAvatar (flat roster)', () => {
     });
 
     it('keeps the moderator on the neutral fill', () => {
-        expect(botFillForKey('Moderator')).toBe('#111111');
-        expect(botFillForKey('moderator')).toBe('#111111');
+        expect(botFillForKey('Moderator')).toBe('#0b0b0a');
+        expect(botFillForKey('moderator')).toBe('#0b0b0a');
     });
 
     it('gives distinct fills per model', () => {

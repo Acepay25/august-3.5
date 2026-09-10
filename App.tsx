@@ -2890,7 +2890,7 @@ const App: React.FC = () => {
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
                 {/* Dark shell: the rail sits LIGHTER than the page
-                    (#1a1a1a over #111111) with NO dividing border —
+                    (#141412 over #0b0b0a) with NO dividing border —
                     separation reads from the fill step alone. */}
                 <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 bg-zinc-900 transition-[width] duration-200 relative`}>
                     <button

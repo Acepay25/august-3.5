@@ -1,186 +1,151 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* ===== CHARCOAL THEME WITH BLUE ACCENT =====
-   Cool-neutral dark charcoal (near-black) ramp + a single muted steel blue
-   accent. Wins/losses are scannable by brightness (light vs dim grays);
-   no gold/yellow, no brown tint. */
+/* ===== MINARA-DERIVED THEME — warm near-black, true semantics =====
+   Arrangement and palette copied from Minara's app tokens: screen #0b0b0a,
+   panels #141412, raised surfaces #1a1a18, hairlines #232320/#2f2f2f, warm
+   ink ramp #edede8→#6e6e68, up-green #07b56a, down-red #f75d5f, Minara blue
+   accent, and a magenta→pink→orange brand gradient reserved for the wordmark,
+   the active nav pill, and hero moments. The neutral utility names (zinc-*)
+   are deliberately kept so every existing component re-colors through this
+   one block. AGENTS.md documents the doctrine. */
 @theme {
-  /* Base — dark neutral ramp: page #111111, panels/sidebar #1a1a1a,
-     composer #262626, active fills ~#333333. No blue tint anywhere in the
-     ramp. */
-  --color-zinc-50: #f5f5f5;
-  --color-zinc-100: #e8e8e8;
-  --color-zinc-200: #d4d4d4;
-  --color-zinc-300: #b4b4b4;
-  --color-zinc-400: #919191;
-  --color-zinc-500: #8a8a8a;
-  --color-zinc-600: #6b6b6b;
-  --color-zinc-700: #343434;
-  --color-zinc-800: #262626;
-  --color-zinc-900: #1a1a1a;
-  --color-zinc-950: #111111;
+  /* Neutrals — warm near-black surfaces + warm ink. Class-name mapping kept
+     stable: 950 page, 900 panels/rail, 800 raised surfaces, 700 hairline &
+     active fills, 500/600 dim/faint text, 100/200/300 ink. */
+  --color-zinc-50: #f6f6f1;
+  --color-zinc-100: #edede8;
+  --color-zinc-200: #d6d6d0;
+  --color-zinc-300: #b7b7b1;
+  --color-zinc-400: #a3a39d;
+  --color-zinc-500: #8c8c86;
+  --color-zinc-600: #6e6e68;
+  --color-zinc-700: #2f2f2f;
+  --color-zinc-800: #1f1f1c;
+  --color-zinc-900: #141412;
+  --color-zinc-950: #0b0b0a;
 
-  /* Accent / primary — muted steel blue */
-  --color-cyan-100: #eaf1f9;
-  --color-cyan-200: #d5e2f2;
-  --color-cyan-300: #b3c9e6;
-  --color-cyan-400: #8aabd8;
-  --color-cyan-500: #648dc6;
-  --color-cyan-600: #4870a4;
-  --color-cyan-700: #39587f;
-  --color-cyan-800: #2c425f;
-  --color-cyan-900: #212f43;
-  --color-cyan-950: #151e2b;
+  /* Accent / primary — Minara blue */
+  --color-cyan-100: #e3f1fe;
+  --color-cyan-200: #c3e3fd;
+  --color-cyan-300: #93cdfb;
+  --color-cyan-400: #5fb0f9;
+  --color-cyan-500: #399ef7;
+  --color-cyan-600: #2280d8;
+  --color-cyan-700: #1d64a8;
+  --color-cyan-800: #1d5186;
+  --color-cyan-900: #1b4468;
+  --color-cyan-950: #122b45;
 
-  /* Positive / wins — light cool grays */
-  --color-emerald-100: #f5f5f6;
-  --color-emerald-200: #e7e7e9;
-  --color-emerald-300: #d2d2d6;
-  --color-emerald-400: #b0b0b6;
-  --color-emerald-500: #8a8a92;
-  --color-emerald-600: #6b6b73;
-  --color-emerald-700: #4f4f57;
-  --color-emerald-800: #34343a;
-  --color-emerald-900: #202024;
-  --color-emerald-950: #161618;
+  /* Positive / gains — Minara green */
+  --color-emerald-100: #d9f7e7;
+  --color-emerald-200: #b1efcf;
+  --color-emerald-300: #6fdeb0;
+  --color-emerald-400: #2fc97f;
+  --color-emerald-500: #07b56a;
+  --color-emerald-600: #059a59;
+  --color-emerald-700: #067947;
+  --color-emerald-800: #075f39;
+  --color-emerald-900: #064a2e;
+  --color-emerald-950: #022c1c;
 
-  /* Negative / losses — dim cool grays */
-  --color-rose-100: #d2d2d6;
-  --color-rose-200: #b0b0b6;
-  --color-rose-300: #8a8a92;
-  --color-rose-400: #6b6b73;
-  --color-rose-500: #4f4f57;
-  --color-rose-600: #3a3a40;
-  --color-rose-700: #2a2a2f;
-  --color-rose-800: #1e1e22;
-  --color-rose-900: #161618;
-  --color-rose-950: #0c0c0e;
+  /* Negative / losses — Minara red */
+  --color-rose-100: #fee3e4;
+  --color-rose-200: #fcc7c8;
+  --color-rose-300: #fb9fa1;
+  --color-rose-400: #f97d80;
+  --color-rose-500: #f75d5f;
+  --color-rose-600: #e04447;
+  --color-rose-700: #bd3538;
+  --color-rose-800: #9c2d30;
+  --color-rose-900: #7c292b;
+  --color-rose-950: #411a1b;
 
-  /* Warnings — blue family (no gold/yellow) */
-  --color-yellow-100: #eaf1f9;
-  --color-yellow-200: #d5e2f2;
-  --color-yellow-300: #b3c9e6;
-  --color-yellow-400: #8aabd8;
-  --color-yellow-500: #648dc6;
-  --color-yellow-600: #4870a4;
-  --color-yellow-900: #212f43;
-  --color-yellow-950: #151e2b;
-  --color-amber-100: #eaf1f9;
-  --color-amber-200: #d5e2f2;
-  --color-amber-300: #b3c9e6;
-  --color-amber-400: #8aabd8;
-  --color-amber-500: #648dc6;
-  --color-amber-600: #4870a4;
-  --color-amber-800: #2c425f;
-  --color-amber-900: #212f43;
-  --color-amber-950: #151e2b;
+  /* Warnings — Minara yellow */
+  --color-yellow-100: #fdeccf;
+  --color-yellow-200: #fbd9a0;
+  --color-yellow-300: #f9c26b;
+  --color-yellow-400: #f7a83e;
+  --color-yellow-500: #f08800;
+  --color-yellow-600: #cf6c03;
+  --color-yellow-900: #5f310b;
+  --color-yellow-950: #331905;
+  --color-amber-100: #fdeccf;
+  --color-amber-200: #fbd9a0;
+  --color-amber-300: #f9c26b;
+  --color-amber-400: #f7a83e;
+  --color-amber-500: #f08800;
+  --color-amber-600: #cf6c03;
+  --color-amber-800: #7d3f0d;
+  --color-amber-900: #5f310b;
+  --color-amber-950: #331905;
 
-  /* Destructive — dim cool grays */
-  --color-red-200: #b0b0b6;
-  --color-red-300: #8a8a92;
-  --color-red-400: #6b6b73;
-  --color-red-500: #4f4f57;
-  --color-red-600: #3a3a40;
-  --color-red-700: #2a2a2f;
-  --color-red-950: #0c0c0e;
+  /* Destructive — Minara red (mirrors rose) */
+  --color-red-200: #fcc7c8;
+  --color-red-300: #fb9fa1;
+  --color-red-400: #f97d80;
+  --color-red-500: #f75d5f;
+  --color-red-600: #e04447;
+  --color-red-700: #bd3538;
+  --color-red-950: #411a1b;
 
-  /* All remaining families (blue, purple, violet, indigo, orange, pink,
-     lime, teal, sky, fuchsia, green) → uniform cool grays */
-  --color-blue-100: #f5f5f6;   --color-blue-200: #e7e7e9;   --color-blue-300: #d2d2d6;
-  --color-blue-400: #b0b0b6;   --color-blue-500: #8a8a92;   --color-blue-600: #6b6b73;
-  --color-blue-700: #4f4f57;   --color-blue-900: #34343a;   --color-blue-950: #202024;
-  --color-purple-100: #f5f5f6; --color-purple-200: #e7e7e9; --color-purple-300: #d2d2d6;
-  --color-purple-400: #b0b0b6; --color-purple-500: #8a8a92; --color-purple-600: #6b6b73;
-  --color-purple-900: #34343a; --color-purple-950: #202024;
-  --color-violet-100: #f5f5f6; --color-violet-400: #b0b0b6; --color-violet-500: #8a8a92;
-  --color-violet-600: #6b6b73; --color-violet-950: #202024;
-  --color-indigo-200: #e7e7e9; --color-indigo-300: #d2d2d6; --color-indigo-400: #b0b0b6;
-  --color-indigo-500: #8a8a92; --color-indigo-600: #6b6b73; --color-indigo-700: #4f4f57;
-  --color-indigo-950: #202024;
-  --color-orange-100: #f5f5f6; --color-orange-200: #e7e7e9; --color-orange-300: #d2d2d6;
-  --color-orange-400: #b0b0b6; --color-orange-500: #8a8a92; --color-orange-600: #6b6b73;
-  --color-orange-950: #202024;
-  --color-pink-500: #8a8a92;
-  --color-lime-100: #f5f5f6; --color-lime-400: #b0b0b6; --color-lime-500: #8a8a92;
-  --color-lime-600: #6b6b73; --color-lime-950: #202024;
-  --color-teal-500: #8a8a92;
-  --color-sky-100: #f5f5f6; --color-sky-400: #b0b0b6; --color-sky-500: #8a8a92; --color-sky-950: #202024;
-  --color-fuchsia-500: #8a8a92;
-  --color-green-400: #b0b0b6; --color-green-500: #8a8a92;
+  /* Secondary families — Minara's brand/chart hues (sparse use; formerly
+     grayed out by the monochrome remap, now intentionally colored). */
+  --color-blue-100: #e3f1fe;   --color-blue-200: #c3e3fd;   --color-blue-300: #93cdfb;
+  --color-blue-400: #5fb0f9;   --color-blue-500: #399ef7;   --color-blue-600: #2280d8;
+  --color-blue-700: #1d64a8;   --color-blue-900: #1b4468;   --color-blue-950: #122b45;
+  --color-purple-100: #f3e7ff; --color-purple-200: #e7cdff; --color-purple-300: #d3a1ff;
+  --color-purple-400: #c26bff; --color-purple-500: #a142ff; --color-purple-600: #862ee0;
+  --color-purple-900: #3a1a63; --color-purple-950: #2e0f52;
+  --color-violet-100: #efe8ff; --color-violet-300: #c9aaff; --color-violet-400: #b58cff;
+  --color-violet-500: #9556ff; --color-violet-600: #7c38e6; --color-violet-950: #291247;
+  --color-indigo-200: #bcbdf5; --color-indigo-300: #9294ef; --color-indigo-400: #6a6df0;
+  --color-indigo-500: #4346d3; --color-indigo-600: #363ab0; --color-indigo-700: #2d3190;
+  --color-indigo-950: #191a4a;
+  --color-orange-100: #fdeccf; --color-orange-200: #fbd9a0; --color-orange-300: #f9c26b;
+  --color-orange-400: #f7a83e; --color-orange-500: #f08800; --color-orange-600: #cf6c03;
+  --color-orange-950: #331905;
+  --color-pink-100: #ffe6f0;   --color-pink-200: #ffcce0;   --color-pink-300: #ffa3c4;
+  --color-pink-400: #ff7ba9;   --color-pink-500: #ff538e;
+  --color-lime-100: #eaffd4;   --color-lime-400: #b9ff6b;   --color-lime-500: #a1ff42;
+  --color-lime-600: #7ed42a;   --color-lime-950: #1e3309;
+  --color-teal-400: #6ddcff;   --color-teal-500: #42d0ff;   --color-teal-600: #23aad9;
+  --color-sky-100: #e2f8fd;    --color-sky-300: #9fe9f6;    --color-sky-400: #7fe1f2;    --color-sky-500: #5fd5ec;
+  --color-sky-950: #123842;
+  --color-fuchsia-300: #f5a6ff; --color-fuchsia-400: #f077ff; --color-fuchsia-500: #eb53ff;
+  --color-green-400: #2fc97f;  --color-green-500: #07b56a;
+
+  /* Brand gradient (Minara: magenta → pink → orange). Reserved: wordmark,
+     active-nav indicator, hero display type — never body copy or tables. */
+  --color-brand-start: #eb53ff;
+  --color-brand-mid: #ff538e;
+  --color-brand-end: #ff9a32;
+
+  /* Type + motion + radii — Minara's chat-v2 numbers: 14px sans over a
+     system stack (Geist), DM Serif Text for display (font-serif resolves
+     here, so existing hero <h1 class="font-serif"> upgrades automatically),
+     12px bubbles / 8px controls / .12s snaps. */
+  --font-sans: 'Geist Variable', 'Inter', system-ui, sans-serif;
+  --font-serif: 'DM Serif Text', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --radius-bubble: 12px;
+  --radius-control: 8px;
+  --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* The analysis card uses the semantic colors shown in the trading-card UI
-   while the rest of the application keeps its charcoal palette. Status-critical
-   surfaces outside the card (hybrid panel, toasts, header indicators,
-   destructive buttons, post-mortem accents) opt in via .status-surface —
-   the monochrome mapping otherwise renders WIN/LOSS/error as indistinguishable
-   grays. */
-.analysis-card,
-.status-surface {
-  --color-emerald-200: #a7f3d0;
-  --color-emerald-300: #6ee7b7;
-  --color-emerald-400: #34d399;
-  --color-emerald-500: #10b981;
-  --color-emerald-600: #059669;
-  --color-emerald-700: #047857;
-  --color-emerald-800: #065f46;
-  --color-emerald-900: #064e3b;
-  --color-emerald-950: #022c22;
-  --color-rose-200: #fecdd3;
-  --color-rose-300: #fda4af;
-  --color-rose-400: #fb7185;
-  --color-rose-500: #f43f5e;
-  --color-rose-600: #e11d48;
-  --color-rose-700: #be123c;
-  --color-rose-800: #9f1239;
-  --color-rose-900: #881337;
-  --color-rose-950: #4c0519;
-  --color-yellow-300: #fde68a;
-  --color-yellow-400: #facc15;
-  --color-yellow-500: #eab308;
-  --color-yellow-600: #ca8a04;
-  --color-yellow-950: #422006;
-  --color-amber-300: #fcd34d;
-  --color-amber-400: #fbbf24;
-  --color-amber-500: #f59e0b;
-  --color-amber-600: #d97706;
-  --color-amber-950: #451a03;
-  --color-orange-300: #fdba74;
-  --color-orange-400: #fb923c;
-  --color-orange-500: #f97316;
-  --color-orange-950: #431407;
-  --color-blue-300: #93c5fd;
-  --color-blue-400: #60a5fa;
-  --color-blue-500: #3b82f6;
-  --color-blue-600: #2563eb;
-  --color-blue-950: #172554;
-  --color-purple-300: #d8b4fe;
-  --color-purple-400: #c084fc;
-  --color-purple-500: #a855f7;
-  --color-purple-950: #3b0764;
-  --color-violet-300: #c4b5fd;
-  --color-violet-400: #a78bfa;
-  --color-violet-500: #8b5cf6;
-  --color-violet-950: #2e1065;
-  --color-indigo-200: #c7d2fe;
-  --color-indigo-300: #a5b4fc;
-  --color-indigo-400: #818cf8;
-  --color-indigo-500: #6366f1;
-  --color-indigo-950: #1e1b4b;
-  --color-red-300: #fca5a5;
-  --color-red-400: #f87171;
-  --color-red-500: #ef4444;
-  --color-red-600: #dc2626;
-  --color-red-950: #450a0a;
-}
+/* Historical note: the app used to be monochrome, with semantic color opted
+   in per-subtree via .analysis-card/.status-surface (the block that lived
+   here re-declared stock Tailwind hues). The theme above is now
+   Minara-derived with real semantics globally (green up / red down / amber
+   warn), so the opt-in scope is obsolete. The class names remain in the
+   components — harmless — but no longer re-map any tokens. */
 
 .splash-spinner {
   margin-top: 0.75rem;
   width: 2rem;
   height: 2rem;
-  border: 2px solid #34343a;
-  border-top-color: #648dc6;
+  border: 2px solid #2f2f2f;
+  border-top-color: #399ef7;
   border-radius: 50%;
   animation: splash-spin 0.8s linear infinite;
 }
@@ -192,7 +157,7 @@
 /* ===== BASE STYLES ===== */
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   touch-action: manipulation;
   /* Improves tap delay on mobile */
   -webkit-tap-highlight-color: transparent;
@@ -206,13 +171,13 @@ body {
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8a8a92;
+  color: #8c8c86;
 }
 .ui-panel {
   overflow: hidden;
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(12, 12, 14, 0.85);
+  background: rgba(20, 20, 18, 0.85);
 }
 @keyframes stream-fade {
   from { opacity: 0.35; }
@@ -483,7 +448,7 @@ body {
   transform: translateX(-50%) scaleX(1.18);
 }
 .debate-stage-actor.is-thinking .debate-stage-name {
-  color: #b0b0b6;
+  color: #b7b7b1;
   border-color: rgba(255, 255, 255, 0.18);
 }
 .debate-stage-actor.is-speaking {
@@ -491,7 +456,7 @@ body {
   z-index: 3;
 }
 .debate-stage-actor.is-speaking .debate-stage-name {
-  color: #f5f5f6;
+  color: #f6f6f1;
   border-color: rgba(255, 255, 255, 0.28);
 }
 /* Spotlight cone behind the active speaker — fades in from above. */
@@ -528,7 +493,7 @@ body {
   margin: 0;
   padding: 0 12px 10px;
   font-size: 11px;
-  color: #8a8a92;
+  color: #8c8c86;
   text-align: center;
 }
 /* Live pulse dot before the caption — the Floor's "on air" light. */
@@ -778,7 +743,7 @@ body.desk-idle-motion-off {
   z-index: 30;
   display: flex;
   flex-direction: column;
-  background: #0c0c0e;
+  background: #0b0b0a;
   border-radius: inherit;
 }
 .debate-seat-modal-head {
@@ -860,14 +825,14 @@ body.desk-idle-motion-off {
 .ui-control {
   border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #202024;
-  color: #d2d2d6;
+  background: #1f1f1c;
+  color: #d6d6d0;
 }
 
 /* Quiet workspace grid for the empty chat canvas. It stays out of the way
-   of the composer and chat content; base matches the page color (#111111). */
+   of the composer and chat content; base matches the page color (#0b0b0a). */
 .chat-hero-grid {
-  background-color: #111111;
+  background-color: #0b0b0a;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
@@ -910,13 +875,13 @@ code,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #34343a;
+  background: #2f2f2f;
   /* zinc-700 */
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4f4f57;
+  background: #56564f;
   /* zinc-600 */
 }
 
@@ -1163,21 +1128,21 @@ code,
 /* Solid charcoal surfaces — glassmorphism (translucency + blur) is
    intentionally removed; cards render on opaque zinc fills. */
 .glass {
-  background: #161618; /* zinc-900 */
+  background: #141412; /* zinc-900 */
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Reduce blur on mobile to save GPU */
 @media (max-width: 640px) {
   .glass {
-    background: #161618;
+    background: #141412;
     /* zinc-900 fallback */
-    border-bottom: 1px solid #202024;
+    border-bottom: 1px solid #1f1f1c;
   }
 
   .glass-panel {
-    background: #161618 !important;
-    border: 1px solid #202024 !important;
+    background: #141412 !important;
+    border: 1px solid #1f1f1c !important;
   }
 
   /* Disable heavy box-shadows on mobile */
@@ -1185,12 +1150,12 @@ code,
   .shadow-xl,
   .shadow-lg {
     box-shadow: none !important;
-    border: 1px solid #202024;
+    border: 1px solid #1f1f1c;
   }
 }
 
 .glass-panel {
-  background: #202024; /* zinc-800 */
+  background: #1f1f1c; /* zinc-800 */
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1202,7 +1167,7 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: #0c0c0e;
+  background-color: #0b0b0a;
   /* zinc-950 matches app theme to prevent white flashes */
 }
 
@@ -1210,7 +1175,7 @@ body,
 
 /* Focus visible styles for keyboard navigation */
 :focus-visible {
-  outline: 2px solid #648dc6;
+  outline: 2px solid #399ef7;
   outline-offset: 2px;
 }
 
@@ -1315,7 +1280,7 @@ select:focus-visible {
 /* Custom thin scrollbar for content areas */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #34343a transparent;
+  scrollbar-color: #2f2f2f transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -1328,7 +1293,7 @@ select:focus-visible {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #34343a;
+  background: #2f2f2f;
   border-radius: 4px;
 }
 

@@ -77,7 +77,7 @@ const Kbd: React.FC<{ children: string }> = ({ children }) => (
 const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick, collapsed = false }) => (
     <button
         onClick={onClick}
-        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-1.5 rounded-lg text-[13px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1a1a1a]`}
+        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-1.5 rounded-lg text-[13px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900`}
         title={collapsed ? label : undefined}
         aria-label={collapsed ? label : undefined}
     >
