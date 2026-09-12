@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { GripVertical } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade } from '../../types';
-import { fetchMarkIndex, fetchMarketData, fetchDerivativesData, fetchTopFuturesSymbols, type SymbolTicker } from '../../services/analysis/MarketDataService';
+import { fetchMarkIndex, fetchMarketData, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
@@ -29,10 +29,11 @@ import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import TradingChart, { type ChartInterval, type ChartHandle } from './TradingChart';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel from './TradeChatPanel';
+import SymbolPicker from './SymbolPicker';
 import type { AgentBot } from '../../services/agents/agentRoster';
 
-const FALLBACK_SYMBOLS: SymbolTicker[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT']
-    .map(symbol => ({ symbol, lastPrice: 0, changePercent24h: 0, quoteVolume: 0 }));
+const FALLBACK_SYMBOLS: SymbolMeta[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT']
+    .map(symbol => ({ symbol, baseAsset: symbol.replace(/USDT$/, ''), lastPrice: 0, changePercent24h: 0, quoteVolume: 0 }));
 
 interface TradeViewProps {
     providers: ProviderConfig[];
@@ -115,7 +116,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
     const [nowMs, setNowMs] = useState(() => Date.now());
-    const [symbols, setSymbols] = useState<SymbolTicker[]>(FALLBACK_SYMBOLS);
+    const [symbols, setSymbols] = useState<SymbolMeta[]>(FALLBACK_SYMBOLS);
     const [chartDrawings, setChartDrawings] = useState<ChartDrawing[]>([]);
     /** Shapes the MODEL drew via desk tools — rendered on the chart, never
      *  persisted into the user's drawing file, cleared on symbol change. */
@@ -159,13 +160,14 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, interval: next }));
     }, []);
 
-    // Dynamic universe: top USDT perps by 24h volume, one public call, 60s
-    // refresh; the static fallback keeps the picker usable offline.
+    // Dynamic universe: EVERY tradable USDT perpetual (exchangeInfo ∩ 24hr
+    // tickers, ~300+ symbols), one public call, 60s refresh; the static
+    // fallback keeps the picker usable offline.
     useEffect(() => {
         let cancelled = false;
         const load = async (): Promise<void> => {
-            const top = await fetchTopFuturesSymbols(20);
-            if (!cancelled && top.length > 0) setSymbols(top);
+            const all = await fetchAllFuturesSymbols();
+            if (!cancelled && all.length > 0) setSymbols(all);
         };
         void load();
         const poll = window.setInterval(() => void load(), 60_000);
@@ -363,16 +365,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             {/* Stats strip (Minara perps header) */}
             <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.06] bg-zinc-900/60 py-2 pr-3">
                 <div className="pl-3 pr-1">
-                    <select
-                        value={symbol}
-                        onChange={e => changeSymbol(e.target.value)}
-                        aria-label="Trade symbol"
-                        className="rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-[13px] font-bold text-zinc-100 focus:outline-none"
-                    >
-                        {symbols.map(s => <option key={s.symbol} value={s.symbol}>
-                            {s.symbol.replace(/USDT$/, '/USDT')}{s.changePercent24h ? `  ${s.changePercent24h >= 0 ? '+' : ''}${s.changePercent24h.toFixed(1)}%` : ''}
-                        </option>)}
-                    </select>
+                    <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
                 </div>
                 <span
                     data-testid="feed-status"

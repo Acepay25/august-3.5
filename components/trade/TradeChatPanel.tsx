@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Brain, Camera, Check, ChevronDown, Copy, FileText, Gavel, History, MoreHorizontal, PanelRightOpen, Plus, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
+import { Brain, Camera, Check, ChevronDown, Copy, FileText, Gavel, History, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
@@ -88,6 +88,8 @@ import { useSmoothStreamText } from '../../hooks/useSmoothStreamText';
 import ModelPicker from '../shared/ModelPicker';
 import ReasoningRow from '../shared/ReasoningRow';
 import ToolActivityRow from '../shared/ToolActivityRow';
+import AnalyzedRow from '../shared/AnalyzedRow';
+import { splitReasoningAroundTools } from '../../utils/traceText';
 import ToolActionsRow from '../chat/ToolActionsRow';
 import { SendIcon, StopIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
@@ -509,11 +511,22 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.mutate(activeId, sess => ({ ...sess, effort: next }));
     }, [activeId]);
 
-    // Follow the bottom while the answer streams.
+    // Follow the bottom while the answer streams — UNLESS the user scrolled
+    // up to read. Wheel/touch position wins over the auto-follow: scrolling
+    // up unpins (returning near the bottom, or sending a message, re-pins).
+    const stickToBottomRef = useRef(true);
+    const onChatScroll = useCallback((): void => {
+        const el = scrollRef.current;
+        if (!el) return;
+        stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    }, []);
     useEffect(() => {
         const el = scrollRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
-    }, [entries]);
+        if (!el) return;
+        const last = entries[entries.length - 1];
+        if (!last || last.role === 'user') stickToBottomRef.current = true;
+        if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+    }, [entries, activeId]);
 
     // NOTE: no unmount-abort on purpose. Switching to another surface tab
     // unmounts this panel; the run must keep streaming into the store so
@@ -634,6 +647,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             mailboxSeat,
             mailboxRound: 0,
             onMailSent,
+            onStreamReset: () => {
+                // Self-heal bounce: what streamed so far was a malformed
+                // tool-call attempt, NOT the answer — clear it so the
+                // corrected turn paints alone instead of concatenating.
+                full = '';
+                patch(e => ({ ...e, text: hidePass && panelCouldStillBePass(full) ? '' : full }));
+            },
             onReasoning: (chunk: string) => { reasoning += chunk; patch(e => ({ ...e, reasoning: (e.reasoning ?? '') + chunk })); },
             onToolEvent: (line: string) => patch(e => ({ ...e, tools: [...e.tools, line] })),
             onToolAction: action => {
@@ -728,16 +748,38 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         nudgeSupervisor(supervisorCfg);
     }, [provider, sessions, symbol, trades]);
 
-    const send = useCallback(async (raw: string): Promise<void> => {
-        const text = raw.trim();
-        if ((!text && attachments.length === 0) || busy) return;
+    /** Send a message — or RETRY one: `retryOf` is the id of a previous USER
+     *  entry whose answer should be regenerated. The stale answer(s) after
+     *  that bubble are dropped and the turn re-runs with the same text/image
+     *  and fresh live context. */
+    const send = useCallback(async (raw: string, retryOf?: string): Promise<void> => {
+        const session0 = sessions.find(s => s.id === activeId);
+        if (!session0) return;
+        const retryEntry = retryOf
+            ? session0.entries.find(e => e.id === retryOf && e.role === 'user')
+            : undefined;
+        if (retryOf && !retryEntry) return;
+        const text = retryEntry
+            ? (retryEntry.text === '(chart screenshot)' ? '' : retryEntry.text.trim())
+            : raw.trim();
+        const sentAttachments: Attachment[] = retryEntry
+            ? (retryEntry.image ? [{ id: newId('at'), kind: 'image', name: 'chart.png', payload: retryEntry.image }] : [])
+            : attachments;
+        if ((!text && sentAttachments.length === 0 && !retryEntry) || busy) return;
         if (!provider) return;
-        setDraft('');
-        const sentAttachments = attachments;
-        setAttachments([]);
+        if (retryEntry) {
+            // Drop the stale answer(s) AFTER the original user bubble — the
+            // branch restarts from that message.
+            mutate(activeId, s => {
+                const idx = s.entries.findIndex(e => e.id === retryEntry.id);
+                return idx < 0 ? s : { ...s, updatedAt: Date.now(), entries: s.entries.slice(0, idx + 1) };
+            });
+        } else {
+            setDraft('');
+            setAttachments([]);
+        }
         const sid = activeId;
-        const session = sessions.find(s => s.id === sid);
-        if (!session) return;
+        const session = session0;
         // WHO SUPERVISES: this session's model — a panel's FIRST seat when
         // several are selected. Reported now, and it rides every learning
         // hook fired from this send's finally block.
@@ -747,12 +789,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             ?? (supBot ? configForSeat(supBot.providerId, supBot.modelId) : null)
             ?? (session.kind !== 'panel' ? provider : null);
         setSessionModel(supervisorCfg);
-        const history = session.entries;
+        // Retry: the model's history is everything BEFORE the retried bubble
+        // (its stale answers are gone from the store too).
+        const retryIdx = retryEntry ? session.entries.findIndex(e => e.id === retryEntry.id) : -1;
+        const history = retryIdx >= 0 ? session.entries.slice(0, retryIdx) : session.entries;
         const imageAttachment = sentAttachments.find(a => a.kind === 'image');
         const fileBlocks = sentAttachments.filter(a => a.kind === 'file')
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
             .join('');
-        const userEntry: LiveEntry = { id: newId('u'), role: 'user', text: text || '(chart screenshot)', tools: [], image: imageAttachment?.payload };
+        const userEntry: LiveEntry = { id: retryEntry?.id ?? newId('u'), role: 'user', text: text || '(chart screenshot)', tools: [], image: imageAttachment?.payload };
         // The controller is armed (and registered in the store, keyed by
         // session) BEFORE the context fetch so a stop click during the
         // network-bound packet pull already kills the turn — and so the run
@@ -776,12 +821,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             interval,
             effort,
             ...(isSolo && !session.botId && selectedChatModel ? { soloModel: selectedChatModel } : {}),
-            entries: [...s.entries, userEntry, ...(isSolo ? [soloAiEntry] : [])],
+            entries: [...s.entries, ...(retryEntry ? [] : [userEntry]), ...(isSolo ? [soloAiEntry] : [])],
         }));
         const contextBlock = await buildContextBlock();
         if (controller.signal.aborted) {
-            // Stopped during the fetch — undo the optimistic bubbles.
-            mutate(sid, s => ({ ...s, entries: s.entries.filter(e => e.id !== userEntry.id && e.id !== soloAiEntry.id) }));
+            // Stopped during the fetch — undo the optimistic bubbles (a
+            // retried user bubble stays; only the fresh answer is removed).
+            mutate(sid, s => ({ ...s, entries: s.entries.filter(e => e.id !== soloAiEntry.id && (retryEntry || e.id !== userEntry.id)) }));
             chatStore.endRun(sid);
             return;
         }
@@ -1289,7 +1335,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             )}
             {activeSession.kind !== 'coach' && activeSession.kind !== 'group' && (
             <>
-            <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4">
+            <div ref={scrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4">
                 {entries.length === 0 && !panelPickerFor && (
                     <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
                         <p className="text-[11px] leading-5 text-zinc-500">
@@ -1305,16 +1351,25 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         </div>
                     </div>
                 )}
-                {entries.map(e => (
+                {entries.map((e, i) => {
+                    // Chips on a USER bubble (retry + copy) only exist once the
+                    // generation following that message has stopped — same
+                    // contract as the AI bubble's copy chip (!streaming).
+                    const answerStreaming = !!entries[i + 1]?.streaming;
+                    return (
                     <div key={e.id} className="chat-fade-in" data-testid={`chat-entry-${e.role}`}>
                         {e.role === 'user' ? (
                             <div className="flex flex-col items-end gap-1">
                                 {e.image && (
-                                    <img src={e.image} alt="attached" className="max-h-40 rounded-lg border border-white/10 object-contain" />
+                                    <div className="group/msg flex flex-col items-end gap-0.5">
+                                        <img src={e.image} alt="attached" className="max-h-40 rounded-lg border border-white/10 object-contain" />
+                                        {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} />}
+                                    </div>
                                 )}
                                 {e.text && e.text !== '(chart screenshot)' && (
                                     <div className="group/msg flex max-w-[85%] items-start gap-1">
-                                        <CopyChip text={e.text} className="mt-2" />
+                                        {!answerStreaming && <CopyChip text={e.text} className="mt-2" />}
+                                        {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} className="mt-2" />}
                                         <p className="min-w-0 rounded-bubble bg-zinc-800 px-3 py-2 text-[12px] leading-5 text-zinc-100">{e.text}</p>
                                     </div>
                                 )}
@@ -1328,18 +1383,59 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 {e.speaker && (
                                     <p className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">{formatModelDisplayName(e.speaker.split(':')[1] ?? e.speaker)}</p>
                                 )}
-                                {e.reasoning ? (
-                                    // The thinking timer runs only during the REASONING phase —
-                                    // once the answer text starts, thinking is over even though
-                                    // the entry is still streaming (the timer-counting-forever bug).
-                                    <ReasoningRow thinking={e.reasoning} running={!!e.streaming && !e.text} />
-                                ) : e.streaming && !e.text ? (
-                                    <p className="flex items-center text-[11px] text-zinc-500" data-testid="thinking-placeholder">
-                                        Tip: {tipForSeed(e.id)}
-                                        <span className="reasoning-row-dots" aria-hidden="true"><span /><span /><span /></span>
-                                    </p>
-                                ) : null}
-                                <ToolActivityRow lines={e.tools} running={!!e.streaming && !e.text} />
+                                {(() => {
+                                    const reasoning = e.reasoning ?? '';
+                                    const running = !!e.streaming && !e.text;
+                                    const hasWork = reasoning.trim().length > 0 || e.tools.length > 0;
+                                    if (!hasWork) {
+                                        // Nothing yet: the MiniMax waiting tip covers
+                                        // the silent first moments of a turn.
+                                        return running ? (
+                                            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-zinc-500" data-testid="thinking-placeholder">
+                                                <Lightbulb className="mt-0.5 h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
+                                                <span className="min-w-0 break-words">Tip: {tipForSeed(e.id)}</span>
+                                            </p>
+                                        ) : null;
+                                    }
+                                    // ZCode-style work timeline: the reasoning stream
+                                    // carries a `[Desk tools] …` mirror for EVERY tool
+                                    // event in order — those markers are the cut
+                                    // points, so Thought segments interleave with the
+                                    // tool rounds that interrupted them. Consecutive
+                                    // tool events group into ONE ToolActivityRow whose
+                                    // rows pair call→result (calling… updates to ok
+                                    // in place, never a second line). The whole
+                                    // timeline folds into a single "Analyzed for Ns"
+                                    // row when the answer lands.
+                                    const segs = splitReasoningAroundTools(reasoning);
+                                    const markerCount = segs.length - 1;
+                                    const nodes: React.ReactNode[] = [];
+                                    let buf: string[] = [];
+                                    const flush = (key: string): void => {
+                                        if (buf.length > 0) {
+                                            nodes.push(<ToolActivityRow key={key} lines={buf} running={running} />);
+                                            buf = [];
+                                        }
+                                    };
+                                    for (let s = 0; s < segs.length; s++) {
+                                        if (s > 0 && s - 1 < e.tools.length) buf.push(e.tools[s - 1]);
+                                        if (segs[s]?.trim()) {
+                                            flush(`tools-${s}`);
+                                            nodes.push(
+                                                <ReasoningRow
+                                                    key={`thought-${s}`}
+                                                    thinking={segs[s]}
+                                                    running={running && s === segs.length - 1}
+                                                />
+                                            );
+                                        }
+                                    }
+                                    // Mirrors can lag the tools array (tool lines pushed
+                                    // outside the desk loop) — leftovers render at the end.
+                                    buf.push(...e.tools.slice(markerCount));
+                                    flush('tools-tail');
+                                    return <AnalyzedRow running={running}>{nodes}</AnalyzedRow>;
+                                })()}
                                 {e.actions && e.actions.length > 0 && <ToolActionsRow actions={e.actions} />}
                                 <div className="text-[12px] leading-5 text-zinc-200">
                                     {e.text
@@ -1386,7 +1482,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             </div>
                         )}
                     </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* Composer — the reference's layout: a workspace-style section
@@ -1540,6 +1637,19 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 /** Hover-copy chip for a message bubble (user + model). Reports "Copied"
  *  inline for ~1.4s; hidden until the bubble is hovered (or keyboard-focused)
  *  so the transcript stays clean. */
+/** Hover chip on USER bubbles: re-run the turn from this message — the
+ *  stale answer(s) after it are dropped and the model regenerates with
+ *  fresh live context. */
+const RetryChip: React.FC<{ onRetry: () => void; className?: string }> = ({ onRetry, className = '' }) => (
+    <button type="button"
+        onClick={onRetry}
+        aria-label="Retry this message"
+        title="Retry — regenerate the answer"
+        className={`flex items-center rounded-control px-1.5 py-0.5 text-[10px] text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
+        <RotateCcw className="h-3 w-3" />
+    </button>
+);
+
 const CopyChip: React.FC<{ text: string; className?: string }> = ({ text, className = '' }) => {
     const [copied, setCopied] = useState(false);
     return (

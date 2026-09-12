@@ -62,7 +62,7 @@ vi.mock('../../services/analysis/MarketDataService', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../services/analysis/MarketDataService')>();
     return {
         ...actual,
-        fetchTopFuturesSymbols: vi.fn(async () => []),
+        fetchAllFuturesSymbols: vi.fn(async () => []),
         fetchMarkIndex: vi.fn(async () => ({
             markPrice: 100.5, indexPrice: 100.4, lastFundingRate: 0.0001,
             nextFundingTime: Date.now() + 3_600_000, available: true,
@@ -190,7 +190,9 @@ describe('TradeView level-watch wiring', () => {
     it('disarms the PREVIOUS symbol when the instrument switches', async () => {
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
         await screen.findByTestId('trade-view');
-        fireEvent.change(screen.getByLabelText('Trade symbol'), { target: { value: 'ETHUSDT' } });
+        // The TradingView-style picker: open the search, click the ETH row.
+        fireEvent.click(screen.getByLabelText('Trade symbol'));
+        fireEvent.click(screen.getByTestId('symbol-row-ETHUSDT'));
         expect(lw.disarmSymbol).toHaveBeenCalledWith('BTCUSDT');
         expect(lw.disarmSymbol).not.toHaveBeenCalledWith('ETHUSDT');
     });

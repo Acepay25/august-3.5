@@ -37,3 +37,14 @@ export const traceLines = (text: string): string[] =>
     text.split('\n')
         .map(line => stripTraceMarkers(line).trim())
         .filter(Boolean);
+
+/**
+ * The desk-tool loop mirrors every tool event into the reasoning stream as
+ * a `[Desk tools] …` line — those mirrors are the CUT POINTS of the
+ * ZCode-style work timeline: thinking segments interleave with the tool
+ * events that interrupted them. Returns the reasoning split into segments
+ * where segment i is separated from segment i+1 by tool event i (so
+ * segments.length - 1 === number of interleaved tool events, in order).
+ */
+export const splitReasoningAroundTools = (reasoning: string): string[] =>
+    reasoning.split(/\s*\[Desk tools\][^\n]*\n?/g);
