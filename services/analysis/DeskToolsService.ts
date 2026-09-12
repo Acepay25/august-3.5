@@ -117,6 +117,9 @@ export interface DeskToolResult {
     name: string;
     ok: boolean;
     content: string;
+    /** Resolved coin for market-data tools — the transcript names it when a
+     *  call targeted a symbol OTHER than the chart's. */
+    symbol?: string;
 }
 
 export const MAX_DESK_TOOL_ROUNDS = 3;
@@ -225,9 +228,20 @@ const TOOL_LABELS: Record<string, string> = {
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
 
-/** One-line digest of a tool result for the Floor chip's done state. */
-export const digestToolResult = (name: string, ok: boolean, content: string): string => {
-    if (!ok) return `${toolLabel(name)} failed`;
+/** One-line digest of a tool result for the transcript's tool rows — always
+ *  self-labeled ("order book · buy wall …") so a row reads without context.
+ *  When the call targeted a symbol OTHER than the chart's, the coin is
+ *  inserted ("order book · ETHUSDT · buy wall …") so a mixed BTC/ETH turn
+ *  stays unambiguous. */
+export const digestToolResult = (name: string, ok: boolean, content: string, foreignSymbol?: string | null): string => {
+    const label = toolLabel(name);
+    const coin = foreignSymbol ? ` · ${foreignSymbol}` : '';
+    if (!ok) return `${label}${coin} · failed`;
+    return `${label}${coin} · ${rawToolDigest(name, content)}`;
+};
+
+/** Detail-only digest (no label/coin prefix). */
+const rawToolDigest = (name: string, content: string): string => {
     try {
         const parsed = JSON.parse(content) as Record<string, unknown>;
         if (name === 'get_order_book') {
@@ -253,17 +267,17 @@ export const digestToolResult = (name: string, ok: boolean, content: string): st
                 funding != null ? `funding ${Number(funding).toFixed(4)}` : '',
                 oi != null ? `OI $${Math.round(Number(oi) / 1e6)}M` : '',
             ].filter(Boolean);
-            return bits.length > 0 ? bits.join(' · ') : `${toolLabel(name)} ok`;
+            return bits.length > 0 ? bits.join(' · ') : 'ok';
         }
         if (name === 'get_price_snapshot') {
             const price = parsed.lastPrice ?? parsed.price ?? parsed.close;
-            return price != null ? `price ${Number(price).toLocaleString()}` : `${toolLabel(name)} ok`;
+            return price != null ? `price ${Number(price).toLocaleString()}` : 'ok';
         }
         if (name === 'get_setup_history_stats') {
             const sample = typeof parsed.sample === 'number' ? parsed.sample : 0;
-            if (sample <= 0) return 'setup history: no logged trades';
+            if (sample <= 0) return 'no logged trades';
             const wr = typeof parsed.winRate === 'number' ? `${Math.round(parsed.winRate * 100)}% win` : '';
-            return `setup history: ${parsed.wins}W/${parsed.losses}L${wr ? ` (${wr})` : ''}`;
+            return `${parsed.wins}W/${parsed.losses}L${wr ? ` (${wr})` : ''}`;
         }
     } catch {
         // Not JSON — fall through to the generic line.
@@ -281,7 +295,7 @@ export const digestToolResult = (name: string, ok: boolean, content: string): st
         if (content.startsWith('Inbox empty')) return 'inbox empty';
         return `${content.split('From ').length - 1} direct message${content.split('From ').length - 1 === 1 ? '' : 's'} read`;
     }
-    return `${toolLabel(name)} ok`;
+    return 'ok';
 };
 
 const asString = (value: unknown, fallback = ''): string =>
@@ -511,13 +525,12 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'get_derivatives',
             description:
-                'Live perpetual derivatives: funding rate, open interest, long/short ratios, taker buy/sell. Use before sizing or calling crowded trades.',
+                'Live perpetual derivatives: funding rate, open interest, long/short ratios, taker buy/sell. Use before sizing or calling crowded trades. Works for ANY symbol — scan another coin without the user switching charts.',
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Futures symbol, e.g. BTCUSDT or ETH.' },
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                 },
-                required: ['symbol'],
                 additionalProperties: false,
             },
         },
@@ -527,13 +540,12 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'get_order_book',
             description:
-                'Order-book depth: bid/ask walls and liquidity imbalance near price. Use for entry/stop placement and sweep risk.',
+                'Order-book depth: bid/ask walls and liquidity imbalance near price. Use for entry/stop placement and sweep risk. Works for ANY symbol — scan another coin without the user switching charts.',
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Futures symbol, e.g. BTCUSDT.' },
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                 },
-                required: ['symbol'],
                 additionalProperties: false,
             },
         },
@@ -543,13 +555,12 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'get_liquidations',
             description:
-                'Recent forced liquidations for the symbol. Use to judge cascade risk / stop hunts.',
+                'Recent forced liquidations for the symbol. Use to judge cascade risk / stop hunts. Works for ANY symbol — scan another coin without the user switching charts.',
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Futures symbol, e.g. BTCUSDT.' },
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                 },
-                required: ['symbol'],
                 additionalProperties: false,
             },
         },
@@ -563,9 +574,8 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Alt symbol being traded (BTC itself returns dominance only).' },
+                    symbol: { type: 'string', description: 'Alt symbol being traded, e.g. SOLUSDT (default: the current chart symbol; BTC itself returns dominance only).' },
                 },
-                required: ['symbol'],
                 additionalProperties: false,
             },
         },
@@ -634,18 +644,17 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'get_price_snapshot',
             description:
-                'Spot price + recent OHLCV summary for one timeframe. Use when hybrid data is missing a TF or you need a fresh print.',
+                'Spot price + recent OHLCV summary for one timeframe. Use when hybrid data is missing a TF or you need a fresh print. Works for ANY symbol — scan another coin without the user switching charts.',
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Futures symbol, e.g. BTCUSDT.' },
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                     interval: {
                         type: 'string',
                         enum: ['15m', '1h', '4h', '1d'],
                         description: 'Candle interval. Default 1h.',
                     },
                 },
-                required: ['symbol'],
                 additionalProperties: false,
             },
         },
@@ -659,10 +668,9 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Futures symbol, e.g. BTCUSDT or ETH.' },
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                     direction: { type: 'string', enum: ['Long', 'Short', 'Neutral'], description: 'Trade direction to filter by.' },
                 },
-                required: ['symbol'],
                 additionalProperties: false,
             },
         },
@@ -713,11 +721,11 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 'Run the strategy-book setup scanner against live candles: range breakouts/fades, pin bars, inside-bar resolutions, gap classes '
                 + '(breakaway/runaway/exhaustion, filled or not), RSI divergences, Bollinger band plays, trend-pullback second entries and failed '
                 + 'breakouts — each LIVE setup comes back with its evidence and the library skills that speak to it. Call this when the user asks '
-                + 'whether anything is setting up, or before deciding a trade direction, so your read is grounded in what the tape actually shows.',
+                + 'whether anything is setting up, or before deciding a trade direction, so your read is grounded in what the tape actually shows. Works for ANY symbol — scan another coin without the user switching charts.',
             parameters: {
                 type: 'object',
                 properties: {
-                    symbol: { type: 'string', description: 'Instrument (default: the chart symbol).' },
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                     interval: { type: 'string', description: 'Timeframe, e.g. 15m (default: the chart\'s current interval).' },
                 },
                 additionalProperties: false,
@@ -872,6 +880,7 @@ export const DESK_TOOLS_PROMPT = `
 **DESK TOOLS (available anytime on this turn)**
 You can call live tools before you speak — opening analysis, rebuttal, clarification, or moderator verdict.
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
+The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
@@ -1132,6 +1141,25 @@ export interface DeskToolContext {
     chartDrawings?: ChartDrawing[];
 }
 
+/** Market-data tools whose result may need the coin named in the transcript —
+ *  the model can fetch ANY symbol while the chart shows another, so the emit
+ *  site inserts the coin into the digest only when it differs from the chart. */
+const MARKET_TOOLS = new Set([
+    'get_market_packet',
+    'get_all_timeframes',
+    'get_chart_view',
+    'get_order_book',
+    'get_derivatives',
+    'get_liquidations',
+    'get_price_snapshot',
+    'get_btc_context',
+    'scan_setups',
+    'get_setup_history_stats',
+]);
+
+const resolvedSymbolField = (call: DeskToolCall, fallback: string): { symbol: string } | { } =>
+    MARKET_TOOLS.has(call.name) ? { symbol: asSymbol(call.arguments?.symbol, fallback) } : {};
+
 export async function executeDeskTool(
     call: DeskToolCall,
     context: DeskToolContext = {},
@@ -1143,7 +1171,7 @@ export async function executeDeskTool(
     const cacheable = !NON_CACHEABLE_TOOLS.has(call.name);
     const cached = cacheable ? toolCache.get(cacheKey) : undefined;
     if (cached && Date.now() - cached.at < TOOL_CACHE_TTL_MS) {
-        return { toolCallId: call.id, name: call.name, ok: true, content: cached.content };
+        return { toolCallId: call.id, name: call.name, ok: true, content: cached.content, ...resolvedSymbolField(call, fallback) };
     }
     try {
         let content: string;
@@ -1535,7 +1563,7 @@ export async function executeDeskTool(
         if (cacheable && !isDataUnavailable(content)) {
             toolCache.set(cacheKey, { at: Date.now(), content });
         }
-        return { toolCallId: call.id, name: call.name, ok: true, content };
+        return { toolCallId: call.id, name: call.name, ok: true, content, ...resolvedSymbolField(call, fallback) };
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         return {
@@ -1543,6 +1571,7 @@ export async function executeDeskTool(
             name: call.name,
             ok: false,
             content: dataUnavailable(call.name, message),
+            ...resolvedSymbolField(call, fallback),
         };
     }
 }
@@ -1630,8 +1659,27 @@ export function parseTextToolCalls(text: string): DeskToolCall[] {
 }
 
 export function stripTextToolCalls(text: string): string {
-    return text.replace(/<tool_call\s+name=["'][^"']+["']\s*>[\s\S]*?<\/tool_call>/gi, '').trim();
+    return text
+        .replace(/<tool_call\s+name=["'][^"']+["']\s*>[\s\S]*?<\/tool_call\s*>/gi, '')
+        // Self-heal remnants: malformed attempts (bare <tool_call>,
+        // <function=…>) must never leak into the visible answer even when
+        // the rounds run out before the model fixes itself.
+        .replace(/<tool_call\s*>[\s\S]*?<\/tool_call\s*>/gi, '')
+        .replace(/<function\s*=[^>]*>[\s\S]*?<\/function\s*>/gi, '')
+        .replace(/<\/?(?:tool_call|function)\b[^>]*>/gi, '')
+        .trim();
 }
+
+/** Why a model's text looks like a FAILED tool-call attempt (null when it
+ *  isn't one). Drives the loop's self-heal bounce — the error is sent back
+ *  to the model so it can fix its own tool calling. */
+export const malformedToolCallReason = (text: string): string | null => {
+    if (!text) return null;
+    if (/<function\s*=/i.test(text)) return 'a `<function=…>` block — the protocol is <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>';
+    if (/<tool_call\s*>/i.test(text)) return 'a `<tool_call>` block without a name attribute — emit <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>';
+    if (/<tool_call\s/i.test(text) && !/<\/tool_call\s*>/i.test(text)) return 'an unclosed `<tool_call>` block — close it with </tool_call>';
+    return null;
+};
 
 export function formatToolResultsForModel(results: DeskToolResult[]): string {
     return results.map(r =>
@@ -1739,6 +1787,10 @@ export async function runDeskToolLoop(params: {
     ) => AsyncGenerator<string, void, unknown>;
     /** Receives streamed text deltas from `streamTurn` rounds. */
     onTextDelta?: (delta: string) => void;
+    /** A self-heal bounce is about to discard the streamed-so-far text (it
+     *  was a malformed tool-call attempt, not the answer). Streaming callers
+     *  clear their accumulator so the corrected turn paints alone. */
+    onStreamReset?: () => void;
     options?: import('../providers/GenericProviderService').ChatRequestOptions;
     defaultSymbol?: string | null;
     /** Trade-chart context so get_chart_view can report what the USER sees. */
@@ -1775,6 +1827,7 @@ export async function runDeskToolLoop(params: {
         sendTurn,
         streamTurn,
         onTextDelta,
+        onStreamReset,
         options,
         defaultSymbol,
         chartInterval,
@@ -1854,6 +1907,26 @@ export async function runDeskToolLoop(params: {
             : parseTextToolCalls(turn.text);
 
         if (!calls.length) {
+            // SELF-HEAL: the model TRIED to call a tool but emitted a
+            // malformed block (e.g. <tool_call><function=name>). Instead of
+            // ending the turn with raw markup in the answer, bounce a
+            // syntax-error correction back so it fixes its own tool calling
+            // — bounded by the same round budget as everything else.
+            const syntaxError = malformedToolCallReason(finalText);
+            if (syntaxError && round < MAX_DESK_TOOL_ROUNDS - 1 && !options?.signal?.aborted) {
+                onToolEvent?.('tool syntax · malformed call — self-healing');
+                onStreamReset?.();
+                messages.push({ role: 'assistant', content: finalText.slice(0, 2000) });
+                messages.push({
+                    role: 'user',
+                    content: 'TOOL CALL ERROR — your last message was not a valid tool call: you emitted '
+                        + `${syntaxError}.\n`
+                        + 'Emit EXACTLY:\n<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>\n'
+                        + 'One JSON object (real quotes), one block per tool, closed with </tool_call>. '
+                        + 'Re-emit your tool call(s) now — no prose, and never invent tool results.',
+                });
+                continue;
+            }
             return {
                 messages,
                 finalText: stripTextToolCalls(finalText),
@@ -1880,7 +1953,9 @@ export async function runDeskToolLoop(params: {
             }
             coreCalls.push(call);
         }
-        onToolEvent?.(calls.map(c => `calling ${toolLabel(c.name)}…`).join(' · '));
+        // One line per call — the transcript renders each call as its own
+        // compact status row (joined lines can't be attributed per-tool).
+        for (const c of calls) onToolEvent?.(`calling ${toolLabel(c.name)}…`);
         // Forged tools (model-authored recipes) execute through their own
         // hardened path BEFORE the built-in executor sees the calls.
         const forgedResults: DeskToolResult[] = [];
@@ -1902,7 +1977,14 @@ export async function runDeskToolLoop(params: {
             : [];
         const results = [...extraResults, ...forgedResults, ...coreResults];
         usedTools.push(...results.map(r => r.name));
-        onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
+        // One digest line per result, coin-prefixed when the call targeted a
+        // symbol other than the chart's — a mixed BTC/ETH turn must read
+        // unambiguously in the transcript.
+        const chartSymbol = (defaultSymbol ?? '').trim().toUpperCase();
+        for (const r of results) {
+            const foreign = r.symbol && r.symbol.toUpperCase() !== chartSymbol ? r.symbol : null;
+            onToolEvent?.(digestToolResult(r.name, r.ok, r.content, foreign));
+        }
         // persist proposal/custom tool side-effects (the transcript's
         // "Saved to memory"-style status rows). The loop does not know seat
         // names — the caller stamps them; the moderator path defaults here.
@@ -1978,6 +2060,10 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
      *  the seat may speak — used for debates WITHOUT live hybrid market data
      *  so seats ground themselves in fresh data instead of arguing from zero. */
     requireFirstToolRound?: boolean;
+    /** A malformed tool-call attempt was bounced back for self-healing — the
+     *  streamed-so-far text was NOT the answer. Streaming callers (Chart AI
+     *  panel) clear their accumulator so the corrected turn paints alone. */
+    onStreamReset?: () => void;
 }
 
 function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
@@ -2025,6 +2111,7 @@ export async function* streamChatWithDeskTools(
         chartDrawings,
         onToolEvent,
         onToolAction,
+        onStreamReset,
         allowedTools,
         trades,
         mailbox,
@@ -2098,6 +2185,7 @@ export async function* streamChatWithDeskTools(
         sendTurn: sendChatTurn,
         streamTurn: nativeTools ? streamChatRequest : undefined,
         onTextDelta: nativeTools ? onTextDelta : undefined,
+        onStreamReset,
         options: chatOptions,
         defaultSymbol,
         chartInterval,

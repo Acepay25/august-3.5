@@ -686,6 +686,53 @@ export const fetchTopFuturesSymbols = async (limit = 20): Promise<SymbolTicker[]
     }
 };
 
+/** One tradable USDT-perpetual in the symbol picker: ticker stats + the base
+ *  asset (the description column) from exchangeInfo. The ticker endpoint
+ *  alone misses zero-volume listings; exchangeInfo alone has no prices —
+ *  the picker universe is their INTERSECTION, falling back to the traded
+ *  set when exchangeInfo is unreachable. */
+export interface SymbolMeta extends SymbolTicker {
+    baseAsset: string;
+}
+
+export const fetchAllFuturesSymbols = async (): Promise<SymbolMeta[]> => {
+    const cacheKey = 'allfutsymbols_v1';
+    const cached = getCached<SymbolMeta[]>(cacheKey);
+    if (cached) return cached;
+    const [tickers, info] = await Promise.all([
+        robustFuturesFetch('/fapi/v1/ticker/24hr').then(r => r.json()).catch(() => null),
+        robustFuturesFetch('/fapi/v1/exchangeInfo').then(r => r.json()).catch(() => null),
+    ]);
+    if (!Array.isArray(tickers)) return [];
+    // Only TRADING perpetuals quoted in USDT — the app's whole universe.
+    const baseByName = new Map<string, string>();
+    if (info && Array.isArray(info.symbols)) {
+        for (const s of info.symbols) {
+            if (s?.status === 'TRADING' && s?.contractType === 'PERPETUAL'
+                && s?.quoteAsset === 'USDT' && typeof s.symbol === 'string') {
+                baseByName.set(s.symbol, String(s.baseAsset ?? s.symbol.replace(/USDT$/, '')));
+            }
+        }
+    }
+    const fromTicker = (t: any, baseAsset: string): SymbolMeta => ({
+        symbol: t.symbol,
+        baseAsset,
+        lastPrice: parseFloat(t.lastPrice) || 0,
+        changePercent24h: parseFloat(t.priceChangePercent) || 0,
+        quoteVolume: parseFloat(t.quoteVolume) || 0,
+    });
+    const rows: SymbolMeta[] = baseByName.size > 0
+        ? (tickers as any[])
+            .filter((t: any) => typeof t?.symbol === 'string' && baseByName.has(t.symbol))
+            .map((t: any) => fromTicker(t, baseByName.get(t.symbol)!))
+        : (tickers as any[])
+            .filter((t: any) => typeof t?.symbol === 'string' && t.symbol.endsWith('USDT') && !/[_-]/.test(t.symbol))
+            .map((t: any) => fromTicker(t, t.symbol.replace(/USDT$/, '')));
+    rows.sort((a, b) => b.quoteVolume - a.quoteVolume);
+    if (rows.length > 0) setCache(cacheKey, rows);
+    return rows;
+};
+
 /**
  * Fetch Open Interest from Binance Futures (PUBLIC - No API Key Required)
  */
