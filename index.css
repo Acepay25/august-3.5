@@ -187,6 +187,19 @@ body {
   animation: stream-fade 160ms ease-out;
 }
 
+/* Chart AI transcript rows fade in as they land (the reference's rendering
+   feel). One-shot on mount — streaming text already fades via .stream-fade. */
+@keyframes chat-fade-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.chat-fade-in {
+  animation: chat-fade-in 220ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-fade-in { animation: none; }
+}
+
 /* ===== REASONING ROW (collapsible thinking) =====
    Reference style: a settled collapsed row is a BARE quiet `Thought ›`
    line (transparent, no box) that blends into the transcript; while

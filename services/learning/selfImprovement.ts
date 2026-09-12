@@ -233,7 +233,19 @@ export const queueDistillDrafts = async (
             if (action.type === 'create') {
                 const ep = episodes.find(e => fingerprintOfEpisode(e) === action.fp);
                 if (!ep) continue;
-                queueSkillDraft({ tradeId: ep.tradeId ?? `fp:${action.fp}`, coin: ep.coin, crafted: craftDraftFromEpisode(ep, action.fp) }, username);
+                // The distill craft passes the deterministic gate — a covered
+                // or recently rejected fingerprint never queues, and the draft
+                // carries a falsifiable prediction either way.
+                const { deterministicDraftGate } = await import('./draftGates');
+                const gate = deterministicDraftGate({
+                    crafted: craftDraftFromEpisode(ep, action.fp),
+                    tradeId: ep.tradeId ?? `fp:${action.fp}`,
+                    username,
+                    coin: ep.coin,
+                    family: ep.family,
+                });
+                if (!gate.ok) { used.add(dedupe); continue; }
+                queueSkillDraft({ tradeId: ep.tradeId ?? `fp:${action.fp}`, coin: ep.coin, crafted: gate.crafted }, username);
             } else if (action.targetSlug) {
                 queueLearningProposal({
                     kind: 'rescope',

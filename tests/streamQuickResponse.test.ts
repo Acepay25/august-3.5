@@ -15,6 +15,7 @@ vi.mock('../services/providers/GenericProviderService', () => ({
 }));
 
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
+import { TASK_BUDGETS } from '../services/providers/taskBudgets';
 
 const config: ProviderConfig = {
   id: 'prov-a',
@@ -96,9 +97,10 @@ describe('streamQuickResponse (live casual-chat streaming)', () => {
     expect(streamMock).toHaveBeenCalledTimes(2);
     expect(reasoning).toContain('a very long chain of thought');
     expect(result).toBe('The answer is Long.');
-    // Second attempt asked for double the chat budget.
+    // Second attempt asked for double the chat budget (referenced from the
+    // source of truth so it tracks future budget changes).
     const secondOptions = (streamMock.mock.calls[1] as any)[2];
-    expect(secondOptions.maxTokens).toBe(2048 * 2);
+    expect(secondOptions.maxTokens).toBe(TASK_BUDGETS.chat * 2);
   });
 
   it('does not retry when the stream simply yields nothing (no reasoning)', async () => {

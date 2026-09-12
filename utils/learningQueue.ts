@@ -9,7 +9,7 @@
  * surface with); proposals are small, bounded, and safe to lose.
  */
 
-export type LearningProposalKind = 'displacement' | 'rescope' | 'revival' | 'contradiction' | 'demote' | 'distill';
+export type LearningProposalKind = 'displacement' | 'rescope' | 'revival' | 'contradiction' | 'demote';
 
 export interface LearningProposal {
     id: string;

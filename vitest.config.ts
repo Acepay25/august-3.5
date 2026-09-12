@@ -13,7 +13,7 @@ export default defineConfig({
     // passes. 30s gives generous headroom without delaying failure detection.
     teardownTimeout: 30000,
     // Same class of flake, per-test: with ~210 files, heavy jsdom suites
-    // (DeskScene/FloorScene/room portals) run at the edge of the default
+    // (DeskScene/room portals) run at the edge of the default
     // 5s timeout when a worker draws a long queue — solo runs pass, full
     // runs time out a varying handful of files at exactly 5000ms. 15s
     // headroom keeps real hangs detectable while removing the scheduling

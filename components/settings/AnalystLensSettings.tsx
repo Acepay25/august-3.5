@@ -184,7 +184,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
           </div>
           {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length < 3 && (
             <div className="info-warning">
-               Enable at least 3 AI providers to fully utilize analyst lenses.
+               Optional: analyst lenses shine with 3+ providers, but analysis and post-mortems run fine with just one.
             </div>
           )}
         </div>

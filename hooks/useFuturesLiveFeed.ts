@@ -22,9 +22,12 @@ const FUTURE_WS = 'wss://fstream.binance.com';
 const CONNECT_TIMEOUT_MS = 5000;
 const MAX_BACKOFF_MS = 10000;
 
-/** kline stream interval names (lowercase Binance form). */
+/** kline stream interval names (lowercase Binance form). The multi-day
+ *  suffixes must NOT be lowercased — '1M'.toLowerCase() is '1m', which would
+ *  silently subscribe the monthly chart to the 1-minute stream. */
+const WS_KLINE: Record<string, string> = { '1D': '1d', '3D': '3d', '1W': '1w', '1M': '1M' };
 export const klineInterval = (appInterval: string): string =>
-    appInterval === '1D' ? '1d' : appInterval.toLowerCase();
+    WS_KLINE[appInterval] ?? appInterval.toLowerCase();
 
 export interface FuturesLiveFeed {
     markIndex: LiveMarkIndex | null;

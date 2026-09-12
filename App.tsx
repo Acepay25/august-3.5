@@ -6,7 +6,7 @@ import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 // Apply the user's persisted idle-motion preference to <body> on app
 // startup so the desk view mounts with the correct class.
 reapplyIdleMotionClass();
-import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
+import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
@@ -19,7 +19,7 @@ import { useConversationHousekeeping } from './hooks/useConversationHousekeeping
 import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
 import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
-import { useFloorProjection } from './hooks/useFloorProjection';
+import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -28,15 +28,12 @@ import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineS
 
 
 // Modular Imports
-import { ChatContextProps } from './components/chat/MessageItem';
 import { useToastActions } from './components/shared/Toast';
 import { FORGED_PROPOSAL_EVENT } from './services/tools/toolForge';
 import { AMENDMENT_EVENT } from './services/learning/memoryAmendments';
 import { useConfirmDialog } from './components/shared/ConfirmDialog';
 import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
-import { SidebarContent } from './components/shared/Sidebar';
-import { ChatArea } from './components/chat/ChatArea';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
@@ -82,22 +79,21 @@ const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
-const FloorScene = React.lazy(() => import('./components/floor/FloorScene'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
-const ThreadTabs = React.lazy(() => import('./components/chat/ThreadTabs'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
-import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider, formatModelDisplayName } from './utils/providerUtils';
+import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider, formatModelDisplayName, isProviderReady } from './utils/providerUtils';
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
+import { deriveMessageDisplayText } from './utils/messageDisplayText';
 import {
     getBots, getGroups, saveBot, saveGroup, updateBot, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
     findBotById, groupDisplayName, newId,
@@ -135,7 +131,6 @@ import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { saveLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { isProviderOnCooldown, providerCooldownRemainingMs, getProviderHealth } from './services/infrastructure/ProviderHealthService';
-import { deriveSeatWireStates } from './utils/floorSeatWire';
 import { listHarnessLessons } from './services/learning/harnessLessons';
 import { assessSession } from './services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
@@ -145,13 +140,10 @@ import { PriceAlertService } from './services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
-import { useUiMode } from './hooks/useUiMode';
 import { useSurface, type AppSurface } from './hooks/useSurface';
 import NavRail from './components/shell/NavRail';
 import { Journal } from './components/journal/Journal';
-import { useSidebarPane } from './hooks/useSidebarPane';
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
-import type { FloorPosition, FloorSquawkEvent } from './components/floor/FloorScene';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
 
@@ -387,28 +379,21 @@ const App: React.FC = () => {
         });
         return new Set(identities).size === identities.length;
     }, [lensConfig, missingAnalystRoles, readyProviders]);
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
-        try {
-            return window.localStorage.getItem('august_sidebar_collapsed') === 'true';
-        } catch {
-            return false;
-        }
-    });
-    useEffect(() => {
-        try {
-            window.localStorage.setItem('august_sidebar_collapsed', String(isSidebarCollapsed));
-        } catch {
-            // Preferences are optional in restricted browser contexts.
-        }
-    }, [isSidebarCollapsed]);
-    // Chat vs floor presentation mode (see hooks/useUiMode.ts).
-    const { uiMode, setUiMode, toggleUiMode } = useUiMode();
-    // Minara arrangement: top-level surfaces chosen from the icon rail
-    // (hooks/useSurface.ts). Floor remains a presentation mode INSIDE chat.
+    // Minara arrangement: top-level surfaces chosen from the activity bar
+    // (hooks/useSurface.ts). The trade surface is home.
     const { surface, setSurface } = useSurface();
-    // Unified sidebar pane (sessions | bots | terminal) — the BOTS tab
-    // embeds the roster rail; floor mode hides the roster (below).
-    const { sidebarPane, setSidebarPane } = useSidebarPane();
+    // Antigravity-style left panel: the activity bar is always visible and
+    // the active surface's icon toggles its sidebar (on Trade: the order
+    // book). Persisted so the layout survives reloads like the dock width.
+    const [tradeSidebarOpen, setTradeSidebarOpen] = useState<boolean>(() => {
+        try { return localStorage.getItem('trade_sidebar_open_v1') !== '0'; } catch { return true; }
+    });
+    const toggleTradeSidebar = useCallback(() => {
+        setTradeSidebarOpen(prev => {
+            try { localStorage.setItem('trade_sidebar_open_v1', prev ? '0' : '1'); } catch { /* private mode */ }
+            return !prev;
+        });
+    }, []);
     const ensembleInitializedRef = useRef(false);
     // Persisted per-profile ensemble choice (loaded by loadUserData, possibly
     // after this effect fires on first mount — the ref bridges that race).
@@ -604,6 +589,13 @@ const App: React.FC = () => {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const mobileMenuRef = useRef<HTMLDivElement>(null);
 
+    // Chart AI dock routing (the Chat surface is gone — roster clicks open
+    // sessions inside the trade surface instead). Nonce-keyed so re-clicking
+    // the same bot/group/coach re-fires the open effect.
+    const [tradeBotRequest, setTradeBotRequest] = useState<{ botId: string; nonce: number } | null>(null);
+    const [tradeGroupRequest, setTradeGroupRequest] = useState<{ groupId: string; nonce: number } | null>(null);
+    const [tradeCoachRequest, setTradeCoachRequest] = useState<number>(0);
+
     // Casual-chat model (used when ensemble is off): app-wide preference,
     // persisted in Preferences. Empty until loaded or chosen — the pipeline
     // falls back to the first ready provider's model.
@@ -633,6 +625,24 @@ const App: React.FC = () => {
             try { localStorage.removeItem(PREF_KEYS.CASUAL_CHAT_MODEL); } catch { /* ignore */ }
         }
     }, [selectedChatModel]);
+
+    // The composer's model selection is provider-qualified
+    // (`providerId::modelId`) so a model name offered by TWO providers
+    // answers from the one the user actually picked, not whichever provider
+    // happened to be scanned first. Migrate the legacy bare-model preference
+    // to the qualified form once the provider list exists.
+    const chatModelMigratedRef = useRef('');
+    useEffect(() => {
+        if (!selectedChatModel || selectedChatModel.includes('::')) return;
+        if (chatModelMigratedRef.current === selectedChatModel) return;
+        if (providerConfigs.length === 0) return;
+        chatModelMigratedRef.current = selectedChatModel;
+        const owner = providerConfigs.find(c => isProviderReady(c) && c.selectedModel === selectedChatModel)
+            ?? providerConfigs.find(c => isProviderReady(c) && c.models.includes(selectedChatModel))
+            ?? providerConfigs.find(c => c.selectedModel === selectedChatModel)
+            ?? providerConfigs.find(c => c.models.includes(selectedChatModel));
+        if (owner) setSelectedChatModel(`${owner.id}::${selectedChatModel}`);
+    }, [providerConfigs, selectedChatModel]);
 
     // ─── Bot Mode — pipeline bridge ────────────────
     // The pipeline is instantiated above the roster state, so it reads the
@@ -1213,26 +1223,6 @@ const App: React.FC = () => {
         const group = groups.find(g => g.id === activeThread.groupId);
         if (group) void runGroupThread(group, prompt, bots);
     }, [activeThread, groups, bots, runGroupThread]);
-    // The visible bot for ChatArea's scoped thread view.
-    const visibleBot = useMemo(() => {
-        if (activeThread.kind !== 'bot') return null;
-        const bot = findBotById(bots, activeThread.botId);
-        return bot ? { providerId: bot.providerId, modelId: bot.modelId, name: bot.name, avatar: bot.avatar } : null;
-    }, [activeThread, bots]);
-    const activeGroup = useMemo(() => (
-        activeThread.kind === 'group' ? groups.find(g => g.id === activeThread.groupId) ?? null : null
-    ), [activeThread, groups]);
-    // Stable handlers for the memoized GroupChatView — inline arrows here
-    // would defeat the memo on every App render.
-    const handleEditActiveGroup = useCallback(() => {
-        if (!activeGroup) return;
-        setGroupEditTarget(activeGroup);
-        setIsNewGroupOpen(true);
-    }, [activeGroup]);
-    const handleDeleteActiveGroup = useCallback(() => {
-        if (!activeGroup) return;
-        deleteGroup(activeGroup.id);
-    }, [activeGroup, deleteGroup]);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -1381,16 +1371,10 @@ const App: React.FC = () => {
                 e.preventDefault();
                 setIsCommandPaletteOpen(prev => !prev);
             }
-            // Ctrl/Cmd+Shift+F toggles chat ↔ floor mode (useUiMode's
-            // toggle is a stable callback, so a [] dep list is safe).
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
-                e.preventDefault();
-                toggleUiMode();
-            }
             // Alt+1..5 jumps the icon-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
-                '1': 'chat', '2': 'trade', '3': 'journal', '4': 'studio', '5': 'agents',
+                '1': 'trade', '2': 'journal', '3': 'studio', '4': 'agents',
             };
             if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
                 e.preventDefault();
@@ -1399,7 +1383,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [toggleUiMode, setSurface]);
+    }, [setSurface]);
 
 
 
@@ -1708,23 +1692,6 @@ const App: React.FC = () => {
         }
     };
 
-    const handleCycleAnalysisUp = () => {
-        if (analysisMessages.length === 0) return;
-        let nextIndex = analysisMessages.length - 1;
-        if (highlightedAnalysisId) {
-            const currentIndex = analysisMessages.findIndex(m => m.id === highlightedAnalysisId);
-            if (currentIndex > 0) {
-                nextIndex = currentIndex - 1;
-            } else {
-                nextIndex = analysisMessages.length - 1;
-            }
-        }
-        const nextId = analysisMessages[nextIndex].id;
-        setHighlightedAnalysisId(nextId);
-        virtuosoRef.current?.scrollIntoView({ index: messages.findIndex(m => m.id === nextId), behavior: 'smooth', align: 'start' });
-    };
-
-
     const handleScrollToBottom = () => {
         let index = messages.length - 1;
         for (let i = messages.length - 1; i >= 0; i--) {
@@ -1762,12 +1729,6 @@ const App: React.FC = () => {
             label: 'Open Live Market',
             hint: 'Prices',
             run: () => setIsLiveMarketVisible(true),
-        },
-        {
-            id: 'floor-mode',
-            label: uiMode === 'floor' ? 'Switch to chat mode' : 'Open floor mode',
-            hint: 'View',
-            run: toggleUiMode,
         },
         {
             id: 'settings',
@@ -1946,6 +1907,63 @@ const App: React.FC = () => {
         }
         stableHandleSendMessage(payload.prompt, payload.images, 'Resume interrupted debate.', { resumeMessageId: messageId });
     }, [buildRerunPayload, stableHandleSendMessage, toast]);
+
+    // ── Chart AI dock bridges ─────────────────────────────────────────────
+    // "Full analysis" from the trade chat: run the SAME ensemble pipeline the
+    // old Chat surface ran (automation-shaped private run), resolve with the
+    // verdict summary so the dock shows the answer in its own transcript.
+    // "Log this trade" from a Chart AI proposal → append a PENDING analysis
+    // message. The outcome autopilot (useWatchAndAutopilot) registers it,
+    // watches the SL/TP, and runs the full post-mortem → skill-learning loop
+    // when it resolves — so a chat-proposed trade is scored like any analysis.
+    const handleLogProposedTrade = useCallback((proposal: TradeProposal): void => {
+        updateMessages(prev => [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)]);
+    }, [updateMessages]);
+
+    const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string> => {
+        if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
+        if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
+        const images: ImageMetadata[] = chatImages.map(img => ({
+            file: new File([], img.name, { type: 'image/png' }),
+            dataURL: img.dataURL,
+            isLoading: false,
+        }));
+        const conversation: Conversation = {
+            id: `trade-chat-${Date.now()}`,
+            title: 'Chart AI analysis',
+            timestamp: Date.now(),
+            messages: [],
+            ocrModel: selectedOcrModel,
+            moderatorProviderId: moderatorProviderId ?? '',
+            moderatorModel: moderatorModel ?? '',
+            leverage: parseInt(leverageInput, 10) || DEFAULT_LEVERAGE,
+        };
+        return new Promise<string>((resolve, reject) => {
+            let settled = false;
+            handleSendMessage(prompt, images, undefined, {
+                automation: {
+                    automationId: 'trade-chat',
+                    conversation,
+                    onMessage: ({ aiMessage }) => {
+                        if (settled) return;
+                        settled = true;
+                        const display = deriveMessageDisplayText(aiMessage);
+                        const summary = (display.displayContent || aiMessage.text || '').trim();
+                        const a = aiMessage.analysis;
+                        const verdict = a
+                            ? `${a.direction ?? '—'} ${a.coinName ?? ''} · confidence ${a.confidence ?? '—'}${a.entryPoints?.[0]?.price ? ` · entry ${a.entryPoints[0].price}` : ''}${a.stopLoss ? ` · stop ${a.stopLoss}` : ''}`
+                            : '';
+                        resolve([summary.slice(0, 8000), verdict].filter(Boolean).join('\n\n') || 'The analysis completed with no summary.');
+                    },
+                    onError: (error) => {
+                        if (settled) return;
+                        settled = true;
+                        reject(new Error(error));
+                    },
+                },
+            });
+        });
+    }, [isAnalysisInProgress, readyProviders, selectedOcrModel, moderatorProviderId, moderatorModel, leverageInput, handleSendMessage]);
 
     const handleForkDebate = useCallback((messageId: string, round: number) => {
         const msgs = messagesRef.current;
@@ -2312,24 +2330,24 @@ const App: React.FC = () => {
         );
         toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
     }, [activeUsername]);
-    // Floor projection (extracted to hooks/useFloorProjection.ts): gauge
-    // stats, positions rail, squawk tape, day PnL, seat wires, tickers,
-    // and the seat-click thread opener — all derived from the running
-    // conversation and the projected desk message.
-    const {
-        gaugeStats,
-        floorPositions,
-        floorSquawk,
-        floorDayPnl,
-        floorSeatWire,
-        floorTickers,
-        openSeatChat,
-    } = useFloorProjection({
-        messages, loggedTrades, approvalItems,
-        isAnalysisInProgress, isPostMortemInProgress,
-        deskSceneMessage, deskSceneActors, providerNameToId,
-        bots, selectBotThread, setActiveThread, setIsEnsembleEnabled, setUiMode,
-    });
+    // Roster clicks route into the Chart AI dock (the Chat surface is gone).
+    // Declared after the thread selectors above so their useCallback
+    // identities exist at first read.
+    const openBotInTrade = useCallback((id: string) => {
+        selectBotThread(id);
+        setTradeBotRequest({ botId: id, nonce: Date.now() });
+        setSurface('trade');
+    }, [selectBotThread, setSurface]);
+    const openGroupInTrade = useCallback((id: string) => {
+        selectGroupThread(id);
+        setTradeGroupRequest({ groupId: id, nonce: Date.now() });
+        setSurface('trade');
+    }, [selectGroupThread, setSurface]);
+    const openCoachInTrade = useCallback(() => {
+        selectCoachThread();
+        setTradeCoachRequest(n => n + 1);
+        setSurface('trade');
+    }, [selectCoachThread, setSurface]);
     // Skill-citation chip tap: open Settings → Skills so the
     // grid mounts and consumes the pending slug (SkillsGrid listens for the
     // same event when already mounted).
@@ -2419,77 +2437,6 @@ const App: React.FC = () => {
         },
     }), [activeUsername, loggedTrades, handleConfirmAutopilot, handleDismissAutopilot, toast]);
 
-    // leverage as a primitive — deriving it inside the memo with
-    // `activeConversation` in the dep list made chatContext (and therefore
-    // every visible MessageItem) re-created on every stream chunk.
-    const chatLeverage = parseInt(leverageInput, 10) || activeConversation?.leverage || DEFAULT_LEVERAGE;
-
-    const chatContext: ChatContextProps = useMemo(() => ({
-        typingMessageState,
-        setTypingMessageState,
-        handleTypingComplete,
-        highlightedAnalysisId,
-        expandedPostMortems,
-        setExpandedPostMortems,
-        expandedPostMortemImages,
-        setExpandedPostMortemImages,
-        savedAnalyses,
-        activeFrameworks,
-        copiedMessageId,
-        modelIdToName,
-        ocrModelIdToName,
-        providerNameToId,
-        handleInitiateLogTrade,
-        handleInitiateSkipTrade,
-        handleViewStrategyDetails,
-        handleApplyStrategy,
-        handleSaveAnalysis,
-        handleCopy,
-        handleInitiateUpdateTrade,
-        handleInitiateSimulator, // Scenario Simulator
-        confidenceCalibration, // Confidence calibration stats
-        onRetryPostMortem: handleRetryPostMortem, // Retry failed post-mortem
-        leverage: chatLeverage, // Leverage for backtest P&L calculations
-        autopilotResolutions, // Outcome autopilot detected resolutions
-        onConfirmAutopilot: handleConfirmAutopilot,
-        onDismissAutopilot: handleDismissAutopilot,
-        onCompareAnalysis: handleCompareAnalysis,
-        onViewReasoning: handleViewReasoning,
-        onReRunAnalysis: handleReRunAnalysis,
-        onResumeDebate: handleResumeDebate,
-        onFollowUpTicket: handleFollowUpTicket,
-        onPreReadCommit: handlePreReadCommit,
-        onForkDebate: handleForkDebate,
-        onToggleWatch: handleToggleWatch,
-        onReplacementChoice: handleReplacementChoice,
-        // Per-seat controls: steer or bench one debate seat mid-run.
-        onSteerSeat: handleSteerSeat,
-        onStopSeat: handleStopSeat,
-        // Inline approval cards — MessageItem filters to its own id.
-        inlineApprovals: approvalItems,
-        onApprovalAllow: approvalHandlers.allow,
-        onApprovalDeny: approvalHandlers.deny,
-        onApprovalAlways: approvalHandlers.always,
-        onApprovalNever: approvalHandlers.never,
-        onApprovalShow: handleApprovalShow,
-        // Post-mortem "what would I do today?" re-assessment.
-        onTodayReassessment: startTodayReassessment,
-        todayReassessmentInFlight,
-        lensConfig,
-        // External open-actor request — the desk view publishes this and
-        // the matching MessageItem mirrors the actor into its local
-        // side-panel state.
-        externalOpenActor,
-        externalOpenActorNonce,
-        // SessionGuard trade counter — the log-trade strip chip (Batch 2).
-        sessionTradeCount: sessionGuard ? {
-            tradesToday: sessionGuard.tradesToday,
-            maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
-        } : undefined,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handlePreReadCommit, handleForkDebate, handleToggleWatch, handleApprovalShow, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
-        // The inline-approval surface reads these —
-        // missing them froze cards on stale drafts/handlers.
-        approvalItems, approvalHandlers, sessionGuard]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -2774,8 +2721,6 @@ const App: React.FC = () => {
                 onOpenApprovals={() => setIsApprovalInboxVisible(true)}
                 approvalCount={approvalItems.length}
                 onOpenJobs={() => setIsJobsDrawerVisible(true)}
-                uiMode={uiMode}
-                onSetUiMode={setUiMode}
             />
 
             {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
@@ -2908,87 +2853,15 @@ const App: React.FC = () => {
                 <NavRail
                     surface={surface}
                     onSelect={setSurface}
+                    onToggleSidebar={toggleTradeSidebar}
                     onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     username={activeUsername || undefined}
                 />
-                {surface === 'chat' && (
-                    <>
-                {/* Dark shell: the rail sits LIGHTER than the page
-                    (#141412 over #0b0b0a) with NO dividing border —
-                    separation reads from the fill step alone. */}
-                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 bg-zinc-900 transition-[width] duration-200 relative`}>
-                    <button
-                        type="button"
-                        onClick={() => setIsSidebarCollapsed(prev => !prev)}
-                        className="absolute -right-3 top-4 z-30 h-6 w-6 rounded-full bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400"
-                        title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                        aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                    >
-                        {isSidebarCollapsed ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronLeftIcon className="h-3.5 w-3.5" />}
-                    </button>
-                    <SidebarContent
-                        activeUsername={activeUsername}
-                        conversations={conversationHistory}
-                        activeConversationId={activeConversationId}
-                        hasVisionData={currentVisionData.length > 0}
-                        isFreshSession={messages.length === 0}
-                        onNewConversation={handleStartNewConversation}
-                        onLoadConversation={handleLoadConversation}
-                        onDeleteConversation={handleDeleteConversationFromSidebar}
-                        onDeleteConversations={handleDeleteSelectedConversations}
-                        onOpenLiveMarket={handleOpenLiveMarket}
-                        onOpenVisionData={() => setIsVisionDataVisible(true)}
-                        onOpenJournal={handleOpenJournal}
-                        onOpenBotManager={() => setIsBotManagerVisible(true)}
-                        onOpenWatchList={() => setIsWatchListVisible(true)}
-                        onOpenSettings={() => setIsSettingsMenuVisible(true)}
-                        automations={automations.configs}
-                        onOpenAutomation={(id) => automations.openAutomation(id)}
-                        onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
-                        collapsed={isSidebarCollapsed}
-                        sidebarPane={sidebarPane}
-                        onSetSidebarPane={setSidebarPane}
-                        rosterSlot={uiMode === 'chat' ? (
-                            <React.Suspense fallback={null}>
-                                <AgentRosterRail
-                                    variant="embedded"
-                                    bots={bots}
-                                    groups={groups}
-                                    messages={messages}
-                                    selection={activeThread}
-                                    onSelectBot={selectBotThread}
-                                    onSelectGroup={selectGroupThread}
-                                    onDeleteBot={deleteBot}
-                                    onDeleteGroup={deleteGroup}
-                                    onEditGroup={groupId => {
-                                        const target = groups.find(g => g.id === groupId);
-                                        if (!target) return;
-                                        setGroupEditTarget(target);
-                                        setIsNewGroupOpen(true);
-                                    }}
-                                    onNewBot={() => setIsNewBotOpen(true)}
-                                    onNewGroup={() => setIsNewGroupOpen(true)}
-                                    onSelectCoach={selectCoachThread}
-                                    onSelectTeam={selectTeamThread}
-                                    coachCount={coachCount}
-                                    workingBotId={workingBotId ?? dmWorkingBotId}
-                                    lastOpenedMap={threadOpenedMap}
-                                    attentionMap={attentionMap}
-                                    botRoutines={botRoutinesMap}
-                                    onRunRoutine={runRoutineFromRail}
-                                />
-                            </React.Suspense>
-                        ) : null}
-                    />
-                </aside>
-
-                {/* The standalone chat-mode roster rail was folded into the
-                    unified sidebar's BOTS pane (rosterSlot above) — one
-                    roster. Teams merged into groups: one room concept. */}
-
-                <main
-                    className={`chat-main flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[21rem] lg:px-8 xl:px-16' : ''}`}
-                >
+                {/* Surfaces (Minara arrangement): pages, not modals. The
+                    Chat surface is gone — the trade surface's Chart AI dock
+                    carries the chats, panels, roster threads and the Coach
+                    inbox; the other tabs embed existing components. */}
+                <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
                     {/* Mistake Warning Banner - Global Risk Reminder */}
                     {loggedTrades.length > 0 && (
                         <React.Suspense fallback={null}>
@@ -3005,152 +2878,152 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     />
 
-                    {/* reference-style document tabs — GROUP threads only.
-                        Individual bots never appear in the strip: their thread
-                        opens directly, chat-style. Hidden outside group threads
-                        (bot threads, coach, floor). */}
-                    {uiMode === 'chat' && activeThread.kind === 'group' && (
-                        <React.Suspense fallback={null}>
-                            <ThreadTabs
-                                selection={activeThread}
-                                bots={bots}
-                                groups={groups}
-                                onSelectGroup={selectGroupThread}
+                    {surface === 'trade' && (
+                            <React.Suspense fallback={null}>
+                                <TradeView
+                                    providers={providerConfigs}
+                                    selectedChatModel={selectedChatModel}
+                                    onSelectChatModel={setSelectedChatModel}
+                                    sidebarOpen={surface === 'trade' && tradeSidebarOpen}
+                                    verdict={deskSceneMessage?.analysis}
+                                    bots={bots}
+                                    trades={loggedTrades}
+                                    groups={groups.map(g => ({ id: g.id, name: groupDisplayName(g, bots) }))}
+                                    botSessionRequest={tradeBotRequest ?? undefined}
+                                    groupSessionRequest={tradeGroupRequest ?? undefined}
+                                    coachSessionRequest={tradeCoachRequest || undefined}
+                                    onRunAnalysis={handleRunAnalysisFromChat}
+                                    onLogProposedTrade={handleLogProposedTrade}
+                                    renderCoachSurface={() => (
+                                        <React.Suspense fallback={null}>
+                                            <CoachThreadPanel
+                                                onAllowDraft={coachAllowDraft}
+                                                onDenyDraft={coachDenyDraft}
+                                            />
+                                        </React.Suspense>
+                                    )}
+                                    renderGroupSurface={(groupId) => {
+                                        const group = groups.find(g => g.id === groupId);
+                                        if (!group) return <p className="p-4 text-[11px] leading-5 text-zinc-500">This room was deleted.</p>;
+                                        return (
+                                            <React.Suspense fallback={null}>
+                                                <GroupChatView
+                                                    group={group}
+                                                    bots={bots}
+                                                    messages={messages}
+                                                    activity={activity}
+                                                    workingBotId={workingBotId}
+                                                    isRunning={groupRunning}
+                                                    onSendThread={sendGroupThread}
+                                                    onReplyInThread={sendGroupReply}
+                                                    onCancelRun={cancelGroupRun}
+                                                    hybridEnabled={isHybridIntelligenceEnabled}
+                                                    onToggleHybrid={toggleGroupHybrid}
+                                                    onEditGroup={() => {
+                                                        setGroupEditTarget(group);
+                                                        setIsNewGroupOpen(true);
+                                                    }}
+                                                    onDeleteGroup={() => deleteGroup(group.id)}
+                                                />
+                                            </React.Suspense>
+                                        );
+                                    }}
+                                />
+                            </React.Suspense>
+                        )}
+                        {surface === 'journal' && (
+                            <Journal
+                                isVisible={true}
+                                onClose={() => setSurface('trade')}
+                                initialTab="log"
+                                isEmbedded={true}
+                                username={activeUsername || undefined}
+                                trades={loggedTrades}
+                                onDeleteTrades={handleDeleteTrades}
+                                onClearAllTrades={handleClearAllTrades}
+                                modelIdToName={modelIdToName}
+                                onUpdateInsights={handleManualInsightsUpdate}
+                                isSummarizing={isSummaryInProgress}
+                                currentInsightIds={currentInsightIds}
+                                onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                                onUpdateOutcome={handleUpdateTradeOutcome}
+                                onUpdatePnL={handleUpdateTradePnL}
+                                finalSummary={finalTradeSummary}
+                                individualSummaries={tradeSummaries}
+                                isLoading={isLoading}
+                                isInsightGenerating={isInsightGenerating}
+                                insightProgress={insightProgress}
+                                newlyAddedInsightIds={newlyAddedInsightIds}
+                                summarizationProvider={summarizationProvider}
+                                summarizationModel={summarizationModel}
+                                onSetSummarizationProvider={handleSetSummarizationProvider}
+                                onSetSummarizationModel={setSummarizationModel}
+                                providers={providerConfigs}
+                                summaryCharLimit={summaryCharLimit}
+                                onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
+                                onRegenerateSummary={handleRegenerateFinalSummary}
+                                onDeleteInsight={handleDeleteInsight}
+                                useAlgorithmicSummary={useAlgorithmicSummary}
+                                onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
+                                useAlgorithmicInsights={useAlgorithmicInsights}
+                                onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
+                                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
+                                familyWinRates={familyWinRates}
+                                enabledProviders={journalEnabledProviders}
+                                selectedModels={journalSelectedModels}
                             />
-                        </React.Suspense>
-                    )}
-
-                    {/* Chat body. Bot threads render directly (reference BOT
-                        CHAT): no detail landing page, no tab — the reasoning
-                        rows + message cards ARE the surface. */}
-                    {(activeThread.kind === 'coach' ? (                <div className="min-h-0 flex-1 overflow-y-auto chat-scroll">
-                    <React.Suspense fallback={null}>
-                        <CoachThreadPanel
-                            onAllowDraft={coachAllowDraft}
-                            onDenyDraft={coachDenyDraft}
-                            onOpenTrade={(tradeId) => {
-                                // Jump to the most recent group transcript and
-                                // highlight the originating verdict card (trade
-                                // ids are message ids — see useTradeLogging).
-                                const target = groups[0];
-                                setActiveThread(target ? { kind: 'group', groupId: target.id } : { kind: 'coach' });
-                                setHighlightedAnalysisId(tradeId);
-                            }}
-                        />
-                    </React.Suspense>
-                </div>
-            ) : activeGroup ? (
-                <React.Suspense fallback={null}>
-                    <GroupChatView
-                        group={activeGroup}
-                        bots={bots}
-                        messages={messages}
-                        activity={activity}
-                        workingBotId={workingBotId}
-                        isRunning={groupRunning}
-                        onSendThread={sendGroupThread}
-                        onReplyInThread={sendGroupReply}
-                        onCancelRun={cancelGroupRun}
-                        hybridEnabled={isHybridIntelligenceEnabled}
-                        onToggleHybrid={toggleGroupHybrid}
-                        onEditGroup={handleEditActiveGroup}
-                        onDeleteGroup={handleDeleteActiveGroup}
-                    />
-                </React.Suspense>
-            ) : (
-            <ChatArea
-                messages={messages}
-                analysisSteps={analysisSteps}
-                isAnalysisActive={!!loadingMessage}
-                regimeProviderStats={regimeProviderStats}
-                onSelectMessageForProbability={handleSelectMessageForProbability}
-                chatContext={chatContext}
-                virtuosoRef={virtuosoRef}
-                isRateLimited={isRateLimited}
-                setIsRateLimited={setIsRateLimited}
-                showScrollDown={showScrollDown}
-                setShowScrollDown={setShowScrollDown}
-                showScrollUp={showScrollUp}
-                setShowScrollUp={setShowScrollUp}
-                handleCycleAnalysisUp={handleCycleAnalysisUp}
-                handleScrollToBottom={handleScrollToBottom}
-                highlightedAnalysisId={highlightedAnalysisId}
-                setHighlightedAnalysisId={setHighlightedAnalysisId}
-                analysisMessages={analysisMessages}
-                loadingMessage={loadingMessage}
-                isAnalysisInProgress={isAnalysisInProgress}
-                steeringNotes={steeringNotes}
-                onRemoveSteeringNote={handleRemoveSteeringNote}
-                sessionGuard={{
-                    level: sessionGuard.level,
-                    warnings: sessionGuard.warnings,
-                    tradesToday: sessionGuard.tradesToday,
-                    maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
-                }}
-                isPostMortemInProgress={isPostMortemInProgress}
-                setIsLivePostMortemVisible={setIsLivePostMortemVisible}
-                handleCancelAnalysis={handleCancelAll}
-                onRetryFailedRun={handleRetryFailedRun}
-                onEditUserMessage={handleEditUserMessage}
-                onDeleteMessages={handleDeleteMessages}
-                // ChatInput props
-                lensConfig={lensConfig}
-                setLensConfig={handleSetLensConfig}
-                ensembleModelSelection={ensembleModelSelection}
-                setEnsembleModelSelection={handleSetEnsembleModelSelection}
-                customEnsemblePrompt={customEnsemblePrompt}
-                setCustomEnsemblePrompt={handleSetCustomEnsemblePrompt}
-                customLensPrompts={customLensPrompts}
-                setCustomLensPrompts={handleSetCustomLensPrompts}
-                isEnsembleEnabled={isEnsembleEnabled}
-                setIsEnsembleEnabled={handleSetEnsembleEnabled}
-                selectedChatModel={selectedChatModel}
-                setSelectedChatModel={setSelectedChatModel}
-                moderatorProviderId={moderatorProviderId}
-                moderatorModel={moderatorModel}
-                onSetModeratorProvider={handleSetModeratorProvider}
-                onSetModeratorModel={handleSetModeratorModel}
-                images={images}
-                removeImage={removeImage}
-                leverageInput={leverageInput}
-                handleLeverageChange={handleLeverageChange}
-                handleLeverageBlur={handleLeverageBlur}
-                handlePresetLeverage={handlePresetLeverage}
-                fileInputRef={fileInputRef}
-                isImageUploadDisabled={isImageUploadDisabled}
-                handleImageUpload={handleImageUpload}
-                input={input}
-                setInput={setInput}
-                handleSendMessage={handleSendMessage}
-                composerMode={composerMode}
-                setComposerMode={setComposerMode}
-                isSummarizing={isSummarizing}
-                isAnyProviderEnabled={isAnyProviderEnabled}
-                isAccuracyModeEnabled={isAccuracyModeEnabled}
-                accuracySubMode={accuracySubMode}
-                providers={providerConfigs}
-                onUpdateProvider={handleUpdateProvider}
-
-                selectedVisionModel={selectedOcrModel}
-                setSelectedVisionModel={handleSetVisionModel}
-                hybridData={currentHybridData}
-                isHybridLoading={isHybridLoading}
-                hybridConnectionStatus={hybridConnectionStatus}
-                hideHybridPanel={isSettingsMenuVisible}
-                slOptimization={currentSlOptimization}
-                suggestedEntryPrice={currentSuggestedEntryPrice}
-                entryTimingScore={currentEntryTimingScore}
-                onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
-                onOpenLiveMarket={handleOpenLiveMarket}
-                visibleBot={visibleBot}
-                bots={bots}
-                onSelectBot={selectBotThread}
-                onNewBot={() => setIsNewBotOpen(true)}
-                homeDashboard={homeDashboard}
-                onInteract={handleInteract}
-            />
-            ))}
-                </main>
+                        )}
+                        {surface === 'studio' && (
+                            <React.Suspense fallback={null}>
+                                <StrategyStudio
+                                    trades={loggedTrades}
+                                    username={activeUsername || undefined}
+                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
+                                    onClose={() => setSurface('trade')}
+                                />
+                            </React.Suspense>
+                        )}
+                        {surface === 'agents' && (
+                            <div className="flex h-full min-h-0">
+                                <div className="flex w-80 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50">
+                                    <React.Suspense fallback={null}>
+                                        <AgentRosterRail
+                                            variant="embedded"
+                                            bots={bots}
+                                            groups={groups}
+                                            messages={messages}
+                                            selection={activeThread}
+                                            onSelectBot={openBotInTrade}
+                                            onSelectGroup={openGroupInTrade}
+                                            onDeleteBot={deleteBot}
+                                            onDeleteGroup={deleteGroup}
+                                            onEditGroup={groupId => {
+                                                const target = groups.find(g => g.id === groupId);
+                                                if (!target) return;
+                                                setGroupEditTarget(target);
+                                                setIsNewGroupOpen(true);
+                                            }}
+                                            onNewBot={() => setIsNewBotOpen(true)}
+                                            onNewGroup={() => setIsNewGroupOpen(true)}
+                                            onSelectCoach={openCoachInTrade}
+                                            onSelectTeam={openCoachInTrade}
+                                            coachCount={coachCount}
+                                            workingBotId={workingBotId ?? dmWorkingBotId}
+                                            lastOpenedMap={threadOpenedMap}
+                                            attentionMap={attentionMap}
+                                            botRoutines={botRoutinesMap}
+                                            onRunRoutine={runRoutineFromRail}
+                                        />
+                                    </React.Suspense>
+                                </div>
+                                <div className="hidden flex-1 items-center justify-center md:flex">
+                                    <p className="max-w-sm text-center text-sm leading-6 text-zinc-600">
+                                        Pick an agent to open it as a Chart AI session on the trade surface, or start a new one from the rail.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </main>
 
                 {/* Desktop activity card: float progress over the
                     right side so the conversation keeps its width while a run
@@ -3235,118 +3108,6 @@ const App: React.FC = () => {
                         )}
                     </div>
                 )}
-                    </>
-                )}
-
-                {/* Non-chat surfaces (Minara arrangement): pages, not modals.
-                    Each embeds an existing component — presentation only, no
-                    new data paths. */}
-                {surface !== 'chat' && (
-                    <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
-                        {surface === 'trade' && (
-                            <React.Suspense fallback={null}>
-                                <TradeView
-                                    providers={providerConfigs}
-                                    selectedChatModel={selectedChatModel}
-                                    onSelectChatModel={setSelectedChatModel}
-                                    verdict={deskSceneMessage?.analysis}
-                                />
-                            </React.Suspense>
-                        )}
-                        {surface === 'journal' && (
-                            <Journal
-                                isVisible={true}
-                                onClose={() => setSurface('chat')}
-                                initialTab="log"
-                                isEmbedded={true}
-                                username={activeUsername || undefined}
-                                trades={loggedTrades}
-                                onDeleteTrades={handleDeleteTrades}
-                                onClearAllTrades={handleClearAllTrades}
-                                modelIdToName={modelIdToName}
-                                onUpdateInsights={handleManualInsightsUpdate}
-                                isSummarizing={isSummaryInProgress}
-                                currentInsightIds={currentInsightIds}
-                                onUpdateTradeLeverage={handleUpdateTradeLeverage}
-                                onUpdateOutcome={handleUpdateTradeOutcome}
-                                onUpdatePnL={handleUpdateTradePnL}
-                                finalSummary={finalTradeSummary}
-                                individualSummaries={tradeSummaries}
-                                isLoading={isLoading}
-                                isInsightGenerating={isInsightGenerating}
-                                insightProgress={insightProgress}
-                                newlyAddedInsightIds={newlyAddedInsightIds}
-                                summarizationProvider={summarizationProvider}
-                                summarizationModel={summarizationModel}
-                                onSetSummarizationProvider={handleSetSummarizationProvider}
-                                onSetSummarizationModel={setSummarizationModel}
-                                providers={providerConfigs}
-                                summaryCharLimit={summaryCharLimit}
-                                onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
-                                onRegenerateSummary={handleRegenerateFinalSummary}
-                                onDeleteInsight={handleDeleteInsight}
-                                useAlgorithmicSummary={useAlgorithmicSummary}
-                                onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
-                                useAlgorithmicInsights={useAlgorithmicInsights}
-                                onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
-                                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
-                                familyWinRates={familyWinRates}
-                                enabledProviders={journalEnabledProviders}
-                                selectedModels={journalSelectedModels}
-                            />
-                        )}
-                        {surface === 'studio' && (
-                            <React.Suspense fallback={null}>
-                                <StrategyStudio
-                                    trades={loggedTrades}
-                                    username={activeUsername || undefined}
-                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
-                                    onClose={() => setSurface('chat')}
-                                />
-                            </React.Suspense>
-                        )}
-                        {surface === 'agents' && (
-                            <div className="flex h-full min-h-0">
-                                <div className="flex w-80 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50">
-                                    <React.Suspense fallback={null}>
-                                        <AgentRosterRail
-                                            variant="embedded"
-                                            bots={bots}
-                                            groups={groups}
-                                            messages={messages}
-                                            selection={activeThread}
-                                            onSelectBot={(id) => { selectBotThread(id); setSurface('chat'); }}
-                                            onSelectGroup={(id) => { selectGroupThread(id); setSurface('chat'); }}
-                                            onDeleteBot={deleteBot}
-                                            onDeleteGroup={deleteGroup}
-                                            onEditGroup={groupId => {
-                                                const target = groups.find(g => g.id === groupId);
-                                                if (!target) return;
-                                                setGroupEditTarget(target);
-                                                setIsNewGroupOpen(true);
-                                            }}
-                                            onNewBot={() => setIsNewBotOpen(true)}
-                                            onNewGroup={() => setIsNewGroupOpen(true)}
-                                            onSelectCoach={() => { selectCoachThread(); setSurface('chat'); }}
-                                            onSelectTeam={() => { selectTeamThread(); setSurface('chat'); }}
-                                            coachCount={coachCount}
-                                            workingBotId={workingBotId ?? dmWorkingBotId}
-                                            lastOpenedMap={threadOpenedMap}
-                                            attentionMap={attentionMap}
-                                            botRoutines={botRoutinesMap}
-                                            onRunRoutine={runRoutineFromRail}
-                                        />
-                                    </React.Suspense>
-                                </div>
-                                <div className="hidden flex-1 items-center justify-center md:flex">
-                                    <p className="max-w-sm text-center text-sm leading-6 text-zinc-600">
-                                        Pick an agent to open its thread, or start a new one from the rail.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </main>
-                )}
 
                 </div>
 
@@ -3378,43 +3139,6 @@ const App: React.FC = () => {
                             setIsDeskSceneOpen(false);
                         }}
                         onClose={() => setIsDeskSceneOpen(false)}
-                    />
-                </React.Suspense>
-            )}
-
-            {/* Floor mode — the debate UI. A full-screen trading floor
-                (hooks/useUiMode.ts toggles chat ↔ floor; Ctrl/Cmd+Shift+F).
-                Projects the same debate/approval/trade state the chat pane
-                renders, as desks + a right rail. Chunk loads on first open. */}
-            {uiMode === 'floor' && (
-                <React.Suspense fallback={null}>
-                    <FloorScene
-                        open
-                        onClose={() => setUiMode('chat')}
-                        isDebating={isAnalysisInProgress || isPostMortemInProgress}
-                        phase={deskScenePhase}
-                        actors={deskSceneActors}
-                        exchanges={deskSceneExchanges}
-                        stages={deskSceneStages}
-                        convictions={deskSceneConvictions}
-                        verdictDetail={deskSceneVerdictDetail}
-                        gaugeStats={gaugeStats}
-                        approvalItems={approvalItems}
-                        positions={floorPositions}
-                        squawk={floorSquawk}
-                        tickers={floorTickers}
-                        staff={readyProviders.map(p => ({ id: p.id, name: p.name }))}
-                        bots={bots}
-                        workingBotId={workingBotId}
-                        dayPnl={floorDayPnl}
-                        guardState={sessionGuard ? {
-                            dailyLossLimitUsd: getHarnessSettings().equityUsd * getSessionGuardConfig().dailyLossLimitPct,
-                            tradesToday: sessionGuard.tradesToday,
-                            maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
-                            level: sessionGuard.level,
-                        } : undefined}
-                        seatWire={floorSeatWire}
-                        onOpenSeatChat={openSeatChat}
                     />
                 </React.Suspense>
             )}

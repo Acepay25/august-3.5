@@ -1740,6 +1740,8 @@ const ingestCraftedSkillFromDraftUnlocked = async (
     const meta: SkillMeta = {
         status: 'candidate',
         kind: crafted.kind,
+        // The supervisor's activation-key description, when it crafted one.
+        ...(crafted.description ? { description: crafted.description.slice(0, 300) } : {}),
         coin,
         wins: 0,
         losses: 0,

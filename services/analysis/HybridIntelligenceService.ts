@@ -949,6 +949,21 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
                 data.derivatives.sentimentScore,
             ]]
         ),
+        // Positioning TREND — the conviction/crowding the snapshot can't show.
+        // Only rendered when the series actually came back (fail-soft).
+        (data.derivatives.fundingStreak || data.derivatives.oiChangePct || data.derivatives.basisRateNow)
+            ? `Positioning trend: ${[
+                data.derivatives.fundingStreak
+                    ? `funding ${data.derivatives.fundingStreak > 0 ? `${data.derivatives.fundingStreak} straight positive (longs paying — crowded long, squeeze risk)` : `${Math.abs(data.derivatives.fundingStreak)} straight negative (shorts paying — crowded short)`}`
+                    : '',
+                typeof data.derivatives.oiChangePct === 'number' && data.derivatives.oiChangePct !== 0
+                    ? `OI ${data.derivatives.oiChangePct > 0 ? '+' : ''}${data.derivatives.oiChangePct.toFixed(1)}% over ${data.derivatives.oiHistory?.length ?? 0}h (${data.derivatives.oiChangePct > 0 ? 'fresh money behind the move' : 'money leaving — weak/covering'})`
+                    : '',
+                typeof data.derivatives.basisRateNow === 'number' && Math.abs(data.derivatives.basisRateNow) > 0.0001
+                    ? `basis ${(data.derivatives.basisRateNow * 100).toFixed(2)}% (${Math.abs(data.derivatives.basisRateNow) > 0.05 ? 'stretched — leverage crowded' : 'normal'})`
+                    : '',
+            ].filter(Boolean).join(' · ')}`
+            : '',
         mdTable(
             ['Spread', 'Spread %', 'Bid 1%', 'Ask 1%', 'Imbalance', 'Dominant'],
             [[

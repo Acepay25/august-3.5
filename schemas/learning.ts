@@ -108,6 +108,10 @@ export const parseStrategySearchResults = (raw: unknown): ValidatedStrategySearc
 export const CraftedSkillSchema = z.object({
   name: z.string().min(2).max(80),
   kind: z.enum(['repeat', 'avoid']).catch('avoid'),
+  // Activation key (what the skill does + WHEN to reach for it, with
+  // trigger words) — the supervisor writes this; skills-index lines lead
+  // with it. Optional: legacy crafts fall back to the generated rationale.
+  description: z.string().max(400).optional(),
   when: z.string().min(8),
   inputs: z.array(z.string()).default([]),
   steps: z.array(z.string()).min(1),

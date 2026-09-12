@@ -22,6 +22,7 @@ import {
 import { hydrateRegimeLedger } from '../services/learning/regimeLedger';
 import { hydrateStrategyRegimeMatrix } from '../services/learning/strategyRegimeMatrix';
 import { ensureSeedSkills } from '../services/learning/seedStrategies';
+import { ensureBookSkillDrafts } from '../services/learning/bookSkillDrafts';
 import { runWeeklyRollupIfDue } from '../services/learning/weeklyRollup';
 import { runWeeklyReviewIfDue } from '../services/learning/weeklyReview';
 import { runMonthlyReportIfDue } from '../services/learning/monthlyReport';
@@ -244,6 +245,10 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             // seed skills once per boot. Idempotent by slug — user edits,
             // retirements and graveyard moves are never overwritten.
             void ensureSeedSkills(username).catch(() => { /* seeding is best-effort */ });
+            // The trader's own strategy-PDF playbooks, queued once as
+            // approval-gated skill drafts (Inbox / Coach). The flag guard means
+            // approving or dismissing a draft is never undone on a later boot.
+            try { ensureBookSkillDrafts(username); } catch { /* best-effort */ }
             void runWeeklyRollupIfDue(username).then(res => {
                 if (res) console.log('[WeeklyRollup] pass complete:', res);
             }).catch(e => {

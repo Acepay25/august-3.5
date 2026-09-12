@@ -59,6 +59,49 @@ describe('toolActionFromResult (proposal classification)', () => {
         expect(action!.label).toBe('rejected');
         expect(action!.review).toBe('');
     });
+
+    it('propose_skill receipt → proposed action pointing at the Coach inbox', () => {
+        const action = toolActionFromResult(
+            'propose_skill', true,
+            JSON.stringify({ proposed: true, id: 'sk-1', skill: 'Funding fade' }),
+            'Chart AI',
+        );
+        expect(action!.verb).toBe('proposed');
+        expect(action!.label).toBe('Funding fade');
+        expect(action!.review).toBe('the Coach inbox');
+    });
+
+    it('revise_skill receipt → proposed action pointing at Settings → Skills', () => {
+        const action = toolActionFromResult(
+            'revise_skill', true,
+            JSON.stringify({ proposed: true, id: 'lp-1', skill: 'btc-momentum' }),
+            'Chart AI',
+        );
+        expect(action!.verb).toBe('proposed');
+        expect(action!.label).toBe('btc-momentum');
+        expect(action!.review).toBe('Settings → Skills');
+    });
+
+    it('write_memory_note receipt → created action pointing at Settings → Memory', () => {
+        const action = toolActionFromResult(
+            'write_memory_note', true,
+            JSON.stringify({ saved: true, file: 'funding-exhaustion.md' }),
+            'Chart AI',
+        );
+        expect(action!.verb).toBe('created');
+        expect(action!.label).toBe('funding-exhaustion.md');
+        expect(action!.review).toBe('Settings → Memory');
+    });
+
+    it('a rejected growth proposal is still a visible failed action', () => {
+        const action = toolActionFromResult('revise_skill', false, 'revise_skill rejected: no skill "x"', 'Chart AI');
+        expect(action!.ok).toBe(false);
+        expect(action!.verb).toBe('proposed');
+    });
+
+    it('get_notebook_map is a READ — never an action', () => {
+        expect(toolActionFromResult('get_notebook_map', true, '## folders', 'Chart AI')).toBeNull();
+    });
 });
 
 describe('ToolActionsRow (Hermes-style status rows)', () => {

@@ -74,7 +74,6 @@ import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
 import { compactDebateEpisode } from '../../utils/debateEpisodes';
 import { debatePreStep } from '../../utils/debatePreStep';
 import type { DebateRunEvent } from '../../types';
-import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
     synthesizePatternMemory,

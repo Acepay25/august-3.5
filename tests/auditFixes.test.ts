@@ -63,10 +63,32 @@ describe('wire audit on every transport', () => {
         expect(audits).toHaveLength(1);
         expect(audits[0].route).toBe('anthropic-thinking');
         expect(audits[0].applied).toBe(true);
-        expect(audits[0].reason).toContain('budget_tokens=1024');
+        // Effort now SCALES the budget (high = 55% of maxTokens) instead of a
+        // fixed 35% that always clamped to the 1024 floor at this size.
+        expect(audits[0].reason).toContain('budget_tokens=1408');
         // The body actually carried the thinking block.
         const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-        expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 1024 });
+        expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 1408 });
+    });
+
+    it('messages format: the effort tier scales the thinking budget', async () => {
+        fetchMock.mockResolvedValue(anthropicOk());
+        const budgetFor = async (effort: string): Promise<number> => {
+            fetchMock.mockReset();
+            fetchMock.mockResolvedValue(anthropicOk());
+            const audits: any[] = [];
+            await sendChatRequest(baseConfig(), [{ role: 'user', content: 'x' }], {
+                maxTokens: 8192, reasoningEffort: effort as never, onWireAudit: e => audits.push(e),
+            });
+            return JSON.parse(fetchMock.mock.calls[0][1].body).thinking.budget_tokens;
+        };
+        // low 15% / medium 35% / high 55% / max 85% — the composer knob now
+        // changes Claude's thinking budget instead of only on/off.
+        expect(await budgetFor('low')).toBe(1228);   // 0.15 × 8192
+        expect(await budgetFor('medium')).toBe(2867); // 0.35 × 8192
+        expect(await budgetFor('high')).toBe(4505);   // 0.55 × 8192
+        expect(await budgetFor('max')).toBe(6963);    // 0.85 × 8192
+        expect(await budgetFor(undefined as unknown as string)).toBe(2867); // default fraction
     });
 
     it('messages format below the thinking floor → no-op audit with the reason', async () => {

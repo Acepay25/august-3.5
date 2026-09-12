@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     draftTriggerKey,
     isDraftTombstoned,
+    takeSkillDraft,
     tombstoneSkillDraftKey,
 } from '../utils/skillDrafts';
 import { maybeQueueVerdictSkillDraft } from '../utils/verdictSkillDraft';
@@ -47,7 +48,9 @@ describe('draft rejection tombstones', () => {
     it('a tombstone expires after the cooldown and the trigger can queue again', () => {
         const first = maybeQueueVerdictSkillDraft('m1', analysis(), 'expire-user');
         const key = draftTriggerKey(first!.coin, first!.crafted);
+        // A real rejection removes the pending draft AND tombstones the key.
         tombstoneSkillDraftKey(key, 'expire-user');
+        takeSkillDraft(first!.id, 'expire-user');
         expect(isDraftTombstoned(key, 'expire-user')).toBe(true);
 
         // Age the tombstone past the 7-day cooldown.
@@ -57,6 +60,14 @@ describe('draft rejection tombstones', () => {
 
         expect(isDraftTombstoned(key, 'expire-user')).toBe(false);
         expect(maybeQueueVerdictSkillDraft('m3', analysis(), 'expire-user')).toBeTruthy();
+    });
+
+    it('a pending identical draft blocks a second queue (no duplicates)', () => {
+        const first = maybeQueueVerdictSkillDraft('m1', analysis(), 'dup-user');
+        expect(first).toBeTruthy();
+        // Same trigger, different message id — the store already has this
+        // draft pending, so a second one must NOT queue.
+        expect(maybeQueueVerdictSkillDraft('m2', analysis(), 'dup-user')).toBeNull();
     });
 
     it('a different pattern is never suppressed by an unrelated rejection', () => {

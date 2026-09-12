@@ -102,6 +102,11 @@ export interface ChatRequestOptions {
         };
     }>;
     toolChoice?: 'auto' | 'none' | 'required';
+    /** chat_completions streaming: when the model answers with native tool
+     *  calls, the SSE deltas are accumulated and delivered here ONCE at end
+     *  of stream (complete name + parsed JSON arguments). Text deltas still
+     *  yield normally — the desk-tool loop uses this to stream AND loop. */
+    onStreamToolCalls?: (calls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>) => void;
     /** Constrained decoding (chat_completions, capability-gated): sends
      *  response_format json_schema with the given object-root JSON Schema
      *  instead of plain json_object. Non-strict — the zod boundary stays
@@ -261,6 +266,27 @@ const EXTENDED_THINKING_MODEL_RE = /claude-(?:3-7|3\.7|sonnet-4|opus-4|haiku-4-5
 /** Chain-of-thought budget as a fraction of max_tokens (always kept below it). */
 const THINKING_BUDGET_FRACTION = 0.35;
 
+/** Budget fraction per requested reasoning effort — the messages transport
+ *  has no native effort param, so Low/Medium/High/Max must actually change
+ *  the thinking budget or the composer knob does nothing on Claude. 'auto'
+ *  and unknown tiers keep the historical default. */
+const THINKING_BUDGET_FRACTIONS: Record<string, number> = {
+    low: 0.15,
+    medium: 0.35,
+    high: 0.55,
+    max: 0.85,
+};
+
+/** Anthropic budget_tokens for a call: effort-scaled, clamped to
+ *  1024 <= budget < max_tokens. Exported for wire tests. */
+export function thinkingBudgetTokens(maxTokens: number, effort?: string): number {
+    const fraction = THINKING_BUDGET_FRACTIONS[effort ?? ''] ?? THINKING_BUDGET_FRACTION;
+    return Math.min(
+        maxTokens - 1,
+        Math.max(MIN_EFFECTIVE_THINKING_TOKENS, Math.floor(maxTokens * fraction)),
+    );
+}
+
 /**
  * Whether to request extended thinking on an Anthropic messages call.
  * Gated on: a thinking-capable Claude model id (or the explicit
@@ -282,6 +308,8 @@ const MIN_EFFECTIVE_THINKING_TOKENS = 1024;
 export function shouldRequestExtendedThinking(config: ProviderConfig, options?: ChatRequestOptions): boolean {
     if (config.apiFormat !== 'messages') return false;
     if (options?.jsonMode) return false;
+    // The composer's explicit no-think toggle wins over the model gate.
+    if (options?.reasoningEffort === 'off') return false;
     const maxTokens = options?.maxTokens ?? 4096;
     if (maxTokens <= MIN_EFFECTIVE_THINKING_TOKENS) return false;
     if (config.thinkingCapable === false) return false;
@@ -540,6 +568,10 @@ async function* chatCompletionsStream(
     };
     const streamRf = buildJsonResponseFormat(config, options);
     if (streamRf) (params as any).response_format = streamRf;
+    if (options?.tools?.length) {
+        (params as any).tools = options.tools;
+        (params as any).tool_choice = options.toolChoice ?? 'auto';
+    }
     requestReasoningSideChannel(config, params);
     applyReasoningToChatParams(config, params as unknown as Record<string, unknown>, options);
     let stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
@@ -558,9 +590,11 @@ async function* chatCompletionsStream(
         }
     }
     const gate = createThinkingStreamGate();
+    const toolBuf = new StreamToolCallBuffer();
     for await (const chunk of stream) {
         reportUsage(config, chunk, options);
         const delta = chunk.choices[0]?.delta as any;
+        toolBuf.push(delta);
         const reasoning = deltaReasoning(delta);
         if (reasoning.trim()) options?.onReasoning?.(reasoning);
         const gated = gate.push(deltaVisibleText(delta));
@@ -570,6 +604,7 @@ async function* chatCompletionsStream(
     const flushed = gate.flush();
     if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
     if (flushed.visible) yield flushed.visible;
+    toolBuf.finish(options);
 }
 
 // ─── Messages Format (Anthropic-style) ──────────────────────────────────────
@@ -626,10 +661,7 @@ async function messagesCall(
     if (shouldRequestExtendedThinking(config, options)) {
         body.thinking = {
             type: 'enabled',
-            budget_tokens: Math.min(
-                maxTokensForBody - 1,
-                Math.max(1024, Math.floor(maxTokensForBody * THINKING_BUDGET_FRACTION)),
-            ),
+            budget_tokens: thinkingBudgetTokens(maxTokensForBody, options?.reasoningEffort),
         };
         delete body.temperature;
     }
@@ -985,6 +1017,7 @@ export async function sendChatRequest(
                             jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
                             toolChoice: options?.toolChoice,
+                            reasoningPatch: reasoningPatchFor(effectiveConfig, options),
                         }),
                         signal: options?.signal,
                     }).then(async response => {
@@ -1139,6 +1172,7 @@ export async function sendChatTurn(
                             jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
                             toolChoice: options?.toolChoice,
+                            reasoningPatch: reasoningPatchFor(effectiveConfig, options),
                         }),
                         signal: options?.signal,
                     });
@@ -1318,6 +1352,68 @@ export async function* streamChatRequest(
  * pipes the upstream SSE response through; we parse `data:` events here and
  * yield content deltas while forwarding reasoning deltas to onReasoning.
  */
+/** Accumulates OpenAI streamed tool_call deltas (fragmented across chunks
+ *  and keyed by index) into complete calls. Shared by both chat_completions
+ *  streaming paths (direct SDK + dev proxy) so the desk-tool loop can stream
+ *  text live AND still loop on native tool calls. */
+class StreamToolCallBuffer {
+    private readonly parts = new Map<number, { id: string; name: string; args: string }>();
+
+    push(delta: unknown): void {
+        const frags = (delta as { tool_calls?: unknown })?.tool_calls;
+        if (!Array.isArray(frags)) return;
+        for (const f of frags as Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>) {
+            const idx = Number.isFinite(f?.index) ? Number(f.index) : 0;
+            const part = this.parts.get(idx) ?? { id: '', name: '', args: '' };
+            if (typeof f?.id === 'string' && f.id) part.id = f.id;
+            if (typeof f?.function?.name === 'string') part.name += f.function.name;
+            if (typeof f?.function?.arguments === 'string') part.args += f.function.arguments;
+            this.parts.set(idx, part);
+        }
+    }
+
+    /** Deliver complete calls to onStreamToolCalls; returns them (null = none). */
+    finish(options?: Pick<ChatRequestOptions, 'onStreamToolCalls'>): Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null {
+        if (this.parts.size === 0) return null;
+        const calls = [...this.parts.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([, p]) => ({
+                id: p.id || `call_${Math.random().toString(36).slice(2, 10)}`,
+                name: p.name,
+                arguments: parseStreamedToolArguments(p.args),
+            }))
+            .filter(c => c.name.length > 0);
+        if (calls.length > 0) options?.onStreamToolCalls?.(calls);
+        return calls.length > 0 ? calls : null;
+    }
+}
+
+/** Tool-call arguments accumulate as a JSON string; a truncated stream must
+ *  still reach the executor as an object (marked) rather than throwing. */
+const parseStreamedToolArguments = (raw: string): Record<string, unknown> => {
+    if (!raw.trim()) return {};
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : { value: parsed };
+    } catch {
+        return { _unparsed: raw };
+    }
+};
+
+/** Client-side reasoning translation for the proxy routes: the capability
+ *  classes live in reasoningControls (renderer side), so the middleware
+ *  never imports app services — it just merges this patch into the body.
+ *  'auto'/absent effort ⇒ undefined (no key, no body change). */
+const reasoningPatchFor = (
+    config: ProviderConfig,
+    options?: ChatRequestOptions,
+): Record<string, unknown> | undefined => {
+    const effort = options?.reasoningEffort;
+    if (!effort || effort === 'auto') return undefined;
+    const { patch } = buildReasoningPatch(config, effort);
+    return Object.keys(patch).length > 0 ? patch : undefined;
+};
+
 async function* streamViaProxy(
     config: ProviderConfig,
     messages: ChatMessage[],
@@ -1340,6 +1436,14 @@ async function* streamViaProxy(
                 temperature: options?.temperature,
                 jsonMode: options?.jsonMode,
                 jsonSchema: resolveWireJsonSchema(config, options),
+                // Native tool-calling over SSE — without these the proxy strip
+                // silently downgrades every streamed chat to tool-less, so the
+                // desk tools never fire in the dev browser.
+                tools: options?.tools,
+                toolChoice: options?.toolChoice,
+                // Reasoning patch is translated CLIENT-side (capability classes
+                // live in reasoningControls); the middleware just merges it.
+                reasoningPatch: reasoningPatchFor(config, options),
                 stream: true,
             }),
             signal: withStreamTimeoutSignal(options?.signal),
@@ -1361,6 +1465,7 @@ async function* streamViaProxy(
     let buffer = '';
     let droppedEvents = 0;
     const gate = createThinkingStreamGate();
+    const toolBuf = new StreamToolCallBuffer();
     const forwardDelta = (delta: Record<string, unknown>): string => {
         const reasoning = deltaReasoning(delta);
         if (reasoning.trim()) options?.onReasoning?.(reasoning);
@@ -1411,6 +1516,7 @@ async function* streamViaProxy(
                     throw error;
                 }
                 reportUsage(config, chunk, options);
+                toolBuf.push(chunk?.choices?.[0]?.delta || {});
                 const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
                 if (visible) yield visible;
             }
@@ -1435,6 +1541,7 @@ async function* streamViaProxy(
                         throw error;
                     }
                     if (chunk) {
+                        toolBuf.push(chunk?.choices?.[0]?.delta || {});
                         const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
                         if (visible) yield visible;
                     }
@@ -1444,6 +1551,7 @@ async function* streamViaProxy(
         const flushed = gate.flush();
         if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
         if (flushed.visible) yield flushed.visible;
+        toolBuf.finish(options);
     } finally {
         reader.releaseLock();
     }

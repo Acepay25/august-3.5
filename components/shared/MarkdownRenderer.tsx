@@ -51,12 +51,16 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             );
           },
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-lg border border-white/10">
-              <table className="w-full text-left text-xs border-collapse tabular-nums">{children}</table>
+            <div className="my-3 overflow-x-auto overscroll-x-contain custom-scrollbar rounded-lg border border-white/10">
+              {/* w-max, not w-full: a wide table keeps its natural columns and
+                  OVERFLOWS the wrapper (scrollable, with the always-visible
+                  custom-scrollbar thumb) instead of shrinking cells until the
+                  extra columns vanish — the "many columns don't display" bug. */}
+              <table className="w-max min-w-full text-left text-xs border-collapse tabular-nums">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border-b border-white/15 bg-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 text-left">{children}</th>
+            <th className="whitespace-nowrap border-b border-white/15 bg-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 text-left">{children}</th>
           ),
           td: ({ children }) => (
             <td className="border-b border-white/5 px-3 py-1.5 text-[13px] text-zinc-300 align-middle leading-snug">{children}</td>

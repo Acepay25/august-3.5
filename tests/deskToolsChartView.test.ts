@@ -24,6 +24,13 @@ vi.mock('../services/analysis/MarketDataService', async (importOriginal) => {
             nextFundingTime: Date.now() + 3_600_000,
             available: true,
         })),
+        fetchOrderBookDepth: vi.fn(async () => ({
+            bestBid: 104.6, bestAsk: 104.8, spread: 0.2, spreadPercent: 0.19,
+            bids: [], asks: [], bidDepth: 0, askDepth: 0, depthImbalance: 0,
+            buyWalls: [{ price: 103.2, quantity: 50, usdValue: 516000 }],
+            sellWalls: [{ price: 106.4, quantity: 80, usdValue: 851200 }],
+            dominantSide: 'buyers', wallDistance: {},
+        })),
     };
 });
 vi.mock('../services/analysis/HybridIntelligenceService', async (importOriginal) => {
@@ -107,5 +114,32 @@ describe('desk tools — chart awareness', () => {
         const names = DESK_TOOL_DEFINITIONS.map(t => t.function.name);
         expect(names).toContain('get_market_packet');
         expect(names).toContain('get_chart_view');
+    });
+
+    it('get_chart_view reports the ORDER BOOK the user watches', async () => {
+        vi.mocked(fetchKlines).mockResolvedValue(candles as never);
+        const result = await executeDeskTool(
+            { id: 'c7', name: 'get_chart_view', arguments: { symbol: 'BTCUSDT' } },
+        );
+        expect(result.content).toContain('best bid 104.6 · best ask 104.8');
+        expect(result.content).toContain('dominant side buyers');
+        expect(result.content).toContain('Nearest buy wall: 103.2 ($516k)');
+        expect(result.content).toContain('Nearest sell wall: 106.4 ($851k)');
+    });
+
+    it('get_chart_view translates the USER DRAWINGS into shape lines', async () => {
+        vi.mocked(fetchKlines).mockResolvedValue(candles as never);
+        const result = await executeDeskTool(
+            { id: 'c8', name: 'get_chart_view', arguments: { symbol: 'BTCUSDT' } },
+            {
+                chartDrawings: [
+                    { id: 'd1', kind: 'hline', points: [{ t: 1757500000, p: 99.5 }], color: '#f75d5f', createdAt: Date.now() },
+                    { id: 'd2', kind: 'trend', points: [{ t: 1757500000, p: 100 }, { t: 1757503600, p: 105 }], color: '#07b56a', createdAt: Date.now() },
+                ],
+            },
+        );
+        expect(result.content).toContain('USER DRAWINGS ON THE CHART (2 shapes)');
+        expect(result.content).toContain('horizontal line at price 99.5');
+        expect(result.content).toContain('rising trendline');
     });
 });

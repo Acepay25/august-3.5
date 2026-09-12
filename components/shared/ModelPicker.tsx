@@ -150,16 +150,26 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     return `${p.name} · ${formatModelDisplayName(value)}`;
                 }
             }
-            return formatModelDisplayName(value) || value;
+            // Stale selection — no ready provider offers it anymore. Say so
+            // instead of displaying a dead slug as if it would answer.
+            return `${formatModelDisplayName(value) || value} · unavailable`;
         }
         // provider-model
         if (currentProviderId && currentModelId) {
             const p = readyProviders.find(p => p.id === currentProviderId);
+            if (!p) return `${formatModelDisplayName(currentModelId)} · unavailable`;
             return `${p?.name || currentProviderId} · ${formatModelDisplayName(currentModelId)}`;
         }
         if (currentProviderId) {
             const p = readyProviders.find(p => p.id === currentProviderId);
-            return p?.name || currentProviderId;
+            if (p) return p.name;
+            // A legacy BARE model id (no '::') lands here after the
+            // provider-model switch — display it as a model, flagged when
+            // nothing offers it anymore (the App-level migration rewrites
+            // owned picks to the qualified form).
+            const label = formatModelDisplayName(currentProviderId) || currentProviderId;
+            const listed = readyProviders.some(pr => pr.models.includes(currentProviderId));
+            return listed ? label : `${label} · unavailable`;
         }
         return placeholder;
     }, [value, mode, currentProviderId, currentModelId, readyProviders, placeholder]);

@@ -4,7 +4,7 @@
  * decision — the desktop sidebar now shows the BOTS roster directly; the
  * pane state is kept for backward-compat with the stored preference.
  *
- * Same persistence pattern as useUiMode: synchronous localStorage read
+ * Same persistence pattern as useSurface: synchronous localStorage read
  * in the useState initializer (no flash of the wrong tab on reload)
  * plus a fire-and-forget Preferences write for durability.
  */

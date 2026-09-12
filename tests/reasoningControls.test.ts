@@ -135,6 +135,29 @@ describe('buildReasoningPatch translation', () => {
         expect(result.patch).toEqual({ reasoning: { effort: 'high' } });
     });
 
+    it('off: the composer no-think tier routes per capability class', () => {
+        // xAI has no no-think knob — low is the cheapest honest value.
+        expect(buildReasoningPatch(makeConfig({ baseUrl: 'https://api.x.ai/v1' }), 'off').patch)
+            .toEqual({ reasoning_effort: 'low' });
+        // GLM and DeepSeek have a real disabled switch — use it.
+        expect(buildReasoningPatch(makeConfig({ baseUrl: 'https://api.z-ai.com/v1' }), 'off').patch)
+            .toEqual({ thinking: { type: 'disabled' } });
+        expect(buildReasoningPatch(makeConfig({ selectedModel: 'deepseek-reasoner' }), 'off').patch)
+            .toEqual({ thinking: { type: 'disabled' } });
+        // Responses API: 'minimal' is the documented no-think tier.
+        expect(buildReasoningPatch(makeConfig({ apiFormat: 'responses' }), 'off').patch)
+            .toEqual({ reasoning: { effort: 'minimal' } });
+    });
+
+    it('off: anthropic is shim-owned — the gate skips the thinking block', () => {
+        // The audit still reports the intent; the block itself is decided by
+        // shouldRequestExtendedThinking (covered in thinkingCapture tests).
+        const result = buildReasoningPatch(makeConfig({ apiFormat: 'messages' }), 'off');
+        expect(result.patch).toEqual({});
+        expect(result.audit.route).toBe('anthropic-thinking');
+        expect(result.audit.effort).toBe('off');
+    });
+
     it('anthropic messages: no body patch (shim owns budget_tokens) but audit reports intent', () => {
         const result = buildReasoningPatch(makeConfig({ apiFormat: 'messages' }), 'max');
         expect(result.patch).toEqual({});
