@@ -163,6 +163,7 @@ export const MAX_TOOL_CONTENT_CHARS = 2400;
 /** Per-tool result budgets — the compendium tools legitimately carry more. */
 const TOOL_BUDGETS: Record<string, number> = {
     get_market_packet: 6000,
+    run_screener: 4000,
     get_all_timeframes: 8000,
 };
 
@@ -221,6 +222,7 @@ const TOOL_LABELS: Record<string, string> = {
     revise_skill: 'skill revision',
     recall: 'notebook recall',
     get_setup_history_stats: 'setup history',
+    run_screener: 'screener',
     recall_chat: 'session search',
     send_message: 'direct message',
     read_message: 'read inbox',
@@ -727,6 +729,23 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 properties: {
                     symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                     interval: { type: 'string', description: 'Timeframe, e.g. 15m (default: the chart\'s current interval).' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'run_screener',
+            description:
+                'Scan the WHOLE USDT-perp market at once (top coins by 24h volume): price, 24h change, RSI(14) on 15m, EMA trend regime, the trader\'s own logged W/L for each coin, and LIVE strategy-book setups (range breakouts, pin bars, inside bars, gaps, divergences, failed breakouts). Use to find candidates across the market without the user switching charts — then drill into a coin with get_market_packet or get_chart_view.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    top: { type: 'number', description: 'How many top-volume coins to scan, 5–30 (default 15).' },
+                    setupsOnly: { type: 'boolean', description: 'Only return coins with at least one live setup detected (default false).' },
+                    sort: { type: 'string', enum: ['volume', 'movers', 'setups'], description: 'Row order: volume (default), biggest 24h movers first, or most setups first.' },
                 },
                 additionalProperties: false,
             },
@@ -1530,6 +1549,23 @@ export async function executeDeskTool(
                     }),
                     'Treat these as CODE-detected conditions with evidence, not advice — confirm against the packet and levels before acting.',
                 ].join('\n');
+                break;
+            }
+            case 'run_screener': {
+                // Market-wide discovery: grade the top-volume universe with
+                // the app's own indicators + setup detectors + the trader's
+                // journal. Heavy (N kline fetches) — capped at 30 coins and
+                // served from the tool cache on repeats.
+                const rawTop = Number(call.arguments.top);
+                const top = Math.min(Math.max(Number.isFinite(rawTop) ? rawTop : 15, 5), 30);
+                const setupsOnly = call.arguments.setupsOnly === true;
+                const sort = asString(call.arguments.sort) || 'volume';
+                const { runScreener, screenerToMarkdown } = await import('../trade/screener');
+                let rows = await runScreener({ limit: top, trades: context.trades || [] });
+                if (setupsOnly) rows = rows.filter(r => r.setups.length > 0);
+                if (sort === 'movers') rows = [...rows].sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h));
+                else if (sort === 'setups') rows = [...rows].sort((a, b) => b.setups.length - a.setups.length);
+                content = screenerToMarkdown(rows);
                 break;
             }
             case 'get_setup_history_stats': {
