@@ -52,24 +52,6 @@ const seedMessages = async (page: import('@playwright/test').Page, username: str
     await expect(page.getByRole('dialog', { name: 'User profile selection' })).toHaveCount(0, { timeout: 15_000 });
 };
 
-const floorMessage = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
-    id: 'e2e-floor',
-    role: 'ai',
-    text: '',
-    createdAt: new Date().toISOString(),
-    isDebating: true,
-    ensembleProgress: {
-        analysts: [
-            { key: 'analyst-a', providerId: 'a', providerName: 'Model A', modelId: 'a-model', modelName: 'A', displayName: 'Model A', status: 'analyzing', reasoning: 'Checking the opening structure.' },
-            { key: 'analyst-b', providerId: 'b', providerName: 'Model B', modelId: 'b-model', modelName: 'B', displayName: 'Model B', status: 'analyzing', reasoning: 'Comparing the supplied levels.' },
-        ],
-        moderator: { status: 'reviewing' },
-    },
-    reasoningProcesses: { moderator: 'Waiting for the opening evidence.' },
-    activeDebateSpeakers: { Moderator: 1, 'Model A': 1, 'Model B': 1 },
-    ...overrides,
-});
-
 const analysisMessage = (): Record<string, unknown> => ({
     id: 'e2e-ai',
     role: 'ai',
@@ -103,12 +85,8 @@ const analysisMessage = (): Record<string, unknown> => ({
     ],
 });
 
-const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smoke Workspace', withAnalysis = false, withFloor = false): Promise<void> => {
-    const messages = withFloor
-        ? [floorMessage()]
-        : withAnalysis
-            ? [analysisMessage()]
-            : [];
+const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smoke Workspace', withAnalysis = false): Promise<void> => {
+    const messages = withAnalysis ? [analysisMessage()] : [];
     await seedMessages(page, name, messages);
 };
 
@@ -151,133 +129,33 @@ test('first-run chat shows the onboarding card when no providers are configured'
     await expect(page.getByRole('button', { name: 'AI setup', exact: true })).toBeVisible({ timeout: 10_000 });
 });
 
-test('seeded analysis can log a WIN through the capture dialog', async ({ page }) => {
-    await seedWorkspace(page, 'Journal Workspace', true);
-    await expect(page.getByText('BTCUSDT')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('R:R')).toBeVisible();
-    await page.getByRole('button', { name: 'Win', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Capture trade data' })).toBeVisible({ timeout: 10_000 });
-    await page.locator('#pnl-amount').fill('25');
-    await page.getByRole('button', { name: /Log without data capture/i }).click();
-    await expect(page.getByRole('dialog', { name: 'Capture trade data' })).toHaveCount(0, { timeout: 10_000 });
+test('a profile with a seeded analysis boots clean', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await seedWorkspace(page, 'Analysis Workspace', true);
+    // Legacy seeded analyses (old chat-surface cards with Win/Loss buttons and
+    // the analysis-trace panel) no longer render anywhere — the smoke contract
+    // is that a profile carrying one boots to the trade surface with ZERO
+    // page errors. The capture dialog itself is reachable only through the
+    // outcome autopilot (price-driven), which smoke does not simulate.
+    await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 15_000 });
+    expect(errors).toEqual([]);
 });
 
-test('seeded analysis exposes an inspectable analysis trace', async ({ page }) => {
-    await seedWorkspace(page, 'Trace Workspace', true);
-    await expect(page.getByText('BTCUSDT')).toBeVisible({ timeout: 15_000 });
-    const trace = page.getByText(/Analysis trace ·/i);
-    await expect(trace).toBeVisible();
-    await trace.click();
-    await expect(page.getByText('Confidence adjusted', { exact: true })).toBeVisible();
-    await expect(page.getByText(/2 public debate turns attached/i)).toBeVisible();
-});
+// NOTE: the Floor surface was removed from the app (the activity rail's four
+// surfaces are Trade/Journal/Studio/Agents) — its seat-card smoke specs went
+// with it.
 
-test('Floor shows one seat card per speaker with its thinking line', async ({ page }) => {
-    await seedMessages(page, 'Floor Workspace', [floorMessage({
-        debateTurns: [
-            { speaker: 'Model A', round: 1, text: '', reasoning: 'Alpha sees support holding at 95k.', createdAt: new Date().toISOString() },
-            { speaker: 'Model B', round: 1, text: '', reasoning: 'Beta sees the sweep failing at 95k.', createdAt: new Date().toISOString() },
-            { speaker: 'Moderator', round: 2, text: '', reasoning: 'Waiting for the opening evidence.', createdAt: new Date().toISOString() },
-        ],
-    })]);
-    const floor = page.getByLabel('Floor');
-    await expect(floor).toBeVisible({ timeout: 15_000 });
-    // One seat card per speaker, no seat missing.
-    await expect(floor.getByRole('button', { name: 'Open Model A analysis' })).toHaveCount(1);
-    await expect(floor.getByRole('button', { name: 'Open Model B analysis' })).toHaveCount(1);
-    await expect(floor.getByRole('button', { name: 'Open Moderator analysis' })).toHaveCount(1);
-    // Each seat's private thinking line renders on its own card.
-    await expect(floor).toContainText('Alpha sees support holding at 95k.');
-    await expect(floor).toContainText('Beta sees the sweep failing at 95k.');
-    await expect(floor).toContainText('Waiting for the opening evidence.');
-});
-
-test('Floor keeps the thinking lane out of a seat card once public speech exists', async ({ page }) => {
-    await seedMessages(page, 'Floor Single Bubble Workspace', [floorMessage({
-        debateTurns: [{ speaker: 'Moderator', round: 2, text: 'I want your strongest counter, please.', reasoning: 'Weighing the sweep against the failed retest.', createdAt: new Date().toISOString() }],
-    })]);
-    const moderatorSeat = page.getByRole('button', { name: 'Open Moderator analysis' });
-    await expect(moderatorSeat).toBeVisible({ timeout: 15_000 });
-    // A settled seat shows its thinking line as the card body...
-    await expect(moderatorSeat).toContainText('Weighing the sweep');
-});
-
-test('Floor seat card bounds the preview to the derivation slice', async ({ page }) => {
-    await seedMessages(page, 'Floor Ticker Workspace', [floorMessage({
-        debateTurns: [{ speaker: 'Model A', round: 1, text: 'The reclaim failed.', reasoning: 'Alpha walks the 15m structure: the sweep took the lows, the reclaim stalled under the 21 EMA, and volume diverged across the second push into resistance.', createdAt: new Date().toISOString() }],
-    })]);
-    const seatA = page.getByRole('button', { name: 'Open Model A analysis' });
-    await expect(seatA).toBeVisible({ timeout: 15_000 });
-    // The card carries the bounded slice (72 chars)...
-    await expect(seatA).toContainText('Alpha walks the 15m structure: the sweep took the lows, the reclaim');
-    // ...and never the full reasoning (that lives in the seat transcript).
-    await expect(seatA).not.toContainText('volume diverged across the second push');
-});
-
-test('final verdict stays out of the seat card; the seat transcript carries it', async ({ page }) => {
-    await seedMessages(page, 'Floor Verdict Workspace', [floorMessage({
-        debateTurns: [{ speaker: 'Moderator', round: 4, text: 'FINAL TRADE PLAN: Long BTCUSDT.', reasoning: 'Weighing the sweep against the failed retest.', createdAt: new Date().toISOString() }],
-        reasoningProcesses: { moderator: 'Weighing the sweep against the failed retest.' },
-        activeDebateSpeakers: { Moderator: 1 },
-        ensembleProgress: {
-            analysts: [
-                { key: 'analyst-a', providerId: 'a', providerName: 'Model A', modelId: 'a-model', modelName: 'A', displayName: 'Model A', status: 'complete', reasoning: 'Alpha sees support holding at 95k.', finalOutput: 'Long the reclaim.' },
-                { key: 'analyst-b', providerId: 'b', providerName: 'Model B', modelId: 'b-model', modelName: 'B', displayName: 'Model B', status: 'complete', reasoning: 'Beta sees the sweep failing at 95k.', finalOutput: 'Short the sweep.' },
-            ],
-            moderator: { status: 'reviewing' },
-        },
-    })]);
-    const moderatorSeat = page.getByRole('button', { name: 'Open Moderator analysis' });
-    await expect(moderatorSeat).toBeVisible({ timeout: 15_000 });
-    // Card body = the thinking line; the public verdict is NOT on the card.
-    await expect(moderatorSeat).toContainText('Weighing the sweep');
-    await expect(moderatorSeat).not.toContainText('Long BTCUSDT');
-    // Open the seat transcript: the public verdict lives there.
-    await moderatorSeat.click();
-    const panel = page.getByRole('complementary', { name: 'Moderator transcript' });
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText('FINAL TRADE PLAN: Long BTCUSDT.');
-});
-
-test('analyst identity never crosses seats in the Floor', async ({ page }) => {
-    await seedMessages(page, 'Floor Seats Workspace', [floorMessage({
-        debateTurns: [
-            { speaker: 'Model A', round: 1, text: 'Long thesis from the reclaim.', reasoning: 'Alpha sees support holding at 95k.', createdAt: new Date().toISOString() },
-            { speaker: 'Model B', round: 1, text: 'Short read from the sweep.', reasoning: 'Beta sees the sweep failing at 95k.', createdAt: new Date().toISOString() },
-        ],
-        activeDebateSpeakers: { 'Model A': 1, 'Model B': 1 },
-    })]);
-    const floor = page.getByLabel('Floor');
-    await expect(floor).toBeVisible({ timeout: 15_000 });
-
-    // Each seat card carries ONLY its own reasoning line.
-    const actorA = page.getByRole('button', { name: 'Open Model A analysis' });
-    await expect(actorA).toContainText('Alpha sees support holding at 95k.');
-    await expect(actorA).not.toContainText('Beta sees');
-    const actorB = page.getByRole('button', { name: 'Open Model B analysis' });
-    await expect(actorB).toContainText('Beta sees the sweep failing at 95k.');
-    await expect(actorB).not.toContainText('Alpha sees');
-
-    // The per-seat transcript panel does not leak either.
-    await actorA.click();
-    const seatA = page.getByRole('complementary', { name: 'Model A transcript' });
-    await expect(seatA).toBeVisible();
-    await expect(seatA).toContainText('Long thesis from the reclaim.');
-    await expect(seatA).not.toContainText('Short read from the sweep');
-});
-
-test('journal and live market are reachable as labelled dialogs', async ({ page }) => {
+test('the surface rail reaches the journal and back to the trade chart', async ({ page }) => {
     await seedWorkspace(page, 'Navigation Workspace');
 
-    await page.getByRole('button', { name: 'Trading Journal', exact: true }).first().click();
-    const settings = page.getByRole('dialog', { name: 'Settings' });
-    await expect(settings).toBeVisible({ timeout: 10_000 });
-    await settings.getByRole('button', { name: 'Journal', exact: true }).click();
-    await expect(settings.getByRole('heading', { name: 'Journal' })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Close settings' }).click();
-
-    await page.getByRole('button', { name: 'Live Market', exact: true }).first().click();
-    await expect(page.getByRole('dialog', { name: 'Live Market' })).toBeVisible({ timeout: 10_000 });
+    // The Antigravity rail replaced the old header buttons: Journal is a
+    // surface now (embedded <Journal/>, no dialog chrome), and Trade
+    // switches back to the chart.
+    await page.getByRole('button', { name: 'Journal', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Trade', exact: true }).click();
+    await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 10_000 });
 });
 
 test('mobile navigation keeps core actions inside the navigation dialog', async ({ page }) => {
