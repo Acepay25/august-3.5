@@ -61,7 +61,6 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
             setRunning(false);
         });
         return () => controller.abort();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     const visible = useMemo(() => {
