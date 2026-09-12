@@ -56,6 +56,10 @@ tests/test_output.txt
 # Local agent tooling
 .zcode/
 
+# Local source material (trading PDF library — referenced by name only,
+# never shipped; keeps copyrighted books out of the repo)
+Pdf's Strategies/
+
 # Tool artifacts
 .commandcode
 
