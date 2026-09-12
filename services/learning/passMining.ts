@@ -248,10 +248,13 @@ export const runPassMiningSweep = async (
             ifCondition: `${coin} ${dir.toLowerCase()} setup in the ${fam} family without fresh confirmation`,
             thenAction: 'stand aside — passed setups like this reached the stop first in every logged case',
         };
+        // The cluster already carries a scoped default prediction; the gate
+        // adds tombstone/duplicate/coverage/IF-THEN checks. Judged once —
+        // a skip (covered by a live skill, or rejected recently) still marks
+        // the cluster drafted so the weekly sweep never re-nags it.
         const { queueSkillDraft } = await import('../../utils/skillDrafts');
-        queueSkillDraft({
-            tradeId: `pass:${cluster.key}:${cluster.records.length}`,
-            coin: sample.coin,
+        const { deterministicDraftGate } = await import('./draftGates');
+        const gate = deterministicDraftGate({
             crafted: {
                 ...crafted,
                 prediction: (await import('../../utils/skillPrediction')).defaultPrediction({
@@ -260,9 +263,20 @@ export const runPassMiningSweep = async (
                     regime: sample.regime,
                 }),
             },
-        }, username);
+            tradeId: `pass:${cluster.key}:${cluster.records.length}`,
+            username,
+            coin: sample.coin,
+            family: sample.family,
+        });
+        if (gate.ok) {
+            queueSkillDraft({
+                tradeId: `pass:${cluster.key}:${cluster.records.length}`,
+                coin: sample.coin,
+                crafted: gate.crafted,
+            }, username);
+            result.draftedClusters.push(cluster.key);
+        }
         for (const r of cluster.records) r.drafted = true;
-        result.draftedClusters.push(cluster.key);
     }
 
     await savePassRecords(username, records);

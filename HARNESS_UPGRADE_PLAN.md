@@ -1607,3 +1607,86 @@ Full mechanism map + port plan: `.hermes/plans/botmode-scan-and-plan.md`
   vitest testTimeout raised to 15s — heavy jsdom files hit the default
   5s per-test timeout only in full runs, clean-HEAD stash bisect proved
   a scheduling edge, not regressions). Not pushed.
+
+
+## 19. SESSION HANDOFF (2026-09-10 → 09-11) — Chat surface folds into Chart AI
+
+Biggest UI round yet: the Messages surface is DELETED and the Trade dock
+becomes the conversation home. NOTE: this round survived a disaster — the
+tree was mid-edit inside E:\C_Archive_20260910 (disk shuffle), the copy was
+lost, and the work was re-applied from session context onto the C: recovery
+(HEAD 4e78e85). That commit lineage is the truth; ignore E: paths.
+
+- **Sessions in the dock** (services/trade/chatSessions.ts extended): kind
+  solo | panel | coach | group, per-session botId, panelModels
+  (providerId+modelId, cap PANEL_MAX_MODELS=5). `+ New` menu: chat /
+  panel / Coach inbox / open a room / as-a-roster-bot. Thinking traces,
+  tool lines, ToolAction rows and images persist per entry (bounded:
+  4000-char reasoning, 50 actions, data-URL-only images ≤1.2MB, 12
+  sessions × 60 entries).
+- **Panel mode** (services/trade/chatPanel.ts, pure): seats speak in
+  round-robin seeing the room so far, may (pass), may DM a peer via the
+  debate mailbox (send_message lines render as ▸ tools), @Name pulls a
+  mentioned seat to the FRONT of the queue (planPanelTurn pull param), and
+  the last seat writes ONE synthesis answer. Every seat runs the full desk
+  loop, and its side-effect proposals are mirrored into the shared room
+  ([side-effects: …] lines) so peers + synthesis co-authorize skill/
+  memory/tool edits (explicit user requirement).
+- **Composer (reference parity)**: ModelPicker + +attach (images→vision
+  parts when isVisionModel, files→inlined labeled text) + chart-screenshot
+  button (PNG attaches + renders in transcript) + thinking-effort dropdown
+  (off/auto/low/medium/high/max). ReasoningEffort 'off' is NEW: routed per
+  capability class (Anthropic gate skips the thinking block —
+  shouldRequestExtendedThinking honors options.reasoningEffort==='off';
+  GLM/DeepSeek send thinking:disabled; responses 'minimal'; xAI clamps to
+  low) — tests in reasoningControls + thinkingCapture. Answers stream via
+  useSmoothStreamText + .stream-fade + new .chat-fade-in CSS; Thinking row
+  = shared ReasoningRow (quiet-collapsed doctrine respected).
+- **The model grows itself from Chart AI** (desk tools added):
+  write_memory_note (DIRECT via writeModelNote guards), get_notebook_map
+  (READ — no action row), propose_skill (queueSkillDraft → Coach inbox),
+  revise_skill (queueLearningProposal 'rescope' → Settings → Skills),
+  joining amend_memory/forge_tool; TRADE_TOOLS now includes the whole set
+  + recall/setup-history/btc-context; toolActionFromResult + ToolActionsRow
+  label every new class with its review location. App.tsx chatContext memo
+  + its dead locals went with the surface.
+- **Chart = realtime + drawings + screenshot**: TradingChart keeps the
+  websocket-driven last-bar patch AND a stall watchdog (live+quiet ~12s →
+  history re-sync) AND a closed-bar top-up — a frozen socket can't freeze
+  the chart silently. TradingView-style toolbar (trend/hline/ray/rect/
+  brush/erase + 5 colors + undo/clear) paints on an overlay canvas anchored
+  in DATA space (unix seconds + price), persisted per symbol+user via
+  services/trade/chartDrawings.ts. Imperative ChartHandle: capturePng
+  (chart.takeScreenshot + overlay composite; lightweight-charts 5.2.1 API)
+  and getSnapshot → describeChartSnapshotForModel rides EVERY message as an
+  [ON SCREEN] block, and get_chart_view now returns candles + mark + verdict
+  levels + condensed order book + the user's drawings. DeskToolContext /
+  runDeskToolLoop / StreamWithDeskToolsOptions thread chartDrawings.
+- **Dock geometry**: drag separator (pointer capture, 300–820px clamp,
+  double-click reset, persisted trade_dock_width_v1), collapse-to-rail
+  (responsive), expand-over-chart. NavRail lost Chat; useSurface migrates
+  stored 'chat'→'trade'; Alt-1..5 renumbered; Agents tab now opens
+  bot/group/coach INTO the dock via nonce-keyed requests + App-owned
+  renderCoachSurface/renderGroupSurface slots (dock imports neither).
+  "Full analysis" button bridges the composer to the ensemble pipeline
+  through an automation-shaped private run (File([],name) placeholder
+  image metas are safe — OCR only consumes pre-set fullAnalysisText).
+- **Deleted** (components/chat): ChatArea, ChatInput, MessageItem,
+  TranscriptRow, ThreadTabs, WorkspaceWelcome, AnalysisDetails,
+  TeamRosterMenu, InlineApprovalCard, PreReadGate, ContextDisclosure,
+  LeverageSection, TodayReassessmentPanel + 7 matching suites. Kept:
+  AgentRosterRail, BotAvatar/BotFace, NewBotDialog/NewGroupDialog,
+  GroupChatView, CoachThreadPanel, ToolActionsRow, SkillCitationChips.
+  Negative tests lock the removed tabs out — do not reintroduce a pane
+  without a distinct content source.
+- **Gates at handoff**: tsc 0 · 2263 passed / 11 skipped · build clean ·
+  eslint 0 errors over the whole dirty tree · prod bundle boots headless
+  (root mounts, trade/chart/dock/toolbar all render; only third-party CORS
+  proxy 403s for Binance REST fallback — websockets are the primary path).
+  ~20 new tests: chartDrawings (6), chatPanel (+pull routing),
+  chatSessions (panel/sanitize/kinds), deskTools catalog + chart_view
+  book/drawings, effort-off routing, snapshot context, toolAction labels.
+- **UNCOMMITTED** at handoff (user's one-commit-when-said convention).
+  59 dirty paths; HEAD 4e78e85; ahead of origin was 2 before this round.
+  Stray junk in tree from the disaster: .scratch/, boot-probe.cjs — do not
+  commit them.

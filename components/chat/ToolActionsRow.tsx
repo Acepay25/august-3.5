@@ -22,6 +22,9 @@ const ICON_OK: Record<string, React.ReactNode> = {
     forge_tool: <Wrench className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     skill_draft: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     skill_ingest: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    propose_skill: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    revise_skill: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    write_memory_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     notebook_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     custom: <FilePlus2 className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
 };
@@ -41,6 +44,18 @@ const actionLabel = (tool: string, items: ToolAction[]): string => {
             return n === 1
                 ? `Skill created from evidence — ${items[0].label}`
                 : `${n} skills created from evidence`;
+        case 'propose_skill':
+            return n === 1
+                ? `Skill draft proposed — ${items[0].label} (review with the Coach)`
+                : `${n} skill drafts proposed — review with the Coach`;
+        case 'revise_skill':
+            return n === 1
+                ? `Skill revision proposed — ${items[0].label} (review in Settings → Skills)`
+                : `${n} skill revisions proposed — review in Settings → Skills`;
+        case 'write_memory_note':
+            return n === 1
+                ? `Memory note saved — ${items[0].label} (Settings → Memory)`
+                : `${n} memory notes saved (Settings → Memory)`;
         case 'notebook_note':
             return items.length === 1
                 ? `Notebook ${items[0].verb} — ${items[0].label}`

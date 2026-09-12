@@ -17,8 +17,11 @@ export const TASK_BUDGETS = {
   clarification: 400,
   /** Vision/OCR structured report — 6 sections; 1024 truncated mid-field. */
   ocr: 2560,
-  /** Casual chat reply. */
-  chat: 2048,
+  /** Casual chat reply. Raised from 2048 — the Chart AI dock runs at high
+   *  thinking effort and some models echo their CoT into the content
+   *  channel; 2048 died mid-reasoning so the user saw a truncated scratchpad
+   *  instead of an answer (a market read is not a casual reply). */
+  chat: 8192,
   /** Post-mortem report (WIN/LOSS/ENTRY_NOT_HIT sections + IF/THEN rule). */
   postMortem: 8192,
   /** Deep Research: subtask decomposition (a JSON list, tiny output). */

@@ -41,7 +41,7 @@ import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
-import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
+import { buildModelIdToName, chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
@@ -4025,13 +4025,16 @@ ${accuracyVerificationNote}`
                     ? providerConfigs.find(c => c.id === activeBot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(activeBot.modelId))
                     : undefined;
                 const useBotThread = Boolean(activeBot && botProvider);
+                // The composer selection is provider-qualified
+                // (`providerId::modelId`) so a model name offered by two
+                // providers answers from the one the user actually picked.
+                // Legacy bare ids resolve heuristically (see providerUtils).
                 const chosen = useBotThread && activeBot && botProvider
                     ? botProvider
-                    : providerConfigs.find(c =>
-                        isProviderReady(c) && (c.selectedModel === selectedChatModel || c.models.includes(selectedChatModel))
-                    );
+                    : resolveChatModelSelection(providerConfigs, selectedChatModel) ?? undefined;
+                const chatModel = useBotThread && activeBot ? activeBot.modelId : chatModelIdOf(selectedChatModel);
                 const provider = chosen
-                    ? { config: { ...chosen, selectedModel: useBotThread && activeBot ? activeBot.modelId : selectedChatModel }, name: chosen.name, model: useBotThread && activeBot ? activeBot.modelId : selectedChatModel, useImages: false, thoughtsKey: chosen.id }
+                    ? { config: { ...chosen, selectedModel: chatModel }, name: chosen.name, model: chatModel, useImages: false, thoughtsKey: chosen.id }
                     : enabledProviders[0];
                 if (activeComposerMode === 'research' && provider?.config) {
                     // Deep Research (Minara port, option 2): a multi-stage

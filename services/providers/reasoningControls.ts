@@ -47,8 +47,11 @@ import { getHarnessSettings } from '../../utils/harnessSettings';
 
 // ─── Effort tiers ──────────────────────────────────────────────────────────
 
-/** Harness-level reasoning effort. 'auto' = no override (legacy behavior). */
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max' | 'auto';
+/** Harness-level reasoning effort. 'auto' = no override (legacy behavior).
+ *  'off' = explicitly ask the model NOT to think (composer toggle): routed
+ *  per capability class (Anthropic skips the thinking block, GLM/DeepSeek
+ *  send thinking:disabled, the rest step to the lowest effort). */
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max' | 'auto';
 
 /** Role→effort schedule (P2). Openings reason hard; quick answers don't. */
 export const EFFORT_BY_TASK = {
@@ -65,6 +68,9 @@ export const EFFORT_BY_TASK = {
     chat: 'low',
     /** Post-mortem reports — structured, but not exploratory. */
     postMortem: 'medium',
+    /** The skill supervisor's per-item verdicts — judgment over the
+     *  catalog/graveyard/evidence, one call per item. */
+    supervision: 'medium',
     /** Vision/OCR structured extraction. */
     ocr: 'low',
 } as const;
@@ -178,6 +184,8 @@ const isRoutePinned = (route: WireAuditEntry['route'], providerId: string): bool
 
 /** Map harness tiers onto xAI's 4-level scale. */
 const XAI_EFFORT_MAP: Record<ReasoningEffort, 'low' | 'medium' | 'high' | 'xhigh' | null> = {
+    // 'off' has no wire equivalent — low is the cheapest honest knob.
+    off: 'low',
     low: 'low',
     medium: 'medium',
     high: 'high',
@@ -188,6 +196,7 @@ const XAI_EFFORT_MAP: Record<ReasoningEffort, 'low' | 'medium' | 'high' | 'xhigh
 
 /** GLM's literal string scale (docs use 'max' as a real value). */
 const GLM_EFFORT_MAP: Record<ReasoningEffort, string | null> = {
+    off: null,
     low: 'low',
     medium: 'medium',
     high: 'high',
@@ -196,6 +205,7 @@ const GLM_EFFORT_MAP: Record<ReasoningEffort, string | null> = {
 };
 
 const DEEPSEEK_EFFORT_MAP: Record<ReasoningEffort, string | null> = {
+    off: null,
     low: 'low',
     medium: 'medium',
     high: 'high',
@@ -236,7 +246,9 @@ export const buildReasoningPatch = (
         if (effort === 'auto') {
             return { patch: {}, audit: { route: 'none', effort, applied: false, reason: 'glm route: effort=auto sends no knob' } };
         }
-        const enabled = effort !== 'low';
+        // 'off' and 'low' both switch thinking OFF — 'off' is the composer's
+        // explicit no-think, 'low' is the fast-answer tier.
+        const enabled = effort !== 'low' && effort !== 'off';
         const patch: Record<string, unknown> = { thinking: { type: enabled ? 'enabled' : 'disabled' } };
         const effortValue = GLM_EFFORT_MAP[effort];
         if (enabled && effortValue) patch.thinking_effort = effortValue;
@@ -257,7 +269,8 @@ export const buildReasoningPatch = (
         if (effort === 'auto') {
             return { patch: {}, audit: { route: 'none', effort, applied: false, reason: 'deepseek route: effort=auto sends no knob' } };
         }
-        const enabled = effort !== 'low';
+        // 'off' and 'low' both switch thinking OFF (see the glm route).
+        const enabled = effort !== 'low' && effort !== 'off';
         const patch: Record<string, unknown> = { thinking: { type: enabled ? 'enabled' : 'disabled' } };
         const effortValue = DEEPSEEK_EFFORT_MAP[effort];
         if (enabled && effortValue) patch.reasoning_effort = effortValue;
@@ -290,7 +303,9 @@ export const buildReasoningPatch = (
         if (isRoutePinned('responses-effort', config.id)) {
             return { patch: {}, audit: { route: 'none', effort, applied: false, reason: 'responses route pinned off by a harness wire lesson (re-probe to clear)' } };
         }
-        const value = effort === 'max' ? 'high' : (effort as 'low' | 'medium' | 'high');
+        // 'off' maps to the responses API's 'minimal' tier; 'max' has no
+        // value above high, so it clamps to 'high'.
+        const value = effort === 'off' ? 'minimal' : effort === 'max' ? 'high' : (effort as 'low' | 'medium' | 'high');
         if (effort !== 'auto') {
             return {
                 patch: { reasoning: { effort: value } },

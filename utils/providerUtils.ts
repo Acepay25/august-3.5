@@ -24,6 +24,59 @@ export function getFirstReadyProvider(configs: ProviderConfig[]): ProviderConfig
 }
 
 /**
+ * Resolve the provider + EXACT model for a chat-model selection.
+ *
+ * The composer's picker emits `providerId::modelId` (the same qualified form
+ * panel seats use) because a bare model id is ambiguous — two providers can
+ * offer the same model, and "first provider that lists it" silently routed
+ * the user's pick to the wrong provider. Legacy bare model ids (old stored
+ * prefs / old session stamps) resolve heuristically: prefer the ready
+ * provider whose selectedModel IS the value, else the first ready provider
+ * listing it. Returns the config with selectedModel PINNED to the picked
+ * model, or null when the selection matches nothing ready.
+ */
+export function resolveChatModelSelection(configs: ProviderConfig[], selection: string): ProviderConfig | null {
+    const owner = findChatModelOwner(configs, selection);
+    return owner?.ready ? owner.config : null;
+}
+
+export interface ChatModelOwner {
+    config: ProviderConfig;
+    /** Whether the owning provider would actually answer (enabled + key). */
+    ready: boolean;
+}
+
+/**
+ * Find WHO owns a chat-model selection — ready or not. Callers use this to
+ * give a PRECISE reason when the selection can't answer: "no provider lists
+ * this model anymore" vs "its provider is disabled / has no API key", instead
+ * of silently answering with the first ready provider.
+ */
+export function findChatModelOwner(configs: ProviderConfig[], selection: string): ChatModelOwner | null {
+    const value = (selection || '').trim();
+    if (!value) return null;
+    if (value.includes('::')) {
+        const sep = value.indexOf('::');
+        const providerId = value.slice(0, sep);
+        const modelId = value.slice(sep + 2);
+        const base = configs.find(c => c.id === providerId);
+        if (!base) return null;
+        return { config: modelId ? { ...base, selectedModel: modelId } : base, ready: isProviderReady(base) };
+    }
+    const byExact = configs.find(c => c.selectedModel === value);
+    if (byExact) return { config: byExact, ready: isProviderReady(byExact) };
+    const byList = configs.find(c => c.models.includes(value));
+    return byList ? { config: byList, ready: isProviderReady(byList) } : null;
+}
+
+/** The bare model id of a chat-model selection (`providerId::modelId` →
+ *  `modelId`; legacy bare values pass through). */
+export function chatModelIdOf(selection: string): string {
+    const value = (selection || '').trim();
+    return value.includes('::') ? value.slice(value.indexOf('::') + 2) : value;
+}
+
+/**
  * A provider config by id — the single lookup used everywhere a seat,
  * bot, or automation references its provider by id.
  */

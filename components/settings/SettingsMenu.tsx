@@ -23,6 +23,8 @@ import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from 
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
+import ProfileMemoryCard from './ProfileMemoryCard';
+import SupervisorCard from './SupervisorCard';
 import AmendmentsInbox from './AmendmentsInbox';
 import ModelPicker from '../shared/ModelPicker';
 import { Journal } from '../journal/Journal';
@@ -922,6 +924,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </p>
                                         <AmendmentsInbox />
                                     </div>
+                                    <SupervisorCard />
+                                    <ProfileMemoryCard />
                                 </div>
                             )}
 

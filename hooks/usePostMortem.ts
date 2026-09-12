@@ -13,7 +13,7 @@ import { getMemoryFiles } from '../services/learning/MemoryFilesService';
 import { syncClosedTradeToNotebook, parseSkillMarkdown, listSkillSlugs } from '../services/learning/SkillMemoryService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
-import { queueSkillDraft, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
+import { gateEvidenceBackedDraft } from '../services/learning/draftGates';
 import { appendToolActions, toolActionStamp } from '../utils/toolActions';
 import type { ToolAction } from '../types/message';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
@@ -696,22 +696,41 @@ Please investigate this discrepancy in your analysis.
                             const m = parseSkillMarkdown(f.content);
                             return Boolean(m && m.tradeIds.includes(closed.id));
                         }) : false;
-                        if (
-                            crafted
-                            && !alreadyAutoIngested
-                            && !isDraftTombstoned(draftTriggerKey(closed.analysis?.coinName, crafted), notebookUser)
-                        ) {
-                            queueSkillDraft({
-                                tradeId: closed.id,
-                                coin: closed.analysis?.coinName,
+                        if (crafted && !alreadyAutoIngested) {
+                            // The LLM craft now passes the SAME evidence-backed
+                            // gate as every other source: the closed trade is the
+                            // cluster, so a merge verdict folds its outcome into
+                            // the covering skill's W/L tally instead of queueing
+                            // a twin, and a create must carry a falsifiable
+                            // prediction. Tombstone + duplicate checks ride the
+                            // gate; the human inbox stays the final backstop.
+                            const gateResult = await gateEvidenceBackedDraft({
                                 crafted,
-                            }, notebookUser);
-                            // the LLM-crafted skill is a proposal —
-                            // it lands in the Coach inbox for human review.
-                            pmActions.push({
-                                at: toolActionStamp(), speaker: 'Coach', tool: 'skill_draft', ok: true,
-                                verb: 'crafted', label: crafted.name, review: 'the Coach inbox',
+                                tradeId: closed.id,
+                                cluster: [closed],
+                                allTrades: loggedTradesRef.current,
+                                username: notebookUser,
+                                config: craftConfig,
+                                coin: closed.analysis?.coinName,
+                                direction: closed.analysis?.direction,
+                                family: closed.analysis?.detectedPatternFamily,
+                                botContext: (closed.postMortem || '').slice(0, 800),
                             });
+                            if (gateResult.action === 'queued') {
+                                // the LLM-crafted skill is a proposal —
+                                // it lands in the Coach inbox for human review.
+                                pmActions.push({
+                                    at: toolActionStamp(), speaker: 'Coach', tool: 'skill_draft', ok: true,
+                                    verb: 'crafted', label: crafted.name, review: 'the Coach inbox',
+                                });
+                            } else if (gateResult.action === 'merged') {
+                                // The covering skill absorbed this trade's
+                                // outcome — no draft, stronger skill.
+                                pmActions.push({
+                                    at: toolActionStamp(), speaker: 'Coach', tool: 'skill_merge', ok: true,
+                                    verb: 'folded evidence into', label: gateResult.target, review: gateResult.reason,
+                                });
+                            }
                         }
                     }
                 } catch (notebookError) {

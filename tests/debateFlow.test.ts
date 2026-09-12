@@ -217,10 +217,12 @@ describe('conductRealDebate (real inter-model debate)', () => {
     );
 
     // 2 rebuttal rounds × 2 analysts + clarification questions + verdict.
-    // +1 for the pre-rebuttal moderator routing call (C12 chief-of-staff).
-    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 3);
-    // +1 for the pre-rebuttal moderator routing call.
-    expect(calls.length).toBe(7);
+    // +2 for the pre-rebuttal moderator routing call (C12 chief-of-staff):
+    // it yields nothing, so the desk loop runs its empty-turn retry — once
+    // a hidden sendChatTurn + one streamed continuation, now both streamed.
+    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 4);
+    // +2 for the pre-rebuttal moderator routing call (attempt + retry).
+    expect(calls.length).toBe(8);
 
     // Rebuttal calls carry the DEBATE_RESPONSE_PROMPT with the speaker and round.
     const firstRebuttal = calls.find(c => !c.system.includes('debate moderator'))!;
@@ -846,8 +848,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
     }
 
     // 2 rebuttal rounds × 3 analysts + clarification questions + verdict.
-    // +1 for the pre-rebuttal moderator routing call.
-    expect(calls.length).toBe(2 * 3 + 3);
+    // +2 for the routing call: it yields nothing, so the desk loop runs its
+    // empty-turn retry (attempt + retry, both streamed now).
+    expect(calls.length).toBe(2 * 3 + 4);
 
     const moderatorEvents = events.filter(e => e.speaker === 'Moderator');
     expect(moderatorEvents.length).toBeGreaterThan(0);

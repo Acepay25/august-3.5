@@ -144,6 +144,14 @@ function devProviderProxy() {
           } else {
             throw new Error('Unknown provider API format.');
           }
+          // Reasoning knob for the dev proxy routes: the renderer translates
+          // the composer's effort tier into wire fields (reasoningControls
+          // capability classes) and sends them as reasoningPatch; merge them
+          // into whatever body shape the format built. Absent ⇒ no change
+          // (fail closed, same as the direct SDK path).
+          if (request.reasoningPatch && typeof request.reasoningPatch === 'object') {
+            Object.assign(body, request.reasoningPatch);
+          }
           // Streaming (SSE) passthrough — used by streamChatRequest on localhost
           // so the renderer receives per-chunk deltas without CORS failures
           // (direct browser SDK calls are blocked by providers without CORS
@@ -333,6 +341,19 @@ export default defineConfig(() => {
       // Keep the unauthenticated development proxy local to this machine.
       host: '127.0.0.1',
       port: 3000,
+      watch: {
+        // Windows: a PDF opened by another app (reader/Explorer preview/
+        // antivirus) locks the file, and chokidar crashes the whole dev
+        // server with EBUSY trying to watch it (seen with the strategy PDFs
+        // in "Pdf's Strategies"). PDFs are never HMR inputs — never watch
+        // them. The globs keep Vite's default ignores (they are replaced,
+        // not merged, when `ignored` is set).
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          (path: string) => path.toLowerCase().endsWith('.pdf') || path.includes("Pdf's Strategies"),
+        ],
+      },
       // Development assets must never be served from a stale browser cache.
       // Vite HMR remains responsible for live updates while this also makes
       // hard refreshes reliably pick up the current source.

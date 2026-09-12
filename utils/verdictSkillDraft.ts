@@ -8,9 +8,9 @@
 
 import { TradeAnalysis } from '../types';
 import { CraftedSkill } from '../schemas/learning';
-import { listSkills, skillMatchesSetup } from '../services/learning/SkillMemoryService';
 import { isMeaningfulLabel } from './meaningfulLabel';
-import { queueSkillDraft, isDraftTombstoned, draftTriggerKey, SkillDraft } from './skillDrafts';
+import { queueSkillDraft, SkillDraft } from './skillDrafts';
+import { deterministicDraftGate } from '../services/learning/draftGates';
 
 const cleanLine = (text: string, max: number): string =>
     text.replace(/\s+/g, ' ').trim().slice(0, max);
@@ -65,6 +65,11 @@ export const craftedSkillFromVerdict = (analysis: TradeAnalysis): CraftedSkill |
  * Queue a skill draft for a concluded debate verdict when it cites a pattern
  * no existing notebook skill already covers. Returns the queued draft, or
  * null when there is nothing new to learn.
+ *
+ * The draft passes the shared deterministic gate: tombstone cooldown,
+ * pending-duplicate skip, live-library coverage skip, IF/THEN sanity, and a
+ * falsifiable default prediction attached (the verdict itself carries no
+ * scored outcome — the deterministic tier is the right bar here).
  */
 export const maybeQueueVerdictSkillDraft = (
     messageId: string,
@@ -74,19 +79,18 @@ export const maybeQueueVerdictSkillDraft = (
     if (!analysis) return null;
     const crafted = craftedSkillFromVerdict(analysis);
     if (!crafted) return null;
-    const setup = {
+    const gate = deterministicDraftGate({
+        crafted,
+        tradeId: messageId,
+        username,
         coin: analysis.coinName,
         direction: analysis.direction,
-        family: analysis.detectedPatternFamily,
-        pattern: analysis.marketConditions?.pattern,
-    };
-    const alreadyKnown = listSkills().some(({ meta }) => skillMatchesSetup(meta, setup));
-    if (alreadyKnown) return null;
-    // A recently rejected trigger stays quiet for the cooldown window.
-    if (isDraftTombstoned(draftTriggerKey(analysis.coinName, crafted), username)) return null;
+        family: analysis.detectedPatternFamily || analysis.marketConditions?.pattern,
+    });
+    if (!gate.ok) return null;
     return queueSkillDraft({
         tradeId: messageId,
         coin: analysis.coinName,
-        crafted,
+        crafted: gate.crafted,
     }, username);
 };

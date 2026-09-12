@@ -1,0 +1,39 @@
+/**
+ * Trace-text presentation helpers. Thinking rows and tool-activity rows
+ * render model chain-of-thought and harness event lines as PLAIN
+ * transcript chrome (no markdown pass), so the emphasis markers models
+ * lean on in their scratchpads must be peeled, not escaped. The strip is
+ * deliberately conservative: paired ** / __ / * emphasis, headers,
+ * leading list bullets/numbers, code fences and backticks. Single
+ * underscores survive — they light up tool names like `scan_setups`.
+ */
+
+/** Paired emphasis first, so a leading `**Note:` stops looking like a
+ *  bullet before the list-marker strip runs. */
+const EMPHASIS_PAIRS: Array<[RegExp, string]> = [
+    [/\*\*([^*]+)\*\*/g, '$1'],
+    [/__([^_]+)__/g, '$1'],
+    [/\*([^*\s][^*]*)\*/g, '$1'],
+];
+
+/** Peel markdown markers from trace text (multiline-safe). Unpaired
+ *  orphan `**`/`__` runs — common when a stream is cut mid-emphasis —
+ *  are dropped after the paired pass. */
+export const stripTraceMarkers = (text: string): string => {
+    let out = text.replace(/```[a-z]*/gi, '');
+    for (const [re, to] of EMPHASIS_PAIRS) out = out.replace(re, to);
+    return out
+        .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+        .replace(/^[ \t]*[-*•·][ \t]+/gm, '')
+        .replace(/^[ \t]*\d{1,2}[.)][ \t]+/gm, '')
+        .replace(/`/g, '')
+        .replace(/\*\*|__/g, '')
+        .replace(/^[_*~\-—]{3,}\s*$/gm, '')
+        .replace(/[ \t]+$/gm, '');
+};
+
+/** Non-empty, marker-stripped lines of a trace — one bullet each. */
+export const traceLines = (text: string): string[] =>
+    text.split('\n')
+        .map(line => stripTraceMarkers(line).trim())
+        .filter(Boolean);

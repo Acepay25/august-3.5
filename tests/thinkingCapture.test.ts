@@ -136,6 +136,14 @@ describe('shouldRequestExtendedThinking — Anthropic thinking request gating', 
         expect(shouldRequestExtendedThinking(config, { maxTokens: 4096 })).toBe(true);
         expect(shouldRequestExtendedThinking(config, { maxTokens: 8192, jsonMode: true })).toBe(false);
     });
+
+    it('the composer effort=off toggle beats the model gate', () => {
+        const config = thinkingCapable('claude-sonnet-4-latest');
+        expect(shouldRequestExtendedThinking(config, { maxTokens: 4096, reasoningEffort: 'off' })).toBe(false);
+        // 'auto' / any other tier leaves the gate's model decision intact.
+        expect(shouldRequestExtendedThinking(config, { maxTokens: 4096, reasoningEffort: 'auto' })).toBe(true);
+        expect(shouldRequestExtendedThinking(config, { maxTokens: 4096, reasoningEffort: 'max' })).toBe(true);
+    });
 });
 
 describe('splitChatContent', () => {

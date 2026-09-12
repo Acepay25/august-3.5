@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import MarkdownContent from './MarkdownContent';
 import { ChevronDownIcon } from './Icons';
+import { getActiveUsername } from '../../utils/activeUser';
+import { nextTip } from '../../utils/tradingTips';
+import { stripTraceMarkers, traceLines } from '../../utils/traceText';
 
 export interface ReasoningRowProps {
     /** Full thinking / chain-of-thought text. */
@@ -30,15 +32,18 @@ const latestLine = (text: string): string => {
 
 /**
  * Collapsible thinking row, built on a native `<details>` so it keeps
- * disclosure semantics — styled to the Hermes reference:
- *   · COLLAPSED + SETTLED = a bare quiet `Thought ›` line — no icon, no
- *     duration, no preview. Blends into the transcript like the
- *     reference's per-step Thought rows.
- *   · RUNNING = `Thinking · Ns` with a live duration tick and the
- *     latest-line ticker, so progress is visible without opening.
- *   · Expanded bodies render near-white readable text (not dim gray) and
- *     TRUNCATE past 600 chars with their own Show more / Show less toggle —
- *     expansion previews the reasoning instead of dumping thousands of chars.
+ * disclosure semantics:
+ *   · RUNNING = a one-line window: the rotating `Tip: …` label (every ~5s,
+ *     every third slot a habit from the trader's own learned memory), a live
+ *     duration tick and the newest trace line scrolling by — markdown
+ *     markers stripped so the ticker reads as clean speech.
+ *   · SETTLE = the row OPENS into its read state — a boxed `Thought` panel
+ *     whose body is the trace as clean bulleted lines (one observation per
+ *     bullet, emphasis markers peeled — the model's `**` never shows).
+ *     A manual toggle during the run wins over the auto-open.
+ *   · Expanded bodies truncate past 600 chars mid-line with their own
+ *     Show more / Show less toggle — expansion previews the reasoning
+ *     instead of dumping thousands of chars.
  * The trace body stays in the DOM when collapsed.
  */
 const ReasoningRow: React.FC<ReasoningRowProps> = ({
@@ -55,6 +60,8 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     const clipRef = useRef<HTMLSpanElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
     const wasRunningRef = useRef(running);
+    // A manual summary click during the run opts out of the settle auto-open.
+    const userToggledRef = useRef(false);
     // Clock starts at mount if the row is already streaming (live message).
     const startedAtRef = useRef<number | null>(running ? Date.now() : null);
     // Live seconds while streaming — ticks every second in the collapsed row.
@@ -63,17 +70,18 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     );
     const trimmed = thinking.trim();
 
-    // Follow the live state WITHOUT opening: when the stream starts we begin
-    // (or restart) the clock; when it settles we snap shut (no-op if already
-    // collapsed — the rule is collapsed-by-default). Settled rows show no
-    // duration — the reference's Thought rows are bare.
+    // When the stream starts we begin (or restart) the clock and arm a fresh
+    // auto-open; when it settles the row OPENS into its read state — the
+    // trader shouldn't have to click to read what the model was thinking.
+    // A manual toggle during the run means the user already chose a state.
     useEffect(() => {
         if (running && !wasRunningRef.current) {
             startedAtRef.current = Date.now();
             setShowFullTrace(false);
+            userToggledRef.current = false;
         }
         if (wasRunningRef.current && !running) {
-            setOpen(false);
+            if (!userToggledRef.current) setOpen(true);
             startedAtRef.current = null;
         }
         wasRunningRef.current = running;
@@ -114,8 +122,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
     if (!trimmed) return null;
     // The ticker renders only while running AND collapsed — a live one-line
-    // window into the stream. Settled collapsed rows are bare (no preview —
-    // the reference's Thought rows carry nothing but the label).
+    // window into the stream.
     const showTicker = running && !open;
 
     const liveMeta = running && liveSeconds !== null ? `${liveSeconds}s` : null;
@@ -123,17 +130,21 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
     // Inner truncation applies to the SETTLED expanded body only — a live
     // stream shows everything (the user opened it deliberately mid-run).
-    // The cut lands on a LINE boundary and "Show more" reveals the whole trace.
+    // The cut lands mid-line with an ellipsis riding the last bullet —
+    // "Show more" reveals the whole trace.
     const needsTrim = !running && trimmed.length > EXPAND_PREVIEW_CHARS;
     const traceShown = needsTrim && !showFullTrace
-        ? `${trimmed.slice(0, trimmed.lastIndexOf('\n', EXPAND_PREVIEW_CHARS) > 0 ? trimmed.lastIndexOf('\n', EXPAND_PREVIEW_CHARS) : EXPAND_PREVIEW_CHARS).trimEnd()}\n…`
+        ? `${trimmed.slice(0, EXPAND_PREVIEW_CHARS).trimEnd()} …`
         : trimmed;
 
     // Row label: the reference distinguishes Thinking (live) from Thought
     // (settled). A CUSTOM label (e.g. "Moderator thinking", "Thinking · 3
     // traces") carries information, so it always shows as-is; only the
     // default label flips with the state.
-    const rowLabel = label !== 'Thinking' ? label : (running ? 'Thinking' : 'Thought');
+    const tipSlot = Math.floor((liveSeconds ?? 0) / 5);
+    const rawTip = running ? nextTip(getActiveUsername(), tipSlot) : null;
+    const tipLabel = rawTip ? `Tip: ${rawTip.length > 80 ? `${rawTip.slice(0, 79)}…` : rawTip}` : null;
+    const rowLabel = label !== 'Thinking' ? label : (running ? (tipLabel ?? 'Thinking') : 'Thought');
 
     return (
         <details
@@ -145,6 +156,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
             <summary
                 className="reasoning-row-summary"
                 aria-label={`${label} — ${open ? 'collapse' : 'expand'}`}
+                onClick={() => { userToggledRef.current = true; }}
             >
                 {!open && (
                     <svg viewBox="0 0 16 16" className="reasoning-row-icon" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.2">
@@ -161,23 +173,30 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                 {running && <span className="reasoning-row-dots" aria-hidden="true"><span /><span /><span /></span>}
                 {showTicker && (
                     <span className="reasoning-row-clip" ref={clipRef}>
-                        <span className="reasoning-row-line">{latestLine(trimmed)}</span>
+                        <span className="reasoning-row-line">{stripTraceMarkers(latestLine(trimmed))}</span>
                     </span>
                 )}
             </summary>
             <div className="reasoning-row-body custom-scrollbar" ref={bodyRef}>
-                {/* While running the body stays plain text — re-parsing a
-                    growing markdown trace every chunk is O(n²) for a panel
-                    that is usually collapsed. Markdown lands on settle. The
+                {/* While running the body stays plain (marker-stripped) text —
+                    re-parsing a growing trace into bullets every chunk is
+                    waste for a panel that is usually collapsed mid-run. The
                     blinking caret makes the growth read as live speech. */}
                 {running ? (
                     <div className="whitespace-pre-wrap break-words text-zinc-400">
-                        {trimmed}
+                        {stripTraceMarkers(trimmed)}
                         <span className="reasoning-row-caret" aria-hidden="true" />
                     </div>
                 ) : (
                     <>
-                        <MarkdownContent content={traceShown} className="text-zinc-400" />
+                        <div className="space-y-1">
+                            {traceLines(traceShown).map((line, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <span aria-hidden="true" className="shrink-0 text-zinc-600">•</span>
+                                    <span className="min-w-0 flex-1 break-words text-zinc-400">{line}</span>
+                                </div>
+                            ))}
+                        </div>
                         {needsTrim && (
                             <button
                                 type="button"

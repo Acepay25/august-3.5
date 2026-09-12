@@ -10,6 +10,7 @@
 
 import { COMMON_WORDS } from '../../constants/commonWords';
 import { getMemoryFilesContext, extractLessonFromPostMortem } from '../../services/learning/MemoryFilesService';
+import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { listRetrievedMemorySources, type MemoryRetrievalQuery, type RetrievedMemorySource } from '../../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../../services/bots/BotMemoryService';
 import type { BotMemoryScope } from '../../types/bot';
@@ -117,9 +118,14 @@ export const assemblePipelineMemoryContext = (
     // Analysts get the opening slice (independent read); the MODERATOR gets
     // the verdict slice (full skill bodies, conflict flags, runner-up skills,
     // similar trades) — the arbiter binds the decision, so it needs verdict
-    // depth even though its context bundle is assembled at send time.
-    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
-    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    // depth even though its context bundle is assembled at send time. The
+    // collaboration-memory index (who the user is / how they want output) is
+    // prepended to BOTH — always loaded, like the notebook slice, so the
+    // seats tailor to the trader, not just the tape.
+    const profileMemoryIndex = buildProfileMemoryIndex();
+    const withProfile = (ctx: string): string => [profileMemoryIndex, ctx].filter(Boolean).join('\n\n---\n\n');
+    const memoryFilesContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
+    const moderatorMemoryContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
     const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
     // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the analysts

@@ -36,7 +36,6 @@ const KIND_LABEL: Record<string, string> = {
     demote: 'demote',
     rescope: 're-scope',
     contradiction: 'conflict',
-    distill: 'distill',
 };
 
 const APPLYABLE = new Set(['displacement', 'revival', 'demote']);

@@ -71,6 +71,19 @@ export interface DerivativesData {
         pressure: 'strong_buying' | 'buying' | 'neutral' | 'selling' | 'strong_selling';
     };
 
+    // --- Positioning TREND (the conviction/crowding the snapshot can't show) ---
+    // Funding-rate history (most recent first): a streak of same-sign funding
+    // tells the model the crowd is one-sided BEFORE it squeezes.
+    fundingHistory?: { t: number; rate: number }[];
+    fundingStreak?: number;            // consecutive same-sign periods (signed: + longs paying)
+    // Open-interest history: OI rising into a move = fresh money (real
+    // conviction); OI falling = the move is short-covering / weak.
+    oiHistory?: { t: number; oi: number; value: number }[];
+    oiChangePct?: number;              // % change over the history window
+    // Spot–futures basis history: a blowout premium flags crowded leverage.
+    basis?: { t: number; basis: number; basisRate: number }[];
+    basisRateNow?: number;             // latest annualized-ish basis rate %
+
     // Combined sentiment analysis
     overallSentiment: 'very_bullish' | 'bullish' | 'neutral' | 'bearish' | 'very_bearish';
     sentimentScore: number;            // -100 to +100
@@ -841,6 +854,96 @@ export const fetchTakerBuySellRatio = async (symbol: string): Promise<{
 };
 
 /**
+ * Funding-rate HISTORY (public). The current rate is a snapshot; the streak
+ * is the signal — many same-sign periods means the crowd is leaning one way
+ * and paying to hold it, which precedes squeezes. Returns most-recent-first.
+ */
+export const fetchFundingRateHistory = async (
+    symbol: string, limit = 21,
+): Promise<{ t: number; rate: number }[]> => {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const cacheKey = `fundhist_${normalizedSymbol}_${limit}`;
+    const cached = getCached<{ t: number; rate: number }[]>(cacheKey);
+    if (cached) return cached;
+    try {
+        const response = await robustFuturesFetch(`/fapi/v1/fundingRate?symbol=${normalizedSymbol}&limit=${limit}`);
+        const data = await response.json();
+        const rows = (Array.isArray(data) ? data : [])
+            .map((r: any) => ({ t: Number(r.fundingTime), rate: parseFloat(r.fundingRate) }))
+            .filter((r: { t: number; rate: number }) => Number.isFinite(r.t) && Number.isFinite(r.rate))
+            .reverse(); // newest first
+        setCache(cacheKey, rows);
+        return rows;
+    } catch (error) {
+        console.warn(`Failed to fetch funding history for ${normalizedSymbol}:`, error);
+        return [];
+    }
+};
+
+/**
+ * Open-interest HISTORY (public /futures/data/openInterestHist). OI trend
+ * against price is the conviction read the snapshot lacks: rising OI + rising
+ * price = new longs funding the move; falling OI + rising price = short
+ * covering (weak). Returns oldest→newest for easy trend math.
+ */
+export const fetchOpenInterestHistory = async (
+    symbol: string, period = '1h', limit = 24,
+): Promise<{ t: number; oi: number; value: number }[]> => {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const cacheKey = `oihist_${normalizedSymbol}_${period}_${limit}`;
+    const cached = getCached<{ t: number; oi: number; value: number }[]>(cacheKey);
+    if (cached) return cached;
+    try {
+        const response = await robustFuturesFetch(`/futures/data/openInterestHist?symbol=${normalizedSymbol}&period=${period}&limit=${limit}`);
+        const data = await response.json();
+        const rows = (Array.isArray(data) ? data : [])
+            .map((r: any) => ({ t: Number(r.timestamp), oi: parseFloat(r.sumOpenInterest), value: parseFloat(r.sumOpenInterestValue) }))
+            .filter((r: { t: number; oi: number }) => Number.isFinite(r.t) && Number.isFinite(r.oi));
+        setCache(cacheKey, rows);
+        return rows;
+    } catch (error) {
+        console.warn(`Failed to fetch OI history for ${normalizedSymbol}:`, error);
+        return [];
+    }
+};
+
+/**
+ * Spot–futures BASIS history (public /futures/data/basis). The premium perps
+ * trade over spot flags crowded leverage; a blowout is reversal risk. Returns
+ * oldest→newest.
+ */
+export const fetchBasisHistory = async (
+    symbol: string, period = '1h', limit = 24,
+): Promise<{ t: number; basis: number; basisRate: number }[]> => {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const cacheKey = `basis_${normalizedSymbol}_${period}_${limit}`;
+    const cached = getCached<{ t: number; basis: number; basisRate: number }[]>(cacheKey);
+    if (cached) return cached;
+    try {
+        const response = await robustFuturesFetch(`/futures/data/basis?symbol=${normalizedSymbol}&period=${period}&limit=${limit}`);
+        const data = await response.json();
+        const rows = (Array.isArray(data) ? data : [])
+            .map((r: any) => ({ t: Number(r.timestamp), basis: parseFloat(r.basis), basisRate: parseFloat(r.basisRate) }))
+            .filter((r: { t: number; basis: number }) => Number.isFinite(r.t) && Number.isFinite(r.basis));
+        setCache(cacheKey, rows);
+        return rows;
+    } catch (error) {
+        console.warn(`Failed to fetch basis for ${normalizedSymbol}:`, error);
+        return [];
+    }
+};
+
+/** Signed count of consecutive same-sign funding periods (newest first). */
+const fundingStreakOf = (rows: { t: number; rate: number }[]): number => {
+    if (rows.length === 0) return 0;
+    const sign = Math.sign(rows[0].rate);
+    if (sign === 0) return 0;
+    let n = 0;
+    for (const r of rows) { if (Math.sign(r.rate) === sign) n += 1; else break; }
+    return sign * n;
+};
+
+/**
  * Fetch all derivatives data in one call
  * Combines Open Interest, Long/Short Ratios, and Taker Buy/Sell data
  */
@@ -852,12 +955,21 @@ export const fetchDerivativesData = async (symbol: string): Promise<DerivativesD
     if (cached) return cached;
 
     try {
-        const [oi, lsr, ttr, tbs] = await Promise.all([
+        const [oi, lsr, ttr, tbs, fundingHistory, oiHistory, basisHistory] = await Promise.all([
             fetchOpenInterest(normalizedSymbol),
             fetchLongShortRatio(normalizedSymbol),
             fetchTopTraderRatio(normalizedSymbol),
-            fetchTakerBuySellRatio(normalizedSymbol)
+            fetchTakerBuySellRatio(normalizedSymbol),
+            fetchFundingRateHistory(normalizedSymbol).catch(() => [] as { t: number; rate: number }[]),
+            fetchOpenInterestHistory(normalizedSymbol).catch(() => [] as { t: number; oi: number; value: number }[]),
+            fetchBasisHistory(normalizedSymbol).catch(() => [] as { t: number; basis: number; basisRate: number }[]),
         ]);
+        // OI % change over the history window (oldest→newest) — the conviction
+        // read; 0 when there's no usable series.
+        let oiChangePct = 0;
+        if (oiHistory.length >= 2 && oiHistory[0].oi > 0) {
+            oiChangePct = ((oiHistory[oiHistory.length - 1].oi - oiHistory[0].oi) / oiHistory[0].oi) * 100;
+        }
 
         // Calculate overall sentiment score (-100 to +100)
         // Weight: Long/Short Ratio (30%), Top Trader (40%), Taker Buy/Sell (30%)
@@ -893,6 +1005,12 @@ export const fetchDerivativesData = async (symbol: string): Promise<DerivativesD
             longShortRatio: lsr,
             topTraderRatio: ttr,
             takerBuySell: tbs,
+            fundingHistory,
+            fundingStreak: fundingStreakOf(fundingHistory),
+            oiHistory,
+            oiChangePct: Math.round(oiChangePct * 100) / 100,
+            basis: basisHistory,
+            basisRateNow: basisHistory.length > 0 ? basisHistory[basisHistory.length - 1].basisRate : undefined,
             overallSentiment,
             sentimentScore: Math.round(sentimentScore),
             dataTimestamp: new Date().toISOString(),

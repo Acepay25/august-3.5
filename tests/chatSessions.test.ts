@@ -99,4 +99,97 @@ describe('trade chat sessions', () => {
         localStorage.setItem('last_active_user', uniqueUser());
         expect(loadSessions()).toEqual([]);
     });
+
+    it('panel sessions carry their seats and survive a round-trip', () => {
+        const s = createSession('panel', [
+            { providerId: 'gemini', modelId: 'a' },
+            { providerId: 'x', modelId: 'b' },
+        ]);
+        s.entries.push({ id: 'a1', role: 'ai', text: 'answer', tools: [], speaker: 'gemini:a' });
+        saveSessions([s]);
+        const [loaded] = loadSessions();
+        expect(loaded.kind).toBe('panel');
+        expect(loaded.title).toBe('New panel');
+        expect(loaded.panelModels).toEqual([
+            { providerId: 'gemini', modelId: 'a' },
+            { providerId: 'x', modelId: 'b' },
+        ]);
+        expect(loaded.entries[0].speaker).toBe('gemini:a');
+    });
+
+    it('sessions remember their chart setup, effort and solo model', () => {
+        const s = createSession();
+        s.symbol = 'solusdt';
+        s.interval = '4h';
+        s.effort = 'high';
+        s.soloModel = 'gemini-2.5-flash';
+        saveSessions([s]);
+        const [loaded] = loadSessions();
+        expect(loaded.symbol).toBe('SOLUSDT');
+        expect(loaded.interval).toBe('4h');
+        expect(loaded.effort).toBe('high');
+        expect(loaded.soloModel).toBe('gemini-2.5-flash');
+    });
+
+    it('drops junk session-scoped fields instead of restoring them', () => {
+        const raw = JSON.stringify([{
+            id: 's-x', title: 'x', createdAt: 1, updatedAt: 1,
+            entries: [], kind: 'solo',
+            symbol: 42, interval: true, effort: 'ludicrous', soloModel: {},
+        }]);
+        localStorage.setItem(storageKey(), raw);
+        const [loaded] = loadSessions();
+        expect(loaded.symbol).toBeUndefined();
+        expect(loaded.interval).toBeUndefined();
+        expect(loaded.effort).toBeUndefined();
+        expect(loaded.soloModel).toBeUndefined();
+    });
+
+    it('caps panel seats at 5 and drops malformed seat rows', () => {
+        const s = createSession('panel', Array.from({ length: 8 }, (_, i) => ({ providerId: 'p', modelId: `m${i}` })));
+        s.panelModels = [...(s.panelModels ?? []), { providerId: 1 as never, modelId: 'junk' }];
+        saveSessions([s]);
+        const [loaded] = loadSessions();
+        expect(loaded.panelModels).toHaveLength(5);
+        expect(loaded.panelModels!.every(m => m.providerId === 'p')).toBe(true);
+    });
+
+    it('bounds the per-entry thinking trace, actions and image', () => {
+        const s = createSession();
+        s.entries.push({
+            id: 'a1', role: 'ai', text: 'x', tools: [],
+            reasoning: 'r'.repeat(9000),
+            actions: Array.from({ length: 60 }, (_, i) => ({ at: 'now', speaker: 'bot', tool: `t${i}`, ok: true, verb: 'created', label: 'l', review: '' })),
+            image: 'data:image/png;base64,AAAA',
+        });
+        s.entries.push({ id: 'a2', role: 'ai', text: 'y', tools: [], image: 'https://evil.example/x.png' });
+        s.entries.push({ id: 'a3', role: 'ai', text: 'z', tools: [], actions: [{ nope: true } as never] });
+        saveSessions([s]);
+        const [loaded] = loadSessions();
+        expect(loaded.entries[0].reasoning).toHaveLength(4000);
+        expect(loaded.entries[0].actions).toHaveLength(50);
+        expect(loaded.entries[0].image).toBe('data:image/png;base64,AAAA');
+        // A non-data-URL image never reaches storage; junk actions are dropped.
+        expect(loaded.entries[1].image).toBeUndefined();
+        expect(loaded.entries[2].actions).toEqual([]);
+    });
+
+    it('coach and group session kinds round-trip (roster surfaces in the dock)', () => {
+        const coach = createSession('coach');
+        coach.title = 'Coach inbox';
+        const group = { ...createSession('group'), title: 'Macro room', groupId: 'g-1' };
+        const botBound = { ...createSession('solo'), botId: 'bot-9' };
+        saveSessions([coach, group, botBound]);
+        const loaded = loadSessions();
+        expect(loaded.map(s => s.kind)).toEqual(['coach', 'group', 'solo']);
+        expect(loaded[1].groupId).toBe('g-1');
+        expect(loaded[2].botId).toBe('bot-9');
+    });
+
+    it('an unknown stored kind falls back to solo, never a crash', () => {
+        const s = createSession();
+        (s as { kind?: string }).kind = 'wizard';
+        saveSessions([s]);
+        expect(loadSessions()[0].kind).toBe('solo');
+    });
 });

@@ -2,6 +2,431 @@
 
 Plain-English log of change rounds. Newest first.
 
+## Sessions remember themselves, an LLM supervises the queues, and your model is actually yours
+
+- **Every Chart AI session keeps its own world.** Each session now stores the
+  chart instrument + timeframe it was set up on, the thinking-effort choice,
+  and the model — restored the moment you return to that session from Past
+  Conversations (and when you reopen the app, which also lands back in the
+  session you left). Solo answers now show **which model** said each line.
+- **Your selected model is the one that answers.** The composer's pick used
+  to be a bare model name, and when two providers offered the same model the
+  answer could silently come from the wrong one. The picker is now
+  provider-qualified (provider + model together), the choice is migrated
+  once, and the same rule is used everywhere a chat model is resolved.
+- **Effort now actually changes Claude's thinking.** The Low/Medium/High/Max
+  knob previously only switched extended thinking on or off for Anthropic
+  models (same budget either way); the budget now scales with the tier.
+- **An LLM supervises the approval queues.** A model — the one your current
+  session uses (a panel's first seat when several are selected) — reviews
+  every new skill draft, forged-tool candidate, memory amendment and ladder
+  proposal automatically, in its own streamed calls: it verifies against your
+  catalog/graveyard/memory, **enhances** the salvageable (mechanical IF,
+  activation-key description, tighter prediction), and approves the solid
+  ones as candidates — or rejects with a reason. Watch it live from the
+  sparkle icon in the Chart AI header: the panel streams what the model is
+  doing item by item, and **every decision is yours to undo** (reject an
+  approval, approve a rejection) plus a pause toggle. Approved skills still
+  enter as candidates — the evidence ladder still decides enforcement.
+- **Trade theses resolve the moment price says so.** Beyond the
+  every-3-sessions review, unresolved trade ideas discussed in chat are
+  re-scored against fresh candles after each send (throttled), so a lesson
+  lands in the Inbox when it becomes knowable — not at the next counter tick.
+- **"Thinking…" became "Tip: …".** While a model works you get rotating,
+  specific trading tips — and every third one is personal, drawn from what
+  August has learned about you.
+- **August learns your trading habits between sessions.** Every couple of
+  sessions it distills durable facts — preferred symbols and timeframes, risk
+  habits, recurring mistakes, how you like answers — into Assistant memory
+  (Settings → Memory, AUTO-badged and forgettable), so the next session
+  starts where the last one ended.
+
+## Triggers now alert your computer, richer market data, and skills learned from the chat
+
+- **Notifications actually reach your computer.** A shared desktop-notification
+  helper (`notify`) now covers web, Electron, and native (Capacitor) in one
+  path, and it fires when a **price watch or a plan level hits** — before this,
+  a trigger only queued a chat bubble, so if you'd tabbed away you'd never
+  know. Arming a watch requests notification permission up front, so the grant
+  exists before a trigger fires minutes later.
+- **More of Binance, as a trend not a snapshot.** The market packet now carries
+  **funding-rate history** (how many sessions the crowd has been paying —
+  squeeze risk), **open-interest history** (is new money funding the move, or
+  is it short-covering?), and **spot–futures basis** (a stretched premium flags
+  crowded leverage). Rendered as a one-line "Positioning trend" the models read
+  alongside the existing OI/funding/long-short snapshot.
+- **Skills learned from the conversation, not just logged trades.** Every few
+  Chart AI sessions a quiet review pass reads what you and the model actually
+  discussed, pulls out each concrete trade idea (direction + entry + stop +
+  target), **scores it against the price history that followed** (did TP or SL
+  hit first?), and turns the resolved ones into skill drafts — a thesis that
+  won becomes a `repeat` skill, one that lost an `avoid` skill. It only ever
+  queues drafts for your approval (never auto-applied), skips ideas still
+  unresolved, and never drafts the same idea twice.
+- **Skills now lead with WHEN to use them.** The skills index the model sees
+  was just an IF/THEN clause; per the Agent-Skills guidance (the description is
+  the activation key), each line now leads with the skill's what/when
+  description and kind, with the IF/THEN rule after it — so the model can
+  actually decide to reach for a skill.
+
+## Your strategy PDFs became skills, and a scanner that reads them live
+
+- **Twelve playbooks, queued for your approval.** The strategy PDFs in
+  `Pdf's Strategies` are distilled into candidate IF/THEN skills — breakout
+  retest, failed-breakout fade, exhaustion-gap reversion, breakaway-gap join,
+  pin-bar range fade, inside-bar resolution, RSI divergence, band reversion,
+  band-walk momentum, Al-Brooks trend pullback, range-edge fade with ATR
+  sizing, and momentum thrust. They land in the **Inbox as pending drafts**
+  (not the live library) — you approve or dismiss each. Seeded once; your
+  decisions are never undone by a later launch.
+- **`scan_setups` — the books, as code.** A new desk tool runs those
+  playbooks' machine-checkable cores against live candles and reports which
+  setups are firing in the last few bars — range breakouts/fades, pin bars,
+  inside-bar resolutions, gap classes (breakaway/runaway/exhaustion, filled
+  or not), RSI divergences, Bollinger band plays, trend-pullback second
+  entries, failed breakouts — each with its evidence and the library skills
+  that match. The model calls it before answering "is anything setting up?",
+  so it reads the tape instead of guessing.
+
+## Floor mode removed; the chart now loads 1,000 candles
+
+- **The CHAT | FLOOR toggle is gone.** The full-screen trading-floor debate
+  view (and its Ctrl+Shift+F shortcut, command-palette entry, and header
+  toggle) has been deleted — the debate lives in the desk view and Chart AI.
+- **1,000 candles.** The chart's history load went from 300 bars to 500 and
+  now to **1,000** — the Binance maximum, still one request per timeframe.
+
+## Chart AI and the left panel now follow the Antigravity layout
+
+- **Chart AI looks like the Agent panel now.** The dock header is the
+  reference's clean cluster — identity on the left, and on the right:
+  **＋** new chat, **🕘 Past conversations**, **⋯** customization (panel
+  models, expand over chart, Start options), and **✕** collapse. The history
+  button opens a **Past Conversations palette**: a search box, "Recent"
+  sessions with relative times ("2 days ago"), ↑↓ to navigate / ↵ to select,
+  "Show N more…" — sessions are no longer a tab strip at all. The composer is
+  one rounded card (input + attach/model/effort/send row) under a
+  symbol-section header, with the reference's generous spacing and a plain
+  sentence-case disclaimer.
+- **The left panel works like Antigravity's.** The four surfaces live on a
+  slim 48px activity bar; clicking the ACTIVE surface icon toggles its side
+  panel — on Trade that's the **order book, now a proper left sidebar**
+  (300px) instead of a permanent column, so closing it hands the width to the
+  chart. The choice persists across reloads.
+
+## Panel seats stop failing silently; the left rail moves behind a hamburger
+
+- **A multi-model panel seat that fails now says WHY.** When one of your
+  panel models errored, every seat just showed "(this seat failed to answer)"
+  with no clue. The real provider error is now printed in the bubble (e.g.
+  "…failed to answer: … request failed (400)"), and a seat whose model was
+  removed from Settings shows a clear "Seat unavailable" line instead of vanishing.
+- **The "thinking and response are the same" bug, fixed.** Two causes: the
+  chat output budget was 2048 tokens, so a thinking-heavy model's answer was
+  often just its own truncated reasoning and nothing else — raised to 8192.
+  And when a model echoed its chain-of-thought verbatim into the answer, the
+  previous cleanup fell back to showing that echo again; now a pure echo is
+  detected and the answer keeps only the text after it (or a plain "the model
+  streamed only its reasoning" note, with a hint to lower thinking effort).
+- **The left navigation is a hamburger now.** The four surfaces (Trade /
+  Journal / Studio / Agents) were a permanent icon column; they now live
+  behind a ☰ flyout on a slim 40px strip (was 64px), with the current
+  surface's icon always shown so you know where you are. That hands width
+  back to the chart and dock.
+- **Expanded Chart AI drag + collapse fixed.** Expanding the dock then
+  dragging the separator felt dead (the drag was setting a pixel width the
+  expanded layout ignored). Now a drag while expanded first shrinks back out
+  and then resizes from the dock's actual width, and collapsing the dock clears
+  the expanded state so you can't get stuck in a wide dock with no collapse.
+
+## Customizable timeframes, a roomier dock, and a memory you can see
+
+- **Pick your own timeframes.** The chart's timeframe bar was hardcoded to
+  1m / 5m / 15m / 1h / 4h / 1D. It now offers the full Binance set (adds 3m,
+  30m, 2h, 6h, 12h, 3D, 1W, 1M) and a ⚙ button opens a TradingView-style
+  picker where you toggle which intervals show in the bar. Your choice is
+  saved per user, and the timeframe you're currently viewing always stays on
+  the bar no matter what. (Fixed a latent bug where a monthly chart would have
+  subscribed to the 1-minute stream — `1M` lowercased to `1m`.)
+- **The dock breathes.** The row of session tabs is gone — sessions now live
+  behind a hamburger in the header (showing the active session's name). The
+  menu lists your sessions (switch / delete) plus the New chat / panel / agent
+  / Coach / room / bot starters, and it can't be clipped the way the old tab
+  strip's dropdown was. That frees a whole row for the conversation.
+- **See what the assistant remembers.** Settings → Memory gained an **Assistant
+  memory** card listing every collaboration memory (kind, description, body,
+  slug) with a Forget button, so you can inspect and delete exactly what Chart
+  AI remembers about you — the human-editable counterpart to the model's own
+  memory index.
+
+## Chart AI now has a memory about YOU (like a good assistant's notes)
+
+- **A second kind of memory.** The Trader Notebook remembers what the *market*
+  taught the models. Now Chart AI also keeps a small, typed memory about the
+  *collaboration* — the same shape this coding agent's memory has: one fact per
+  entry, four kinds (**user** who they are, **feedback** how they want you to
+  work, **project** ongoing goals, **reference** pointers), each with a
+  one-line description that says when it matters.
+- **Always loaded, pulled on demand.** A compact index (slug + one-liner per
+  entry) rides *every* Chart AI turn and the analysis pipeline's context, so
+  the model always knows what it already remembers — then reads a full body
+  with `read_memory` only when relevant. Nothing is dumped into every prompt.
+- **The model maintains it.** Three new desk tools — **remember** (save, or
+  UPDATE an existing entry by slug so it never duplicates), **read_memory**,
+  and **forget** (delete wrong memories). A system-prompt rule teaches the
+  discipline: check the index first, update over duplicate, carry Why/How-to-
+  apply lines on feedback, and never store trading lessons (those belong to the
+  notebook) or one-off conversation detail. Every save shows as a side-effect
+  row. Stored per user, bounded, survives reloads.
+
+## Chart AI responds instantly and its answers render clean
+
+- **No more dead time after you hit send.** The dock used to fetch the live
+  market packet over the network *before* drawing anything, so the screen sat
+  blank for a beat. Now your message and a "Thinking…" bubble appear the
+  instant you send, and the model call starts once the packet is ready.
+- **Answers stop leaking the model's scratchpad.** Some models stream their
+  reasoning into the answer as a "Thinking: … / FINAL_OUTPUT: …" header (or
+  repeat their thinking inline). The live stream only stripped tagged thinking,
+  so the raw scratchpad landed in the answer bubble — which also broke the
+  markdown (a stray fence swallowed the real reply). At settle, Chart AI now
+  runs the same splitter the journal uses: leaked thinking moves into the
+  collapsible Thought row and the answer is only the model's reply. A clean
+  answer — even one that opens with a word like "Verdict:" — is left untouched.
+- **Follow-up questions are faster.** The slow market-packet fetch is now
+  cached briefly (8s, per symbol), so a quick second question starts the model
+  immediately instead of re-pulling. Drawings, armed plans and watches still
+  refresh every message, and the block carries the real fetch time so the model
+  knows the packet's age.
+
+## Chart AI: watch/schedule triggers + a batch of dock fixes
+
+- **Watch or schedule — the model tracks the chart in real time.** Three new
+  desk tools: **watch_price** ("alert me when BTC prints above 112,000"),
+  **wake_me** ("re-check the breakout in 30 minutes"), and **cancel_watch**.
+  The model arms a trigger and the harness wakes it with a `[HARNESS TRIGGER]`
+  signal the moment the condition holds (or the scheduled time arrives) — it
+  then pulls a fresh read and tells the user whether it's ready to trade.
+  Price triggers fire once and lapse; wake-ups run off the clock, not the
+  tape; armed watches persist per user across a reload. Every armed watch
+  rides the model's context so it never double-arms.
+- **You can actually add a new session again.** The "+ New" dropdown lived
+  inside the 29px-tall scrollable session bar, which clipped it out of
+  existence — so "New chat / New panel / New agent" were unreachable. The
+  button moved out of the scroller and the menu now floats over the
+  transcript, with click-outside to close.
+- **Adding panel models is findable.** The panel chip in the header is now a
+  button ("panel · 1/5 ▸ models") that opens the seat editor any time, not
+  just once right after creating a panel.
+- **The thinking timer stops when thinking stops.** It used to keep counting
+  for the entire answer because it was tied to the whole stream; now it settles
+  the moment the answer text starts.
+- **The chart speaks Philippine time.** Axis labels, the crosshair, the live
+  context stamp, drawing timestamps and harness signals all render in
+  Asia/Manila (UTC+8) instead of UTC — 13:08 UTC now reads 21:08.
+- **Copy any message.** A Copy chip appears on hover for both your messages
+  and the model's answers.
+- **Wide tables scroll instead of losing columns.** A markdown table with many
+  columns now keeps its natural width and scrolls sideways with a visible
+  scrollbar, rather than shrinking until some columns vanish.
+
+## The harness now watches your plan levels and warns you in Chart AI
+
+- **Level-hit signals.** When you present a trade, the harness arms a watch
+  on its Entry/SL/TP levels. When the live mark price reaches one, Chart AI
+  gets a machine `[HARNESS SIGNAL]` and warns you in the dock: what hit, at
+  what price, whether the rest of the plan holds — naming each level by a
+  stable id. Each level fires **once**, ever (the latch persists per user
+  across reloads), and the model's context block always lists the armed plan
+  plus which levels already spoke.
+- **Advisory only — one owner per decision.** The watch warns; it never
+  resolves. The outcome autopilot still owns SL/TP resolution and the
+  post-mortem for logged trades. Both watch the same levels on purpose (one
+  grades the trade, one prompts the conversation), and a plan that's already
+  through its stop or a target when armed stays silent (stale-plan guard) —
+  no tick-0 pings for a dead or paid plan.
+- **Hits can't be dropped.** The signal queue lives in the chat store, not a
+  component, so a level that fires while the model is mid-answer — or while
+  the dock is unmounted — flushes as a warning turn when the session goes
+  idle. It renders as a notice row + the model's warning, never as a fake
+  user message.
+
+## Five fixes from the in-flight review
+
+- **Chat sessions no longer leak across users.** The dock's session store
+  remembers which user it loaded for; after a user switch it reloads from
+  the new profile's key instead of writing the old chats into it, and a
+  `storage` listener keeps two open windows from silently clobbering each
+  other.
+- **Panel seats that pass stay invisible.** A seat replying `(pass)` used to
+  take a visible turn and pollute the room the other seats read; now silence
+  never renders and never enters the cross-talk (a panel that lost seats
+  says so instead of silently swallowing your message).
+- A duplicated-branch ternary when creating sessions was collapsed; the
+  skills index is read fresh on every prompt, so a skill proposed mid-session
+  re-enters the conversation immediately.
+
+## Learning-loop cleanup (verified-dead only)
+
+- Deleted the `distill` learning-queue kind (declared + labeled, zero
+  emitters) and the dead `EnhancedDebateService` (imported once, never
+  called). The judge-precision producer (`recordJudgePrecision`) stays
+  backlogged as its own scoped follow-up — it's a feature, not a fix.
+
+## Chart AI can present a trade and the harness learns from it
+
+- **`present_trade` desk tool** — the model puts a concrete setup on the
+  table (direction, entry, stop, targets, confidence, rationale,
+  invalidation). It draws the Entry/SL/TP lines on the chart AND renders a
+  **proposal card** in the chat with **Log this trade** / **Cancel**.
+- **Log this trade → an open trade.** Logging appends a PENDING trade to the
+  conversation carrying the model's levels and attribution. The existing
+  outcome autopilot already registers any PENDING trade, watches its SL/TP on
+  the live feed, and — when it resolves — runs the full post-mortem →
+  skill-learning loop. So a trade the model proposes in chat is scored
+  against reality exactly like a trade the analysis pipeline produced; no new
+  close-out machinery was needed.
+- **The multi-model requirement is gone.** The post-mortem already ran on a
+  single model; the "enable at least 3 providers" hint is now clearly
+  optional ("…analysis and post-mortems run fine with just one"). One model is
+  always enough; extra models only add a debate when they're available.
+
+## Chart AI: the whole picture, the model can draw, and streams survive a tab switch
+
+- **`get_all_timeframes`** — one call returns EVERY timeframe at once: for
+  5m/15m/1h/4h/1d the last candles, trend vs EMA20/50, RSI, swing structure
+  (higher-highs/higher-lows vs the reverse) and named candle formations
+  (engulfings, hammers, shooting stars, dojis, inside bars, impulse bars),
+  plus the global layer — order book with spread/imbalance/walls, funding,
+  open interest and recent liquidations. The model can now read the complete
+  market in a single lookup.
+- **The model can draw on your chart** — the same tools you have. New desk
+  tools `mark_trade_levels` (lays an Entry/Stop/TP plan as labeled lines),
+  `draw_on_chart` (trendline / ray / zone / level, anchored in bars-ago +
+  price so it survives pan/zoom), and `clear_chart_drawings`. The model's
+  marks render on the live canvas, flow back into its own context (so it
+  builds on what it drew), and are cleared when you switch instruments.
+- **Chart AI no longer dies when you switch tabs.** The dock's session state
+  moved into a module store, so navigating to the Journal (which unmounts the
+  trade surface) no longer aborts an in-flight answer — it keeps streaming
+  into the store and the completed reply is there when you come back. Only an
+  explicit Stop, or deleting a session, cancels a run; switching between
+  sessions no longer cancels the one you left. Verified live: a stream
+  unmounted mid-answer finished to completion and reappeared intact.
+- **The model can see what you traded.** Your logged trade history now flows
+  into the Chart AI desk tools, so `recall` and `get_setup_history_stats`
+  answer from your real fills instead of an empty notebook.
+
+## Chart AI gets truly live: streaming answers, working pens, honest knobs
+
+A fix round for everything that only looked finished in the Chart AI dock —
+every item below was verified end-to-end in the running app against a live
+SSE provider, not just in unit tests:
+
+- **Answers stream for real now.** The desk-tool loop ran on a
+  non-streaming call, so tool-using turns (and any plain answer) rendered
+  all at once when the model finished. Every loop round now streams through
+  the same SSE pipeline: text lands word-by-word while tools run, native
+  tool calls are accumulated from the stream itself, and a clean in-loop
+  answer is never re-asked (no more duplicate continuation). The dev
+  provider proxy now also forwards `tools`/`tool_choice` on streams and a
+  client-translated `reasoningPatch` on every route — before this, streamed
+  chats in the dev browser silently lost ALL desk tools and the effort
+  toggle did nothing on the wire.
+- **The effort toggle really works.** Off/Auto/Low/Medium/High/Max now
+  reaches the provider: capability-class translation happens in the renderer
+  and the dev proxy merges the patch into the upstream body (verified:
+  GLM-class model received `thinking.enabled` + `thinking_effort` on High).
+- **Stop actually stops.** An armed controller now covers the whole turn
+  (context fetch included), the tool loop checks the signal between rounds,
+  and the continuation refuses to fire on a dead signal. Verified
+  mid-stream: an answer froze at 122 of 395 characters the moment Stop was
+  pressed.
+- **The drawing tools actually draw.** The overlay canvas sat BELOW
+  lightweight-charts' internal z-indexed canvases, so no tool ever received
+  a pointer — clicks previewed and never committed. The overlay now clears
+  the chart stack (z-10), and screen↔data conversion goes through logical
+  bar coordinates, so drawings stay glued through pan/zoom and work even
+  when the first candle is scrolled off-screen (the old anchor-time math
+  returned null there and silently killed every commit). Verified: hline
+  click, trendline drag, persistence across reloads, one-click reset.
+- **Tool calls got their own Thinking-style section.** A collapsible
+  "Tool activity" row (same look as the Thought row) shows the live call
+  ticker while streaming and the full call/result log after; the old
+  always-visible "▸" lines are gone.
+- **"Thinking…" no longer flickers.** The placeholder is static text with
+  only the three dots animating.
+- **One + button for everything.** Uploads and the chart screenshot live in
+  a single attach menu on the composer, matching the reference client.
+- **New agents are born inside Chart AI.** The New-session menu gains
+  "New agent": the full New Bot dialog opens, and creating the bot saves it
+  to the roster and drops you straight into its bound session.
+- **The system prompt now commands tool + skill discipline.** The copilot
+  must ground market claims in desk tools, consult the skills library and
+  APPLY matching skills (the composer injects a compact index of every
+  skill's slug + IF/THEN rule), and grow the desk (memory notes, skill
+  revisions/proposals) when a chat earns it.
+- 300 candles load on every timeframe (chart + get_chart_view), and the
+  debate-count expectations in debateFlow were updated for the streamed
+  routing call (same provider requests, both now visible as streams).
+
+## The Chat surface folds into Chart AI
+
+The Messages tab is gone. The trade surface's Chart AI dock is now the
+conversation home for the whole app — a full rebuild of the panel plus the
+chart underneath it:
+
+- **Sessions in the dock.** Chats run as parallel, persisted sessions with a
+  New-session menu: one-model chat, a PANEL of up to five models that answer
+  together (each seat sees the others' turns, can direct-message a peer
+  mid-turn through the debate mailbox, can @mention a peer to pull it into
+  the queue next, and the round closes with one synthesized answer), a
+  session bound to any roster BOT (its persona + provider/model), a group
+  ROOM (the room transcript embeds live in a session tab), and the Coach
+  inbox. The Agents tab now opens bots/rooms/coach INTO the dock instead of
+  a separate surface.
+- **Composer like the reference agent client.** Model selector, a + attach
+  button (images ride as vision parts when the model can see; files inline
+  as labeled text), a chart-screenshot button, and a thinking-effort toggle
+  (Off/Auto/Low/Medium/High/Max). A new explicit 'off' effort tier routes
+  per capability class: Anthropic skips the thinking block, GLM/DeepSeek
+  send thinking:disabled, the responses API sends minimal, xAI steps to low.
+  Answers stream into a real collapsible Thinking row and fade in as text
+  lands.
+- **The model can grow itself from this chat.** The desk set gains
+  write_memory_note (direct notebook authoring through the harness's own
+  guards), get_notebook_map, propose_skill (pending draft in the Coach
+  inbox) and revise_skill (pending proposal in Settings → Skills), joining
+  amend_memory and forge_tool. Every side-effect renders as a visible
+  status row naming where the human reviews it; a rejection is a visible
+  "Blocked — nothing stored" row.
+- **Chart tools.** get_chart_view now reports everything on screen: candles,
+  timeframe, live mark, verdict levels, the order book the ladder shows,
+  and the user's own drawings. Every message also carries an ON SCREEN block
+  read from the live canvas snapshot — the exact painted numbers, not a
+  re-fetch. The full hybrid pull remains callable as get_market_packet.
+- **TradingView-style drawing tools on the chart.** Trendline, horizontal
+  line, ray, rectangle zone and freehand brush with a five-color palette,
+  eraser, undo and clear. Shapes anchor in DATA space (bar time + price),
+  persist per symbol per user, survive reload/zoom/pan, and reach the model
+  as plain English lines.
+- **Screenshot tool.** The chart (candles + drawings composited) captures to
+  a PNG the user attaches to a message; it renders in the transcript and
+  goes to vision-capable models as an image part.
+- **The dock is a real dock.** Drag the separator to resize (persists,
+  double-click resets), collapse to a rail, expand over the chart.
+- **Realtime hardening.** A stall watchdog re-syncs history whenever the
+  feed claims live but goes quiet ~12s, and a closed-bar refresh keeps the
+  last painted bar honest — a socket that silently dies can no longer
+  freeze the chart.
+- **Deleted, with everything transferred first:** ChatArea, ChatInput,
+  MessageItem, TranscriptRow, ThreadTabs, WorkspaceWelcome, AnalysisDetails,
+  TeamRosterMenu, InlineApprovalCard, PreReadGate, ContextDisclosure,
+  LeverageSection, TodayReassessmentPanel and their suites. Bot/group/coach
+  surfaces survive inside the dock; the ensemble pipeline is reachable from
+  the composer ("Full analysis" runs it and answers back into the chat). The
+  app boots on Trade; stored 'chat' surface values migrate.
+
 ## v1.0.21 — Fix the stuck-on-loading boot crash
 
 The v1.0.20 desktop build could hang on the splash screen forever: the
