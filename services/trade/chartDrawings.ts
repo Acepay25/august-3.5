@@ -139,7 +139,7 @@ export const saveSessionDrawings = (sessionId: string, symbol: string, drawings:
     try {
         const key = sessionStorageKey(username, sessionId);
         // Merge into the coin map (older single-symbol shape migrates in place).
-        let store: Record<string, ChartDrawing[]> = {};
+        const store: Record<string, ChartDrawing[]> = {};
         const raw = localStorage.getItem(key);
         if (raw) {
             const parsed = JSON.parse(raw) as unknown;
