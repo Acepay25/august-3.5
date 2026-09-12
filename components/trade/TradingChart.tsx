@@ -38,7 +38,7 @@ import { fetchKlines } from '../../services/analysis/KlineService';
 import { phtAxisTick } from '../../utils/timezone';
 import { toCandles, toVolumes, verdictLevels, VOLUME_UP, VOLUME_DOWN, type ChartLevel } from '../../services/trade/chartData';
 import {
-    loadDrawings, saveDrawings, createDrawingId, pointsForKind, FIB_RATIOS,
+    loadDrawings, saveDrawings, loadSessionDrawings, saveSessionDrawings, createDrawingId, pointsForKind, FIB_RATIOS,
     type ChartDrawing, type DrawKind, type DrawPoint, type DrawTool, DRAW_COLORS,
 } from '../../services/trade/chartDrawings';
 import type { LiveKline } from '../../services/trade/futuresStreams';
@@ -128,6 +128,10 @@ interface TradingChartProps {
     symbol: string;
     interval: ChartInterval;
     onIntervalChange: (interval: ChartInterval) => void;
+    /** The ACTIVE Chart AI session — when set, drawings are SESSION-scoped
+     *  (each session is its own chart with its own shapes) instead of
+     *  shared per symbol. */
+    sessionId?: string;
     /** The current verdict (optional): its Entry/SL/TP lines are drawn on the
      *  candles when it belongs to this symbol. */
     verdict?: TradeAnalysis | null;
@@ -168,7 +172,7 @@ const distToSegment = (px: number, py: number, ax: number, ay: number, bx: numbe
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 };
 
-const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, verdict, showSma = false, live = false, liveKline, lastPrice, chartHandle, onDrawingsChange, modelDrawings }) => {
+const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, chartHandle, onDrawingsChange, modelDrawings }) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -212,13 +216,15 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     const modelDrawingsRef = useRef<ChartDrawing[]>([]);
     modelDrawingsRef.current = modelDrawings ?? [];
 
-    // Load the persisted shapes whenever the symbol changes.
+    // Load the persisted shapes whenever the chart (session + symbol)
+    // changes: session-scoped when the active session is known, legacy
+    // per-symbol otherwise.
     useEffect(() => {
-        setDrawings(loadDrawings(symbol));
+        setDrawings(sessionId ? loadSessionDrawings(sessionId, symbol) : loadDrawings(symbol));
         setDraft(null);
         setTool('cursor');
         setTextEdit(null);
-    }, [symbol]);
+    }, [symbol, sessionId]);
 
     // Esc cancels an in-progress shape (TradingView behaviour) — the draft
     // lives across pointer moves, so the listener rides its lifetime.
@@ -233,9 +239,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
 
     const publishDrawings = useCallback((next: ChartDrawing[]): void => {
         setDrawings(next);
-        saveDrawings(symbol, next);
+        if (sessionId) saveSessionDrawings(sessionId, symbol, next);
+        else saveDrawings(symbol, next);
         onDrawingsChange?.(next);
-    }, [symbol, onDrawingsChange]);
+    }, [symbol, sessionId, onDrawingsChange]);
 
     // ─── Chart lifecycle ────────────────────────────────────────────────────
     // Create the chart once per mount; theme tokens match the app's dark surface.
@@ -299,7 +306,24 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     // the CURRENT bar). Refresh cadence after that: while live the websocket
     // drives updates and no fast timer is armed — but a stall watchdog
     // re-syncs if the socket goes quiet; otherwise 15s (4s while empty).
+    // Tracks symbol flips inside the data-lifecycle effect below (it also
+    // re-runs on `live` toggles, which must NOT blank the chart).
+    const dataSymbolRef = useRef(symbol);
     useEffect(() => {
+        // Symbol switch: drop the PREVIOUS coin's artifacts immediately —
+        // candles, volume and the mark price line — so no stale price prints
+        // on the new chart during the history fetch (the "BTC mark on a ZEN
+        // chart" data-discrepancy flag).
+        if (dataSymbolRef.current !== symbol) {
+            dataSymbolRef.current = symbol;
+            if (markLineRef.current) {
+                try { candlesRef.current?.removePriceLine(markLineRef.current); } catch { /* series gone */ }
+                markLineRef.current = null;
+            }
+            candlesRef.current?.setData([]);
+            volumeRef.current?.setData([]);
+            lastTickRef.current = Date.now();
+        }
         let cancelled = false;
         let timer = 0;
         let watchdog = 0;

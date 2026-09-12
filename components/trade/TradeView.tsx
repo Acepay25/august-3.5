@@ -30,6 +30,7 @@ import TradingChart, { type ChartInterval, type ChartHandle } from './TradingCha
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
+import ScreenerPanel from './ScreenerPanel';
 import type { AgentBot } from '../../services/agents/agentRoster';
 
 const FALLBACK_SYMBOLS: SymbolMeta[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT']
@@ -125,6 +126,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const [dockWidth, setDockWidth] = useState<number>(readDockWidth);
     const [dockCollapsed, setDockCollapsed] = useState(false);
     const [dockExpanded, setDockExpanded] = useState(false);
+    const [screenerOpen, setScreenerOpen] = useState(false);
     const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
     const widthRef = useRef(dockWidth);
     widthRef.current = dockWidth;
@@ -173,6 +175,38 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         const poll = window.setInterval(() => void load(), 60_000);
         return () => { cancelled = true; window.clearInterval(poll); };
     }, []);
+
+    // SYMBOL SWITCH: the strip must never print the previous coin's numbers.
+    // Null it immediately, then one-shot fetch the NEW coin even while the
+    // websocket is live — the socket re-subscribes within ~1s, but without
+    // this the strip would show stale BTC prices on a ZEN chart (the data
+    // discrepancy the model flagged) for as long as the socket stays up.
+    useEffect(() => {
+        setStrip(null);
+        let cancelled = false;
+        const load = async (): Promise<void> => {
+            try {
+                const [mi, market, deriv] = await Promise.all([
+                    fetchMarkIndex(symbol),
+                    fetchMarketData(symbol),
+                    fetchDerivativesData(symbol),
+                ]);
+                if (!cancelled) {
+                    setStrip({
+                        markPrice: mi.markPrice,
+                        indexPrice: mi.indexPrice,
+                        lastFundingRate: mi.lastFundingRate,
+                        nextFundingTime: mi.nextFundingTime,
+                        changePercent24h: market.priceChangePercent24h ?? 0,
+                        volume24h: market.volume24h ?? 0,
+                        oiValue: deriv.openInterestValue ?? 0,
+                    });
+                }
+            } catch { /* the socket or the poll will fill it */ }
+        };
+        void load();
+        return () => { cancelled = true; };
+    }, [symbol]);
 
     // Fallback strip (only while the socket is down): 15s refresh.
     useEffect(() => {
@@ -367,6 +401,15 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 <div className="pl-3 pr-1">
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
                 </div>
+                <button
+                    type="button"
+                    onClick={() => setScreenerOpen(true)}
+                    aria-label="Open market screener"
+                    data-testid="screener-trigger"
+                    className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                >
+                    Screener
+                </button>
                 <span
                     data-testid="feed-status"
                     title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 15s'}
@@ -404,7 +447,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     </div>
                 )}
                 <div className={`min-h-[420px] flex-1 lg:min-h-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}>
-                    <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} verdict={verdict} live={live} liveKline={feed.kline}
+                    <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
                         chartHandle={chartHandleRef}
                         onDrawingsChange={setChartDrawings}
@@ -451,6 +494,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     </div>
                 )}
             </div>
+            <ScreenerPanel open={screenerOpen} onClose={() => setScreenerOpen(false)} onChangeSymbol={changeSymbol} trades={trades} />
         </div>
     );
 };

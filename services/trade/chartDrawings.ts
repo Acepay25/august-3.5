@@ -50,6 +50,9 @@ export type DrawTool = 'cursor' | DrawKind | 'erase';
 const storageKey = (username: string, symbol: string): string =>
     `trade_drawings_v1_${username}_${symbol.toUpperCase()}`;
 
+const sessionStorageKey = (username: string, sessionId: string): string =>
+    `trade_session_drawings_v1_${username}_${sessionId}`;
+
 const finiteNum = (v: unknown): number | null => {
     const n = typeof v === 'number' ? v : Number(v);
     return Number.isFinite(n) ? n : null;
@@ -90,6 +93,72 @@ export const saveDrawings = (symbol: string, drawings: ChartDrawing[], username 
         const trimmed = drawings.slice(-MAX_DRAWINGS_PER_SYMBOL)
             .map(d => ({ ...d, points: d.points.slice(0, MAX_POINTS_PER_DRAWING) }));
         localStorage.setItem(storageKey(username, symbol), JSON.stringify(trimmed));
+    } catch {
+        /* quota / private mode — drawings stay in memory this session */
+    }
+};
+
+/** Shared validation/bounding for a parsed drawing array (garbage → []). */
+const sanitizeDrawings = (parsed: unknown): ChartDrawing[] => {
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as unknown[]).filter(validDrawing).map(d => ({
+        ...d,
+        points: d.points.filter(validPoint).slice(0, MAX_POINTS_PER_DRAWING),
+    })).filter(d => d.points.length > 0).slice(-MAX_DRAWINGS_PER_SYMBOL);
+};
+
+/**
+ * SESSION+COIN-scoped drawings — each Chart AI session owns a MAP of
+ * symbol → shapes under one key (`trade_session_drawings_v1_<user>_<sid>`).
+ * Switching coins inside a session blanks the canvas; coming BACK to a
+ * previous coin restores that coin's shapes; a fresh session starts EMPTY.
+ */
+export const loadSessionDrawings = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] => {
+    const wanted = symbol.toUpperCase();
+    try {
+        const raw = localStorage.getItem(sessionStorageKey(username, sessionId));
+        if (raw === null) return []; // fresh session — nothing to inherit
+        const parsed = JSON.parse(raw) as { symbol?: unknown; drawings?: unknown } | Record<string, unknown> | null;
+        // New map format ({ BTCUSDT: [...], ETHUSDT: [...] })…
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray((parsed as Record<string, unknown>)[wanted])) {
+            return sanitizeDrawings((parsed as Record<string, unknown>)[wanted]);
+        }
+        // …one-shot read of the earlier single-symbol shape ({symbol, drawings}):
+        // a session drawn on ONE coin keeps working, other coins start empty.
+        if (parsed && typeof parsed === 'object' && (parsed as { symbol?: unknown }).symbol === wanted && Array.isArray((parsed as { drawings?: unknown }).drawings)) {
+            return sanitizeDrawings((parsed as { drawings: unknown }).drawings);
+        }
+        return [];
+    } catch {
+        return []; // corrupt session store — start clean rather than guess
+    }
+};
+
+export const saveSessionDrawings = (sessionId: string, symbol: string, drawings: ChartDrawing[], username = getActiveUsername()): void => {
+    const wanted = symbol.toUpperCase();
+    try {
+        const key = sessionStorageKey(username, sessionId);
+        // Merge into the coin map (older single-symbol shape migrates in place).
+        let store: Record<string, ChartDrawing[]> = {};
+        const raw = localStorage.getItem(key);
+        if (raw) {
+            const parsed = JSON.parse(raw) as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const obj = parsed as Record<string, unknown>;
+                if (typeof obj.symbol === 'string' && Array.isArray(obj.drawings)) {
+                    // Earlier single-symbol shape → migrate that one coin.
+                    store[(obj.symbol as string).toUpperCase()] = sanitizeDrawings(obj.drawings);
+                } else {
+                    // Coin map: keep EVERY coin, not just the one being saved.
+                    for (const [coin, list] of Object.entries(obj)) {
+                        if (Array.isArray(list)) store[coin] = sanitizeDrawings(list);
+                    }
+                }
+            }
+        }
+        store[wanted] = drawings.slice(-MAX_DRAWINGS_PER_SYMBOL)
+            .map(d => ({ ...d, points: d.points.slice(0, MAX_POINTS_PER_DRAWING) }));
+        localStorage.setItem(key, JSON.stringify(store));
     } catch {
         /* quota / private mode — drawings stay in memory this session */
     }
