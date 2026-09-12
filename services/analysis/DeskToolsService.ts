@@ -1157,8 +1157,10 @@ const MARKET_TOOLS = new Set([
     'get_setup_history_stats',
 ]);
 
-const resolvedSymbolField = (call: DeskToolCall, fallback: string): { symbol: string } | { } =>
-    MARKET_TOOLS.has(call.name) ? { symbol: asSymbol(call.arguments?.symbol, fallback) } : {};
+const resolvedSymbolField = (call: DeskToolCall, fallback: string): { symbol?: string } => {
+    if (!MARKET_TOOLS.has(call.name)) return {};
+    return { symbol: asSymbol(call.arguments?.symbol, fallback) };
+};
 
 export async function executeDeskTool(
     call: DeskToolCall,
