@@ -132,6 +132,17 @@ export const MAX_DESK_TOOL_ROUNDS = 3;
  */
 export const TOOL_CACHE_TTL_MS = 30_000;
 const toolCache = new Map<string, { at: number; content: string }>();
+/** The TTL check only skipped STALE reads; it never removed them, so the Map
+ *  grew unbounded over a long session (23 tools × symbols × arg variants).
+ *  Cap it and drop the oldest-inserted keys when full. */
+const TOOL_CACHE_MAX = 200;
+const cacheTool = (key: string, content: string): void => {
+    if (toolCache.size >= TOOL_CACHE_MAX && !toolCache.has(key)) {
+        const oldest = toolCache.keys().next();
+        if (!oldest.done) toolCache.delete(oldest.value);
+    }
+    toolCache.set(key, { at: Date.now(), content });
+};
 
 /** Machine-readable "the source failed" sentinel. A failed fetch must reach
  *  the model as UNKNOWN — prose like "no results" reads as evidence of
@@ -1437,8 +1448,11 @@ export async function executeDeskTool(
             }
             case 'get_chart_view': {
                 const sym = asSymbol(call.arguments.symbol, fallback);
-                const rawInterval = String(call.arguments.interval || context.chartInterval || '15m');
-                const ivl = rawInterval.toLowerCase();
+                // Pass the app token through untouched — fetchKlines maps it.
+                // `.toLowerCase()` here turned the monthly '1M' into a
+                // 1-minute '1m', and disagreed with scan_setups (which never
+                // lowercased) about what the same session's interval meant.
+                const ivl = String(call.arguments.interval || context.chartInterval || '15m');
                 const { fetchKlines } = await import('./KlineService');
                 const [klines, mi, book] = await Promise.all([
                     fetchKlines(sym, ivl, 60),
@@ -1599,7 +1613,7 @@ export async function executeDeskTool(
         // outage into the TTL even after the source recovers. Stateful memory
         // tools never cache (see NON_CACHEABLE_TOOLS).
         if (cacheable && !isDataUnavailable(content)) {
-            toolCache.set(cacheKey, { at: Date.now(), content });
+            cacheTool(cacheKey, content);
         }
         return { toolCallId: call.id, name: call.name, ok: true, content, ...resolvedSymbolField(call, fallback) };
     } catch (e) {
@@ -2034,13 +2048,26 @@ export async function runDeskToolLoop(params: {
         }
 
         if (nativeTools && turn.assistantMessage?.tool_calls?.length) {
-            messages.push(turn.assistantMessage);
-            for (const result of results) {
-                messages.push({
-                    role: 'tool',
-                    tool_call_id: result.toolCallId,
-                    content: result.content,
-                });
+            // Only the sliced (≤3) calls get results — push an assistant
+            // message whose tool_calls match EXACTLY those ids, else the
+            // OpenAI-compatible provider sees a call with no matching
+            // tool reply and 400s the whole seat.
+            const executedIds = new Set(results.map(r => r.toolCallId));
+            const paired = turn.assistantMessage.tool_calls.filter(tc => executedIds.has(tc.id));
+            if (paired.length === 0) {
+                // Nothing executed (all skipped): don't push an orphan
+                // assistant turn — fall through to the text protocol shape.
+                const cleaned = stripTextToolCalls(turn.text);
+                if (cleaned) messages.push({ role: 'assistant', content: cleaned });
+            } else {
+                messages.push({ ...turn.assistantMessage, tool_calls: paired });
+                for (const result of results) {
+                    messages.push({
+                        role: 'tool',
+                        tool_call_id: result.toolCallId,
+                        content: result.content,
+                    });
+                }
             }
         } else {
             // Text protocol: keep the assistant text (minus tags) and inject results as user context.

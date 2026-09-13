@@ -32,6 +32,17 @@ describe('panelSeats', () => {
     it('empty panel models → no seats', () => {
         expect(panelSeats({} as ChatSession, labelFor)).toEqual([]);
     });
+
+    it('lets the SAME model sit on two relays (dedupe is provider:model, not bare model)', () => {
+        // Regression: deduping on modelId alone collapsed two providers offering
+        // one model into a single seat, even though the ids differ.
+        const session = { panelModels: [
+            { providerId: 'gemini', modelId: 'llama-4' },
+            { providerId: 'groq', modelId: 'llama-4' },
+        ] } as ChatSession;
+        const seats = panelSeats(session, labelFor);
+        expect(seats.map(s => s.id)).toEqual(['gemini:llama-4', 'groq:llama-4']);
+    });
 });
 
 describe('planPanelTurn', () => {

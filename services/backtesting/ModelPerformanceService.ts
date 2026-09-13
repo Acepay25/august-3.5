@@ -236,7 +236,10 @@ export const initModelPerformanceService = async (): Promise<void> => {
         const [perf, rolling, conf, pairs, postMortems] = await Promise.all([
             getPreferenceObject<AllModelPerformances>(PREF_KEYS.MODEL_PERFORMANCE_DATA),
             getPreferenceObject<RollingWindowData>(PREF_KEYS.ROLLING_WINDOW_DATA),
-            getPreferenceObject<ModelConfidenceCalibrationData>(PREF_KEYS.CONFIDENCE_CALIBRATION),
+            (async (): Promise<ModelConfidenceCalibrationData | null> => {
+                migrateLegacyCalibrationKey();
+                return getPreferenceObject<ModelConfidenceCalibrationData>(CONFIDENCE_CALIBRATION_STORAGE_KEY);
+            })(),
             getPreferenceObject<AllProviderPairStats>(PREF_KEYS.PROVIDER_PAIR_STATS),
             getPreferenceObject<PostMortemInsightData>(PREF_KEYS.POST_MORTEM_INSIGHTS)
         ]);
@@ -481,6 +484,14 @@ export const trackTradeOutcome = (
 
     // Update timestamp
     modelData.lastUpdated = new Date().toISOString();
+
+    // Append this outcome to the rolling window FIRST, so the recent-trend
+    // read below (and cold-streak demotion / weighted voting elsewhere, all of
+    // which consume getRollingWindowStats) reflect the CURRENT trade. Until now
+    // updateRollingWindow had zero production callers, so the window was frozen
+    // at its startup snapshot — a model on a live 5-loss streak was never
+    // demoted mid-session.
+    updateRollingWindow(provider, isWin, family);
 
     // Calculate recent trend from the rolling window (last 10 trades), NOT the
     // all-time win rate — a model in a current slump with good history used to
@@ -1310,13 +1321,37 @@ export const getRecencyWeightedWinRate = (provider: AIProvider): RecencyWeighted
 // =============================================================================
 
 /**
+ * MIGRATION (2026-09-13): this per-model blob used to live on the shared
+ * `confidence_calibration` key, colliding with the bucketed
+ * ConfidenceCalibration the VersionHistoryDashboard reads from that same key
+ * (and parsing into a shape whose fields were all `undefined` — silent data
+ * corruption). The providers-shaped blob now owns its own key
+ * (`model_confidence_calibration`). One-time lift from the shared key when it
+ * still holds OUR shape (has `providers`); the dashboard's shape is left alone.
+ */
+function migrateLegacyCalibrationKey(): void {
+    try {
+        const mine = localStorage.getItem(CONFIDENCE_CALIBRATION_STORAGE_KEY);
+        if (mine) return;
+        const legacy = localStorage.getItem(PREF_KEYS.CONFIDENCE_CALIBRATION);
+        if (!legacy) return;
+        const parsed = JSON.parse(legacy) as { providers?: unknown };
+        if (parsed && typeof parsed === 'object' && parsed.providers) {
+            localStorage.setItem(CONFIDENCE_CALIBRATION_STORAGE_KEY, legacy);
+            localStorage.removeItem(PREF_KEYS.CONFIDENCE_CALIBRATION);
+        }
+    } catch { /* best-effort */ }
+};
+
+/**
  * Load confidence calibration data
  */
 const loadConfidenceCalibrationData = (): ModelConfidenceCalibrationData => {
     if (_confidenceCalibrationCache) return _confidenceCalibrationCache;
 
+    migrateLegacyCalibrationKey();
     try {
-        const stored = localStorage.getItem(PREF_KEYS.CONFIDENCE_CALIBRATION);
+        const stored = localStorage.getItem(CONFIDENCE_CALIBRATION_STORAGE_KEY);
         if (stored) {
             _confidenceCalibrationCache = JSON.parse(stored);
             return _confidenceCalibrationCache!;
@@ -1333,7 +1368,7 @@ const loadConfidenceCalibrationData = (): ModelConfidenceCalibrationData => {
  */
 const saveConfidenceCalibrationData = (data: ModelConfidenceCalibrationData): void => {
     _confidenceCalibrationCache = data;
-    setPreferenceObject(PREF_KEYS.CONFIDENCE_CALIBRATION, data).catch(e =>
+    setPreferenceObject(CONFIDENCE_CALIBRATION_STORAGE_KEY, data).catch(e =>
         console.warn('[Confidence] Failed to save data:', e)
     );
 };

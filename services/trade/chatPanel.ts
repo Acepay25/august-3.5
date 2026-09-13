@@ -35,9 +35,13 @@ export const panelSeats = (session: Pick<ChatSession, 'panelModels'>, labelFor: 
     const out: PanelSeat[] = [];
     const seen = new Set<string>();
     for (const m of (session.panelModels ?? []).slice(0, 5)) {
-        if (seen.has(m.modelId)) continue;
-        seen.add(m.modelId);
-        out.push({ id: `${m.providerId}:${m.modelId}`, name: labelFor(m.modelId) });
+        // Dedupe on the SAME key the seat id uses (provider:model), not the
+        // bare modelId — otherwise two relays offering one model collapse to a
+        // single seat even though their ids differ.
+        const key = `${m.providerId}:${m.modelId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ id: key, name: labelFor(m.modelId) });
     }
     return out;
 };

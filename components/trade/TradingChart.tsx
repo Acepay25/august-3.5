@@ -215,6 +215,12 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     drawingsRef.current = drawings;
     const modelDrawingsRef = useRef<ChartDrawing[]>([]);
     modelDrawingsRef.current = modelDrawings ?? [];
+    // Stable handle to the latest repaint() so the data-lifecycle effect (which
+    // runs before repaint is defined) can force a repaint the instant a coin's
+    // candles (re)load — otherwise a switch BACK reloads the shapes into state
+    // but, with status already 'live', nothing repaints them (invisible until a
+    // manual pan). Synced below once repaint exists.
+    const repaintRef = useRef<() => void>(() => {});
 
     // Load the persisted shapes whenever the chart (session + symbol)
     // changes: session-scoped when the active session is known, legacy
@@ -339,6 +345,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 vs.setData(toVolumes(klines).map(v => ({ ...v, time: v.time as UTCTimestamp })));
                 setStatus('live');
                 lastTickRef.current = Date.now();
+                // Repaint the (already-reloaded) drawings against the fresh
+                // bars NOW — a switch back sets `status` to 'live' when it is
+                // already 'live', so the state-change repaint effect won't fire
+                // and the shapes would stay unpainted until the next pan/zoom.
+                repaintRef.current();
                 if (isInitial) {
                     const ts = chartRef.current?.timeScale();
                     ts?.fitContent?.();
@@ -671,6 +682,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         }
         ctx.restore();
     }, [toScreen, draft, tool, color]);
+    repaintRef.current = repaint;
 
     // Repaint on state changes and on every pan/zoom the chart performs.
     useEffect(() => {

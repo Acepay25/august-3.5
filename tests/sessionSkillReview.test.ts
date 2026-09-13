@@ -126,6 +126,39 @@ describe('runSessionSkillReview', () => {
         expect(await runSessionSkillReview(USER, [session], cfg)).toBe(0);
         expect(listSkillDrafts(USER).length).toBe(1);
     });
+
+    it('MUST NOT score a thesis against candles that printed BEFORE it (lookahead)', async () => {
+        // Regression: KlineService stores time in MILLISECONDS, but the filter
+        // used `k.time * 1000 >= atMs`, which is always true for real ms epochs
+        // → a pre-thesis winning bar leaked into the window and minted a false
+        // 'repeat' skill. The conversation happened at T; a winning candle from
+        // 1h BEFORE T must be ignored.
+        const T = 1_700_000_000_000; // ms
+        vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
+            { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
+        ]));
+        vi.mocked(fetchKlines).mockResolvedValue([
+            { time: T - 3_600_000, open: 100, high: 111, low: 99, close: 110, volume: 1 }, // pre-thesis win (must be dropped)
+            { time: T, open: 100, high: 101, low: 95, close: 100, volume: 1 },              // post-thesis: unresolved
+        ] as never);
+        const s = { id: 'sT', transcript: 'user: long BTC 100 stop 90 target 110 here', atMs: T, symbol: 'BTCUSDT' };
+        expect(await runSessionSkillReview(USER, [s], cfg)).toBe(0); // NOT a false win
+        expect(listSkillDrafts(USER)).toHaveLength(0);
+    });
+
+    it('scores a thesis on the candles that printed AFTER it', async () => {
+        const T = 1_700_000_000_000;
+        vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
+            { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
+        ]));
+        vi.mocked(fetchKlines).mockResolvedValue([
+            { time: T - 3_600_000, open: 100, high: 111, low: 99, close: 110, volume: 1 }, // pre-thesis (dropped)
+            { time: T + 60_000, open: 100, high: 112, low: 99, close: 111, volume: 1 },     // post-thesis win
+        ] as never);
+        const s = { id: 'sT2', transcript: 'user: long BTC 100 stop 90 target 110 here', atMs: T, symbol: 'BTCUSDT' };
+        expect(await runSessionSkillReview(USER, [s], cfg)).toBe(1);
+        expect(listSkillDrafts(USER)[0].crafted.kind).toBe('repeat');
+    });
 });
 
 describe('runThesisResolver (event-driven resolution)', () => {
