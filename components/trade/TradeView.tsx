@@ -18,6 +18,7 @@ import { TradeAnalysis, LoggedTrade } from '../../types';
 import { fetchMarkIndex, fetchMarketData, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
+import { loadSessionModelDrawings, saveSessionModelDrawings } from '../../services/trade/chartDrawings';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { baseOf } from '../../utils/symbol';
 import * as levelWatch from '../../services/trade/levelWatchService';
@@ -256,8 +257,20 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     useEffect(() => {
         if (prevSymbolRef.current !== symbol) levelWatch.disarmSymbol(prevSymbolRef.current);
         prevSymbolRef.current = symbol;
-        setModelDrawings([]);
-    }, [symbol]);
+        // Reload THIS coin's model-drawn shapes (persisted per session+coin),
+        // so the model's lines survive a coin switch — instead of the old
+        // blanket wipe that made "what the AI drew" vanish on the next coin.
+        setModelDrawings(loadSessionModelDrawings(chatSnap.activeId, symbol));
+    }, [symbol, chatSnap.activeId]);
+
+    // Persist the model's shapes under the CURRENT coin+session whenever they
+    // change (adds, erases, clear). Keyed on modelDrawings ONLY — not symbol —
+    // so a coin switch (which loads a different list) never writes the
+    // previous coin's shapes under the new coin's key.
+    useEffect(() => {
+        const sid = chatStore.getActiveId();
+        if (sid) saveSessionModelDrawings(sid, symbolRef.current, modelDrawings);
+    }, [modelDrawings]);
 
     // 1s tick for the funding countdown.
     useEffect(() => {
@@ -362,6 +375,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         setModelDrawings(prev => [...prev, ...drawings].slice(-60));
     }, []);
     const clearModelDrawings = useCallback((): void => setModelDrawings([]), []);
+    // Erasing one of the model's shapes (the chart's eraser routes it here);
+    // the persist effect re-saves the coin's model bucket minus this shape.
+    const removeModelShape = useCallback((id: string): void => {
+        setModelDrawings(prev => prev.filter(d => d.id !== id));
+    }, []);
     const clearAllDrawings = useCallback((): void => {
         setModelDrawings([]);
         chartHandleRef.current?.clearUserDrawings();
@@ -452,7 +470,8 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
                         chartHandle={chartHandleRef}
                         onDrawingsChange={setChartDrawings}
-                        modelDrawings={modelDrawings} />
+                        modelDrawings={modelDrawings}
+                        onRemoveModelShape={removeModelShape} />
                 </div>
                 {!dockCollapsed && (
                     <>
