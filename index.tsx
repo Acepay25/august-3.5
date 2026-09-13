@@ -74,3 +74,15 @@ root.render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// Splash fade-out. The splash lives outside #root (index.html), so React's
+// mount-clear leaves it alone and this owns its exit. The node must end up
+// REMOVED, not merely hidden — e2e smoke and scripts/boot-probe.cjs both wait
+// for #splash to be gone as the "boot completed" signal.
+function dismissSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  splash.classList.add('splash-fading');
+  window.setTimeout(() => splash.remove(), 300);
+}
+requestAnimationFrame(() => requestAnimationFrame(dismissSplash));

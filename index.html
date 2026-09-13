@@ -26,13 +26,21 @@
 </head>
 
 <body class="bg-zinc-950 text-zinc-100 antialiased overflow-hidden">
-  <div id="root" class="h-dvh w-full relative">
-    <!-- Inline splash screen — removed automatically when React mounts -->
-    <div id="splash" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0b0b0a;z-index:9999;">
-      <div style="font-size:1.5rem;font-weight:700;color:#edede8;letter-spacing:-0.025em;">August Trading</div>
-       <div class="splash-spinner"></div>
+  <!-- Inline splash screen — lives OUTSIDE #root so React's mount-clear can't
+       yank it; index.tsx fades it out once React has rendered. Kept as plain
+       HTML + CSS so it paints before any JS (and CSP needs no inline script). -->
+  <div id="splash" aria-label="August Trading is loading">
+    <div class="splash-glow" aria-hidden="true"></div>
+    <div class="splash-wordmark">August Trading</div>
+    <div class="splash-candles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="splash-track" aria-hidden="true"><div class="splash-bar"></div></div>
+    <div class="splash-status" aria-hidden="true">
+      <span>Loading modules</span>
+      <span>Restoring session</span>
+      <span>Connecting market data</span>
     </div>
   </div>
+  <div id="root" class="h-dvh w-full relative"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
 

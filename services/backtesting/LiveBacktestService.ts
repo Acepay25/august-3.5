@@ -12,6 +12,7 @@
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../../types';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import { parsePrice } from '../../utils/analysisUtils';
+import { baseOf } from '../../utils/symbol';
 
 // =============================================================================
 // TYPES
@@ -161,9 +162,10 @@ const calculateSimilarity = (
             score += 40;
             matchedDimensions++;
         } else {
-            // Same base asset (e.g., both BTC pairs): +15 points
-            const currentBase = current.coinName.replace(/USDT|USD|PERP/gi, '');
-            const historicalBase = historicalAnalysis.coinName.replace(/USDT|USD|PERP/gi, '');
+            // Same base asset (e.g., both BTC pairs): +15 points. Anchored so a
+            // USDC pair no longer parses to "C" (the old unanchored strip bug).
+            const currentBase = baseOf(current.coinName);
+            const historicalBase = baseOf(historicalAnalysis.coinName);
             if (currentBase === historicalBase) {
                 score += 15;
                 matchedDimensions++;
