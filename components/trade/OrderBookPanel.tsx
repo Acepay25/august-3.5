@@ -63,8 +63,12 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
     const usingLive = live && !!liveDepth;
     const asks = usingLive ? liveDepth!.asks : book?.asks ?? [];
     const bids = usingLive ? liveDepth!.bids : book?.bids ?? [];
-    // Minara shows asks best-at-bottom: reverse so the spread sits between.
-    const asksView = [...asks].reverse().slice(0, 12);
+    // Binance depth asks arrive ASCENDING (best ask first, index 0). Take the
+    // 12 NEAREST levels first, THEN reverse so the ladder paints best-at-bottom
+    // next to the spread. (Reversing before the slice kept the 12 FARTHEST asks
+    // and discarded the near-spread ones — poisoning bestAsk, spread%, walls
+    // and the dominance ratio.)
+    const asksView = asks.slice(0, 12).reverse();
     const bidsView = bids.slice(0, 12);
     const maxQty = Math.max(1, ...asksView.map(a => a.qty), ...bidsView.map(b => b.qty));
     const sellWalls = useMemo(() => wallPrices(asksView), [asksView]);

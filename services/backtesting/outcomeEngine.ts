@@ -141,10 +141,25 @@ export const scanTradeOutcome = (
   const entryCandleTime = scanKlines[entryTriggeredAtIndex].time;
   const timeLabel = (t: number): string => formatDurationMs(t - entryCandleTime);
 
+  // ORDER-AWARE ENTRY-CANDLE CREDITING (look-ahead fix). A limit entry fills
+  // SOMEWHERE INSIDE its candle, so a TP that prints on the SAME candle may
+  // have touched BEFORE the fill — a 1h bar can wick up through TP then drop to
+  // fill the limit, and the old code banked that as a WIN that never traded.
+  // Only the candle we FILL on is ambiguous, and only when it did not open
+  // already executable (open ≤ entry for a Long / ≥ entry for a Short → the
+  // whole bar is genuinely post-fill). `startIndex` callers hand us an
+  // ALREADY-filled position, so that candle is never gated.
+  const entryCandle = scanKlines[entryTriggeredAtIndex];
+  const entryCandleAmbiguous = options?.startIndex === undefined
+    && !(isLong ? entryCandle.open <= entryPrice : entryCandle.open >= entryPrice);
+
   // --- Scan from the entry candle ---
   for (let i = entryTriggeredAtIndex; i < scanKlines.length; i++) {
     const candle = scanKlines[i];
     const candleTimeStr = new Date(candle.time).toISOString();
+    // A take-profit may only be banked on the fill candle if that candle opened
+    // executable — otherwise the touch could have preceded the fill (see above).
+    const canCreditTp = i !== entryTriggeredAtIndex || !entryCandleAmbiguous;
 
     if (isLong) {
       const dd = (entryPrice - candle.low) / entryPrice * 100;
@@ -180,16 +195,16 @@ export const scanTradeOutcome = (
       }
 
       // TPs count as REAL hits even after an SL touch (within the zone).
-      if (!result.tpHits.some(h => h.level === 'TP1') && tp1 > 0 && candle.high >= tp1) {
+      if (canCreditTp && !result.tpHits.some(h => h.level === 'TP1') && tp1 > 0 && candle.high >= tp1) {
         result.tpHits.push({ level: 'TP1', price: tp1, candleIndex: i, candleTime: candleTimeStr, timeAfterEntry: timeLabel(candle.time) });
         result.breakevenActive = true; // TP1 hit → scale out, stop to breakeven
       }
       // After a breakeven exit the remainder is FLAT — a later rally to
       // TP2/TP3 was never realized by a live position.
-      if (!result.tpHits.some(h => h.level === 'TP2') && tp2 > 0 && !result.breakevenHit && candle.high >= tp2) {
+      if (canCreditTp && !result.tpHits.some(h => h.level === 'TP2') && tp2 > 0 && !result.breakevenHit && candle.high >= tp2) {
         result.tpHits.push({ level: 'TP2', price: tp2, candleIndex: i, candleTime: candleTimeStr, timeAfterEntry: timeLabel(candle.time) });
       }
-      if (!result.tpHits.some(h => h.level === 'TP3') && tp3 > 0 && !result.breakevenHit && candle.high >= tp3) {
+      if (canCreditTp && !result.tpHits.some(h => h.level === 'TP3') && tp3 > 0 && !result.breakevenHit && candle.high >= tp3) {
         result.tpHits.push({ level: 'TP3', price: tp3, candleIndex: i, candleTime: candleTimeStr, timeAfterEntry: timeLabel(candle.time) });
         break; // All TPs hit — stop scanning
       }
@@ -219,14 +234,14 @@ export const scanTradeOutcome = (
         result.slTouchPrice = stopLoss;
       }
 
-      if (!result.tpHits.some(h => h.level === 'TP1') && tp1 > 0 && candle.low <= tp1) {
+      if (canCreditTp && !result.tpHits.some(h => h.level === 'TP1') && tp1 > 0 && candle.low <= tp1) {
         result.tpHits.push({ level: 'TP1', price: tp1, candleIndex: i, candleTime: candleTimeStr, timeAfterEntry: timeLabel(candle.time) });
         result.breakevenActive = true;
       }
-      if (!result.tpHits.some(h => h.level === 'TP2') && tp2 > 0 && !result.breakevenHit && candle.low <= tp2) {
+      if (canCreditTp && !result.tpHits.some(h => h.level === 'TP2') && tp2 > 0 && !result.breakevenHit && candle.low <= tp2) {
         result.tpHits.push({ level: 'TP2', price: tp2, candleIndex: i, candleTime: candleTimeStr, timeAfterEntry: timeLabel(candle.time) });
       }
-      if (!result.tpHits.some(h => h.level === 'TP3') && tp3 > 0 && !result.breakevenHit && candle.low <= tp3) {
+      if (canCreditTp && !result.tpHits.some(h => h.level === 'TP3') && tp3 > 0 && !result.breakevenHit && candle.low <= tp3) {
         result.tpHits.push({ level: 'TP3', price: tp3, candleIndex: i, candleTime: candleTimeStr, timeAfterEntry: timeLabel(candle.time) });
         break;
       }

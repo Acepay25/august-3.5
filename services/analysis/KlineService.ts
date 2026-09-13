@@ -25,7 +25,13 @@ const INTERVAL_MAP: Record<'pdax' | 'coinsph' | 'binance', Record<string, string
     // PDAX uses minute-based suffixes (M) and hour (H)
     pdax: { '5m': '5M', '15m': '15M', '1h': '60M', '4h': '4H' },
     coinsph: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h' },
-    binance: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h' },
+    // Binance klines are case-sensitive: daily/weekly are lowercase
+    // ('1d','3d','1w') but MONTHLY is a CAPITAL '1M' (a lowercase '1m' is
+    // 1-MINUTE). The app's timeframe tokens use '1D','3D','1W','1M'
+    // (TradingChart.CHART_INTERVALS), so map the multi-day ones here —
+    // normalizing in ONE place means no caller has to `.toLowerCase()` and
+    // silently turn the monthly chart into a 1-minute one.
+    binance: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1D': '1d', '3D': '3d', '1W': '1w', '1M': '1M' },
 };
 
 const mapInterval = (interval: string, exchange: 'pdax' | 'coinsph' | 'binance'): string =>

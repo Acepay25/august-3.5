@@ -125,6 +125,36 @@ describe('desk tool loop — live streaming rounds', () => {
         expect(sendMock).not.toHaveBeenCalled();
     });
 
+    it('pairs the assistant tool_calls to EXACTLY the executed calls (caps at 3 → no orphan → no 400)', async () => {
+        // Regression: a model emitting 4 native tool calls is capped to 3
+        // executed, but the OLD code replayed the assistant message with ALL
+        // 4 ids while only 3 tool replies followed — OpenAI-compatible
+        // providers reject the mismatch and the whole seat 400s.
+        scriptStream([
+            { text: 'x ', toolCalls: [
+                { id: 'a', name: 'get_price_snapshot', arguments: {} },
+                { id: 'b', name: 'get_price_snapshot', arguments: {} },
+                { id: 'c', name: 'get_price_snapshot', arguments: {} },
+                { id: 'd', name: 'get_price_snapshot', arguments: {} },
+            ] },
+            { text: 'done' },
+        ]);
+        const loop = await runDeskToolLoop({
+            config, messages: [...baseMessages], sendTurn: sendMock, streamTurn: streamMock,
+            nativeTools: true, options: { maxTokens: 512 },
+        });
+        const asst = [...loop.messages].reverse()
+            .find(m => m.role === 'assistant' && Array.isArray((m as { tool_calls?: unknown }).tool_calls)) as
+            { tool_calls: Array<{ id: string }> };
+        const toolMsgs = loop.messages.filter(m => m.role === 'tool') as Array<{ tool_call_id: string }>;
+        expect(asst.tool_calls).toHaveLength(3); // 4 requested, 3 executed
+        const ids = new Set(asst.tool_calls.map(t => t.id));
+        expect(ids.has('d')).toBe(false); // the skipped call is NOT advertised
+        expect(toolMsgs).toHaveLength(3);
+        // Strict 1:1: every advertised call has exactly one reply.
+        expect(toolMsgs.every(m => ids.has(m.tool_call_id))).toBe(true);
+    });
+
     it('does not re-ask after a clean in-loop answer (no duplicate continuation)', async () => {
         scriptStream([
             { text: 'Look. ', toolCalls: [{ id: 'c1', name: 'get_price_snapshot', arguments: {} }] },

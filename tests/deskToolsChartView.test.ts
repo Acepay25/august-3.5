@@ -81,6 +81,21 @@ describe('desk tools — chart awareness', () => {
         expect(fetchKlines).toHaveBeenCalledWith('ETHUSDT', '1h', 60);
     });
 
+    it('get_chart_view NEVER lowercases the monthly interval (1M ≠ 1m)', async () => {
+        // Regression: `.toLowerCase()` turned Binance monthly '1M' into
+        // 1-MINUTE '1m', silently feeding the AI 1-minute candles for a monthly
+        // chart — and disagreeing with scan_setups on the same session. The raw
+        // token is now passed through (KlineService maps it), so '1M' is intact.
+        vi.mocked(fetchKlines).mockResolvedValue(candles as never);
+        const result = await executeDeskTool(
+            { id: 'cM', name: 'get_chart_view', arguments: { symbol: 'BTCUSDT', interval: '1M' } },
+            { chartInterval: '1M' },
+        );
+        expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '1M', 60);
+        expect(result.content).toContain('· 1M ·');
+        expect(vi.mocked(fetchKlines).mock.calls.some(c => c[1] === '1m')).toBe(false);
+    });
+
     it('get_chart_view says no levels when none are drawn', async () => {
         vi.mocked(fetchKlines).mockResolvedValue(candles as never);
         const result = await executeDeskTool(

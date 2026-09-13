@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import dns from 'dns';
 import * as process from 'process';
+import { readFileSync } from 'fs';
 import {
   chatMessagesToGemini,
   googleGenerateUrl,
@@ -329,8 +330,19 @@ dns.setDefaultResultOrder('verbatim');
 
 // https://vitejs.dev/config/
 export default defineConfig(() => {
+  // package.json is the ONLY version source: expose it as
+  // import.meta.env.PACKAGE_VERSION so the Sidebar + Settings "About" line
+  // render the real app version (previously the define was missing entirely,
+  // so the UI showed "August v" with no number).
+  let pkgVersion = '0.0.0';
+  try {
+    pkgVersion = (JSON.parse(readFileSync(`${process.cwd()}/package.json`, 'utf8')) as { version?: string }).version || pkgVersion;
+  } catch { /* build-time only; leave the placeholder */ }
   return {
     base: './', // Crucial: relative paths for Electron
+    define: {
+      'import.meta.env.PACKAGE_VERSION': JSON.stringify(pkgVersion),
+    },
     plugins: [react(), tailwindcss(), devProviderProxy()],
     resolve: {
       alias: {
