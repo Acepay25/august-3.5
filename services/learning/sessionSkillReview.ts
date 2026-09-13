@@ -214,13 +214,20 @@ export const runSessionSkillReview = async (
     const existingDraftIds = new Set(listSkillDrafts(username).map(d => d.tradeId));
     for (const session of sessions.slice(-6)) {
         const theses = await extractDiscussedTrades(session.transcript, config, session.symbol);
-        for (const thesis of theses) {
+        for (const rawThesis of theses) {
+            // extractDiscussedTrades returns atMs: 0 — the caller owns the
+            // conversation's timestamp. Stamp it so the scoring window starts
+            // at the thesis and the resolver (re-scoring from cache) agrees.
+            const thesis: DiscussedThesis = { ...rawThesis, atMs: rawThesis.atMs || session.atMs };
             const fp = thesisFingerprint(thesis);
             if (already.has(fp) || existingDraftIds.has(fp)) continue;
             let candles;
             try {
                 const kl = await fetchKlines(thesis.symbol, thesis.interval || '15m', 120);
-                candles = kl.filter(k => k.time * 1000 >= (session.atMs || 0));
+                // KlineService stores time in MILLISECONDS — compare directly.
+                // (`k.time * 1000` made the filter a no-op, so pre-thesis
+                // candles leaked into scoring and minted false wins.)
+                candles = kl.filter(k => k.time >= thesis.atMs);
             } catch { continue; }
             const outcome = scoreHypotheticalTrade(thesis, candles);
             if (outcome === 'open') {
@@ -241,7 +248,7 @@ export const runSessionSkillReview = async (
                     direction: thesis.direction,
                     outcome: outcome === 'win' ? 'win' : 'loss',
                     thesis: thesis.thesis,
-                    atMs: session.atMs || Date.now(),
+                    atMs: thesis.atMs || Date.now(),
                 })],
                 botContext: thesis.thesis,
             });
@@ -324,7 +331,7 @@ export const runThesisResolver = async (
         if (already.has(fp) || existingDraftIds.has(fp)) continue; // handled by the review pass meanwhile
         try {
             const kl = await fetchKlines(thesis.symbol, thesis.interval || '15m', 120);
-            const candles = kl.filter(k => k.time * 1000 >= (thesis.atMs || 0));
+            const candles = kl.filter(k => k.time >= thesis.atMs);
             const outcome = scoreHypotheticalTrade(thesis, candles);
             if (outcome === 'open') {
                 if (Date.now() - thesis.cachedAtMs < OPEN_THESIS_TTL_MS) keep.push(thesis);

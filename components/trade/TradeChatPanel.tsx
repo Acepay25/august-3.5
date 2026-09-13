@@ -964,7 +964,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     // friendly error), not just "failed to answer".
                     seatFailed = true;
                     const msg = e instanceof Error ? e.message : String(e);
-                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id && !en.text ? { ...en, text: `(this seat failed to answer: ${msg})`, streaming: false } : en)) }));
+                    // Always settle the flag — a seat that threw AFTER partial
+                    // text used to keep streaming:true forever, which then
+                    // blocked the whole store from persisting.
+                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
+                        ? { ...en, streaming: false, ...(en.text ? {} : { text: `(this seat failed to answer: ${msg})` }) }
+                        : en)) }));
                 }
                 spoken.push(seat.id);
                 if (!seatFailed && isPassReply(full)) {
@@ -1010,7 +1015,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.beginRun(sid, controller);
         try {
             const answer = await onRunAnalysis(text + fileNote, images);
-            if (controller.signal.aborted) return;
+            if (controller.signal.aborted) {
+                // Stopped mid-run: the early return used to skip the settle,
+                // orphaning a streaming:true bubble that then blocked ALL
+                // session persistence until reload.
+                mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, streaming: false, text: e.text || 'The analysis was stopped.' } : e)) }));
+                return;
+            }
             mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, text: answer || 'The analysis produced no summary.', streaming: false } : e)) }));
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
@@ -1112,8 +1123,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (!modelId) return;
         const session = sessions.find(s => s.id === panelPickerFor);
         const current = session?.panelModels ?? [];
-        if (current.some(m => m.modelId === modelId)) return;
-        setPanelModels(panelPickerFor, [...current, { providerId: providerId || provider?.id || '', modelId }]);
+        // Dedupe by provider+model, not modelId alone — two relays offering the
+        // same model id are distinct seats (seats are keyed providerId:modelId).
+        const pid = providerId || provider?.id || '';
+        if (current.some(m => m.modelId === modelId && m.providerId === pid)) return;
+        setPanelModels(panelPickerFor, [...current, { providerId: pid, modelId }]);
     }, [panelPickerFor, provider, sessions, setPanelModels]);
 
     // ── Attachments ─────────────────────────────────────────────────────────

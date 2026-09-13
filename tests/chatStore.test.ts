@@ -105,14 +105,19 @@ describe('chatStore run survival (the tab-switch fix)', () => {
 });
 
 describe('chatStore persistence', () => {
-    it('saves settled sessions and strips streaming flags', () => {
+    it('persists settled entries even while another entry streams (no deadlock)', () => {
         vi.useFakeTimers();
         const a = store.getActiveId();
         store.beginRun(a, new AbortController());
         store.mutate(a, s => ({ ...s, entries: [{ id: 'u', role: 'user', text: 'q', tools: [] }, { id: 'ai', role: 'ai', text: 'partial', tools: [], streaming: true }] }));
-        // While a stream runs, persistence defers.
+        // The fix: a still-streaming entry is EXCLUDED from the write, but it
+        // must NOT block the rest. Previously any streaming flag re-armed the
+        // persist forever, so one stuck bubble froze EVERY session's history.
         vi.advanceTimersByTime(1000);
-        expect(localStorage.getItem(storageKey())).toBeNull();
+        const mid = JSON.parse(localStorage.getItem(storageKey()) ?? '[]');
+        const midEntries = mid.find((x: { id: string }) => x.id === a).entries;
+        expect(midEntries.map((e: { id: string }) => e.id)).toEqual(['u']); // settled user entry lands
+        expect(midEntries.find((e: { id: string }) => e.id === 'ai')).toBeUndefined(); // half answer never stored
         // Settle the run → the streaming flag is stripped before storage.
         store.mutate(a, s => ({ ...s, entries: s.entries.map(e => ({ ...e, streaming: false })) }));
         store.endRun(a);

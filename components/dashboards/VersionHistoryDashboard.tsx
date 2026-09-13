@@ -7,7 +7,8 @@ import {
 
 // Import services
 import { ReinforcementSignalService, ReinforcementSignal } from '../../services/learning/ReinforcementSignalService';
-import { getCalibrationSummary, initializeCalibration } from '../../services/validation/ConfidenceCalibrationService';
+import { getCalibrationSummary } from '../../services/validation/ConfidenceCalibrationService';
+import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';
 import { recordInsightFeedback } from '../../services/learning/PatternMemorySynthesisService';
@@ -74,7 +75,12 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
             const recentSignals = await ReinforcementSignalService.getAllSignals(20);
             setSignals(recentSignals || []);
 
-            setCalibration(storageService.loadSetting<ConfidenceCalibration>('confidence_calibration', initializeCalibration()));
+            // The bucketed per-confidence calibration is owned by GlobalLearning
+            // Service (per-user). It used to be read off the raw
+            // 'confidence_calibration' localStorage key — which Model
+            // Performance was writing a DIFFERENT (providers-shaped) blob to,
+            // so every bucket parsed as `undefined`. Read the real owner now.
+            setCalibration(GlobalLearningService.getCalibration());
 
             const sk = listSkills().filter(s => s.meta.status !== 'retired');
             setRules(sk);

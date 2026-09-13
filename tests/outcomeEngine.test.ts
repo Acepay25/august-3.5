@@ -74,6 +74,52 @@ describe('scanTradeOutcome + resolveOutcomeFromScan — canonical semantics', ()
     expect(scan.tpHits.map(h => h.level)).toEqual(['TP1', 'TP2']);
   });
 
+  it('does NOT credit a TP that printed on the fill candle when the limit filled mid-bar (look-ahead)', () => {
+    // A 1h bar can wick UP through TP then drop to fill the limit — the touch
+    // preceded the fill, so it must not bank a WIN. Entry candle opens ABOVE
+    // entry (95300), spikes to 96500 (past TP1 96000), dips to 94900 (fills),
+    // then the next bar loses at SL. Old engine: phantom WIN at TP1.
+    const scan = scanTradeOutcome(candles(T, [
+      [95300, 96500, 94900, 95000], // entry fills mid-bar; TP1 touched (pre-fill)
+      [95000, 95050, 93900, 94000], // SL 94000 hit, no revisit of TP
+    ]), LONG.entry, LONG.sl, LONG.tps, LONG.isLong);
+    expect(scan.tpHits).toHaveLength(0);
+    expect(resolveOutcomeFromScan(scan)).toMatchObject({ outcome: 'LOSS', hitTarget: 'SL' });
+  });
+
+  it('DOES credit a TP on the entry candle when it opened executable (whole bar post-fill)', () => {
+    // Open 94900 ≤ entry 95000 → the limit was fillable at the open, so the
+    // entire candle is genuinely post-fill and its TP touch is real.
+    const scan = scanTradeOutcome(candles(T, [
+      [94900, 96500, 94850, 96000], // open below entry → filled at open, then TP1
+    ]), LONG.entry, LONG.sl, LONG.tps, LONG.isLong);
+    expect(scan.tpHits.map(h => h.level)).toEqual(['TP1']);
+    expect(resolveOutcomeFromScan(scan)).toMatchObject({ outcome: 'WIN', hitTarget: 'TP1' });
+  });
+
+  it('gates the same ambiguity for shorts (wick down through TP before the fill)', () => {
+    // Short: entry 95000, SL 96000, TP1 94000. Entry candle opens BELOW entry
+    // (94800 → not executable at open for a short that fills by rising to it),
+    // wicks DOWN to 93500 (past TP1) then up to 95100 (fills). Pre-fill → no win.
+    const scan = scanTradeOutcome(candles(T, [
+      [94800, 95100, 93500, 95000], // fills mid-bar; TP1 touched pre-fill
+      [95000, 96100, 94950, 96000], // SL 96000 hit
+    ]), 95000, 96000, [94000, 0, 0], false);
+    expect(scan.tpHits).toHaveLength(0);
+    expect(resolveOutcomeFromScan(scan)).toMatchObject({ outcome: 'LOSS', hitTarget: 'SL' });
+  });
+
+  it('respects startIndex (a pre-filled position is never gated)', () => {
+    // Entry candle here opens ABOVE the fill but the caller supplied startIndex
+    // (position already established) → TP must still count on that candle.
+    const raw = candles(T, [
+      [95200, 95300, 94900, 95100],
+      [95500, 96500, 95400, 96000], // open 95500 > entry 96000? no; TP1 96100 by high
+    ]);
+    const scan = scanTradeOutcome(raw, 96000, 94000, [96100, 0, 0], true, { startIndex: 1 });
+    expect(resolveOutcomeFromScan(scan)).toMatchObject({ outcome: 'WIN', hitTarget: 'TP1' });
+  });
+
   it('leaves the trade OPEN when neither SL nor TP is touched', () => {
     const scan = scanTradeOutcome(candles(T, [
       [95200, 95300, 94900, 95100], // entry

@@ -78,17 +78,21 @@ const emit = (): void => {
     schedulePersist();
 };
 
-/** Persist once no stream is running (re-armed while one is, so the final
- *  settled state always lands). A user switch detected here rehydrates from
- *  the NEW key instead of writing the old user's chats into it. */
+/** Persist the settled transcript. An entry that is still streaming is
+ *  EXCLUDED from the write (a half-finished answer must never land) but does
+ *  NOT block the rest — previously one stuck `streaming:true` bubble (a seat
+ *  that threw after partial text, or an aborted full-analysis) silently
+ *  re-armed this timer forever and froze EVERY session's persistence until
+ *  reload. */
 const schedulePersist = (): void => {
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
-        if (sessions.some(s => s.entries.some(e => e.streaming))) { schedulePersist(); return; }
         if (getActiveUsername() !== loadedFor) { rehydrate(); return; }
         const stored: ChatSession[] = sessions.map(s => ({
             ...s,
-            entries: s.entries.map(({ streaming: _streaming, proposal: _proposal, ...rest }) => rest),
+            entries: s.entries
+                .filter(e => !e.streaming)
+                .map(({ streaming: _streaming, proposal: _proposal, ...rest }) => rest),
         }));
         saveSessions(stored);
         // The last-open session rides the same debounce — reopening the app
