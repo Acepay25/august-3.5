@@ -92,7 +92,7 @@ import * as dbService from './services/dbService';
 import { ProviderConfigService } from './services/infrastructure/ProviderConfigService';
 
 // 4. Internal components (alphabetical)
-import { ChatArea } from './components/chat/ChatArea';
+import { TradeView } from './components/trade/TradeView';
 
 // 5. Utilities (alphabetical)
 import { sanitizeAIResponse } from './utils/sanitizers';
