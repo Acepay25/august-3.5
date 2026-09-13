@@ -21,6 +21,52 @@ describe('buildTradeChatContext (the model sees the chart)', () => {
         expect(ctx).toContain('get_order_book');
     });
 
+    it('carries the snapshot-vs-live-mark guard so a packet/mark gap is never narrated as a move', () => {
+        const ctx = buildTradeChatContext({
+            symbol: 'BTCUSDT', interval: '15m', packetMarkdown: '## packet', fetchedAtMs: Date.now(),
+        });
+        expect(ctx).toContain('[PRICES');
+        expect(ctx).toContain('markPrice@1s');
+        expect(ctx).toContain('NOT a fresh market move');
+    });
+
+    it('stamps the send-time websocket mark over the packet when provided', () => {
+        const ctx = buildTradeChatContext({
+            symbol: 'BTCUSDT', interval: '15m', packetMarkdown: '## packet\nPrice 100,500',
+            fetchedAtMs: Date.now(), liveMarkPrice: 0.7836,
+        });
+        expect(ctx).toContain('[PRICE STAMP');
+        expect(ctx).toContain('$0.783600');
+        expect(ctx).toContain('the stamp wins');
+        // The stamp lands BEFORE the packet so the model reads it as the
+        // header's correction, not a footnote.
+        expect(ctx.indexOf('[PRICE STAMP')).toBeLessThan(ctx.indexOf('## packet'));
+    });
+
+    it('stamps the live forming candle so packet candle rows never contradict the chart', () => {
+        const ctx = buildTradeChatContext({
+            symbol: 'BTCUSDT', interval: '15m', packetMarkdown: '## packet',
+            fetchedAtMs: Date.now(), liveMarkPrice: 0.7836,
+            formingCandle: { time: 1760000000000, open: 0.8038, high: 0.804, low: 0.781, close: 0.7836 },
+        });
+        expect(ctx).toContain('[LIVE CANDLE');
+        expect(ctx).toContain('forming 15m candle');
+        expect(ctx).toContain('C 0.783600');
+        expect(ctx).toContain('this one is current');
+        expect(ctx.indexOf('[LIVE CANDLE')).toBeLessThan(ctx.indexOf('## packet'));
+        // No interval → still renders, just without the timeframe token.
+        const bare = buildTradeChatContext({ symbol: 'BTCUSDT', interval: '15m', packetMarkdown: 'p', fetchedAtMs: Date.now(), formingCandle: { time: 1, open: 1, high: 1, low: 1, close: 1 } });
+        expect(bare).toContain('[LIVE CANDLE');
+    });
+
+    it('omits the stamps when no live feed snapshot is available', () => {
+        for (const liveMarkPrice of [null, undefined]) {
+            const ctx = buildTradeChatContext({ symbol: 'BTCUSDT', interval: '15m', packetMarkdown: 'p', fetchedAtMs: Date.now(), liveMarkPrice, formingCandle: null });
+            expect(ctx).not.toContain('[PRICE STAMP');
+            expect(ctx).not.toContain('[LIVE CANDLE');
+        }
+    });
+
     it('a failed packet fetch degrades to an explicit unavailable note', () => {
         const ctx = buildTradeChatContext({ symbol: 'ETHUSDT', interval: '1h', packetMarkdown: '   ', fetchedAtMs: Date.now() });
         expect(ctx).toContain('packet unavailable');
@@ -54,6 +100,11 @@ describe('buildTradeChatContext (the model sees the chart)', () => {
         expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('[HARNESS SIGNAL]');
         expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('NEVER re-announce a level already marked fired');
         expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('does not place, close or resolve trades');
+    });
+
+    it('the system prompt pins the live mark as current when packet and mark disagree', () => {
+        expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('the mark is current');
+        expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('never as a fresh move');
     });
 
     it('describeChartSnapshotForModel renders painted candles, mark and levels', () => {

@@ -1,10 +1,18 @@
 /**
- * KlineService - Candlestick (kline) data fetching with multi-source fallback.
+ * KlineService - Candlestick (kline) data fetching.
  *
- * Extracted from LiveMarket.tsx and OKXChart.tsx. Browser requests to exchange
- * APIs are frequently blocked by CORS, so every fetch path rotates through a
- * chain of direct endpoints and public CORS proxies, returning the first
- * successful, well-formed response.
+ * PRIMARY source: Binance USDT-FUTURES klines (fapi) — the SAME market as the
+ * Trade surface's markPrice@1s websocket, funding/OI, and the hybrid packet.
+ * The desk is a perps desk: chart history from the SPOT market made the
+ * painted candles deviate from the live mark on moving symbols (the
+ * spot↔perp basis read as a price move). fapi sends
+ * `Access-Control-Allow-Origin: *`, so the browser calls it directly; on
+ * failure the request races the fapi/fapi1/fapi2 mirrors.
+ *
+ * DEGRADED FALLBACK: the SPOT mirror chain (data-api.binance.vision + CORS
+ * proxies) — a DIFFERENT market whose candles can deviate from the perp
+ * feed. Used only when fapi itself is unreachable from the browser, and
+ * logged as degraded when it wins.
  *
  * All functions return a standardized Kline[] (time in milliseconds, OHLCV).
  */
@@ -19,23 +27,20 @@ const klineCache = new Map<string, { at: number; data: Kline[] }>();
 const klineInFlight = new Map<string, Promise<Kline[]>>();
 const KLINE_CACHE_TTL_MS = 30_000;
 
-// --- Interval mapping per exchange ---
-
-const INTERVAL_MAP: Record<'pdax' | 'coinsph' | 'binance', Record<string, string>> = {
-    // PDAX uses minute-based suffixes (M) and hour (H)
-    pdax: { '5m': '5M', '15m': '15M', '1h': '60M', '4h': '4H' },
-    coinsph: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h' },
-    // Binance klines are case-sensitive: daily/weekly are lowercase
-    // ('1d','3d','1w') but MONTHLY is a CAPITAL '1M' (a lowercase '1m' is
-    // 1-MINUTE). The app's timeframe tokens use '1D','3D','1W','1M'
-    // (TradingChart.CHART_INTERVALS), so map the multi-day ones here —
-    // normalizing in ONE place means no caller has to `.toLowerCase()` and
-    // silently turn the monthly chart into a 1-minute one.
-    binance: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1D': '1d', '3D': '3d', '1W': '1w', '1M': '1M' },
+// --- Binance interval mapping ---
+// Binance klines are case-sensitive: daily/weekly are lowercase
+// ('1d','3d','1w') but MONTHLY is a CAPITAL '1M' (a lowercase '1m' is
+// 1-MINUTE). The app's timeframe tokens use '1D','3D','1W','1M'
+// (TradingChart.CHART_INTERVALS), so map the multi-day ones here —
+// normalizing in ONE place means no caller has to `.toLowerCase()` and
+// silently turn the monthly chart into a 1-minute one. Spot and futures
+// klines share the interval tokens.
+const BINANCE_INTERVALS: Record<string, string> = {
+    '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h',
+    '1D': '1d', '3D': '3d', '1W': '1w', '1M': '1M',
 };
 
-const mapInterval = (interval: string, exchange: 'pdax' | 'coinsph' | 'binance'): string =>
-    INTERVAL_MAP[exchange][interval] || interval;
+const mapBinanceInterval = (interval: string): string => BINANCE_INTERVALS[interval] || interval;
 
 // --- Core fetch helper ---
 
@@ -73,7 +78,8 @@ const fetchJson = async (source: FetchSource): Promise<any> => {
 /**
  * Parse Binance-style kline payload (array of arrays:
  * [time, open, high, low, close, volume, ...]) into standardized Kline[].
- * Time is preserved in milliseconds.
+ * Time is preserved in milliseconds. Spot (/api/v3) and futures (/fapi/v1)
+ * klines share this array layout.
  */
 const parseBinanceKlines = (data: any): Kline[] => {
     if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
@@ -95,7 +101,8 @@ const parseBinanceKlines = (data: any): Kline[] => {
  * critical path (worst case 27s+ for the Binance chain); with a parallel race
  * the fastest healthy source wins and the rest are abandoned (their abort
  * timers still fire, releasing the sockets). All sources share one parser, so
- * the first non-empty payload is a valid drop-in result.
+ * the first non-empty payload is a valid drop-in result. Resolves [] when
+ * every source fails.
  */
 const fetchKlinesFromSources = async (
     sources: FetchSource[],
@@ -118,10 +125,26 @@ const fetchKlinesFromSources = async (
     }
 };
 
-// --- Binance source chain (direct + CORS proxies) ---
+// --- PRIMARY: Binance futures klines (fapi, browser-direct) ---
+
+const FUTURES_HOSTS = [
+    'https://fapi.binance.com',
+    'https://fapi1.binance.com',
+    'https://fapi2.binance.com',
+];
+
+const buildFuturesSources = (symbol: string, interval: string, limit: number): FetchSource[] => {
+    const binanceInterval = mapBinanceInterval(interval);
+    return FUTURES_HOSTS.map(host => ({
+        url: `${host}/fapi/v1/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`,
+        timeout: 8000,
+    }));
+};
+
+// --- DEGRADED FALLBACK: Binance SPOT mirror chain (direct + CORS proxies) ---
 
 const buildBinanceSources = (symbol: string, interval: string, limit: number): FetchSource[] => {
-    const binanceInterval = mapInterval(interval, 'binance');
+    const binanceInterval = mapBinanceInterval(interval);
     const publicUrl = `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
     const targetUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
 
@@ -135,8 +158,9 @@ const buildBinanceSources = (symbol: string, interval: string, limit: number): F
 };
 
 /**
- * Fetch klines from Binance via a direct endpoint with CORS-proxy fallback.
- * Returns standardized Kline[] (time in ms), or [] if all sources fail.
+ * Fetch klines for the perp chart: futures (fapi) first, spot mirror chain as
+ * the labeled degraded fallback. Returns standardized Kline[] (time in ms),
+ * or [] if both fail.
  */
 export const fetchKlines = async (
     symbol: string,
@@ -151,121 +175,25 @@ export const fetchKlines = async (
 
     const promise = (async () => {
         try {
-            const sources = buildBinanceSources(symbol, interval, limit);
-            const data = await fetchKlinesFromSources(sources, parseBinanceKlines, `${symbol} ${interval}`);
+            // PRIMARY: the futures market itself — same instrument the user
+            // trades, same basis as the markPrice@1s feed and the packet.
+            let data = await fetchKlinesFromSources(
+                buildFuturesSources(symbol, interval, limit),
+                parseBinanceKlines,
+                `${symbol} ${interval} (futures)`,
+            );
+            if (data.length === 0) {
+                console.warn(
+                    `[KlineService] futures klines unavailable for ${symbol} ${interval} — DEGRADED to the SPOT mirror chain; candles may deviate from the perp feed`,
+                );
+                data = await fetchKlinesFromSources(
+                    buildBinanceSources(symbol, interval, limit),
+                    parseBinanceKlines,
+                    `${symbol} ${interval} (spot fallback)`,
+                );
+            }
             klineCache.set(cacheKey, { at: Date.now(), data });
             return data;
-        } finally {
-            klineInFlight.delete(cacheKey);
-        }
-    })();
-    klineInFlight.set(cacheKey, promise);
-    return promise;
-};
-
-// --- Philippine exchange sources (PDAX, Coins.ph) ---
-
-/**
- * PDAX (Philippine Digital Asset Exchange). Uses PHP pairs (BTCUSDT -> BTC-PHP)
- * and returns an array of objects: { time, open, high, low, close, volume }.
- */
-const fetchFromPDAX = async (symbol: string, interval: string, limit: number): Promise<Kline[]> => {
-    // Only the trailing USDT quote gets converted. A blanket replace mangles
-    // symbols where 'USDT' appears in the base (TUSDUSDT → T-PHPUSDT) and
-    // passes non-USDT quotes (BTCBUSD) through to PDAX as garbage.
-    const pdaxSymbol = symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}-PHP` : symbol;
-    const pdaxInterval = mapInterval(interval, 'pdax');
-    const source: FetchSource = {
-        url: `https://api.pdax.ph/api/v1/market/klines?symbol=${pdaxSymbol}&interval=${pdaxInterval}&limit=${limit}`,
-        timeout: 5000,
-    };
-
-    try {
-        const data = await fetchJson(source);
-        if (Array.isArray(data) && data.length > 0) {
-            return data.map((k: any) => ({
-                time: k.time,
-                open: parseFloat(k.open),
-                high: parseFloat(k.high),
-                low: parseFloat(k.low),
-                close: parseFloat(k.close),
-                volume: parseFloat(k.volume),
-            }));
-        }
-    } catch (e: any) {
-        console.warn('PDAX fetch failed:', e?.name === 'AbortError' ? 'timeout' : e?.message);
-    }
-    return [];
-};
-
-/**
- * Coins.ph (Philippine Crypto Exchange). Returns Binance-style array of arrays.
- */
-const fetchFromCoinsph = async (symbol: string, interval: string, limit: number): Promise<Kline[]> => {
-    const coinsphInterval = mapInterval(interval, 'coinsph');
-    const source: FetchSource = {
-        url: `https://api.pro.coins.ph/openapi/quote/v1/klines?symbol=${symbol}&interval=${coinsphInterval}&limit=${limit}`,
-        timeout: 5000,
-    };
-
-    try {
-        const data = await fetchJson(source);
-        const klines = parseBinanceKlines(data);
-        if (klines.length > 0) {
-            return klines;
-        }
-    } catch (e: any) {
-        console.warn('Coins.ph fetch failed:', e?.name === 'AbortError' ? 'timeout' : e?.message);
-    }
-    return [];
-};
-
-/**
- * Multi-exchange kline fetch: races the two Philippine exchanges in parallel,
- * then falls back to the Binance proxy chain. Returns standardized Kline[]
- * (time in ms), or [] if all sources fail.
- *
- * Both PH exchanges quote the same pairs (BTCUSDT → BTC-PHP), so whichever
- * responds first with a non-empty payload is a valid result for the caller —
- * racing them (instead of the old PDAX→Coins.ph serial chain) cuts the
- * worst-case PH latency from ~10s to ~5s and returns as soon as the faster
- * exchange answers.
- */
-export const fetchMultiExchangeKlines = async (
-    symbol: string,
-    interval: string,
-    limit: number = 300,
-): Promise<Kline[]> => {
-    const cacheKey = `kline_multi_${symbol}_${interval}_${limit}`;
-    const cached = klineCache.get(cacheKey);
-    if (cached && Date.now() - cached.at < KLINE_CACHE_TTL_MS) return cached.data;
-    const inFlight = klineInFlight.get(cacheKey);
-    if (inFlight) return inFlight;
-
-    const promise = (async () => {
-        try {
-            const phAttempts = [
-                fetchFromPDAX(symbol, interval, limit).then(k => {
-                    if (k.length === 0) throw new Error('PDAX empty');
-                    return k;
-                }),
-                fetchFromCoinsph(symbol, interval, limit).then(k => {
-                    if (k.length === 0) throw new Error('Coins.ph empty');
-                    return k;
-                }),
-            ];
-
-            try {
-                const data = await Promise.any(phAttempts);
-                klineCache.set(cacheKey, { at: Date.now(), data });
-                return data;
-            } catch {
-                // Both PH exchanges unavailable — fall back to Binance via proxy chain.
-                console.log('PH exchanges unavailable, trying Binance fallback...');
-                const data = await fetchKlines(symbol, interval, limit);
-                klineCache.set(cacheKey, { at: Date.now(), data });
-                return data;
-            }
         } finally {
             klineInFlight.delete(cacheKey);
         }
