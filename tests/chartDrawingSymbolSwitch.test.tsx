@@ -71,7 +71,7 @@ beforeEach(() => { localStorage.clear(); });
 
 describe('drawings survive a coin switch (same session)', () => {
     it('BTC → ETH → BTC keeps the BTC shape', async () => {
-        let r = mount(null, 'BTCUSDT');
+        const r = mount(null, 'BTCUSDT');
         await act(async () => { await Promise.resolve(); }); // let the data effect settle
 
         // Select the horizontal-line tool and click the chart → one hline.
@@ -83,12 +83,12 @@ describe('drawings survive a coin switch (same session)', () => {
         expect(undoBtn().disabled).toBe(false);
 
         // Flip to ETH — that coin is empty, canvas blanks.
-        r = mount(r, 'ETHUSDT');
+        mount(r, 'ETHUSDT');
         await act(async () => { await Promise.resolve(); });
         expect(undoBtn().disabled).toBe(true);
 
         // Flip BACK to BTC — the shape must return.
-        r = mount(r, 'BTCUSDT');
+        mount(r, 'BTCUSDT');
         await act(async () => { await Promise.resolve(); });
         expect(loadSessionDrawings('s1', 'BTCUSDT')).toHaveLength(1); // never clobbered
         expect(undoBtn().disabled).toBe(false); // and reloaded onto the canvas
