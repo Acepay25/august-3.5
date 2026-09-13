@@ -592,9 +592,16 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 .map(p => describePlanForModel(p, levelWatch.firedLevelsFor(p.planId))),
             describeWatchesForModel(watchService.list(), Date.now()),
         ].filter(Boolean).join('\n\n');
+        // Send-time stamps from the websocket feed: the live mark plus the
+        // FORMING candle (last painted bar — already ws-updated), so a
+        // cached/snapshot packet can never read as a fresh move or a stale
+        // candle.
+        const liveMarkPrice = snap?.markPrice ?? null;
+        const snapCandles = snap?.candles ?? [];
+        const formingCandle = snapCandles.length > 0 ? snapCandles[snapCandles.length - 1] : null;
         const cached = packetCache.get(symbol);
         if (cached && Date.now() - cached.atMs < PACKET_CACHE_MS) {
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: cached.markdown, fetchedAtMs: cached.atMs, drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock });
+            return buildTradeChatContext({ symbol, interval, packetMarkdown: cached.markdown, fetchedAtMs: cached.atMs, drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         }
         try {
             const packet = await fetchHybridData(symbol);
@@ -602,9 +609,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             const atMs = Date.now();
             setContextAt(atMs);
             packetCache.set(symbol, { markdown, atMs });
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: markdown, fetchedAtMs: atMs, drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock });
+            return buildTradeChatContext({ symbol, interval, packetMarkdown: markdown, fetchedAtMs: atMs, drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         } catch {
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: '', fetchedAtMs: Date.now(), drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock });
+            return buildTradeChatContext({ symbol, interval, packetMarkdown: '', fetchedAtMs: Date.now(), drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         }
     }, [symbol, interval, allDrawings, getChartSnapshot]);
 
@@ -627,6 +634,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const { sid, entryId, config, messages, mailboxSeat, mailbox, onMailSent, onAction, hidePass } = params;
         const controller = chatStore.getController(sid);
         if (!controller) return '';
+        // One snapshot per seat turn feeds BOTH stamps (live mark + forming
+        // candle) and the desk tools' context — a single consistent read of
+        // what the canvas is painting as the turn starts.
+        const sendSnap = getChartSnapshot?.() ?? null;
+        const sendCandles = sendSnap?.candles ?? [];
         // present_trade attaches its proposal to whichever entry is streaming.
         activeEntryIdRef.current = entryId;
         const patch = (fn: (e: LiveEntry) => LiveEntry): void => {
@@ -644,6 +656,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             chartInterval: interval,
             chartLevels,
             chartDrawings: allDrawings,
+            liveMarkPrice: sendSnap?.markPrice ?? null,
+            formingCandle: sendCandles.length > 0 ? sendCandles[sendCandles.length - 1] : null,
             executePanelTool,
             trades,
             mailbox,
@@ -711,7 +725,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const finalText = leaked ? (settled.output || full) : full;
         patch(e => ({ ...e, streaming: false, text: finalText, reasoning: leaked ? (settled.thinking || e.reasoning) : (e.reasoning || reasoning) }));
         return finalText;
-    }, [symbol, interval, effort, chartLevels, allDrawings, executePanelTool]);
+    }, [symbol, interval, effort, chartLevels, allDrawings, executePanelTool, getChartSnapshot]);
 
     /** Every few Chart AI conversations, quietly review the recent ones for
      *  concrete trades the user+model discussed, score each against the price

@@ -27,15 +27,56 @@ export interface TradeChatContextInput {
      *  knows the live plan and which levels already fired, even without a
      *  fresh signal. */
     plansDescription?: string;
+    /** The chart's live websocket mark (markPrice@1s) captured at send
+     *  time. When present it is stamped onto the packet so a cached
+     *  snapshot can never read as a fresh price move. */
+    liveMarkPrice?: number | null;
+    /** The chart's forming candle (last element of the painted candles —
+     *  updated live by the kline websocket). Stamped onto the packet so its
+     *  REST-snapshot candle rows can't contradict what the user watches. */
+    formingCandle?: FormingCandle | null;
 }
 
-export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetchedAtMs, drawingsDescription, onScreenDescription, plansDescription }: TradeChatContextInput): string => {
+/** One OHLC candle — the shape the canvas snapshot carries. */
+export interface FormingCandle {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+}
+
+/** Price formatting tiers shared with the packet's own rendering. */
+const fmtPx = (v: number): string => (v >= 1000 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(6));
+
+/** One price-stamp line pinning the packet to the chart's websocket mark —
+ *  the snapshot-vs-live seam in a single sentence. Shared with the desk-tool
+ *  packet path (get_market_packet) so both stamps read identically. */
+export const formatLiveMarkStamp = (price: number): string =>
+    `[PRICE STAMP — live perp mark from the chart's markPrice@1s feed: $${fmtPx(price)}, this is "now". The packet's own price is a REST snapshot; where they differ, the stamp wins.]`;
+
+/** One line pinning the packet to the chart's LIVE forming candle (the
+ *  ws-updated tail the user is watching right now). */
+export const formatFormingCandleLine = (candle: FormingCandle, interval?: string): string => {
+    const ivl = interval ? `${interval} ` : '';
+    const last = interval ? `last ${interval} ` : 'last ';
+    return `[LIVE CANDLE — the forming ${ivl}candle on the chart right now: O ${fmtPx(candle.open)} H ${fmtPx(candle.high)} L ${fmtPx(candle.low)} C ${fmtPx(candle.close)} (kline websocket, live). The packet's ${last}candle row is a REST snapshot — this one is current.]`;
+};
+
+export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetchedAtMs, drawingsDescription, onScreenDescription, plansDescription, liveMarkPrice, formingCandle }: TradeChatContextInput): string => {
     const when = phtFullStamp(fetchedAtMs);
     const packet = (packetMarkdown || '').trim() || '(packet unavailable — the live fetch failed; say so and call the desk tools instead of guessing)';
+    const stamp = typeof liveMarkPrice === 'number' && Number.isFinite(liveMarkPrice) && liveMarkPrice > 0
+        ? formatLiveMarkStamp(liveMarkPrice)
+        : '';
+    const candleLine = formingCandle ? formatFormingCandleLine(formingCandle, interval) : '';
     return [
         `[LIVE CHART CONTEXT — ${symbol} · ${interval} chart · fetched ${when} PHT (UTC+8) — code-calculated, treat as ground truth]`,
+        stamp,
+        candleLine,
         packet,
         (onScreenDescription || '').trim(),
+        '[PRICES — the packet is a REST snapshot (ticker/klines cached up to ~30s); the PRICE STAMP and the "Live mark" in [ON SCREEN] both come from the chart\'s markPrice@1s websocket and are the FRESHEST prices in this message. A gap between packet numbers and those is snapshot age or perp basis, NOT a fresh market move — never narrate a move from that gap alone; confirm with get_chart_view or get_price_snapshot first.]',
         (plansDescription || '').trim(),
         (drawingsDescription || '').trim(),
         'If you need data newer than this packet, CALL THE DESK TOOLS — get_chart_view (everything on screen: candles, timeframe, live mark, verdict levels, order book and the user\'s own drawings), get_all_timeframes (every timeframe at once: candles, structure, formations per TF + book/spread/funding/OI/liquidations), get_market_packet (the full hybrid pull: every timeframe, indicators, funding, OI, book walls, liquidations, session), scan_setups (the strategy-book scanner: live breakouts, pin bars, inside-bar resolutions, gaps, divergences, band plays, pullbacks and failed breaks with evidence + matching skills), or the granular ones (get_price_snapshot, get_order_book, get_liquidations, get_session_context) — never invent a number the packet lacks.',
@@ -74,6 +115,7 @@ export const TRADE_CHAT_SYSTEM_PROMPT = [
     'You are the live chart copilot docked beside a Binance perpetuals chart in the August Trading terminal.',
     'The user is looking at the chart right now; every message arrives with a fresh code-calculated market packet.',
     'ALWAYS ground market claims in evidence: call the desk tools when the answer touches price, the order book, funding, open interest or anything time-sensitive — get_chart_view (everything on screen), get_market_packet (the full hybrid pull) or the granular lookups. Cite exact levels, name the timeframe, and never invent a number the packet lacks.',
+    'PRICES: the packet is a REST snapshot and can lag the chart by seconds; if the packet price and the on-screen live mark disagree, the mark is current — treat the gap as snapshot age or perp basis, never as a fresh move, and confirm with get_chart_view before narrating one.',
     'ALWAYS consult the skills library — the index below and the recall / get_notebook_map tools — and APPLY the skills and strategies that match the current setup. A matching skill outranks improvisation; name the skill you applied and its edge. If no skill matches, say so.',
     'GROW the desk whenever this chat earns it: write_memory_note for durable lessons, revise_skill to improve an existing skill, propose_skill for a new strategy, amend_memory to correct the notebook, forge_tool for a missing capability. Proposals wait for human approval — label them clearly.',
     'MAINTAIN your memory about the USER like a good assistant keeps notes: when you learn something durable about them (who they are, a correction about how they want you to work, an ongoing goal, a reference they use), save it with remember — one fact per entry, a description that says WHEN it matters, and check your memory index first so you UPDATE an existing slug instead of duplicating. feedback/project entries must end with **Why:** and **How to apply:** lines. Pull full bodies with read_memory when an index line is relevant, and forget entries that turn out wrong. Never save trading lessons (those belong to the notebook), provider keys, or anything that only matters to this one conversation.',
