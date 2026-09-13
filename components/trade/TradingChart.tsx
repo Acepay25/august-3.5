@@ -150,9 +150,13 @@ interface TradingChartProps {
     /** Notifies the parent (→ Chart AI context/desk tools) of drawing edits. */
     onDrawingsChange?: (drawings: ChartDrawing[]) => void;
     /** Shapes the MODEL drew via desk tools (draw_on_chart /
-     *  mark_trade_levels) — rendered over the candles like the user's own,
-     *  but never persisted into the user's drawing file. */
+     *  mark_trade_levels) — rendered over the candles like the user's own;
+     *  persisted per session+coin by the parent (TradeView), NOT the user's
+     *  drawing file, so the two stores never clobber each other. */
     modelDrawings?: ChartDrawing[];
+    /** Erasing a MODEL-drawn shape routes removal to the parent's model store
+     *  (the eraser deletes whichever kind it lands on). */
+    onRemoveModelShape?: (id: string) => void;
 }
 
 const sma = (closes: number[], period: number): (number | null)[] => closes.map((_, i) => {
@@ -172,7 +176,7 @@ const distToSegment = (px: number, py: number, ax: number, ay: number, bx: numbe
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 };
 
-const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, chartHandle, onDrawingsChange, modelDrawings }) => {
+const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, chartHandle, onDrawingsChange, modelDrawings, onRemoveModelShape }) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -713,8 +717,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     };
 
     const hitTestDrawing = (x: number, y: number): ChartDrawing | null => {
-        for (let i = drawingsRef.current.length - 1; i >= 0; i -= 1) {
-            const d = drawingsRef.current[i];
+        // Model shapes paint above the user's, so test them first (top-down):
+        // the eraser deletes whichever kind it actually lands on.
+        const pool = [...drawingsRef.current, ...modelDrawingsRef.current];
+        for (let i = pool.length - 1; i >= 0; i -= 1) {
+            const d = pool[i];
             const pts = d.points.map(p => toScreen(p)).filter((s): s is { x: number; y: number } => s !== null);
             if (pts.length === 0) continue;
             if (d.kind === 'rect') {
@@ -738,7 +745,15 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         const pt = localPoint(ev);
         if (tool === 'erase') {
             const hit = hitTestDrawing(pt.x, pt.y);
-            if (hit) publishDrawings(drawingsRef.current.filter(d => d.id !== hit.id));
+            if (hit) {
+                if (drawingsRef.current.some(d => d.id === hit.id)) {
+                    publishDrawings(drawingsRef.current.filter(d => d.id !== hit.id));
+                } else {
+                    // A model-drawn shape → remove it from the parent's model
+                    // store (which re-persists the coin's model bucket).
+                    onRemoveModelShape?.(hit.id);
+                }
+            }
             return;
         }
         if (tool === 'hline') {
