@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Search, X } from 'lucide-react';
 import { runScreener, type ScreenerRow } from '../../services/trade/screener';
+import { display as symbolDisplay } from '../../utils/symbol';
 import type { LoggedTrade } from '../../types/trade';
 
 export interface ScreenerPanelProps {
@@ -145,7 +146,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                     className="cursor-pointer border-b border-white/[0.03] transition-colors hover:bg-white/[0.04]"
                                 >
                                     <td className="px-4 py-1.5">
-                                        <span className="font-mono font-bold text-zinc-100">{r.symbol.replace(/USDT$/, '/USDT')}</span>
+                                        <span className="font-mono font-bold text-zinc-100">{symbolDisplay(r.symbol)}</span>
                                         <span className="ml-2 text-zinc-600">{r.baseAsset}</span>
                                     </td>
                                     <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-300">{r.price > 0 ? fmtPrice(r.price) : '—'}</td>

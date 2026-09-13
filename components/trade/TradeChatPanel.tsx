@@ -61,6 +61,7 @@ import {
 import SupervisorPanel from './SupervisorPanel';
 import type { SupervisorPhase } from '../../services/learning/supervisorStore';
 import { getActiveUsername } from '../../utils/activeUser';
+import { baseOf, display as symbolDisplay } from '../../utils/symbol';
 import { listSkills } from '../../services/learning/SkillMemoryService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { isPassReply } from '../../services/agents/groupRounds';
@@ -394,7 +395,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // The DOCK generates the stable plan id: the level-watch arms on
             // it, the receipt names its level ids for the model to quote,
             // and "Log this trade" carries it onto the journal row.
-            proposal.planId = `${proposal.symbol.replace(/USDT$/i, '').toLowerCase()}-${Date.now().toString(36)}`;
+            proposal.planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
             const { drawings } = drawingsFromLevelTool({ entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits });
             addModelDrawings?.(drawings);
             onPlanPresented?.({
@@ -1516,7 +1517,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     </div>
                 )}
                 <div className="flex shrink-0 items-center gap-2 px-1 pb-2 pt-1">
-                    <span className="truncate text-[12px] font-semibold text-zinc-200">{symbol.replace(/USDT$/, '/USDT')}</span>
+                    <span className="truncate text-[12px] font-semibold text-zinc-200">{symbolDisplay(symbol)}</span>
                     {isPanel && (
                         <button type="button" onClick={() => setPanelPickerFor(panelPickerFor === activeId ? null : activeId)}
                             aria-expanded={panelPickerFor === activeId} title="Add / remove panel models (up to 5)"

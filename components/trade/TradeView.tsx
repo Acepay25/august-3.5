@@ -19,6 +19,7 @@ import { fetchMarkIndex, fetchMarketData, fetchDerivativesData, fetchAllFuturesS
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
+import { baseOf } from '../../utils/symbol';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { formatLevelHitForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
@@ -34,7 +35,7 @@ import ScreenerPanel from './ScreenerPanel';
 import type { AgentBot } from '../../services/agents/agentRoster';
 
 const FALLBACK_SYMBOLS: SymbolMeta[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT']
-    .map(symbol => ({ symbol, baseAsset: symbol.replace(/USDT$/, ''), lastPrice: 0, changePercent24h: 0, quoteVolume: 0 }));
+    .map(symbol => ({ symbol, baseAsset: baseOf(symbol), lastPrice: 0, changePercent24h: 0, quoteVolume: 0 }));
 
 interface TradeViewProps {
     providers: ProviderConfig[];
