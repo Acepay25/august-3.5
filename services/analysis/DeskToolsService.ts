@@ -16,15 +16,16 @@ import {
     extractSymbolFromPrompt,
     fetchDerivativesData,
     fetchFundingRate,
+    fetchFuturesOHLCV,
+    fetchFuturesTicker24h,
     fetchMarkIndex,
-    fetchMarketData,
-    fetchOHLCV,
     fetchOrderBookDepth,
     fetchRecentLiquidations,
     normalizeSymbol,
 } from './MarketDataService';
 import { getSessionContext } from '../infrastructure/SessionService';
 import { handleRecallTool } from '../learning/MemoryRetrievalService';
+import { formatFormingCandleLine, formatLiveMarkStamp, type FormingCandle } from '../trade/tradeChatContext';
 import { computeSetupClusterStats } from '../learning/EvidencePackService';
 import type { LoggedTrade } from '../../types';
 import type { ToolAction } from '../../types/message';
@@ -1012,8 +1013,10 @@ async function runWebSearch(query: string, signal?: AbortSignal): Promise<string
 
 async function runDerivatives(symbol: string, signal?: AbortSignal): Promise<string> {
     void signal;
+    // Futures ticker — this result sits next to funding/OI, so the headline
+    // price must be perp-side or the model reads the spot basis as a move.
     const [market, funding, derivatives] = await Promise.all([
-        fetchMarketData(symbol),
+        fetchFuturesTicker24h(symbol),
         fetchFundingRate(symbol),
         fetchDerivativesData(symbol),
     ]);
@@ -1054,9 +1057,11 @@ function runSession(): string {
 
 async function runPriceSnapshot(symbol: string, interval: string): Promise<string> {
     const tf = (['15m', '1h', '4h', '1d'].includes(interval) ? interval : '1h') as '15m' | '1h' | '4h' | '1d';
+    // Perp-side price + candles: a "price snapshot" the model compares against
+    // the chart's live mark must come from the same market as the mark.
     const [market, klines] = await Promise.all([
-        fetchMarketData(symbol),
-        fetchOHLCV(symbol, tf, 24),
+        fetchFuturesTicker24h(symbol),
+        fetchFuturesOHLCV(symbol, tf, 24),
     ]);
     const last = klines[klines.length - 1];
     const first = klines[0];
@@ -1170,6 +1175,14 @@ export interface DeskToolContext {
     /** Shapes the USER drew on the chart (services/trade/chartDrawings) —
      *  reported by get_chart_view so the model sees the user's annotations. */
     chartDrawings?: ChartDrawing[];
+    /** The chart's live websocket mark (markPrice@1s) at call time — stamped
+     *  onto get_market_packet so its snapshot price can't read as a fresh
+     *  move. */
+    liveMarkPrice?: number | null;
+    /** The chart's forming candle (kline websocket, live) at call time —
+     *  stamped onto get_market_packet so its snapshot candle rows can't
+     *  contradict the painted chart. */
+    formingCandle?: FormingCandle | null;
 }
 
 /** Market-data tools whose result may need the coin named in the transcript —
@@ -1445,6 +1458,22 @@ export async function executeDeskTool(
                 const { fetchHybridData, generateHybridPromptInjection } = await import('./HybridIntelligenceService');
                 const packet = await fetchHybridData(sym);
                 content = generateHybridPromptInjection(packet, { compact: true });
+                // The packet's price and candle rows are REST snapshots
+                // (≤30s caches); when the desk runs beside a live chart, pin
+                // "now" to the websocket mark and the forming candle so the
+                // snapshot can't be narrated as a fresh move.
+                const mark = context.liveMarkPrice;
+                const stampSuffix = sym !== fallback
+                    ? ` (note: the stamps are the CHART symbol's ${fallback} feed; this packet describes ${sym})`
+                    : '';
+                let stamps = '';
+                if (typeof mark === 'number' && Number.isFinite(mark) && mark > 0) {
+                    stamps += `\n\n${formatLiveMarkStamp(mark)}`;
+                }
+                if (context.formingCandle) {
+                    stamps += `\n\n${formatFormingCandleLine(context.formingCandle, context.chartInterval)}`;
+                }
+                if (stamps) content += stamps + stampSuffix;
                 break;
             }
             case 'get_chart_view': {
@@ -1851,6 +1880,10 @@ export async function runDeskToolLoop(params: {
     chartLevels?: { label: string; price: number }[];
     /** The user's drawings on the live chart (get_chart_view). */
     chartDrawings?: ChartDrawing[];
+    /** Chart's live websocket mark (stamps get_market_packet). */
+    liveMarkPrice?: number | null;
+    /** Chart's forming candle (stamps get_market_packet). */
+    formingCandle?: FormingCandle | null;
     onToolEvent?: (line: string) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
@@ -1886,6 +1919,8 @@ export async function runDeskToolLoop(params: {
         chartInterval,
         chartLevels,
         chartDrawings,
+        liveMarkPrice,
+        formingCandle,
         onToolEvent,
         onToolAction,
         speaker = '',
@@ -2026,6 +2061,8 @@ export async function runDeskToolLoop(params: {
                 chartInterval,
                 chartLevels,
                 chartDrawings,
+                liveMarkPrice,
+                formingCandle,
             })
             : [];
         const results = [...extraResults, ...forgedResults, ...coreResults];
@@ -2092,6 +2129,10 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     chartInterval?: string;
     chartLevels?: { label: string; price: number }[];
     chartDrawings?: ChartDrawing[];
+    /** Chart's live websocket mark at call time — stamps get_market_packet. */
+    liveMarkPrice?: number | null;
+    /** Chart's forming candle (kline websocket) at call time — same stamp. */
+    formingCandle?: FormingCandle | null;
     /** Override harness setting. Default: follow Settings → Desk Tools. */
     enabled?: boolean;
     /** Final-turn nudge after tools ran. */
@@ -2175,6 +2216,8 @@ export async function* streamChatWithDeskTools(
         chartInterval,
         chartLevels,
         chartDrawings,
+        liveMarkPrice,
+        formingCandle,
         onToolEvent,
         onToolAction,
         onStreamReset,
@@ -2257,6 +2300,8 @@ export async function* streamChatWithDeskTools(
         chartInterval,
         chartLevels,
         chartDrawings,
+        liveMarkPrice,
+        formingCandle,
         nativeTools,
         allowedTools: mergedAllowed,
         trades,
