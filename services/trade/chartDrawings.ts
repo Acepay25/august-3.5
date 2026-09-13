@@ -53,6 +53,9 @@ const storageKey = (username: string, symbol: string): string =>
 const sessionStorageKey = (username: string, sessionId: string): string =>
     `trade_session_drawings_v1_${username}_${sessionId}`;
 
+const sessionModelStorageKey = (username: string, sessionId: string): string =>
+    `trade_session_model_v1_${username}_${sessionId}`;
+
 const finiteNum = (v: unknown): number | null => {
     const n = typeof v === 'number' ? v : Number(v);
     return Number.isFinite(n) ? n : null;
@@ -113,10 +116,10 @@ const sanitizeDrawings = (parsed: unknown): ChartDrawing[] => {
  * Switching coins inside a session blanks the canvas; coming BACK to a
  * previous coin restores that coin's shapes; a fresh session starts EMPTY.
  */
-export const loadSessionDrawings = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] => {
+const readCoinMap = (storeKey: string, symbol: string): ChartDrawing[] => {
     const wanted = symbol.toUpperCase();
     try {
-        const raw = localStorage.getItem(sessionStorageKey(username, sessionId));
+        const raw = localStorage.getItem(storeKey);
         if (raw === null) return []; // fresh session — nothing to inherit
         const parsed = JSON.parse(raw) as { symbol?: unknown; drawings?: unknown } | Record<string, unknown> | null;
         // New map format ({ BTCUSDT: [...], ETHUSDT: [...] })…
@@ -130,17 +133,16 @@ export const loadSessionDrawings = (sessionId: string, symbol: string, username 
         }
         return [];
     } catch {
-        return []; // corrupt session store — start clean rather than guess
+        return []; // corrupt store — start clean rather than guess
     }
 };
 
-export const saveSessionDrawings = (sessionId: string, symbol: string, drawings: ChartDrawing[], username = getActiveUsername()): void => {
+const writeCoinMap = (storeKey: string, symbol: string, drawings: ChartDrawing[]): void => {
     const wanted = symbol.toUpperCase();
     try {
-        const key = sessionStorageKey(username, sessionId);
         // Merge into the coin map (older single-symbol shape migrates in place).
         const store: Record<string, ChartDrawing[]> = {};
-        const raw = localStorage.getItem(key);
+        const raw = localStorage.getItem(storeKey);
         if (raw) {
             const parsed = JSON.parse(raw) as unknown;
             if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -158,11 +160,34 @@ export const saveSessionDrawings = (sessionId: string, symbol: string, drawings:
         }
         store[wanted] = drawings.slice(-MAX_DRAWINGS_PER_SYMBOL)
             .map(d => ({ ...d, points: d.points.slice(0, MAX_POINTS_PER_DRAWING) }));
-        localStorage.setItem(key, JSON.stringify(store));
+        localStorage.setItem(storeKey, JSON.stringify(store));
     } catch {
         /* quota / private mode — drawings stay in memory this session */
     }
 };
+
+/**
+ * SESSION+COIN-scoped USER drawings — each Chart AI session owns a map of
+ * symbol → shapes. Switching coins blanks the canvas; coming BACK restores
+ * that coin's shapes; a fresh session starts EMPTY.
+ */
+export const loadSessionDrawings = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
+    readCoinMap(sessionStorageKey(username, sessionId), symbol);
+
+export const saveSessionDrawings = (sessionId: string, symbol: string, drawings: ChartDrawing[], username = getActiveUsername()): void =>
+    writeCoinMap(sessionStorageKey(username, sessionId), symbol, drawings);
+
+/**
+ * The MODEL's drawn shapes — the SAME per-session-per-coin machinery, its OWN
+ * bucket (`trade_session_model_v1`) so the user's eraser/clear and the model's
+ * `clear_chart_drawings(scope:"model")` never clobber each other — and BOTH
+ * survive a coin switch instead of the model's lines vanishing.
+ */
+export const loadSessionModelDrawings = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
+    readCoinMap(sessionModelStorageKey(username, sessionId), symbol);
+
+export const saveSessionModelDrawings = (sessionId: string, symbol: string, drawings: ChartDrawing[], username = getActiveUsername()): void =>
+    writeCoinMap(sessionModelStorageKey(username, sessionId), symbol, drawings);
 
 export const createDrawingId = (): string =>
     `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
