@@ -82,7 +82,7 @@ const mount = (r: RenderResult | null, symbol: string): RenderResult => {
 
 describe('overlay repaints a coin after a symbol switch back', () => {
     it('paints the BTC shape again after BTC→ETH→BTC once the candles reload', async () => {
-        let r = mount(null, 'BTCUSDT');
+        const r = mount(null, 'BTCUSDT');
         await flush();
 
         // Draw one horizontal line on BTC.
@@ -90,11 +90,11 @@ describe('overlay repaints a coin after a symbol switch back', () => {
         fireEvent.pointerDown(screen.getByTestId('draw-overlay'), { clientX: 60, clientY: 40 });
         await flush();
 
-        // Reset the paint counter, then leave and come back.
+        // Reset the paint counter, then leave and come back (rerender in place).
         ops.stroke = 0;
-        r = mount(r, 'ETHUSDT');
+        mount(r, 'ETHUSDT');
         await flush();
-        r = mount(r, 'BTCUSDT');
+        mount(r, 'BTCUSDT');
         await flush(); // BTC candles reload here
 
         // The shape is reloaded AND must be repainted without a manual pan.
