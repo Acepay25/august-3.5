@@ -10,6 +10,11 @@ const BINANCE_FUTURES_API = 'https://fapi.binance.com';
 // Simple in-memory cache with eviction
 const cache: Map<string, { data: any; timestamp: number }> = new Map();
 const CACHE_TTL = 30000; // 30 seconds
+// mark/index is THE live price the chart streams at 1s (markPrice@1s). Caching
+// it for the full 30s made every "Live mark" line in the model's packet lag
+// the painted chart — the gap read as a fresh price move ("discrepancy
+// flagged"). Keep it near-stream-fresh; the endpoint is one cheap symbol call.
+const LIVE_MARK_TTL = 3000;
 
 // In-flight dedupe for fetchOHLCVFromTime — concurrent identical requests
 // share one promise instead of fanning out N identical Binance calls.
@@ -167,9 +172,9 @@ export const normalizeSymbol = (input: string): string => {
 /**
  * Get cached data or fetch new
  */
-const getCached = <T>(key: string): T | null => {
+const getCached = <T>(key: string, ttlMs: number = CACHE_TTL): T | null => {
     const cached = cache.get(key);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (cached && Date.now() - cached.timestamp < ttlMs) {
         return cached.data as T;
     }
     return null;
@@ -368,6 +373,18 @@ export const pingBinanceAPI = async (): Promise<boolean> => {
  * @param timeframe - Candle interval ('1m', '5m', '15m', '1h', '4h', '1d')
  * @param limit - Number of candles to fetch (default 100)
  */
+/** Shared row parser — spot (/api/v3) and futures (/fapi/v1) klines have the
+ *  identical array layout, so both fetchers map through this. */
+const toKlines = (data: any[][]): Kline[] => data.map((k: any[]) => ({
+    time: k[0],
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4]),
+    volume: parseFloat(k[5]),
+    takerBuyVolume: Number.isFinite(parseFloat(k[9])) ? parseFloat(k[9]) : undefined
+}));
+
 export const fetchOHLCV = async (
     symbol: string,
     timeframe: string = '1h',
@@ -383,20 +400,79 @@ export const fetchOHLCV = async (
         const response = await robustBinanceFetch(`/api/v3/klines?symbol=${normalizedSymbol}&interval=${timeframe}&limit=${limit}`);
         const data = await response.json();
 
-        const klines: Kline[] = data.map((k: any[]) => ({
-            time: k[0],
-            open: parseFloat(k[1]),
-            high: parseFloat(k[2]),
-            low: parseFloat(k[3]),
-            close: parseFloat(k[4]),
-            volume: parseFloat(k[5]),
-            takerBuyVolume: Number.isFinite(parseFloat(k[9])) ? parseFloat(k[9]) : undefined
-        }));
+        const klines = toKlines(data);
 
         setCache(cacheKey, klines);
         return klines;
     } catch (error) {
         console.error(`Failed to fetch OHLCV for ${normalizedSymbol}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Futures OHLCV — same contract as fetchOHLCV but on /fapi/v1. The Trade
+ * surface is a perpetuals desk: every packet/candle the model reasons about
+ * must come from the same market as the chart's mark feed, or the spot↔perp
+ * basis reads as a fresh price move.
+ */
+export const fetchFuturesOHLCV = async (
+    symbol: string,
+    timeframe: string = '1h',
+    limit: number = 100
+): Promise<Kline[]> => {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const cacheKey = `futohlcv_${normalizedSymbol}_${timeframe}_${limit}`;
+
+    const cached = getCached<Kline[]>(cacheKey);
+    if (cached) return cached;
+
+    try {
+        const response = await robustFuturesFetch(`/fapi/v1/klines?symbol=${normalizedSymbol}&interval=${timeframe}&limit=${limit}`);
+        const data = await response.json();
+
+        const klines = toKlines(data);
+
+        setCache(cacheKey, klines);
+        return klines;
+    } catch (error) {
+        console.error(`Failed to fetch futures OHLCV for ${normalizedSymbol}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Futures 24h ticker — the perp counterpart of fetchMarketData. Field names
+ * in /fapi/v1/ticker/24hr match the spot response, so the MarketData shape
+ * is filled identically; only the market differs (and the market matters:
+ * the chart's mark line, funding and OI are all perp-side).
+ */
+export const fetchFuturesTicker24h = async (symbol: string): Promise<MarketData> => {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const cacheKey = `futmarket_${normalizedSymbol}`;
+
+    const cached = getCached<MarketData>(cacheKey);
+    if (cached) return cached;
+
+    try {
+        const response = await robustFuturesFetch(`/fapi/v1/ticker/24hr?symbol=${normalizedSymbol}`);
+        const data = await response.json();
+
+        const marketData: MarketData = {
+            symbol: normalizedSymbol,
+            currentPrice: parseFloat(data.lastPrice),
+            price24hHigh: parseFloat(data.highPrice),
+            price24hLow: parseFloat(data.lowPrice),
+            priceChange24h: parseFloat(data.priceChange),
+            priceChangePercent24h: parseFloat(data.priceChangePercent),
+            volume24h: parseFloat(data.quoteVolume),
+            available: true
+        };
+
+        setCache(cacheKey, marketData);
+        return marketData;
+    } catch (error) {
+        console.error(`Failed to fetch futures ticker for ${normalizedSymbol}:`, error);
         throw error;
     }
 };
@@ -623,7 +699,7 @@ export interface MarkIndexData {
 export const fetchMarkIndex = async (symbol: string): Promise<MarkIndexData> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `markindex_${normalizedSymbol}`;
-    const cached = getCached<MarkIndexData>(cacheKey);
+    const cached = getCached<MarkIndexData>(cacheKey, LIVE_MARK_TTL);
     if (cached) return cached;
     const empty: MarkIndexData = { markPrice: 0, indexPrice: 0, lastFundingRate: 0, nextFundingTime: 0, available: false };
     try {
@@ -1360,14 +1436,22 @@ export const fetchCompleteMarketSnapshot = async (
     // the run. Timeframe klines + funding rate now degrade to empty/0 so the
     // rest of the packet survives; the core ticker (marketData) stays critical
     // because the packet cannot exist without it.
-    const [marketData, klines15m, klines1h, klines4h, klines1d, fundingRate] = await Promise.all([
-        fetchMarketData(normalizedSymbol),
-        fetchOHLCV(normalizedSymbol, '15m', 300).catch(err => { console.warn(`[MarketData] 15m klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchOHLCV(normalizedSymbol, '1h', 300).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchOHLCV(normalizedSymbol, '4h', 300).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchOHLCV(normalizedSymbol, '1d', 300).catch(err => { console.warn(`[MarketData] 1d klines failed, continuing without them:`, err?.message || err); return []; }),
+    //
+    // All pulls are FUTURES (/fapi/v1): the packet is the perp desk's ground
+    // truth and must share the market of the chart's markPrice@1s feed. Spot
+    // sources made the packet diverge from the painted chart on moving symbols
+    // (the spot↔perp basis read as a "discrepancy" the model narrated as a
+    // fresh price move). If the futures ticker itself fails (unknown symbol),
+    // fall back to the spot ticker so the packet still exists.
+    const [futuresMarket, klines15m, klines1h, klines4h, klines1d, fundingRate] = await Promise.all([
+        fetchFuturesTicker24h(normalizedSymbol).catch(err => { console.warn(`[MarketData] futures ticker failed, falling back to spot:`, err?.message || err); return null; }),
+        fetchFuturesOHLCV(normalizedSymbol, '15m', 300).catch(err => { console.warn(`[MarketData] 15m klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchFuturesOHLCV(normalizedSymbol, '1h', 300).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchFuturesOHLCV(normalizedSymbol, '4h', 300).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchFuturesOHLCV(normalizedSymbol, '1d', 300).catch(err => { console.warn(`[MarketData] 1d klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchFundingRate(normalizedSymbol).catch(err => { console.warn(`[MarketData] funding rate failed, defaulting to 0:`, err?.message || err); return 0; })
     ]);
+    const marketData = futuresMarket ?? await fetchMarketData(normalizedSymbol);
 
     return {
         marketData,
