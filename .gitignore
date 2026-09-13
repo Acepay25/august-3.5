@@ -87,3 +87,7 @@ USER.md
 scripts/check_grids.cjs.bak
 .commit-msg.txt
 .commit-msg*.txt
+
+# Local clutter (untracked 2026-09-13 dead-code purge):
+native_backup/
+delivery/

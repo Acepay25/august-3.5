@@ -111,62 +111,7 @@ export const parseAPIError = (error: any, provider: ProviderName): ParsedAPIErro
 };
 
 /**
- * Get toast configuration for an error
- */
-export const getErrorToastConfig = (parsedError: ParsedAPIError): {
-    title: string;
-    message: string;
-    duration: number;
-    action?: { label: string; onClick: () => void };
-} => {
-    switch (parsedError.type) {
-        case 'rate_limit':
-            return {
-                title: 'Rate Limit',
-                message: parsedError.message,
-                duration: (parsedError.retryAfterSeconds || 30) * 1000
-            };
-        case 'quota_exceeded':
-            return {
-                title: 'Quota Exceeded',
-                message: parsedError.message,
-                duration: 10000
-            };
-        case 'invalid_key':
-            return {
-                title: 'Invalid API Key',
-                message: parsedError.message,
-                duration: 0 // Don't auto-dismiss
-            };
-        case 'network':
-            return {
-                title: 'Connection Error',
-                message: parsedError.message,
-                duration: 8000
-            };
-        case 'timeout':
-            return {
-                title: 'Timeout',
-                message: parsedError.message,
-                duration: 8000
-            };
-        case 'server':
-            return {
-                title: 'Server Error',
-                message: parsedError.message,
-                duration: 8000
-            };
-        default:
-            return {
-                title: 'Analysis Error',
-                message: parsedError.message,
-                duration: 6000
-            };
-    }
-};
-
-/**
- * Check if error should trigger a retry
+ * Decide whether an error is worth auto-retrying
  */
 export const shouldRetry = (parsedError: ParsedAPIError): boolean => {
     // 'timeout' is deliberately non-retryable — a request that burned its full
