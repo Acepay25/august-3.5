@@ -41,11 +41,15 @@ let fired = new Set<string>();
 let firedFor = '';
 const subscribers = new Set<(hit: LevelHit, plan: WatchPlan) => void>();
 
-/** Adopt the CURRENT user's latch (cheap no-op while the user is unchanged). */
+/** Adopt the CURRENT user's latch (cheap no-op while the user is unchanged).
+ *  On a switch, ALSO drop the previous user's ARMED plans: the fired-latch is
+ *  per-user, but `armed` is a module-global, so without this A's plan would be
+ *  ticked against B's price feed and fire B's Chart AI. */
 const loadFired = (): void => {
     const user = getActiveUsername();
     if (user === firedFor) return;
     firedFor = user;
+    armed.clear();
     fired = new Set();
     try {
         const raw = localStorage.getItem(hitsKey(user));
