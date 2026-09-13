@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 import type { SymbolMeta } from '../../services/analysis/MarketDataService';
+import { display as symbolDisplay } from '../../utils/symbol';
 
 export interface SymbolPickerProps {
     symbols: SymbolMeta[];
@@ -17,7 +18,7 @@ export interface SymbolPickerProps {
     onChange: (symbol: string) => void;
 }
 
-const display = (symbol: string): string => symbol.replace(/USDT$/, '/USDT');
+const display: (symbol: string) => string = symbolDisplay;
 
 export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onChange }) => {
     const [open, setOpen] = useState(false);

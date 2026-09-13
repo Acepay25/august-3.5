@@ -7,6 +7,7 @@
 
 import type { ProviderConfig } from '../../types/provider';
 import { getHarnessSettings } from '../../utils/harnessSettings';
+import { baseOf } from '../../utils/symbol';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
@@ -1584,7 +1585,7 @@ export async function executeDeskTool(
             }
             case 'get_setup_history_stats': {
                 const symRaw = asSymbol(call.arguments.symbol, fallback);
-                const coin = symRaw.replace(/USDT?$/, '');
+                const coin = baseOf(symRaw);
                 const dirArg = asString(call.arguments.direction).toUpperCase();
                 const direction: 'Long' | 'Short' | undefined = dirArg === 'LONG' ? 'Long' : dirArg === 'SHORT' ? 'Short' : undefined;
                 const stats = computeSetupClusterStats(coin, direction, undefined, context.trades || []);

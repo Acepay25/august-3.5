@@ -32,6 +32,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 import { isQuotaError } from '../utils/errorUtils';
 import { shouldSkillHoldout } from '../utils/skillHoldout';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, isBindingMarkdownPlan } from '../utils/analysisUtils';
+import { stripQuoteSuffix } from '../utils/symbol';
 import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
 import { appendSessionUsage } from '../utils/sessionUsage';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
@@ -1500,7 +1501,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const symbolMatches = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?|PERP)\b/gi) ||
                 effectiveInput.match(/\b([A-Z]{2,5})\b/gi) || [];
             const detectedSymbol = symbolMatches
-                .map(m => m.replace(/USDT?|PERP/gi, '').toUpperCase())
+                .map(m => stripQuoteSuffix(m))
                 .find(s => s.length >= 2 && s.length <= 10 && !commonWords.includes(s));
             const finalSymbol = detectedSymbol ? `${detectedSymbol}USDT` : null;
 
