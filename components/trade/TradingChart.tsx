@@ -145,6 +145,11 @@ interface TradingChartProps {
      *  dashed price line ("mark") that ticks every second, faster than the
      *  built-in last-close line can move while a bar is still open. */
     lastPrice?: number | null;
+    /** Futures mark price (markPrice@1s). The dashed line is LABELED 'mark',
+     *  so it should BE the mark price: on a quiet perp the last-trade ticker
+     *  sits unchanged for minutes while mark keeps streaming, and the line
+     *  reads as frozen/not-realtime. Falls back to lastPrice when absent. */
+    markPrice?: number | null;
     /** Imperative handle filled in on mount (screenshot + snapshot). */
     chartHandle?: React.MutableRefObject<ChartHandle | null>;
     /** Notifies the parent (→ Chart AI context/desk tools) of drawing edits. */
@@ -176,7 +181,7 @@ const distToSegment = (px: number, py: number, ax: number, ay: number, bx: numbe
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 };
 
-const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, chartHandle, onDrawingsChange, modelDrawings, onRemoveModelShape }) => {
+const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, markPrice, chartHandle, onDrawingsChange, modelDrawings, onRemoveModelShape }) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -339,7 +344,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         let watchdog = 0;
         const load = async (isInitial: boolean): Promise<void> => {
             try {
-                const klines = await fetchKlines(symbol, toKlineInterval(interval), HISTORY_BARS);
+                // Refreshes (non-initial) bypass the 30 s kline cache — with it
+                // the 15 s poll and the live-stall watchdog re-fetch the same
+                // snapshot and the chart advances at ~30 s, half its cadence.
+                // The initial (mount/coin-switch) load still rides the cache.
+                const klines = await fetchKlines(symbol, toKlineInterval(interval), HISTORY_BARS, isInitial ? undefined : { noCache: true });
                 if (cancelled) return;
                 const cs = candlesRef.current;
                 const vs = volumeRef.current;
@@ -403,10 +412,12 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             color: liveKline.close >= liveKline.open ? VOLUME_UP : VOLUME_DOWN,
         });
         // A closed bar means the next tick opens a NEW bar — keep history
-        // honest without waiting for the watchdog.
+        // honest without waiting for the watchdog. Bypass the cache: the whole
+        // point is the just-finalized OHLC, which a 30 s-old cached page of
+        // 3 would still report at its pre-close value.
         if (liveKline.closed) {
             const cs = candlesRef.current;
-            void fetchKlines(symbol, toKlineInterval(interval), 3).then(kl => {
+            void fetchKlines(symbol, toKlineInterval(interval), 3, { noCache: true }).then(kl => {
                 if (kl.length === 0 || cs.data().length === 0) return;
                 const last = kl[kl.length - 1];
                 cs.update({ time: Math.floor(last.time / 1000) as UTCTimestamp, open: last.open, high: last.high, low: last.low, close: last.close });
@@ -426,17 +437,20 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 markLineRef.current = null;
             }
         };
-        if (lastPrice == null || !Number.isFinite(lastPrice)) { removeLine(); return; }
+        // The line is titled 'mark', so prefer the real mark price; lastPrice
+        // remains the fallback (e.g. feeds where markPrice@1s is unavailable).
+        const price = markPrice ?? lastPrice;
+        if (price == null || !Number.isFinite(price)) { removeLine(); return; }
         if (markLineRef.current) {
-            try { markLineRef.current.applyOptions({ price: lastPrice }); return; } catch { removeLine(); }
+            try { markLineRef.current.applyOptions({ price }); return; } catch { removeLine(); }
         }
         try {
             markLineRef.current = cs.createPriceLine({
-                price: lastPrice, color: '#399ef7', lineWidth: 1, lineStyle: 2,
+                price, color: '#399ef7', lineWidth: 1, lineStyle: 2,
                 axisLabelVisible: true, title: 'mark',
             }) ?? null;
         } catch { /* series without price-line support (test mock) */ }
-    }, [lastPrice, status]);
+    }, [lastPrice, markPrice, status]);
 
     // SMA overlay.
     useEffect(() => {
@@ -854,7 +868,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     symbol,
                     interval,
                     candles: tail,
-                    markPrice: lastPrice ?? null,
+                    markPrice: markPrice ?? lastPrice ?? null,
                     levels: levels.map(l => ({ label: l.label, price: l.price })),
                     drawings: drawingsRef.current,
                     modelDrawings: modelDrawingsRef.current,
@@ -864,7 +878,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             clearUserDrawings: (): void => publishDrawings([]),
         };
         return () => { chartHandle.current = null; };
-    }, [chartHandle, symbol, interval, lastPrice, levels, publishDrawings]);
+    }, [chartHandle, symbol, interval, lastPrice, markPrice, levels, publishDrawings]);
 
     const toolActive = tool !== 'cursor';
 
