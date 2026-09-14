@@ -52,7 +52,13 @@ interface ElectronProviderBridge {
          *  reasoningPatch. Without it desktop ran thinking-default gateways
          *  at their provider default regardless of the composer tier. */
         reasoningPatch?: Record<string, unknown>;
+        /** Opt into live SSE: main parses the response stream and pushes
+         *  deltas over `provider:chunk` while the invoke promise still
+         *  resolves with the accumulated final result. */
+        stream?: boolean;
     }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; toolCalls?: ChatTurnResult['toolCalls']; assistantMessage?: ChatMessage; status?: number; code?: string; message?: string }>;
+    /** Subscribe to streamed deltas of a stream:true providerChat call. */
+    onProviderChunk?: (callback: (chunk: { requestId: string; type: 'text' | 'reasoning'; delta: string }) => void) => (() => void) | void;
     cancelProviderChat?: (requestId: string) => Promise<boolean>;
     discoverModels?: (config: {
         baseUrl: string;
@@ -1306,10 +1312,100 @@ export async function sendChatTurn(
 }
 
 /**
+ * Desktop live paint over the Electron bridge. main.cjs parses the provider's
+ * SSE stream and pushes deltas on `provider:chunk`; this generator yields
+ * text deltas as they land and forwards reasoning deltas to
+ * options.onReasoning — so the thinking strip and the AnalyzedRow timer start
+ * at the first thought, not the last byte. On invoke resolution it delivers
+ * the accumulated native tool calls via options.onStreamToolCalls: the old
+ * single-chunk short-circuit dropped them, so native seats silently lost
+ * every tool round on desktop.
+ *
+ * If nothing streamed (provider ignored stream:true — main falls back to the
+ * buffered parse and returns the whole text in the final result), the text is
+ * yielded once whole; the consumer never sees a blank bubble.
+ */
+async function* streamViaElectronBridge(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options: ChatRequestOptions | undefined,
+    electronAPI: NonNullable<Window['electronAPI']>,
+): AsyncGenerator<string, void, unknown> {
+    const requestId = `provider-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const queue: string[] = [];
+    let yielded = '';
+    let wake: (() => void) | null = null;
+    let settled = false;
+    const notify = (): void => { wake?.(); wake = null; };
+    const unsubscribe = electronAPI.onProviderChunk?.((chunk) => {
+        if (!chunk || chunk.requestId !== requestId) return;
+        if (chunk.type === 'reasoning') {
+            options?.onReasoning?.(chunk.delta);
+            return;
+        }
+        queue.push(chunk.delta);
+        notify();
+    });
+    const cancelRequest = (): void => { void electronAPI.cancelProviderChat?.(requestId); };
+    options?.signal?.addEventListener('abort', cancelRequest, { once: true });
+    if (options?.signal?.aborted) cancelRequest();
+    const timeout = window.setTimeout(() => cancelRequest(), REQUEST_TIMEOUT_MS);
+    const invoke = electronAPI.providerChat!({
+        config,
+        messages,
+        requestId,
+        stream: true,
+        maxTokens: options?.maxTokens,
+        temperature: options?.temperature,
+        tools: options?.tools,
+        toolChoice: options?.toolChoice,
+        reasoningPatch: reasoningPatchFor(config, options),
+    }).catch((err: unknown): Awaited<ReturnType<NonNullable<typeof electronAPI.providerChat>>> => ({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Provider bridge call failed.',
+    })).finally(() => { settled = true; notify(); });
+    try {
+        while (true) {
+            while (queue.length > 0) {
+                const delta = queue.shift() as string;
+                yielded += delta;
+                yield delta;
+            }
+            if (settled) break;
+            await new Promise<void>(resolve => { wake = resolve; });
+        }
+        while (queue.length > 0) {
+            const delta = queue.shift() as string;
+            yielded += delta;
+            yield delta;
+        }
+        const result = await invoke;
+        if (!result.ok) {
+            const error = new Error(result.message || 'Provider request failed.');
+            if (result.status !== undefined) (error as { status?: number }).status = result.status;
+            if (result.code !== undefined) (error as { code?: string }).code = result.code;
+            throw error;
+        }
+        if (result.toolCalls && result.toolCalls.length > 0) options?.onStreamToolCalls?.(result.toolCalls);
+        reportUsageDirect(config, result.usage, options);
+        // Buffered fallback / lost tail: paint whatever the stream missed.
+        if (result.text && result.text.length > yielded.length) {
+            yield result.text.slice(yielded.length);
+        }
+    } finally {
+        window.clearTimeout(timeout);
+        options?.signal?.removeEventListener('abort', cancelRequest);
+        if (typeof unsubscribe === 'function') unsubscribe();
+    }
+}
+
+/**
  * Stream a chat response from any provider as an async generator.
- * Currently supports chat_completions (the dominant format). For messages/responses
- * formats, falls back to non-streaming and yields the full result once.
- * Streaming applies the same hard timeout as non-streaming calls.
+ * Desktop: streams through the Electron bridge (main.cjs parses the SSE for
+ * all three wire formats and pushes provider:chunk deltas). Web: currently
+ * supports chat_completions (the dominant format) via proxy/SDK streaming;
+ * messages/responses formats fall back to non-streaming and yield the full
+ * result once. Streaming applies the same hard timeout as non-streaming calls.
  */
 export async function* streamChatRequest(
     config: ProviderConfig,
@@ -1324,6 +1420,11 @@ export async function* streamChatRequest(
     try {
         const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
         if (electronAPI?.isElectron && electronAPI.providerChat) {
+            if (electronAPI.onProviderChunk) {
+                yield* streamViaElectronBridge(effectiveConfig, messages, options, electronAPI);
+                return;
+            }
+            // Shell without the chunk channel (old preload) — buffered as before.
             yield await sendChatRequest(effectiveConfig, messages, options);
             return;
         }

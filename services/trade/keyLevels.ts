@@ -110,8 +110,27 @@ export interface ParsedKeyLevels {
 /** Pull every `key-levels` block out of a model answer. Tolerant by design:
  *  junk lines are skipped, caps clamp the rest, and an unterminated block
  *  (streaming) is stripped from the display text without yielding levels —
- *  the card only ever renders from a CLOSED block. */
+ *  the card only ever renders from a CLOSED block.
+ *
+ *  Memoized by text on purpose: the dock re-renders every second (mark-price
+ *  tick) and re-parses every AI message; without a stable result identity
+ *  `React.memo(KeyLevelsCard)` never hits and each toggle/hover push repaints
+ *  the whole transcript. Same text → same object. */
+const PARSE_CACHE_MAX = 48;
+const parseCache = new Map<string, ParsedKeyLevels>();
 export const parseKeyLevels = (text: string): ParsedKeyLevels => {
+    const hit = parseCache.get(text);
+    if (hit) return hit;
+    const out = parseKeyLevelsUncached(text);
+    if (parseCache.size >= PARSE_CACHE_MAX) {
+        const oldest = parseCache.keys().next();
+        if (!oldest.done) parseCache.delete(oldest.value);
+    }
+    parseCache.set(text, out);
+    return out;
+};
+
+const parseKeyLevelsUncached = (text: string): ParsedKeyLevels => {
     if (!text || !/```[ \t]*(?:august-)?key-levels/i.test(text)) return { clean: text, levels: [], hadBlock: false };
     // Levels: only ever from CLOSED blocks.
     const levels: ModelKeyLevel[] = [];
