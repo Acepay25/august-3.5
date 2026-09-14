@@ -303,6 +303,19 @@ function providerRequestDetails(request) {
         throw new Error('Unknown provider API format.');
     }
 
+    // Reasoning knob parity with the vite dev proxy (vite.config.ts): the
+    // renderer translates the composer's effort tier into wire fields
+    // (reasoningControls capability classes) and sends them as reasoningPatch;
+    // merge them into whatever body shape the format built. Absent ⇒ no
+    // change. Without this, desktop requests ran thinking-default gateways
+    // (GLM/DeepSeek/xAI) in thinking mode even at off/low effort, while
+    // localhost disabled it — the same prompt answered differently per
+    // transport, and the empty-content collapse below turned that into a
+    // false "streamed only reasoning" error.
+    if (request.reasoningPatch && typeof request.reasoningPatch === 'object') {
+        Object.assign(body, request.reasoningPatch);
+    }
+
     return { url, headers, body };
 }
 
@@ -543,7 +556,7 @@ async function sendProviderRequest(request) {
                 };
             }).filter(c => c.name);
             return {
-                text: text || reasoning || '',
+                text,
                 reasoning,
                 usage: extractTokenUsageJs(data),
                 toolCalls,
@@ -555,7 +568,12 @@ async function sendProviderRequest(request) {
             };
         }
     }
-    return { text: text || reasoning || '', reasoning, usage: extractTokenUsageJs(data) };
+    // NEVER substitute reasoning for content. A model that thinks without
+    // emitting a final message genuinely returned no text; relabeling its
+    // CoT as the answer makes the renderer's pure-echo guard (reasoning ==
+    // content) fire a false "streamed only its reasoning" error on desktop
+    // for turns that localhost renders fine.
+    return { text, reasoning, usage: extractTokenUsageJs(data) };
 }
 
 async function createWindow() {

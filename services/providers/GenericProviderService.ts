@@ -46,6 +46,11 @@ interface ElectronProviderBridge {
         jsonSchema?: ChatRequestOptions['jsonSchema'];
         tools?: ChatRequestOptions['tools'];
         toolChoice?: ChatRequestOptions['toolChoice'];
+        /** Effort-derived wire fields (reasoningControls) — merged into the
+         *  request body main-process-side, mirroring the vite proxy's
+         *  reasoningPatch. Without it desktop ran thinking-default gateways
+         *  at their provider default regardless of the composer tier. */
+        reasoningPatch?: Record<string, unknown>;
     }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; toolCalls?: ChatTurnResult['toolCalls']; assistantMessage?: ChatMessage; status?: number; code?: string; message?: string }>;
     cancelProviderChat?: (requestId: string) => Promise<boolean>;
     discoverModels?: (config: {
@@ -989,6 +994,7 @@ export async function sendChatRequest(
                         jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                         tools: options?.tools,
                         toolChoice: options?.toolChoice,
+                        reasoningPatch: reasoningPatchFor(effectiveConfig, options),
                     }).then(result => {
                         if (!result.ok) {
                             const error = new Error(result.message || 'Provider request failed.');
@@ -1136,6 +1142,7 @@ export async function sendChatTurn(
                             jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
                             toolChoice: options?.toolChoice,
+                            reasoningPatch: reasoningPatchFor(effectiveConfig, options),
                         });
                         if (!bridge.ok) {
                             const error = new Error(bridge.message || 'Provider request failed.');

@@ -721,9 +721,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // the splitter confirms it by returning an empty answer). The reply
         // is only what comes AFTER the echo; if nothing does (the budget died
         // mid-reasoning), say so instead of showing the scratchpad twice.
+        // The `f === ''` arm covers the desktop bridge: main.cjs no longer
+        // substitutes reasoning into text, so a turn that really ends with no
+        // answer arrives as empty content + reasoning, and deserves the same
+        // explanation rather than a blank bubble.
         const r = reasoning.trim();
         const f = full.trim();
-        if (r && settled.output === '' && f.startsWith(r)) {
+        if (r && settled.output === '' && (f === '' || f.startsWith(r))) {
             const rest = f.slice(r.length).trim();
             patch(e => ({
                 ...e,
