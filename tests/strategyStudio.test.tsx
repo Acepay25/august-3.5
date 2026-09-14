@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import StrategyStudio from '../components/dashboards/StrategyStudio';
+import { ToastProvider } from '../components/shared/Toast';
 import { initMemoryFiles, createMemoryFile, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import type { LoggedTrade, TradeAnalysis } from '../types';
 
@@ -50,7 +51,7 @@ describe('StrategyStudio (browse + annotate the playbook library)', () => {
     it('renders a card per playbook with its family chip and status badge', async () => {
         await initMemoryFiles('studio-1');
         await seedSkill('btc-failed-breakout.md', 'confirmed', 'studio-1');
-        render(<StrategyStudio trades={[trade]} username="studio-1" />);
+        render(<ToastProvider><StrategyStudio trades={[trade]} username="studio-1" /></ToastProvider>);
         expect(await screen.findByText('Failed-breakout BTC shorts keep bleeding.')).toBeInTheDocument();
         // Family chip (from strategyFamily), evidence, and the confirmed badge.
         expect(screen.getAllByText(/mean reversion/i).length).toBeGreaterThan(0);
@@ -61,7 +62,7 @@ describe('StrategyStudio (browse + annotate the playbook library)', () => {
     it('search filters the library and reports the empty state', async () => {
         await initMemoryFiles('studio-2');
         await seedSkill('btc-failed-breakout.md', 'confirmed', 'studio-2');
-        render(<StrategyStudio trades={[trade]} username="studio-2" />);
+        render(<ToastProvider><StrategyStudio trades={[trade]} username="studio-2" /></ToastProvider>);
         const box = await screen.findByPlaceholderText(/search playbooks/i);
         fireEvent.change(box, { target: { value: 'zzzzz-no-match' } });
         expect(screen.getByText(/no playbooks match/i)).toBeInTheDocument();
@@ -75,7 +76,7 @@ describe('StrategyStudio (browse + annotate the playbook library)', () => {
         const onSpy = vi.fn();
         window.addEventListener('august:try-skill', onSpy);
         let closed = false;
-        render(<StrategyStudio trades={[trade]} username="studio-3" onClose={() => { closed = true; }} />);
+        render(<ToastProvider><StrategyStudio trades={[trade]} username="studio-3" onClose={() => { closed = true; }} /></ToastProvider>);
         const btn = await screen.findByRole('button', { name: /try in chat/i });
         fireEvent.click(btn);
         window.removeEventListener('august:try-skill', onSpy);

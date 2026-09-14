@@ -1,8 +1,9 @@
 /**
- * SkillsGrid "Prove on history" — the detail card's free history-proof button
- * must reach skillProof with the skill's coin/timeframe/clauses and paint the
- * verdict without any provider call. The proof engine itself is covered in
- * skillProof.test.ts; the kline source is mocked so no network rides the run.
+ * Strategy Studio "Prove on history" — the detail pane's free history-proof
+ * button must reach skillProof with the skill's coin/timeframe/clauses and
+ * paint the verdict without any provider call. The proof engine itself is
+ * covered in skillProof.test.ts; the kline source is mocked so no network
+ * rides the run. (Formerly tests/skillsGridProof.test.tsx, before the merge.)
  */
 
 import React from 'react';
@@ -21,6 +22,10 @@ const { fetchKlinesMock } = vi.hoisted(() => ({
     fetchKlinesMock: vi.fn() as Mock<(...args: any[]) => any>,
 }));
 vi.mock('../services/analysis/KlineService', () => ({ fetchKlines: fetchKlinesMock }));
+vi.mock('../services/learning/strategyRegimeMatrix', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../services/learning/strategyRegimeMatrix')>();
+    return { ...actual, hydrateStrategyRegimeMatrix: vi.fn(async () => {}) };
+});
 
 import {
     initMemoryFiles,
@@ -28,7 +33,7 @@ import {
     createMemoryFile,
 } from '../services/learning/MemoryFilesService';
 import { ToastProvider } from '../components/shared/Toast';
-import SkillsGrid from '../components/settings/SkillsGrid';
+import StrategyStudio from '../components/dashboards/StrategyStudio';
 
 const SKILL = [
     '---',
@@ -36,7 +41,7 @@ const SKILL = [
     'kind: repeat',
     'coin: BTC',
     'timeframe: 15m',
-    'ifCondition: IF a bullish pin bar rejects the local low',
+    'ifCondition: IF a bullish pin bar rejects the local low on volume',
     'thenAction: THEN go long at the trigger close',
     'wins: 2',
     'losses: 1',
@@ -77,10 +82,11 @@ beforeEach(async () => {
     await createMemoryFile(folder.id, 'btc-15m-pin-bar-reclaim.md', `${SKILL}\n`, 'tester');
 });
 
-describe('SkillsGrid history proof', () => {
-    it("detail card proves the coin's tape and shows the win-rate verdict", { timeout: 30_000 }, async () => {
-        render(<ToastProvider><SkillsGrid /></ToastProvider>);
-        await userEvent.click(await screen.findByText('btc-15m-pin-bar-reclaim'));
+describe('Strategy Studio history proof', () => {
+    it("detail pane proves the coin's tape and shows the win-rate verdict", { timeout: 30_000 }, async () => {
+        render(<ToastProvider><StrategyStudio trades={[]} username="tester" /></ToastProvider>);
+        // Open the skill's detail from its library card.
+        await userEvent.click(await screen.findByTestId('studio-wl-btc-15m-pin-bar-reclaim'));
 
         const btn = await screen.findByTestId('prove-skill-history');
         await userEvent.click(btn);

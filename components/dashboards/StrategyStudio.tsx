@@ -1,22 +1,23 @@
 /**
- * StrategyStudio — a browse + annotate surface for the harness's strategy
- * library (seeded playbooks, learned skills, uploaded frameworks). It is a
- * PRESENTATION layer over data that already exists:
+ * StrategyStudio — the single home for the harness's strategy library (seeded
+ * playbooks, learned skills, imported .md). It merges the old Settings → Skills
+ * grid's management (pin, retire, import, the learning-queue proposals, and the
+ * full detail pane with prove-on-history + manual A/B eval) with the Studio's
+ * read-only analytics (family + regime edge, attribution lift). It is still a
+ * PRESENTATION layer over data that already exists — nothing here recomputes or
+ * mutates the learning loop; management writes go through the same
+ * SkillMemoryService / MemoryFilesService the pipeline reads.
  *   - listSkills()             → every skills/*.md (seed prior + learned)
  *   - computeAllSkillLifts()   → per-skill attribution lift (post − pre WR)
  *   - familyRegimeEdge()       → the family × regime win-rate matrix cell
  *   - classifyStrategyFamily() → the controlled family a skill trades
- *
- * Nothing here recomputes or mutates the learning loop — it reads it. "Try
- * in chat" reuses the existing august:try-skill event so a card drops its
- * slug into the composer exactly like the Settings skills grid.
  *
  * Monochrome theme (AGENTS.md): zinc surfaces throughout; the only semantic
  * color is the status-surface family used for edge verdicts and the
  * candidate/confirmed/retired badges, matching the rest of the app.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoggedTrade } from '../../types';
 import { listSkills, titleFromMeta, type SkillMeta } from '../../services/learning/SkillMemoryService';
 import { computeAllSkillLifts, type SkillLiftResult } from '../../services/learning/MemoryProvenanceService';
@@ -24,27 +25,27 @@ import { familyRegimeEdge, matrixSummaryBlock, hydrateStrategyRegimeMatrix } fro
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { normalizeStrategyFamily, STRATEGY_FAMILIES, type StrategyFamily } from '../../types/strategy';
 import { getActiveUsername } from '../../utils/activeUser';
-
-/** "Try in chat" — the same august:try-skill contract SkillsGrid uses.
- *  Dispatched inline (not imported from the settings sibling) so a dashboard
- *  never depends on a settings component; ChatInput owns the listener. */
-const trySkillInChat = (slug: string): void => {
-    window.dispatchEvent(new CustomEvent('august:try-skill', { detail: { slug } }));
-};
+import { importSkillFiles, readSkillFiles } from '../../services/learning/SkillImportService';
+import { subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
+import { consumePendingSkillOpen } from '../chat/SkillCitationChips';
+import { useToastActions } from '../shared/Toast';
+import type { ProviderConfig } from '../../types/provider';
+import SkillDetail, {
+    type SkillCardData, monogramOf, descriptionOf, STATUS_BADGE, KIND_BADGE,
+    trySkillInChat, toggleSkillRetire, PIN_STORAGE_KEY,
+} from '../skills/SkillDetail';
+import LearningQueuePanel from '../skills/LearningQueuePanel';
+import { PinIcon } from 'lucide-react';
 
 interface StrategyStudioProps {
     trades: LoggedTrade[];
     username?: string;
     /** Current market regime (from hybrid) — drives the family-edge tilt. */
     currentRegime?: string;
+    /** Seat used by the manual A/B eval (the same one Settings → Memory uses). */
+    memoryConfig?: ProviderConfig | null;
     onClose?: () => void;
 }
-
-const STATUS_BADGE: Record<SkillMeta['status'], string> = {
-    candidate: 'border-white/15 bg-zinc-800 text-zinc-300',
-    confirmed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-    retired: 'border-white/10 bg-zinc-900 text-zinc-600',
-};
 
 /** A skill's controlled family: canonical when stored, else a keyword
  *  classification of its pattern family + body (the same derivation the
@@ -61,7 +62,21 @@ const edgeTone = (edge: { winRate: number; samples: number } | null): string => 
     return 'text-zinc-300';
 };
 
-const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, currentRegime, onClose }) => {
+/** Raw markdown body with the frontmatter fence stripped (the detail pane's
+ *  Instructions section renders this). */
+const bodyOf = (content: string): string => content.split(/^---\s*$/m).slice(2).join('---').trim();
+
+const readPins = (): Set<string> => {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(PIN_STORAGE_KEY) : null;
+        return new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+        return new Set<string>();
+    }
+};
+
+const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, currentRegime, memoryConfig, onClose }) => {
+    const toast = useToastActions();
     React.useEffect(() => {
         const user = username || getActiveUsername();
         void hydrateStrategyRegimeMatrix(user);
@@ -70,44 +85,149 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
     const [query, setQuery] = useState('');
     const [familyFilter, setFamilyFilter] = useState<StrategyFamily | 'all'>('all');
     const [statusFilter, setStatusFilter] = useState<SkillMeta['status'] | 'all'>('all');
+    const [isImporting, setIsImporting] = useState(false);
+    const [skills, setSkills] = useState<SkillCardData[]>([]);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [pinnedIds, setPinnedIds] = useState<Set<string>>(readPins);
+    const skillsRef = useRef<SkillCardData[]>([]);
+    skillsRef.current = skills;
 
-    const skills = useMemo(() => listSkills(), []);
-    const lifts = useMemo<SkillLiftResult[]>(
-        () => computeAllSkillLifts(trades),
-        [trades],
-    );
+    const refresh = useCallback((): void => {
+        setSkills(listSkills().map(({ file, meta }) => ({
+            fileId: file.id,
+            name: file.name.replace(/\.md$/i, ''),
+            meta,
+            body: bodyOf(file.content),
+        })));
+    }, []);
+
+    // Live: the notebook (and thus skills/) can change from a post-mortem, a
+    // supervisor approval, or an import elsewhere — resync the library.
+    useEffect(() => {
+        refresh();
+        return subscribeMemoryFilesChanged(refresh);
+    }, [refresh]);
+
+    useEffect(() => {
+        try {
+            if (typeof localStorage !== 'undefined') localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(Array.from(pinnedIds)));
+        } catch { /* quota errors never break the library */ }
+    }, [pinnedIds]);
+
+    // Deep link from a skill-citation chip in the transcript: open that skill.
+    // The chip fires the event and mounts the surface on the same tick, so also
+    // consume the pending slug once the list exists.
+    useEffect(() => {
+        const openBySlug = (slug: string): void => {
+            const base = slug.replace(/\.md$/i, '');
+            const hit = skillsRef.current.find(s => s.name === base);
+            if (hit) setSelectedId(hit.fileId);
+        };
+        const pending = consumePendingSkillOpen();
+        if (pending && skills.length > 0) openBySlug(pending);
+        const onOpen = (e: Event): void => {
+            const detail = (e as CustomEvent<{ slug?: string }>).detail;
+            if (detail?.slug) openBySlug(detail.slug);
+        };
+        window.addEventListener('august:open-skill', onOpen);
+        return () => window.removeEventListener('august:open-skill', onOpen);
+    }, [skills.length]);
+
+    const lifts = useMemo<SkillLiftResult[]>(() => computeAllSkillLifts(trades), [trades]);
     const liftByName = useMemo(() => {
         const m = new Map<string, SkillLiftResult>();
         for (const l of lifts) m.set(l.name, l);
         return m;
     }, [lifts]);
+    const matrixLine = useMemo(() => matrixSummaryBlock(currentRegime, 400), [currentRegime]);
 
     const rows = useMemo(() => {
         const q = query.trim().toLowerCase();
         return skills
-            .filter(({ file, meta }) => {
+            .filter(s => {
+                const meta = s.meta;
+                if (!meta) return false;
                 if (statusFilter !== 'all' && meta.status !== statusFilter) return false;
                 if (familyFilter !== 'all' && skillFamily(meta) !== familyFilter) return false;
                 if (!q) return true;
-                const hay = `${titleFromMeta(meta)} ${meta.description ?? ''} ${meta.coin ?? ''} ${meta.family ?? ''} ${file.name}`.toLowerCase();
+                const hay = `${s.name} ${meta.description ?? ''} ${meta.coin ?? ''} ${meta.family ?? ''}`.toLowerCase();
                 return hay.includes(q);
             })
             .sort((a, b) => {
-                // Confirmed first, then most evidence, then newest.
+                const pa = pinnedIds.has(a.fileId) ? 0 : 1;
+                const pb = pinnedIds.has(b.fileId) ? 0 : 1;
+                if (pa !== pb) return pa - pb;
+                // Confirmed first, then most evidence, then newest; retired sinks.
                 const rank = (m: SkillMeta): number => (m.status === 'confirmed' ? 2 : m.status === 'candidate' ? 1 : 0);
-                return rank(b.meta) - rank(a.meta)
-                    || (b.meta.wins + b.meta.losses) - (a.meta.wins + a.meta.losses);
+                const ra = a.meta?.status === 'retired' ? 1 : 0;
+                const rb = b.meta?.status === 'retired' ? 1 : 0;
+                if (ra !== rb) return ra - rb;
+                return rank(b.meta!) - rank(a.meta!)
+                    || (b.meta!.wins + b.meta!.losses) - (a.meta!.wins + a.meta!.losses);
             });
-    }, [skills, query, statusFilter, familyFilter]);
+    }, [skills, query, statusFilter, familyFilter, pinnedIds]);
 
-    const matrixLine = useMemo(() => matrixSummaryBlock(currentRegime, 400), [currentRegime]);
+    const selected = selectedId ? skills.find(s => s.fileId === selectedId) ?? null : null;
+
+    const toggleRetire = (s: SkillCardData): void => {
+        void toggleSkillRetire(s).then(refresh);
+    };
+    const togglePin = (fileId: string): void => {
+        setPinnedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(fileId)) next.delete(fileId);
+            else next.add(fileId);
+            return next;
+        });
+    };
+
+    const onImportFiles = async (picked: FileList | null): Promise<void> => {
+        if (!picked || picked.length === 0 || isImporting) return;
+        setIsImporting(true);
+        try {
+            const read = await readSkillFiles(picked);
+            const files = read.filter(f => f.content !== undefined) as Array<{ name: string; content: string }>;
+            const readErrors = read.filter(f => f.error !== undefined) as Array<{ name: string; error: string }>;
+            const result = await importSkillFiles(files);
+            if (result.imported.length > 0) {
+                toast.success('Skills imported', `${result.imported.length} file${result.imported.length === 1 ? '' : 's'} added — the models can use them in debates now.`);
+            }
+            for (const fail of result.failed) toast.error(`Import failed: ${fail.name}`, fail.reason);
+            for (const fail of readErrors) toast.error(`Import failed: ${fail.name}`, fail.error);
+            if (result.skipped.length > 0) {
+                toast.info('Duplicates skipped', `${result.skipped.length} file${result.skipped.length === 1 ? '' : 's'} already learned (same trigger).`);
+            }
+        } catch (err) {
+            toast.error('Import failed', err instanceof Error ? err.message : 'Could not read the files.');
+        } finally {
+            setIsImporting(false);
+            refresh();
+        }
+    };
+
+    if (selected) {
+        return (
+            <div className="flex h-full min-h-0 flex-col bg-zinc-950 px-5 py-4 text-zinc-100">
+                <div className="min-h-0 flex-1">
+                    <SkillDetail
+                        skill={selected}
+                        backLabel="Library"
+                        onBack={() => setSelectedId(null)}
+                        onToggleRetire={() => toggleRetire(selected)}
+                        memoryConfig={memoryConfig}
+                        loggedTrades={trades}
+                    />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-full flex-col bg-zinc-950 text-zinc-100">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
                 <div>
                     <h2 className="text-sm font-semibold tracking-wide">Strategy Studio</h2>
-                    <p className="text-[11px] text-zinc-500">{skills.length} playbooks · browse, filter, and try them in chat</p>
+                    <p className="text-[11px] text-zinc-500">{skills.length} playbooks · browse, filter, prove, and try them in chat</p>
                 </div>
                 {onClose && (
                     <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
@@ -116,7 +236,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 )}
             </div>
 
-            {/* Filters */}
+            {/* Toolbar: search + filters + import. */}
             <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-5 py-2.5">
                 <input
                     value={query}
@@ -142,6 +262,20 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                     <option value="all">Any family</option>
                     {STRATEGY_FAMILIES.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
                 </select>
+                <label
+                    className="shrink-0 cursor-pointer rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                    title="Import skill .md files — they must carry valid skill frontmatter"
+                >
+                    {isImporting ? 'Importing…' : '⬆ Import'}
+                    <input
+                        type="file"
+                        accept=".md,text/markdown,text/plain"
+                        multiple
+                        data-testid="skills-import-input"
+                        className="hidden"
+                        onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
+                    />
+                </label>
             </div>
 
             {/* Regime×family matrix — a quiet context strip, not a table of
@@ -153,31 +287,51 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
             )}
 
             <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
+                {/* The proposals side of the learning loop — "the gate
+                    proposes, the inbox disposes." Self-hides when empty. */}
+                <LearningQueuePanel />
                 {rows.length === 0 ? (
-                    <p className="text-xs italic text-zinc-600">No playbooks match — close trades with post-mortems to grow skill memory, or clear the filters.</p>
+                    <p className="text-xs italic text-zinc-600">
+                        {skills.length === 0
+                            ? 'No playbooks yet — they form automatically from your post-mortems, or import skill .md files above.'
+                            : 'No playbooks match — clear the filters, or close trades with post-mortems to grow skill memory.'}
+                    </p>
                 ) : (
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {rows.map(({ file, meta }) => {
+                        {rows.map(s => {
+                            const meta = s.meta!;
                             const fam = skillFamily(meta);
                             const edge = fam ? familyRegimeEdge(fam, currentRegime) : null;
-                            const slug = file.name.replace(/\.md$/i, '');
-                            const lift = liftByName.get(file.name) ?? liftByName.get(slug);
+                            const slug = s.name;
+                            const lift = liftByName.get(`${slug}.md`) ?? liftByName.get(slug);
+                            const retired = meta.status === 'retired';
+                            const statusBadge = STATUS_BADGE[meta.status] ?? STATUS_BADGE.candidate;
+                            const kindBadge = KIND_BADGE[meta.kind ?? 'avoid'] ?? KIND_BADGE.avoid;
                             const sample = Math.round(meta.wins + meta.losses);
+                            const pinned = pinnedIds.has(s.fileId);
                             return (
-                                <div key={file.id} className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/60 p-3">
-                                    <div className="mb-1.5 flex items-start justify-between gap-2">
-                                        <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-100" title={titleFromMeta(meta)}>
+                                <div
+                                    key={s.fileId}
+                                    data-skill-card
+                                    onClick={() => setSelectedId(s.fileId)}
+                                    className={`group flex cursor-pointer flex-col rounded-xl border border-white/10 bg-zinc-900/60 p-3 transition-colors hover:border-zinc-600/70 ${retired ? 'opacity-55' : ''}`}
+                                >
+                                    <div className="mb-1.5 flex items-start gap-2">
+                                        <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-[10px] font-bold tracking-wider text-zinc-300">
+                                            {monogramOf(s.name)}
+                                        </span>
+                                        <h3 className="min-w-0 flex-1 truncate pt-1 text-[13px] font-semibold text-zinc-100" title={titleFromMeta(meta)}>
                                             {titleFromMeta(meta)}
                                         </h3>
-                                        <span className={`status-surface shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${STATUS_BADGE[meta.status]}`}>
+                                        <span className={`status-surface shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusBadge.className}`}>
                                             {meta.status}
                                         </span>
                                     </div>
                                     <p className="mb-2 line-clamp-2 min-h-[2.4em] text-[11px] leading-4 text-zinc-500">
-                                        {meta.description || `${meta.ifCondition ? `IF ${meta.ifCondition}` : ''}${meta.thenAction ? ` THEN ${meta.thenAction}` : ''}` || slug}
+                                        {meta.description || descriptionOf(s.body) || slug}
                                     </p>
                                     <div className="mb-2 flex flex-wrap gap-1">
-                                        <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-zinc-400">{meta.kind}</span>
+                                        <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-zinc-400">{kindBadge.label}</span>
                                         {meta.coin && <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-zinc-400">{meta.coin}</span>}
                                         {meta.direction && <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-zinc-400">{meta.direction}</span>}
                                         {fam && <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-zinc-400">{fam.replace(/_/g, ' ')}</span>}
@@ -191,21 +345,48 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                             {edge && edge.samples >= 8 ? `edge ${Math.round(edge.winRate * 100)}%` : '—'}
                                         </span>
                                         {lift?.lift !== null && lift?.lift !== undefined && (
-                                            <span
-                                                className="text-[11px] tabular-nums text-zinc-400"
-                                                title={`Attribution lift (post − pre win rate): ${lift.verdict}`}
-                                            >
+                                            <span className="text-[11px] tabular-nums text-zinc-400" title={`Attribution lift (post − pre win rate): ${lift.verdict}`}>
                                                 lift {lift.lift >= 0 ? '+' : ''}{Math.round(lift.lift)}pt
                                             </span>
                                         )}
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => { trySkillInChat(slug); onClose?.(); }}
-                                        className="mt-2 rounded-lg border border-white/10 bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
-                                    >
-                                        Try in chat
-                                    </button>
+                                    {/* Management row: try / pin / retire / open. */}
+                                    <div className="mt-2 flex items-center gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={e => { e.stopPropagation(); trySkillInChat(slug); onClose?.(); }}
+                                            className="flex-1 rounded-lg border border-white/10 bg-zinc-800 px-2 py-1.5 text-[11px] font-medium text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                                        >
+                                            Try in chat
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title={pinned ? 'Unpin' : 'Pin to top'}
+                                            aria-label={pinned ? `Unpin ${s.name}` : `Pin ${s.name} to top`}
+                                            onClick={e => { e.stopPropagation(); togglePin(s.fileId); }}
+                                            className={`rounded-lg border px-2 py-1.5 ${pinned ? 'border-white/20 bg-zinc-700 text-zinc-100' : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-200'}`}
+                                        >
+                                            <PinIcon className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title={retired ? 'Restore' : 'Retire'}
+                                            aria-label={retired ? `Restore ${s.name}` : `Retire ${s.name}`}
+                                            onClick={e => { e.stopPropagation(); toggleRetire(s); }}
+                                            className="rounded-lg border border-white/10 bg-zinc-800 px-2 py-1.5 text-zinc-500 hover:text-zinc-200"
+                                        >
+                                            {retired ? '↺' : '⏻'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={`Open ${s.name}`}
+                                            title="Open details"
+                                            onClick={e => { e.stopPropagation(); setSelectedId(s.fileId); }}
+                                            className="rounded-lg border border-white/10 bg-zinc-800 px-2 py-1.5 text-zinc-500 hover:text-zinc-200"
+                                        >
+                                            →
+                                        </button>
+                                    </div>
                                 </div>
                             );
                         })}

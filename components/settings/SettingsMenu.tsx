@@ -8,7 +8,6 @@ import { ProviderConfig, ApiFormat } from '../../types/provider';
 import ProviderManager from './ProviderManager';
 import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
-import SkillsGrid from './SkillsGrid';
 import ToolForgeManager from './ToolForgeManager';
 import { loadForgedTools } from '../../services/tools/toolForge';
 import { listAmendments } from '../../services/learning/memoryAmendments';
@@ -931,7 +930,29 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                             {activeTab === 'skills' && (
                                 <div className="h-full min-h-0 animate-fade-in flex flex-col px-4 pb-4 gap-6">
-                                    <SkillsGrid memoryConfig={memoryConfig} loggedTrades={props.loggedTrades} />
+                                    {/* The skill library now lives in the
+                                        full-screen Strategy Studio; Settings
+                                        keeps only the pointer + forged-tool
+                                        approvals (which have no Studio home). */}
+                                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-[13px] font-bold text-zinc-100">Skills</h3>
+                                                <p className="mt-0.5 text-[11px] text-zinc-500">
+                                                    Browse, prove, retire and import your skill library in the Strategy Studio.
+                                                </p>
+                                            </div>
+                                            {onOpenStrategyStudio && (
+                                                <button
+                                                    type="button"
+                                                    onClick={onOpenStrategyStudio}
+                                                    className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                                                >
+                                                    Open Strategy Studio
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                     <div className="border-t border-zinc-800 pt-4">
                                         <h3 className="text-[13px] font-bold text-zinc-100">Forged tools</h3>
                                         <p className="mt-0.5 text-[11px] text-zinc-500 mb-3">
