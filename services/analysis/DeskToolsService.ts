@@ -820,12 +820,12 @@ export const CHART_ACTION_TOOL_DEFS: DeskToolDefinition[] = [
         function: {
             name: 'draw_on_chart',
             description:
-                'Draw on the user\'s live chart — the same drawing tools the user has: horizontal line (level), trendline, ray, or supply/demand zone. Anchors are PRICES plus "bars ago" offsets from the newest candle (startBarsAgo is the OLDER anchor). The shape appears on the chart immediately and the user sees it.',
+                'Draw on the user\'s live chart — the same drawing tools the user has: horizontal line (level), trendline, ray, supply/demand zone, a fibonacci retracement (two anchors), or a text note. Anchors are PRICES plus "bars ago" offsets from the newest candle (startBarsAgo is the OLDER anchor). The shape appears on the chart immediately and the user sees it.',
             parameters: {
                 type: 'object',
                 properties: {
-                    kind: { type: 'string', description: 'hline | trend | ray | zone', enum: ['hline', 'trend', 'ray', 'zone'] },
-                    prices: { type: 'array', items: { type: 'number' }, description: 'One price for hline; two prices (start→end) for trend/ray/zone.' },
+                    kind: { type: 'string', description: 'hline | trend | ray | zone | fib | text', enum: ['hline', 'trend', 'ray', 'zone', 'fib', 'text'] },
+                    prices: { type: 'array', items: { type: 'number' }, description: 'One price for hline/text; two prices (start→end) for trend/ray/zone/fib.' },
                     startBarsAgo: { type: 'number', description: 'Bars back from now for the OLDER anchor (default 40).' },
                     endBarsAgo: { type: 'number', description: 'Bars back for the NEWER anchor (default 0 = now).' },
                     color: { type: 'string', description: 'emerald | rose | amber | sky | violet (default sky).', enum: ['emerald', 'rose', 'amber', 'sky', 'violet'] },
@@ -1554,6 +1554,11 @@ export async function executeDeskTool(
                     bookLines.push('Order book unavailable (the depth fetch failed).');
                 }
                 const { describeDrawingsForModel } = await import('../trade/chartDrawings');
+                // Give the model each shape's draw-time and drift vs the mark
+                // it sees right here, so it can tell a fresh level from one
+                // price has moved away from. Prefer the same mark the price
+                // line above reports.
+                const markNow = mi.available ? mi.markPrice : (context.liveMarkPrice ?? null);
                 content = [
                     `CHART VIEW — ${sym} · ${ivl} · last ${klines.length} candles (oldest→newest)`,
                     `Live mark price: ${mi.available ? mi.markPrice : 'unavailable'}`,
@@ -1561,7 +1566,7 @@ export async function executeDeskTool(
                         ? `Levels drawn on the chart: ${context.chartLevels.map(l => `${l.label} ${l.price}`).join(' · ')}`
                         : 'No verdict levels are drawn on the chart right now.',
                     ...bookLines,
-                    describeDrawingsForModel(context.chartDrawings ?? []) || 'The user has not drawn any shapes on the chart.',
+                    describeDrawingsForModel(context.chartDrawings ?? [], { priceNow: markNow, nowMs: Date.now() }) || 'The user has not drawn any shapes on the chart.',
                     rows,
                 ].join('\n');
                 break;
