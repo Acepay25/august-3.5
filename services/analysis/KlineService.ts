@@ -161,15 +161,21 @@ const buildBinanceSources = (symbol: string, interval: string, limit: number): F
  * Fetch klines for the perp chart: futures (fapi) first, spot mirror chain as
  * the labeled degraded fallback. Returns standardized Kline[] (time in ms),
  * or [] if both fail.
+ *
+ * `noCache` bypasses the 30 s read cache for periodic re-syncs (the live
+ * watchdog / 15 s chart refresh) — without it the TTL halves their cadence
+ * and can serve a just-closed bar its pre-close OHLC for up to 30 s. Fresh
+ * results still land IN the cache (other consumers benefit either way).
  */
 export const fetchKlines = async (
     symbol: string,
     interval: string,
     limit: number = 300,
+    opts?: { noCache?: boolean },
 ): Promise<Kline[]> => {
     const cacheKey = `kline_${symbol}_${interval}_${limit}`;
     const cached = klineCache.get(cacheKey);
-    if (cached && Date.now() - cached.at < KLINE_CACHE_TTL_MS) return cached.data;
+    if (cached && !opts?.noCache && Date.now() - cached.at < KLINE_CACHE_TTL_MS) return cached.data;
     const inFlight = klineInFlight.get(cacheKey);
     if (inFlight) return inFlight;
 

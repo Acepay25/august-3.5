@@ -240,13 +240,21 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     }, [symbol, live]);
 
     // OI has no public stream — seed/refresh it on the slow poll even when
-    // the rest of the strip is live.
+    // the rest of the strip is live. OI has no push stream, so it needs its
+    // OWN slow poll (the comment always claimed this; the interval did not
+    // exist — it only fetched once per [symbol, live] change, leaving OI
+    // hours-stale while live).
     useEffect(() => {
         let cancelled = false;
-        void fetchDerivativesData(symbol).then(d => {
-            if (!cancelled) setStrip(prev => (prev ? { ...prev, oiValue: d.openInterestValue ?? prev.oiValue } : prev));
-        }).catch(() => { /* keep last */ });
-        return () => { cancelled = true; };
+        const load = async (): Promise<void> => {
+            try {
+                const d = await fetchDerivativesData(symbol);
+                if (!cancelled) setStrip(prev => (prev ? { ...prev, oiValue: d.openInterestValue ?? prev.oiValue } : prev));
+            } catch { /* keep last */ }
+        };
+        void load();
+        const poll = window.setInterval(() => void load(), 15_000);
+        return () => { cancelled = true; window.clearInterval(poll); };
     }, [symbol, live]);
 
     // A model drawing belongs to the symbol it was drawn on — switching
@@ -468,6 +476,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 <div className={`min-h-[420px] flex-1 lg:min-h-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}>
                     <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
+                        markPrice={Number.isFinite(markPrice) ? markPrice : null}
                         chartHandle={chartHandleRef}
                         onDrawingsChange={setChartDrawings}
                         modelDrawings={modelDrawings}

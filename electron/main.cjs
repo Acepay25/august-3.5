@@ -585,6 +585,13 @@ async function createWindow() {
         // Don't show the frame until the first paint is ready — otherwise a
         // blank/white window flashes on launch (the audit flagged this).
         show: false,
+        // Keep renderer timers/rAF at full rate when the window is hidden or
+        // occluded. Electron throttles backgrounded renderers to ~1 timer/min
+        // after ~5 min, which on desktop froze the price strip (reconnect
+        // setTimeout + REST polls) and suspended the chart repaint until the
+        // window refocused — the "prices aren't realtime, then jump" symptom.
+        // This is a trading terminal; it must keep ticking in the background.
+        backgroundThrottling: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,

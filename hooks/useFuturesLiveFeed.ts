@@ -22,6 +22,13 @@ const FUTURE_WS = 'wss://fstream.binance.com';
 const CONNECT_TIMEOUT_MS = 5000;
 const MAX_BACKOFF_MS = 10000;
 
+/** The combined feed streams markPrice@1s, so a healthy socket is never
+ *  silent for long. If it goes quiet for STALL_MS while still OPEN, it is
+ *  half-dead (phantom-live) — force-close so scheduleRetry flips us to
+ *  'polling' and REST resumes. STALL_CHECK_MS is how often we test for it. */
+const STALL_MS = 8000;
+const STALL_CHECK_MS = 5000;
+
 /** kline stream interval names (lowercase Binance form). The multi-day
  *  suffixes must NOT be lowercased — '1M'.toLowerCase() is '1m', which would
  *  silently subscribe the monthly chart to the 1-minute stream. */
@@ -63,12 +70,15 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
             let attempt = 0;
             let retryTimer = 0;
             let gotMessage = false;
+            let lastMessageAt = 0;
+            let stallTimer = 0;
             let ws: WebSocket;
 
             const scheduleRetry = (): void => {
                 if (closed) return;
                 if (isCombined) setStatus('polling');
                 gotMessage = false;
+                window.clearInterval(stallTimer);
                 const backoff = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** attempt);
                 attempt += 1;
                 window.clearTimeout(retryTimer);
@@ -89,6 +99,26 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                     const payload = url.includes('/stream?') ? unwrapCombined(String(ev.data)) : safeParse(String(ev.data));
                     if (payload) {
                         gotMessage = true;
+                        lastMessageAt = Date.now();
+                        // Once the first frame lands, the connectTimer's job is
+                        // done — hand liveness to the rolling stall watchdog.
+                        window.clearTimeout(connectTimer);
+                        if (isCombined && stallTimer === 0) {
+                            // Phantom-live guard: a half-open TCP (laptop sleep,
+                            // Wi-Fi roam, NAT timeout) never fires onclose, so
+                            // 'live' would stick and EVERY REST fallback stays
+                            // gated off — the strip freezes on the last frame
+                            // forever. If the 1s markPrice stream goes quiet
+                            // for STALL_MS, force-close: onclose → scheduleRetry
+                            // flips status to 'polling' and REST resumes.
+                            stallTimer = window.setInterval(() => {
+                                if (closed) { window.clearInterval(stallTimer); stallTimer = 0; return; }
+                                if (gotMessage && Date.now() - lastMessageAt > STALL_MS
+                                    && ws.readyState === WebSocket.OPEN) {
+                                    try { ws.close(); } catch { /* onclose drives the retry */ }
+                                }
+                            }, STALL_CHECK_MS);
+                        }
                         // Liveness rides the COMBINED feed (mark/depth/ticker)
                         // — the kline nudge is advisory, so its dropout must
                         // not read as "live" nor flip the surface to polling.
@@ -96,7 +126,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                         onData(payload);
                     }
                 };
-                ws.onclose = () => { window.clearTimeout(connectTimer); sockets.delete(ws); scheduleRetry(); };
+                ws.onclose = () => { window.clearTimeout(connectTimer); window.clearInterval(stallTimer); stallTimer = 0; sockets.delete(ws); scheduleRetry(); };
                 ws.onerror = () => { try { ws.close(); } catch { /* close fires onerror too */ } };
             };
             connect();
