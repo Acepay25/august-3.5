@@ -24,6 +24,10 @@ vi.mock('../services/analysis/HybridIntelligenceService', () => ({
     fetchHybridData: (...args: unknown[]) => fetchHybridMock(...args),
     generateHybridPromptInjection: vi.fn(() => '## packet'),
 }));
+vi.mock('../services/analysis/KlineService', () => ({
+    // BiasChips pulls klines for the dock's regime row — keep the suite offline.
+    fetchKlines: vi.fn(async () => []),
+}));
 vi.mock('../services/learning/SkillMemoryService', () => ({
     listSkills: (...args: unknown[]) => (listSkillsMock as (...a: unknown[]) => unknown)(...args),
 }));

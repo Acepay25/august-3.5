@@ -78,7 +78,8 @@ import {
 } from '../../services/trade/chatPanel';
 import { createDebateMailbox, formatDmEventLine } from '../../services/analysis/DebateMailbox';
 import type { ChartSnapshot } from './TradingChart';
-import { intervalSeconds } from './TradingChart';
+import { intervalSeconds, type ChartInterval } from './TradingChart';
+import BiasChips from './BiasChips';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { seatPersonaPrompt } from '../../services/agents/seatPersonas';
 import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, resolveChatModelSelection, findChatModelOwner, chatModelIdOf } from '../../utils/providerUtils';
@@ -1454,6 +1455,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             )}
             {activeSession.kind !== 'coach' && activeSession.kind !== 'group' && (
             <>
+            {/* The prototype's bias read rides ABOVE the transcript: always
+                current, code-calculated — the tape's state, not a chat turn. */}
+            <BiasChips symbol={symbol} interval={interval as ChartInterval} />
             <div ref={scrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4">
                 {entries.length === 0 && !panelPickerFor && (
                     <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
@@ -1567,7 +1571,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         ? <FadingText text={shownText} streaming={!!e.streaming} />
                                         : null}
                                 </div>
-                                {e.text && !e.streaming && (
+                                {shownText && !e.streaming && (
                                     <div className="flex items-center gap-2">
                                         <CopyChip text={shownText} />
                                     </div>
