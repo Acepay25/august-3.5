@@ -26,7 +26,8 @@ vi.mock('../services/infrastructure/ProviderConfigService', () => ({
   getReadyProviders: (configs: unknown[]) => configs,
 }));
 
-import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import {
   maybeUpsertSkill,

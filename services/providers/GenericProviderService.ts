@@ -30,6 +30,7 @@ import { applyReasoningToChatParams, buildReasoningPatch, detectWireCapabilities
 // a static cycle.
 import '../learning/harnessLessons';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
+import type { ElectronUpdateStatus } from '../../types/electron';
 import { chatMessagesToGemini, googleGenerateUrl, parseGeminiResponse } from '../../utils/googleGeminiFormat';
 import { createThinkingStreamGate, extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
 interface ElectronProviderBridge {
@@ -58,6 +59,23 @@ interface ElectronProviderBridge {
         apiKey: string;
         apiFormat: ProviderConfig['apiFormat'];
     }) => Promise<{ ok: boolean; status?: number; body?: string; message?: string }>;
+    // ── App / auto-update / secret-encryption surface (preload.cjs). Declared
+    // here so the ambient Window.electronAPI is complete: consumers (the update
+    // hook, ProviderConfigService) read `window.electronAPI.*` typed instead of
+    // re-casting to `(window as any)`. ──
+    platform?: string;
+    getVersion?: () => Promise<string>;
+    checkForUpdates?: () => Promise<ElectronUpdateStatus | null>;
+    downloadUpdate?: () => Promise<ElectronUpdateStatus | null>;
+    installUpdate?: () => Promise<ElectronUpdateStatus | null>;
+    getUpdateStatus?: () => Promise<ElectronUpdateStatus | null>;
+    /** Fired by the restart-animation overlay once it has played. */
+    quitNow?: () => void;
+    /** Subscribe to pushed status; returns an unsubscribe (or void). */
+    onUpdateStatus?: (callback: (status: ElectronUpdateStatus) => void) => (() => void) | void;
+    /** safeStorage (OS keychain) encrypt/decrypt for API keys at rest. */
+    encryptSecret?: (plaintext: string) => Promise<string | null>;
+    decryptSecret?: (payload: string) => Promise<string | null>;
 }
 
 declare global {

@@ -21,7 +21,8 @@ vi.mock('../services/infrastructure/ProviderConfigService', () => ({
   getReadyProviders: (configs: unknown[]) => configs,
 }));
 
-import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, updateMemoryFile } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, updateMemoryFile } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { parseSkillMarkdown, serializeSkill } from '../services/learning/SkillMemoryService';
 import { ensureSeedSkills, SEED_SKILLS } from '../services/learning/seedStrategies';
 import { STRATEGY_FAMILIES } from '../types/strategy';

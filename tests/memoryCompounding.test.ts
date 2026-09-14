@@ -11,7 +11,8 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
     }),
 }));
 
-import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { upsertSettledBelief } from '../services/learning/settledBeliefs';
 

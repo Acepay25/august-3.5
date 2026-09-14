@@ -31,9 +31,9 @@ import { shouldSkillHoldout } from '../utils/skillHoldout';
 import {
     initMemoryFiles,
     getMemoryFiles,
-    getMemoryFilesContext,
     createMemoryFile,
 } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { applySkillEvidence, parseSkillMarkdown } from '../services/learning/SkillMemoryService';
 import { getRecentMemoryInjections } from '../services/learning/MemoryInjectionService';
 import { LoggedTrade, TradeOutcome } from '../types';
