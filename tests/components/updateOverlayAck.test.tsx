@@ -2,73 +2,75 @@
  * UpdateOverlay restart handshake — while `installing`, the overlay must let
  * the animation play and then fire the renderer's quitNow() ack exactly once
  * (main's 5 s fallback covers a stuck renderer, but a healthy one must not
- * wait for it). Other phases must never ack.
+ * wait for it). Other phases must never ack, and an unmount mid-hold kills
+ * the pending ack.
  */
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 
-const { quitNowMock, hookState } = vi.hoisted(() => ({
-    quitNowMock: vi.fn(),
-    hookState: {
-        current: {
-            isElectron: true,
-            appVersion: '1.0.0',
-            updateStatus: {
-                status: 'idle', progress: 0, version: null, error: null,
-            },
-            checkForUpdates: vi.fn(),
-            downloadUpdate: vi.fn(),
-            installUpdate: vi.fn(),
-            quitNow: quitNowMock,
-        },
-    },
+const mocks = vi.hoisted(() => ({
+    quitNow: vi.fn(),
+    // Mutable status snapshot the mocked hook reads on every render.
+    status: { status: 'idle', progress: 0, version: null, error: null } as Record<string, unknown>,
 }));
 
 vi.mock('../../hooks/useAutoUpdate', () => ({
-    useAutoUpdate: () => hookState.current,
+    useAutoUpdate: () => ({
+        isElectron: true,
+        appVersion: '1.0.0',
+        updateStatus: mocks.status,
+        checkForUpdates: vi.fn(),
+        downloadUpdate: vi.fn(),
+        installUpdate: vi.fn(),
+        quitNow: mocks.quitNow,
+    }),
 }));
 
 import UpdateOverlay from '../../components/shared/UpdateOverlay';
 
 beforeEach(() => {
     vi.useFakeTimers();
-    quitNowMock.mockReset();
-    hookState.current.updateStatus = {
-        status: 'idle', progress: 0, version: null, error: null,
-    } as never;
+    mocks.quitNow.mockReset();
+    mocks.status = { status: 'idle', progress: 0, version: null, error: null };
 });
 afterEach(() => { vi.useRealTimers(); });
 
 const phase = (status: string, extra: Record<string, unknown> = {}): void => {
-    act(() => {
-        hookState.current.updateStatus = {
-            status, progress: status === 'downloaded' ? 100 : 42, version: '9.9.9', error: null, ...extra,
-        } as never;
-    });
+    mocks.status = {
+        status, progress: status === 'downloaded' ? 100 : 42, version: '9.9.9', error: null, ...extra,
+    };
 };
 
 describe('UpdateOverlay install ack', () => {
     it('plays the restart animation, then acks quit exactly once', () => {
-        render(<UpdateOverlay />);
         phase('installing');
+        render(<UpdateOverlay />);
         expect(screen.getByText(/Restarting with v9.9.9/)).toBeTruthy();
-        expect(quitNowMock).not.toHaveBeenCalled();
+        expect(mocks.quitNow).not.toHaveBeenCalled();
 
         act(() => { vi.advanceTimersByTime(2000); }); // past the 1.9s hold
-        expect(quitNowMock).toHaveBeenCalledTimes(1);
+        expect(mocks.quitNow).toHaveBeenCalledTimes(1);
 
         act(() => { vi.advanceTimersByTime(10_000); }); // no repeat acks
-        expect(quitNowMock).toHaveBeenCalledTimes(1);
+        expect(mocks.quitNow).toHaveBeenCalledTimes(1);
     });
 
-    it('never acks during download or after cancel (unmount clears the timer)', () => {
-        const { unmount } = render(<UpdateOverlay />);
+    it('never acks during download, and the hold respects unmount', () => {
         phase('downloading', { bytesPerSecond: 1024 * 1024, transferred: 1e6, total: 2e6 });
-        act(() => { vi.advanceTimersByTime(5000); });
-        expect(quitNowMock).not.toHaveBeenCalled();
+        const { unmount } = render(<UpdateOverlay />);
         expect(screen.getByText(/Updating to v9.9.9/)).toBeTruthy();
+        act(() => { vi.advanceTimersByTime(5000); });
+        expect(mocks.quitNow).not.toHaveBeenCalled();
         unmount();
+
+        // A fresh install-phase mount acks only after the animation hold.
+        phase('installing');
+        render(<UpdateOverlay />);
+        act(() => { vi.advanceTimersByTime(1000); }); // still inside the 1.9s hold
+        expect(mocks.quitNow).not.toHaveBeenCalled();
+        act(() => { vi.advanceTimersByTime(1500); }); // past it → exactly one
+        expect(mocks.quitNow).toHaveBeenCalledTimes(1);
     });
 });

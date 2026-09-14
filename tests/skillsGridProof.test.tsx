@@ -36,6 +36,8 @@ const SKILL = [
     'kind: repeat',
     'coin: BTC',
     'timeframe: 15m',
+    'ifCondition: IF a bullish pin bar rejects the local low',
+    'thenAction: THEN go long at the trigger close',
     'wins: 2',
     'losses: 1',
     '---',
@@ -50,7 +52,7 @@ const SKILL = [
 const bar = (t: number, o: number, h: number, l: number, c: number) =>
     ({ time: t * 900_000, open: o, high: h, low: l, close: c, volume: 10 });
 const tape = () => {
-    const c = [];
+    const c: ReturnType<typeof bar>[] = [];
     for (let i = 0; i < 6; i += 1) c.push(bar(i, 100, 101, 99, 100));
     for (let k = 0; k < 6; k += 1) {
         const t0 = c.length;
@@ -76,7 +78,7 @@ beforeEach(async () => {
 });
 
 describe('SkillsGrid history proof', () => {
-    it('detail card proves the coin\\'s tape and shows the win-rate verdict', { timeout: 30_000 }, async () => {
+    it("detail card proves the coin's tape and shows the win-rate verdict", { timeout: 30_000 }, async () => {
         render(<ToastProvider><SkillsGrid /></ToastProvider>);
         await userEvent.click(await screen.findByText('btc-15m-pin-bar-reclaim'));
 
