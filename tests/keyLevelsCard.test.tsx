@@ -24,6 +24,10 @@ vi.mock('../services/analysis/HybridIntelligenceService', () => ({
     fetchHybridData: vi.fn(async () => ({})),
     generateHybridPromptInjection: vi.fn(() => '## packet'),
 }));
+vi.mock('../services/analysis/KlineService', () => ({
+    // BiasChips (mounted by the dock) pulls klines for its regime row.
+    fetchKlines: vi.fn(async () => []),
+}));
 
 import KeyLevelsCard from '../components/trade/KeyLevelsCard';
 import TradeChatPanel, { __clearPacketCacheForTests } from '../components/trade/TradeChatPanel';

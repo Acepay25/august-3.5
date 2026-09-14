@@ -183,7 +183,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const handleChatLevels = useCallback((lines: MessageLevelLines | null): void => {
         setChatLevels(prev => {
             if (!lines || !prev) return lines;
-            if (lines.symbol !== prev.symbol || JSON.stringify(lines.lines) === JSON.stringify(prev.lines)) return prev;
+            // Keep the old object only when the push is content-identical (a
+            // hover tick) — a different symbol or different lines always land.
+            if (lines.symbol === prev.symbol && JSON.stringify(lines.lines) === JSON.stringify(prev.lines)) return prev;
             return lines;
         });
     }, []);
