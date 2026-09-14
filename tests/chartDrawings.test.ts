@@ -86,7 +86,7 @@ describe('describeDrawingsForModel', () => {
             shape({ kind: 'hline', points: [{ t: 1_700_000_000, p: 59_500 }] }),
             shape({ kind: 'rect', points: [{ t: 1_700_000_000, p: 60_000 }, { t: 1_700_003_600, p: 59_000 }] }),
         ]);
-        expect(text).toContain('USER DRAWINGS ON THE CHART');
+        expect(text).toContain('DRAWINGS ON THE CHART (user + model — 3 shapes)');
         expect(text).toContain('3 shapes');
         expect(text).toContain('rising trendline');
         expect(text).toContain('horizontal line');
@@ -142,6 +142,47 @@ describe('drawingFromChartTool (model draw_on_chart → data-space shape)', () =
         expect(note.drawings[0].kind).toBe('text');
         expect(note.drawings[0].points[0].p).toBe(60_250);
         expect(note.drawings[0].label).toBe('watch here');
+    });
+
+    it('stamps the draw-time mark price onto the shape (staleness anchor)', () => {
+        const { drawings } = drawingFromChartTool({ kind: 'hline', prices: [60_000] }, { lastBarTime: 1_700_003_600, barSeconds: 900, drawnPrice: 60_250.5 });
+        expect(drawings[0].drawnPrice).toBe(60_250.5);
+    });
+
+    it('leaves drawnPrice absent when no live mark was available', () => {
+        const { drawings } = drawingFromChartTool({ kind: 'hline', prices: [60_000] }, { lastBarTime: 1_700_003_600, barSeconds: 900 });
+        expect(drawings[0].drawnPrice).toBeUndefined();
+    });
+});
+
+describe('drawing staleness (A3): describeDrawingsForModel freshness', () => {
+    it('names the draw time and age when a live context is given', () => {
+        const d = shape({ kind: 'hline', points: [{ t: 1_700_000_000, p: 100 }], createdAt: Date.now() - 2 * 3_600_000 });
+        const text = describeDrawingsForModel([d], { priceNow: 100, nowMs: Date.now() });
+        expect(text).toContain('drawn');
+        expect(text).toContain('2.0 hr ago');
+    });
+
+    it('reports price drift since drawn and flags a shape as possibly stale', () => {
+        const d = shape({ kind: 'hline', points: [{ t: 1_700_000_000, p: 100 }], drawnPrice: 100, createdAt: Date.now() });
+        const text = describeDrawingsForModel([d], { priceNow: 105, nowMs: Date.now() });
+        expect(text).toContain('mark 100→105');
+        expect(text).toContain('+5.0%');
+        expect(text).toContain('POSSIBLY STALE');
+    });
+
+    it('does NOT flag a fresh shape whose price has barely moved', () => {
+        const d = shape({ kind: 'hline', points: [{ t: 1_700_000_000, p: 100 }], drawnPrice: 100, createdAt: Date.now() });
+        const text = describeDrawingsForModel([d], { priceNow: 100.2, nowMs: Date.now() });
+        expect(text).toContain('+0.2%');
+        expect(text).not.toContain('STALE');
+    });
+
+    it('shows age without a drift note for shapes that predate the price stamp', () => {
+        const d = shape({ kind: 'hline', points: [{ t: 1_700_000_000, p: 100 }], createdAt: Date.now() - 60_000 });
+        const text = describeDrawingsForModel([d], { priceNow: 100, nowMs: Date.now() });
+        expect(text).toContain('1 min ago');
+        expect(text).not.toContain('mark 100');
     });
 });
 

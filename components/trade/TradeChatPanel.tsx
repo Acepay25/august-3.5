@@ -45,6 +45,10 @@ import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromLevelTool, type ChartDrawing,
 } from '../../services/trade/chartDrawings';
 import { parseTradeProposal, type TradeProposal } from '../../services/trade/proposedTrade';
+import {
+    parseKeyLevels, deriveChartLines, formatDist,
+    type ModelKeyLevel, type MessageLevelLines,
+} from '../../services/trade/keyLevels';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { describePlanForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
@@ -59,6 +63,7 @@ import {
     ensureSupervisorListeners, nudgeSupervisor, setSessionModel,
 } from '../../services/learning/skillSupervisor';
 import SupervisorPanel from './SupervisorPanel';
+import KeyLevelsCard from './KeyLevelsCard';
 import type { SupervisorPhase } from '../../services/learning/supervisorStore';
 import { getActiveUsername } from '../../utils/activeUser';
 import { baseOf, display as symbolDisplay } from '../../utils/symbol';
@@ -146,6 +151,10 @@ interface TradeChatPanelProps {
     /** Report a presented plan to the harness level-watch (TradeView arms
      *  it; a later price touch comes back as a [HARNESS SIGNAL] turn). */
     onPlanPresented?: (plan: WatchPlan) => void;
+    /** A message's Key Levels card pushes its resolved lines here so the
+     *  canvas can draw them (toggle / pin / hover states already decided);
+     *  null clears. Owned by TradeView — the chart stays the single renderer. */
+    onChatLevelsChange?: (payload: MessageLevelLines | null) => void;
     /** Roster surfaces carried into the dock: the Coach inbox and group
      *  rooms render INSIDE the session tabs (App owns the wiring — the dock
      *  only shows the slot). Absent ⇒ those session options are hidden. */
@@ -265,6 +274,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
     onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
+    onChatLevelsChange,
     renderCoachSurface, renderGroupSurface, groups = [],
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
 }) => {
@@ -359,6 +369,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             && name !== 'present_trade' && name !== 'watch_price' && name !== 'wake_me' && name !== 'cancel_watch') return null;
         const args = call.arguments ?? {};
         const receipt = (ok: boolean, content: string): DeskToolResult => ({ toolCallId: call.id, name, ok, content });
+        // The chart snapshot is shared by every drawing branch: its live mark
+        // is stamped onto each shape (drawnPrice) so describeDrawingsForModel
+        // can later tell the model how far price has moved since the shape was
+        // made — the difference between a fresh level and a stale one.
+        const snap = getChartSnapshot?.() ?? null;
+        const drawnPrice = snap?.markPrice ?? null;
         // ── Watch / schedule harness (model arms a price trigger or a time
         //    wake-up; the harness wakes it back up when the condition holds).
         if (name === 'watch_price' || name === 'wake_me') {
@@ -402,7 +418,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // it, the receipt names its level ids for the model to quote,
             // and "Log this trade" carries it onto the journal row.
             proposal.planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
-            const { drawings } = drawingsFromLevelTool({ entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits });
+            const { drawings } = drawingsFromLevelTool({ entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits }, { drawnPrice });
             addModelDrawings?.(drawings);
             onPlanPresented?.({
                 planId: proposal.planId, symbol: proposal.symbol, direction: proposal.direction,
@@ -428,18 +444,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         }
         if (!addModelDrawings) return receipt(false, `${name}: no chart is attached to this session.`);
         if (name === 'mark_trade_levels') {
-            const { drawings, error } = drawingsFromLevelTool(args);
+            const { drawings, error } = drawingsFromLevelTool(args, { drawnPrice });
             if (error) return receipt(false, `mark_trade_levels rejected: ${error}`);
             addModelDrawings(drawings);
             const listed = drawings.map(d => `${d.label} ${d.points[0].p}`).join(', ');
             return receipt(true, `Marked on the chart: ${listed}. The user sees these lines now.`);
         }
         // draw_on_chart — resolve bars-ago anchors against the newest candle.
-        const snap = getChartSnapshot?.() ?? null;
         const lastBarTime = snap && snap.candles.length > 0
             ? snap.candles[snap.candles.length - 1].time
             : Math.floor(Date.now() / 1000);
-        const { drawings, error } = drawingFromChartTool(args, { lastBarTime, barSeconds: intervalSeconds(interval as never) });
+        const { drawings, error } = drawingFromChartTool(args, { lastBarTime, barSeconds: intervalSeconds(interval as never), drawnPrice });
         if (error) return receipt(false, `draw_on_chart rejected: ${error}`);
         addModelDrawings(drawings);
         const d = drawings[0];
@@ -616,9 +631,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const liveMarkPrice = snap?.markPrice ?? null;
         const snapCandles = snap?.candles ?? [];
         const formingCandle = snapCandles.length > 0 ? snapCandles[snapCandles.length - 1] : null;
+        // Drawings carry their draw-time price, so describe them against the
+        // live mark HERE — the model sees how far price has moved since each
+        // shape and knows which levels are still fresh vs gone stale.
+        const drawingsDescription = describeDrawingsForModel(allDrawings, { priceNow: liveMarkPrice, nowMs: Date.now() });
         const cached = packetCache.get(symbol);
         if (cached && Date.now() - cached.atMs < PACKET_CACHE_MS) {
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: cached.markdown, fetchedAtMs: cached.atMs, drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
+            return buildTradeChatContext({ symbol, interval, packetMarkdown: cached.markdown, fetchedAtMs: cached.atMs, drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         }
         try {
             const packet = await fetchHybridData(symbol);
@@ -626,9 +645,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             const atMs = Date.now();
             setContextAt(atMs);
             packetCache.set(symbol, { markdown, atMs });
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: markdown, fetchedAtMs: atMs, drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
+            return buildTradeChatContext({ symbol, interval, packetMarkdown: markdown, fetchedAtMs: atMs, drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         } catch {
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: '', fetchedAtMs: Date.now(), drawingsDescription: describeDrawingsForModel(allDrawings), onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
+            return buildTradeChatContext({ symbol, interval, packetMarkdown: '', fetchedAtMs: Date.now(), drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         }
     }, [symbol, interval, allDrawings, getChartSnapshot]);
 

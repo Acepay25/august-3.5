@@ -27,6 +27,14 @@ export interface ChartDrawing {
     createdAt: number;
     /** Optional user label shown on the shape's first anchor. */
     label?: string;
+    /**
+     * Futures mark price at the moment the shape was drawn (model drawings,
+     * and any canvas shape saved while the live feed was up). This is what
+     * lets the model judge STALENESS — how far price has travelled since the
+     * anchor — not just when it was made. Null for legacy/user shapes that
+     * predate the stamp or were drawn with no live mark available.
+     */
+    drawnPrice?: number | null;
 }
 
 export const MAX_DRAWINGS_PER_SYMBOL = 40;
@@ -84,6 +92,7 @@ export const loadDrawings = (symbol: string, username = getActiveUsername()): Ch
         if (!Array.isArray(parsed)) return [];
         return parsed.filter(validDrawing).map(d => ({
             ...d,
+            drawnPrice: finiteNum(d.drawnPrice) ?? undefined,
             points: d.points.filter(validPoint).slice(0, MAX_POINTS_PER_DRAWING),
         })).filter(d => d.points.length > 0).slice(-MAX_DRAWINGS_PER_SYMBOL);
     } catch {
@@ -106,6 +115,7 @@ const sanitizeDrawings = (parsed: unknown): ChartDrawing[] => {
     if (!Array.isArray(parsed)) return [];
     return (parsed as unknown[]).filter(validDrawing).map(d => ({
         ...d,
+        drawnPrice: finiteNum(d.drawnPrice) ?? undefined,
         points: d.points.filter(validPoint).slice(0, MAX_POINTS_PER_DRAWING),
     })).filter(d => d.points.length > 0).slice(-MAX_DRAWINGS_PER_SYMBOL);
 };
@@ -216,7 +226,7 @@ export const drawingFromChartTool = (
         color?: unknown;
         label?: unknown;
     },
-    ctx: { lastBarTime: number; barSeconds: number },
+    ctx: { lastBarTime: number; barSeconds: number; drawnPrice?: number | null },
 ): { drawings: ChartDrawing[]; error?: string } => {
     const kindRaw = typeof args.kind === 'string' ? args.kind : '';
     const kindMap: Record<string, DrawKind> = { hline: 'hline', horizontal: 'hline', trend: 'trend', trendline: 'trend', line: 'trend', ray: 'ray', zone: 'rect', rect: 'rect', rectangle: 'rect', fib: 'fib', retracement: 'fib', 'fib-retracement': 'fib', text: 'text', note: 'text', annotation: 'text' };
@@ -240,7 +250,7 @@ export const drawingFromChartTool = (
         ? [{ t: barAt(end), p: prices[0] }]
         : [{ t: barAt(start), p: prices[0] }, { t: barAt(end), p: prices[1] }];
 
-    return { drawings: [{ id: createDrawingId(), kind, points, color, createdAt: Date.now(), label }] };
+    return { drawings: [{ id: createDrawingId(), kind, points, color, createdAt: Date.now(), label, drawnPrice: finiteNum(ctx.drawnPrice ?? undefined) ?? undefined }] };
 };
 
 /**
@@ -249,6 +259,7 @@ export const drawingFromChartTool = (
  */
 export const drawingsFromLevelTool = (
     args: { entry?: unknown; stopLoss?: unknown; takeProfits?: unknown },
+    ctx?: { drawnPrice?: number | null },
 ): { drawings: ChartDrawing[]; error?: string } => {
     const num = (v: unknown): number | null => {
         const n = typeof v === 'number' ? v : Number(v);
@@ -260,8 +271,9 @@ export const drawingsFromLevelTool = (
     if (entry === null) return { drawings: [], error: 'entry price is required' };
     if (stop === null && tps.length === 0) return { drawings: [], error: 'provide stopLoss and/or takeProfits' };
 
+    const drawnPrice = finiteNum(ctx?.drawnPrice ?? undefined) ?? undefined;
     const mk = (price: number, label: string, color: string): ChartDrawing => ({
-        id: createDrawingId(), kind: 'hline', points: [{ t: Date.now() / 1000, p: price }], color, createdAt: Date.now(), label,
+        id: createDrawingId(), kind: 'hline', points: [{ t: Date.now() / 1000, p: price }], color, createdAt: Date.now(), label, drawnPrice,
     });
     const drawings: ChartDrawing[] = [mk(entry, 'Entry', MODEL_COLOR_NAMES.sky)];
     if (stop !== null) drawings.push(mk(stop, 'SL', MODEL_COLOR_NAMES.rose));
@@ -280,6 +292,45 @@ export const pointsForKind = (kind: DrawKind, points: DrawPoint[]): DrawPoint[] 
 
 const fmt = (n: number): string => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
+/** How long ago a drawing was made, in the same coarse units spanName uses. */
+const agoLabel = (ms: number): string => {
+    const mins = Math.max(0, ms) / 60_000;
+    if (mins < 1) return 'moments';
+    if (mins < 60) return `${Math.round(mins)} min`;
+    if (mins < 24 * 60) return `${(mins / 60).toFixed(1)} hr`;
+    return `${(mins / (60 * 24)).toFixed(1)} days`;
+};
+
+/** A drawing is worth re-checking when price has moved ≥1% off its draw-time
+ *  mark, or it was anchored ≥4 hr ago. Soft — phrased as a caveat, not a
+ *  verdict, so the model re-anchors without being told its read is wrong. */
+export const DRAWING_STALE_DRIFT_PCT = 1;
+export const DRAWING_STALE_AGE_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * A trailing "(drawn …)" note for one shape. Always names the Manila draw time
+ * (the clock the user sees); with a live `fresh` context it adds how long ago
+ * and — when a draw-time price was recorded — how far the current mark has
+ * travelled since, flagging possibly-stale shapes so the model knows to
+ * re-anchor before leaning on them.
+ */
+const freshnessNote = (d: ChartDrawing, fresh?: { priceNow: number | null; nowMs: number }): string => {
+    if (!fresh) return ` (drawn ${phtStamp(d.createdAt)})`;
+    const ageMs = fresh.nowMs - d.createdAt;
+    const bits = [`drawn ${phtStamp(d.createdAt)}, ${agoLabel(ageMs)} ago`];
+    const now = fresh.priceNow;
+    const driftPct = d.drawnPrice != null && now != null && Number.isFinite(now) && d.drawnPrice !== 0
+        ? ((now - d.drawnPrice) / d.drawnPrice) * 100
+        : null;
+    if (driftPct !== null) {
+        const sign = driftPct >= 0 ? '+' : '';
+        bits.push(`mark ${fmt(d.drawnPrice as number)}→${fmt(now as number)} (${sign}${driftPct.toFixed(1)}%) since`);
+    }
+    const stale = Math.abs(driftPct ?? 0) >= DRAWING_STALE_DRIFT_PCT || ageMs >= DRAWING_STALE_AGE_MS;
+    if (stale) bits.push('POSSIBLY STALE — re-anchor against current price');
+    return ` (${bits.join('; ')})`;
+};
+
 /** A rough duration name for a trendline/ray's time span, so the model
  *  knows how wide a shape is without counting seconds. */
 const spanName = (seconds: number): string => {
@@ -293,24 +344,29 @@ const spanName = (seconds: number): string => {
 /**
  * The chart in words for the model: one line per shape with kind, anchors
  * and (for lines) the slope direction. Used by get_chart_view and the
- * per-message context packet so the model sees what the user drew.
+ * per-message context packet so the model sees what's on the chart. Pass
+ * `fresh` (current mark + wall clock) to attach draw-time/drift staleness.
  */
-export const describeDrawingsForModel = (drawings: ChartDrawing[]): string => {
+export const describeDrawingsForModel = (
+    drawings: ChartDrawing[],
+    fresh?: { priceNow: number | null; nowMs: number },
+): string => {
     if (drawings.length === 0) return '';
     // Times are Philippine (Manila) throughout — the model reads and repeats
     // the SAME clock the user sees on the chart.
     const lines = drawings.map(d => {
         const tag = d.label ? ` "${d.label}"` : '';
+        const suffix = freshnessNote(d, fresh);
         const stamp = (unixSeconds: number): string => phtStamp(unixSeconds * 1000);
         switch (d.kind) {
             case 'hline':
-                return `- horizontal line${tag} at price ${fmt(d.points[0].p)} (drawn ${phtStamp(d.createdAt)})`;
+                return `- horizontal line${tag} at price ${fmt(d.points[0].p)}${suffix}`;
             case 'trend':
             case 'ray': {
                 const [a, b] = d.points;
                 const slope = b.p > a.p ? 'rising' : b.p < a.p ? 'falling' : 'flat';
                 const kindName = d.kind === 'trend' ? 'trendline' : 'ray';
-                return `- ${slope} ${kindName}${tag} from ${fmt(a.p)} (${stamp(a.t)}) through ${fmt(b.p)} (${stamp(b.t)}), spans ${spanName(Math.abs(b.t - a.t))}${d.kind === 'ray' ? ', extends right' : ''}`;
+                return `- ${slope} ${kindName}${tag} from ${fmt(a.p)} (${stamp(a.t)}) through ${fmt(b.p)} (${stamp(b.t)}), spans ${spanName(Math.abs(b.t - a.t))}${d.kind === 'ray' ? ', extends right' : ''}${suffix}`;
             }
             case 'rect': {
                 const [a, b] = d.points;
@@ -318,24 +374,24 @@ export const describeDrawingsForModel = (drawings: ChartDrawing[]): string => {
                 const bottom = Math.min(a.p, b.p);
                 const left = Math.min(a.t, b.t);
                 const right = Math.max(a.t, b.t);
-                return `- supply/demand zone${tag} between prices ${fmt(bottom)} and ${fmt(top)}, from ${stamp(left)} to ${stamp(right)}`;
+                return `- supply/demand zone${tag} between prices ${fmt(bottom)} and ${fmt(top)}, from ${stamp(left)} to ${stamp(right)}${suffix}`;
             }
             case 'brush': {
                 const first = d.points[0];
                 const last = d.points[d.points.length - 1];
-                return `- freehand sketch${tag} (${d.points.length} points) starting at price ${fmt(first.p)} (${stamp(first.t)}), ending at ${fmt(last.p)}`;
+                return `- freehand sketch${tag} (${d.points.length} points) starting at price ${fmt(first.p)} (${stamp(first.t)}), ending at ${fmt(last.p)}${suffix}`;
             }
             case 'fib': {
                 const [a, b] = d.points;
                 const high = Math.max(a.p, b.p);
                 const low = Math.min(a.p, b.p);
-                return `- fibonacci retracement${tag} from ${fmt(low)} to ${fmt(high)}, levels at ${FIB_RATIOS.map(r => `${(r * 100).toFixed(1)}%`).join('/')}, spans ${spanName(Math.abs(b.t - a.t))}`;
+                return `- fibonacci retracement${tag} from ${fmt(low)} to ${fmt(high)}, levels at ${FIB_RATIOS.map(r => `${(r * 100).toFixed(1)}%`).join('/')}, spans ${spanName(Math.abs(b.t - a.t))}${suffix}`;
             }
             case 'text':
-                return `- text note${tag} at price ${fmt(d.points[0].p)} (${stamp(d.points[0].t)})${d.label ? `: ${d.label}` : ''}`;
+                return `- text note${tag} at price ${fmt(d.points[0].p)} (${stamp(d.points[0].t)})${d.label ? `: ${d.label}` : ''}${suffix}`;
             default:
                 return null;
         }
     }).filter((l): l is string => Boolean(l));
-    return [`USER DRAWINGS ON THE CHART (${drawings.length} shape${drawings.length === 1 ? '' : 's'}), times in Philippine time (UTC+8):`, ...lines].join('\n');
+    return [`DRAWINGS ON THE CHART (user + model — ${drawings.length} shape${drawings.length === 1 ? '' : 's'}), times in Philippine time (UTC+8):`, ...lines].join('\n');
 };

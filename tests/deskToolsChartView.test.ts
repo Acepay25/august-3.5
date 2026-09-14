@@ -153,8 +153,12 @@ describe('desk tools — chart awareness', () => {
                 ],
             },
         );
-        expect(result.content).toContain('USER DRAWINGS ON THE CHART (2 shapes)');
+        expect(result.content).toContain('DRAWINGS ON THE CHART (user + model — 2 shapes)');
         expect(result.content).toContain('horizontal line at price 99.5');
         expect(result.content).toContain('rising trendline');
+        // Freshness: the model-facing block now names the draw time + age so
+        // it can judge staleness (these shapes have no drawnPrice → age only).
+        expect(result.content).toContain('drawn ');
+        expect(result.content).toContain('ago');
     });
 });
