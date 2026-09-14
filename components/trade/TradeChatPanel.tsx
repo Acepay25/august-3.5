@@ -45,10 +45,7 @@ import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromLevelTool, type ChartDrawing,
 } from '../../services/trade/chartDrawings';
 import { parseTradeProposal, type TradeProposal } from '../../services/trade/proposedTrade';
-import {
-    parseKeyLevels, deriveChartLines, formatDist,
-    type ModelKeyLevel, type MessageLevelLines,
-} from '../../services/trade/keyLevels';
+import { parseKeyLevels, type MessageLevelLines } from '../../services/trade/keyLevels';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { describePlanForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
@@ -316,6 +313,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const boundBot = activeSession.botId ? bots.find(b => b.id === activeSession.botId) : undefined;
     const busy = !!snap.running[activeId];
 
+    /** The freshest mark for the levels card's Dist column + "last" divider —
+     *  read from the canvas snapshot (the markPrice@1s line), never a re-fetch. */
+    const getMarkForDist = useCallback((): number | null => {
+        const m = getChartSnapshot?.()?.markPrice ?? null;
+        return typeof m === 'number' && Number.isFinite(m) && m > 0 ? m : null;
+    }, [getChartSnapshot]);
+
     /** Compact index of the trader's skill library — rides the system prompt
      *  so the model APPLYs existing skills and strategies instead of
      *  free-styling (the mandate lives in TRADE_CHAT_SYSTEM_PROMPT). Read
@@ -498,6 +502,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     effortRef.current = effort;
     const soloModelRef = useRef(selectedChatModel);
     soloModelRef.current = selectedChatModel;
+    // Composer textarea, so a "Try in chat" skill chip can drop its /slug in
+    // and hand focus back to the user (see the august:try-skill listener).
+    const composerRef = useRef<HTMLTextAreaElement | null>(null);
     // WHO SUPERVISES: the ACTIVE session's model — a panel's FIRST seat when
     // several are selected — is reported to the supervisor on every switch
     // and every send, so oversight always runs on the model the user chose.
@@ -534,6 +541,27 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         };
         window.addEventListener('august:prefill-chat', onPrefill);
         return () => window.removeEventListener('august:prefill-chat', onPrefill);
+    }, []);
+    // Strategy Studio / learning-queue "Try in chat" (and the skill-citation
+    // chips): prepend the skill's /slash-invocation to the composer and focus
+    // it, so the user lands on the chat with the skill ready to invoke. Send
+    // stays manual. The listener lives here because the Chart AI dock owns the
+    // composer now (the old ChatInput that handled this was deleted).
+    useEffect(() => {
+        const onTrySkill = (ev: Event): void => {
+            const slug = (ev as CustomEvent<{ slug?: string }>).detail?.slug;
+            if (!slug) return;
+            const token = `/${slug.replace(/\.md$/i, '')}`;
+            setDraft(prev => {
+                const base = prev.trimStart();
+                if (base.startsWith(`${token} `) || base === token) return prev; // already invoked
+                return base ? `${token} ${base}` : `${token} `;
+            });
+            const el = composerRef.current;
+            if (el) { el.focus(); const end = el.value.length; try { el.setSelectionRange(end, end); } catch { /* detached */ } }
+        };
+        window.addEventListener('august:try-skill', onTrySkill);
+        return () => window.removeEventListener('august:try-skill', onTrySkill);
     }, []);
     /** Composer model change: keep the app-wide default AND bind it to the
      *  active session so coming back to this chat reselects it. */
@@ -1244,8 +1272,28 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
                 <span className="text-[13px] font-semibold text-zinc-100">Chart AI</span>
                 <span className="truncate text-[11px] text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
+                {(() => {
+                    // The prototype's "Analyzed 2m ago" meta, told honestly:
+                    // the session's last real activity, and only once a settled
+                    // answer exists to be "answered".
+                    const hasAnswer = entries.some(x => x.role === 'ai' && !x.notice && !x.streaming && x.text);
+                    if (!hasAnswer) return null;
+                    return <span className="hidden shrink-0 text-[10px] text-zinc-600 sm:inline" data-testid="chat-answered-meta">answered {relTime(activeSession.updatedAt)}</span>;
+                })()}
                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} />
+                    {(() => {
+                        // ⟳ Re-run the last question with FRESH live context —
+                        // the prototype's Refresh-analysis button, on real rails.
+                        const lastUser = [...entries].reverse().find(x => x.role === 'user' && x.text && x.text !== '(chart screenshot)');
+                        return (
+                            <button type="button" onClick={() => lastUser && void send('', lastUser.id)} disabled={!ready || busy || !lastUser}
+                                aria-label="Re-run last question" title={lastUser ? 'Re-ask the last question with fresh market context' : 'Ask something first'}
+                                className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40">
+                                <RotateCcw className="h-4 w-4" />
+                            </button>
+                        );
+                    })()}
                     <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
                         className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
                         <Plus className="h-4 w-4" />
@@ -1427,6 +1475,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     // generation following that message has stopped — same
                     // contract as the AI bubble's copy chip (!streaming).
                     const answerStreaming = !!entries[i + 1]?.streaming;
+                    // Key-levels protocol: the fenced block the model closes an
+                    // analysis with renders as the chart-linked card, never as
+                    // raw text — and an OPEN (still-streaming) fence is hidden
+                    // from the bubble too, so the protocol never flashes.
+                    const aiLevels = e.role === 'ai' && !e.notice ? parseKeyLevels(e.text) : null;
+                    const shownText = aiLevels?.hadBlock ? aiLevels.clean : e.text;
                     return (
                     <div key={e.id} className="chat-fade-in" data-testid={`chat-entry-${e.role}`}>
                         {e.role === 'user' ? (
@@ -1509,14 +1563,22 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 })()}
                                 {e.actions && e.actions.length > 0 && <ToolActionsRow actions={e.actions} />}
                                 <div className="text-[12px] leading-5 text-zinc-200">
-                                    {e.text
-                                        ? <FadingText text={e.text} streaming={!!e.streaming} />
+                                    {shownText
+                                        ? <FadingText text={shownText} streaming={!!e.streaming} />
                                         : null}
                                 </div>
                                 {e.text && !e.streaming && (
                                     <div className="flex items-center gap-2">
-                                        <CopyChip text={e.text} />
+                                        <CopyChip text={shownText} />
                                     </div>
+                                )}
+                                {aiLevels && aiLevels.levels.length > 0 && !e.streaming && (
+                                    <KeyLevelsCard
+                                        levels={aiLevels.levels}
+                                        symbol={symbol}
+                                        getMark={getMarkForDist}
+                                        onChatLevels={onChatLevelsChange}
+                                    />
                                 )}
                                 {e.proposal && !proposalState[e.id] && (
                                     <div className="mt-1 rounded-xl border border-white/10 bg-zinc-800/70 p-2.5" data-testid="trade-proposal-card">
@@ -1602,6 +1664,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 )}
                 <div className="rounded-2xl border border-white/10 bg-zinc-800/70 px-3 py-2.5 shadow-lg">
                     <textarea
+                        ref={composerRef}
                         rows={1}
                         value={draft}
                         disabled={!ready}

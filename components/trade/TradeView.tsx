@@ -1,13 +1,17 @@
 /**
- * TradeView — August's take on Minara's /app/trade/perps/BTC screen, dark:
- * a stats strip (Mark / Oracle / 24h / Volume / OI / Funding + countdown)
- * over a full-height canvas chart with TradingView-style drawing tools,
- * with the order-book ladder and the live-context Chart AI docked to the
+ * TradeView — August's take on Minara's /app/trade/perps/BTC screen, dark,
+ * in the prototype's two-row market header: identity + HERO price (with a
+ * 48-bar spark + feed state), then a quiet metrics strip (Mark / Oracle /
+ * 24h / Volume / OI / Funding with a depleting-window bar) — over a
+ * full-height canvas chart with TradingView-style drawing tools, with the
+ * order-book ladder and the live-context Chart AI docked to the
  * right. The dock is drag-resizable, collapsible to a rail and expandable
  * over the chart; its width persists. Push-first: one websocket bundle per
  * symbol drives strip + book + candles; REST polling takes over the moment
  * the socket drops (and the chart's own stall watchdog re-syncs a quiet
  * stream), so prices on the chart are realtime or visibly healing.
+ * A Chart AI levels card can also push its key levels onto the canvas
+ * (chatLevels — transient, coin-stamped, blanked on instrument switch).
  * Presentation only — no order execution.
  */
 
@@ -28,7 +32,9 @@ import { formatWatchFiredForModel } from '../../services/trade/chartTriggers';
 import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
-import TradingChart, { type ChartInterval, type ChartHandle } from './TradingChart';
+import TradingChart, { toKlineInterval, type ChartInterval, type ChartHandle } from './TradingChart';
+import type { MessageLevelLines } from '../../services/trade/keyLevels';
+import { fetchKlines } from '../../services/analysis/KlineService';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
@@ -114,6 +120,47 @@ const fundingCountdown = (nextFundingTime: number, nowMs: number): string => {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
+/** Funding settles on an 8 h cadence; the strip's progress bar shows how far
+ *  INTO the current window we are (fills as the next funding approaches). When
+ *  under 30 minutes remain the bar goes amber and pulses — the "it's basically
+ *  now" cue from the prototype. Approximate prev (next − 8 h) since Binance
+ *  only exposes the NEXT time; good enough for a depleting meter. */
+const FUNDING_WINDOW_MS = 8 * 3_600_000;
+const fundingProgress = (nextFundingTime: number, nowMs: number): { frac: number; soon: boolean } => {
+    const left = nextFundingTime - nowMs;
+    if (!Number.isFinite(left) || left <= 0) return { frac: 1, soon: false };
+    const frac = Math.min(1, Math.max(0, 1 - left / FUNDING_WINDOW_MS));
+    return { frac, soon: left <= 30 * 60_000 };
+};
+
+/** Prototype hero-row sparkline: the last ~48 closes of the chart's OWN
+ *  timeframe, from one small fetch (KlineService's 30 s cache covers a coin
+ *  round-trip). Null while loading/failed — the row never shows a fake line. */
+const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symbol, interval }) => {
+    const [closes, setCloses] = useState<number[] | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        setCloses(null);
+        void fetchKlines(symbol, toKlineInterval(interval), 60)
+            .then(kl => { if (!cancelled) setCloses(kl.slice(-48).map(k => k.close)); })
+            .catch(() => { /* no spark is fine — the number carries the read */ });
+        return () => { cancelled = true; };
+    }, [symbol, interval]);
+    if (!closes || closes.length < 3) return null;
+    const min = Math.min(...closes);
+    const max = Math.max(...closes);
+    const span = max - min || 1;
+    const up = closes[closes.length - 1] >= closes[0];
+    const pts = closes.map((c, i) =>
+        `${((i / (closes.length - 1)) * 118 + 1).toFixed(1)},${(29 - ((c - min) / span) * 28).toFixed(1)}`,
+    ).join(' ');
+    return (
+        <svg width="120" height="30" aria-hidden="true" className="hidden shrink-0 sm:block" data-testid="hero-spark">
+            <polyline fill="none" stroke={up ? '#07b56a' : '#f75d5f'} strokeWidth="1.5" points={pts} />
+        </svg>
+    );
+};
+
 const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], sidebarOpen = true }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
@@ -129,6 +176,17 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const [dockCollapsed, setDockCollapsed] = useState(false);
     const [dockExpanded, setDockExpanded] = useState(false);
     const [screenerOpen, setScreenerOpen] = useState(false);
+    /** Key-level lines a Chat AI message card is currently SHOWING on the
+     *  chart (toggle / pin / hover resolved by the dock). Transient view state
+     *  — never persisted, stamped with its symbol so a coin switch blanks it. */
+    const [chatLevels, setChatLevels] = useState<MessageLevelLines | null>(null);
+    const handleChatLevels = useCallback((lines: MessageLevelLines | null): void => {
+        setChatLevels(prev => {
+            if (!lines || !prev) return lines;
+            if (lines.symbol !== prev.symbol || JSON.stringify(lines.lines) === JSON.stringify(prev.lines)) return prev;
+            return lines;
+        });
+    }, []);
     const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
     const widthRef = useRef(dockWidth);
     widthRef.current = dockWidth;
@@ -185,6 +243,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // discrepancy the model flagged) for as long as the socket stays up.
     useEffect(() => {
         setStrip(null);
+        // Same doctrine for a chart card's level lines: the new coin starts
+        // with the new coin's canvas — no leftover BTC tags floating on ZEN.
+        setChatLevels(null);
         let cancelled = false;
         const load = async (): Promise<void> => {
             try {
@@ -416,6 +477,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         onRunAnalysis,
         onLogProposedTrade,
         onPlanPresented: handlePlanPresented,
+        onChatLevelsChange: handleChatLevels,
         renderCoachSurface,
         renderGroupSurface,
         groups,
@@ -423,44 +485,75 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trade-view">
-            {/* Stats strip (Minara perps header) */}
-            <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.06] bg-zinc-900/60 py-2 pr-3">
-                <div className="pl-3 pr-1">
+            {/* ROW 1 · identity + hero (prototype's market row): instrument,
+                spark, screener, feed state on the left; the big live price
+                with its 24h delta + MARK caption on the right. */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-zinc-900/60 px-3 pb-1.5 pt-2">
+                <div className="flex min-w-0 items-center gap-2.5">
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
+                    <Sparkline symbol={symbol} interval={interval} />
+                    <button
+                        type="button"
+                        onClick={() => setScreenerOpen(true)}
+                        aria-label="Open market screener"
+                        data-testid="screener-trigger"
+                        className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                    >
+                        Screener
+                    </button>
+                    <span
+                        data-testid="feed-status"
+                        title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 15s'}
+                        className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
+                            feed.status === 'live' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                                : feed.status === 'connecting' ? 'border-white/10 bg-zinc-800 text-zinc-400'
+                                    : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                        }`}
+                    >
+                        {feed.status === 'live' ? '● live' : feed.status === 'connecting' ? 'connecting' : 'polling'}
+                    </span>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setScreenerOpen(true)}
-                    aria-label="Open market screener"
-                    data-testid="screener-trigger"
-                    className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
-                >
-                    Screener
-                </button>
-                <span
-                    data-testid="feed-status"
-                    title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 15s'}
-                    className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
-                        feed.status === 'live' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                            : feed.status === 'connecting' ? 'border-white/10 bg-zinc-800 text-zinc-400'
-                                : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                    }`}
-                >
-                    {feed.status === 'live' ? '● live' : feed.status === 'connecting' ? 'connecting' : 'polling'}
-                </span>
+                <div className="shrink-0 text-right leading-none">
+                    <div data-testid="hero-price" className={`font-mono text-[22px] font-semibold tabular-nums ${changeTone}`}>
+                        {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
+                    </div>
+                    <div className="mt-1 text-[10px] text-zinc-500">
+                        {Number.isFinite(changePct) && (
+                            <span className={changeTone}>{changePct! >= 0 ? '▲' : '▼'} {changePct! >= 0 ? '+' : ''}{changePct!.toFixed(2)}%</span>
+                        )}
+                        <span> 24h · MARK</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* ROW 2 · metrics strip — the quiet numbers a perp desk checks
+                without leaving the chart; Funding carries its own countdown +
+                depleting-window bar (amber + pulse inside 30 min). */}
+            <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
                 <Stat label="Mark" value={Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'} />
                 <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
                 <Stat label="24h Change" value={Number.isFinite(changePct) ? `${changePct! >= 0 ? '+' : ''}${changePct!.toFixed(2)}%` : '—'} />
                 <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
-                <Stat label="Funding / Countdown" value={Number.isFinite(fundingRate) ? (
-                    <span className={fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                        {(fundingRate! * 100).toFixed(4)}% <span className="text-zinc-500">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
-                    </span>
-                ) : '—'} />
-                <span className={`ml-auto hidden shrink-0 pr-1 font-mono text-[15px] font-bold tabular-nums sm:block ${changeTone}`}>
-                    {Number.isFinite(lastPrice) ? fmtPrice(lastPrice!) : ''}
-                </span>
+                <div className="flex w-[210px] shrink-0 flex-col px-3">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-600">Funding · next in</span>
+                    {Number.isFinite(fundingRate) ? (() => {
+                        const { frac, soon } = fundingProgress(nextFundingTime ?? 0, nowMs);
+                        return (
+                            <>
+                                <span className="flex items-baseline justify-between">
+                                    <span className={`font-mono text-[12px] tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {(fundingRate! * 100).toFixed(4)}%
+                                    </span>
+                                    <span className="font-mono text-[11px] tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
+                                </span>
+                                <span className="mt-1 block h-[3px] overflow-hidden rounded-full bg-zinc-800" aria-hidden="true" data-testid="funding-bar">
+                                    <span className={`block h-full rounded-full ${soon ? 'animate-pulse bg-amber-400' : 'bg-cyan-400/70'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
+                                </span>
+                            </>
+                        );
+                    })() : <span className="font-mono text-[12px] text-zinc-200">—</span>}
+                </div>
             </div>
 
             {/* Chart + book + AI chat (drag-resizable dock) */}
@@ -477,6 +570,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
                         markPrice={Number.isFinite(markPrice) ? markPrice : null}
+                        chatLevels={chatLevels}
                         chartHandle={chartHandleRef}
                         onDrawingsChange={setChartDrawings}
                         modelDrawings={modelDrawings}
