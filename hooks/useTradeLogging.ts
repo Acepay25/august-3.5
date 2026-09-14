@@ -38,11 +38,15 @@ export interface UseTradeLoggingParams {
      *  App debounces this into an automatic AI Review (Pattern Memory)
      *  re-run so the journal stays fresh without manual regeneration. */
     onJournalAutoRefresh?: () => void;
-    // UI state setters needed by handlers:
-    setIsAutoCapturing: (v: boolean) => void;
+    // UI state setters needed by handlers (transient capture SPINNERS —
+    // distinct from the persisted "prompt for capture" settings):
+    setIsAutoCaptureBusy: (v: boolean) => void;
     setIsHybridLoading: (v: boolean) => void;
-    setIsEntryNotHitCapturing: (v: boolean) => void;
-    setIsUpdateAutoCapturing: (v: boolean) => void;
+    setIsEntryNotHitCaptureBusy: (v: boolean) => void;
+    setIsUpdateCaptureBusy: (v: boolean) => void;
+    /** "Prompt when entry price is not hit" setting — gates whether the
+     *  capture modal interrupts, or the ENTRY_NOT_HIT is logged silently. */
+    isEntryNotHitCapturing: boolean;
     setIsInsightGenerating: (v: boolean) => void;
     // Market data setters:
     setCurrentHybridData: (v: any) => void;
@@ -63,8 +67,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         moderatorProviderId, moderatorModel,
         memoryModel, memoryConfig, useAlgorithmicInsights,
         onJournalAutoRefresh,
-        setIsAutoCapturing, setIsHybridLoading, setIsEntryNotHitCapturing,
-        setIsUpdateAutoCapturing, setIsInsightGenerating,
+        setIsAutoCaptureBusy, setIsHybridLoading, setIsEntryNotHitCaptureBusy,
+        setIsUpdateCaptureBusy, isEntryNotHitCapturing, setIsInsightGenerating,
         setCurrentHybridData, startPostMortemAnalysis, handleSendMessage,
         toast, setPostMortemCandidate, setConfidenceCalibration,
     } = params;
@@ -385,7 +389,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             return;
         }
 
-        setIsAutoCapturing(true);
+        setIsAutoCaptureBusy(true);
         setIsHybridLoading(true); // Show loading animation on HybridDataPanel
 
         try {
@@ -442,7 +446,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
             setPostMortemCandidate(dataCaptureCandidate);
         } finally {
-            setIsAutoCapturing(false);
+            setIsAutoCaptureBusy(false);
             setIsHybridLoading(false); // Stop loading animation
             setDataCaptureCandidate(null);
         }
@@ -480,22 +484,23 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         if (!skipCandidate) return;
         const outcome = reason;
 
-        if (outcome === TradeOutcome.ENTRY_NOT_HIT && skipCandidate.analysis) {
-            // DON'T log trade yet - defer until user confirms capture option in EntryNotHitCaptureModal
-            // Just show the modal for capture options
+        if (outcome === TradeOutcome.ENTRY_NOT_HIT && skipCandidate.analysis && isEntryNotHitCapturing) {
+            // Setting ON (default): DON'T log trade yet - defer until user
+            // confirms capture option in EntryNotHitCaptureModal.
             setEntryNotHitCandidate({
                 message: skipCandidate,
                 correctedEntry: correctedEntry || undefined
             });
         } else {
-            // For SKIPPED outcome, update message immediately (no capture modal needed)
+            // SKIPPED, or ENTRY_NOT_HIT with the "prompt for capture" setting
+            // turned off: update message immediately (no capture modal).
             updateMessages(prev => prev.map(m => m.id === skipCandidate.id ? { ...m, outcome, correctedEntry: correctedEntry || undefined } : m));
         }
 
         setSkipCandidate(null);
         setSkipReason(null);
         setCorrectedEntry('');
-    }, [skipCandidate, correctedEntry]);
+    }, [skipCandidate, correctedEntry, isEntryNotHitCapturing]);
 
     // ─── Entry Not Hit Capture Handlers ───────────────────────────────────
 
@@ -643,7 +648,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // Log trade NOW since user confirmed their choice
         logEntryNotHitTrade(entryNotHitCandidate);
 
-        setIsEntryNotHitCapturing(true);
+        setIsEntryNotHitCaptureBusy(true);
         setIsHybridLoading(true);
 
         try {
@@ -693,7 +698,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 feedback: { correctedEntry: entryNotHitCandidate.correctedEntry }
             });
         } finally {
-            setIsEntryNotHitCapturing(false);
+            setIsEntryNotHitCaptureBusy(false);
             setIsHybridLoading(false);
             setEntryNotHitCandidate(null);
         }
@@ -795,7 +800,7 @@ ${JSON.stringify(originalAnalysis, null, 2)}
             return;
         }
 
-        setIsUpdateAutoCapturing(true);
+        setIsUpdateCaptureBusy(true);
         setIsHybridLoading(true); // Show loading animation on HybridDataPanel
 
         try {
@@ -858,7 +863,7 @@ ${result.comparisonBlock}
             console.error('[UpdateAutoCapture] Error:', error);
             toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
         } finally {
-            setIsUpdateAutoCapturing(false);
+            setIsUpdateCaptureBusy(false);
             setIsHybridLoading(false); // Stop loading animation
         }
     }, [updateCandidate, handleSendMessage]);

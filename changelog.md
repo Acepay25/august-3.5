@@ -2,6 +2,25 @@
 
 Plain-English log of change rounds. Newest first.
 
+## Future price paths, a finished screener shortcut, and tool-call markup that can no longer leak into chat
+
+- **The model can show possible future prices.** A new `project_future_price`
+  desk tool draws a deterministic cone (base / bull / bear paths) from the
+  recent candles over the next hours — ATR width, trend read, per-bar drift —
+  so "where could this go" gets a statistical picture, labeled as
+  possibilities, never a forecast.
+- **The screener's learn button works end to end.** Its per-row button already
+  loaded the coin and asked the chat to prefill; the Chart AI composer now
+  actually listens and fills in the scan prompt (send stays manual).
+- **Broken tool calls never paint as chat text.** Some models emit the
+  text-protocol tool call in the wrong shape (`<function=…>` /
+  `<parameter=…>` lines). The loop already bounced those back for a fix, but
+  on a live stream the raw block could still land in the bubble — when the
+  fix budget ran out, or applied a beat after the wipe. The streamer now
+  drops unpainted stale chunks, re-wipes and re-yields the cleaned text at
+  the end of any turn that saw a wipe, and the stripper covers parameter
+  lines too. Turns that never misbehave render exactly as before.
+
 ## Sessions remember themselves, an LLM supervises the queues, and your model is actually yours
 
 - **Every Chart AI session keeps its own world.** Each session now stores the

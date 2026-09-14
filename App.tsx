@@ -193,6 +193,9 @@ const App: React.FC = () => {
         isAutoCapturing, setIsAutoCapturing,
         isUpdateAutoCapturing, setIsUpdateAutoCapturing,
         isEntryNotHitCapturing, setIsEntryNotHitCapturing,
+        isAutoCaptureBusy, setIsAutoCaptureBusy,
+        isUpdateCaptureBusy, setIsUpdateCaptureBusy,
+        isEntryNotHitCaptureBusy, setIsEntryNotHitCaptureBusy,
         isRateLimited, setIsRateLimited,
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
@@ -561,10 +564,11 @@ const App: React.FC = () => {
         memoryModel,
         memoryConfig: memoryConfig || moderatorConfig,
         useAlgorithmicInsights,
-        setIsAutoCapturing,
+        setIsAutoCaptureBusy,
         setIsHybridLoading,
-        setIsEntryNotHitCapturing,
-        setIsUpdateAutoCapturing,
+        setIsEntryNotHitCaptureBusy,
+        setIsUpdateCaptureBusy,
+        isEntryNotHitCapturing,
         setIsInsightGenerating,
         setCurrentHybridData,
         startPostMortemAnalysis: stableStartPostMortem,
@@ -2500,7 +2504,7 @@ const App: React.FC = () => {
                     onUploadScreenshot={handleDataCaptureUpload}
                     onAutoCapture={handleDataCaptureAuto}
                     onSkip={handleDataCaptureSkip}
-                    isCapturing={isAutoCapturing}
+                    isCapturing={isAutoCaptureBusy}
                 />
             )}
             {entryNotHitCandidate && (
@@ -2511,11 +2515,11 @@ const App: React.FC = () => {
                     onAutoCapture={handleEntryNotHitAutoCapture}
                     onUploadScreenshot={handleEntryNotHitUpload}
                     onSkip={handleEntryNotHitSkip}
-                    isCapturing={isEntryNotHitCapturing}
+                    isCapturing={isEntryNotHitCaptureBusy}
                 />
             )}
             {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
-            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
+            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateCaptureBusy} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {simulatorCandidate && (
                 <ScenarioSimulator
                     message={simulatorCandidate}

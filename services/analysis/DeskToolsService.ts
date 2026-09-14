@@ -237,6 +237,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_setup_history_stats: 'setup history',
     run_screener: 'screener',
     recall_chat: 'session search',
+    project_future_price: 'price projection',
     send_message: 'direct message',
     read_message: 'read inbox',
 };
@@ -750,6 +751,46 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
     {
         type: 'function',
         function: {
+            name: 'scan_chart_skills',
+            description:
+                'Study the ENTIRE candle history of a chart (up to 1000 bars — the full set the chart loads) and draft new IF/THEN skills from '
+                + 'how the price actually moved: regime segments, swing structure, gap classes, and every strategy-book detector aggregated over all '
+                + 'history with first-touch win-rates. The drafted skills are evidence-scored against the same candles and enter the APPROVAL INBOX '
+                + 'as pending drafts — nothing reaches the skill library until a human (or the supervisor) approves. Use when the user asks you to '
+                + 'learn the chart, "build skills from this coin", or wants patterns/entries the tape itself reveals. Slow (one model call + a full '
+                + 'history scan) — never call it twice in the same turn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
+                    interval: { type: 'string', description: 'Timeframe, e.g. 15m (default: the chart\'s current interval).' },
+                    timeframes: { type: 'array', items: { type: 'string' }, description: 'Scan SEVERAL timeframes at once (e.g. ["15m","1h","4h"]) — each contributes its own timeframe-stamped drafts. Overrides `interval`; capped at 6.' },
+                    max_skills: { type: 'number', description: 'How many skills to ask for per timeframe, 1–5 (default 3).' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'project_future_price',
+            description:
+                'Show POSSIBLE future price paths for a coin: a deterministic ATR cone (base / bull / bear) projected from the recent candles over the next N bars, with the trend read and per-bar drift. Use when the user asks where price could go, what the upside/downside room looks like, or whether a target is within a normal excursion. This is a statistical cone, NOT a prediction — quote it as possibilities with the uncertainty, never as a forecast. One call per coin per turn is enough.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
+                    interval: { type: 'string', description: 'Timeframe, e.g. 15m (default: the chart\'s current interval).' },
+                    horizon_bars: { type: 'number', description: 'How many bars ahead to project, 1–96 (default 24).' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'run_screener',
             description:
                 'Scan the WHOLE USDT-perp market at once (top coins by 24h volume): price, 24h change, RSI(14) on 15m, EMA trend regime, the trader\'s own logged W/L for each coin, and LIVE strategy-book setups (range breakouts, pin bars, inside bars, gaps, divergences, failed breakouts). Use to find candidates across the market without the user switching charts — then drill into a coin with get_market_packet or get_chart_view.',
@@ -1198,6 +1239,8 @@ const MARKET_TOOLS = new Set([
     'get_price_snapshot',
     'get_btc_context',
     'scan_setups',
+    'scan_chart_skills',
+    'project_future_price',
     'get_setup_history_stats',
 ]);
 
@@ -1595,6 +1638,50 @@ export async function executeDeskTool(
                 ].join('\n');
                 break;
             }
+            case 'scan_chart_skills': {
+                // The eighth learner: the model reads the WHOLE tape (a digest
+                // of up to 1000 candles + historical detector win-rates) and
+                // drafts IF/THEN skills. Every craft passes through the shared
+                // draftGates into the approval inbox — nothing is auto-applied.
+                const sym = asSymbol(call.arguments.symbol, fallback);
+                const ivl = asString(call.arguments.interval) || context.chartInterval || '15m';
+                const { getActiveUsername } = await import('../../utils/activeUser');
+                const { scanChartForSkills, scanChartAcrossIntervals } = await import('../learning/chartScanSkills');
+                const username = getActiveUsername();
+                const maxSkills = Number.isFinite(Number(call.arguments.max_skills)) ? Number(call.arguments.max_skills) : undefined;
+                const rawTfs = Array.isArray(call.arguments.timeframes)
+                    ? (call.arguments.timeframes as unknown[]).map(t => asString(t)).filter(Boolean)
+                    : [];
+                const result = rawTfs.length > 0
+                    ? await scanChartAcrossIntervals({ symbol: sym, intervals: rawTfs, username, maxSkills, signal: context.signal })
+                    : await scanChartForSkills({ symbol: sym, interval: ivl, username, maxSkills, signal: context.signal });
+                content = result.receipt;
+                break;
+            }
+            case 'project_future_price': {
+                // Deterministic ATR cone over the next N bars — pure math on
+                // the same futures klines the chart paints, no model call.
+                const sym = asSymbol(call.arguments.symbol, fallback);
+                const ivl = asString(call.arguments.interval) || context.chartInterval || '15m';
+                const rawH = Number(call.arguments.horizon_bars);
+                const horizon = Math.min(Math.max(Number.isFinite(rawH) ? Math.round(rawH) : 24, 1), 96);
+                const { fetchKlines } = await import('./KlineService');
+                const klines = await fetchKlines(sym, ivl, 300);
+                if (klines.length === 0) {
+                    content = `DATA_UNAVAILABLE: project_future_price — not enough candles returned for ${sym} ${ivl}. The source failed; do not infer a flat market.`;
+                    break;
+                }
+                const { projectPrices, projectionToMarkdown } = await import('../trade/priceProjection');
+                try {
+                    content = projectionToMarkdown(sym, ivl, projectPrices(
+                        klines.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close })),
+                        horizon,
+                    ));
+                } catch (err) {
+                    content = `DATA_UNAVAILABLE: project_future_price — ${err instanceof Error ? err.message : String(err)}. The source failed; do not invent paths.`;
+                }
+                break;
+            }
             case 'run_screener': {
                 // Market-wide discovery: grade the top-volume universe with
                 // the app's own indicators + setup detectors + the trader's
@@ -1744,11 +1831,12 @@ export function stripTextToolCalls(text: string): string {
     return text
         .replace(/<tool_call\s+name=["'][^"']+["']\s*>[\s\S]*?<\/tool_call\s*>/gi, '')
         // Self-heal remnants: malformed attempts (bare <tool_call>,
-        // <function=…>) must never leak into the visible answer even when
-        // the rounds run out before the model fixes itself.
+        // <function=…>, <parameter=…>) must never leak into the visible
+        // answer even when the rounds run out before the model fixes itself.
         .replace(/<tool_call\s*>[\s\S]*?<\/tool_call\s*>/gi, '')
         .replace(/<function\s*=[^>]*>[\s\S]*?<\/function\s*>/gi, '')
-        .replace(/<\/?(?:tool_call|function)\b[^>]*>/gi, '')
+        .replace(/<parameter\s*=[^>]*>[\s\S]*?<\/parameter\s*>/gi, '')
+        .replace(/<\/?(?:tool_call|function|parameter)\b[^>]*>/gi, '')
         .trim();
 }
 
@@ -1758,6 +1846,7 @@ export function stripTextToolCalls(text: string): string {
 export const malformedToolCallReason = (text: string): string | null => {
     if (!text) return null;
     if (/<function\s*=/i.test(text)) return 'a `<function=…>` block — the protocol is <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>';
+    if (/<parameter(\s|=|\/)/i.test(text)) return 'a `<parameter=…>` block — parameters live INSIDE the JSON object: <tool_call name="TOOL_NAME">{"param":"value"}</tool_call>';
     if (/<tool_call\s*>/i.test(text)) return 'a `<tool_call>` block without a name attribute — emit <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>';
     if (/<tool_call\s/i.test(text) && !/<\/tool_call\s*>/i.test(text)) return 'an unclosed `<tool_call>` block — close it with </tool_call>';
     return null;
@@ -1789,6 +1878,12 @@ export interface DeskToolLoopResult {
     finalText: string;
     reasoning: string;
     usedTools: string[];
+    /** True when the final text REPLACES already-streamed markup: the last
+     *  round painted a malformed tool-call attempt live, the budget ran out
+     *  before it could self-heal, and the loop wiped the bubble via
+     *  onStreamReset. Streaming callers must yield finalText (the cleaned
+     *  reply) instead of keeping the painted raw text. */
+    repaintFinal?: boolean;
     /** True when the loop ran out of rounds right after EXECUTING tools —
      *  the model never got a word in after the results, so the caller owes
      *  one more (streamed) turn. False when the last round answered with
@@ -2015,17 +2110,38 @@ export async function runDeskToolLoop(params: {
                 });
                 continue;
             }
+            const strippedFinal = stripTextToolCalls(finalText);
+            const paintedMarkup = strippedFinal.trim() !== finalText.trim();
+            if (paintedMarkup) {
+                // Budget-exhausted malformed attempt: the broken block was
+                // already painted live, and no round is left to self-heal it.
+                // Wipe the bubble so raw markup never stands as the answer.
+                onStreamReset?.();
+            }
             return {
                 messages,
-                finalText: stripTextToolCalls(finalText),
+                finalText: strippedFinal.trim()
+                    ? strippedFinal
+                    : paintedMarkup
+                        ? 'I tried to call a tool but used the wrong format, so nothing ran — ask me again and I will retry with the right call.'
+                        : finalText,
                 reasoning,
                 usedTools,
                 endedWithToolCalls: false,
+                ...(paintedMarkup ? { repaintFinal: true } : {}),
             };
         }
 
         // Cap parallel tools per round.
         calls = calls.slice(0, 3);
+
+        // Text-protocol tags in a LIVE-streamed turn painted raw markup into
+        // the bubble (valid `<tool_call name=…>` blocks included — the tags
+        // are transport, not the answer). Wipe it before the results round;
+        // the continuation turn restates anything the user needs to see.
+        if (streamTurn && turn.toolCalls.length === 0 && calls.length > 0) {
+            onStreamReset?.();
+        }
 
         // Extra tools (debate mailbox) execute here — they touch orchestration
         // state and must not go through the pure market-data executor.
@@ -2273,15 +2389,28 @@ export async function* streamChatWithDeskTools(
     // tool rounds run — instead of appearing all at once after the loop.
     // Non-native formats keep the collect-then-stream shape (their wire
     // protocol needs the full text before tool tags can be parsed).
-    const pending: string[] = [];
+    const pending: Array<{ gen: number; text: string }> = [];
     let wake: (() => void) | null = null;
     let loopSettled = false;
     let streamedLive = false;
+    // A self-heal wipe fired mid-stream. Already-yielded markup can still be
+    // applied by the consumer AFTER the wipe (async apply), so the loop end
+    // below re-wipes and re-yields the authoritative text when this is set.
+    let wipedLive = false;
+    // Paint generation: every self-heal wipe bumps it, and the drain below
+    // drops anything queued-but-unpainted from the discarded attempt — else a
+    // stale delta lands in the bubble AFTER the wipe (and after the repaint).
+    let streamGen = 0;
     const onTextDelta = (delta: string): void => {
         streamedLive = true;
-        pending.push(delta);
+        pending.push({ gen: streamGen, text: delta });
         wake?.();
         wake = null;
+    };
+    const onLoopReset = (): void => {
+        streamGen += 1;
+        wipedLive = true;
+        onStreamReset?.();
     };
     const settle = (): void => {
         loopSettled = true;
@@ -2294,7 +2423,7 @@ export async function* streamChatWithDeskTools(
         sendTurn: sendChatTurn,
         streamTurn: nativeTools ? streamChatRequest : undefined,
         onTextDelta: nativeTools ? onTextDelta : undefined,
-        onStreamReset,
+        onStreamReset: onLoopReset,
         options: chatOptions,
         defaultSymbol,
         chartInterval,
@@ -2348,9 +2477,12 @@ export async function* streamChatWithDeskTools(
     loopPromise.then(settle, settle);
 
     // Drain streamed deltas as they arrive; stop when the loop settles.
+    // Stale generations (queued before a self-heal wipe) are dropped, never
+    // painted — the wipe already cleared them from the bubble.
     for (;;) {
         if (pending.length > 0) {
-            yield pending.shift()!;
+            const next = pending.shift()!;
+            if (next.gen === streamGen) yield next.text;
             continue;
         }
         if (loopSettled) break;
@@ -2365,7 +2497,26 @@ export async function* streamChatWithDeskTools(
 
     // A clean in-loop answer (last round had no tool calls) already streamed
     // to the user — running the continuation here would answer TWICE.
-    if (streamedLive && !loop.endedWithToolCalls) return;
+    // EXCEPTION: a wipe fired mid-stream. Already-yielded markup can be
+    // applied by the consumer AFTER the wipe (async apply), so re-wipe and
+    // yield the authoritative cleaned text — otherwise residue stands as (or
+    // in front of) the answer. Untouched when nothing was ever wiped, so
+    // clean turns never flicker.
+    if (streamedLive && !loop.endedWithToolCalls) {
+        // Gated on an observing consumer (one that clears its bubble on
+        // wipes): without the wipe channel the re-yield would DUPLICATE the
+        // answer instead of replacing residue.
+        if (onStreamReset && (loop.repaintFinal || wipedLive) && loop.finalText.trim()) {
+            onStreamReset?.();
+            yield loop.finalText;
+        }
+        return;
+    }
+
+    // Tool rounds ran and a continuation follows. When a wipe fired, its
+    // text-protocol tags may have been applied after the wipe — clear once
+    // more so the continuation paints onto a clean bubble.
+    if (wipedLive) onStreamReset?.();
 
     const finalMessages = [...loop.messages];
     if (loop.usedTools.length > 0) {

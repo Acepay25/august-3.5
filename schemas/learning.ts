@@ -120,6 +120,11 @@ export const CraftedSkillSchema = z.object({
   approval: z.string().min(4),
   ifCondition: z.string().min(8),
   thenAction: z.string().min(8),
+  // Provenance stamped by a learner (not the model): the timeframe a pattern
+  // was earned on, and which source minted the draft. Optional so chat/
+  // post-mortem/verdict authors stay valid.
+  timeframe: z.string().max(12).optional(),
+  source: z.string().max(24).optional(),
   // Birth certificate: the falsifiable claim the skill must
   // pre-register. Optional at the schema edge (legacy crafts + refinements
   // carry none) — the persistence layer fills a deterministic default so

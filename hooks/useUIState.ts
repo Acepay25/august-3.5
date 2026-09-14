@@ -33,6 +33,13 @@ interface UIStateShape {
     isAutoCapturing: boolean;
     isUpdateAutoCapturing: boolean;
     isEntryNotHitCapturing: boolean;
+    // Transient capture spinners — SEPARATE from the persisted "prompt for
+    // capture" settings above. Previously the modals drove the setting flags
+    // as busy indicators, so a profile save mid-capture persisted a stuck
+    // `true` (and the toggle flickered during every capture).
+    isAutoCaptureBusy: boolean;
+    isUpdateCaptureBusy: boolean;
+    isEntryNotHitCaptureBusy: boolean;
     isRateLimited: boolean;
 }
 
@@ -62,6 +69,9 @@ const initialState: UIStateShape = {
     isAutoCapturing: false,
     isUpdateAutoCapturing: false,
     isEntryNotHitCapturing: false,
+    isAutoCaptureBusy: false,
+    isUpdateCaptureBusy: false,
+    isEntryNotHitCaptureBusy: false,
     isRateLimited: false,
 };
 
@@ -104,6 +114,9 @@ const PROGRESS_KEYS: (keyof UIStateShape)[] = [
     'isAutoCapturing',
     'isUpdateAutoCapturing',
     'isEntryNotHitCapturing',
+    'isAutoCaptureBusy',
+    'isUpdateCaptureBusy',
+    'isEntryNotHitCaptureBusy',
 ];
 
 function uiReducer(state: UIStateShape, action: UIAction): UIStateShape {

@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    scanSetups, classifyGaps, rsiSeries, bollinger, type ScanCandle,
+    scanSetups, scanHistorySetups, classifyGaps, rsiSeries, bollinger, type ScanCandle,
 } from '../services/trade/setupScan';
 
 const bar = (time: number, open: number, high: number, low: number, close: number): ScanCandle =>
@@ -122,5 +122,64 @@ describe('scanSetups guardrails', () => {
         for (let i = 0; i < 40; i += 1) c.push(bar(i, 100, 100.4, 99.6, 100));
         // flat, no extremes, no gaps, no divergence — expect no live setups
         expect(scanSetups(c)).toEqual([]);
+    });
+});
+
+describe('scanHistorySetups — the whole-tape aggregate', () => {
+    /** One cycle: a short flat base, a bullish pin bar at the lows, then a
+     *  two-bar thrust up that turns the pin into a first-touch WIN
+     *  (1.5×ATR target ≈ +3.1 from ~99.3 before the 12-bar horizon ends). */
+    const pinWinCycle = (t0: number): ScanCandle[] => [
+        bar(t0, 100, 101, 99, 100),
+        bar(t0 + 1, 100, 101, 99, 100),
+        bar(t0 + 2, 100, 101, 99, 100),
+        bar(t0 + 3, 100, 101, 99, 100),
+        bar(t0 + 4, 99.2, 99.4, 95, 99.3),   // pin: wick 4.2, body 0.1
+        bar(t0 + 5, 100, 101, 99, 100),
+        bar(t0 + 6, 100, 101, 99, 100),
+        bar(t0 + 7, 99.5, 102, 99.5, 101.5),
+        bar(t0 + 8, 101.5, 104.5, 101, 104),
+    ];
+
+    const tape = (): ScanCandle[] => {
+        const c: ScanCandle[] = [];
+        for (let i = 0; i < 6; i += 1) c.push(bar(i, 100, 101, 99, 100));
+        for (let k = 0; k < 6; k += 1) c.push(...pinWinCycle(c.length));
+        return c;
+    };
+
+    it('returns nothing on too short a history', () => {
+        expect(scanHistorySetups(tape().slice(0, 39))).toEqual([]);
+    });
+
+    it('aggregates every pin-bar occurrence across the tape with outcomes', () => {
+        const stats = scanHistorySetups(tape());
+        const pin = stats.find(s => s.id === 'pin-bar-buy');
+        expect(pin).toBeTruthy();
+        expect(pin!.side).toBe('long');
+        // Cycles start late enough that ≥3 pins are visible to the scan, and
+        // the (id @ trigger-bar) dedupe keeps each pin counted exactly once.
+        expect(pin!.hits).toBeGreaterThanOrEqual(3);
+        expect(pin!.hits).toBeLessThanOrEqual(6);
+        expect(pin!.wins).toBeGreaterThanOrEqual(2);
+        expect(pin!.winRate).not.toBeNull();
+        expect(pin!.winRate!).toBeGreaterThan(0.5);
+        expect(pin!.keywords).toContain('pin bar');
+    });
+
+    it('records per-hit excursions as entry fractions, newest examples first', () => {
+        const stats = scanHistorySetups(tape());
+        const pin = stats.find(s => s.id === 'pin-bar-buy')!;
+        expect(pin.examples.length).toBeGreaterThan(0);
+        expect(pin.examples.length).toBeLessThanOrEqual(8);
+        for (const h of pin.examples) {
+            expect(h.entry).toBeGreaterThan(0);
+            expect(h.mae).toBeLessThanOrEqual(0);
+            expect(h.mfe).toBeGreaterThanOrEqual(0);
+            expect(['win', 'loss', 'open']).toContain(h.outcome);
+        }
+        const idx = pin.examples.map(e => e.index);
+        expect([...idx].sort((a, b) => b - a)).toEqual(idx); // newest first
+        expect(pin.avgMfe).toBeGreaterThan(0);
     });
 });

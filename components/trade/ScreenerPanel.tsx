@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, Search, X } from 'lucide-react';
+import { Loader2, Search, X, BrainCircuit } from 'lucide-react';
 import { runScreener, type ScreenerRow } from '../../services/trade/screener';
 import { display as symbolDisplay } from '../../utils/symbol';
 import type { LoggedTrade } from '../../types/trade';
@@ -148,6 +148,21 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                     <td className="px-4 py-1.5">
                                         <span className="font-mono font-bold text-zinc-100">{symbolDisplay(r.symbol)}</span>
                                         <span className="ml-2 text-zinc-600">{r.baseAsset}</span>
+                                        <button
+                                            type="button"
+                                            data-testid={`screener-learn-${r.symbol}`}
+                                            title="Load on the chart and prefill the Chart AI to scan this coin's candles for skills"
+                                            aria-label={`Learn skills from ${symbolDisplay(r.symbol)}`}
+                                            onClick={ev => {
+                                                ev.stopPropagation();
+                                                onChangeSymbol(r.symbol);
+                                                window.dispatchEvent(new CustomEvent('august:prefill-chat', { detail: { token: 'scan-chart-skills' } }));
+                                                onClose();
+                                            }}
+                                            className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-violet-300"
+                                        >
+                                            <BrainCircuit className="h-3.5 w-3.5" />
+                                        </button>
                                     </td>
                                     <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-300">{r.price > 0 ? fmtPrice(r.price) : '—'}</td>
                                     <td className={`px-3 py-1.5 font-mono tabular-nums ${r.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>

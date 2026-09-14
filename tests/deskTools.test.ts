@@ -41,6 +41,8 @@ describe('DeskToolsService', () => {
             'recall',
             'recall_chat',
             'scan_setups',
+            'scan_chart_skills',
+            'project_future_price',
             'run_screener',
         ]);
         expect(toAnthropicTools().find(t => (t as { name: string }).name === 'web_search')).toMatchObject({

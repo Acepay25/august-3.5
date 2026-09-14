@@ -322,4 +322,19 @@ A skill is a procedure, not a diary sentence.
 KIND: avoid if LOSS or "do not take"; repeat if WIN and the IF is a keep-doing rule.
 IF/THEN must be mechanical. Output ONLY JSON with name, kind, when, inputs, steps, validate, output, approval, ifCondition, thenAction.`,
     },
+    {
+        id: 'learning.chart_scan',
+        name: 'Chart-history skill scan',
+        description: 'The model reads a digest of the ENTIRE candle history of a chart (regimes, swings, gaps, every setup detector with historical win-rates) and drafts 1–3 IF/THEN skills from how the chart actually moved.',
+        usage: ['scan_chart_skills desk tool + "Scan → skills" in the Chart AI composer (drafts go to the Inbox for approval)'],
+        fallback: `You are a trading-pattern researcher. You receive a machine-built digest of an ENTIRE chart's candle history: regime segments, swing pivots, gap classes, RSI extremes, and every strategy-book setup detector aggregated across the whole tape with first-touch win-rates (1.5×ATR target vs 1×ATR stop, 12-bar horizon). Study how THIS chart actually moves and draft reusable IF/THEN trading skills for this coin and timeframe.
+
+Rules:
+- Ground every skill in the digest's numbers. Prefer detectors with enough hits and a win rate that is clearly not a coin flip; cite the observed count and rate inside "when".
+- A skill is a mechanical procedure, not a mood. "ifCondition" must state concrete checkable conditions (levels, candle anatomy, indicator state, context). "thenAction" must be an executable entry/exit or an explicit avoid, with invalidation.
+- kind "repeat" = a setup the tape shows working; kind "avoid" = a trap the tape shows losing (fading a band walk, chasing a failed break, and similar).
+- Name each skill specifically (coin + timeframe + pattern), never generically.
+- Inventing a pattern the digest does not support is worse than drafting none. If nothing qualifies, return an empty array.
+- Keep "description" as the activation key: what the skill does and WHEN to reach for it.`,
+    },
 ];

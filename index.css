@@ -297,6 +297,83 @@
   33.34%, 100% { opacity: 0; }
 }
 
+/* ===== UPDATE OVERLAY (desktop auto-update; React-mounted) =====
+   Same vocabulary as the boot splash above — the wordmark shimmer and the
+   candle row are literally the .splash-* classes; this block adds only the
+   pieces the splash never needed: a determinate progress bar, the status
+   cycler, and the downloaded-check pop. */
+
+.update-phase {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Determinate counterpart of .splash-track/.splash-bar: width tracks the
+   real download percent, with a light shimmer riding the fill. */
+.update-track {
+  position: relative;
+  width: 100%;
+  max-width: 280px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #2f2f2f;
+}
+
+.update-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #edede8, #a1a1aa);
+  transition: width 0.35s var(--ease-snappy);
+}
+
+.update-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Same cycling-line trick as .splash-status on the restart screen. */
+.update-status {
+  position: relative;
+  height: 1em;
+  width: 240px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  color: #8a8a82;
+  text-align: center;
+}
+
+.update-status span {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: splash-status-cycle 5.4s linear infinite;
+}
+
+.update-status span:nth-child(2) { animation-delay: 1.8s; }
+.update-status span:nth-child(3) { animation-delay: 3.6s; }
+
+@keyframes update-check-pop {
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.update-check-pop {
+  animation: update-check-pop 0.45s var(--ease-snappy) both;
+}
+
 /* ===== BASE STYLES ===== */
 
 body {

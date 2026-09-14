@@ -679,7 +679,33 @@ let updateInfo = {
     progress: 0,
     version: null,
     error: null,
+    // Download telemetry (downloading phase): electron-updater's
+    // download-progress carries bytes/second so the overlay can show speed+ETA.
+    bytesPerSecond: 0,
+    transferred: 0,
+    total: 0,
+    // Release body from GitHub (available/downloaded phases) — "What's new".
+    releaseNotes: null,
 };
+
+// Set while an update:install is waiting for the renderer's restart animation
+// to finish (the overlay sends update:quit-now, with a timeout fallback).
+let pendingInstallerQuit = null;
+
+/** GitHub's releaseNotes is a raw markdown string; other providers can hand
+ *  back an array of per-language notes. Normalize to plain text (capped) so
+ *  the renderer never has to branch on the shape. */
+function normalizeReleaseNotes(notes) {
+    if (typeof notes === 'string') return notes.slice(0, 4000);
+    if (Array.isArray(notes)) {
+        return notes
+            .map(n => (n && (n.note ?? n.text ?? n.value) ? String(n.note ?? n.text ?? n.value) : ''))
+            .filter(Boolean)
+            .join('\n\n')
+            .slice(0, 4000) || null;
+    }
+    return null;
+}
 
 function sendUpdateStatus() {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -704,6 +730,7 @@ function setupAutoUpdater() {
             ...updateInfo,
             status: 'available',
             version: info.version,
+            releaseNotes: normalizeReleaseNotes(info.releaseNotes),
             error: null,
         };
         sendUpdateStatus();
@@ -719,6 +746,9 @@ function setupAutoUpdater() {
             ...updateInfo,
             status: 'downloading',
             progress: Math.round(progressObj.percent),
+            bytesPerSecond: Math.max(0, Math.round(progressObj.bytesPerSecond || 0)),
+            transferred: Math.max(0, Math.round(progressObj.transferred || 0)),
+            total: Math.max(0, Math.round(progressObj.total || 0)),
         };
         sendUpdateStatus();
     });
@@ -728,6 +758,7 @@ function setupAutoUpdater() {
             ...updateInfo,
             status: 'downloaded',
             progress: 100,
+            bytesPerSecond: 0,
         };
         sendUpdateStatus();
     });
@@ -776,9 +807,35 @@ function setupAutoUpdater() {
         // "Restarting…" message before the app quits.
         updateInfo = { ...updateInfo, status: 'installing' };
         sendUpdateStatus();
-        // quitAndInstall runs after the renderer acknowledges
-        setImmediate(() => autoUpdater.quitAndInstall());
+        // The overlay plays the restart animation, then sends
+        // update:quit-now. The 5s fallback guarantees the update still
+        // installs if the renderer is stuck (or hides the overlay entirely);
+        // quitAndInstall fires exactly once either way.
+        let fired = false;
+        const doQuit = () => {
+            if (fired) return;
+            fired = true;
+            pendingInstallerQuit = null;
+            try {
+                // Silent + force-run: the NSIS installer runs invisibly with
+                // no generic Windows dialog (/S is safe for the per-user
+                // oneClick install — no elevation needed), then relaunches
+                // August (--force-run). The only visuals around the update
+                // are ours: the Restarting… overlay, then the boot splash.
+                autoUpdater.quitAndInstall(true, true);
+            } catch (err) {
+                console.error('[AutoUpdater] quitAndInstall failed, plain quit:', err);
+                app.quit();
+            }
+        };
+        pendingInstallerQuit = doQuit;
+        setTimeout(doQuit, 5000);
         return true;
+    });
+
+    // Renderer's "animation done — quit now" ack for the install above.
+    ipcMain.on('update:quit-now', () => {
+        if (pendingInstallerQuit) pendingInstallerQuit();
     });
 
     ipcMain.handle('update:get-status', () => updateInfo);
