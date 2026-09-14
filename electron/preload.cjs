@@ -32,6 +32,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cancelProviderChat: (requestId) => ipcRenderer.invoke('provider:cancel', requestId),
     discoverModels: (config) => ipcRenderer.invoke('provider:discover', config),
 
+    // Live streaming deltas for a providerChat call that set stream:true.
+    // Payload: { requestId, type: 'text' | 'reasoning', delta }. The
+    // providerChat promise still resolves with the accumulated final result;
+    // these events only drive the realtime paint.
+    onProviderChunk: (callback) => {
+        const handler = (_event, chunk) => callback(chunk);
+        ipcRenderer.on('provider:chunk', handler);
+        return () => ipcRenderer.removeListener('provider:chunk', handler);
+    },
+
     // Listen for real-time status updates pushed from main process
     onUpdateStatus: (callback) => {
         const handler = (_event, status) => callback(status);

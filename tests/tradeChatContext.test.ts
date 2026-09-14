@@ -102,6 +102,13 @@ describe('buildTradeChatContext (the model sees the chart)', () => {
         expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('does not place, close or resolve trades');
     });
 
+    it('the system prompt makes the key-levels block OPTIONAL (never forced)', () => {
+        expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('KEY LEVELS (optional)');
+        expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('never force a block just to have one');
+        // The old mandatory framing must not survive.
+        expect(TRADE_CHAT_SYSTEM_PROMPT).not.toMatch(/PUBLISH your levels this way instead/);
+    });
+
     it('the system prompt pins the live mark as current when packet and mark disagree', () => {
         expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('the mark is current');
         expect(TRADE_CHAT_SYSTEM_PROMPT).toContain('never as a fresh move');

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendChatRequest } from '../services/providers/GenericProviderService';
+import { sendChatRequest, streamChatRequest } from '../services/providers/GenericProviderService';
 import type { ProviderConfig } from '../types/provider';
 
 const baseConfig = (over: Partial<ProviderConfig>): ProviderConfig => ({
@@ -72,5 +72,88 @@ describe('providerChat IPC reasoning-effort parity', () => {
         });
         await sendChatRequest(cfg, messages, { reasoningEffort: 'high' });
         expect(calls[0].reasoningPatch).toEqual({ reasoning: { effort: 'high' } });
+    });
+});
+
+/**
+ * Desktop LIVE streaming (v1.0.24): streamChatRequest must yield deltas as
+ * the bridge pushes them, forward reasoning to onReasoning (the AnalyzedRow
+ * timer starts on the first thought), deliver native tool calls via
+ * onStreamToolCalls (the old short-circuit dropped them), and still paint a
+ * whole answer when the provider ignores stream:true.
+ */
+describe('streamChatRequest over the chunk bridge', () => {
+    type Chunk = { requestId: string; type: 'text' | 'reasoning'; delta: string };
+    let chunkCb: ((chunk: Chunk) => void) | null;
+    const collect = async (gen: AsyncGenerator<string>): Promise<string[]> => {
+        const out: string[] = [];
+        for await (const d of gen) out.push(d);
+        return out;
+    };
+
+    beforeEach(() => {
+        chunkCb = null;
+        window.electronAPI = {
+            isElectron: true,
+            providerChat: vi.fn(async (request: BridgePayload) => {
+                calls.push(request);
+                const rid = request.requestId as string;
+                // Simulate main.cjs pushing SSE deltas before resolving.
+                chunkCb?.({ requestId: rid, type: 'reasoning', delta: 'think A' });
+                chunkCb?.({ requestId: rid, type: 'reasoning', delta: 'think B' });
+                chunkCb?.({ requestId: rid, type: 'text', delta: 'Hello ' });
+                chunkCb?.({ requestId: rid, type: 'text', delta: 'world' });
+                return { ok: true, text: 'Hello world', reasoning: 'think Athink B' };
+            }) as unknown as BridgeChatFn,
+            cancelProviderChat: vi.fn(async () => true),
+            onProviderChunk: vi.fn((cb: (chunk: Chunk) => void) => {
+                chunkCb = cb;
+                return () => { chunkCb = null; };
+            }) as never,
+        };
+    });
+
+    it('yields text deltas incrementally and forwards reasoning live', async () => {
+        const reasoning: string[] = [];
+        const deltas = await collect(streamChatRequest(baseConfig({}), messages, {
+            onReasoning: chunk => { reasoning.push(chunk); },
+        }));
+        expect(deltas).toEqual(['Hello ', 'world']);
+        expect(reasoning).toEqual(['think A', 'think B']);
+        expect(calls[0].stream).toBe(true);
+    });
+
+    it('delivers native tool calls through onStreamToolCalls', async () => {
+        window.electronAPI!.providerChat = vi.fn(async (request: BridgePayload) => {
+            calls.push(request);
+            return {
+                ok: true, text: '', toolCalls: [{ id: 'call_1', name: 'get_market_packet', arguments: { symbol: 'ETHUSDT' } }],
+            };
+        }) as unknown as BridgeChatFn;
+        let delivered: Array<{ id: string; name: string }> = [];
+        await collect(streamChatRequest(baseConfig({}), messages, {
+            onStreamToolCalls: c => { delivered = c; },
+        }));
+        expect(delivered).toEqual([{ id: 'call_1', name: 'get_market_packet', arguments: { symbol: 'ETHUSDT' } }]);
+    });
+
+    it('paints the whole answer when the provider ignored stream:true', async () => {
+        window.electronAPI!.providerChat = vi.fn(async (request: BridgePayload) => {
+            calls.push(request);
+            return { ok: true, text: 'buffered answer' };
+        }) as unknown as BridgeChatFn;
+        const deltas = await collect(streamChatRequest(baseConfig({}), messages, {}));
+        expect(deltas.join('')).toBe('buffered answer');
+    });
+
+    it('ignores chunks from a different requestId', async () => {
+        const original = window.electronAPI!.providerChat!;
+        window.electronAPI!.providerChat = vi.fn(async (request: BridgePayload) => {
+            const promise = original(request);
+            chunkCb?.({ requestId: 'someone-elses-call', type: 'text', delta: 'LEAK' });
+            return promise;
+        }) as unknown as BridgeChatFn;
+        const deltas = await collect(streamChatRequest(baseConfig({}), messages, {}));
+        expect(deltas.join('')).toBe('Hello world');
     });
 });

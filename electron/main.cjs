@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
+const { createSseParser } = require('./sseParser.cjs');
 
 const isDev = !app.isPackaged;
 
@@ -180,6 +181,17 @@ async function sendDiscoverRequest(config) {
     }
 }
 
+// Streaming parity for the desktop chat dock: the renderer opts in per call
+// (stream:true). jsonMode/jsonSchema calls stay buffered (they need the whole
+// body to validate), and the google format's stream wire (JSON-array SSE) is
+// not parsed here — those requests keep today's one-shot path.
+const STREAMABLE_FORMATS = new Set(['chat_completions', 'messages', 'responses']);
+function streamRequested(request) {
+    return request?.stream === true
+        && !request.jsonMode && !request.jsonSchema
+        && STREAMABLE_FORMATS.has(request?.config?.apiFormat);
+}
+
 function providerRequestDetails(request) {
     const config = request?.config || {};
     const format = config.apiFormat;
@@ -316,6 +328,15 @@ function providerRequestDetails(request) {
         Object.assign(body, request.reasoningPatch);
     }
 
+    // Stream opt-in AFTER the reasoning patch so a patch key can never be
+    // silently overwritten. stream_options asks OpenAI-compatible servers for
+    // the final usage chunk; servers that reject the knob are retried
+    // buffered in sendProviderRequest (400/422 degrade).
+    if (streamRequested(request)) {
+        body.stream = true;
+        if (format === 'chat_completions') body.stream_options = { include_usage: true };
+    }
+
     return { url, headers, body };
 }
 
@@ -409,7 +430,49 @@ function extractTokenUsageJs(data) {
     return undefined;
 }
 
-async function sendProviderRequest(request) {
+/**
+ * Consume a streaming provider response: parse SSE deltas as they land, push
+ * each one to the renderer over `provider:chunk` (the live paint), and
+ * accumulate the final {text, reasoning, toolCalls, usage}. Returns
+ * sawData:false when the body carried no SSE frames at all — a provider that
+ * ignored stream:true and answered with one plain JSON body — so the caller
+ * can fall back to the buffered parse of `raw` instead of losing the answer.
+ */
+async function consumeProviderStream(response, request, sender) {
+    const parser = createSseParser(request.config.apiFormat);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let text = '';
+    let reasoning = '';
+    let raw = '';
+    let terminal = false;
+    const emit = (ev) => {
+        if (ev.type === 'text') text += ev.delta; else reasoning += ev.delta;
+        try {
+            if (sender && !sender.isDestroyed()) {
+                sender.send('provider:chunk', { requestId: request.requestId, type: ev.type, delta: ev.delta });
+            }
+        } catch { /* window gone mid-stream */ }
+    };
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunkText = decoder.decode(value, { stream: true });
+            raw += chunkText;
+            const out = parser.push(chunkText);
+            out.events.forEach(emit);
+            if (out.done) { terminal = true; break; }
+        }
+    } finally {
+        try { await reader.cancel(); } catch { /* already closed */ }
+    }
+    const fin = parser.finish();
+    fin.events.forEach(emit);
+    return { text, reasoning, toolCalls: fin.toolCalls, usage: fin.usage, sawData: terminal || fin.sawData, raw };
+}
+
+async function sendProviderRequest(request, sender) {
     const { url, headers, body } = providerRequestDetails(request);
     const controller = new AbortController();
     // 300s — matches the browser's stream budget (STREAM_TIMEOUT_MS). The old
@@ -418,6 +481,7 @@ async function sendProviderRequest(request) {
     const timeout = setTimeout(() => controller.abort(), 300000);
     if (request.requestId) activeProviderRequests.set(request.requestId, controller);
     let response;
+    let streamActive = streamRequested(request);
     try {
         response = await net.fetch(url, {
             method: 'POST',
@@ -449,12 +513,64 @@ async function sendProviderRequest(request) {
                 });
             }
         }
+        if (streamActive && !response.ok && (response.status === 400 || response.status === 422)) {
+            // Some OpenAI-compatible gateways reject stream/stream_options —
+            // retry once buffered so the chat still answers (no live paint).
+            const retryBody = { ...body };
+            delete retryBody.stream;
+            delete retryBody.stream_options;
+            response = await net.fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(retryBody),
+                signal: controller.signal,
+            });
+            streamActive = false;
+        }
     } finally {
         clearTimeout(timeout);
         if (request.requestId) activeProviderRequests.delete(request.requestId);
     }
-    let raw = await response.text();
+    let raw = null;
     let data = {};
+    if (streamActive && response.ok && response.body && request.requestId && sender) {
+        // Re-arm cancel + the 300s guard for the BODY phase: the finally
+        // above released both when headers arrived, and an SSE stream can
+        // run long after — a wedged one must stay abortable.
+        activeProviderRequests.set(request.requestId, controller);
+        const bodyTimeout = setTimeout(() => controller.abort(), 300000);
+        let streamOut;
+        try {
+            streamOut = await consumeProviderStream(response, request, sender);
+        } finally {
+            clearTimeout(bodyTimeout);
+            activeProviderRequests.delete(request.requestId);
+        }
+        if (streamOut.sawData) {
+            if (streamOut.toolCalls.length > 0) {
+                return {
+                    text: streamOut.text,
+                    reasoning: streamOut.reasoning,
+                    usage: streamOut.usage || {},
+                    toolCalls: streamOut.toolCalls,
+                    assistantMessage: {
+                        role: 'assistant',
+                        content: streamOut.text || '',
+                        tool_calls: streamOut.toolCalls.map((c, i) => ({
+                            id: c.id || `call_${i}`,
+                            type: 'function',
+                            function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) },
+                        })),
+                    },
+                };
+            }
+            return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamOut.usage || {} };
+        }
+        // Provider ignored stream:true and answered with one JSON body —
+        // feed the accumulated raw text into the buffered parse below.
+        raw = streamOut.raw;
+    }
+    if (raw === null) raw = await response.text();
     try { data = raw ? JSON.parse(raw) : {}; } catch { /* handled by fallback below */ }
 
     if (response.ok && (request.jsonMode || request.jsonSchema) && body.response_format) {
@@ -581,6 +697,13 @@ async function createWindow() {
     mainWindow = new BrowserWindow({
         width: saved.width,
         height: saved.height,
+        // Floor the live size at the same bounds loadWindowState clamps to:
+        // below ~600px the trade layout degrades into the reported "toggle
+        // broke the UI" state — the chart pane hits its min-h floor, the dock
+        // transcript collapses to a sliver, and the Key Levels card clips to
+        // one row. The window must not be draggable into that state.
+        minWidth: 800,
+        minHeight: 600,
         ...(saved.x !== undefined && saved.y !== undefined ? { x: saved.x, y: saved.y } : {}),
         // Don't show the frame until the first paint is ready — otherwise a
         // blank/white window flashes on launch (the audit flagged this).
@@ -883,9 +1006,9 @@ function setupAutoUpdater() {
         }
     });
 
-    ipcMain.handle('provider:chat', async (_event, request) => {
+    ipcMain.handle('provider:chat', async (event, request) => {
         try {
-            return { ok: true, ...(await sendProviderRequest(request)) };
+            return { ok: true, ...(await sendProviderRequest(request, event.sender)) };
         } catch (error) {
             console.error('[main] provider request failed:', {
                 provider: request?.config?.name || 'Provider',
