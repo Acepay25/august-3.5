@@ -16,7 +16,6 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 import {
   initMemoryFiles,
   getMemoryFiles,
-  getMemoryFilesContext,
   getMemoryFilesStats,
   createMemoryFolder,
   renameMemoryFolder,
@@ -37,6 +36,7 @@ import {
   writeModelNote,
   SUGGESTIONS_FILE_NAME,
 } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { LoggedTrade, MemoryFile, TradeOutcome, UserProfile } from '../types';
 
 const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({

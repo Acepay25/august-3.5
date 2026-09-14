@@ -9,7 +9,8 @@
  */
 
 import { COMMON_WORDS } from '../../constants/commonWords';
-import { getMemoryFilesContext, extractLessonFromPostMortem } from '../../services/learning/MemoryFilesService';
+import { extractLessonFromPostMortem } from '../../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../../services/learning/MemoryRetrievalService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { listRetrievedMemorySources, type MemoryRetrievalQuery, type RetrievedMemorySource } from '../../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../../services/bots/BotMemoryService';

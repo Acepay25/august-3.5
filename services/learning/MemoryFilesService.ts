@@ -487,7 +487,6 @@ export const deleteMemoryFile = (id: string, username: string): Promise<void> =>
 // ─── Prompt injection ───────────────────────────────────────────────────────
 
 export type { MemoryRetrievalQuery } from './MemoryRetrievalService';
-export { getMemoryFilesContext } from './MemoryRetrievalService';
 
 /** UI stats: how many files are injected and at what total size. */
 export const getMemoryFilesStats = (): { enabledCount: number; charCount: number } => {

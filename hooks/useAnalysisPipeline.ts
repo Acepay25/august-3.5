@@ -74,7 +74,8 @@ const SEAT_LAUNCH_STAGGER_MS = 700;
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { getMemoryFilesContext, writeModelNote, extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
+import { writeModelNote, extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { annotateVerdictCitations } from '../services/learning/MemoryInjectionService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';

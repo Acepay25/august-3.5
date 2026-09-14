@@ -2383,7 +2383,7 @@ const App: React.FC = () => {
     const lastExitBackupRef = useRef(0);
     useEffect(() => {
         const onBeforeUnload = () => {
-            if (typeof (window as any).electronAPI === 'undefined') return;
+            if (typeof window.electronAPI === 'undefined') return;
             if (Date.now() - lastExitBackupRef.current < 10 * 60 * 1000) return;
             lastExitBackupRef.current = Date.now();
             if (activeUsernameRef.current) {

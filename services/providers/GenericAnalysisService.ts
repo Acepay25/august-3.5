@@ -31,7 +31,7 @@ import {
 import { TASK_BUDGETS } from './taskBudgets';
 import { EFFORT_BY_TASK, effortForTask, WireAuditEntry } from './reasoningControls';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
-import { getMemoryFilesContext } from '../learning/MemoryFilesService';
+import { getMemoryFilesContext } from '../learning/MemoryRetrievalService';
 import { composePrompt } from '../../utils/composePrompt';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import {

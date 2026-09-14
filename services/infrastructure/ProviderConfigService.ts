@@ -22,11 +22,13 @@ interface CryptoBridge {
 }
 
 function getCryptoBridge(): CryptoBridge | null {
-    if (typeof window !== 'undefined') {
-        const api = (window as any).electronAPI as CryptoBridge | undefined;
-        if (api && typeof api.encryptSecret === 'function' && typeof api.decryptSecret === 'function') {
-            return api;
-        }
+    if (typeof window === 'undefined') return null;
+    const api = window.electronAPI;
+    // The global electronAPI type carries the optional crypto members; narrow
+    // across the presence check and hand back a required-members view so the
+    // rest of this file never re-casts.
+    if (api && typeof api.encryptSecret === 'function' && typeof api.decryptSecret === 'function') {
+        return { encryptSecret: api.encryptSecret, decryptSecret: api.decryptSecret };
     }
     return null;
 }

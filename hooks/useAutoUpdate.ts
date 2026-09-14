@@ -1,36 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-
-/**
- * Update status pushed from the Electron main process.
- *
- * States:
- *   idle        — no update activity
- *   checking    — checking GitHub releases for a newer version
- *   available   — a newer version is available, awaiting download
- *   downloading — update package is downloading (see `progress`)
- *   downloaded  — update fully downloaded, ready to install
- *   installing  — installer is running; app is about to quit & relaunch
- *   error       — the update flow failed (see `error`)
- */
-interface UpdateStatus {
-    status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error';
-    progress: number;
-    version: string | null;
-    error: string | null;
-    /** Download telemetry from electron-updater (downloading phase). */
-    bytesPerSecond?: number;
-    transferred?: number;
-    total?: number;
-    /** GitHub release body (available/downloaded phases) — "What's new". */
-    releaseNotes?: string | null;
-}
-
-const IDLE_STATUS: UpdateStatus = {
-    status: 'idle',
-    progress: 0,
-    version: null,
-    error: null,
-};
+import { useState, useEffect, useCallback } from 'react';
+import type { ElectronUpdateStatus as UpdateStatus } from '../types/electron';
 
 /**
  * Hook for managing app auto-updates in Electron.
@@ -38,9 +7,20 @@ const IDLE_STATUS: UpdateStatus = {
  * In the browser (non-Electron), all operations are no-ops and
  * `isUpdateAvailable` is always false.
  *
+ * The `window.electronAPI` surface is typed by the ambient global declared
+ * next to GenericProviderService's bridge (so no `(window as any)` here); its
+ * members are optional (absent on web), hence the `?.` calls.
+ *
  * Usage:
  *   const { isElectron, appVersion, updateStatus, checkForUpdates, downloadUpdate, installUpdate } = useAutoUpdate();
  */
+const IDLE_STATUS: UpdateStatus = {
+    status: 'idle',
+    progress: 0,
+    version: null,
+    error: null,
+};
+
 export function useAutoUpdate() {
     const [isElectron, setIsElectron] = useState(false);
     const [appVersion, setAppVersion] = useState<string | null>(null);
@@ -48,23 +28,23 @@ export function useAutoUpdate() {
 
     useEffect(() => {
         // Detect if running in Electron
-        const electronAPI = (window as any).electronAPI;
+        const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
         if (!electronAPI) return;
 
         setIsElectron(true);
 
         // Get current app version
-        electronAPI.getVersion().then((v: string) => {
+        void electronAPI.getVersion?.().then((v) => {
             if (v) setAppVersion(v);
         });
 
         // Subscribe to status updates from main process
-        const unsubscribe = electronAPI.onUpdateStatus((status: UpdateStatus) => {
+        const unsubscribe = electronAPI.onUpdateStatus?.((status: UpdateStatus) => {
             setUpdateStatus(status);
         });
 
         // Fetch initial status
-        electronAPI.getUpdateStatus().then((status: UpdateStatus) => {
+        void electronAPI.getUpdateStatus?.().then((status) => {
             if (status) setUpdateStatus(status);
         });
 
@@ -74,27 +54,27 @@ export function useAutoUpdate() {
     }, []);
 
     const installUpdate = useCallback(async () => {
-        const electronAPI = (window as any).electronAPI;
+        const electronAPI = window.electronAPI;
         if (!electronAPI) return;
-        await electronAPI.installUpdate();
+        await electronAPI.installUpdate?.();
     }, []);
 
     const checkForUpdates = useCallback(async () => {
-        const electronAPI = (window as any).electronAPI;
+        const electronAPI = window.electronAPI;
         if (!electronAPI) return;
-        await electronAPI.checkForUpdates();
+        await electronAPI.checkForUpdates?.();
     }, []);
 
     const downloadUpdate = useCallback(async () => {
-        const electronAPI = (window as any).electronAPI;
+        const electronAPI = window.electronAPI;
         if (!electronAPI) return;
-        await electronAPI.downloadUpdate();
+        await electronAPI.downloadUpdate?.();
     }, []);
 
     /** Tell main the restart animation is done — quit & install now. Safe to
      *  call repeatedly; main ignores it outside an install. */
     const quitNow = useCallback(() => {
-        const electronAPI = (window as any).electronAPI;
+        const electronAPI = window.electronAPI;
         if (!electronAPI) return;
         electronAPI.quitNow?.();
     }, []);
