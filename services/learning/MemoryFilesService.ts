@@ -1090,3 +1090,51 @@ const pruneModelNotesIfFull = async (folderId: string, username: string): Promis
     const oldest = [...auto].sort((a, b) => a.updatedAt - b.updatedAt)[0];
     if (oldest) await deleteMemoryFileUnlocked(oldest.id, username);
 };
+
+// ─── Note search (backs the `recall` desk tool) ─────────────────────────────
+
+export interface NotebookNoteHit {
+    path: string;
+    excerpt: string;
+}
+
+/** Folders recall must NOT dump: skills ride the skill-meta retrieval tier,
+ *  diary/distilled/lens/bots are harness-owned writes, archive is retired. */
+const NOTE_SEARCH_SKIP_FOLDERS = new Set(['skills', 'trader-diary', 'distilled', 'lens', 'bots', 'archive']);
+
+/**
+ * Keyword search over the model's/user's NOTE files — the folders
+ * `write_memory_note` writes into. The skill-tier retrieval never sees these
+ * (no SKILL frontmatter), so without this a saved lesson is invisible to the
+ * `recall` tool despite its "lessons learned" promise. Ranks enabled files by
+ * term hits (name ×3, capped body hits), excerpts the first line containing a
+ * term.
+ */
+export const searchNotebookNotes = (topic: string, limit = 3): NotebookNoteHit[] => {
+    const terms = [...new Set(topic.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2))];
+    if (terms.length === 0) return [];
+    const folderById = new Map(memoryCache.folders.map(f => [f.id, f]));
+    const hits = memoryCache.files
+        .filter(f => f.enabled && f.content.trim() && !SKIP_INDEX_DUMP.has(f.name.toLowerCase()))
+        .map(f => {
+            const folder = folderById.get(f.folderId);
+            if (!folder || NOTE_SEARCH_SKIP_FOLDERS.has(folder.name)) return null;
+            if (HARNESS_REGENERATED_FILES.has(`${folder.name}/${f.name}`)) return null;
+            const name = f.name.toLowerCase();
+            const body = f.content.toLowerCase();
+            let score = 0;
+            for (const t of terms) {
+                if (name.includes(t)) score += 3;
+                score += Math.min(body.split(t).length - 1, 4);
+            }
+            if (score === 0) return null;
+            const lines = f.content.split('\n').map(l => l.trim()).filter(Boolean);
+            const hitLine = lines.find(l => terms.some(t => l.toLowerCase().includes(t))) ?? lines[0] ?? '';
+            const excerpt = hitLine.length > 240 ? `${hitLine.slice(0, 240).trimEnd()}…` : hitLine;
+            return { path: `${folder.name}/${f.name}`, excerpt, score };
+        })
+        .filter((x): x is NotebookNoteHit & { score: number } => x !== null)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+    return hits.map(({ path, excerpt }) => ({ path, excerpt }));
+};

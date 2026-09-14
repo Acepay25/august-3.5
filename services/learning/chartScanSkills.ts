@@ -365,6 +365,7 @@ export async function scanChartAcrossIntervals(
         candidates: 0, queued: 0, outcomes: [], receipt: '',
     };
     const receipts: string[] = [];
+    const failures: string[] = [];
     for (const interval of intervals) {
         const one = await scanChartForSkills({ ...input, interval });
         merged.bars += one.bars;
@@ -372,11 +373,24 @@ export async function scanChartAcrossIntervals(
         merged.queued += one.queued;
         merged.outcomes.push(...one.outcomes.map(o => ({ ...o, name: `${o.name} (${interval})` })));
         receipts.push(one.receipt);
-        if (one.error) { merged.error = merged.error ?? one.error; }
+        if (one.error) {
+            merged.error = merged.error ?? one.error;
+            failures.push(`- ${interval}: ${one.error}`);
+        }
         if (input.signal?.aborted) break;
     }
     merged.receipt = intervals.length > 1
-        ? `CHART SKILL SCAN ${input.symbol} across ${intervals.join(', ')} — ${merged.queued} draft${merged.queued === 1 ? '' : 's'} from ${merged.candidates} candidate${merged.candidates === 1 ? '' : 's'}.\n${merged.outcomes.map(o => `- ${o.name} → ${o.action.toUpperCase()} — ${o.detail}`).join('\n') || '(none)'}`
+        ? [
+            `CHART SKILL SCAN ${input.symbol} across ${intervals.join(', ')} — ${merged.queued} draft${merged.queued === 1 ? '' : 's'} from ${merged.candidates} candidate${merged.candidates === 1 ? '' : 's'}.`,
+            // A failed interval contributes 0 candidates — without naming it,
+            // "0 drafts from 0 candidates" reads as an empty tape when a
+            // source actually died (violates the repo's DATA_UNAVAILABLE
+            // doctrine: a failure is UNKNOWN, never absence of evidence).
+            ...(failures.length > 0
+                ? [`FAILED intervals — their tapes were NOT read (treat as UNKNOWN, not "found nothing"):`, ...failures]
+                : []),
+            merged.outcomes.map(o => `- ${o.name} → ${o.action.toUpperCase()} — ${o.detail}`).join('\n') || '(none)',
+        ].join('\n')
         : receipts[0];
     return merged;
 }
