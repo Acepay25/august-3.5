@@ -30,7 +30,7 @@ describe('HarnessControls new settings', () => {
     it('skill library cap persists, clamped to 5..200', () => {
         localStorage.clear();
         render(<SessionUsagePanel />);
-        const input = screen.getByLabelText('Skill library cap');
+        const input = screen.getByLabelText(/Skill library cap/);
 
         fireEvent.change(input, { target: { value: '75' } });
         expect(getHarnessSettings().skillLibraryCap).toBe(75);
