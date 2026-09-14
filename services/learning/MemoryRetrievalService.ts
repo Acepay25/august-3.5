@@ -22,7 +22,7 @@ import { regimeRankFactor } from '../../utils/regimeSentinel';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { normalizeStrategyFamily } from '../../types/strategy';
 import { familyEdgeFactor, matrixSummaryBlock } from './strategyRegimeMatrix';
-import { getMemoryFiles } from './MemoryFilesService';
+import { getMemoryFiles, searchNotebookNotes } from './MemoryFilesService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
 import { settledBeliefsBlock } from './settledBeliefs';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
@@ -676,8 +676,9 @@ export interface RecallRequest {
 /**
  * Handle a model-initiated `recall` desk-tool call: search the notebook the
  * way the retrieval layer does and hand back a compact digest — matched
- * skills (top 3, one-line each), similar closed trades, uncovered mistakes,
- * and the current doctrine header. Budget-capped like every other slice.
+ * skills (top 3, one-line each), matching NOTE files (the write_memory_note
+ * surface), similar closed trades, uncovered mistakes, and the current
+ * doctrine header. Budget-capped like every other slice.
  */
 export function handleRecallTool(
     args: RecallRequest,
@@ -716,6 +717,15 @@ export function handleRecallTool(
 
     const mistakes = uncoveredMistakeLine(query);
     if (mistakes) sections.push(mistakes.replace(/^\[[^\]]+\]\n/, ''));
+
+    // The model's own NOTES (write_memory_note → lessons/, rules/, …): these
+    // files have no SKILL frontmatter, so the skill tier above never sees
+    // them — without this, a saved lesson is invisible to the very tool whose
+    // description promises "lessons learned" (observed 2026-09-14).
+    const notes = searchNotebookNotes(raw);
+    if (notes.length > 0) {
+        sections.push(notes.map(n => `NOTE ${n.path}:\n${n.excerpt}`).join('\n'));
+    }
 
     const similar = similarTradesBlock(query, trades);
     if (similar) sections.push(similar);

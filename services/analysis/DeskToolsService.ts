@@ -158,11 +158,33 @@ export const isDataUnavailable = (content: string): boolean => content.startsWit
 const toolCacheKey = (call: DeskToolCall): string =>
     `${call.name}:${JSON.stringify(call.arguments ?? {}, Object.keys(call.arguments ?? {}).sort())}`;
 
-/** Stateful memory tools bypass the result cache: a `remember` must be
- *  visible to the next `read_memory`, and re-issuing a write must actually
- *  run (not replay a cached receipt). Scoped to the collaboration-memory
- *  trio; pre-existing tools keep their current caching. */
-const NON_CACHEABLE_TOOLS = new Set(['remember', 'read_memory', 'forget']);
+/** CACHE POLICY (2026-09-14 inverted): ONLY the pure network market reads
+ *  cache — the whole reason the cache exists is sparing the exchange from N
+ *  seats re-fetching identical prices within 30s. Everything else must run
+ *  every call: a `remember` must be visible to the next `read_memory`, a
+ *  re-issued write must actually write, and a read of local state right
+ *  after a write must see the write. The old deny-list covered only the
+ *  collaboration-memory trio, so `write_memory_note` → `get_notebook_map`
+ *  replayed the PRE-WRITE cached map ("the notebook map has no such file")
+ *  and the model retracted writes that had landed, then duplicated them
+ *  under new names. These local reads are cheap; nothing is lost. */
+const CACHEABLE_TOOLS = new Set([
+    'get_market_packet',
+    'get_all_timeframes',
+    'get_derivatives',
+    'get_order_book',
+    'get_liquidations',
+    'get_btc_context',
+    'get_price_snapshot',
+    'get_session_context',
+    'get_setup_history_stats',
+    'project_future_price',
+    'run_screener',
+    'scan_setups',
+    'web_search',
+]);
+const cacheableResult = (name: string): boolean =>
+    CACHEABLE_TOOLS.has(name) || name.startsWith('custom_');
 
 export const clearDeskToolCache = (): void => {
     toolCache.clear();
@@ -1249,6 +1271,20 @@ const resolvedSymbolField = (call: DeskToolCall, fallback: string): { symbol?: s
     return { symbol: asSymbol(call.arguments?.symbol, fallback) };
 };
 
+/** A refusal is a FAILED call, not a receipt. The transcript header
+ *  (`(error)`), the "rejected" ToolAction chip and the panel narration all
+ *  already understand ok:false — they were just never given it. Rejections
+ *  used to fall through with ok:true and ride INTO the result cache, so a
+ *  "revise_skill rejected: no skill …" could even be replayed back to the
+ *  model as if the revision had been queued. Rejection TEXT keeps the
+ *  `<tool> rejected:` prefix contract (see toolActionFromResult). */
+const rejectedResult = (call: DeskToolCall, reason: string): DeskToolResult => ({
+    toolCallId: call.id,
+    name: call.name,
+    ok: false,
+    content: reason,
+});
+
 export async function executeDeskTool(
     call: DeskToolCall,
     context: DeskToolContext = {},
@@ -1256,8 +1292,9 @@ export async function executeDeskTool(
     const fallback = context.defaultSymbol || 'BTCUSDT';
     // Repeat calls within the TTL (every seat asks the same desk) are served
     // from cache — identical market data, zero extra network round-trips.
+    // Only the whitelisted network readers take part (see CACHEABLE_TOOLS).
     const cacheKey = toolCacheKey(call);
-    const cacheable = !NON_CACHEABLE_TOOLS.has(call.name);
+    const cacheable = cacheableResult(call.name);
     const cached = cacheable ? toolCache.get(cacheKey) : undefined;
     if (cached && Date.now() - cached.at < TOOL_CACHE_TTL_MS) {
         return { toolCallId: call.id, name: call.name, ok: true, content: cached.content, ...resolvedSymbolField(call, fallback) };
@@ -1283,7 +1320,7 @@ export async function executeDeskTool(
                     );
                     content = JSON.stringify({ proposed: true, id: amendment.id, status: amendment.status, note: 'Pending human approval in Settings → Memory. The notebook is unchanged until approved.' });
                 } catch (err) {
-                    content = `amend_memory rejected: ${err instanceof Error ? err.message : String(err)}`;
+                    return rejectedResult(call, `amend_memory rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
@@ -1304,7 +1341,7 @@ export async function executeDeskTool(
                     }, 'model:desk');
                     content = JSON.stringify({ proposed: true, id: tool.id, status: tool.status, note: 'Candidate stored. A human must approve it in Settings → AI Models before it can run.' });
                 } catch (err) {
-                    content = `forge_tool rejected: ${err instanceof Error ? err.message : String(err)}`;
+                    return rejectedResult(call, `forge_tool rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
@@ -1312,11 +1349,15 @@ export async function executeDeskTool(
                 // Direct authoring into the model's own notebook folders —
                 // writeModelNote enforces the harness-owned guards (diary,
                 // distilled, skills/ are off-limits; append on name match).
+                // decision:'append' matches the tool description ("Write or
+                // APPEND"): a re-saved lesson folds into the matching file
+                // instead of minting a name-2.md duplicate.
                 try {
                     const { writeModelNote } = await import('../learning/MemoryFilesService');
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     const note = await writeModelNote(
                         {
+                            decision: 'append',
                             folder: asString(call.arguments.folder, 'lessons'),
                             fileName: asString(call.arguments.file_name, 'note'),
                             content: asString(call.arguments.content),
@@ -1325,7 +1366,7 @@ export async function executeDeskTool(
                     );
                     content = JSON.stringify({ saved: true, file: note.name, note: 'The note is live in Settings → Memory now. Summarize what you wrote in your reply.' });
                 } catch (err) {
-                    content = `write_memory_note rejected: ${err instanceof Error ? err.message : String(err)}`;
+                    return rejectedResult(call, `write_memory_note rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
@@ -1344,14 +1385,12 @@ export async function executeDeskTool(
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     const kind = normalizeKind(call.arguments.kind);
                     if (!kind) {
-                        content = 'remember rejected: kind must be user | feedback | project | reference';
-                        break;
+                        return rejectedResult(call, 'remember rejected: kind must be user | feedback | project | reference');
                     }
                     const description = asString(call.arguments.description);
                     const body = asString(call.arguments.body);
                     if (!description || !body) {
-                        content = 'remember rejected: description and body are both required';
-                        break;
+                        return rejectedResult(call, 'remember rejected: description and body are both required');
                     }
                     const slug = asString(call.arguments.slug) || slugify(asString(call.arguments.name) || description);
                     const { entry, created } = rememberProfileMemory(
@@ -1363,7 +1402,7 @@ export async function executeDeskTool(
                         note: created ? 'New memory saved — its index line now rides every future prompt.' : `Existing memory "${entry.slug}" UPDATED in place (no duplicate created).`,
                     });
                 } catch (err) {
-                    content = `remember rejected: ${err instanceof Error ? err.message : String(err)}`;
+                    return rejectedResult(call, `remember rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
@@ -1384,9 +1423,10 @@ export async function executeDeskTool(
                 const { forgetProfileMemory } = await import('../learning/profileMemory');
                 const slug = asString(call.arguments.slug);
                 const gone = slug ? forgetProfileMemory(slug) : false;
-                content = gone
-                    ? JSON.stringify({ removed: true, slug, note: 'The memory is deleted and gone from every future index.' })
-                    : `forget rejected: no memory with slug "${slug}". Check the index for the exact slug.`;
+                if (!gone) {
+                    return rejectedResult(call, `forget rejected: no memory with slug "${slug}". Check the index for the exact slug.`);
+                }
+                content = JSON.stringify({ removed: true, slug, note: 'The memory is deleted and gone from every future index.' });
                 break;
             }
             case 'propose_skill': {
@@ -1415,8 +1455,7 @@ export async function executeDeskTool(
                         thenAction: asString(call.arguments.then_action),
                     });
                     if (!crafted) {
-                        content = 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).';
-                        break;
+                        return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).');
                     }
                     // The same quality bar every other draft source passes:
                     // tombstone cooldown, duplicate skip, live-skill coverage
@@ -1431,10 +1470,9 @@ export async function executeDeskTool(
                         coin: asString(call.arguments.coin) || undefined,
                     });
                     if (!gate.ok) {
-                        content = `propose_skill rejected: ${gate.reason}.`
+                        return rejectedResult(call, `propose_skill rejected: ${gate.reason}.`
                             + (gate.reason.includes('existing skill') ? ' Use revise_skill to tighten the existing skill instead.' : '')
-                            + ' Tell the user why no draft was queued.';
-                        break;
+                            + ' Tell the user why no draft was queued.');
                     }
                     const draft = queueSkillDraft(
                         { tradeId, coin: asString(call.arguments.coin) || undefined, crafted: gate.crafted },
@@ -1442,7 +1480,7 @@ export async function executeDeskTool(
                     );
                     content = JSON.stringify({ proposed: true, id: draft.id, skill: crafted.name, note: 'Pending draft queued for human approval in the Coach inbox. The skill does nothing until a human allows it.' });
                 } catch (err) {
-                    content = `propose_skill rejected: ${err instanceof Error ? err.message : String(err)}`;
+                    return rejectedResult(call, `propose_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
@@ -1456,8 +1494,20 @@ export async function executeDeskTool(
                     const slug = asString(call.arguments.skill_slug).toLowerCase().replace(/\.md$/, '');
                     const hit = listSkills().find(s => s.file.name.replace(/\.md$/i, '').toLowerCase() === slug);
                     if (!hit) {
-                        content = `revise_skill rejected: no skill "${slug}". Call get_notebook_map or recall first for the exact slug.`;
-                        break;
+                        // Name the REAL reason when the slug is a pending
+                        // DRAFT (the book-*/scan-*/chat-* sources): revise_skill
+                        // can only act on approved skills, and a bare "no skill"
+                        // invites the model to claim a revision that can never
+                        // queue (observed 2026-09-14).
+                        const { listSkillDrafts } = await import('../../utils/skillDrafts');
+                        const username = getActiveUsername();
+                        const draftHit = listSkillDrafts(username).find(d => {
+                            const name = d.crafted.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                            return name === slug || name.replace(/-/g, '') === slug.replace(/-/g, '');
+                        });
+                        return rejectedResult(call, draftHit
+                            ? `revise_skill rejected: "${slug}" is a PENDING DRAFT in the Inbox, not a live skill — drafts cannot be revised through this tool. It is edited (or approved/rejected) by the human in the Inbox.`
+                            : `revise_skill rejected: no skill "${slug}". Call get_notebook_map or recall first for the exact slug.`);
                     }
                     const proposal = queueLearningProposal({
                         kind: 'rescope',
@@ -1474,7 +1524,7 @@ export async function executeDeskTool(
                         ? JSON.stringify({ proposed: true, id: proposal.id, skill: slug, note: 'Revision proposal queued — a human approves it in Settings → Skills. The live skill is unchanged until then.' })
                         : 'revise_skill: an identical revision proposal is already pending.';
                 } catch (err) {
-                    content = `revise_skill rejected: ${err instanceof Error ? err.message : String(err)}`;
+                    return rejectedResult(call, `revise_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
@@ -1732,8 +1782,8 @@ export async function executeDeskTool(
         }
         content = budgetToolContent(call.name, content);
         // A failure sentinel must not be cached — that would freeze an
-        // outage into the TTL even after the source recovers. Stateful memory
-        // tools never cache (see NON_CACHEABLE_TOOLS).
+        // outage into the TTL even after the source recovers. Only the
+        // whitelisted network reads cache at all (see CACHEABLE_TOOLS).
         if (cacheable && !isDataUnavailable(content)) {
             cacheTool(cacheKey, content);
         }

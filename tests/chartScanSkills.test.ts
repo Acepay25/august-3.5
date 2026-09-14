@@ -231,6 +231,21 @@ describe('scanChartAcrossIntervals', () => {
         expect(r.receipt).toContain('across 15m, 1h');
     });
 
+    it('names FAILED intervals in the merged receipt — 0 candidates must not read as an empty tape', async () => {
+        vi.mocked(getQuickResponse).mockResolvedValue(JSON.stringify([]));
+        vi.mocked(fetchKlines).mockImplementation(((_s: string, ivl: string) =>
+            ivl === '4h' ? Promise.resolve([] as never) : Promise.resolve(tape() as never)) as never);
+        const r = await scanChartAcrossIntervals({
+            symbol: 'BTCUSDT', intervals: ['15m', '4h'], username: USER, config: cfg,
+        });
+        expect(r.candidates).toBe(0);
+        expect(r.error).toContain('4h');
+        // The doctrine: a dead source is UNKNOWN, not absence of evidence.
+        expect(r.receipt).toContain('FAILED intervals');
+        expect(r.receipt).toContain('- 4h:');
+        expect(r.receipt).toContain('UNKNOWN');
+    });
+
     it('empty interval list is a clean no-op, not a crash', async () => {
         const r = await scanChartAcrossIntervals({
             symbol: 'BTCUSDT', intervals: [], username: USER, config: cfg,
