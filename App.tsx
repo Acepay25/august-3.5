@@ -2353,12 +2353,13 @@ const App: React.FC = () => {
         setSurface('trade');
     }, [selectCoachThread, setSurface]);
     // Skill-citation chip tap: open Settings → Skills so the
-    // grid mounts and consumes the pending slug (SkillsGrid listens for the
-    // same event when already mounted).
+    // Skill-citation chip tap: open the Strategy Studio surface so it mounts
+    // and consumes the pending slug (Studio listens for the same event when
+    // already open). The Settings → Skills tab is now just a pointer here.
     useEffect(() => {
         const onOpenSkill = (): void => {
-            setSettingsInitialTab('skills');
-            setIsSettingsMenuVisible(true);
+            setIsSettingsMenuVisible(false);
+            setSurface('studio');
         };
         window.addEventListener('august:open-skill', onOpenSkill);
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
@@ -2982,6 +2983,7 @@ const App: React.FC = () => {
                                 <StrategyStudio
                                     trades={loggedTrades}
                                     username={activeUsername || undefined}
+                                    memoryConfig={memoryConfig}
                                     currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
                                     onClose={() => setSurface('trade')}
                                 />

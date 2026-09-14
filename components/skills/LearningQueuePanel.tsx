@@ -11,8 +11,9 @@ import {
 } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 
-/** Same event ChatInput listens for (see trySkillInChat in SkillsGrid) —
- *  dispatched directly to keep the module graph acyclic. */
+/** Same event TradeChatPanel listens for (see trySkillInChat in
+ *  components/skills/SkillDetail) — dispatched directly to keep the module
+ *  graph acyclic. */
 const trySkillInChat = (slug: string): void => {
     window.dispatchEvent(new CustomEvent('august:try-skill', { detail: { slug } }));
 };
@@ -21,8 +22,8 @@ const trySkillInChat = (slug: string): void => {
  * LearningQueuePanel (loop E /) — "the gate proposes, the inbox
  * disposes." Five lifecycle passes (cap displacement, graveyard revival,
  * zero-evidence demote, regime/recurrence re-scope, contradiction/belief
- * challenge) queue proposals; this is the ONLY surface that reads them.
- * Without it the queue is write-only and every proposal is silently lost.
+ * challenge) queue proposals; mounted as the top strip of the Strategy
+ * Studio. Without it the queue is write-only and every proposal is lost.
  *
  * Apply exists where a deterministic actuation path exists (displacement,
  * revival, demote). Re-scope and contradiction proposals are HUMAN EDIT
