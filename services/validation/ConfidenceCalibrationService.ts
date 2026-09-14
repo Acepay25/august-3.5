@@ -26,6 +26,7 @@ import {
     DECAY_FACTOR,
     MAX_TRADE_AGE_DAYS
 } from '../../constants/calibrationConstants';
+import { getEffectiveSessions } from '../infrastructure/SessionService';
 
 export type ConfidenceLevel = 'High' | 'Medium' | 'Low' | 'Avoid';
 
@@ -564,30 +565,21 @@ export const initializeGranularCalibration = (): GranularCalibration => ({
 });
 
 /**
- * Detect trading session based on UTC hour
- * - Asian: 00:00-08:00 UTC
- * - London: 08:00-13:00 UTC (before overlap)
- * - Overlap: 13:00-16:00 UTC (London/NY overlap - highest volume)
- * - New York: 16:00-21:00 UTC (after overlap)
- * - Asian: 21:00-24:00 UTC (late night = early Asian)
+ * Detect trading session — DST-aware, aligned with the SAME effective
+ * boundaries SessionService feeds the model (London opens 07 UTC in summer /
+ * 08 in winter, NY 13/14, overlap = NY open until London close). Previously
+ * a fixed UTC table that silently mismatched the packet's session labels
+ * for half the year. Buckets: london = open→NY open, overlap = NY open→
+ * London close, new_york = London close→NY close, asian = everything else.
  */
 export const detectTradingSession = (timestamp?: string): 'asian' | 'london' | 'new_york' | 'overlap' => {
     const date = timestamp ? new Date(timestamp) : new Date();
-    const utcHour = date.getUTCHours();
-
-    // Overlap period (London + NY both active) - highest volume
-    if (utcHour >= 13 && utcHour < 16) {
-        return 'overlap';
-    }
-    // London session (before overlap)
-    if (utcHour >= 8 && utcHour < 13) {
-        return 'london';
-    }
-    // New York session (after overlap)
-    if (utcHour >= 16 && utcHour < 21) {
-        return 'new_york';
-    }
-    // Asian session (night in US/Europe)
+    if (Number.isNaN(date.getTime())) return 'asian';
+    const hour = date.getUTCHours();
+    const s = getEffectiveSessions(date);
+    if (hour >= s.new_york.start && hour < s.london.end) return 'overlap';
+    if (hour >= s.london.start && hour < s.new_york.start) return 'london';
+    if (hour >= s.london.end && hour < s.new_york.end) return 'new_york';
     return 'asian';
 };
 
@@ -773,10 +765,10 @@ export const getSessionAccuracyComparison = (
 
     const sessionOrder = ['asian', 'london', 'overlap', 'new_york'];
     const sessionLabels: Record<string, string> = {
-        asian: ' Asian (00-08 UTC)',
-        london: ' London (08-13 UTC)',
-        overlap: ' Overlap (13-16 UTC)',
-        new_york: ' New York (16-21 UTC)'
+        asian: ' Asian',
+        london: ' London (pre-overlap)',
+        overlap: ' London/NY Overlap',
+        new_york: ' New York (post-London)'
     };
 
     // Safely access bySession with defensive checks for old/incomplete data

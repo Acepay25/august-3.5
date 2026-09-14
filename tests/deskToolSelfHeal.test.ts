@@ -63,13 +63,6 @@ const config: ProviderConfig = {
 
 const MALFORMED = '<tool_call>\n<function=get_all_timeframes>\n</function>\n</tool_call>';
 
-/** Drain an async generator into an array. */
-const collect = async (gen: AsyncGenerator<string>): Promise<string[]> => {
-    const out: string[] = [];
-    for await (const c of gen) out.push(c);
-    return out;
-};
-
 beforeEach(() => {
     clearDeskToolCache();
     streamMock.mockReset();
@@ -86,6 +79,10 @@ describe('malformedToolCallReason', () => {
         expect(malformedToolCallReason('<tool_call name="scan_setups">{"symbol":"ETHUSDT"}')).toMatch(/unclosed/);
     });
 
+    it('recognizes the <parameter=…> lines from the reported mark_trade_levels dump', () => {
+        expect(malformedToolCallReason('<parameter=symbol>\nETHUSDT\n</parameter>')).toMatch(/parameter/);
+    });
+
     it('leaves clean answers alone', () => {
         expect(malformedToolCallReason('All timeframes look ranging.')).toBeNull();
         expect(malformedToolCallReason('')).toBeNull();
@@ -97,6 +94,23 @@ describe('stripTextToolCalls (self-heal remnants)', () => {
         expect(stripTextToolCalls(`Let me check.${MALFORMED} Done`)).toBe('Let me check. Done');
         expect(stripTextToolCalls('<tool_call name="scan_setups">{"symbol":"ETH"}</tool_call>ok')).toBe('ok');
         expect(stripTextToolCalls('dangling </tool_call> tag')).toBe('dangling  tag');
+    });
+
+    it('removes the full reported dump shape, parameters included', () => {
+        const dump = [
+            '<tool_call>',
+            '<function=mark_trade_levels>',
+            '<parameter=symbol>',
+            'ETHUSDT',
+            '</parameter>',
+            '<parameter=entry>',
+            '2488',
+            '</parameter>',
+            '</function>',
+            '</tool_call>',
+        ].join('\n');
+        expect(stripTextToolCalls(`Setup first.${dump}`)).toBe('Setup first.');
+        expect(stripTextToolCalls(dump)).toBe('');
     });
 });
 
@@ -173,13 +187,62 @@ describe('streamChatWithDeskTools live-path reset', () => {
                 opts?.onStreamToolCalls?.([]);
             });
 
-        const deltas = await collect(streamChatWithDeskTools(config, [{ role: 'user', content: 'scan' }], {
-            onStreamReset: () => { order.push('reset'); },
-        }));
+        // Mirror the panel: deltas accumulate, a reset wipes the bubble.
+        let full = '';
+        for await (const delta of streamChatWithDeskTools(config, [{ role: 'user', content: 'scan' }], {
+            onStreamReset: () => { order.push('reset'); full = ''; },
+        })) {
+            full += delta;
+        }
 
-        // Both rounds streamed (the bubble repaints from the reset)…
-        expect(deltas.join('')).toContain('Clean answer.');
-        // …and the reset fired BEFORE the corrected round started.
-        expect(order).toEqual(['reset', 'round2-start']);
+        // …the reset fired BEFORE the corrected round started…
+        expect(order.indexOf('reset')).toBeLessThan(order.indexOf('round2-start'));
+        // …and the bubble holds exactly the clean answer: the mid-turn wipe
+        // plus the end-of-turn re-wipe leave no residue behind.
+        expect(full).toBe('Clean answer.');
+    });
+
+    it('repaints the bubble when every round is malformed (budget exhausted)', async () => {
+        const resets = vi.fn();
+        streamMock.mockImplementation(async function* (_cfg: unknown, _msgs: unknown, opts: { onStreamToolCalls?: (c: unknown[]) => void }) {
+            yield '<tool_call>\n<function=mark_trade_levels>\n<parameter=symbol>\nETHUSDT\n</parameter>\n</function>\n</tool_call>';
+            opts?.onStreamToolCalls?.([]);
+        });
+
+        // Mirror the panel: deltas accumulate, a reset wipes the bubble.
+        let full = '';
+        for await (const delta of streamChatWithDeskTools(config, [{ role: 'user', content: 'mark levels' }], {
+            onStreamReset: () => { resets(); full = ''; },
+        })) {
+            full += delta;
+        }
+
+        expect(resets).toHaveBeenCalled();
+        expect(full).not.toContain('<');
+        expect(full).toMatch(/wrong format/);
+    });
+
+    it('wipes painted text-protocol tags once a streamed round executes tools', async () => {
+        streamMock
+            .mockImplementationOnce(async function* (_cfg: unknown, _msgs: unknown, opts: { onStreamToolCalls?: (c: unknown[]) => void }) {
+                yield 'Checking…<tool_call name="bogus_tool">{}</tool_call>';
+                opts?.onStreamToolCalls?.([]);
+            })
+            .mockImplementationOnce(async function* (_cfg: unknown, _msgs: unknown, opts: { onStreamToolCalls?: (c: unknown[]) => void }) {
+                yield 'Answer from findings.';
+                opts?.onStreamToolCalls?.([]);
+            });
+
+        let full = '';
+        let resetCount = 0;
+        for await (const delta of streamChatWithDeskTools(config, [{ role: 'user', content: 'check' }], {
+            onStreamReset: () => { resetCount += 1; full = ''; },
+        })) {
+            full += delta;
+        }
+
+        expect(resetCount).toBeGreaterThanOrEqual(1);
+        expect(full).toContain('Answer from findings.');
+        expect(full).not.toContain('<tool_call');
     });
 });

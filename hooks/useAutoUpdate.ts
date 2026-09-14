@@ -17,6 +17,12 @@ interface UpdateStatus {
     progress: number;
     version: string | null;
     error: string | null;
+    /** Download telemetry from electron-updater (downloading phase). */
+    bytesPerSecond?: number;
+    transferred?: number;
+    total?: number;
+    /** GitHub release body (available/downloaded phases) — "What's new". */
+    releaseNotes?: string | null;
 }
 
 const IDLE_STATUS: UpdateStatus = {
@@ -85,6 +91,14 @@ export function useAutoUpdate() {
         await electronAPI.downloadUpdate();
     }, []);
 
+    /** Tell main the restart animation is done — quit & install now. Safe to
+     *  call repeatedly; main ignores it outside an install. */
+    const quitNow = useCallback(() => {
+        const electronAPI = (window as any).electronAPI;
+        if (!electronAPI) return;
+        electronAPI.quitNow?.();
+    }, []);
+
     return {
         isElectron,
         appVersion,
@@ -93,5 +107,6 @@ export function useAutoUpdate() {
         checkForUpdates,
         downloadUpdate,
         installUpdate,
+        quitNow,
     };
 }

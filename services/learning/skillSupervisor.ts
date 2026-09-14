@@ -61,6 +61,11 @@ export const setSessionModel = (config: ProviderConfig | null): void => {
 const resolveSupervisorConfig = async (username: string): Promise<ProviderConfig | null> =>
     sessionConfig ?? await resolveMemoryConfig(username);
 
+/** The chat model the CURRENT session answers with (null outside a chat).
+ *  Other learning-loop features (the chart-scan crafter) reuse it so the
+ *  model that sees your chart is the model that learns from it. */
+export const getSessionModel = (): ProviderConfig | null => sessionConfig;
+
 // ─── Verdict schema ─────────────────────────────────────────────────────────
 
 const SupervisorVerdictSchema = z.object({

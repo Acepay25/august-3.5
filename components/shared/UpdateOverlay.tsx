@@ -1,26 +1,83 @@
 import React from 'react';
-import { Download, CheckCircle, Loader2, Sparkles } from 'lucide-react';
+import { CheckCircle, Sparkles } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 /**
- * Full-screen overlay shown during the Electron auto-update flow.
+ * Full-screen overlay shown during the Electron auto-update flow, styled with
+ * the same vocabulary as the boot splash (index.css): the shimmering August
+ * wordmark, the animated candle row, the hairline progress track and the
+ * cycling mono status line. Brand gradient appears only on the wordmark.
  *
- * Only shows during active download/installation states:
- * - downloading: progress bar with percentage
- * - downloaded: ready to install (manual trigger)
- * - installing: animated installation screen
+ * Shown during active phases only:
+ * - downloading: determinate progress — the bar tracks the real percent
+ * - downloaded:  ready to install (manual trigger, pop-in check)
+ * - installing: "Restarting…" screen; when the animation has played it sends
+ *   update:quit-now so main runs quitAndInstall (main also has a timeout
+ *   fallback, so a stuck renderer never blocks the update)
  *
  * The `idle`, `checking`, `available`, and `error` states are handled
  * by `UpdateButton` in the header so users have a non-blocking entry point.
  *
  * In the browser (non-Electron) this renders nothing.
  */
-export const UpdateOverlay: React.FC = () => {
-    const { isElectron, appVersion, updateStatus, installUpdate } = useAutoUpdate();
+
+const prefersReducedMotion = (): boolean => {
+    try {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+        return false;
+    }
+};
+
+/** The splash's 7-bar candle row — pure decoration, layout is CSS. */
+const CandleRow: React.FC = () => (
+    <div className="splash-candles" aria-hidden="true">
+        <i /><i /><i /><i /><i /><i /><i />
+    </div>
+);
+
+/** GitHub release bodies are markdown; render them as plain, readable text
+ *  (no parser, no dangerouslySetInnerHTML — CSP and safety both prefer it). */
+const notesToPlainLines = (raw: string): string[] => raw
+    .replace(/```[\s\S]*?```/g, '')
+    .split(/\r?\n/)
+    .map(l => l
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/^\s*[-*]\s+/, '• ')
+        .replace(/\*\*|__|`/g, '')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .trimEnd())
+    .filter(l => l.trim().length > 0)
+    .slice(0, 24);
+
+const UpdateOverlay: React.FC = () => {
+    const { isElectron, updateStatus, installUpdate, quitNow } = useAutoUpdate();
+    const { status, progress, version, bytesPerSecond, transferred, total, releaseNotes } = updateStatus;
+
+    // ETA from electron-updater's live download telemetry.
+    const etaLine = React.useMemo(() => {
+        if (status !== 'downloading' || !total || !bytesPerSecond) return null;
+        const secs = Math.ceil((total - (transferred ?? 0)) / bytesPerSecond);
+        if (!Number.isFinite(secs) || secs <= 0) return null;
+        const mbps = bytesPerSecond / (1024 * 1024);
+        const speed = `${mbps.toFixed(1)} MB/s`;
+        const eta = secs >= 60 ? `~${Math.ceil(secs / 60)} min` : secs >= 10 ? `~${secs}s` : '<10s';
+        return `${speed} · ${eta} left`;
+    }, [status, total, transferred, bytesPerSecond]);
+
+    const notes = React.useMemo(() => (releaseNotes ? notesToPlainLines(releaseNotes) : []), [releaseNotes]);
+
+    // Restart screen: let the animation breathe, then tell main to quit.
+    // Reduced motion (or a hidden overlay) → ack almost immediately; main's
+    // own timeout covers the case where this component never mounts.
+    React.useEffect(() => {
+        if (!isElectron || status !== 'installing') return;
+        const holdMs = prefersReducedMotion() ? 300 : 1900;
+        const timer = window.setTimeout(() => quitNow(), holdMs);
+        return () => window.clearTimeout(timer);
+    }, [isElectron, status, quitNow]);
 
     if (!isElectron) return null;
-
-    const { status, progress, version } = updateStatus;
 
     // Only show overlay during active download/installation
     if (status !== 'downloading' && status !== 'downloaded' && status !== 'installing') {
@@ -35,81 +92,86 @@ export const UpdateOverlay: React.FC = () => {
             aria-live="assertive"
             aria-label="Application update in progress"
         >
-            <div className="w-full max-w-md mx-4 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-8 flex flex-col items-center text-center">
-                {status === 'downloading' && (
-                    <>
-                        <div className="relative w-16 h-16 mb-6">
-                            <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
-                            <div
-                                className="absolute inset-0 rounded-full border-4 border-t-cyan-500 border-r-cyan-500 border-b-transparent border-l-transparent animate-spin"
-                                style={{ animationDuration: '1.5s' }}
-                            />
-                            <Download className="absolute inset-0 m-auto w-6 h-6 text-cyan-400" />
-                        </div>
-                        <h2 className="text-lg font-semibold text-zinc-100 mb-1">
-                            Updating to v{version}
-                        </h2>
-                        <p className="text-sm text-zinc-500 mb-6">Downloading the latest version…</p>
+            <div className="relative w-full max-w-md mx-4 overflow-hidden border border-zinc-800 bg-zinc-900 shadow-2xl rounded-2xl p-8">
+                {/* the same soft glow the splash carries, tucked inside the card */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full"
+                    style={{ background: 'radial-gradient(closest-side, rgba(235, 83, 255, 0.07), transparent 70%)' }}
+                />
+                {/* key=phase re-mounts the content, so the fade-in plays on every transition */}
+                <div key={status} className="update-phase animate-fade-in">
+                    <span className="splash-wordmark mb-1 block">August Trading</span>
 
-                        <div className="w-full">
-                            <div className="w-full h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500 bg-[length:200%_100%] animate-shimmer transition-all duration-300 rounded-full"
-                                    style={{ width: `${progress}%` }}
-                                />
+                    {status === 'downloading' && (
+                        <>
+                            <CandleRow />
+                            <h2 className="mt-6 text-lg font-semibold text-zinc-100">
+                                Updating to v{version}
+                            </h2>
+                            <p className="mb-6 mt-1 text-sm text-zinc-500">Downloading the latest version…</p>
+                            <div className="w-full">
+                                <div className="update-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+                                    <div className="update-bar" style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }} />
+                                </div>
+                                <div className="mt-3 flex items-center justify-between">
+                                    <span className="text-xs text-zinc-500">Don't close the app</span>
+                                    <span className="font-mono text-sm font-semibold text-zinc-200">
+                                        {progress}%
+                                        {etaLine && <span className="ml-2 text-xs font-normal text-zinc-500">{etaLine}</span>}
+                                    </span>
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between mt-3">
-                                <span className="text-xs text-zinc-500">Don't close the app</span>
-                                <span className="text-sm font-mono font-semibold text-cyan-400">{progress}%</span>
-                            </div>
-                        </div>
-                    </>
-                )}
+                        </>
+                    )}
 
-                {status === 'downloaded' && (
-                    <>
-                        <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-6 animate-bounce-slow">
-                            <CheckCircle className="w-8 h-8 text-emerald-400" />
-                        </div>
-                        <h2 className="text-lg font-semibold text-zinc-100 mb-1">Update downloaded</h2>
-                        <p className="text-sm text-zinc-500 mb-6">
-                            v{version} is ready to install. The app will restart to complete the update.
-                        </p>
-                        <button
-                            onClick={installUpdate}
-                            className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/25 active:scale-95"
-                            aria-label={`Install update version ${version}`}
-                        >
-                            <Sparkles className="w-4 h-4" />
-                            Install &amp; Restart
-                        </button>
-                    </>
-                )}
-
-                {status === 'installing' && (
-                    <>
-                        <div className="relative w-20 h-20 mb-6">
-                            {/* Animated rings */}
-                            <div className="absolute inset-0 rounded-full border-2 border-cyan-500/30 animate-ping" style={{ animationDuration: '2s' }} />
-                            <div className="absolute inset-2 rounded-full border-2 border-blue-500/30 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
-                            <div className="absolute inset-4 rounded-full border-2 border-cyan-500/30 animate-ping" style={{ animationDuration: '2s', animationDelay: '1s' }} />
-                            {/* Center icon */}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <Loader2 className="w-8 h-8 animate-spin text-cyan-400" style={{ animationDuration: '1s' }} />
+                    {status === 'downloaded' && (
+                        <>
+                            <div className="update-check-pop my-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+                                <CheckCircle className="h-8 w-8 text-emerald-400" />
                             </div>
-                        </div>
-                        <h2 className="text-lg font-semibold text-zinc-100 mb-2">Installing update…</h2>
-                        <p className="text-sm text-zinc-500">
-                            August Trading will relaunch in a moment. Please don't close this window.
-                        </p>
-                        {/* Animated dots */}
-                        <div className="flex gap-1.5 mt-4">
-                            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </div>
-                    </>
-                )}
+                            <h2 className="text-lg font-semibold text-zinc-100">Update downloaded</h2>
+                            <p className="mb-6 mt-1 text-sm text-zinc-500">
+                                v{version} is ready. The app will restart to complete the update.
+                            </p>
+                            {notes.length > 0 && (
+                                <details className="update-notes mb-5 w-full text-left" data-testid="update-release-notes">
+                                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300">
+                                        What's new in v{version}
+                                    </summary>
+                                    <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-white/[0.06] bg-zinc-950/60 p-3 text-[11px] leading-5 text-zinc-400 custom-scrollbar">
+                                        {notes.map((line, i) => (
+                                            <p key={i} className={line.startsWith('•') ? 'pl-3' : 'font-semibold text-zinc-300'}>{line}</p>
+                                        ))}
+                                    </div>
+                                </details>
+                            )}
+                            <button
+                                onClick={installUpdate}
+                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-95"
+                                aria-label={`Install update version ${version}`}
+                            >
+                                <Sparkles className="h-4 w-4" />
+                                Install &amp; Restart
+                            </button>
+                        </>
+                    )}
+
+                    {status === 'installing' && (
+                        <>
+                            <CandleRow />
+                            <h2 className="mt-6 text-lg font-semibold text-zinc-100">
+                                Restarting with v{version}
+                            </h2>
+                            <div className="update-status mt-4">
+                                <span>Installing the update…</span>
+                                <span>Preparing your session…</span>
+                                <span>Relaunching August Trading…</span>
+                            </div>
+                            <p className="mt-4 text-xs text-zinc-600">This takes a moment — see you right after.</p>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );

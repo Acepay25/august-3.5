@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     checkForUpdates: () => ipcRenderer.invoke('update:check'),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),
     installUpdate: () => ipcRenderer.invoke('update:install'),
+    // Fired by the restart-animation overlay once it has played: main then
+    // runs quitAndInstall (with its own fallback timeout).
+    quitNow: () => ipcRenderer.send('update:quit-now'),
     getUpdateStatus: () => ipcRenderer.invoke('update:get-status'),
 
     // Secret encryption (OS keychain via safeStorage) — used by

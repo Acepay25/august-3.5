@@ -164,11 +164,12 @@ const TRADE_TOOLS = [
     'get_price_snapshot', 'get_order_book', 'get_derivatives',
     'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',
     'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
+    'project_future_price',
     // Market-wide discovery: grade the whole top-volume universe at once.
     'run_screener',
     // Growth set: the model edits its own memory, skills and tools from here.
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill',
-    'amend_memory', 'forge_tool',
+    'amend_memory', 'forge_tool', 'scan_chart_skills',
     // Chart-action set: the model draws on the live chart (levels, lines).
     'draw_on_chart', 'mark_trade_levels', 'clear_chart_drawings', 'present_trade',
     // Watch/schedule harness: real-time price triggers + time wake-ups.
@@ -178,7 +179,12 @@ const TRADE_TOOLS = [
     'remember', 'read_memory', 'forget',
 ];
 
-const QUICK_PROMPTS = ['Read this chart', 'Key levels?', 'What is the bias?', 'Order-flow pressure?'];
+const QUICK_PROMPTS = ['Read this chart', 'Key levels?', 'What is the bias?', 'Order-flow pressure?', 'Scan chart → skills'];
+
+/** Composer chip + the empty-state "Scan chart → skills" prompt: the model
+ *  reads the WHOLE tape via the scan_chart_skills desk tool and drafts skills
+ *  that wait for approval in the Inbox. */
+const SCAN_SKILLS_PROMPT = 'Scan the full candle history of this chart with scan_chart_skills: study how the price actually moved (regimes, swings, gaps) and which entries have historically worked, then draft your best IF/THEN skill candidates from what the tape proves. Tell me what you found and what is waiting in the Inbox.';
 
 const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string }[] = [
     { id: 'off', label: 'Off' },
@@ -503,6 +509,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // The supervisor's queue-event listeners (drafts/tools/amendments landing
     // anywhere schedule a debounced pass) — wired once on dock mount.
     useEffect(() => { ensureSupervisorListeners(); }, []);
+    // Screener → learn-this-coin: the screener's per-row button dispatches
+    // `august:prefill-chat` with the scan-chart-skills token after loading
+    // the coin — prefill the composer with the scan prompt (send stays manual).
+    useEffect(() => {
+        const onPrefill = (ev: Event): void => {
+            const token = (ev as CustomEvent<{ token?: string }>).detail?.token;
+            if (token === 'scan-chart-skills') setDraft(SCAN_SKILLS_PROMPT);
+        };
+        window.addEventListener('august:prefill-chat', onPrefill);
+        return () => window.removeEventListener('august:prefill-chat', onPrefill);
+    }, []);
     /** Composer model change: keep the app-wide default AND bind it to the
      *  active session so coming back to this chat reselects it. */
     const changeSoloModel = useCallback((value: string): void => {
@@ -1600,6 +1617,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 </>
                             )}
                         </div>
+                        {/* Always-available growth chip: study the whole tape
+                            and draft skills (they wait for approval in the
+                            Inbox). Kept out of the + menu so the action is
+                            discoverable, like Full analysis. */}
+                        <button type="button" onClick={() => void send(SCAN_SKILLS_PROMPT)} disabled={!ready || busy}
+                            title="Study every candle in this chart and draft IF/THEN skills from what actually worked — drafts wait for your approval in the Inbox"
+                            className="rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
+                        Scan → skills
+                        </button>
                         {onRunAnalysis && draft.trim() && !isPanel && (
                             <button type="button" onClick={() => void runFullAnalysis()} disabled={busy}
                                 title="Run the full ensemble analysis (hybrid data + debate + verdict) on this request"

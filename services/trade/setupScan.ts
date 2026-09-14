@@ -307,3 +307,145 @@ export const scanSetups = (candles: ScanCandle[]): LiveSetup[] => {
 
     return out.sort((a, b) => a.barsAgo - b.barsAgo);
 };
+
+// ─── Historical scan ─────────────────────────────────────────────────────────
+
+/** One occurrence of a detector firing in the past, with how price behaved
+ *  after its trigger close: 1.5×ATR first-touch target vs 1×ATR stop within
+ *  the horizon. `mfe`/`mae` are signed fractions of the entry price. */
+export interface HistoricalSetupHit {
+    /** Index of the trigger candle inside the scanned array. */
+    index: number;
+    time: number;
+    entry: number;
+    outcome: 'win' | 'loss' | 'open';
+    /** Best excursion in the trade's direction, as a fraction of entry. */
+    mfe: number;
+    /** Worst excursion against it (≤ 0), as a fraction of entry. */
+    mae: number;
+}
+
+/** Aggregated behavior of one detector (per side) across the whole history —
+ *  "how often does this fire here, and does it actually work?". */
+export interface HistoricalSetupStat {
+    id: string;
+    title: string;
+    side: 'long' | 'short' | 'watch';
+    keywords: string[];
+    hits: number;
+    wins: number;
+    losses: number;
+    open: number;
+    /** wins/(wins+losses); null when nothing resolved inside the horizon. */
+    winRate: number | null;
+    avgMfe: number;
+    avgMae: number;
+    /** Most recent hits (newest first), capped for prompt economy. */
+    examples: HistoricalSetupHit[];
+}
+
+export interface HistoryScanOptions {
+    /** Bars walked forward from each trigger before calling it 'open'. */
+    horizonBars?: number;
+    /** Trailing window handed to the live detectors per step (bounds cost). */
+    windowBars?: number;
+}
+
+const HISTORY_EXAMPLE_CAP = 8;
+
+export const scanHistorySetups = (
+    candles: ScanCandle[],
+    opts: HistoryScanOptions = {},
+): HistoricalSetupStat[] => {
+    const horizon = opts.horizonBars ?? 12;
+    const windowBars = Math.max(30, opts.windowBars ?? 120);
+    const n = candles.length;
+    if (n < 40) return [];
+
+    const ranges = candles.map(c => range(c));
+    const atrAt = (idx: number): number => {
+        const from = Math.max(0, idx - 13);
+        let sum = 0;
+        for (let j = from; j <= idx; j += 1) sum += ranges[j];
+        return sum / (idx - from + 1);
+    };
+
+    interface Bucket {
+        id: string; title: string; side: LiveSetup['side']; keywords: string[];
+        hits: HistoricalSetupHit[];
+        wins: number; losses: number; open: number;
+        mfeSum: number; maeSum: number;
+    }
+    const stats = new Map<string, Bucket>();
+    const seen = new Set<string>();
+
+    for (let e = 25; e < n; e += 1) {
+        const from = Math.max(0, e - windowBars + 1);
+        const window = candles.slice(from, e + 1);
+        const setups = scanSetups(window);
+        if (setups.length === 0) continue;
+        for (const s of setups) {
+            const triggerIdx = from + (window.length - 1 - s.barsAgo);
+            const key = `${s.id}@${triggerIdx}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const entry = candles[triggerIdx].close;
+            const atr = atrAt(triggerIdx);
+            const target = atr * 1.5;
+            const stop = atr;
+            let outcome: HistoricalSetupHit['outcome'] = 'open';
+            let mfe = 0;
+            let mae = 0;
+            if (s.side !== 'watch' && entry > 0 && atr > 0) {
+                for (let j = triggerIdx + 1; j <= Math.min(n - 1, triggerIdx + horizon); j += 1) {
+                    const c = candles[j];
+                    const favourable = s.side === 'long' ? c.high - entry : entry - c.low;
+                    const adverse = s.side === 'long' ? c.low - entry : entry - c.high;
+                    mfe = Math.max(mfe, favourable);
+                    mae = Math.min(mae, adverse);
+                    // A bar spanning both levels loses (no favourable fill).
+                    if (adverse <= -stop) { outcome = 'loss'; break; }
+                    if (favourable >= target) { outcome = 'win'; break; }
+                }
+            }
+            const hit: HistoricalSetupHit = {
+                index: triggerIdx,
+                time: candles[triggerIdx].time,
+                entry,
+                outcome,
+                mfe: mfe / entry,
+                mae: mae / entry,
+            };
+            const statKey = `${s.id}::${s.side}`;
+            let bucket = stats.get(statKey);
+            if (!bucket) {
+                bucket = { id: s.id, title: s.title, side: s.side, keywords: s.keywords, hits: [], wins: 0, losses: 0, open: 0, mfeSum: 0, maeSum: 0 };
+                stats.set(statKey, bucket);
+            }
+            bucket.hits.push(hit);
+            if (outcome === 'win') bucket.wins += 1;
+            else if (outcome === 'loss') bucket.losses += 1;
+            else bucket.open += 1;
+            bucket.mfeSum += hit.mfe;
+            bucket.maeSum += hit.mae;
+        }
+    }
+
+    return [...stats.values()]
+        .sort((a, b) => b.hits.length - a.hits.length)
+        .map(b => ({
+            id: b.id,
+            title: b.title,
+            side: b.side,
+            keywords: b.keywords,
+            hits: b.hits.length,
+            wins: b.wins,
+            losses: b.losses,
+            open: b.open,
+            winRate: b.wins + b.losses > 0 ? b.wins / (b.wins + b.losses) : null,
+            avgMfe: b.hits.length > 0 ? b.mfeSum / b.hits.length : 0,
+            avgMae: b.hits.length > 0 ? b.maeSum / b.hits.length : 0,
+            examples: [...b.hits].reverse().slice(0, HISTORY_EXAMPLE_CAP),
+        }));
+};

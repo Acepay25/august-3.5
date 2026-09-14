@@ -187,6 +187,13 @@ export interface SkillMeta {
     lastEvidenceAt?: string;
     /** ISO timestamp of the last content write — freshness signal for readers. */
     modifiedAt?: string;
+    /** Timeframe the skill was proven/drafted on (e.g. '15m', '4h'). Optional
+     *  so legacy and chat-authored skills stay valid; the chart scan stamps it
+     *  so a reader knows which tape a pattern was earned on. */
+    timeframe?: string;
+    /** Which learner minted this skill (provenance line on the card): 'scan'
+     *  (chart-history scan), 'post-mortem', 'book', 'chat', etc. */
+    source?: string;
     /** Invocation control (Agent Skills frontmatter port): which debate
      *  audience may load this skill. Default 'all'. */
     audience?: 'analyst' | 'moderator' | 'all';
@@ -358,6 +365,8 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         status,
         kind,
         coin: pick('coin'),
+        timeframe: pick('timeframe'),
+        source: pick('source'),
         direction: pick('direction'),
         family: pick('family'),
         regime: pick('regime'),
@@ -560,6 +569,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         `status: ${meta.status}`,
         `kind: ${meta.kind}`,
         ...(meta.coin ? [`coin: ${meta.coin}`] : []),
+        ...(meta.timeframe ? [`timeframe: ${meta.timeframe}`] : []),
+        ...(meta.source ? [`source: ${meta.source}`] : []),
         ...(meta.direction ? [`direction: ${meta.direction}`] : []),
         ...(meta.family ? [`family: ${meta.family}`] : []),
         ...(meta.regime ? [`regime: ${meta.regime}`] : []),
@@ -1742,6 +1753,8 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         kind: crafted.kind,
         // The supervisor's activation-key description, when it crafted one.
         ...(crafted.description ? { description: crafted.description.slice(0, 300) } : {}),
+        ...(crafted.timeframe ? { timeframe: crafted.timeframe } : {}),
+        ...(crafted.source ? { source: crafted.source } : {}),
         coin,
         wins: 0,
         losses: 0,

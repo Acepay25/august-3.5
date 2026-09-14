@@ -4,6 +4,7 @@ import LearningQueuePanel from './LearningQueuePanel';
 import { setSkillStatus, parseSkillMarkdown } from '../../services/learning/SkillMemoryService';
 import { getMemoryFiles, subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
+import type { SkillProofResult } from '../../services/learning/skillProof';
 import { evaluateSkill, SkillEvalResult, recordEvalVerdict } from '../../services/learning/SkillEvalService';
 import { importSkillFiles, readSkillFiles } from '../../services/learning/SkillImportService';
 import { useToastActions } from '../shared/Toast';
@@ -13,7 +14,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import MarkdownContent from '../shared/MarkdownContent';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ChevronLeftIcon } from '../shared/Icons';
-import { PinIcon, MessageSquarePlus, FlaskConical } from 'lucide-react';
+import { PinIcon, MessageSquarePlus, FlaskConical, History } from 'lucide-react';
 
 /**
  * "Try in chat" — drops the skill's /slug into the composer.
@@ -183,6 +184,36 @@ const SkillDetail: React.FC<{
     // Manual A/B eval state — user-invoked, cost-capped by SKILL_EVAL_MAX_TRADES.
     const [evalState, setEvalState] = useState<'idle' | 'running' | 'done'>('idle');
     const [evalResult, setEvalResult] = useState<SkillEvalResult | null>(null);
+    // On-demand history proof — pure code + klines, no provider call.
+    const [proofState, setProofState] = useState<'idle' | 'running' | 'done'>('idle');
+    const [proofResult, setProofResult] = useState<SkillProofResult | null>(null);
+
+    const runProof = async (): Promise<void> => {
+        if (!meta || proofState === 'running') return;
+        if (!meta.coin) {
+            setProofResult({ status: 'no-data', message: 'This skill is not scoped to a coin, so there is no chart to prove it on.' });
+            setProofState('done');
+            return;
+        }
+        setProofState('running');
+        setProofResult(null);
+        try {
+            const { proofSkillOnHistory, skillProofText } = await import('../../services/learning/skillProof');
+            const res = await proofSkillOnHistory({
+                coin: meta.coin,
+                timeframe: meta.timeframe || '1h',
+                text: skillProofText({
+                    title: skill.name, description: meta.description,
+                    family: meta.family, ifCondition: meta.ifCondition, thenAction: meta.thenAction,
+                }),
+            });
+            setProofResult(res);
+            setProofState('done');
+        } catch (err) {
+            setProofResult({ status: 'no-data', message: err instanceof Error ? err.message : String(err) });
+            setProofState('done');
+        }
+    };
 
     const runManualEval = async (): Promise<void> => {
         if (!memoryConfig || evalState === 'running') return;
@@ -288,6 +319,47 @@ const SkillDetail: React.FC<{
                     )}
                 </div>
             )}
+
+            {/* History proof — replays the coin's full tape and reports what
+                this skill's matching detector WOULD have done. Pure code, no
+                provider cost, safe to run any time. */}
+            <div className="mt-4 shrink-0 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => { void runProof(); }}
+                        disabled={proofState === 'running'}
+                        data-testid="prove-skill-history"
+                        title="Replay the coin's candle history and report this behavior's first-touch win-rate"
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        <History className="h-3.5 w-3.5" />
+                        {proofState === 'running' ? 'Checking history…' : 'Prove on history'}
+                    </button>
+                    {proofState === 'done' && proofResult?.status === 'ok' && (
+                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide ${
+                            proofResult.proof.winRate !== null && proofResult.proof.winRate >= 0.55 ? 'bg-emerald-950/60 text-emerald-400'
+                                : proofResult.proof.winRate !== null && proofResult.proof.winRate < 0.45 ? 'bg-rose-950/50 text-rose-400/90'
+                                    : 'bg-amber-950/60 text-amber-400'
+                        }`} data-testid="skill-proof-verdict">
+                            {proofResult.proof.winRate === null ? 'NO OUTCOMES' : `${Math.round(proofResult.proof.winRate * 100)}%`}
+                        </span>
+                    )}
+                    <span className="ml-auto text-[10px] text-zinc-600">
+                        {proofState === 'done' && proofResult?.status === 'ok'
+                            ? `${proofResult.proof.title} · ${proofResult.proof.wins}W/${proofResult.proof.losses}L over ${proofResult.proof.hits} hits · ${proofResult.proof.symbol} ${proofResult.proof.timeframe}`
+                            : 'Free · replays real candles, no AI call'}
+                    </span>
+                </div>
+                {proofState === 'done' && proofResult && proofResult.status !== 'ok' && (
+                    <p className="mt-2 text-[11px] text-zinc-500">{proofResult.message}</p>
+                )}
+                {proofState === 'done' && proofResult?.status === 'ok' && (
+                    <p className="mt-2 text-[11px] text-zinc-500">
+                        Average move when it worked: +{(proofResult.proof.avgMfe * 100).toFixed(1)}% · against you: {(proofResult.proof.avgMae * 100).toFixed(1)}%. Historical readout — the skill's live W/L ladder still governs promotion.
+                    </p>
+                )}
+            </div>
 
             {/* Manual A/B eval — with-skill vs without-skill on matched trades.
                 Verdict feeds the same promotion/demotion ledger as the

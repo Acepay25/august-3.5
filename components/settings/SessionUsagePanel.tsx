@@ -174,6 +174,30 @@ const HarnessControls: React.FC = () => {
                     <option value="0.5">50%</option>
                 </select>
             </label>
+            <label className="block text-[11px] text-zinc-400">
+                Default thinking effort
+                <select
+                    value={settings.responseEffort}
+                    onChange={e => persist({ responseEffort: e.target.value === 'fast' ? 'fast' : 'quality' })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                >
+                    <option value="quality">Quality — built-in reasoning budget</option>
+                    <option value="fast">Fast — one step lighter on every call</option>
+                </select>
+            </label>
+            <label className="block text-[11px] text-zinc-400">
+                Skill library cap
+                <input
+                    type="number"
+                    min={5}
+                    max={200}
+                    step={1}
+                    value={settings.skillLibraryCap ?? 40}
+                    onChange={e => persist({ skillLibraryCap: Math.min(200, Math.max(5, Math.round(Number(e.target.value) || 40))) })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                />
+                <span className="mt-1 block text-[10px] text-zinc-600">How many confirmed skills the worth gate holds before it turns comparative (displacement/revival). Default 40.</span>
+            </label>
             {/* Session-guard limits: preset + overrides.
                 Takes effect immediately here; the in-the-moment cap change
                 rule (typed confirm) applies to the banner, not this panel. */}

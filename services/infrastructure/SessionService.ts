@@ -88,10 +88,12 @@ const isEasternDaylightTime = (now: Date): boolean => {
 };
 
 /**
- * Effective session boundaries for RIGHT NOW: London and New York shift
- * +1h in their respective winter (GMT/EST); Asia never moves.
+ * Effective session boundaries for a given moment (default: now): London
+ * and New York shift +1h in their respective winter (GMT/EST); Asia never
+ * moves. Exported so other session bucketers (confidence calibration) stay
+ * aligned with these same DST-aware edges instead of a fixed UTC table.
  */
-const getEffectiveSessions = (now: Date = new Date()): typeof SESSIONS => {
+export const getEffectiveSessions = (now: Date = new Date()): typeof SESSIONS => {
     const ldnShift = isBritishSummerTime(now) ? 0 : 1;
     const nyShift = isEasternDaylightTime(now) ? 0 : 1;
     return {
