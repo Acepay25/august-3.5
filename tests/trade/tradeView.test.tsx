@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { Mock } from 'vitest';
 
 // TradeView render smoke: the Minara arrangement (stats strip, local canvas
@@ -119,6 +119,12 @@ describe('TradeView', () => {
         expect(screen.getByText('Order Book')).toBeTruthy();
         expect(screen.getByTestId('trade-chat-panel')).toBeTruthy();
         expect(screen.getByText('What is the bias?')).toBeTruthy();
+        // Prototype header: HERO price (mark) with its 24h caption, and the
+        // funding metric carries a depleting-window progress bar.
+        const hero = await screen.findByTestId('hero-price');
+        await waitFor(() => expect(hero.textContent).toContain('100.50'));
+        expect(screen.getByText('24h · MARK')).toBeTruthy();
+        expect(await screen.findByTestId('funding-bar')).toBeTruthy();
     });
 
     it('timeframe buttons re-point the chart row', async () => {

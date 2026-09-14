@@ -1,0 +1,167 @@
+/**
+ * KeyLevelsCard — the prototype's Key Levels table, living inside a Chart AI
+ * message. When the model ends an answer with a `key-levels` block, the dock
+ * renders this card under it: the levels as a table (Level · Price · Dist ·
+ * Context) with a "chart" toggle, wired to the canvas exactly like the
+ * prototype's table↔chart pair —
+ *   · master switch ON  → every level draws as a dim dashed line + gutter tag
+ *   · row click         → PIN the line (stays drawn with the switch off)
+ *   · row hover         → full-strength preview of that line
+ *   · the "last" divider→ mark price sits between the levels it is above/below
+ * The resolved visibility is pushed UP as MessageLevelLines (TradeView holds
+ * it, TradingChart paints it), so the chart stays the single renderer and the
+ * card owns the whole interaction model — mirroring the prototype's
+ * "LEVELS array is the single source of truth for table + chart" split.
+ *
+ * The card belongs to the coin it was drawn for: switching instruments
+ * resets it (and TradeView blanks the lines with the strip).
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { deriveChartLines, formatDist, type MessageLevelLines, type ModelKeyLevel } from '../../services/trade/keyLevels';
+
+interface KeyLevelsCardProps {
+    levels: ModelKeyLevel[];
+    /** The instrument on the chart right now (the lines are stamped with it). */
+    symbol: string;
+    /** Freshest mark the canvas is showing (Dist column + the "last" divider). */
+    getMark?: () => number | null;
+    /** Push the resolved line set to the chart; null blanks it. */
+    onChatLevels?: (payload: MessageLevelLines | null) => void;
+}
+
+const fmtPx = (p: number): string => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: p >= 1000 ? 2 : 4 });
+
+/** Text tone per kind (matches the line colors on the canvas). */
+const KIND_TEXT: Record<ModelKeyLevel['kind'], string> = {
+    resistance: 'text-rose-400',
+    support: 'text-emerald-400',
+    vwap: 'text-violet-400',
+    level: 'text-amber-300',
+};
+const KIND_BORDER: Record<ModelKeyLevel['kind'], string> = {
+    resistance: 'border-l-rose-500/70',
+    support: 'border-l-emerald-500/70',
+    vwap: 'border-l-violet-400/70',
+    level: 'border-l-amber-400/70',
+};
+
+const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, getMark, onChatLevels }) => {
+    const [allOn, setAllOn] = useState(false);
+    const [pinned, setPinned] = useState<ReadonlySet<string>>(() => new Set());
+    const [hoverId, setHoverId] = useState<string | null>(null);
+
+    const lines = deriveChartLines(levels, { allOn, pinned, hoverId });
+    const drawing = lines.some(l => l.state !== 'hidden');
+
+    // Push the resolved set up whenever it CHANGES — a card never blanks the
+    // layer on mount (an old card settling must not erase a live card's
+    // lines; the most-recent card to draw owns the layer). Null lands only
+    // when this card actively clears or unmounts while it was drawing.
+    const pushRef = useRef(onChatLevels);
+    pushRef.current = onChatLevels;
+    const pushedRef = useRef(false);
+    const signature = JSON.stringify([symbol, drawing ? lines : null]);
+    useEffect(() => {
+        if (drawing) {
+            pushRef.current?.({ symbol, lines });
+            pushedRef.current = true;
+        } else if (pushedRef.current) {
+            pushRef.current?.(null);
+            pushedRef.current = false;
+        }
+    }, [signature]);
+    useEffect(() => () => { if (pushedRef.current) pushRef.current?.(null); }, []);
+
+    // Coin switch: the levels belonged to the PREVIOUS instrument — drop the
+    // user's draw state instead of silently repainting it on a new coin.
+    const prevSymbolRef = useRef(symbol);
+    useEffect(() => {
+        if (prevSymbolRef.current === symbol) return;
+        prevSymbolRef.current = symbol;
+        setAllOn(false);
+        setPinned(new Set());
+        setHoverId(null);
+    }, [symbol]);
+
+    const mark = getMark?.() ?? null;
+    // The prototype's "last" divider: after the levels above the mark.
+    const splitAt = useMemo(() => {
+        if (mark === null) return -1;
+        const i = levels.findIndex(l => l.price <= mark);
+        return i === -1 ? levels.length : i;
+    }, [levels, mark]);
+
+    const togglePin = useCallback((id: string): void => {
+        setPinned(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    }, []);
+
+    const drawnCount = levels.length - lines.filter(l => l.state === 'hidden').length;
+
+    return (
+        <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-zinc-800/70" data-testid="key-levels-card"
+            onMouseLeave={() => setHoverId(null)}>
+            <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.09em] text-zinc-400">
+                    Key Levels <span className="font-mono text-zinc-500 normal-case tracking-normal">({levels.length})</span>
+                </span>
+                <label
+                    className="flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
+                    title={allOn ? 'Hide the other levels — pinned lines stay' : 'Draw every level on the chart'}
+                >
+                    <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={allOn}
+                        onChange={ev => setAllOn(ev.target.checked)}
+                        aria-label="Draw all key levels on the chart"
+                        data-testid="key-levels-chart-toggle"
+                    />
+                    <span className={`relative inline-block h-3.5 w-6 rounded-full transition-colors ${allOn ? 'bg-emerald-500/40' : 'bg-zinc-700'}`} aria-hidden="true">
+                        <span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full transition-all ${allOn ? 'translate-x-2.5 bg-emerald-400' : 'bg-zinc-500'}`} />
+                    </span>
+                    chart
+                </label>
+            </div>
+            <div className="grid grid-cols-[42px_80px_52px_1fr] gap-x-2 border-y border-white/[0.06] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-zinc-600">
+                <span>Level</span><span>Price</span><span>Dist</span><span>Context</span>
+            </div>
+            <div className="py-0.5">
+                {levels.map((l, i) => (
+                    <React.Fragment key={l.id}>
+                        {i === splitAt && (
+                            <div className="my-0.5 flex items-center justify-center gap-2 border-y border-dashed border-emerald-500/30 bg-emerald-500/[0.06] py-1 text-[11px] text-emerald-400" data-testid="key-levels-last">
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
+                                last <span className="font-mono font-bold tabular-nums">{fmtPx(mark!)}</span>
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => togglePin(l.id)}
+                            onMouseEnter={() => setHoverId(l.id)}
+                            data-id={l.id}
+                            aria-pressed={pinned.has(l.id)}
+                            title={pinned.has(l.id) ? 'Unpin this level' : 'Pin this level — stays drawn with the switch off'}
+                            className={`grid w-full grid-cols-[42px_80px_52px_1fr] items-center gap-x-2 border-l-[3px] px-3 py-1.5 text-left transition-colors hover:bg-white/[0.04] ${KIND_BORDER[l.kind]} ${pinned.has(l.id) ? 'bg-white/[0.05]' : ''}`}
+                        >
+                            <span className={`text-[11.5px] font-bold ${KIND_TEXT[l.kind]}`}>{l.label}{pinned.has(l.id) && <span className="ml-0.5 text-cyan-400" aria-hidden="true">⌖</span>}</span>
+                            <span className="font-mono text-[11.5px] tabular-nums text-zinc-200">{fmtPx(l.price)}</span>
+                            <span className={`font-mono text-[10.5px] tabular-nums ${KIND_TEXT[l.kind]}`}>{formatDist(l.price, mark)}</span>
+                            <span className="line-clamp-2 text-[11px] leading-4 text-zinc-400">{l.context}</span>
+                        </button>
+                    </React.Fragment>
+                ))}
+            </div>
+            <div className="border-t border-white/[0.06] px-3 py-1.5 text-[10px] text-zinc-600">
+                hover = preview on chart · click = pin / unpin
+                {drawing && <span className="ml-2 text-emerald-400">· {drawnCount} drawn</span>}
+            </div>
+        </div>
+    );
+};
+
+export default React.memo(KeyLevelsCard);

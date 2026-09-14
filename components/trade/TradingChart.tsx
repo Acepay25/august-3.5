@@ -42,6 +42,7 @@ import {
     type ChartDrawing, type DrawKind, type DrawPoint, type DrawTool, DRAW_COLORS,
 } from '../../services/trade/chartDrawings';
 import type { LiveKline } from '../../services/trade/futuresStreams';
+import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { getActiveUsername } from '../../utils/activeUser';
 import { TradeAnalysis } from '../../types';
 import { ChartToolRail, CHART_RAIL_WIDTH } from './ChartToolRail';
@@ -56,7 +57,10 @@ export const DEFAULT_CHART_INTERVALS: readonly ChartInterval[] = ['1m', '5m', '1
 
 /** KlineService/Binance interval strings for each supported timeframe. */
 const KLINE_OF: Partial<Record<ChartInterval, string>> = { '1D': '1d', '3D': '3d', '1W': '1w' };
-const toKlineInterval = (interval: ChartInterval): string => KLINE_OF[interval] ?? interval;
+/** Chart timeframe → Binance kline interval. Exported: the TradeView sparkline
+ *  fetches the SAME series the chart shows (never lowercase() — '1M' is the
+ *  monthly, and lowercasing it would silently request 1-minute bars). */
+export const toKlineInterval = (interval: ChartInterval): string => KLINE_OF[interval] ?? interval;
 
 /** Bar length in SECONDS for each timeframe — the drawings' data-space ruler. */
 const INTERVAL_SECONDS: Record<ChartInterval, number> = {
@@ -162,6 +166,14 @@ interface TradingChartProps {
     /** Erasing a MODEL-drawn shape routes removal to the parent's model store
      *  (the eraser deletes whichever kind it lands on). */
     onRemoveModelShape?: (id: string) => void;
+    /** Key levels the Chart AI dock is currently SHOWING on the chart (from a
+     *  message's levels card + its chart toggle). A transient render layer,
+     *  NOT a persisted drawing: the dock owns the show/pin/hover state and
+     *  pushes the resolved line set here; the chart just paints it (dashed
+     *  line + right-gutter tag, dim by default, full when pinned/hovered).
+     *  Stamped with the symbol it was drawn for, so a BTC card never paints
+     *  on an ETH chart. */
+    chatLevels?: MessageLevelLines | null;
 }
 
 const sma = (closes: number[], period: number): (number | null)[] => closes.map((_, i) => {
@@ -181,7 +193,7 @@ const distToSegment = (px: number, py: number, ax: number, ay: number, bx: numbe
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 };
 
-const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, markPrice, chartHandle, onDrawingsChange, modelDrawings, onRemoveModelShape }) => {
+const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onIntervalChange, sessionId, verdict, showSma = false, live = false, liveKline, lastPrice, markPrice, chartHandle, onDrawingsChange, modelDrawings, onRemoveModelShape, chatLevels }) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -189,8 +201,14 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     const smaRef = useRef<ISeriesApi<'Line'> | null>(null);
     const levelLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
     const markLineRef = useRef<IPriceLine | null>(null);
+    /** Key-level lines the DOCK pushed (message card + chart toggle) — id →
+     *  price line, diffed on every push. Transient view state, never saved. */
+    const chatLevelLinesRef = useRef<Map<string, IPriceLine>>(new Map());
     const [status, setStatus] = useState<'loading' | 'live' | 'unavailable'>('loading');
     const [levels, setLevels] = useState<ChartLevel[]>([]);
+    /** The "ƒ Indicators" toolbar toggle (the prototype's Add-studies button):
+     *  ORs with the showSma prop so callers can force it on programmatically. */
+    const [indicatorsOn, setIndicatorsOn] = useState(false);
 
     // ─── Drawings state ─────────────────────────────────────────────────────
     const overlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -314,6 +332,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             smaRef.current = null;
             levelLinesRef.current = [];
             markLineRef.current = null;
+            // The chat-level lines died with the chart — forget them so the
+            // next mount's diff recreates instead of applyOptions-ing ghosts.
+            chatLevelLinesRef.current = new Map();
         };
     }, []);
 
@@ -456,7 +477,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     useEffect(() => {
         const chart = chartRef.current;
         if (!chart) return;
-        if (!showSma) {
+        if (!showSma && !indicatorsOn) {
             if (smaRef.current) { chart.removeSeries(smaRef.current); smaRef.current = null; }
             return;
         }
@@ -466,7 +487,49 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             const values = sma(candles.map(c => c.close), 20);
             smaRef.current.setData(candles.map((c, i) => (values[i] === null ? null : { time: c.time as UTCTimestamp, value: values[i] as number })).filter(Boolean) as { time: UTCTimestamp; value: number }[]);
         }
-    }, [showSma, status]);
+    }, [showSma, indicatorsOn, status]);
+
+    // ─── Chat key-level lines (the message card's chart toggle) ────────────
+    // The dock owns the whole interaction model (master show-all switch,
+    // per-row pins, hover previews) and pushes the RESOLVED line set here.
+    // This effect diffs it against the live lines: ids that vanished (or went
+    // hidden / another coin's payload) come off; new ones are created; the
+    // rest get applyOptions — dim dashed while merely "shown", full color for
+    // pinned, solid 2px while hovered ("preview"), exactly the prototype's
+    // opacity semantics (50% default, 100% on .pin/.on).
+    useEffect(() => {
+        const cs = candlesRef.current;
+        const lines = (chatLevels && chatLevels.symbol === symbol ? chatLevels.lines : [])
+            .filter(l => l.state !== 'hidden' && Number.isFinite(l.price) && l.price > 0);
+        const wanted = new Map(lines.map(l => [l.id, l] as const));
+        for (const [id, line] of [...chatLevelLinesRef.current]) {
+            if (!wanted.has(id)) {
+                try { cs?.removePriceLine?.(line); } catch { /* already gone */ }
+                chatLevelLinesRef.current.delete(id);
+            }
+        }
+        if (!cs) return;
+        for (const l of wanted.values()) {
+            const bright = l.state === 'pinned' || l.state === 'preview';
+            const opts = {
+                // 8-digit hex alpha dims a merely-SHOWN line; pinned/preview
+                // print at full strength so the table↔chart link is legible.
+                price: l.price,
+                color: bright ? l.color : `${l.color}80`,
+                lineWidth: l.state === 'preview' ? 2 : 1,
+                lineStyle: 2,
+                axisLabelVisible: true,
+                title: l.label,
+            } as const;
+            const existing = chatLevelLinesRef.current.get(l.id);
+            if (existing) {
+                try { existing.applyOptions(opts); continue; } catch { /* recreate below */ }
+            }
+            try {
+                chatLevelLinesRef.current.set(l.id, cs.createPriceLine(opts));
+            } catch { /* series without price-line support (test mock) */ }
+        }
+    }, [chatLevels, symbol, status]);
 
     // Verdict levels: horizontal lines per Entry/SL/TP with labels.
     useEffect(() => {
@@ -869,7 +932,15 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     interval,
                     candles: tail,
                     markPrice: markPrice ?? lastPrice ?? null,
-                    levels: levels.map(l => ({ label: l.label, price: l.price })),
+                    // What's ON SCREEN includes the verdict levels AND the
+                    // lines the chat card is currently drawing — the model
+                    // reads back exactly what the user is looking at.
+                    levels: [
+                        ...levels.map(l => ({ label: l.label, price: l.price })),
+                        ...(chatLevels && chatLevels.symbol === symbol
+                            ? chatLevels.lines.filter(l => l.state !== 'hidden').map(l => ({ label: l.label, price: l.price }))
+                            : []),
+                    ],
                     drawings: drawingsRef.current,
                     modelDrawings: modelDrawingsRef.current,
                     capturedAt: Date.now(),
@@ -878,7 +949,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             clearUserDrawings: (): void => publishDrawings([]),
         };
         return () => { chartHandle.current = null; };
-    }, [chartHandle, symbol, interval, lastPrice, markPrice, levels, publishDrawings]);
+    }, [chartHandle, symbol, interval, lastPrice, markPrice, levels, chatLevels, publishDrawings]);
 
     const toolActive = tool !== 'cursor';
 
@@ -929,6 +1000,18 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                         </div>
                     </>
                 )}
+                {/* Prototype's "Add studies" button, one honest study: the
+                    SMA-20 line over the closes. Amber = active, matching the
+                    overlay's color so the button and the line agree. */}
+                <button type="button" onClick={() => setIndicatorsOn(v => !v)} aria-pressed={indicatorsOn}
+                    title="Toggle the SMA-20 overlay"
+                    className={`ml-1.5 rounded-control border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                        indicatorsOn
+                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                            : 'border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
+                    }`}>
+                    ƒ Indicators
+                </button>
                 {/* Drawing tools live in the TradingView-style LEFT RAIL over
                     the plot (ChartToolRail) — the top bar keeps timeframes. */}
                 <span className="ml-auto flex items-center gap-2 pr-1">
