@@ -17,6 +17,7 @@
 
 import { TechnicalIndicators, ConfluenceResult, RegimeAnalysis, AdvancedVolumeAnalysis } from '../analysis/TechnicalAnalysisService';
 import { clamp100 } from '../../utils/math';
+import { sanitizeLevelOrdering } from '../../utils/levelOrder';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { ConfidenceCalibration, CorrelationRiskResult } from '../../types';
 import { getCalibrationSummary, getCalibratedWinRateWithDecay } from './ConfidenceCalibrationService';
@@ -56,6 +57,12 @@ export interface RiskRewardValidation {
     stopLossPercent: number;
     atrBasedStopSuggestion: number;
     warnings: string[];
+    /** False when `direction` was supplied and the SL/TP ordering violates it
+     *  (e.g. a Long with the stop ABOVE entry). Undefined when the caller
+     *  omitted `direction` (legacy shape, no side check possible). */
+    orderingValid?: boolean;
+    /** Human-readable repairs/diagnoses from utils/levelOrder when inverted. */
+    orderingFixes?: string[];
 }
 
 export interface DevilsAdvocateResult {
@@ -201,23 +208,45 @@ export const validateMultiTimeframeConfluence = (
  * - Medium confidence: Requires R:R >= 1.5
  * - Low confidence: Requires R:R >= 1.2
  * - Also validates that stop loss is at least 1x ATR from entry
+ *
+ * DIRECTION-AWARE (Tier-0 #7): when `direction` is supplied, risk and reward
+ * are SIGNED distances through the shared ordering gate (`sanitizeLevelOrdering`)
+ * — a Long with the stop ABOVE entry (or a target below it) no longer masks
+ * itself behind `Math.abs` with a healthy-looking ratio; it fails validation.
+ * The optional parameter keeps legacy direction-less callers compiling; those
+ * retain the old absolute-value behavior (the sanitizer has already repaired
+ * ordering upstream by then).
  */
 export const validateRiskReward = (
     entryPrice: number,
     stopLoss: number,
     takeProfit1: number,
     atr: number,
-    proposedConfidence: ConfidenceLevel
+    proposedConfidence: ConfidenceLevel,
+    direction?: TradeDirection
 ): RiskRewardValidation => {
     const warnings: string[] = [];
 
-    // Calculate R:R
-    const risk = Math.abs(entryPrice - stopLoss);
-    const reward = Math.abs(takeProfit1 - entryPrice);
+    // Direction-aware ordering gate — shared rule source in utils/levelOrder.
+    const order = direction
+        ? sanitizeLevelOrdering(direction, entryPrice, stopLoss, [takeProfit1])
+        : null;
+    const orderingInvalid = !!order && !order.ok;
+
+    // Signed risk/reward when the direction is known; legacy absolute values
+    // only for direction-less callers.
+    const risk = direction
+        ? (direction === 'Long' ? entryPrice - stopLoss : stopLoss - entryPrice)
+        : Math.abs(entryPrice - stopLoss);
+    const reward = direction
+        ? (direction === 'Long' ? takeProfit1 - entryPrice : entryPrice - takeProfit1)
+        : Math.abs(takeProfit1 - entryPrice);
+    // Magnitudes for the distance checks below (ATR tightness, percent width).
+    const riskMagnitude = Math.abs(risk);
     const ratio = risk > 0 ? reward / risk : 0;
 
     // Calculate stop loss as percentage
-    const stopLossPercent = (risk / entryPrice) * 100;
+    const stopLossPercent = (riskMagnitude / entryPrice) * 100;
 
     // ATR-based stop suggestion (1.5x ATR is commonly used)
     const atrBasedStopSuggestion = atr * 1.5;
@@ -235,19 +264,24 @@ export const validateRiskReward = (
     // Validate R:R
     let isValid = ratio >= minRequired;
 
-    if (ratio < minRequired) {
+    if (orderingInvalid && order) {
+        // Inverted plan: no measurable risk/reward exists in the stated
+        // direction — hard invalid regardless of any ratio.
+        isValid = false;
+        warnings.push(` INVERTED PLAN (${direction}): ${order.fixes.join('; ')}`);
+    } else if (ratio < minRequired) {
         warnings.push(`R:R ratio (${ratio.toFixed(2)}) below required minimum (${minRequired}) for ${proposedConfidence} confidence`);
     }
 
     // Validate stop loss is not too tight (should be at least 1x ATR)
-    if (risk < atr) {
-        warnings.push(` TIGHT STOP: Stop loss (${risk.toFixed(2)}) is tighter than 1x ATR (${atr.toFixed(2)}). High chance of being stopped out by noise.`);
+    if (riskMagnitude > 0 && riskMagnitude < atr) {
+        warnings.push(` TIGHT STOP: Stop loss (${riskMagnitude.toFixed(2)}) is tighter than 1x ATR (${atr.toFixed(2)}). High chance of being stopped out by noise.`);
         isValid = false;
     }
 
     // Warn if stop is excessively wide (more than 3x ATR)
-    if (risk > atr * 3) {
-        warnings.push(`Wide stop loss (${(risk / atr).toFixed(1)}x ATR). Consider reducing position size.`);
+    if (riskMagnitude > atr * 3) {
+        warnings.push(`Wide stop loss (${(riskMagnitude / atr).toFixed(1)}x ATR). Consider reducing position size.`);
     }
 
     // Check if stop respects common structure
@@ -261,7 +295,9 @@ export const validateRiskReward = (
         minRequired,
         stopLossPercent,
         atrBasedStopSuggestion,
-        warnings
+        warnings,
+        ...(order ? { orderingValid: order.ok } : {}),
+        ...(orderingInvalid && order ? { orderingFixes: order.fixes } : {}),
     };
 };
 
@@ -647,7 +683,8 @@ export const validateTradeSetup = (
         proposedStopLoss,
         proposedTakeProfit1,
         data.indicators['1h'].atr,
-        proposedConfidence
+        proposedConfidence,
+        proposedDirection
     );
 
     const volumeValidation = validateVolumeConfirmation(

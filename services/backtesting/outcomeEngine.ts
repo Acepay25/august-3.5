@@ -23,6 +23,10 @@
  *   later breakeven touch means the remainder exited flat — TP2/TP3 are only
  *   realized before that touch.
  * - Outcome priority: TP(s) → zone breach → SL touch → OPEN.
+ * - Inverted plans are NEVER scored: a plan whose SL/TP ordering contradicts
+ *   the direction (Long stop above entry, target below it, ...) is refused
+ *   with an INVALID verdict (see utils/levelOrder) instead of the phantom
+ *   same-candle WIN the abs-distance math used to hand out.
  *
  * The `excludeFormingCandle` option drops the final (still-forming) candle
  * when scanning live data fetched with endTime=now — a hit detected inside
@@ -30,6 +34,7 @@
  */
 
 import { Kline } from '../../types';
+import { sanitizeLevelOrdering } from '../../utils/levelOrder';
 
 export type ScanTpLevel = 'TP1' | 'TP2' | 'TP3';
 
@@ -61,14 +66,22 @@ export interface TradeScanResult {
   breakevenHit: boolean;
   breakevenIndex?: number;
   breakevenTime?: string;
+  /** Defense-in-depth (Tier-0 #7): the plan's SL/TP ordering violates the
+   *  direction even after the sanitizer — the scan is refused outright
+   *  (nothing triggered), so an inverted plan can never earn WIN/LOSS. */
+  planInvalid?: boolean;
+  /** Human-readable reason(s) from utils/levelOrder when `planInvalid`. */
+  planInvalidReason?: string;
 }
 
 export interface OutcomeResolution {
-  outcome: 'WIN' | 'LOSS' | 'OPEN';
+  outcome: 'WIN' | 'LOSS' | 'OPEN' | 'INVALID';
   hitTarget: 'NONE' | 'SL' | 'TP1' | 'TP2' | 'TP3';
   exitPrice?: number;
   exitTime?: string;
   exitCandleIndex?: number;
+  /** Present when `outcome === 'INVALID'` — why the plan was not scored. */
+  invalidReason?: string;
 }
 
 /** Format duration in human-readable form (shared by all engines). */
@@ -115,6 +128,25 @@ export const scanTradeOutcome = (
     breakevenActive: false,
     breakevenHit: false,
   };
+
+  // --- Inverted-plan refusal (defense-in-depth, Tier-0 #7) ---
+  // The AI-boundary sanitizer already repairs SL/TP ordering; a plan that
+  // still arrives inverted bypassed it (prose-parsed, hand-edited, legacy
+  // row). The abs/zone math below cannot tell a Long whose "TP" sits BELOW
+  // entry from a real target, so scanning it would hand out phantom
+  // same-candle WINs. Refuse to score: nothing triggers, and
+  // resolveOutcomeFromScan maps the scan to INVALID (never WIN/LOSS).
+  // Levels of 0/NaN mean "leg absent" (caller convention), not a price.
+  const orderCheck = sanitizeLevelOrdering(
+    isLong ? 'Long' : 'Short',
+    Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : null,
+    Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
+    takeProfits.map((tp) => (Number.isFinite(tp) && tp > 0 ? tp : null)),
+  );
+  if (!orderCheck.ok) {
+    return { ...empty, planInvalid: true, planInvalidReason: orderCheck.fixes.join('; ') };
+  }
+
   if (scanKlines.length === 0) return empty;
 
   // --- Entry trigger: first candle touching the entry level ---
@@ -253,11 +285,19 @@ export const scanTradeOutcome = (
 
 /**
  * Resolve the neutral scan into the canonical outcome verdict.
+ * - Inverted plan (scan refused) → INVALID: no credit, never WIN/LOSS.
  * - Same-candle SL+TP → LOSS (the resting stop filled first).
  * - TP on a later candle after an SL wick → WIN at the highest hit level.
  * - 150% zone breach → LOSS. SL touch with no TP → LOSS. Else OPEN.
  */
 export const resolveOutcomeFromScan = (scan: TradeScanResult): OutcomeResolution => {
+  if (scan.planInvalid) {
+    return {
+      outcome: 'INVALID',
+      hitTarget: 'NONE',
+      invalidReason: scan.planInvalidReason,
+    };
+  }
   if (scan.tpHits.length > 0) {
     const firstTp = scan.tpHits[0];
     const sameCandleSlFill = scan.slTouched && firstTp.candleIndex === scan.slTouchIndex;
