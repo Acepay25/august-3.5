@@ -293,6 +293,22 @@ export function extractResponsesReasoning(output: unknown): string {
     return parts.join('\n');
 }
 
+// ─── Dev-proxy routing ───────────────────────────────────────────────────────
+
+/**
+ * The vite DEV SERVER is the only runtime that serves /__provider_proxy
+ * (it's registered in configureServer). A packaged Capacitor WebView ALSO
+ * reports hostname 'localhost' — routing its provider calls to that path
+ * POSTed at a non-existent middleware and every call 404'd. Only dev may
+ * take the proxy; packaged mobile/web fall through to the direct-call
+ * branches. Mirrors ProviderConfigService.fetchProviderCatalog's guard.
+ */
+export function usesDevProviderProxy(): boolean {
+    return Boolean(import.meta.env.DEV)
+        && typeof window !== 'undefined'
+        && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+}
+
 // ─── Extended Thinking (request side) ───────────────────────────────────────
 
 /**
@@ -1031,7 +1047,7 @@ export async function sendChatRequest(
                         options?.signal?.removeEventListener('abort', cancelRequest);
                     });
                 }
-                if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                if (usesDevProviderProxy()) {
                     return fetch('/__provider_proxy', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1189,7 +1205,7 @@ export async function sendChatTurn(
                         options?.signal?.removeEventListener('abort', cancelRequest);
                     }
                 }
-                if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                if (usesDevProviderProxy()) {
                     const response = await fetch('/__provider_proxy', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1436,7 +1452,7 @@ export async function* streamChatRequest(
         // Dev browser on localhost: route through the CORS-avoiding Vite
         // provider proxy, which passes SSE through. Direct SDK streaming from
         // the browser fails for providers without CORS headers (e.g. opencode).
-        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        if (usesDevProviderProxy()) {
             if (effectiveConfig.apiFormat === 'chat_completions') {
                 const startedAt = Date.now();
                 try {
