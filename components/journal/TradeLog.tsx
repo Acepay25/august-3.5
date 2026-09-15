@@ -561,6 +561,19 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
         return toPatternMemoryMarkdown(finalSummary, patternMemoryStatsFromTrades(trades));
     }, [finalSummary, isReviewLoading, showPatternMemory, trades]);
 
+    const handleSelect = useCallback((id: string) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
+        );
+    }, []);
+
+    // Stable detail-open handler for the memoized row — an inline arrow per
+    // row would rebuild on every render and defeat React.memo.
+    // Both callbacks sit ABOVE every conditional return: they used to live
+    // below them, which crashed row-click with "Rendered fewer hooks than
+    // expected" (a trade detail render has 2 fewer hooks than the list).
+    const openDetailForTrade = useCallback((id: string) => setDetailTradeId(id), []);
+
     if (showPatternMemory) {
         return (
             <PatternMemoryDetailView
@@ -588,16 +601,6 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
             />
         );
     }
-
-    const handleSelect = useCallback((id: string) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
-        );
-    }, []);
-
-    // Stable detail-open handler for the memoized row — an inline arrow per
-    // row would rebuild on every render and defeat React.memo.
-    const openDetailForTrade = useCallback((id: string) => setDetailTradeId(id), []);
 
     const handleSelectActiveInsights = () => {
         const validIds = currentInsightIds.filter(id => trades.some(t => t.id === id));
