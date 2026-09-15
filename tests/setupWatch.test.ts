@@ -7,6 +7,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
   setPreferenceObject: vi.fn(async (_key: string, value: unknown) => {
     store = value;
   }),
+  removePreference: vi.fn(async () => {}),
   PREF_KEYS: { SETUP_WATCHES: 'setup_watches' },
 }));
 

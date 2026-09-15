@@ -65,6 +65,11 @@ beforeEach(() => {
     chatStore.__resetForTests();
     levelWatch.__resetForTests();
     watchService.__resetForTests();
+    // watchService's REST-poll clock (Tier-0 #6) runs every second while any
+    // price watch is armed — this suite arms real watches through the panel,
+    // so the mark-price endpoint must never reach the network (a live print
+    // crossing an armed level would queue a second harness signal mid-test).
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline test'); }));
     __clearPacketCacheForTests();
     __clearProfileMemoriesForTests();
     localStorage.clear();
