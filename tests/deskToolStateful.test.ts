@@ -13,6 +13,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = store[key];
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => { store[key] = value; }),
     removePreference: vi.fn(async (key: string) => { delete store[key]; }),
 }));
@@ -127,5 +132,21 @@ describe('write-side refusals are error results', () => {
         const res = await call('m1', 'remember', { kind: 'vibes', description: 'd', body: 'b' });
         expect(res.ok).toBe(false);
         expect(res.content.startsWith('remember rejected:')).toBe(true);
+    });
+});
+
+describe('remember provenance (deep-dive 2026-09-15)', () => {
+    it('a model-written memory carries source:"model" — the profileMemory convention', async () => {
+        const res = await call('m1', 'remember', {
+            kind: 'user',
+            name: 'Runs 15m scalps',
+            description: 'When picking a timeframe or size.',
+            body: 'User runs 15m scalps on BTCUSDT only.',
+        });
+        expect(res.ok).toBe(true);
+        const { listProfileMemories } = await import('../services/learning/profileMemory');
+        const entry = listProfileMemories().find(e => e.slug === 'runs-15m-scalps');
+        // Without the tag, model and human entries were indistinguishable.
+        expect(entry?.source).toBe('model');
     });
 });

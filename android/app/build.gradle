@@ -1,4 +1,20 @@
+import groovy.json.JsonSlurper
+
 apply plugin: 'com.android.application'
+
+// Single source of truth for versions: the root package.json. release.yml
+// validates the git tag against it and electron-builder stamps it into the
+// installer, so the APK must derive its version instead of hand-bumping a
+// rotting "1" / "1.0" pair here. Dependency-free (JsonSlurper ships with
+// Groovy). versionCode = major*10000 + minor*100 + patch (supports 0-99
+// minor/patch, which semver-in-practice covers for this app); versionName =
+// the raw semver string. A pre-release suffix ("1.2.0-beta.1") is stripped
+// from the code but kept in the name.
+def packageJsonFile = new File(projectDir, '../../package.json')
+def packageJson = new JsonSlurper().parse(packageJsonFile)
+def semver = (packageJson.version as String).trim()
+def coreParts = semver.split('-')[0].split('\\.')
+def appVersionCode = (coreParts[0] as int) * 10000 + (coreParts[1] as int) * 100 + (coreParts.size() > 2 ? (coreParts[2] as int) : 0)
 
 android {
     namespace "com.august35.tradingapp"
@@ -7,8 +23,8 @@ android {
         applicationId "com.august35.tradingapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName semver
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

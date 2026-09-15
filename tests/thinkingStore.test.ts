@@ -24,6 +24,7 @@ import {
     updateThinkingOutcome,
     getAllThinkingForExport,
     getProviderReasoningStats,
+    getThinkingExemplars,
 } from '../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../types/thinking';
 import { TradeOutcome } from '../types';
@@ -147,6 +148,28 @@ class FakeSqliteDb {
             // Matches ORDER BY total DESC in the real query.
             values.sort((a, b) => b.total - a.total);
             return { values };
+        }
+        if (/WHERE provider = \?/i.test(sql)) {
+            // getThinkingByProvider: provider (+ optional outcome/username
+            // scope) newest-first with an id tie-break, LIMIT n.
+            let rows = this.rows.filter(r => r.provider === params[0]);
+            let p = 1;
+            if (/AND outcome = \?/i.test(sql)) {
+                rows = rows.filter(r => r.outcome === params[p]);
+                p += 1;
+            }
+            if (/AND username = \?/i.test(sql)) {
+                rows = rows.filter(r => r.username === params[p]);
+                p += 1;
+            } else if (/username IS NULL/i.test(sql)) {
+                rows = rows.filter(r => !r.username);
+            }
+            rows.sort((a, b) =>
+                a.createdAt !== b.createdAt
+                    ? (a.createdAt < b.createdAt ? 1 : -1)
+                    : (a.id < b.id ? 1 : -1)
+            );
+            return { values: rows.slice(0, Number(params[p])) };
         }
         if (/SELECT \* FROM thinking_records/i.test(sql)) {
             return { values: this.rows.filter(r => r.username === params[0]) };
@@ -414,5 +437,44 @@ describe('ThinkingStoreService — PnL on thinking records', () => {
     const stats = await getProviderReasoningStats('test-user');
     const gemini = stats.find(s => s.provider === 'gemini');
     expect(gemini?.avgPnLPercent).toBe(15);
+  });
+});
+
+// Exemplar profile scoping on the SQLite branch (deep-dive 2026-09-15 item 4):
+// WIN-reasoning reads must carry username in the query, newest-first, with a
+// tagged fallback to the untagged legacy bucket only when the profile has
+// nothing of its own.
+describe('getThinkingExemplars (SQLite path)', () => {
+  let fakeDb: FakeSqliteDb;
+
+  beforeEach(() => {
+    fakeDb = new FakeSqliteDb();
+    (getSqliteDb as ReturnType<typeof vi.fn>).mockResolvedValue(fakeDb);
+  });
+
+  const win = (id: string, username: string, reasoning: string, createdAt: string) =>
+    makeRecord({ id, username, outcome: TradeOutcome.WIN, reasoning, createdAt });
+
+  it('scopes WIN exemplars to the requesting username and orders newest-first', async () => {
+    await saveThinkingBatch([
+      win('a-old', 'alice', 'alice old win', '2026-01-01T00:00:00.000Z'),
+      win('a-new', 'alice', 'alice new win', '2026-08-01T00:00:00.000Z'),
+      win('b-1', 'bob', 'bob private win', '2026-09-01T00:00:00.000Z'),
+    ]);
+    const alice = await getThinkingExemplars('gemini', 5, 'alice');
+    expect(alice.map(e => e.reasoning)).toEqual(['alice new win', 'alice old win']);
+    expect(alice.every(e => e.source === 'user')).toBe(true);
+  });
+
+  it('falls back to the untagged legacy bucket (tagged), never another profile', async () => {
+    await saveThinkingBatch([
+      win('legacy-1', '', 'shared pre-scoping win', '2026-02-01T00:00:00.000Z'),
+      win('b-1', 'bob', 'bob private win', '2026-07-01T00:00:00.000Z'),
+    ]);
+    const carol = await getThinkingExemplars('gemini', 5, 'carol');
+    expect(carol.map(e => e.reasoning)).toEqual(['shared pre-scoping win']);
+    expect(carol[0].source).toBe('legacy');
+    const bob = await getThinkingExemplars('gemini', 5, 'bob');
+    expect(bob.map(e => e.source)).toEqual(['user']);
   });
 });

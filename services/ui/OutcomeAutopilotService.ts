@@ -17,6 +17,7 @@ import { Capacitor } from '@capacitor/core';
 import { LoggedTrade, TradeAnalysis } from '../../types';
 import { TradeOutcome } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { getActiveUsername } from '../../utils/activeUser';
 import { verifyHistoricalOutcome, extractSymbolFromAnalysis } from './AutoCaptureService';
 import { trackSLOutcome, SLOptimizationData } from '../backtesting/StopLossOptimizerService';
 import { parsePrice, leveragedMovePercent } from '../../utils/analysisUtils';
@@ -49,17 +50,53 @@ interface Registration {
     leverage: number;
     registeredAt: string;
     lastTickPrice?: number;
+    /** Release for the ref-counted PriceAlertService feed hold acquired at
+     *  registration — without it, autopilot-only coins never receive ticks
+     *  and the subscribeTicks episodes silently never accumulate. */
+    releaseSymbolTracking?: () => void;
 }
 
-interface PersistedState {
+/** Per-profile slice of the persisted autopilot state. */
+interface PersistedUserState {
     processed: string[];  // message ids confirmed/logged — never re-detect
     dismissed: string[];  // user dismissed the banner
 }
+
+/** Legacy (pre-scoping) global shape: one flat processed/dismissed pair. */
+interface LegacyPersistedState {
+    processed?: string[];
+    dismissed?: string[];
+}
+
+/** Current shape: a per-username partition map, e.g. `{ alice: {...} }`. */
+type PersistedPartitions = Record<string, PersistedUserState>;
 
 type Listener = (messageId: string, resolution: AutopilotResolution) => void;
 type TickListener = (messageId: string, price: number, previousPrice?: number) => void;
 
 const CHECK_INTERVAL_MS = 20_000;
+
+/**
+ * Interpret whatever is on disk under `outcome_autopilot_state` as a
+ * partition map. The legacy global shape ({processed, dismissed}) has no
+ * owner — callers attribute it separately (read-fallback for the loading
+ * profile); here it contributes no partitions.
+ */
+const normalizePartitions = (stored: unknown): PersistedPartitions => {
+    const out: PersistedPartitions = {};
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return out;
+    for (const [key, value] of Object.entries(stored as Record<string, unknown>)) {
+        if (key === 'processed' || key === 'dismissed') continue; // legacy leaves
+        const v = value as Partial<PersistedUserState> | null;
+        if (v && Array.isArray(v.processed) && Array.isArray(v.dismissed)) {
+            out[key] = {
+                processed: v.processed.filter((x): x is string => typeof x === 'string'),
+                dismissed: v.dismissed.filter((x): x is string => typeof x === 'string'),
+            };
+        }
+    }
+    return out;
+};
 
 // How many processed/dismissed message ids to keep. MUST match between the
 // in-memory trim (pruneIdSets) and persist() — if disk kept fewer than
@@ -77,47 +114,114 @@ class OutcomeAutopilotServiceClass {
     private timer: ReturnType<typeof setInterval> | null = null;
     private checkPromise: Promise<void> | null = null;
     private initialized = false;
+    /** Profile the in-memory sets were loaded for (partition owner). */
+    private loadedUser: string | null = null;
+    /** Bumped by init/reset so a superseded async load can't write state. */
+    private initGeneration = 0;
+    /** Last-known partition map (read-modify-write target for persist). */
+    private partitions: PersistedPartitions = {};
+    /** Serialize the read-modify-write cycles against the shared global key
+     *  — two overlapping persists would otherwise lose one partition. */
+    private writeChain: Promise<void> = Promise.resolve();
 
-    /** Load persisted state and register native lifecycle handling. */
-    async init(): Promise<void> {
-        if (this.initialized) return;
+    /** Load persisted state for a profile. Re-init for a DIFFERENT user
+     *  reloads their partition (the old unconditional `if (initialized)
+     *  return;` made post-switch init a no-op, leaving the outgoing user's
+     *  processed/dismissed sets in place — duplicate banners and possible
+     *  auto-logs of pre-switch outcomes). */
+    async init(username?: string): Promise<void> {
+        const user = username ?? getActiveUsername();
+        if (this.initialized && this.loadedUser === user) return;
+        const gen = ++this.initGeneration;
+        // Release every feed hold BEFORE dropping the map — init can be
+        // called for a different user WITHOUT a preceding reset() (the
+        // loader does reset first, but the guard here must not leak the
+        // outgoing user's trackSymbol ref-counts either).
+        for (const reg of this.registrations.values()) reg.releaseSymbolTracking?.();
+        this.registrations.clear();
+        this.resolutions.clear();
+        this.processed.clear();
+        this.dismissed.clear();
+        this.loadedUser = user;
         try {
-            const stored = await getPreferenceObject<PersistedState>(PREF_KEYS.OUTCOME_AUTOPILOT_STATE);
-            if (stored) {
-                (stored.processed || []).forEach(id => this.processed.add(id));
-                (stored.dismissed || []).forEach(id => this.dismissed.add(id));
+            const stored = await getPreferenceObject<LegacyPersistedState & PersistedPartitions>(
+                PREF_KEYS.OUTCOME_AUTOPILOT_STATE
+            );
+            if (gen !== this.initGeneration || this.loadedUser !== user) return;
+            this.partitions = normalizePartitions(stored);
+            const isLegacy = !!stored && (Array.isArray(stored.processed) || Array.isArray(stored.dismissed));
+            // Read-fallback: the legacy global pair is attributed to the
+            // profile that loads it first (then re-persisted partitioned).
+            const mine = isLegacy
+                ? { processed: stored.processed || [], dismissed: stored.dismissed || [] }
+                : this.partitions[user];
+            if (mine) {
+                (mine.processed || []).forEach(id => this.processed.add(id));
+                (mine.dismissed || []).forEach(id => this.dismissed.add(id));
                 this.pruneIdSets();
             }
+            if (isLegacy) void this.persist(); // migrate to the partition map
         } catch (err) {
             console.warn('[OutcomeAutopilot] Failed to load state:', err);
+            if (gen !== this.initGeneration || this.loadedUser !== user) return;
         }
         this.registerLifecycle();
         this.initialized = true;
-        console.log(`[OutcomeAutopilot] Initialized (${this.processed.size} processed, ${this.dismissed.size} dismissed)`);
+        console.log(`[OutcomeAutopilot] Initialized for ${user} (${this.processed.size} processed, ${this.dismissed.size} dismissed)`);
     }
 
-    /** Track a pending analysis. No-op for processed/dismissed messages. */
+    /**
+     * Track a pending analysis. No-op for processed/dismissed messages.
+     * A re-registration of a KNOWN id UPDATES the entry instead of returning
+     * early: useWatchAndAutopilot re-registers everything when the
+     * conversation leverage changes and used to rely on this call to refresh
+     * the authoritative `reg.leverage` used by every later PnL resolution
+     * (it stayed stale while register early-returned on existing id).
+     */
     register(messageId: string, analysis: TradeAnalysis, leverage: number): void {
         if (this.processed.has(messageId) || this.dismissed.has(messageId)) return;
-        if (this.registrations.has(messageId)) return;
+        const lev = leverage || DEFAULT_LEVERAGE;
+        const existing = this.registrations.get(messageId);
+        if (existing) {
+            existing.analysis = analysis;
+            existing.leverage = lev;
+            this.ensureLoop();
+            void this.runChecks();
+            return;
+        }
         if (analysis.confidence === 'Avoid' || analysis.direction === 'Neutral') {
             return;
         }
         if (analysis.direction !== 'Long' && analysis.direction !== 'Short') return;
-        this.registrations.set(messageId, {
+        const registration: Registration = {
             messageId,
             analysis,
-            leverage: leverage || DEFAULT_LEVERAGE,
+            leverage: lev,
             registeredAt: new Date().toISOString(),
-        });
+        };
+        // Guarantee the feed streams this coin while the registration is
+        // alive, even when no price alert / setup watch tracks it (:279
+        // subscribeTicks was silently dead for untracked symbols).
+        const symbol = extractSymbolFromAnalysis(analysis);
+        if (symbol) registration.releaseSymbolTracking = PriceAlertService.acquireSymbol(symbol);
+        this.registrations.set(messageId, registration);
         this.ensureLoop();
         void this.runChecks();
     }
 
     /** Stop tracking (message logged, deleted, or outcome set manually). */
     unregister(messageId: string): void {
-        this.registrations.delete(messageId);
+        this.dropRegistration(messageId);
         this.stopLoopIfEmpty();
+    }
+
+    /** Delete one registration and release its feed hold (single choke point
+     *  so every removal path — resolve, dismiss, expiry drops — cleans up). */
+    private dropRegistration(messageId: string): void {
+        const reg = this.registrations.get(messageId);
+        if (!reg) return;
+        reg.releaseSymbolTracking?.();
+        this.registrations.delete(messageId);
     }
 
     /** User dismissed the banner for this message. */
@@ -125,7 +229,7 @@ class OutcomeAutopilotServiceClass {
         this.dismissed.add(messageId);
         this.pruneIdSets();
         this.resolutions.delete(messageId);
-        this.registrations.delete(messageId);
+        this.dropRegistration(messageId);
         this.stopLoopIfEmpty();
         void this.persist();
     }
@@ -135,7 +239,7 @@ class OutcomeAutopilotServiceClass {
         this.processed.add(messageId);
         this.pruneIdSets();
         this.resolutions.delete(messageId);
-        this.registrations.delete(messageId);
+        this.dropRegistration(messageId);
         this.stopLoopIfEmpty();
         void this.persist();
     }
@@ -182,8 +286,19 @@ class OutcomeAutopilotServiceClass {
      * the loop. Called on profile switch — otherwise the singleton keeps
      * kline-verifying the old user's pending analyses and the processed/
      * dismissed sets leak across profiles.
+     *
+     * The old version persisted EMPTY sets to the global key (destroying the
+     * incoming user's history on every switch) while `initialized` stayed
+     * true, so the follow-up init() never reloaded. Now the persisted state
+     * is a per-username partition map: reset clears ONLY the outgoing user's
+     * partition in storage (their processed/dismissed history should not
+     * resurrect re-detect after a logout-relogin either — matches the old
+     * global behavior, minus the cross-user damage) and drops `initialized`
+     * so the incoming user's init() actually loads their own partition.
      */
     reset(): void {
+        this.initGeneration++;
+        for (const reg of this.registrations.values()) reg.releaseSymbolTracking?.();
         this.registrations.clear();
         this.resolutions.clear();
         this.dismissed.clear();
@@ -192,7 +307,23 @@ class OutcomeAutopilotServiceClass {
             clearInterval(this.timer);
             this.timer = null;
         }
-        void this.persist();
+        const outgoing = this.loadedUser;
+        this.loadedUser = null;
+        this.initialized = false;
+        this.partitions = {};
+        if (outgoing) {
+            this.writeChain = this.writeChain
+                .then(async () => {
+                    const stored = await getPreferenceObject<LegacyPersistedState & PersistedPartitions>(
+                        PREF_KEYS.OUTCOME_AUTOPILOT_STATE
+                    );
+                    const map = normalizePartitions(stored);
+                    if (!(outgoing in map)) return; // nothing of theirs to clear
+                    delete map[outgoing];
+                    await setPreferenceObject(PREF_KEYS.OUTCOME_AUTOPILOT_STATE, map);
+                })
+                .catch(err => console.warn('[OutcomeAutopilot] Failed to clear outgoing partition:', err));
+        }
     }
 
     // ── Internals ─────────────────────────────────────────────────────────
@@ -255,7 +386,7 @@ class OutcomeAutopilotServiceClass {
         const symbol = extractSymbolFromAnalysis(analysis);
         const createdAt = analysis.createdAt || reg.registeredAt;
         if (!symbol) {
-            this.registrations.delete(messageId);
+            this.dropRegistration(messageId);
             return;
         }
 
@@ -267,7 +398,7 @@ class OutcomeAutopilotServiceClass {
             // or after a hard 7-day cap on observation.
             const watchedMs = Date.now() - new Date(reg.registeredAt).getTime();
             if (this.isExpired(analysis) || watchedMs > 7 * 24 * 60 * 60 * 1000) {
-                this.registrations.delete(messageId);
+                this.dropRegistration(messageId);
                 this.stopLoopIfEmpty();
                 console.warn(`[OutcomeAutopilot] ${messageId} dropped after insufficient data (watched ${Math.round(watchedMs / 36e5)}h).`);
             }
@@ -312,7 +443,7 @@ class OutcomeAutopilotServiceClass {
         // only to the INSUFFICIENT_DATA branch).
         const watchedMs = Date.now() - new Date(reg.registeredAt).getTime();
         if (watchedMs > 7 * 24 * 60 * 60 * 1000) {
-            this.registrations.delete(messageId);
+            this.dropRegistration(messageId);
             this.stopLoopIfEmpty();
             console.warn(`[OutcomeAutopilot] ${messageId} dropped after 7-day observation cap (setup never resolved).`);
         }
@@ -474,7 +605,7 @@ class OutcomeAutopilotServiceClass {
 
     private resolve(messageId: string, resolution: AutopilotResolution): void {
         this.resolutions.set(messageId, resolution);
-        this.registrations.delete(messageId);
+        this.dropRegistration(messageId);
         this.stopLoopIfEmpty();
         console.log(`[OutcomeAutopilot] ${messageId} → ${resolution.outcome}${resolution.expiredOpen ? ' (expired open)' : ''}: ${resolution.detail}`);
         this.listeners.forEach(cb => {
@@ -487,18 +618,32 @@ class OutcomeAutopilotServiceClass {
     }
 
     private async persist(): Promise<void> {
-        try {
-            const state: PersistedState = {
-                // Keep the same window as the in-memory trim — a narrower
-                // persist window would resurrect old messages as
-                // re-detectable after a restart.
-                processed: [...this.processed].slice(-MAX_TRACKED_IDS),
-                dismissed: [...this.dismissed].slice(-MAX_TRACKED_IDS),
-            };
-            await setPreferenceObject(PREF_KEYS.OUTCOME_AUTOPILOT_STATE, state);
-        } catch (err) {
-            console.warn('[OutcomeAutopilot] Failed to persist state:', err);
-        }
+        const user = this.loadedUser;
+        if (!user) return; // no partition owner yet — never write to the shared key
+        const snapshot: PersistedUserState = {
+            // Keep the same window as the in-memory trim — a narrower
+            // persist window would resurrect old messages as
+            // re-detectable after a restart.
+            processed: [...this.processed].slice(-MAX_TRACKED_IDS),
+            dismissed: [...this.dismissed].slice(-MAX_TRACKED_IDS),
+        };
+        this.partitions[user] = snapshot;
+        // Read-modify-write the partition map under the write chain so a
+        // concurrent persist can't clobber another user's partition (or our
+        // own newer snapshot, when chains interleave).
+        this.writeChain = this.writeChain
+            .then(async () => {
+                const stored = await getPreferenceObject<LegacyPersistedState & PersistedPartitions>(
+                    PREF_KEYS.OUTCOME_AUTOPILOT_STATE
+                );
+                const map = normalizePartitions(stored);
+                // A still-legacy blob belongs to nobody verifiable; our own
+                // partition is authoritative for the loaded user regardless.
+                map[user] = snapshot;
+                await setPreferenceObject(PREF_KEYS.OUTCOME_AUTOPILOT_STATE, map);
+            })
+            .catch(err => console.warn('[OutcomeAutopilot] Failed to persist state:', err));
+        await this.writeChain;
     }
 }
 

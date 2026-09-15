@@ -21,6 +21,9 @@ beforeEach(() => {
     watchService.__resetForTests();
     localStorage.clear();
     userRef.current = 'alice';
+    // The REST-poll clock must never touch the network from the other suites;
+    // the poll tests below replace this with their own resolving mock.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in tests'); }));
 });
 
 const armPrice = (over: { condition?: 'above' | 'below'; price?: number; symbol?: string; expiresInMinutes?: number } = {}) => {
@@ -125,7 +128,6 @@ describe('persistence + user scoping', () => {
         watchService.tick('BTCUSDT', 100);
         expect(fired.length).toBe(1);
     });
-
     it('the watch key is per user; a switch reloads instead of leaking', () => {
         armPrice({ price: 100 });
         // Switch users and reload: Bob starts with no watches, and Alice's
@@ -135,5 +137,51 @@ describe('persistence + user scoping', () => {
         expect(watchService.list().length).toBe(0);
         expect(JSON.parse(localStorage.getItem('trade_watches_v1_alice') ?? '[]').length).toBe(1);
         expect(localStorage.getItem('trade_watches_v1_bob')).toBeNull();
+    });
+});
+
+describe('cross-symbol REST poll (Tier-0 #6)', () => {
+    it('fires an armed watch on a NON-visible symbol from the polled mark price', async () => {
+        const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: async () => ({ markPrice: '101.5' }) }));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.useFakeTimers({ now: Date.now() });
+        const fired = collect();
+        armPrice({ condition: 'above', price: 100, symbol: 'ETHUSDT' });
+        // The chart feed only ever carries the VISIBLE symbol (BTC here) —
+        // before the fix the ETH watch could never see a price and silently
+        // expired at its deadline.
+        watchService.tick('BTCUSDT', 50);
+        expect(fired.length).toBe(0);
+
+        await vi.advanceTimersByTimeAsync(1_100); // one clock tick → poll → evaluate
+        expect(fetchMock).toHaveBeenCalled();
+        expect(String(fetchMock.mock.calls[0][0])).toContain('premiumIndex?symbol=ETHUSDT');
+        expect(fired.length).toBe(1);
+        expect(fired[0].price).toBe(101.5);
+        expect(watchService.list().length).toBe(0); // fire-once, then gone
+        vi.useRealTimers();
+    });
+
+    it('a fresh live tick suppresses polling for that symbol', async () => {
+        const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: async () => ({ markPrice: '100' }) }));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.useFakeTimers({ now: Date.now() });
+        armPrice({ condition: 'above', price: 500, symbol: 'BTCUSDT' });
+        watchService.tick('BTCUSDT', 100); // visible feed — fresh, <5s old
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(fetchMock).not.toHaveBeenCalled();
+        vi.useRealTimers();
+    });
+
+    it('throttles repeat polls to ~5s per symbol (attempts, not successes)', async () => {
+        const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: async () => ({ markPrice: '999' }) }));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.useFakeTimers({ now: Date.now() });
+        armPrice({ condition: 'above', price: 1_000_000, symbol: 'ETHUSDT' });
+        await vi.advanceTimersByTimeAsync(10_000); // 10 clock ticks
+        const ethCalls = fetchMock.mock.calls.filter(c => String(c[0]).includes('symbol=ETHUSDT')).length;
+        // t≈1s first attempt, t≈6s next allowed — NOT one fetch per second.
+        expect(ethCalls).toBe(2);
+        vi.useRealTimers();
     });
 });

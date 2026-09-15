@@ -4241,10 +4241,13 @@ ${accuracyVerificationNote}`
 
             // Offline sends are queued and re-dispatched on reconnect instead
             // of landing as a dead error bubble (the queue was previously
-            // wired to the header badge but nothing ever enqueued).
+            // wired to the header badge but nothing ever enqueued). The
+            // username is passed EXPLICITLY at the enqueue site so the item's
+            // profile stamp never depends on the queue module's marker being
+            // fresh — processQueue replays only the active user's items.
             if (typeof navigator !== 'undefined' && !navigator.onLine) {
                 try {
-                    await offlineQueue.add({ type: 'analysis', payload: { prompt: effectiveInput, images: imagesToUse.map(img => img.dataURL) } });
+                    await offlineQueue.add({ type: 'analysis', username: getActiveUsername(), payload: { prompt: effectiveInput, images: imagesToUse.map(img => img.dataURL) } });
                     updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "You're offline — this analysis was queued and will run automatically when you're back online." }]);
                     return;
                 } catch (queueErr) {

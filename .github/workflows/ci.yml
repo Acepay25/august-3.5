@@ -46,3 +46,9 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      # Verify the PRODUCTION bundle boots (e2e above only covers `npm run
+      # dev`; v1.0.20 shipped a prod-only splash hang). Needs the chromium
+      # installed by the smoke step.
+      - name: Boot probe (production bundle)
+        run: npm run boot-probe

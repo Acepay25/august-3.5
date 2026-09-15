@@ -9,6 +9,7 @@
 
 import { isNativePlatform } from './SqliteService';
 import { openDB } from 'idb';
+import { getActiveUsername } from '../../utils/activeUser';
 import { ThinkingRecord, ThinkingRecordStats, ThinkingExportRow, ThinkingTradeSummary, ThinkingRole } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 
@@ -339,11 +340,19 @@ export const getThinkingByMessage = async (messageId: string, username?: string)
 };
 
 /**
- * Get thinking records for a specific provider, optionally filtered by outcome.
+ * Get thinking records for a specific provider, optionally filtered by
+ * outcome and/or username.
+ *
+ * `username` scopes to one profile — without it the provider query bleeds
+ * every profile's reasoning into every other profile's prompts (the exemplar
+ * leak). `unownedOnly` is the mirror read: the "legacy" bucket of records
+ * stored BEFORE the username column was reliably populated. Both options
+ * return NEWEST-FIRST (the IDB branch used to walk the index oldest-first,
+ * so `slice(0, limit)` kept the OLDEST reasoning).
  */
 export const getThinkingByProvider = async (
     provider: string,
-    options?: { limit?: number; outcome?: TradeOutcome }
+    options?: { limit?: number; outcome?: TradeOutcome; username?: string; unownedOnly?: boolean }
 ): Promise<ThinkingRecord[]> => {
     const limit = options?.limit || 100;
 
@@ -360,18 +369,37 @@ export const getThinkingByProvider = async (
             params.push(options.outcome);
         }
 
-        query += ' ORDER BY createdAt DESC LIMIT ?';
+        if (options?.username) {
+            query += ' AND username = ?';
+            params.push(options.username);
+        } else if (options?.unownedOnly) {
+            query += " AND (username IS NULL OR username = '')";
+        }
+
+        query += ' ORDER BY createdAt DESC, id DESC LIMIT ?';
         params.push(limit);
 
         const result = await db.query(query, params);
         return (result.values || []).map(rowToRecord);
     } else {
         const db = await initIndexedDB();
-        const all = await db.getAllFromIndex(STORE_NAME, 'provider', provider);
+        const all: ThinkingRecord[] = await db.getAllFromIndex(STORE_NAME, 'provider', provider);
         let filtered = all;
         if (options?.outcome) {
             filtered = filtered.filter((r: ThinkingRecord) => r.outcome === options.outcome);
         }
+        if (options?.username) {
+            filtered = filtered.filter((r: ThinkingRecord) => r.username === options.username);
+        } else if (options?.unownedOnly) {
+            filtered = filtered.filter((r: ThinkingRecord) => !r.username);
+        }
+        // Mirror the SQLite `ORDER BY createdAt DESC, id DESC` — the raw
+        // index walk was insertion-ordered (oldest first).
+        filtered = [...filtered].sort((a, b) =>
+            a.createdAt !== b.createdAt
+                ? (a.createdAt < b.createdAt ? 1 : -1)
+                : (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+        );
         return filtered.slice(0, limit);
     }
 };
@@ -771,16 +799,42 @@ export const getAllThinkingRecordsByUser = async (username: string): Promise<Thi
 
 /**
  * Retrieve WIN-conditioned reasoning exemplars for a provider — the "read
- * the thinking corpus back" step. The corpus was write-only: outcome-
- * correlated reasoning was stored but never injected into prompts. These
- * few-shot exemplars let each model see its OWN best past reasoning on
- * similar setups before analyzing a new chart.
+ * the corpus back" step. The corpus was write-only: outcome-correlated
+ * reasoning was stored but never injected into prompts. These few-shot
+ * exemplars let each model see its OWN best past reasoning on similar
+ * setups before analyzing a new chart.
+ *
+ * Profile-scoped: the query keys on provider AND username (defaulting to
+ * the active profile via getActiveUsername) — an unscoped provider query
+ * served one profile's WIN reasoning into every other profile's prompts
+ * (same class as the fixed chatStore leak). Records predating username
+ * tagging form a separate, ownerless "legacy" bucket that is ONLY used as a
+ * fallback when the profile has no exemplars of its own, and is tagged
+ * source:'legacy' so it is never silently served as another user's history.
  */
+export interface ThinkingExemplar {
+    coin: string | null;
+    reasoning: string;
+    confidence?: string;
+    probability?: number;
+    /** 'user' — the profile's own corpus; 'legacy' — untagged pre-scoping
+     *  records, read only when the profile has none of its own. */
+    source: 'user' | 'legacy';
+}
+
 export const getThinkingExemplars = async (
     provider: string,
-    limit = 2
-): Promise<{ coin: string | null; reasoning: string; confidence?: string; probability?: number }[]> => {
-    const records = await getThinkingByProvider(provider, { limit: Math.max(limit, 20), outcome: TradeOutcome.WIN });
+    limit = 2,
+    username?: string,
+): Promise<ThinkingExemplar[]> => {
+    const user = (username ?? getActiveUsername()).trim() || 'default';
+    const fetchLimit = Math.max(limit, 20);
+    let records = await getThinkingByProvider(provider, { limit: fetchLimit, outcome: TradeOutcome.WIN, username: user });
+    let source: ThinkingExemplar['source'] = 'user';
+    if (records.length === 0) {
+        records = await getThinkingByProvider(provider, { limit: fetchLimit, outcome: TradeOutcome.WIN, unownedOnly: true });
+        source = 'legacy';
+    }
     return records
         .filter(r => Boolean(r.reasoning || r.finalOutput))
         .slice(0, limit)
@@ -797,6 +851,7 @@ export const getThinkingExemplars = async (
                 reasoning: (r.reasoning || r.finalOutput || '').slice(0, 400),
                 confidence: r.confidence,
                 probability: r.probability,
+                source,
             };
         });
 };

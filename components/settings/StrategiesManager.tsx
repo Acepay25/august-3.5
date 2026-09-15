@@ -279,7 +279,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                     <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500" /></div>
                 ) : docs.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
-                        <BookmarkIcon className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
+                        <BookmarkIcon className="w-8 h-8 text-zinc-500 mx-auto mb-3" />
                         <p className="text-xs font-bold text-zinc-400">No strategy books yet</p>
                         <p className="text-[11px] text-zinc-600 mt-1 max-w-sm mx-auto leading-relaxed">
                             Upload a trading PDF and it will be summarized into strategies here. Enable it and the ensemble

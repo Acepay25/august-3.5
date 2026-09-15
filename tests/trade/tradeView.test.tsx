@@ -67,7 +67,9 @@ vi.mock('../../services/analysis/MarketDataService', async (importOriginal) => {
             markPrice: 100.5, indexPrice: 100.4, lastFundingRate: 0.0001,
             nextFundingTime: Date.now() + 3_600_000, available: true,
         })),
-        fetchMarketData: vi.fn(async () => ({
+        // The perp desk strip is futures-native now (fetchFuturesTicker24h),
+        // not the spot ticker.
+        fetchFuturesTicker24h: vi.fn(async () => ({
             symbol: 'BTCUSDT', currentPrice: 100.5, price24hHigh: 104, price24hLow: 99,
             priceChange24h: -2.5, priceChangePercent24h: -2.5, volume24h: 1.2e9,
         })),

@@ -37,13 +37,14 @@ vi.mock('../utils/activeUser', () => ({
     LAST_ACTIVE_USER_KEY: 'last_active_user',
 }));
 
-import TradeChatPanel, { __clearPacketCacheForTests } from '../components/trade/TradeChatPanel';
+import TradeChatPanel, { __clearPacketCacheForTests, __clearProposalStateForTests } from '../components/trade/TradeChatPanel';
 import * as chatStore from '../services/trade/chatStore';
 import * as levelWatch from '../services/trade/levelWatchService';
 import * as watchService from '../services/trade/watchService';
 import { parsePriceWatch } from '../services/trade/chartTriggers';
 import { rememberProfileMemory, __clearProfileMemoriesForTests } from '../services/learning/profileMemory';
 import type { WatchPlan } from '../services/trade/tradePlanLevels';
+import type { TradeProposal } from '../services/trade/proposedTrade';
 
 const config: ProviderConfig = {
     id: 'prov-a', name: 'Provider A', apiKey: 'key-a',
@@ -65,7 +66,13 @@ beforeEach(() => {
     chatStore.__resetForTests();
     levelWatch.__resetForTests();
     watchService.__resetForTests();
+    // watchService's REST-poll clock (Tier-0 #6) runs every second while any
+    // price watch is armed — this suite arms real watches through the panel,
+    // so the mark-price endpoint must never reach the network (a live print
+    // crossing an armed level would queue a second harness signal mid-test).
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline test'); }));
     __clearPacketCacheForTests();
+    __clearProposalStateForTests();
     __clearProfileMemoriesForTests();
     localStorage.clear();
     // The supervision hooks fire from send(); this suite is about the
@@ -472,5 +479,250 @@ describe('message UX: new session, seat editor, copy', () => {
         await waitFor(() => expect(writeText).toHaveBeenCalled());
         expect(writeText.mock.calls.flat()).toContain('read the tape');
         if (prev) Object.defineProperty(navigator, 'clipboard', { value: prev, configurable: true });
+    });
+});
+
+describe('send() double-run guards (deep-dive 2026-09-15, chat wave 3)', () => {
+    it('two clicks in the SAME tick start only ONE run (fresh store read, not the render snapshot)', async () => {
+        let release: () => void = () => {};
+        const gate = new Promise<void>(r => { release = r; });
+        script(async function* () { yield 'answer'; await gate; });
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        const box = await screen.findByPlaceholderText(/Ask anything/);
+        fireEvent.change(box, { target: { value: 'twice please' } });
+        // The whole race in one act(): no React re-render between the clicks,
+        // so the closure's `busy` snapshot is still false for the second send.
+        act(() => {
+            fireEvent.click(screen.getByLabelText('Send'));
+            fireEvent.click(screen.getByLabelText('Send'));
+        });
+        await act(async () => { release(); });
+        await screen.findByText('answer');
+        expect(streamMock).toHaveBeenCalledTimes(1);
+        const session = chatStore.getSnapshot().sessions.find(s => s.id === chatStore.getActiveId())!;
+        expect(session.entries.filter(e => e.role === 'user')).toHaveLength(1);
+    });
+
+    it('a finishing run never deletes a NEWER run slot — Stop stays aimed at the live run', async () => {
+        let release: () => void = () => {};
+        const gate = new Promise<void>(r => { release = r; });
+        script(async function* () { yield 'first'; await gate; });
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        fireEvent.click(screen.getByText('Key levels?'));
+        await screen.findByText('first');
+        const sid = chatStore.getActiveId();
+        // A newer beginRun replaces the store's controller for this session
+        // (a harness flush racing the user send). The OLD run finishing must
+        // NOT delete that entry — that is what made Stop target nothing.
+        const newer = new AbortController();
+        act(() => { chatStore.beginRun(sid, newer); });
+        await act(async () => { release(); });
+        expect(chatStore.getController(sid)).toBe(newer);
+        expect(chatStore.getSnapshot().running[sid]).toBe(true);
+        act(() => { chatStore.abortActive(); });
+        expect(newer.signal.aborted).toBe(true);
+    });
+});
+
+describe('per-turn identity: background turns write to THEIR session', () => {
+    it('a present_trade from a turn the user switched away from still lands in ITS OWN entry', async () => {
+        let callTool: ((call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<unknown>) | null = null;
+        script(async function* (_c: unknown, _m: unknown, opts: {
+            executePanelTool?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<unknown>;
+        }) {
+            yield 'holding';
+            callTool = opts.executePanelTool ?? null;
+            await new Promise<void>(r => setTimeout(r, 0));
+        });
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        fireEvent.click(screen.getByText('Key levels?'));
+        await waitFor(() => expect(callTool).toBeTruthy());
+        const before = chatStore.getSnapshot();
+        const sidA = before.activeId;
+        const entryAId = before.sessions.find(s => s.id === sidA)!.entries.find(e => e.role === 'ai')!.id;
+        // The user switches to a NEW session while the first turn is still running.
+        let sidB = '';
+        act(() => { sidB = chatStore.addSession(); });
+        expect(chatStore.getSnapshot().activeId).toBe(sidB);
+        await act(async () => {
+            await callTool!({
+                id: 'c1', name: 'present_trade',
+                arguments: { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] },
+            });
+        });
+        const after = chatStore.getSnapshot();
+        const a = after.sessions.find(s => s.id === sidA)!;
+        const b = after.sessions.find(s => s.id === sidB)!;
+        // The proposal rode the RUNNING turn's sid/entryId — not the viewed
+        // session the user switched to.
+        expect(a.entries.find(e => e.id === entryAId)?.proposal).toBeTruthy();
+        expect(b.entries.some(e => !!e.proposal)).toBe(false);
+    });
+});
+
+describe('explicit Stop is never narrated as a failure', () => {
+    it('stopping a mid-stream turn shows neither "could not answer" nor the pure-echo note', async () => {
+        let release: () => void = () => {};
+        const gate = new Promise<void>(r => { release = r; });
+        script(async function* (_c: unknown, _m: unknown, opts: { signal?: AbortSignal; onReasoning?: (c: string) => void }) {
+            opts.onReasoning?.('the model thought this through');
+            yield 'the model thought this through'; // a pure echo of the reasoning
+            await gate;
+            // The transport dies exactly as the real stream does after Stop.
+            const err = new Error('The turn was stopped.');
+            err.name = 'AbortError';
+            throw err;
+        });
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        fireEvent.click(screen.getByText('Key levels?'));
+        await screen.findByText('the model thought this through');
+        const sid = chatStore.getActiveId();
+        act(() => { chatStore.abortActive(); release(); });
+        await waitFor(() => {
+            const entry = chatStore.getSnapshot().sessions.find(s => s.id === sid)!.entries.find(e => e.role === 'ai')!;
+            expect(entry.streaming).toBe(false);
+        });
+        const entry = chatStore.getSnapshot().sessions.find(s => s.id === sid)!.entries.find(e => e.role === 'ai')!;
+        expect(entry.text).toBe('the model thought this through');
+        expect(entry.tools.join(' ')).not.toContain('only its reasoning');
+        expect(entry.text).not.toContain('could not answer');
+        expect(screen.queryByText(/could not answer/)).toBeNull();
+    });
+});
+
+describe('harness drain only into chat-kind sessions', () => {
+    it('signals HOLD while a coach session is selected and drain when a chat returns', async () => {
+        script(yieldText('warned now'));
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        const soloId = chatStore.getActiveId();
+        act(() => { chatStore.addSession({ kind: 'coach', title: 'Coach inbox' }); });
+        act(() => { chatStore.queueHarnessSignal(SIGNAL); });
+        // Held: the queue was NOT consumed, and no model turn ran into the
+        // coach transcript the dock never renders.
+        await waitFor(() => expect(chatStore.getSnapshot().signals.length).toBe(1));
+        expect(streamMock).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('chat-notice')).toBeNull();
+        // Switching back to the chat session re-fires the drain effect.
+        act(() => { chatStore.setActiveId(soloId); });
+        await screen.findByTestId('chat-notice');
+        expect(await screen.findByText(/warned now/)).toBeTruthy();
+        expect(chatStore.getSnapshot().signals.length).toBe(0);
+    });
+});
+
+describe('present_trade reports the arm() disposition honestly', () => {
+    it('a plan already through its target gets a REFUSED warning, not a fake watch promise', async () => {
+        let receipt: { ok: boolean; content: string } | null = null;
+        script(async function* (_c: unknown, _m: unknown, opts: {
+            executePanelTool?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<{ ok: boolean; content: string } | null>;
+        }) {
+            yield 'x';
+            receipt = await opts.executePanelTool?.({
+                id: 'c1', name: 'present_trade',
+                arguments: { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] },
+            }) ?? null;
+        });
+        // Live mark 111 is already THROUGH TP1 (110) — arm() will refuse this.
+        const snapshot = { markPrice: 111, candles: [] } as never;
+        render(
+            <TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+                onSelectChatModel={() => {}} getChartSnapshot={() => snapshot} />,
+        );
+        fireEvent.click(screen.getByText('Key levels?'));
+        await waitFor(() => expect(receipt).toBeTruthy());
+        expect(receipt!.ok).toBe(true);
+        expect(receipt!.content).toContain('REFUSED');
+        expect(receipt!.content).not.toContain('The harness now watches');
+    });
+
+    it('a live plan ahead of price still gets the watch promise', async () => {
+        let receipt: { ok: boolean; content: string } | null = null;
+        script(async function* (_c: unknown, _m: unknown, opts: {
+            executePanelTool?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<{ ok: boolean; content: string } | null>;
+        }) {
+            yield 'x';
+            receipt = await opts.executePanelTool?.({
+                id: 'c1', name: 'present_trade',
+                arguments: { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] },
+            }) ?? null;
+        });
+        const snapshot = { markPrice: 105, candles: [] } as never;
+        render(
+            <TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+                onSelectChatModel={() => {}} getChartSnapshot={() => snapshot} />,
+        );
+        fireEvent.click(screen.getByText('Key levels?'));
+        await waitFor(() => expect(receipt).toBeTruthy());
+        expect(receipt!.content).toContain('The harness now watches');
+        expect(receipt!.content).not.toContain('REFUSED');
+    });
+});
+
+describe('composer badge, proposal double-log, mid-turn retry chips', () => {
+    it('the ctx packet-age badge clears on a symbol switch (no previous coin\u2019s fetch time)', async () => {
+        script(yieldText('answer'));
+        const props = (sym: string) => ({
+            symbol: sym, interval: '15m', providers: [config], selectedChatModel: 'model-a',
+            onSelectChatModel: () => {},
+        });
+        const { rerender } = render(<TradeChatPanel {...props('BTCUSDT')} />);
+        fireEvent.click(screen.getByText('Key levels?'));
+        await screen.findByText('answer');
+        await waitFor(() => expect(document.body.textContent).toContain('ctx '));
+        rerender(<TradeChatPanel {...props('ETHUSDT')} />);
+        await waitFor(() => expect(screen.getByText('ETHUSDT · 15m')).toBeTruthy());
+        expect(document.body.textContent).not.toContain('ctx ');
+    });
+
+    const seededProposal: TradeProposal = {
+        symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110],
+        confidence: 'Medium', rationale: 'reclaim',
+    };
+    const seedProposalEntry = (): void => {
+        act(() => { chatStore.mutate(chatStore.getActiveId(), s => ({
+            ...s,
+            entries: [{ id: 'a-proposal', role: 'ai', text: 'a plan', tools: [], proposal: seededProposal }],
+        })); });
+    };
+
+    it('"logged" survives a dock unmount — the card cannot double-log the same plan', async () => {
+        const logged: TradeProposal[] = [];
+        const dock = (): React.ReactElement => (
+            <TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+                onSelectChatModel={() => {}} onLogProposedTrade={p => logged.push(p)} />
+        );
+        const first = render(dock());
+        seedProposalEntry();
+        fireEvent.click(await screen.findByText('Log this trade'));
+        expect(logged).toHaveLength(1);
+        // The user leaves the trade surface (the dock unmounts — component
+        // state would die with it) and comes back: the STORE-side disposition
+        // persists, so the card shows ✓ Logged with NO second Log button —
+        // and even if the click somehow landed twice, only one log happens.
+        first.unmount();
+        render(dock());
+        expect(screen.queryByText('Log this trade')).toBeNull();
+        expect(screen.getByText(/✓ Logged as an open trade/)).toBeTruthy();
+        expect(logged).toHaveLength(1);
+    });
+
+    it('retry chips stay hidden while ANY later seat of the turn is still streaming', async () => {
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        const sid = chatStore.getActiveId();
+        act(() => { chatStore.mutate(sid, s => ({
+            ...s,
+            entries: [
+                { id: 'u1', role: 'user', text: 'read', tools: [] },
+                { id: 'a1', role: 'ai', text: 'seat one settled', tools: [] },
+                { id: 'a2', role: 'ai', text: 'seat two live', tools: [], streaming: true },
+            ],
+        })); });
+        // Seat 1 settled — but seat 2 is still streaming: NO chip yet.
+        expect(screen.queryByLabelText('Retry this message')).toBeNull();
+        act(() => { chatStore.mutate(sid, s => ({
+            ...s,
+            entries: s.entries.map(e => (e.id === 'a2' ? { ...e, streaming: false } : e)),
+        })); });
+        expect(await screen.findByLabelText('Retry this message')).toBeTruthy();
     });
 });

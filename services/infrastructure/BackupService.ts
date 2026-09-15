@@ -428,6 +428,13 @@ export const exportBackupToFile = async (backupId: string): Promise<void> => {
  * Restore a backup — REPLACES the profile stored under the backup's username
  * with the backed-up snapshot (delete-sync in sqliteSaveUserProfile removes
  * rows absent from the backup, so a smaller/older backup truly restores).
+ *
+ * ATOMICITY: every apply-step (profile write, preferences sidecar, thinking
+ * sidecar) that FAILS aborts the restore with a thrown, step-named error —
+ * a mixed-generation state (new profile + old prefs) never reports success.
+ * A best-effort safety backup of the CURRENT state is taken before anything
+ * is applied (when the profile exists) so a failed/partial restore is
+ * reversible from Settings → Backups.
  */
 export const restoreBackup = async (
     backupId: string
@@ -446,22 +453,61 @@ export const restoreBackup = async (
         if (!isValidUserProfile(profile)) {
             return { success: false, error: 'Backup contains an invalid profile' };
         }
-        await overwriteUserProfile(profile);
+
+        // Pre-restore safety net: snapshot the CURRENT profile before any
+        // write so a mid-restore failure is reversible. Best-effort —
+        // createBackup returns null (already warns) when there is no current
+        // profile or the snapshot itself failed; that must not block a
+        // restore of a profile that legitimately doesn't exist yet.
+        let safetyBackupId: string | null = null;
+        try {
+            const safety = await createBackup(profile.username);
+            safetyBackupId = safety?.id ?? null;
+        } catch (e) {
+            console.warn('[BackupService] Pre-restore safety backup failed (restore continues):', e);
+        }
+        const safetyNote = safetyBackupId
+            ? ` A pre-restore safety backup (${safetyBackupId}) was created and can be restored from Settings → Backups.`
+            : ' No pre-restore safety backup was available.';
+
+        // ── Step 1: profile ───────────────────────────────────────────────
+        try {
+            await overwriteUserProfile(profile);
+        } catch (error) {
+            throw new Error(
+                `Restore failed at the "profile" step: ${error instanceof Error ? error.message : String(error)}.${safetyNote}`,
+                { cause: error },
+            );
+        }
+
+        // ── Step 2: preferences sidecar ───────────────────────────────────
         // F6: restore the preferences sidecar (provider configs, learning
         // rules, alerts, autopilot state). Old backups don't have one — the
-        // profile restore still succeeds without it.
+        // profile restore still succeeds without it. But when a sidecar IS
+        // present, any failure (bad JSON, import crash, or per-key write
+        // failures reported by the import) aborts the restore loudly — the
+        // prefs generation must not silently diverge from the profile's.
         if (record.preferencesJson) {
             try {
                 const preferences = JSON.parse(record.preferencesJson);
                 if (preferences && typeof preferences === 'object') {
-                    await importPreferencesData(preferences);
+                    const report = await importPreferencesData(preferences);
+                    if (report.failedKeys.length > 0) {
+                        throw new Error(`${report.failedKeys.length} preference key(s) could not be written: ${report.failedKeys.join(', ')}`);
+                    }
                 }
-            } catch (e) {
-                console.warn('[BackupService] Preferences sidecar could not be restored:', e);
+            } catch (error) {
+                throw new Error(
+                    `Restore failed at the "preferences" step: ${error instanceof Error ? error.message : String(error)}.${safetyNote}`,
+                    { cause: error },
+                );
             }
         }
+
+        // ── Step 3: thinking sidecar ──────────────────────────────────────
         // Restore the thinking sidecar (reasoning corpus). Old backups don't
-        // have one — the profile restore still succeeds without it.
+        // have one — the profile restore still succeeds without it. A present
+        // sidecar that fails to apply is a loud, named-step failure.
         if (record.thinkingJson) {
             try {
                 const parsed = JSON.parse(record.thinkingJson);
@@ -469,8 +515,11 @@ export const restoreBackup = async (
                     await saveThinkingBatch(parsed);
                     console.log(`[BackupService] Restored ${parsed.length} thinking records`);
                 }
-            } catch (e) {
-                console.warn('[BackupService] Thinking sidecar could not be restored:', e);
+            } catch (error) {
+                throw new Error(
+                    `Restore failed at the "thinking" step: ${error instanceof Error ? error.message : String(error)}.${safetyNote}`,
+                    { cause: error },
+                );
             }
         }
         return { success: true, username: profile.username };

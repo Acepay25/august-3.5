@@ -47,7 +47,7 @@ import {
 import { parseTradeProposal, type TradeProposal } from '../../services/trade/proposedTrade';
 import { parseKeyLevels, type MessageLevelLines } from '../../services/trade/keyLevels';
 import * as levelWatch from '../../services/trade/levelWatchService';
-import { describePlanForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
+import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from '../../services/trade/chartTriggers';
 import { phtClock } from '../../utils/timezone';
@@ -116,12 +116,15 @@ interface TradeChatPanelProps {
     /** Shapes the MODEL drew via desk tools — merged into what the model
      *  reads (so it sees its own marks) and rendered by the chart. */
     modelDrawings?: ChartDrawing[];
-    /** Desk-tool drawing surface (draw_on_chart / mark_trade_levels). */
-    addModelDrawings?: (drawings: ChartDrawing[]) => void;
+    /** Desk-tool drawing surface (draw_on_chart / mark_trade_levels).
+     *  `turn` names the RUNNING turn's session/entry/symbol/interval —
+     *  persistence must key off IT, never off whichever session the user
+     *  happens to be watching when the tool lands (per-turn identity). */
+    addModelDrawings?: (drawings: ChartDrawing[], turn?: PanelTurnContext) => void;
     /** Clear only the model's own shapes (clear_chart_drawings scope=model). */
-    clearModelDrawings?: () => void;
+    clearModelDrawings?: (turn?: PanelTurnContext) => void;
     /** Clear model + user shapes (scope=all — only on the user's request). */
-    clearAllDrawings?: () => void;
+    clearAllDrawings?: (turn?: PanelTurnContext) => void;
     /** Captures the current chart (candles + drawings) as a PNG data URL. */
     onCaptureChart?: () => string | null;
     /** Plain-data snapshot of everything the canvas currently displays
@@ -140,15 +143,21 @@ interface TradeChatPanelProps {
     groupSessionRequest?: { groupId: string; nonce: number };
     coachSessionRequest?: number;
     /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
-     *  debate verdict back as an AI entry). Absent ⇒ the option is hidden. */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<string>;
+     *  debate verdict back as an AI entry). Absent ⇒ the option is hidden.
+     *  May resolve with just the verdict text, or with `{ text, messageId }`
+     *  — the App-side analysis message id lets the dock stamp the answer
+     *  entry with `data-message-id`, so the saved-analyses gallery's Locate
+     *  can scroll straight to it. */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
+        Promise<string | { text: string; messageId?: string }>;
     /** "Log this trade" on a model proposal → App records it as an OPEN
      *  (PENDING) trade the outcome autopilot later scores. Absent ⇒ the Log
      *  button is hidden (no journal attached). */
     onLogProposedTrade?: (proposal: TradeProposal) => void;
     /** Report a presented plan to the harness level-watch (TradeView arms
-     *  it; a later price touch comes back as a [HARNESS SIGNAL] turn). */
-    onPlanPresented?: (plan: WatchPlan) => void;
+     *  it; a later price touch comes back as a [HARNESS SIGNAL] turn).
+     *  `turn` carries the RUNNING turn's identity (see PanelTurnContext). */
+    onPlanPresented?: (plan: WatchPlan, turn?: PanelTurnContext) => void;
     /** A message's Key Levels card pushes its resolved lines here so the
      *  canvas can draw them (toggle / pin / hover states already decided);
      *  null clears. Owned by TradeView — the chart stays the single renderer. */
@@ -160,6 +169,14 @@ interface TradeChatPanelProps {
     renderGroupSurface?: (groupId: string) => React.ReactNode;
     /** Group rooms available to open as a session (title for the tab). */
     groups?: Array<{ id: string; name: string }>;
+    /** Imperative scroll-to-entry bridge for App-level affordances ("Jump to
+     *  latest analysis", the saved-analyses gallery's Locate). This dock is
+     *  the app's only real transcript scroller, so it hands App a function
+     *  that scrolls the entry whose `data-message-id` matches the given id
+     *  into view; the cleanup passes null so App never calls into an
+     *  unmounted dock. (Replaces the old virtuosoRef, which pointed at a
+     *  list this panel never rendered as a Virtuoso.) */
+    registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
     /** Dock geometry controls, hoisted to the trade layout (drag handle). */
     collapsed?: boolean;
     onToggleCollapsed?: () => void;
@@ -187,6 +204,43 @@ const TRADE_TOOLS = [
 ];
 
 const QUICK_PROMPTS = ['Read this chart', 'Key levels?', 'What is the bias?', 'Order-flow pressure?', 'Scan chart → skills'];
+
+/** Identity of a RUNNING model turn, captured the moment it starts. Every
+ *  side-effect of a panel tool (proposal card attach, drawing persistence,
+ *  level-watch arming) must resolve WHO IT BELONGS TO from this object —
+ *  never from the panel's render-snapshot view state (`activeId`, or a
+ *  shared "current entry" ref). A harness turn or a background session's
+ *  turn keeps running while the user switches sessions/symbols; keying its
+ *  output off the VIEWED session made proposals and drawings land in the
+ *  wrong transcript (deep-dive 2026-09-15, per-turn identity class).
+ *  Exported so the canvas owner (TradeView) can persist against it too. */
+export interface PanelTurnContext {
+    /** The session the turn runs in. */
+    sid: string;
+    /** The streaming AI entry the turn writes into. */
+    entryId: string;
+    /** The chart the turn started under. */
+    symbol: string;
+    interval: string;
+}
+
+/** Per-entry disposition of a model proposal card ('logged' / 'dismissed').
+ *  Lives at MODULE scope keyed by entry id, NOT in component state: the
+ *  dock unmounts whenever the user leaves the trade surface, and a remount
+ *  reset the flag — a second click on "Log this trade" then logged the
+ *  SAME plan a second time. Bounded: proposal cards are rare; drop the
+ *  oldest insertions when the cap is reached. */
+const PROPOSAL_STATE_MAX = 500;
+const proposalDisposition = new Map<string, 'logged' | 'dismissed'>();
+const setProposalDisposition = (entryId: string, state: 'logged' | 'dismissed'): void => {
+    if (proposalDisposition.size >= PROPOSAL_STATE_MAX) {
+        const oldest = proposalDisposition.keys().next();
+        if (!oldest.done) proposalDisposition.delete(oldest.value);
+    }
+    proposalDisposition.set(entryId, state);
+};
+/** Test hook: forget every recorded proposal disposition. */
+export const __clearProposalStateForTests = (): void => { proposalDisposition.clear(); };
 
 /** Composer chip + the empty-state "Scan chart → skills" prompt: the model
  *  reads the WHOLE tape via the scan_chart_skills desk tool and drafts skills
@@ -274,6 +328,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
     renderCoachSurface, renderGroupSurface, groups = [],
+    registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
 }) => {
     // Session state lives in the module store (chatStore) so an in-flight
@@ -299,14 +354,23 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const [historyShowAll, setHistoryShowAll] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [showNewBot, setShowNewBot] = useState(false);
-    /** Per-entry disposition of a model proposal card: logged / dismissed. */
-    const [proposalState, setProposalState] = useState<Record<string, 'logged' | 'dismissed'>>({});
+    /** Re-render trigger for the module-scope proposal dispositions (see
+     *  proposalDisposition): the disposition itself must SURVIVE a dock
+     *  unmount, the state here only makes React repaint the card. */
+    const [proposalTick, setProposalTick] = useState(0);
+    /** entryId → App-side analysis message id for ensemble runs launched
+     *  from this dock (see onRunAnalysis): the answer entry's
+     *  `data-message-id` stamp, so the gallery's Locate can scroll to it.
+     *  Component-scoped by design — after a dock remount the mapping is
+     *  gone and Locate falls back to a no-op scroll (highlight still works). */
+    const [analysisMessageIds, setAnalysisMessageIds] = useState<Record<string, string>>({});
     const [panelPickerFor, setPanelPickerFor] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    /** The AI entry currently streaming, so a present_trade tool call can
-     *  attach its proposal to the right message for the card. */
-    const activeEntryIdRef = useRef<string | null>(null);
+    /** Which Key Levels card currently owns the shared chart-levels channel
+     *  (message id of the card that last PUSHED). Its unmount may clear the
+     *  layer; any other card's clear is dropped — see handleCardLevels. */
+    const chatLevelsOwnerRef = useRef<string | null>(null);
 
     const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
     const entries = activeSession.entries;
@@ -320,6 +384,22 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const m = getChartSnapshot?.()?.markPrice ?? null;
         return typeof m === 'number' && Number.isFinite(m) && m > 0 ? m : null;
     }, [getChartSnapshot]);
+
+    /** Ownership-arbitrated Key Levels → chart channel. Every Key Levels
+     *  card reports (payload, ownerId) through this single dock-owned pipe:
+     *  a PUSH always takes ownership (the most-recent card to draw owns the
+     *  layer), and a CLEAR only forwards when it comes from the CURRENT
+     *  owner — so card A unmounting can no longer null the live lines card
+     *  B is still drawing (deep-dive 2026-09-15, KeyLevelsCard). */
+    const handleCardLevels = useCallback((payload: MessageLevelLines | null, ownerId?: string): void => {
+        if (payload) {
+            chatLevelsOwnerRef.current = ownerId ?? null;
+            onChatLevelsChange?.(payload);
+        } else if (!ownerId || chatLevelsOwnerRef.current === ownerId) {
+            chatLevelsOwnerRef.current = null;
+            onChatLevelsChange?.(null);
+        }
+    }, [onChatLevelsChange]);
 
     /** Compact index of the trader's skill library — rides the system prompt
      *  so the model APPLYs existing skills and strategies instead of
@@ -367,8 +447,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  clear_chart_drawings land here — the market executor never sees
      *  them (they touch the live canvas). Bars-ago anchors resolve against
      *  the chart's newest candle so a line the model draws at "10 bars ago"
-     *  lands where the user is looking. */
-    const executePanelTool = useCallback(async (call: DeskToolCall): Promise<DeskToolResult | null> => {
+     *  lands where the user is looking.
+     *  `turn` is the RUNNING turn's identity (captured by runSeatTurn when
+     *  the stream starts) — every attach/persist keys off it, never off
+     *  the view state, so a background or harness turn's output lands in
+     *  ITS OWN session even after the user switched away. */
+    const executePanelTool = useCallback(async (call: DeskToolCall, turn: PanelTurnContext): Promise<DeskToolResult | null> => {
         const name = call.name;
         if (name !== 'draw_on_chart' && name !== 'mark_trade_levels' && name !== 'clear_chart_drawings'
             && name !== 'present_trade' && name !== 'watch_price' && name !== 'wake_me' && name !== 'cancel_watch') return null;
@@ -391,12 +475,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // would be too late, or silently dropped).
             void ensureNotifyPermission();
             if (name === 'watch_price') {
-                const { watch, error } = parsePriceWatch(args, { symbol, makeId, nowMs });
+                const { watch, error } = parsePriceWatch(args, { symbol: turn.symbol, makeId, nowMs });
                 if (error || !watch) return receipt(false, `watch_price rejected: ${error ?? 'invalid'}`);
                 watchService.arm(watch);
                 return receipt(true, `Watch ${watch.id} armed: ${watch.symbol} ${watch.condition} ${watch.price}, expires ${phtClock(watch.expiresAt)} PHT. The harness will wake you with a [HARNESS TRIGGER] the first time it holds — then it lapses. Tell the user you are watching for it.`);
             }
-            const { wake, error } = parseTimeWake(args, { symbol, makeId, nowMs });
+            const { wake, error } = parseTimeWake(args, { symbol: turn.symbol, makeId, nowMs });
             if (error || !wake) return receipt(false, `wake_me rejected: ${error ?? 'invalid'}`);
             watchService.arm(wake);
             return receipt(true, `Scheduled wake ${wake.id} at ${phtClock(wake.atMs)} PHT (in ${Math.round((wake.atMs - nowMs) / 60_000)}m). The harness will signal you then to re-check ${wake.symbol}: "${wake.note}".`);
@@ -406,7 +490,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             let n = 0;
             for (const id of ids) if (watchService.cancel(id)) n += 1;
             if (args.allForSymbol) {
-                const target = String(args.symbol ?? symbol).toUpperCase();
+                const target = String(args.symbol ?? turn.symbol).toUpperCase();
                 n += watchService.cancelWhere(w => w.symbol === target);
             }
             const left = watchService.list().map(w => w.id);
@@ -417,32 +501,42 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // present_trade: draw the plan, ARM the harness level-watch on it,
         // AND surface a Log-this-trade card on the streaming entry.
         if (name === 'present_trade') {
-            const { proposal, error } = parseTradeProposal({ ...args, symbol: args.symbol || symbol });
+            const { proposal, error } = parseTradeProposal({ ...args, symbol: args.symbol || turn.symbol });
             if (error || !proposal) return receipt(false, `present_trade rejected: ${error ?? 'invalid proposal'}`);
             // The DOCK generates the stable plan id: the level-watch arms on
             // it, the receipt names its level ids for the model to quote,
             // and "Log this trade" carries it onto the journal row.
             proposal.planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
             const { drawings } = drawingsFromLevelTool({ entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits }, { drawnPrice });
-            addModelDrawings?.(drawings);
-            onPlanPresented?.({
+            addModelDrawings?.(drawings, turn);
+            const plan: WatchPlan = {
                 planId: proposal.planId, symbol: proposal.symbol, direction: proposal.direction,
                 entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits,
-            });
-            const entryId = activeEntryIdRef.current;
-            const sid = activeId;
-            if (entryId) chatStore.mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === entryId ? { ...e, proposal } : e)) }));
+            };
+            // The honest disposition of the watch TradeView is about to arm:
+            // arm() REFUSES a plan already through its SL/target at the live
+            // mark (staleLevelsAtArm is the same gate), so the receipt must
+            // not promise a watch that will never ping.
+            const stale = staleLevelsAtArm(plan, typeof drawnPrice === 'number' && Number.isFinite(drawnPrice) && drawnPrice > 0 ? drawnPrice : null);
+            onPlanPresented?.(plan, turn);
+            // THE TURN's entry — not "whatever is streaming in the viewed
+            // session": the card must land in this run's transcript even if
+            // the user switched sessions mid-stream.
+            if (turn.entryId) chatStore.mutate(turn.sid, s => ({ ...s, entries: s.entries.map(e => (e.id === turn.entryId ? { ...e, proposal } : e)) }));
             const rr = proposal.takeProfits.length && Math.abs(proposal.entry - proposal.stopLoss) > 0
                 ? (Math.abs(proposal.takeProfits[0] - proposal.entry) / Math.abs(proposal.entry - proposal.stopLoss)).toFixed(1) : '—';
             const levelIds = [`${proposal.planId}:ENTRY`, `${proposal.planId}:SL`,
                 ...proposal.takeProfits.map((_, i) => `${proposal.planId}:TP${i + 1}`)];
-            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. The user sees a "Log this trade" card. The harness now watches these levels — ids ${levelIds.join(', ')} — and will send you a [HARNESS SIGNAL] when one is reached; refer to levels by those ids and never re-announce one that already fired.`);
+            const watchLine = stale.length > 0
+                ? `WARNING: the harness REFUSED to watch this plan — price ${drawnPrice} is already through a stop/target, so every level (${stale.join(', ')}) latched as already-reached and NO [HARNESS SIGNAL] will come for them. Do not claim a watch is live; if the user still wants one, re-present a plan whose levels sit ahead of price.`
+                : `The harness now watches these levels — ids ${levelIds.join(', ')} — and will send you a [HARNESS SIGNAL] when one is reached; refer to levels by those ids and never re-announce one that already fired.`;
+            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. The user sees a "Log this trade" card. ${watchLine}`);
         }
         if (name === 'clear_chart_drawings') {
             const scope = args.scope === 'all' ? 'all' : 'model';
             if (!clearModelDrawings && !clearAllDrawings) return receipt(false, 'clear_chart_drawings: no chart is attached to this session.');
-            if (scope === 'all') clearAllDrawings?.();
-            else clearModelDrawings?.();
+            if (scope === 'all') clearAllDrawings?.(turn);
+            else clearModelDrawings?.(turn);
             return receipt(true, scope === 'all'
                 ? 'Cleared ALL drawings (the model\'s marks and the user\'s own shapes) from the chart.'
                 : 'Cleared the model\'s own drawings from the chart (the user\'s shapes were kept).');
@@ -451,7 +545,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (name === 'mark_trade_levels') {
             const { drawings, error } = drawingsFromLevelTool(args, { drawnPrice });
             if (error) return receipt(false, `mark_trade_levels rejected: ${error}`);
-            addModelDrawings(drawings);
+            addModelDrawings(drawings, turn);
             const listed = drawings.map(d => `${d.label} ${d.points[0].p}`).join(', ');
             return receipt(true, `Marked on the chart: ${listed}. The user sees these lines now.`);
         }
@@ -459,13 +553,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const lastBarTime = snap && snap.candles.length > 0
             ? snap.candles[snap.candles.length - 1].time
             : Math.floor(Date.now() / 1000);
-        const { drawings, error } = drawingFromChartTool(args, { lastBarTime, barSeconds: intervalSeconds(interval as never), drawnPrice });
+        const { drawings, error } = drawingFromChartTool(args, { lastBarTime, barSeconds: intervalSeconds(turn.interval as never), drawnPrice });
         if (error) return receipt(false, `draw_on_chart rejected: ${error}`);
-        addModelDrawings(drawings);
+        addModelDrawings(drawings, turn);
         const d = drawings[0];
         const described = describeDrawingsForModel([d]).split('\n').slice(1).join(' ').trim();
         return receipt(true, `Drew on the chart: ${described || d.kind}. The user sees it now.`);
-    }, [addModelDrawings, clearModelDrawings, clearAllDrawings, getChartSnapshot, interval, symbol, activeId, onPlanPresented]);
+    }, [addModelDrawings, clearModelDrawings, clearAllDrawings, getChartSnapshot, onPlanPresented]);
 
     // The solo chat model: a `providerId::modelId` selection (the composer's
     // picker is provider-qualified so duplicate model names across providers
@@ -592,6 +686,43 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
     }, [entries, activeId]);
 
+    // ── Imperative scroll-to-entry bridge (see registerScrollToMessage) ────
+    // The dock owns the only real transcript scroller, so App's affordances
+    // ("Jump to latest analysis", the gallery's Locate) route the scroll
+    // through this registered function instead of a never-attached handle.
+    // Entries are stamped `data-entry-id` (the chatStore entry id — what
+    // jump-to-latest resolves from the store) and `data-message-id` (the
+    // App-side analysis message id when this entry carries one, else the
+    // entry id — what the gallery's Locate passes). A miss is a deliberate
+    // no-op: the coach/group surfaces render no transcript, and an analysis
+    // card that isn't in THIS dock's session must not yank the user
+    // somewhere unrelated.
+    useEffect(() => {
+        if (!registerScrollToMessage) return;
+        registerScrollToMessage((messageId: string): void => {
+            const container = scrollRef.current;
+            if (!container || !messageId) return;
+            const nodes = container.querySelectorAll<HTMLElement>('[data-entry-id]');
+            for (const node of Array.from(nodes)) {
+                if (node.getAttribute('data-entry-id') === messageId
+                    || node.getAttribute('data-message-id') === messageId) {
+                    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    return;
+                }
+            }
+        });
+        return () => { registerScrollToMessage(null); };
+    }, [registerScrollToMessage]);
+
+    // The composer's "ctx HH:MM PHT" badge reports when the LAST packet was
+    // fetched — a fetch made for a DIFFERENT coin or a DIFFERENT session
+    // says nothing about this one. Clear it on any switch so the badge falls
+    // back to `SYMBOL · INTERVAL` until the first send under the new setup
+    // stamps a real time (the stale previous-coin fetch time was the bug).
+    useEffect(() => {
+        setContextAt(null);
+    }, [symbol, activeId]);
+
     // NOTE: no unmount-abort on purpose. Switching to another surface tab
     // unmounts this panel; the run must keep streaming into the store so
     // returning shows the completed answer. Only an explicit Stop (or
@@ -630,6 +761,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
     const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
         chatStore.mutate(id, fn);
+    };
+
+    /** End a run ONLY if the store still holds THIS run's controller.
+     *  chatStore keys controllers by session; a second beginRun (a queued
+     *  harness flush racing this run, or a double-submit that slipped
+     *  through) REPLACES the entry — and a blind endRun(sid) would then
+     *  delete the NEWER run's slot, leaving it un-stoppable while the
+     *  finished one's `busy` ghost lingers. Identity check: whoever owns
+     *  the slot clears the slot. */
+    const endRunOwned = (sid: string, controller: AbortController): void => {
+        if (chatStore.getController(sid) === controller) chatStore.endRun(sid);
     };
 
     /** The fresh code-calculated packet every message rides (fetched ONCE per
@@ -704,8 +846,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // what the canvas is painting as the turn starts.
         const sendSnap = getChartSnapshot?.() ?? null;
         const sendCandles = sendSnap?.candles ?? [];
-        // present_trade attaches its proposal to whichever entry is streaming.
-        activeEntryIdRef.current = entryId;
+        // The identity of THIS turn, frozen at start. Every panel-tool
+        // side-effect (proposal card, drawings, arming) is dispatched with
+        // this context — so a turn running in the background while the user
+        // watches another session/symbol still writes into ITS transcript.
+        const turnCtx: PanelTurnContext = { sid, entryId, symbol, interval };
         const patch = (fn: (e: LiveEntry) => LiveEntry): void => {
             mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: s.entries.map(e => (e.id === entryId ? fn(e) : e)) }));
         };
@@ -723,7 +868,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             chartDrawings: allDrawings,
             liveMarkPrice: sendSnap?.markPrice ?? null,
             formingCandle: sendCandles.length > 0 ? sendCandles[sendCandles.length - 1] : null,
-            executePanelTool,
+            executePanelTool: call => executePanelTool(call, turnCtx),
             trades,
             mailbox,
             mailboxSeat,
@@ -753,6 +898,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // Absolute text (not += delta): a hidden-pass stream shows ''
             // until it proves it spoke, then the whole answer lands at once.
             patch(e => ({ ...e, text: hidePass && panelCouldStillBePass(full) ? '' : full }));
+        }
+        // An explicit Stop is the user pulling the plug — NOT a failure.
+        // Settle quietly and check this FIRST: without the guard, a stopped
+        // turn fell through to the pure-echo repair below and printed
+        // "streamed only its reasoning…" on a deliberate stop click (and
+        // callers' catch blocks labelled it "could not answer").
+        if (controller.signal.aborted) {
+            patch(e => ({ ...e, streaming: false }));
+            return full;
         }
         // Settle-time repair: the live gate only strips TAG-delimited thinking
         // (<thinking>…). Header-style ("Thinking:" / "FINAL_OUTPUT:") or a model
@@ -839,7 +993,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  that bubble are dropped and the turn re-runs with the same text/image
      *  and fresh live context. */
     const send = useCallback(async (raw: string, retryOf?: string): Promise<void> => {
-        const session0 = sessions.find(s => s.id === activeId);
+        // Fresh STORE read (the pattern runHarnessTurn already uses) — never
+        // the render snapshot: a key-repeat/double-click fires two sends
+        // inside one React tick, and the snapshot's `busy` is still false
+        // for the second one, so two runs overlap.
+        const live = chatStore.getSnapshot();
+        const sid = live.activeId;
+        const session0 = live.sessions.find(s => s.id === sid);
         if (!session0) return;
         const retryEntry = retryOf
             ? session0.entries.find(e => e.id === retryOf && e.role === 'user')
@@ -851,12 +1011,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const sentAttachments: Attachment[] = retryEntry
             ? (retryEntry.image ? [{ id: newId('at'), kind: 'image', name: 'chart.png', payload: retryEntry.image }] : [])
             : attachments;
-        if ((!text && sentAttachments.length === 0 && !retryEntry) || busy) return;
+        if ((!text && sentAttachments.length === 0 && !retryEntry) || live.running[sid]) return;
         if (!provider) return;
         if (retryEntry) {
             // Drop the stale answer(s) AFTER the original user bubble — the
             // branch restarts from that message.
-            mutate(activeId, s => {
+            mutate(sid, s => {
                 const idx = s.entries.findIndex(e => e.id === retryEntry.id);
                 return idx < 0 ? s : { ...s, updatedAt: Date.now(), entries: s.entries.slice(0, idx + 1) };
             });
@@ -864,7 +1024,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             setDraft('');
             setAttachments([]);
         }
-        const sid = activeId;
         const session = session0;
         // WHO SUPERVISES: this session's model — a panel's FIRST seat when
         // several are selected. Reported now, and it rides every learning
@@ -914,7 +1073,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // Stopped during the fetch — undo the optimistic bubbles (a
             // retried user bubble stays; only the fresh answer is removed).
             mutate(sid, s => ({ ...s, entries: s.entries.filter(e => e.id !== soloAiEntry.id && (retryEntry || e.id !== userEntry.id)) }));
-            chatStore.endRun(sid);
+            endRunOwned(sid, controller);
             return;
         }
         const userText = `${contextBlock}\n\n${text}${fileBlocks}`;
@@ -946,11 +1105,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             try {
                 await runSeatTurn({ sid, entryId: aiEntry.id, config: soloProvider, messages, mailboxSeat: '' });
             } catch (e) {
-                const message = e instanceof Error ? e.message : String(e);
-                mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, text: `The chart copilot could not answer: ${message}`, streaming: false } : en) }));
+                // An explicit Stop throws a transport AbortError — that is a
+                // user action, not a failure: the bubble keeps what streamed
+                // (already settled by runSeatTurn) instead of being stamped
+                // "The chart copilot could not answer…".
+                if (!controller.signal.aborted) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, text: `The chart copilot could not answer: ${message}`, streaming: false } : en) }));
+                }
             } finally {
                 mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false } : en)) }));
-                chatStore.endRun(sid);
+                endRunOwned(sid, controller);
                 maybeReviewSessions(supervisorCfg);
             }
             return;
@@ -971,7 +1136,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     notice: true,
                 }],
             }));
-            chatStore.endRun(sid);
+            endRunOwned(sid, controller);
             return;
         }
         const mailbox = createDebateMailbox(seats.map(s => s.name));
@@ -1045,15 +1210,18 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 } catch (e) {
                     // Seat failed — a visible line beats a silent gap, and
                     // the line carries the REAL reason (the provider's
-                    // friendly error), not just "failed to answer".
+                    // friendly error), not just "failed to answer". An
+                    // explicit Stop is not a failure: keep whatever streamed.
                     seatFailed = true;
-                    const msg = e instanceof Error ? e.message : String(e);
-                    // Always settle the flag — a seat that threw AFTER partial
-                    // text used to keep streaming:true forever, which then
-                    // blocked the whole store from persisting.
-                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
-                        ? { ...en, streaming: false, ...(en.text ? {} : { text: `(this seat failed to answer: ${msg})` }) }
-                        : en)) }));
+                    if (!controller.signal.aborted) {
+                        const msg = e instanceof Error ? e.message : String(e);
+                        // Always settle the flag — a seat that threw AFTER partial
+                        // text used to keep streaming:true forever, which then
+                        // blocked the whole store from persisting.
+                        mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
+                            ? { ...en, streaming: false, ...(en.text ? {} : { text: `(this seat failed to answer: ${msg})` }) }
+                            : en)) }));
+                    }
                 }
                 spoken.push(seat.id);
                 if (!seatFailed && isPassReply(full)) {
@@ -1074,16 +1242,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 room.push({ seatId: seat.id, text: roomText, synthesis: plan.isSynthesis });
             }
         } finally {
-            chatStore.endRun(sid);
+            endRunOwned(sid, controller);
             maybeReviewSessions(supervisorCfg);
         }
-    }, [activeId, attachments, bots, buildContextBlock, busy, configForSeat, maybeReviewSessions, provider, runSeatTurn, sessions, systemPromptFor]);
+    }, [attachments, bots, buildContextBlock, configForSeat, maybeReviewSessions, provider, runSeatTurn, systemPromptFor]);
 
     /** "Run full analysis" — the ensemble pipeline launched from this chat;
      *  its verdict comes back as an AI entry in the same transcript. */
     const runFullAnalysis = useCallback(async (): Promise<void> => {
         const text = draft.trim();
-        if (!text || busy || !onRunAnalysis) return;
+        // Fresh store read, same double-submit defense as send().
+        if (!text || !onRunAnalysis || chatStore.getSnapshot().running[activeId]) return;
         setDraft('');
         const sentAttachments = attachments;
         setAttachments([]);
@@ -1098,7 +1267,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
         try {
-            const answer = await onRunAnalysis(text + fileNote, images);
+            const result = await onRunAnalysis(text + fileNote, images);
             if (controller.signal.aborted) {
                 // Stopped mid-run: the early return used to skip the settle,
                 // orphaning a streaming:true bubble that then blocked ALL
@@ -1106,14 +1275,21 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, streaming: false, text: e.text || 'The analysis was stopped.' } : e)) }));
                 return;
             }
+            // The bridge may hand back the App-side message id alongside the
+            // verdict text — stamp the entry with it so Locate can scroll here.
+            const answer = typeof result === 'string' ? result : result.text;
+            const analysisMessageId = typeof result === 'string' ? undefined : result.messageId;
+            if (analysisMessageId) {
+                setAnalysisMessageIds(prev => ({ ...prev, [aiEntry.id]: analysisMessageId }));
+            }
             mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, text: answer || 'The analysis produced no summary.', streaming: false } : e)) }));
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
             mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, text: `The analysis run failed: ${message}`, streaming: false } : e)) }));
         } finally {
-            chatStore.endRun(sid);
+            endRunOwned(sid, controller);
         }
-    }, [activeId, attachments, busy, draft, onRunAnalysis]);
+    }, [activeId, attachments, draft, onRunAnalysis]);
 
     /** Run one queued harness signal (a level-watch price event) as a model
      *  turn: a notice row shows the event, then the model warns the user.
@@ -1147,7 +1323,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const contextBlock = await buildContextBlock();
         if (controller.signal.aborted) {
             mutate(sid, s => ({ ...s, entries: s.entries.filter(e => e.id !== aiEntry.id) }));
-            chatStore.endRun(sid);
+            endRunOwned(sid, controller);
             return;
         }
         const messages: ChatMessage[] = [
@@ -1159,21 +1335,35 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         try {
             await runSeatTurn({ sid, entryId: aiEntry.id, config, messages, mailboxSeat: '' });
         } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id && !en.text ? { ...en, text: `The harness warning failed: ${message}`, streaming: false } : en)) }));
+            // A Stop of a harness warning is not a failure to narrate.
+            if (!controller.signal.aborted) {
+                const message = e instanceof Error ? e.message : String(e);
+                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id && !en.text ? { ...en, text: `The harness warning failed: ${message}`, streaming: false } : en)) }));
+            }
         } finally {
             mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false } : en)) }));
-            chatStore.endRun(sid);
+            endRunOwned(sid, controller);
         }
     }, [bots, buildContextBlock, configForSeat, provider, runSeatTurn, systemPromptFor]);
 
     // Flush queued harness signals when the session goes idle. takeHarness-
     // Signals emits, so this re-runs with an empty queue and settles.
+    // KIND GATE: runHarnessTurn streams into the ACTIVE session's transcript
+    // — but the coach inbox / group room render a different surface the dock
+    // never shows chat entries in. Draining into one would consume the queue
+    // invisibly (the warning vanishes without ever reaching a model turn).
+    // With a non-chat session selected the signals HOLD in the store;
+    // switching back to a chat session re-fires this effect and drains.
     useEffect(() => {
         if (busy || snap.signals.length === 0) return;
+        const session = sessions.find(s => s.id === activeId) ?? sessions[0];
+        if (session && session.kind !== 'solo' && session.kind !== 'panel') {
+            console.info(`[Chart AI] holding ${snap.signals.length} harness signal(s): the active session is a ${session.kind}, not a chat — it will drain when a chat session is selected.`);
+            return;
+        }
         const texts = chatStore.takeHarnessSignals();
         if (texts.length > 0) void runHarnessTurn(texts.join('\n\n'));
-    }, [busy, snap.signals, runHarnessTurn]);
+    }, [busy, snap.signals, runHarnessTurn, activeId, sessions]);
 
     // ── Session management ──────────────────────────────────────────────────
     const addSession = useCallback((kind: 'solo' | 'panel' = 'solo', botId?: string): void => {
@@ -1249,6 +1439,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         .sort((a, b) => b.updatedAt - a.updatedAt);
     const historyRows = historyShowAll ? historyFiltered : historyFiltered.slice(0, 8);
     const historyHidden = historyFiltered.length - historyRows.length;
+
+    /** Proposal card disposition for one entry — read from the MODULE map
+     *  (see proposalDisposition), so the 'logged' state survives a dock
+     *  unmount/remount and "Log this trade" can never be clicked twice for
+     *  the same plan. proposalTick is the repaint trigger. */
+    const proposalStateOf = (id: string): 'logged' | 'dismissed' | undefined => {
+        void proposalTick;
+        return proposalDisposition.get(id);
+    };
 
     if (collapsed) {
         return (
@@ -1476,9 +1675,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 )}
                 {entries.map((e, i) => {
                     // Chips on a USER bubble (retry + copy) only exist once the
-                    // generation following that message has stopped — same
-                    // contract as the AI bubble's copy chip (!streaming).
-                    const answerStreaming = !!entries[i + 1]?.streaming;
+                    // generation following that message has stopped — and
+                    // "the generation" is EVERY later entry, not just the
+                    // adjacent one: a PANEL turn streams seat 2 while seat 1
+                    // has already settled, and a retry chip appearing mid-turn
+                    // let a click wipe the live room. Same contract as the AI
+                    // bubble's copy chip (!streaming).
+                    const answerStreaming = entries.slice(i + 1).some(x => x.streaming);
                     // Key-levels protocol: the fenced block the model closes an
                     // analysis with renders as the chart-linked card, never as
                     // raw text — and an OPEN (still-streaming) fence is hidden
@@ -1486,7 +1689,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     const aiLevels = e.role === 'ai' && !e.notice ? parseKeyLevels(e.text) : null;
                     const shownText = aiLevels?.hadBlock ? aiLevels.clean : e.text;
                     return (
-                    <div key={e.id} className="chat-fade-in" data-testid={`chat-entry-${e.role}`}>
+                    <div key={e.id} className="chat-fade-in" data-entry-id={e.id} data-message-id={analysisMessageIds[e.id] ?? e.id} data-testid={`chat-entry-${e.role}`}>
                         {e.role === 'user' ? (
                             <div className="flex flex-col items-end gap-1">
                                 {e.image && (
@@ -1578,13 +1781,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 )}
                                 {aiLevels && aiLevels.levels.length > 0 && !e.streaming && (
                                     <KeyLevelsCard
+                                        messageId={e.id}
                                         levels={aiLevels.levels}
                                         symbol={symbol}
                                         getMark={getMarkForDist}
-                                        onChatLevels={onChatLevelsChange}
+                                        onChatLevels={handleCardLevels}
                                     />
                                 )}
-                                {e.proposal && !proposalState[e.id] && (
+                                {e.proposal && !proposalStateOf(e.id) && (
                                     <div className="mt-1 rounded-xl border border-white/10 bg-zinc-800/70 p-2.5" data-testid="trade-proposal-card">
                                         <div className="flex items-center gap-2">
                                             <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${e.proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{e.proposal.direction}</span>
@@ -1600,20 +1804,30 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         <div className="mt-2 flex items-center gap-1.5">
                                             {onLogProposedTrade && (
                                                 <button type="button"
-                                                    onClick={() => { onLogProposedTrade(e.proposal!); setProposalState(prev => ({ ...prev, [e.id]: 'logged' })); }}
+                                                    onClick={() => {
+                                                        // Double-log guard: the disposition lives at module
+                                                        // scope, so it survived even before this fix's second
+                                                        // half — the map lookup makes a re-click after a dock
+                                                        // unmount/remount (fresh component, same store entry)
+                                                        // a NO-OP instead of a second journal row.
+                                                        if (proposalDisposition.get(e.id)) return;
+                                                        onLogProposedTrade(e.proposal!);
+                                                        setProposalDisposition(e.id, 'logged');
+                                                        setProposalTick(t => t + 1);
+                                                    }}
                                                     className="rounded-control bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-500">
                                                     Log this trade
                                                 </button>
                                             )}
                                             <button type="button"
-                                                onClick={() => setProposalState(prev => ({ ...prev, [e.id]: 'dismissed' }))}
+                                                onClick={() => { if (proposalDisposition.get(e.id)) return; setProposalDisposition(e.id, 'dismissed'); setProposalTick(t => t + 1); }}
                                                 className="rounded-control border border-white/10 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
                                                 Cancel
                                             </button>
                                         </div>
                                     </div>
                                 )}
-                                {e.proposal && proposalState[e.id] === 'logged' && (
+                                {e.proposal && proposalStateOf(e.id) === 'logged' && (
                                     <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">✓ Logged as an open trade — the harness will score it against the outcome.</p>
                                 )}
                             </div>

@@ -6,16 +6,16 @@
 import { useState } from 'react';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 
-/** Journal panel state. focusTradeId deep-links the Think tab to one analysis. */
+/** Journal panel route state — consumed only for its `tab` vocabulary since
+ *  the surface router owns opening (journalState was deleted after the dead
+ *  overlay branch went; audit 2026-09-15). focusTradeId deep-links the
+ *  Think tab to one analysis. */
 export interface JournalUIState {
-    isOpen: boolean;
     tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
     focusTradeId?: string;
 }
 
 export function useJournalUI() {
-    const [journalState, setJournalState] = useState<JournalUIState>({ isOpen: false, tab: 'log' });
-
     const [selectedProbabilityMessageId, setSelectedProbabilityMessageId] = useState<string | null>(null);
     const [strategyToView, setStrategyToView] = useState<string | null>(null);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -25,7 +25,6 @@ export function useJournalUI() {
     const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
 
     return {
-        journalState, setJournalState,
         selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
         copiedMessageId, setCopiedMessageId,

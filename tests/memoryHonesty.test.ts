@@ -5,6 +5,11 @@ import { TradeOutcome } from '../types';
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = store[key];
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
         store[key] = value;
     }),
@@ -13,11 +18,11 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
     }),
 }));
 
-import { initMemoryFiles } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, createMemoryFile, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import { findRelevantTrades } from '../services/learning/PatternMemorySynthesisService';
 import { buildVerdictEvidencePack, buildRootCausePatternLine } from '../services/learning/EvidencePackService';
 import { filterBotNoteByQuery } from '../services/bots/BotMemoryService';
-import { parseSkillMarkdown } from '../services/learning/SkillMemoryService';
+import { parseSkillMarkdown, serializeSkill, applySkillEvidence, type SkillMeta } from '../services/learning/SkillMemoryService';
 
 const day = 86_400_000;
 
@@ -111,6 +116,47 @@ describe('memory honesty', () => {
         const meta = parseSkillMarkdown(md)!;
         expect(meta.evidenceCount).toBe(27);
         expect(meta.tradeIds.length).toBe(3);
+    });
+
+    it('evidence counter keeps growing PAST 21 — no tail-20 saturation', async () => {
+        // The counter was derived as max(stored, tradeIds.length) at write
+        // time, but tradeIds is itself tail-capped to 20 — so the best it
+        // ever reached was 20 + this-trade = 21, and every later "learned
+        // from N logged trades" provenance line lied forever. It must now
+        // be a real running total.
+        const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const tradeIds = Array.from({ length: 20 }, (_, i) => `seed-${i}`);
+        const meta: SkillMeta = {
+            status: 'confirmed',
+            kind: 'avoid',
+            coin: 'BTCUSDT',
+            direction: 'Short',
+            family: 'Family A',
+            wins: 1,
+            losses: 19,
+            consecutiveLosses: 0,
+            tradeIds,
+            lastEvidenceAt: new Date().toISOString(),
+            body: 'Fade the extension.',
+        };
+        await createMemoryFile(folder.id, 'saturation.md', serializeSkill(meta, 'Saturation'), 'test-user', true);
+
+        const w1 = makeTrade({ id: 'sat-1', outcome: TradeOutcome.WIN });
+        await applySkillEvidence(w1, 'test-user', [w1]);
+        const after1 = parseSkillMarkdown(
+            getMemoryFiles().files.find(f => f.name === 'saturation.md')!.content,
+        )!;
+        expect(after1.evidenceCount).toBe(21); // 20 legacy + the new count
+
+        const w2 = makeTrade({ id: 'sat-2', outcome: TradeOutcome.WIN });
+        await applySkillEvidence(w2, 'test-user', [w1, w2]);
+        const after2 = parseSkillMarkdown(
+            getMemoryFiles().files.find(f => f.name === 'saturation.md')!.content,
+        )!;
+        // Pre-fix this stuck at 21 forever.
+        expect(after2.evidenceCount).toBe(22);
+        // …and the tail list still shows only 20 ids.
+        expect(after2.tradeIds.length).toBe(20);
     });
 
     it('surfaces the root-cause failure pattern only above sample + majority', () => {

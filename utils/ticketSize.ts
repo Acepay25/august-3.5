@@ -135,10 +135,32 @@ export const computeContractSize = (
     }
     const entry = parseNum(analysis.entryPoints?.[0]?.price);
     const sl = parseNum(analysis.stopLoss);
-    const riskUsd = eq * (riskPct / 100) * base.fraction;
+    let riskUsd = eq * (riskPct / 100) * base.fraction;
     const stopDist = entry && sl ? Math.abs(entry - sl) / entry : 0;
-    const qty = entry && stopDist > 0 ? riskUsd / (entry * stopDist) : null;
-    const notionalUsd = qty && entry ? qty * entry : riskUsd * lev;
+    let qty = entry && stopDist > 0 ? riskUsd / (entry * stopDist) : null;
+    let notionalUsd = qty && entry ? qty * entry : riskUsd * lev;
+
+    // Exchange leverage cap: no resting position can exceed equity × leverage
+    // of notional. A very tight stop (stopDist below the risk fraction) made
+    // the risk-based size demand MORE notional than the account can possibly
+    // carry at the configured leverage — the exchange rejects the recommended
+    // ticket silently. Clamp the notional to the affordable maximum,
+    // recompute qty and the EFFECTIVE risk from what actually fits, and record
+    // the step in the trail so the card never shows an unfundable size.
+    const maxNotionalUsd = eq * lev;
+    if (maxNotionalUsd > 0 && notionalUsd > maxNotionalUsd) {
+        const uncappedNotionalUsd = notionalUsd;
+        const fractionEffect = Math.round((maxNotionalUsd / uncappedNotionalUsd) * 100) / 100;
+        notionalUsd = maxNotionalUsd;
+        if (entry) qty = notionalUsd / entry;
+        if (stopDist > 0) riskUsd = notionalUsd * stopDist;
+        trail.push({
+            type: 'equity',
+            label: `Leverage cap — the stop-based size needed $${Math.round(uncappedNotionalUsd)} notional but ${lev}x on $${Math.round(eq)} allows $${Math.round(maxNotionalUsd)}; size clamped, effective risk $${Math.round(riskUsd)}`,
+            fractionEffect,
+        });
+    }
+
     const coin = (analysis.coinName || '').replace(/USDT$/i, '') || 'qty';
     const qtyText = qty !== null
         ? `${qty >= 1 ? qty.toFixed(3) : qty.toPrecision(3)} ${coin}`

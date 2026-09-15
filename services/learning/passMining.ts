@@ -21,7 +21,7 @@
 
 import type { LoggedTrade } from '../../types';
 import { TradeOutcome } from '../../types/enums';
-import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { getPreferenceArray, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';
 import type { Kline } from '../../types/message';
 
@@ -58,10 +58,22 @@ const MAX_RECORDS = 300;
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
 
-export const loadPassRecords = async (username: string): Promise<PassRecord[]> => {
-    const recs = await getPreferenceObject<PassRecord[]>(keyFor(username));
-    return Array.isArray(recs) ? recs : [];
+const RESOLUTIONS: readonly PassResolution[] = ['CORRECT_PASS', 'MISSED_OPPORTUNITY', 'OPEN', 'NO_PLAN'];
+
+/** Item guard for the stored blob: the sweep keys, filters and clusters on
+ *  tradeId/resolution, so a junk element (null, string, unknown resolution)
+ *  must never survive the read — the previous `as T` cast let one reach the
+ *  `.map`/`every` chains. */
+const isPassRecord = (item: unknown): item is PassRecord => {
+    const r = item as Partial<PassRecord> | null;
+    return !!r && typeof r === 'object'
+        && typeof r.tradeId === 'string'
+        && typeof r.resolution === 'string'
+        && RESOLUTIONS.includes(r.resolution as PassResolution);
 };
+
+export const loadPassRecords = async (username: string): Promise<PassRecord[]> =>
+    getPreferenceArray<PassRecord>(keyFor(username), isPassRecord);
 
 const savePassRecords = async (username: string, recs: PassRecord[]): Promise<void> =>
     setPreferenceObject(keyFor(username), recs.slice(-MAX_RECORDS));

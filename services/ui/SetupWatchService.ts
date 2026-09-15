@@ -16,7 +16,8 @@
  */
 
 import { SetupWatch, SetupWatchTriggerEvent } from '../../types';
-import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { getPreferenceObject, setPreferenceObject, removePreference, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { getActiveUsername } from '../../utils/activeUser';
 import { PriceAlertService } from './PriceAlertService';
 
 type FireCallback = (trigger: SetupWatchTriggerEvent) => void;
@@ -57,18 +58,59 @@ class SetupWatchServiceClass {
     private unsubscribePrices: (() => void) | null = null;
     private releaseMonitor: (() => void) | null = null;
     private initialized = false;
+    /** Profile the in-memory watch map belongs to. Watches persist under
+     *  `setup_watches_v1_<username>` — the global key was unscoped (audit
+     *  §2.5) and one user's re-debate triggers used to arm under another. */
+    private loadedUser: string | null = null;
+    /** Bumped by every init/reset so a superseded profile switch can't
+     *  commit the outgoing user's watches into the incoming one's session
+     *  (mirrors GlobalLearningService._initGeneration). */
+    private initGeneration = 0;
     // Serialize preference writes: fire-and-forget async saves can land out
     // of order and let an older snapshot overwrite a newer re-arm.
     private saveChain: Promise<void> = Promise.resolve();
 
     /**
-     * Load persisted watches and start consuming the price feed. Idempotent.
+     * Load persisted watches and start consuming the price feed. Idempotent
+     * FOR THE SAME USER only: an init for a different profile (the switch
+     * path) tears the previous user's state down and loads the incoming
+     * user's key — the old unconditional `if (initialized) return;` made the
+     * post-switch re-init a no-op, so the new user inherited the old user's
+     * armed watches.
      */
-    async init(): Promise<void> {
-        if (this.initialized) return;
+    async init(username?: string): Promise<void> {
+        const user = username ?? getActiveUsername();
+        if (this.initialized && this.loadedUser === user) return;
+        const gen = ++this.initGeneration;
+        this.teardownFeed();
+        this.releaseTrackedSymbols();
+        this.watches.clear();
+        this.loadedUser = user;
         this.initialized = true;
-        await this.loadWatches();
+        const fetched = await this.fetchWatches(user);
+        if (gen !== this.initGeneration || this.loadedUser !== user) return;
+        if (fetched) this.hydrateWatches(fetched.watches, fetched.migrate);
+        if (fetched?.migrate) {
+            // The blob moved into THIS user's key — retire the shared global
+            // one so the next profile never re-adopts the same watches.
+            removePreference(PREF_KEYS.SETUP_WATCHES).catch(() => { /* best effort */ });
+        }
         this.ensureFeed();
+    }
+
+    /**
+     * Profile switch: drop the outgoing user's watches from MEMORY and
+     * release the feed hooks, and re-arm init so the incoming user's
+     * init() actually loads their own persisted set. Their storage is
+     * untouched — it is keyed per user and re-adopted on next login.
+     */
+    reset(): void {
+        this.initGeneration++;
+        this.teardownFeed();
+        this.releaseTrackedSymbols();
+        this.watches.clear();
+        this.loadedUser = null;
+        this.initialized = false;
     }
 
     /**
@@ -160,14 +202,26 @@ class SetupWatchServiceClass {
 
     /** Test-only: wipe in-memory state + feed hooks. */
     resetForTest(): void {
-        this.watches.clear();
+        this.reset();
         this.fireSubscribers.clear();
         this.changeSubscribers.clear();
+    }
+
+    /** Release the shared-feed hold and the tick subscription (if held). */
+    private teardownFeed(): void {
         this.unsubscribePrices?.();
         this.unsubscribePrices = null;
         this.releaseMonitor?.();
         this.releaseMonitor = null;
-        this.initialized = false;
+    }
+
+    /** Give back every trackSymbol hold this profile's watches took —
+     *  without it the outgoing user's symbols keep streaming under the
+     *  incoming one and the ref-counts drift upward across switches. */
+    private releaseTrackedSymbols(): void {
+        for (const watch of this.watches.values()) {
+            PriceAlertService.untrackSymbol(watch.symbol);
+        }
     }
 
     private isValidWatch(watch: SetupWatch): boolean {
@@ -256,34 +310,53 @@ class SetupWatchServiceClass {
         });
     }
 
+    /** Per-user storage key (`setup_watches_v1_<username>`). */
+    private storageKey(): string {
+        return `${PREF_KEYS.SETUP_WATCHES}_v1_${this.loadedUser ?? getActiveUsername()}`;
+    }
+
     private saveWatches(): Promise<void> {
         // Snapshot the map at CALL time, then queue behind any in-flight
         // write so an earlier snapshot can never land after a later one.
         const data = Array.from(this.watches.values());
         this.saveChain = this.saveChain
-            .then(() => setPreferenceObject(PREF_KEYS.SETUP_WATCHES, data))
+            .then(() => setPreferenceObject(this.storageKey(), data))
             .catch(e => console.warn('[SetupWatchService] Save error:', e));
         return this.saveChain;
     }
 
-    private async loadWatches(): Promise<void> {
+    /** Read-only fetch for the given profile — hydration + migration writes
+     *  happen after the staleness check in init(). */
+    private async fetchWatches(user: string): Promise<{ watches: SetupWatch[]; migrate: boolean } | null> {
         try {
-            const stored = await getPreferenceObject<SetupWatch[]>(PREF_KEYS.SETUP_WATCHES);
-            if (!Array.isArray(stored)) return;
-            stored.forEach(w => {
-                // Drop canceled watches; keep ARMED (re-arm across restarts)
-                // and TRIGGERED (so the card shows "re-debate launched").
-                if (!w || w.status === 'CANCELED') return;
-                this.watches.set(w.id, w);
-                // Re-register the feed symbol after a restart — the feed only
-                // streams symbols that are explicitly tracked.
-                PriceAlertService.trackSymbol(w.symbol);
-            });
-            if (this.watches.size > 0) {
-                console.log(`[SetupWatchService] Loaded ${this.watches.size} setup watch(es)`);
-            }
+            const key = `${PREF_KEYS.SETUP_WATCHES}_v1_${user}`;
+            const stored = await getPreferenceObject<SetupWatch[]>(key);
+            if (Array.isArray(stored)) return { watches: stored, migrate: false };
+            // One-time migration: adopt the pre-scoping global blob.
+            const legacy = await getPreferenceObject<SetupWatch[]>(PREF_KEYS.SETUP_WATCHES);
+            if (Array.isArray(legacy)) return { watches: legacy, migrate: true };
+            return null;
         } catch (e) {
             console.error('[SetupWatchService] Load error:', e);
+            return null;
+        }
+    }
+
+    private hydrateWatches(stored: SetupWatch[], migrate: boolean): void {
+        stored.forEach(w => {
+            // Drop canceled watches; keep ARMED (re-arm across restarts)
+            // and TRIGGERED (so the card shows "re-debate launched").
+            if (!w || w.status === 'CANCELED') return;
+            this.watches.set(w.id, w);
+            // Re-register the feed symbol after a restart — the feed only
+            // streams symbols that are explicitly tracked.
+            PriceAlertService.trackSymbol(w.symbol);
+        });
+        if (this.watches.size > 0) {
+            console.log(`[SetupWatchService] Loaded ${this.watches.size} setup watch(es)`);
+            // Persist once under the NEW per-user key (moves the legacy blob
+            // out of the shared global key on first load).
+            if (migrate) void this.saveWatches();
         }
     }
 }

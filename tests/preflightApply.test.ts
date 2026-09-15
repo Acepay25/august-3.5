@@ -6,6 +6,11 @@ let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async <T,>(key: string): Promise<T | null> =>
         (store[key] as T | undefined) ?? null),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = store[key];
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown): Promise<void> => {
         store[key] = value;
     }),

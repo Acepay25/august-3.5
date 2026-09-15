@@ -14,6 +14,14 @@ class GlobalLearningService {
     private static instance: GlobalLearningService;
     private _calibration: ConfidenceCalibration;
     private _isInitialized: boolean = false;
+    // Memoized in-flight initialize() promise — without it, two concurrent
+    // callers (boot + updateCalibration, or two settled trades) both run
+    // loadLearningState and race each other's cache writes.
+    private _initPromise: Promise<void> | null = null;
+    // The generation the memoized _initPromise was created for — a profile
+    // switch (which bumps _initGeneration) must NOT reuse a stale in-flight
+    // load; the next initialize() starts one for the new user.
+    private _initPromiseGen: number = -1;
     // Per-user state: calibration is keyed by the active profile so switching
     // users doesn't leak one user's calibration into another's analysis.
     private _activeUser: string | null = null;
@@ -43,25 +51,44 @@ class GlobalLearningService {
     }
 
     /**
-     * Initialize the service by loading data from the filesystem
+     * Initialize the service by loading data from the filesystem.
+     *
+     * `_isInitialized` flips ONLY after a successful load. A failed load
+     * leaves it false so the next updateCalibration() re-attempts the load
+     * (and refuses to save while it fails) — marking it initialized on
+     * failure used to let the next update persist the constructor's EMPTY
+     * calibration over the user's real on-disk history.
      */
-    public async initialize(): Promise<void> {
-        if (this._isInitialized) return;
-
-        const gen = this._initGeneration;
-        try {
-            await this.loadLearningState();
-            // A newer setActiveUser() call has superseded this one — discard
-            // the results so we don't overwrite the newer user's state.
-            if (this._initGeneration !== gen) return;
-            this._isInitialized = true;
-            console.log('[GlobalLearningService] Initialized and loaded state.');
-        } catch (error) {
-            console.error('[GlobalLearningService] Failed to initialize:', error);
-            if (this._initGeneration !== gen) return;
-            // Even if load fails, we have initialized empty state in constructor
-            this._isInitialized = true;
+    public initialize(): Promise<void> {
+        if (this._isInitialized) return Promise.resolve();
+        if (this._initPromise && this._initPromiseGen === this._initGeneration) {
+            return this._initPromise;
         }
+        const gen = this._initGeneration;
+        this._initPromiseGen = gen;
+        const run = (async () => {
+            try {
+                await this.loadLearningState();
+                // A newer setActiveUser() call has superseded this one — discard
+                // the results so we don't overwrite the newer user's state.
+                if (this._initGeneration !== gen) return;
+                this._isInitialized = true;
+                console.log('[GlobalLearningService] Initialized and loaded state.');
+            } catch (error) {
+                console.error('[GlobalLearningService] Failed to initialize:', error);
+                // Deliberately NOT marking initialized: the next caller retries
+                // the load, and updateCalibration refuses to save until a load
+                // has actually succeeded.
+            }
+        })();
+        this._initPromise = run;
+        void run.finally(() => {
+            if (this._initPromise === run) {
+                this._initPromise = null;
+                this._initPromiseGen = -1;
+            }
+        });
+        return run;
     }
 
     /**
@@ -89,9 +116,18 @@ class GlobalLearningService {
         // Guard against the constructor's empty default: if the on-disk state
         // hasn't loaded yet, applying the update would build on an empty
         // baseline and the following saveLearningState() would OVERWRITE the
-        // user's real calibration history with it.
+        // user's real calibration history with it. Re-attempt the load; if it
+        // still hasn't succeeded, REFUSE the save — losing one entry is
+        // recoverable, clobbering months of calibration is not.
         if (!this._isInitialized) {
             await this.initialize();
+        }
+        if (!this._isInitialized) {
+            console.error(
+                '[GlobalLearningService] Calibration state not loaded (load failed) — ' +
+                'refusing to persist an update onto the empty baseline.'
+            );
+            return;
         }
         const oldState = this._calibration;
 
@@ -135,6 +171,11 @@ class GlobalLearningService {
      */
     public async loadLearningState(): Promise<void> {
         let parsed: ConfidenceCalibration | null = null;
+        // True when the Preferences fallback itself threw. The Filesystem
+        // failure is not the signal — on web it ALWAYS fails (that's the
+        // documented fallback leg) — only an unreadable Preferences store
+        // means the persisted calibration might exist but is unreachable.
+        let storageFailed = false;
         try {
             const file = await Filesystem.readFile({
                 path: this.stateFile,
@@ -157,6 +198,7 @@ class GlobalLearningService {
             try {
                 parsed = await getPreferenceObject<ConfidenceCalibration>(this.prefKey);
             } catch (e) {
+                storageFailed = true;
                 console.warn('[GlobalLearningService] Preferences load failed:', e);
             }
         }
@@ -173,12 +215,21 @@ class GlobalLearningService {
                     );
                 }
             } catch (e) {
+                storageFailed = true;
                 console.warn('[GlobalLearningService] Legacy calibration fallback failed:', e);
             }
         }
         if (parsed) {
             this._calibration = parsed;
             console.log('[GlobalLearningService] State loaded successfully.');
+            return;
+        }
+        // Nothing was found AND a storage read errored — this is not a fresh
+        // start, it's an unreachable store. Throw so initialize() does NOT
+        // mark the service ready (updateCalibration would otherwise persist
+        // the empty constructor state over the user's real history).
+        if (storageFailed) {
+            throw new Error('[GlobalLearningService] Calibration storage unreadable — state not loaded');
         }
     }
 

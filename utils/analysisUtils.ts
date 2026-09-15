@@ -1175,6 +1175,18 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
             }
             const slPct = leveragedMovePercent(entryPriceStr, slPriceStr, leverage, 'loss');
             if (slPct) newAnalysis.stopLossPercentage = slPct;
+            // Keep the UNLEVERAGED move alongside the leveraged display. The
+            // price-parsed branch used to overwrite `stopLossPercentage` with
+            // the leveraged number while `originalStopLossPercentage` kept
+            // whatever stale value the model had stated; if the SL later
+            // became unparseable (user edits a range/annotation), the
+            // fallback leg below multiplies `originalStopLossPercentage` by
+            // leverage again — double compounding. Re-stash the raw move
+            // every time it is computed from an actual price.
+            if (!isNaN(slPrice) && entryPrice > 0) {
+                newAnalysis.originalStopLossPercentage =
+                    `${((Math.abs(entryPrice - slPrice) / entryPrice) * 100).toFixed(1)}`;
+            }
         } else if (newAnalysis.originalStopLossPercentage) {
             const numericSL = parseFloat(newAnalysis.originalStopLossPercentage);
             if (!isNaN(numericSL)) {
@@ -1195,6 +1207,16 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
                     validTakeProfits.push(tpPrice);
                     const tpPct = leveragedMovePercent(entryPriceStr, newTp.price, leverage, 'gain');
                     if (tpPct) newTp.percentage = tpPct;
+                    // Same double-compounding guard as the SL leg: stash the
+                    // UNLEVERAGED move in `originalPercentage` whenever it is
+                    // recomputed from a parseable price, so a later pass that
+                    // can no longer parse the price scales from the raw move
+                    // instead of multiplying the already-leveraged
+                    // `percentage` by leverage again.
+                    if (entryPrice > 0) {
+                        newTp.originalPercentage =
+                            `${((Math.abs(tpPrice - entryPrice) / entryPrice) * 100).toFixed(1)}`;
+                    }
                 } else {
                     const originalTP = newTp.originalPercentage || newTp.percentage;
                     if (originalTP) {

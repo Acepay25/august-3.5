@@ -31,7 +31,7 @@ import {
 } from '../../utils/skillDrafts';
 import { defaultPrediction } from '../../utils/skillPrediction';
 import { evaluateSkillWorth, validateCraftedSkill } from './skillWorthGate';
-import { listSkills, skillMatchesSetup, maybeMergeSkill } from './SkillMemoryService';
+import { listSkills, skillStrictlyMatchesSetup, maybeMergeSkill } from './SkillMemoryService';
 
 // ─── Deterministic tier ─────────────────────────────────────────────────────
 
@@ -79,7 +79,14 @@ export const coveredByLiveSkill = (
         const words = salientWords(crafted.ifCondition);
         return listSkills().some(({ meta }) => {
             if (meta.status === 'retired' || meta.supersededBy) return false;
-            if (skillMatchesSetup(meta, { coin, direction: dir, family })) return true;
+            // STRICT matcher — the LOOSE one scores direction-equality alone
+            // as coverage (hits ≥ 2), so one direction-only skill claimed to
+            // cover EVERY same-direction draft on EVERY coin and the gate
+            // answered "an existing skill already covers this", silently
+            // silencing future drafts. Coverage here is a suppression
+            // decision, i.e. enforcement-grade overlap: the skill must share
+            // the coin, the pattern family, or direction + regime.
+            if (skillStrictlyMatchesSetup(meta, { coin, direction: dir, family })) return true;
             if (coin && meta.coin
                 && coin.toUpperCase().replace(/USDT?$/, '') !== meta.coin.toUpperCase().replace(/USDT?$/, '')) {
                 return false;

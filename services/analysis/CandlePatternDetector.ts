@@ -51,8 +51,9 @@ export interface CandlePatternScan {
     /** Last 30 completed candles' compact OHLCV, oldest first. */
     candles: Kline[];
     /** Quick visual sequence the model can "imagine" — same idea as the
-     *  existing `candleHistory.sequence`, but built on the larger window. */
-    sequence: ('🟢' | '🔴')[];
+     *  existing `candleHistory.sequence`, but built on the larger window.
+     *  '⚪' = doji (close === open): a NEUTRAL print, not a bearish one. */
+    sequence: ('🟢' | '🔴' | '⚪')[];
     bullishCount: number;
     bearishCount: number;
     dominantTrend: 'bullish' | 'bearish' | 'neutral';
@@ -1200,16 +1201,21 @@ export function scanCandlePatterns(
     const trendCounts = countTrendStructure(swings);
 
     // Sequence & counts (use the same completed-window view)
-    const sequence: ('🟢' | '🔴')[] = [];
+    // A doji (close === open) used to fall into the `else` bearish bucket,
+    // biasing dominantTrend red on quiet/range windows. Neutral candles get
+    // their own '⚪' print and count toward NEITHER side.
+    const sequence: ('🟢' | '🔴' | '⚪')[] = [];
     let bullishCount = 0;
     let bearishCount = 0;
     for (const c of completed) {
         if (isBullish(c)) {
             sequence.push('🟢');
             bullishCount++;
-        } else {
+        } else if (isBearish(c)) {
             sequence.push('🔴');
             bearishCount++;
+        } else {
+            sequence.push('⚪');
         }
     }
     const total = bullishCount + bearishCount;

@@ -597,7 +597,18 @@ export const updateGranularCalibration = (
 
     // Initialize granular structure if not present
     const granular: GranularCalibration = base.granular ? { ...base.granular } : initializeGranularCalibration();
-    const granularEntries = [...(base.granularEntries || []), entry];
+    // Append + PRUNE with the same horizon the base entries use (see
+    // updateCalibration). granularEntries used to grow without bound while
+    // `entries` capped at MAX_TRADE_AGE_DAYS — every settled write copied
+    // the whole array (O(n) allocation) and detectDangerousCombinations
+    // re-scanned it O(n) per call. Rows whose timestamp is missing or
+    // unparseable are kept (unknown age ≠ stale; legacy shapes survive).
+    const granularCutoffMs = Date.now() - MAX_TRADE_AGE_DAYS * 86_400_000;
+    const granularEntries = [...(base.granularEntries || []), entry]
+        .filter(e => {
+            const t = Date.parse(e.timestamp ?? '');
+            return !Number.isFinite(t) || t >= granularCutoffMs;
+        });
 
     // Helper to update stats for a dimension
     const updateDimensionStats = (

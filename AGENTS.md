@@ -132,7 +132,9 @@ import { sanitizeAIResponse } from './utils/sanitizers';
 - Virtualize long lists (react-virtuoso)
 - Monte Carlo runs in a Web Worker (`services/analysis/monteCarlo.worker.ts`) with
   synchronous fallback (`runMonteCarloForSetupAsync`)
-- Cache AI responses (`services/infrastructure/responseCache`)
+- Cache desk-tool results within a run (`cacheTool`/`clearDeskToolCache` in
+  `services/analysis/DeskToolsService.ts`, 30s TTL) — cleared at each debate
+  start. There is no generic AI-response cache (do not assume one exists)
 
 ### Security Best Practices
 - Never commit API keys; `.env.local` is gitignored (and no longer read at runtime —

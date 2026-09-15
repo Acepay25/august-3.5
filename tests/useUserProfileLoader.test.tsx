@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useUserProfileLoader, UseUserProfileLoaderArgs } from '../hooks/useUserProfileLoader';
 import * as dbService from '../services/infrastructure/dbService';
+import { PriceAlertService } from '../services/ui/PriceAlertService';
+import { SetupWatchService } from '../services/ui/SetupWatchService';
+import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
+import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 
 vi.mock('../services/infrastructure/dbService', () => ({
     initDatabase: vi.fn().mockResolvedValue(undefined),
@@ -71,15 +75,21 @@ vi.mock('../services/learning/GlobalLearningService', () => ({
 }));
 
 vi.mock('../services/ui/PriceAlertService', () => ({
-    PriceAlertService: { init: vi.fn().mockResolvedValue(undefined) },
+    // loadUserData now calls reset() (switch path) + init(username), both
+    // before and inside its stale-write-guarded sequence.
+    PriceAlertService: { init: vi.fn().mockResolvedValue(undefined), reset: vi.fn() },
 }));
 
 vi.mock('../services/ui/SetupWatchService', () => ({
-    SetupWatchService: { init: vi.fn().mockResolvedValue(undefined) },
+    SetupWatchService: { init: vi.fn().mockResolvedValue(undefined), reset: vi.fn() },
 }));
 
 vi.mock('../services/ui/OutcomeAutopilotService', () => ({
     OutcomeAutopilotService: { init: vi.fn().mockResolvedValue(undefined), reset: vi.fn() },
+}));
+
+vi.mock('../services/infrastructure/OfflineQueueService', () => ({
+    offlineQueue: { setActiveUser: vi.fn() },
 }));
 
 vi.mock('../services/ui/VetoLedgerService', () => ({
@@ -100,6 +110,7 @@ vi.mock('../services/validation/DataIntegrityService', () => ({
 
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn().mockResolvedValue(null),
+    getPreferenceArray: vi.fn(async () => []),
     PREF_KEYS: { ENSEMBLE_MODEL_SELECTION: 'ensemble_model_selection' },
 }));
 
@@ -282,5 +293,88 @@ describe('useUserProfileLoader', () => {
 
         expect(vi.mocked(dbService.getAllUsernames).mock.calls.length).toBe(1);
         expect(vi.mocked(dbService.getUserProfile).mock.calls.length).toBe(loadsAfterBoot);
+    });
+
+    it("switch path drops the outgoing profile's live singletons before loading the incoming one", async () => {
+        vi.mocked(dbService.getUserProfile).mockResolvedValue({
+            username: 'bob', conversations: [], tradeLog: [], savedAnalyses: [],
+            tradeSummaries: [], settings: {},
+        } as any);
+        const args = createMockArgs();
+        const { result } = renderHook(() => useUserProfileLoader(args));
+
+        await act(async () => {
+            await result.current.loadUserData('bob');
+        });
+
+        // Audit §2.5: these singletons carried the previous profile's
+        // alerts/watches/registrations/queue across the switch.
+        expect(OutcomeAutopilotService.reset).toHaveBeenCalled();
+        expect(PriceAlertService.reset).toHaveBeenCalled();
+        expect(SetupWatchService.reset).toHaveBeenCalled();
+        expect(offlineQueue.setActiveUser).toHaveBeenCalledWith('bob');
+        // And the monitoring inits get the INCOMING username explicitly.
+        expect(PriceAlertService.init).toHaveBeenCalledWith('bob');
+        expect(SetupWatchService.init).toHaveBeenCalledWith('bob');
+        expect(OutcomeAutopilotService.init).toHaveBeenCalledWith('bob');
+    });
+
+    it('stale-write guard: a superseded load never stamps its profile into state', async () => {
+        // Alice's profile read HANGS until after Bob's whole load has
+        // committed. Without the generation token, Alice's tail (conversation
+        // history, trades, active-username commit, sessionStorage) would land
+        // over Bob's — the audit's loader stale-write race.
+        const bobProfile = {
+            username: 'bob',
+            conversations: [{ id: 'bob-conv', title: 'Bob', messages: [] }],
+            tradeLog: [{ id: 'bob-t1', symbol: 'BTCUSDT' }],
+            savedAnalyses: [], tradeSummaries: [], settings: {},
+            lastActiveConversationId: 'bob-conv',
+        };
+        const aliceProfile = {
+            username: 'alice',
+            conversations: [{ id: 'alice-conv', title: 'Alice', messages: [] }],
+            tradeLog: [{ id: 'alice-t1', symbol: 'ETHUSDT' }],
+            savedAnalyses: [], tradeSummaries: [], settings: {},
+            lastActiveConversationId: 'alice-conv',
+        };
+        let releaseAlice: (p: unknown) => void = () => {};
+        const aliceGate = new Promise(res => { releaseAlice = res; });
+        vi.mocked(dbService.getUserProfile).mockImplementation((user: string) => {
+            if (user === 'alice') return aliceGate.then(() => aliceProfile) as any;
+            return Promise.resolve(bobProfile) as any;
+        });
+
+        const args = createMockArgs();
+        const { result } = renderHook(() => useUserProfileLoader(args));
+
+        let aliceLoad: Promise<void> | null = null;
+        await act(async () => {
+            aliceLoad = result.current.loadUserData('alice');
+        });
+        // Bob's load overtakes and fully commits while Alice's read is open.
+        await act(async () => {
+            await result.current.loadUserData('bob');
+        });
+        expect(args.setActiveUsername).toHaveBeenCalledWith('bob');
+        expect(localStorage.getItem('last_active_user')).toBe('bob');
+
+        const conversationsBefore = vi.mocked(args.setConversationHistory).mock.calls.length;
+        // Now the abandoned Alice load finally resolves.
+        releaseAlice(undefined);
+        await act(async () => {
+            await aliceLoad;
+        });
+
+        // Every post-await write site in the stale load bailed: no Alice
+        // profile data, no active-username hijack, no storage rewrite.
+        expect(vi.mocked(args.setConversationHistory).mock.calls.length).toBe(conversationsBefore);
+        expect(args.setConversationHistory).toHaveBeenCalledWith(
+            [expect.objectContaining({ id: 'bob-conv' })],
+        );
+        expect(args.setActiveUsername).not.toHaveBeenCalledWith('alice');
+        expect(localStorage.getItem('last_active_user')).toBe('bob');
+        expect(sessionStorage.getItem('activeUsername')).toBe('bob');
+        expect(args.setIsLoading).toHaveBeenLastCalledWith(false);
     });
 });

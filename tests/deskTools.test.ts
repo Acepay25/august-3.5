@@ -103,3 +103,45 @@ Then I'll write the call.`;
         expect(DESK_TOOL_DEFINITIONS.length).toBeGreaterThanOrEqual(5);
     });
 });
+
+describe('allowedTools is enforced in the EXECUTOR (transport-agnostic)', () => {
+    // The offer-time filter only shapes what a NATIVE-format provider sees;
+    // a text-protocol seat can emit a tag for ANY tool (observed: arbiter
+    // seats calling remember/write_memory_note/forget despite their policy).
+    // The executor is the one chokepoint every transport passes through.
+    it('refuses an off-list write tool even though nothing about the transport says so', async () => {
+        const res = await executeDeskTool(
+            { id: 'r1', name: 'remember', arguments: { kind: 'user', description: 'd', body: 'b' } },
+            { allowedTools: ['recall', 'web_search'] },
+        );
+        expect(res.ok).toBe(false);
+        expect(res.content.startsWith('remember rejected:')).toBe(true);
+        expect(res.content).toContain('not available on this seat');
+    });
+
+    it('refuses write_memory_note / forget off-list, passes an on-list read', async () => {
+        const wn = await executeDeskTool(
+            { id: 'r2', name: 'write_memory_note', arguments: { folder: 'lessons', file_name: 'x', content: 'y' } },
+            { allowedTools: ['get_session_context'] },
+        );
+        expect(wn.ok).toBe(false);
+        const fg = await executeDeskTool(
+            { id: 'r3', name: 'forget', arguments: { slug: 'whatever' } },
+            { allowedTools: ['get_session_context'] },
+        );
+        expect(fg.ok).toBe(false);
+        const ok = await executeDeskTool(
+            { id: 'r4', name: 'get_session_context', arguments: {} },
+            { allowedTools: ['get_session_context'] },
+        );
+        expect(ok.ok).toBe(true);
+    });
+
+    it('empty/absent allow-list stays unrestricted (legacy debate/analysis callers)', async () => {
+        const res = await executeDeskTool(
+            { id: 'r5', name: 'get_session_context', arguments: {} },
+            { allowedTools: [] },
+        );
+        expect(res.ok).toBe(true);
+    });
+});

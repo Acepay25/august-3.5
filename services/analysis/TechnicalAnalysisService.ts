@@ -159,6 +159,10 @@ export interface PivotPoints {
     s1: number;
     s2: number;
     s3: number;
+    /** 'daily' = aggregated from a completed UTC session of the passed bars;
+     *  'tf-relative' = no day boundary existed in the data, so the levels are
+     *  derived from the timeframe window itself (do NOT read them as daily). */
+    scope: 'daily' | 'tf-relative';
 }
 
 export interface FibonacciLevels {
@@ -189,6 +193,10 @@ export interface VWAPData {
     lowerBand2: number;    // -2 std dev
     pricePosition: 'above_upper2' | 'above_upper1' | 'above_vwap' | 'at_vwap' | 'below_vwap' | 'below_lower1' | 'below_lower2';
     bias: 'bullish' | 'bearish' | 'neutral';
+    /** 'session' = window restarted at the most recent UTC day boundary
+     *  (true session VWAP); 'window' = no boundary present in the passed
+     *  bars, so this is a window VWAP spanning everything given. */
+    anchor: 'session' | 'window';
 }
 
 /**
@@ -236,6 +244,27 @@ function safeCalc<T>(calc: () => T, defaultValue: T): T {
         return defaultValue;
     }
 }
+
+// ============================================================================
+// Timestamp helpers (session/day anchoring)
+// ============================================================================
+
+const MS_PER_DAY = 86_400_000;
+
+/** Normalize a kline timestamp to milliseconds. Binance sends ms; some
+ *  synthetic/legacy feeds send seconds. Returns NaN for unusable values. */
+const toMs = (t: number): number =>
+    !Number.isFinite(t) || t <= 0 ? NaN : t < 1e12 ? t * 1000 : t;
+
+/** UTC day index for a kline timestamp (NaN when the timestamp is unusable). */
+const utcDayIndex = (k: Kline): number => {
+    const ms = toMs(k.time);
+    return Number.isNaN(ms) ? NaN : Math.floor(ms / MS_PER_DAY);
+};
+
+/** True when every bar carries a usable timestamp. */
+const hasUsableTimes = (klines: Kline[]): boolean =>
+    klines.length > 0 && klines.every(k => !Number.isNaN(utcDayIndex(k)));
 
 /**
  * Calculate all technical indicators from OHLCV data
@@ -314,8 +343,10 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
         signalPeriod: 3
     });
     const lastStoch = stochValues[stochValues.length - 1] || { k: 50, d: 50 };
-    const stochK = lastStoch.k || 50;
-    const stochD = lastStoch.d || 50;
+    // `??` not `||`: K = 0 is a REAL reading (maximum oversold), not an absent
+    // value. `|| 50` silently relabelled genuine zeros as "neutral".
+    const stochK = lastStoch.k ?? 50;
+    const stochD = lastStoch.d ?? 50;
     const stochJ = 3 * stochK - 2 * stochD; // J = 3K - 2D
 
     // Volume analysis — guarded: empty/degraded klines (per-source degradation
@@ -806,9 +837,18 @@ export const calculateAdvancedVolume = (klines: Kline[]): AdvancedVolumeAnalysis
     const obvValues = calculateOBVValues(klines);
     const obv = obvValues[obvValues.length - 1] || 0;
     const obvRecent = obvValues.slice(-10);
+    // Sign-safe trend test. OBV is a running sum that routinely straddles
+    // zero, so ratio thresholds like `last > first * 1.05` INVERT when the
+    // baseline is negative (first = −1000, last = −1020 is a FALLING series
+    // but −1020 > −1050 read "rising"). Compare the signed delta against a
+    // deadband scaled by the magnitude of the endpoints instead.
+    const obvFirst = obvRecent[0] ?? 0;
+    const obvLast = obvRecent[obvRecent.length - 1] ?? 0;
+    const obvDelta = obvLast - obvFirst;
+    const obvDeadband = Math.max(Math.abs(obvFirst), Math.abs(obvLast)) * 0.05;
     const obvTrend: 'rising' | 'falling' | 'flat' =
-        obvRecent[obvRecent.length - 1] > obvRecent[0] * 1.05 ? 'rising' :
-            obvRecent[obvRecent.length - 1] < obvRecent[0] * 0.95 ? 'falling' : 'flat';
+        obvDeadband > 0 && obvDelta > obvDeadband ? 'rising' :
+            obvDeadband > 0 && obvDelta < -obvDeadband ? 'falling' : 'flat';
     const obvDivergence = detectOBVDivergence(klines, obvValues);
 
     // CVD
@@ -1080,15 +1120,57 @@ export const calculateRegime = (klines: Kline[]): RegimeAnalysis => {
 
 /**
  * Calculate Pivot Points (Classic/Floor Trader)
+ *
+ * Classic floor-trader pivots are DAILY: they use the high/low/close of the
+ * previous completed UTC session. The old code took ONE bar of whatever
+ * timeframe was passed — on a 15m chart the "daily" pivots were derived from
+ * the previous 15-minute bar's HLC, dressing noise up as high-confidence
+ * levels in every prompt. Now we aggregate the intraday bars into the
+ * previous completed day; when no day boundary exists in the data (single-day
+ * window or missing timestamps) we aggregate all completed bars into one
+ * pseudo-session and label the result honestly as `tf-relative`.
  */
 export const calculatePivotPoints = (klines: Kline[]): PivotPoints => {
-    // Use the previous period's data for pivot calculation
-    const prevKline = klines[klines.length - 2] || klines[klines.length - 1];
+    const round = (v: number) => Math.round(v * 100) / 100;
 
-    const high = prevKline.high;
-    const low = prevKline.low;
-    const close = prevKline.close;
+    if (klines.length === 0) {
+        return { pp: 0, r1: 0, r2: 0, r3: 0, s1: 0, s2: 0, s3: 0, scope: 'tf-relative' };
+    }
 
+    const aggregate = (bars: Kline[]): { high: number; low: number; close: number } => ({
+        high: Math.max(...bars.map(b => b.high)),
+        low: Math.min(...bars.map(b => b.low)),
+        close: bars[bars.length - 1].close
+    });
+
+    let hlc: { high: number; low: number; close: number };
+    let scope: PivotPoints['scope'];
+
+    const lastDay = hasUsableTimes(klines) ? utcDayIndex(klines[klines.length - 1]) : NaN;
+    const completedDays = Number.isNaN(lastDay)
+        ? []
+        : [...new Set(klines.map(utcDayIndex))]
+            .filter(d => !Number.isNaN(d) && d < lastDay)
+            .sort((a, b) => a - b);
+
+    if (completedDays.length > 0) {
+        // Most recent COMPLETED UTC day strictly before the forming bar's day
+        // (tolerates gap days where the feed had no prints).
+        const targetDay = completedDays[completedDays.length - 1];
+        const dayBars = klines.filter(k => utcDayIndex(k) === targetDay);
+        hlc = aggregate(dayBars);
+        scope = 'daily';
+    } else {
+        // No day boundary present: fold every completed bar (all except the
+        // forming last one) into one pseudo-session. This is still far more
+        // stable than the old single-bar HLC, but it is TF-relative, not daily.
+        const prevBars = klines.slice(0, -1);
+        const src = prevBars.length > 0 ? prevBars : klines;
+        hlc = aggregate(src);
+        scope = 'tf-relative';
+    }
+
+    const { high, low, close } = hlc;
     const pp = (high + low + close) / 3;
     const r1 = 2 * pp - low;
     const s1 = 2 * pp - high;
@@ -1097,8 +1179,6 @@ export const calculatePivotPoints = (klines: Kline[]): PivotPoints => {
     const r3 = high + 2 * (pp - low);
     const s3 = low - 2 * (high - pp);
 
-    const round = (v: number) => Math.round(v * 100) / 100;
-
     return {
         pp: round(pp),
         r1: round(r1),
@@ -1106,7 +1186,8 @@ export const calculatePivotPoints = (klines: Kline[]): PivotPoints => {
         r3: round(r3),
         s1: round(s1),
         s2: round(s2),
-        s3: round(s3)
+        s3: round(s3),
+        scope
     };
 };
 
@@ -1291,30 +1372,57 @@ export const calculateVWAP = (klines: Kline[]): VWAPData => {
             lowerBand1: 0,
             lowerBand2: 0,
             pricePosition: 'at_vwap',
-            bias: 'neutral'
+            bias: 'neutral',
+            anchor: 'window'
         };
+    }
+
+    // Session anchoring: a true VWAP restarts at each session open. When the
+    // passed window contains a UTC day boundary, anchor on the day of the
+    // most recent bar; otherwise this is honestly a window VWAP over all the
+    // bars given.
+    let windowBars = klines;
+    let anchor: VWAPData['anchor'] = 'window';
+    if (hasUsableTimes(klines)) {
+        const lastDay = utcDayIndex(klines[klines.length - 1]);
+        const sessionBars = klines.filter(k => utcDayIndex(k) === lastDay);
+        if (sessionBars.length > 0 && sessionBars.length < klines.length) {
+            windowBars = sessionBars;
+            anchor = 'session';
+        }
     }
 
     // Calculate VWAP
     let cumulativeTPV = 0;  // Typical Price * Volume
     let cumulativeVolume = 0;
-    const tpvArray: number[] = [];
+    const sessionPoints: { tp: number; volume: number }[] = [];
 
-    for (const kline of klines) {
+    for (const kline of windowBars) {
         const typicalPrice = (kline.high + kline.low + kline.close) / 3;
         cumulativeTPV += typicalPrice * kline.volume;
         cumulativeVolume += kline.volume;
-        tpvArray.push(typicalPrice);
+        sessionPoints.push({ tp: typicalPrice, volume: kline.volume });
     }
 
     const vwap = cumulativeVolume > 0 ? cumulativeTPV / cumulativeVolume : 0;
 
-    // Calculate standard deviation from VWAP
-    let sumSquaredDiff = 0;
-    for (const tp of tpvArray) {
-        sumSquaredDiff += Math.pow(tp - vwap, 2);
+    // Volume-weighted standard deviation over the anchored window — the bands
+    // are labeled "+1/+2 std dev" around a volume-weighted mean, so the
+    // deviation must be weighted the same way (an unweighted std over
+    // typical prices mislabels itself when volume is lumpy).
+    let sumWeightedSqDiff = 0;
+    if (cumulativeVolume > 0) {
+        for (const { tp, volume } of sessionPoints) {
+            sumWeightedSqDiff += volume * Math.pow(tp - vwap, 2);
+        }
+    } else {
+        // Zero-volume fallback: unweighted deviation of typical prices.
+        for (const { tp } of sessionPoints) {
+            sumWeightedSqDiff += Math.pow(tp - vwap, 2);
+        }
     }
-    const stdDev = Math.sqrt(sumSquaredDiff / tpvArray.length);
+    const stdDivisor = cumulativeVolume > 0 ? cumulativeVolume : sessionPoints.length;
+    const stdDev = stdDivisor > 0 ? Math.sqrt(sumWeightedSqDiff / stdDivisor) : 0;
 
     const upperBand1 = vwap + stdDev;
     const upperBand2 = vwap + 2 * stdDev;
@@ -1349,7 +1457,8 @@ export const calculateVWAP = (klines: Kline[]): VWAPData => {
         lowerBand1: round(lowerBand1),
         lowerBand2: round(lowerBand2),
         pricePosition,
-        bias
+        bias,
+        anchor
     };
 };
 
@@ -1397,12 +1506,28 @@ export const calculateIchimoku = (klines: Kline[]): IchimokuData => {
     // Chikou Span: Current close plotted 26 periods back
     const chikouSpan = klines[len - 1].close;
 
-    // Cloud boundaries
-    const cloudTop = Math.max(senkouSpanA, senkouSpanB);
-    const cloudBottom = Math.min(senkouSpanA, senkouSpanB);
+    // ── Historical (current-position) cloud ──────────────────────────────
+    // The spans above are DISPLACED 26 bars forward when plotted, so the
+    // cloud that actually sits UNDER today's price was computed 26 bars ago.
+    // The old code compared today's close against the FUTURE cloud — a
+    // look-ahead, since that cloud is not observable yet — and every
+    // consumer (signals, prompts, "price vs Cloud" validation) inherited the
+    // bias. Evaluate against the spans formed at `len - 26`.
+    const DISPLACEMENT = 26;
+    const histEnd = len - DISPLACEMENT; // exclusive end of the historical window
+    const tenkanThen = getHighLowAvg(klines.slice(Math.max(0, histEnd - 9), histEnd));
+    const kijunThen = getHighLowAvg(klines.slice(Math.max(0, histEnd - 26), histEnd));
+    const senkouSpanAThen = (tenkanThen + kijunThen) / 2;
+    const senkouSpanBThen = getHighLowAvg(klines.slice(Math.max(0, histEnd - 52), histEnd));
 
-    // Cloud color
-    const cloudColor: 'bullish' | 'bearish' = senkouSpanA > senkouSpanB ? 'bullish' : 'bearish';
+    // Cloud boundaries AT the current price (historical spans, not the
+    // forward-projected ones) — this is what charts overlay on today's bars
+    // and what EntryTiming/AccuracyValidation read as support/resistance.
+    const cloudTop = Math.max(senkouSpanAThen, senkouSpanBThen);
+    const cloudBottom = Math.min(senkouSpanAThen, senkouSpanBThen);
+
+    // Cloud color: twist of the cloud under price (same historical spans).
+    const cloudColor: 'bullish' | 'bearish' = senkouSpanAThen > senkouSpanBThen ? 'bullish' : 'bearish';
 
     // Price vs Cloud
     const currentPrice = klines[len - 1].close;

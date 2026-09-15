@@ -47,3 +47,38 @@ describe('notebook cycle guard (v1.0.20 TDZ regression)', () => {
         expect(code).not.toMatch(valueDefaultImport);
     });
 });
+
+/**
+ * The second un-ratcheted TDZ-capable cycle (deep-dive 2026-09-15, cycle
+ * hygiene): SkillMemoryService ↔ skillGraveyard. The graveyard imports the
+ * notebook module (recordTombstone/…) while exporting helpers the notebook
+ * calls — and it resolves `parseSkillMarkdown` through the module namespace
+ * AT CALL TIME. That defense only holds while the export itself is a HOISTED
+ * `function` declaration: a `const` arrow is hoisted-but-uninitialized
+ * (TDZ) during cyclic evaluation, so a Rollup/dev chunk-order flip could
+ * dereference it before its declaration runs (the exact v1.0.20 crash
+ * class). This ratchet pins the declaration form.
+ */
+describe('SkillMemoryService ↔ skillGraveyard TDZ ratchet', () => {
+    const notebook = readFileSync(
+        resolve(__dirname, '../services/learning/SkillMemoryService.ts'),
+        'utf8',
+    );
+    const graveyard = readFileSync(
+        resolve(__dirname, '../services/learning/skillGraveyard.ts'),
+        'utf8',
+    );
+
+    it('exports parseSkillMarkdown as a hoisted function declaration', () => {
+        expect(notebook).toMatch(/export function parseSkillMarkdown\s*\(/);
+        expect(notebook).not.toMatch(/export const parseSkillMarkdown\s*=/);
+    });
+
+    it('graveyard reaches it only through a hoisted function via the namespace', () => {
+        // The graveyard must not import it as a bare binding used at module
+        // evaluation time — it resolves SkillMemoryService.parseSkillMarkdown
+        // inside a hoisted `function`.
+        expect(graveyard).toMatch(/function [A-Za-z_$][\w$]*\([^)]*\)[^{]*\{\s*return SkillMemoryService\.parseSkillMarkdown/);
+        expect(graveyard).not.toMatch(/import \{[^}]*parseSkillMarkdown[^}]*\} from/);
+    });
+});

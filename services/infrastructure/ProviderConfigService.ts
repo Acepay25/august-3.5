@@ -7,6 +7,7 @@ import { ProviderConfig, ApiFormat, parseApiFormat } from '../../types/provider'
 import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import { usesGoogleGeminiDiscovery, googleModelsUrl } from '../../utils/googleGeminiFormat';
+import { isLocalBaseUrl } from '../../shared/providerRequestPolicy.cjs';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
@@ -54,14 +55,25 @@ async function encryptKey(apiKey: string): Promise<string> {
 async function decryptKey(stored: string): Promise<string> {
     if (!stored || !isEncrypted(stored)) return stored;
     const bridge = getCryptoBridge();
-    // Fail open: when the bridge is unavailable (web/Capacitor) or the OS
-    // keychain can't decrypt (fresh OS session, changed DPAPI/keyring
-    // credentials), return the stored payload as-is. Returning '' here made
-    // the next save re-encrypt an empty key and permanently destroy the
-    // stored secret — unrecoverable key loss.
+    // Bridge unavailable (web/Capacitor — documented plaintext storage): return
+    // the stored payload as-is, unchanged behavior for those platforms.
     if (!bridge) return stored;
-    const decrypted = await bridge.decryptSecret(stored);
-    return decrypted || stored;
+    // The bridge EXISTS but the DECRYPT failed (OS keychain rotated, fresh
+    // session, DPAPI/keyring credentials changed). Returning the raw
+    // `enc:v1:…` blob as the apiKey was fail-OPEN in the wrong direction: the
+    // ciphertext satisfies the non-empty readiness check (`apiKey.trim().length
+    // > 0`) and got sent verbatim as the Bearer token to the provider. Mark
+    // the provider NOT-READY instead — an empty key keeps it present in the
+    // list, fails readiness, and the UI prompts the user to re-enter the key.
+    try {
+        const decrypted = await bridge.decryptSecret(stored);
+        if (decrypted) return decrypted;
+        console.warn('[ProviderConfigService] Failed to decrypt stored API key (OS keychain unavailable or rotated). Provider marked not ready — re-enter the key in Settings → Providers.');
+        return '';
+    } catch (error) {
+        console.warn('[ProviderConfigService] API key decryption threw; provider marked not ready — re-enter the key in Settings → Providers.', error);
+        return '';
+    }
 }
 
 // ─── Provider Configuration Service ───────────────────────────────────────
@@ -168,6 +180,13 @@ export async function addCustomProvider(provider: {
 }): Promise<ProviderConfig[]> {
     return runExclusiveProviderWrite(async () => {
         const configs = await loadProviderConfigs();
+        // No phantom 'default' model seed (audit 2026-09-15): readiness is
+        // `models.length > 0 || selectedModel`, so seeding ['default'] minted
+        // a provider that looked READY with a fake model that 400s on every
+        // call — and the picker rendered the phantom. A provider added
+        // without models stays NOT ready until the user refreshes/picks real
+        // models from the endpoint.
+        const firstModel = provider.selectedModel || provider.models?.[0] || '';
         const newConfig: ProviderConfig = {
             id: `custom-${Date.now()}`,
             name: provider.name,
@@ -176,9 +195,9 @@ export async function addCustomProvider(provider: {
             apiFormat: provider.apiFormat,
             isEnabled: true,
             isBuiltIn: false,
-            models: provider.models || ['default'],
-            selectedModel: provider.selectedModel || provider.models?.[0] || 'default',
-            ensembleModels: [provider.selectedModel || provider.models?.[0] || 'default'],
+            models: provider.models ?? [],
+            selectedModel: firstModel,
+            ensembleModels: firstModel ? [firstModel] : [],
         };
         const updated = [...configs, newConfig];
         await saveProviderConfigs(updated);
@@ -262,12 +281,18 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
 }
 
 /**
- * Get only enabled providers that have an API key configured AND a usable
- * model — a provider whose last model was deleted (models: []) must not be
- * "ready" (its phantom 'default' model used to fail on every API call).
+ * Get only enabled providers that have a usable model AND either an API key
+ * or a local base URL — Ollama / LM Studio style servers are keyless, so an
+ * empty key must not make them "not ready" (users were inventing dummy keys
+ * to get past the old hard requirement). A provider whose last model was
+ * deleted (models: [] and no selectedModel) must not be "ready" either (its
+ * phantom 'default' model used to fail on every API call). Mirrors
+ * providerUtils.isProviderReady exactly.
  */
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
-    return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0 && (c.models.length > 0 || !!c.selectedModel));
+    return configs.filter(c => c.isEnabled
+        && (c.apiKey.trim().length > 0 || isLocalBaseUrl(c.baseUrl))
+        && (c.models.length > 0 || !!c.selectedModel));
 }
 
 /**
@@ -398,7 +423,11 @@ export async function discoverProviderModels(config: {
 }): Promise<string[]> {
     const key = (config.apiKey || '').trim();
     if (!(config.baseUrl || '').trim()) throw new Error('Base URL is required to discover models.');
-    if (!key) throw new Error('API key is required to discover models.');
+    // Keyless LOCAL providers (Ollama / LM Studio) answer /models with no
+    // auth — demanding a key here made the one endpoint that could tell the
+    // user "no key needed" reject them before the request. Remote providers
+    // still require a key.
+    if (!key && !isLocalBaseUrl(config.baseUrl)) throw new Error('API key is required to discover models.');
     assertValidProviderUrl(config.baseUrl);
 
     const { status, body } = await fetchDiscoverPayload(config);

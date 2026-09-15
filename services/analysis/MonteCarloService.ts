@@ -19,8 +19,19 @@ export interface MonteCarloResult {
     simulations: number;
     winRate: number;                  // % of sims hitting any TP
     winCount: number;                 // Number of winning sims
-    expectedValue: number;            // Average PnL % per trade
+    expectedValue: number;            // Average PnL % per trade (resolved sims only; TIMEOUT PnLs excluded)
     timeframe: string;                // Timeframe used for simulation
+    /** Mean PnL % over the POSITIVE-PnL samples (true average win). Optional
+     *  because legacy/cached results may predate it; consumers should prefer
+     *  it over the EV/winRate proxy when present. */
+    avgWinPercent?: number;
+    /** Mean PnL % magnitude over the negative-PnL samples (true average
+     *  loss, as a positive number). Same optionality rationale. */
+    avgLossPercent?: number;
+    /** RNG seed actually used — derived from the setup identity when no
+     *  explicit seed was passed, so the same setup yields the same
+     *  "Simulated Win Rate" run after run. */
+    seedUsed?: number;
     probabilities: {
         tp1Hit: number;
         tp2Hit: number;
@@ -62,6 +73,10 @@ export interface SimulationConfig {
     numSimulations?: number;          // Default 1000
     maxSteps?: number;                // Max candles to simulate (default 100)
     marketRegime?: 'strong_trend_up' | 'strong_trend_down' | 'weak_trend_up' | 'weak_trend_down' | 'ranging' | 'volatile_chop' | 'compression';
+    /** Explicit RNG seed. When omitted the seed is derived deterministically
+     *  from the setup identity (see deriveSetupSeed) so re-running the same
+     *  setup no longer yields a different "Simulated Win Rate". */
+    seed?: number;
 }
 
 // =============================================================================
@@ -78,12 +93,56 @@ const BIAS_STRENGTH = 0.001;          // How much trend bias affects drift
 // =============================================================================
 
 /**
- * Generate a random number from standard normal distribution (Box-Muller transform)
+ * Deterministic PRNG (mulberry32). The simulations used raw Math.random(),
+ * so the same setup produced a different "Simulated Win Rate" on every run
+ * — while the prompt explicitly tells the model to use it to validate
+ * confidence. A seeded generator makes results reproducible per setup; the
+ * worker and the synchronous fallback import the same code, so both paths
+ * yield identical numbers for identical inputs.
  */
-const randomNormal = (): number => {
-    // Guard against Math.random() === 0 → log(0) = -Infinity → infinite paths.
-    const u1 = Math.max(Math.random(), 1e-300);
-    const u2 = Math.random();
+export const mulberry32 = (seed: number): (() => number) => {
+    let a = seed >>> 0;
+    return (): number => {
+        a |= 0;
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+
+/**
+ * FNV-1a hash of the setup identity (entry/SL/TPs/direction/ATR/timeframe/
+ * bias/regime) → stable seed so "rerun this setup" is stable, while a
+ * genuinely different setup still gets a different sample of paths.
+ */
+export const deriveSetupSeed = (config: SimulationConfig): number => {
+    const identity = [
+        config.entry,
+        config.stopLoss,
+        (config.takeProfits || []).join(','),
+        config.direction,
+        config.atr,
+        config.timeframe,
+        config.trendBias ?? 0,
+        config.marketRegime ?? 'default'
+    ].join('|');
+    let h = 0x811c9dc5;
+    for (let i = 0; i < identity.length; i++) {
+        h ^= identity.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h >>> 0;
+};
+
+/**
+ * Generate a random number from standard normal distribution (Box-Muller
+ * transform) using the supplied seeded generator instead of Math.random().
+ */
+const randomNormal = (rng: () => number): number => {
+    // Guard against rng() === 0 → log(0) = -Infinity → infinite paths.
+    const u1 = Math.max(rng(), 1e-300);
+    const u2 = rng();
     return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 };
 
@@ -120,7 +179,8 @@ const simulatePricePath = (
     baseVolatility: number,
     baseDrift: number,
     steps: number,
-    regimeConfig: VolatilityRegimeConfig = DEFAULT_REGIME_CONFIG
+    regimeConfig: VolatilityRegimeConfig = DEFAULT_REGIME_CONFIG,
+    rng: () => number = Math.random
 ): number[] => {
     const path = [startPrice];
     let price = startPrice;
@@ -130,10 +190,10 @@ const simulatePricePath = (
 
     for (let i = 0; i < steps; i++) {
         // Markov chain regime switching
-        if (Math.random() < regimeConfig.switchProb) {
+        if (rng() < regimeConfig.switchProb) {
             // Switch to a random other regime
             const otherRegimes = regimes.filter(r => r !== currentRegime);
-            currentRegime = otherRegimes[Math.floor(Math.random() * otherRegimes.length)];
+            currentRegime = otherRegimes[Math.floor(rng() * otherRegimes.length)];
         }
 
         const multipliers = regimeConfig.regimeMultipliers[currentRegime];
@@ -143,7 +203,7 @@ const simulatePricePath = (
         const effectiveDrift = baseDrift * multipliers.drift;
 
         // GBM: dS = μS*dt + σS*dW
-        const z = randomNormal();
+        const z = randomNormal(rng);
         const logReturn = effectiveDrift - 0.5 * effectiveVol * effectiveVol + effectiveVol * z;
         price = price * Math.exp(logReturn);
         path.push(price);
@@ -322,6 +382,12 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
         }
     }
 
+    // Seeded RNG: same setup → same paths → same "Simulated Win Rate".
+    // An explicit config.seed wins; otherwise the seed is a hash of the
+    // setup identity (see deriveSetupSeed).
+    const seedUsed = config.seed ?? deriveSetupSeed(config);
+    const rng = mulberry32(seedUsed);
+
     // Results tracking
     const outcomes: ('TP1' | 'TP2' | 'TP3' | 'SL' | 'TIMEOUT')[] = [];
     const pnls: number[] = [];
@@ -330,7 +396,7 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
 
     // Run simulations
     for (let i = 0; i < numSimulations; i++) {
-        const path = simulatePricePath(entry, volatility, drift, maxSteps, regimeConfig);
+        const path = simulatePricePath(entry, volatility, drift, maxSteps, regimeConfig, rng);
         const result = evaluatePath(path, entry, stopLoss, takeProfits, direction);
 
         outcomes.push(result.outcome);
@@ -349,7 +415,28 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
     const winCount = tp1Count + tp2Count + tp3Count;
     const winRate = (winCount / numSimulations) * 100;
 
-    const expectedValue = pnls.reduce((a, b) => a + b, 0) / numSimulations;
+    // EV excludes TIMEOUT runs' mark-to-market PnL: a path that never hit TP
+    // or SL has no realized trade outcome, and folding its final price into
+    // the average (previously) biased EV toward whatever the random walk
+    // wandered to. Drawdown/time/CI still describe the full sample.
+    const resolvedPnls = pnls.filter((_, i) => outcomes[i] !== 'TIMEOUT');
+    const expectedValue = resolvedPnls.length > 0
+        ? resolvedPnls.reduce((a, b) => a + b, 0) / resolvedPnls.length
+        : 0;
+
+    // TRUE average win/loss = means of the positive / negative PnL samples.
+    // (The Kelly input used to be EV/winRate, which is NOT an average win:
+    // it subtracts the loss rate out of every win and systematically
+    // understates b, shrinking the Kelly fraction.)
+    const winSamples = resolvedPnls.filter(p => p > 0);
+    const lossSamples = resolvedPnls.filter(p => p < 0);
+    const avgWinPercent = winSamples.length > 0
+        ? winSamples.reduce((a, b) => a + b, 0) / winSamples.length
+        : 0;
+    const avgLossPercent = lossSamples.length > 0
+        ? Math.abs(lossSamples.reduce((a, b) => a + b, 0) / lossSamples.length)
+        : 0;
+
     const maxDrawdownAvg = drawdowns.reduce((a, b) => a + b, 0) / numSimulations;
     const timeToOutcomeAvg = stepsToResolution.reduce((a, b) => a + b, 0) / numSimulations;
 
@@ -364,6 +451,9 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
         winCount,
         expectedValue: Math.round(expectedValue * 100) / 100,
         timeframe,
+        avgWinPercent: Math.round(avgWinPercent * 100) / 100,
+        avgLossPercent: Math.round(avgLossPercent * 100) / 100,
+        seedUsed,
         probabilities: {
             tp1Hit: Math.round((tp1Count / numSimulations) * 1000) / 10,
             tp2Hit: Math.round((tp2Count / numSimulations) * 1000) / 10,
@@ -393,17 +483,26 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
  * 2% average win, so ANY system with winRate > 1/3 reported a positive Kelly
  * fraction (up to 100% of the account) even when the setup was a guaranteed
  * loser. Sizing a losing system is worse than not sizing it.
+ *
+ * `avgWinPctOverride` should be the TRUE average win (mean of the positive
+ * PnL sample, i.e. MonteCarloResult.avgWinPercent). Without it the legacy
+ * EV/winRate proxy is used — that ratio is NOT an average win (it nets the
+ * losses out of every win and is systematically too small), and it biases
+ * Kelly down.
  */
 export const computeKellyFraction = (
     winRatePct: number,
     expectedValuePct: number,
     slHitPct: number,
-    ciLowerPct: number
+    ciLowerPct: number,
+    avgWinPctOverride?: number
 ): number => {
     if (expectedValuePct <= 0) return 0;
     const winRate = winRatePct / 100;
     const lossRate = 1 - winRate;
-    const avgWinPercent = winRate > 0 ? expectedValuePct / winRate : 0;
+    const avgWinPercent = typeof avgWinPctOverride === 'number' && avgWinPctOverride > 0
+        ? avgWinPctOverride
+        : (winRate > 0 ? expectedValuePct / winRate : 0);
     // NOTE: avgLossPercent deliberately uses the 5th-percentile tail PnL
     // (conservative) rather than the mean loss — a documented tail choice,
     // not a bug.
@@ -423,12 +522,16 @@ export const calculateRuinRisk = (
     const winRate = monteCarloResult.winRate / 100;
     const lossRate = 1 - winRate;
 
-    // Calculate average win and loss based on probabilities. A zero/negative
-    // EV system gets avgWin 0 — mirroring computeKellyFraction, a losing
-    // system must not be modeled with a phantom 2% win.
-    const avgWinPercent = winRate > 0 && monteCarloResult.expectedValue > 0
-        ? monteCarloResult.expectedValue / winRate
-        : 0;
+    // Average win: prefer the TRUE sample mean (mean of positive-PnL sims)
+    // recorded on the result. The legacy `expectedValue / winRate` is NOT an
+    // average win — it nets the losses out of every win, systematically
+    // understates b, and shrinks Kelly/ruin estimates. It remains only as a
+    // fallback for legacy results that predate avgWinPercent.
+    const avgWinPercent = typeof monteCarloResult.avgWinPercent === 'number' && monteCarloResult.avgWinPercent > 0
+        ? monteCarloResult.avgWinPercent
+        : (winRate > 0 && monteCarloResult.expectedValue > 0
+            ? monteCarloResult.expectedValue / winRate
+            : 0);
 
     const avgLossPercent = monteCarloResult.probabilities.slHit > 0 && Math.abs(monteCarloResult.confidenceInterval.lower) > 0
         ? Math.abs(monteCarloResult.confidenceInterval.lower)
@@ -493,12 +596,16 @@ export const calculateRuinRisk = (
 
     const expectedEquity = finalEquities.reduce((a, b) => a + b, 0) / sequenceCount;
 
-    // Kelly Criterion: f* = (bp - q) / b (guarded helper)
+    // Kelly Criterion: f* = (bp - q) / b (guarded helper, fed the same true
+    // average win used above)
     const kellyFraction = computeKellyFraction(
         monteCarloResult.winRate,
         monteCarloResult.expectedValue,
         monteCarloResult.probabilities.slHit,
-        monteCarloResult.confidenceInterval.lower
+        monteCarloResult.confidenceInterval.lower,
+        typeof monteCarloResult.avgWinPercent === 'number' && monteCarloResult.avgWinPercent > 0
+            ? monteCarloResult.avgWinPercent
+            : undefined
     );
 
     return {
@@ -588,7 +695,13 @@ const WORKER_POOL_SIZE = 4;
 const workerPool: Worker[] = [];
 let poolCursor = 0;
 let requestId = 0;
-const pendingRequests = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+const pendingRequests = new Map<string, {
+    resolve: (v: any) => void;
+    reject: (e: Error) => void;
+    /** The worker this request was dispatched to — needed so a timed-out
+     *  request can eject ITS worker from the pool (see ejectWorker). */
+    worker?: Worker;
+}>();
 
 const dropPool = (): void => {
     for (const w of workerPool) {
@@ -640,6 +753,26 @@ const getWorker = (): Worker => {
 };
 
 /**
+ * Remove a specific worker from the pool and terminate it. Used when a
+ * request on that worker timed out: the worker is (or may be) wedged, and
+ * leaving it in the round-robin would stall every future request assigned
+ * to it. Sibling in-flight requests on the ejected worker simply hit their
+ * own timeout and fall back to the synchronous path.
+ */
+const ejectWorker = (worker: Worker): void => {
+    const idx = workerPool.indexOf(worker);
+    if (idx >= 0) {
+        workerPool.splice(idx, 1);
+        poolCursor = 0;
+    }
+    try {
+        worker.terminate();
+    } catch (err) {
+        console.warn('[MonteCarlo] Worker terminate failed:', err);
+    }
+};
+
+/**
  * A wedged worker (browser suspends the tab, infinite loop in the worker)
  * would otherwise leave the caller's promise pending forever. Race every
  * worker call against a timeout and fall back to the synchronous path —
@@ -663,7 +796,11 @@ const withWorkerTimeout = async <T>(
     } catch (err) {
         if (err instanceof Error && err.message === 'Monte Carlo worker timed out') {
             console.warn('[MonteCarlo] Worker timed out — falling back to synchronous simulation');
-            // Release the pending slot so a late worker reply is ignored.
+            // Release the pending slot so a late worker reply is ignored, and
+            // EJECT the worker that owned the request: a wedged worker left in
+            // the pool would stall every future round-robin pick on it.
+            const entry = pendingRequests.get(id);
+            if (entry?.worker) ejectWorker(entry.worker);
             pendingRequests.delete(id);
             return syncFallback();
         }
@@ -683,9 +820,10 @@ export const runSimulationAsync = (config: SimulationConfig): Promise<MonteCarlo
         return Promise.resolve(runSimulation(config));
     }
     const id = `mc-${++requestId}`;
+    const worker = getWorker();
     const workerPromise = new Promise<MonteCarloResult>((resolve, reject) => {
-        pendingRequests.set(id, { resolve, reject });
-        getWorker().postMessage({ type: 'runSimulation', id, config });
+        pendingRequests.set(id, { resolve, reject, worker });
+        worker.postMessage({ type: 'runSimulation', id, config });
     });
     return withWorkerTimeout(workerPromise, id, () => runSimulation(config));
 };
@@ -705,9 +843,10 @@ export const calculateRuinRiskAsync = (
         return Promise.resolve(calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult));
     }
     const id = `mc-${++requestId}`;
+    const worker = getWorker();
     const workerPromise = new Promise<RuinRiskResult>((resolve, reject) => {
-        pendingRequests.set(id, { resolve, reject });
-        getWorker().postMessage({ type: 'calculateRuinRisk', id, accountBalance, positionSize, leverage, monteCarloResult });
+        pendingRequests.set(id, { resolve, reject, worker });
+        worker.postMessage({ type: 'calculateRuinRisk', id, accountBalance, positionSize, leverage, monteCarloResult });
     });
     return withWorkerTimeout(workerPromise, id, () =>
         calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult)

@@ -701,7 +701,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                             <td className="py-1.5 pr-3 text-zinc-300 truncate max-w-[140px]" title={row.key}>{row.key}</td>
                                             {REGIMES.map(r => {
                                                 const s = row.byRegime[r];
-                                                if (!s || s.w + s.l === 0) return <td key={r} className="py-1.5 px-2 text-zinc-700">—</td>;
+                                                if (!s || s.w + s.l === 0) return <td key={r} className="py-1.5 px-2 text-zinc-500">—</td>;
                                                 const wr = (s.w / (s.w + s.l)) * 100;
                                                 return (
                                                     <td key={r} className={`py-1.5 px-2 ${wr >= 60 ? 'text-emerald-400' : wr >= 45 ? 'text-zinc-300' : 'text-rose-400'}`}>
@@ -710,7 +710,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                                 );
                                             })}
                                             <td className="py-1.5 px-2 text-zinc-300">{overall.toFixed(0)}% <span className="text-zinc-600">({row.total})</span></td>
-                                            <td className={`py-1.5 px-2 ${delta === null ? 'text-zinc-700' : delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <td className={`py-1.5 px-2 ${delta === null ? 'text-zinc-500' : delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {delta === null ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(0)} pts / ${row.last20N}`}
                                             </td>
                                         </tr>

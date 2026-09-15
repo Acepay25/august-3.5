@@ -19,6 +19,13 @@ import OpenAI from 'openai';
 import { ProviderConfig } from '../../types/provider';
 import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
+import {
+    anthropicShouldSendThinking,
+    anthropicThinkingFields,
+    claudeThinkingBudgetTokens,
+    geminiThinkingParams,
+    MIN_EFFECTIVE_THINKING_TOKENS,
+} from '../../shared/providerRequestPolicy.cjs';
 
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
 import { applyReasoningToChatParams, buildReasoningPatch, detectWireCapabilities } from './reasoningControls';
@@ -42,6 +49,11 @@ interface ElectronProviderBridge {
         maxTokens?: number;
         temperature?: number;
         jsonMode?: boolean;
+        /** Composer effort tier — the out-of-process transports (Electron
+         *  bridge + dev proxy) gate/scale the Claude thinking block from this
+         *  via shared/providerRequestPolicy.cjs. Without it the proxies could
+         *  only ever use the fixed historical budget and ignored 'off'. */
+        reasoningEffort?: NonNullable<ChatRequestOptions['reasoningEffort']>;
         /** Pre-resolved (capability-checked) constrained-decoding schema for
          *  chat_completions; undefined = never send json_schema. */
         jsonSchema?: ChatRequestOptions['jsonSchema'];
@@ -284,66 +296,37 @@ export function extractResponsesReasoning(output: unknown): string {
 // ─── Extended Thinking (request side) ───────────────────────────────────────
 
 /**
- * Anthropic extended-thinking-capable Claude models. The `thinking` request
- * block is only valid on these — older Claude models reject it with a 400, so
- * the gate is model-id based (with a manual override flag below).
- * Covers 3.7 / 4 / 4.5 and the 5-series ids (the old regex missed opus-5 /
- * sonnet-5, silently disabling thinking on them).
+ * ALL extended-thinking / budget / temperature rules live in
+ * shared/providerRequestPolicy.cjs — the single source consumed identically
+ * by this renderer transport, the vite dev proxy, and electron/main.cjs.
+ * (Before that module these rules were hand-copied three times and had
+ * verifiably drifted: stale model-id regex, fixed 0.35 budget, missing
+ * temperature on the proxies. The wrappers below stay exported because the
+ * wire tests import them.
  */
-const EXTENDED_THINKING_MODEL_RE = /claude-(?:3-7|3\.7|sonnet-4|opus-4|haiku-4-5|sonnet-5|opus-5|4-5)/i;
-
-/** Chain-of-thought budget as a fraction of max_tokens (always kept below it). */
-const THINKING_BUDGET_FRACTION = 0.35;
-
-/** Budget fraction per requested reasoning effort — the messages transport
- *  has no native effort param, so Low/Medium/High/Max must actually change
- *  the thinking budget or the composer knob does nothing on Claude. 'auto'
- *  and unknown tiers keep the historical default. */
-const THINKING_BUDGET_FRACTIONS: Record<string, number> = {
-    low: 0.15,
-    medium: 0.35,
-    high: 0.55,
-    max: 0.85,
-};
 
 /** Anthropic budget_tokens for a call: effort-scaled, clamped to
  *  1024 <= budget < max_tokens. Exported for wire tests. */
 export function thinkingBudgetTokens(maxTokens: number, effort?: string): number {
-    const fraction = THINKING_BUDGET_FRACTIONS[effort ?? ''] ?? THINKING_BUDGET_FRACTION;
-    return Math.min(
-        maxTokens - 1,
-        Math.max(MIN_EFFECTIVE_THINKING_TOKENS, Math.floor(maxTokens * fraction)),
-    );
+    return claudeThinkingBudgetTokens(maxTokens, effort);
 }
 
 /**
- * Whether to request extended thinking on an Anthropic messages call.
- * Gated on: a thinking-capable Claude model id (or the explicit
- * `thinkingCapable` override on the provider config — the regex can't know
- * every future id), no JSON mode (structured output and extended thinking
- * are mutually exclusive), and enough headroom for Anthropic's
- * 1024 <= budget_tokens < max_tokens constraint.
- *
- * The old `maxTokens >= 4096` floor silently excluded every rebuttal round
- * (TASK_BUDGETS.rebuttal = 2560), so Claude seats never thought during
- * debates. 2560 already fits the Anthropic constraint — the floor only needs
- * to keep budget_tokens under max_tokens, which THINKING_BUDGET_FRACTION
- * guarantees for any maxTokens > 1576 (0.35×2560 ≈ 896 clamps to 1024).
- * Connection tests still pass maxTokens 10: the real floor is
- * MIN_EFFECTIVE_THINKING_TOKENS, below which thinking is pointless.
+ * Whether to request extended thinking on an Anthropic messages call
+ * (delegates the whole gate — JSON-mode exclusion, the composer's 'off'
+ * tier, the 1024-token floor, and the model-id list/`thinkingCapable`
+ * override — to the shared policy module).
  */
-const MIN_EFFECTIVE_THINKING_TOKENS = 1024;
-
 export function shouldRequestExtendedThinking(config: ProviderConfig, options?: ChatRequestOptions): boolean {
     if (config.apiFormat !== 'messages') return false;
-    if (options?.jsonMode) return false;
-    // The composer's explicit no-think toggle wins over the model gate.
-    if (options?.reasoningEffort === 'off') return false;
-    const maxTokens = options?.maxTokens ?? 4096;
-    if (maxTokens <= MIN_EFFECTIVE_THINKING_TOKENS) return false;
-    if (config.thinkingCapable === false) return false;
-    if (config.thinkingCapable === true) return true;
-    return EXTENDED_THINKING_MODEL_RE.test(config.selectedModel || '');
+    return anthropicShouldSendThinking({
+        modelId: config.selectedModel || '',
+        displayName: config.name,
+        capabilityOverride: config.thinkingCapable,
+        maxTokens: options?.maxTokens,
+        jsonMode: options?.jsonMode,
+        reasoningEffort: options?.reasoningEffort,
+    });
 }
 
 // ─── URL Normalization Helper ───────────────────────────────────────────────
@@ -403,12 +386,17 @@ export function warmProviderConnection(config: ProviderConfig): void {
 
 /**
  * Create an OpenAI SDK client for chat_completions providers.
+ * maxRetries: 0 — the SDK's own retry loop (default 2) multiplied with
+ * withRetry(fn, 3) here, sending up to 9 requests to a rate-limited gateway
+ * per logical call. Retry/backoff is this module's job; the SDK must make
+ * exactly one attempt per call.
  */
 function createOpenAIClient(config: ProviderConfig): OpenAI {
     return new OpenAI({
         apiKey: config.apiKey?.trim() || 'not-needed',
         baseURL: normalizeBaseUrl(config.baseUrl, config.apiFormat),
         dangerouslyAllowBrowser: true,
+        maxRetries: 0,
     });
 }
 
@@ -679,21 +667,23 @@ async function messagesCall(
     if (systemMsg) {
         body.system = typeof systemMsg.content === 'string' ? systemMsg.content : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('');
     }
-    // Explicit 0.7 default — matches chat_completions/responses. Anthropic's
-    // API default is 1.0, so omitting temperature sampled the same task at a
-    // different value per provider format and polluted calibration data.
-    body.temperature = options?.temperature ?? 0.7;
-    // Extended thinking (thinking-capable Claude models only — older models
-    // reject the `thinking` block with a 400): request a chain-of-thought
-    // budget so `thinking` content blocks come back. Anthropic requires
-    // temperature unset when thinking is enabled, so the explicit value drops.
-    if (shouldRequestExtendedThinking(config, options)) {
-        body.thinking = {
-            type: 'enabled',
-            budget_tokens: thinkingBudgetTokens(maxTokensForBody, options?.reasoningEffort),
-        };
-        delete body.temperature;
-    }
+    // Temperature + extended thinking come from the shared policy module (all
+    // three transports): explicit value or 0.7 default — Anthropic's own API
+    // default is 1.0, so omitting temperature sampled the same task at a
+    // different value per provider format and polluted calibration data —
+    // and when thinking is active the block replaces temperature (Anthropic
+    // requires it unset alongside `thinking`).
+    const thinkingFields = anthropicThinkingFields({
+        modelId: config.selectedModel || '',
+        displayName: config.name,
+        capabilityOverride: config.thinkingCapable,
+        maxTokens: maxTokensForBody,
+        temperature: options?.temperature,
+        jsonMode: options?.jsonMode,
+        reasoningEffort: options?.reasoningEffort,
+    });
+    if (typeof thinkingFields.temperature === 'number') body.temperature = thinkingFields.temperature;
+    if (thinkingFields.thinking) body.thinking = thinkingFields.thinking;
     // Wire audit: the messages transport previously emitted
     // NO audit line, so Claude seats — the format whose thinking gate P3
     // fixed — were invisible in the run log. Report the shim's actual
@@ -708,7 +698,7 @@ async function messagesCall(
             reason: thinkingSent
                 ? `thinking budget_tokens=${(body.thinking as { budget_tokens: number }).budget_tokens} (effort ${effort})`
                 : `no thinking block: ${options?.jsonMode ? 'jsonMode excludes thinking'
-                    : (options?.maxTokens ?? 4096) <= 1024 ? 'maxTokens below the 1024 thinking floor'
+                    : (options?.maxTokens ?? 4096) <= MIN_EFFECTIVE_THINKING_TOKENS ? 'maxTokens below the 1024 thinking floor'
                         : config.thinkingCapable === false ? 'thinkingCapable override = off'
                             : 'model id not recognized as thinking-capable (set the override in Settings)'}`,
         });
@@ -861,6 +851,12 @@ async function googleCall(
         jsonMode: options?.jsonMode,
         model: config.selectedModel,
     });
+    // Canonical thinking decision from the shared policy module (the codec's
+    // inline copy is behaviorally identical; applying the policy here means
+    // every transport's Gemini thinkingConfig provably comes from one source).
+    const geminiThinking = geminiThinkingParams(options?.jsonMode, config.selectedModel);
+    if (geminiThinking) body.generationConfig.thinkingConfig = geminiThinking;
+    else delete body.generationConfig.thinkingConfig;
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -1014,6 +1010,7 @@ export async function sendChatRequest(
                         requestId,
                         maxTokens: options?.maxTokens,
                         temperature: options?.temperature,
+                        reasoningEffort: options?.reasoningEffort,
                         jsonMode: options?.jsonMode,
                         jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                         tools: options?.tools,
@@ -1038,19 +1035,20 @@ export async function sendChatRequest(
                     return fetch('/__provider_proxy', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            config: effectiveConfig,
-                            messages,
-                            maxTokens: options?.maxTokens,
-                            temperature: options?.temperature,
-                            jsonMode: options?.jsonMode,
-                            jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
-                            tools: options?.tools,
-                            toolChoice: options?.toolChoice,
-                            reasoningPatch: reasoningPatchFor(effectiveConfig, options),
-                        }),
-                        signal: options?.signal,
-                    }).then(async response => {
+                    body: JSON.stringify({
+                        config: effectiveConfig,
+                        messages,
+                        maxTokens: options?.maxTokens,
+                        temperature: options?.temperature,
+                        reasoningEffort: options?.reasoningEffort,
+                        jsonMode: options?.jsonMode,
+                        jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
+                        tools: options?.tools,
+                        toolChoice: options?.toolChoice,
+                        reasoningPatch: reasoningPatchFor(effectiveConfig, options),
+                    }),
+                    signal: options?.signal,
+                }).then(async response => {
                         const result = await response.json() as { ok?: boolean; status?: number; body?: string; reasoning?: string; message?: string };
                         if (!response.ok || !result.ok) {
                             const providerBody = result.body ? parseProviderErrorBody(result.body) : '';
@@ -1162,6 +1160,7 @@ export async function sendChatTurn(
                             requestId,
                             maxTokens: options?.maxTokens,
                             temperature: options?.temperature,
+                            reasoningEffort: options?.reasoningEffort,
                             jsonMode: options?.jsonMode,
                             jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
@@ -1199,6 +1198,7 @@ export async function sendChatTurn(
                             messages,
                             maxTokens: options?.maxTokens,
                             temperature: options?.temperature,
+                            reasoningEffort: options?.reasoningEffort,
                             jsonMode: options?.jsonMode,
                             jsonSchema: resolveWireJsonSchema(effectiveConfig, options),
                             tools: options?.tools,
@@ -1349,7 +1349,11 @@ async function* streamViaElectronBridge(
     const cancelRequest = (): void => { void electronAPI.cancelProviderChat?.(requestId); };
     options?.signal?.addEventListener('abort', cancelRequest, { once: true });
     if (options?.signal?.aborted) cancelRequest();
-    const timeout = window.setTimeout(() => cancelRequest(), REQUEST_TIMEOUT_MS);
+    // STREAMING budget (300s), NOT the 120s non-streaming cap: reasoning-heavy
+    // desktop answers stream well past 120s and this renderer-side timer used
+    // to cancel them mid-stream on the very transport main.cjs gives 300s.
+    // (Web streams get the same 300s via withStreamTimeoutSignal.)
+    const timeout = window.setTimeout(() => cancelRequest(), STREAM_TIMEOUT_MS);
     const invoke = electronAPI.providerChat!({
         config,
         messages,
@@ -1357,6 +1361,7 @@ async function* streamViaElectronBridge(
         stream: true,
         maxTokens: options?.maxTokens,
         temperature: options?.temperature,
+        reasoningEffort: options?.reasoningEffort,
         tools: options?.tools,
         toolChoice: options?.toolChoice,
         reasoningPatch: reasoningPatchFor(config, options),
@@ -1540,6 +1545,22 @@ const reasoningPatchFor = (
     return Object.keys(patch).length > 0 ? patch : undefined;
 };
 
+/** Extract an SSE event's payload per the spec: an event may carry MULTIPLE
+ *  `data:` lines (legal — some gateways split large JSON frames across them,
+ *  losing tool-call/usage events entirely when only the first line is read,
+ *  the exact bug this replaces). Collect every data line, strip one optional
+ *  leading space per line, and join with '\n' before the caller JSON.parses.
+ *  Returns null when the event carries no data lines. */
+const sseEventPayload = (event: string): string | null => {
+    const dataLines: string[] = [];
+    for (const line of event.split('\n')) {
+        if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+    }
+    if (dataLines.length === 0) return null;
+    const joined = dataLines.join('\n').trim();
+    return joined || null;
+};
+
 async function* streamViaProxy(
     config: ProviderConfig,
     messages: ChatMessage[],
@@ -1560,6 +1581,7 @@ async function* streamViaProxy(
                 messages,
                 maxTokens: options?.maxTokens,
                 temperature: options?.temperature,
+                reasoningEffort: options?.reasoningEffort,
                 jsonMode: options?.jsonMode,
                 jsonSchema: resolveWireJsonSchema(config, options),
                 // Native tool-calling over SSE — without these the proxy strip
@@ -1614,9 +1636,9 @@ async function* streamViaProxy(
             while ((sep = buffer.indexOf('\n\n')) >= 0) {
                 const event = buffer.slice(0, sep);
                 buffer = buffer.slice(sep + 2);
-                const dataLine = event.split('\n').find(line => line.startsWith('data:'));
-                if (!dataLine) continue;
-                const data = dataLine.slice(5).trim();
+                // ALL data: lines of the event, joined — multi-line data is
+                // legal SSE (see sseEventPayload).
+                const data = sseEventPayload(event);
                 if (!data || data === '[DONE]') continue;
                 let chunk: any;
                 try {
@@ -1649,28 +1671,25 @@ async function* streamViaProxy(
         }
         // Flush any trailing buffer (final event without a blank line).
         if (buffer.trim()) {
-            const dataLine = buffer.split('\n').find(line => line.startsWith('data:'));
-            if (dataLine) {
-                const data = dataLine.slice(5).trim();
-                if (data && data !== '[DONE]') {
-                    let chunk: any;
-                    try {
-                        chunk = JSON.parse(data);
-                    } catch { /* trailing partial event — ignore */ }
-                    if (chunk?.error) {
-                        // Provider error in the final event must propagate, not
-                        // be silently swallowed like a partial event would be.
-                        const error = new Error(chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`);
-                        if (typeof chunk.error.code === 'number') (error as any).status = chunk.error.code;
-                        else if (typeof chunk.error.code === 'string' && /^\d{3}$/.test(chunk.error.code)) (error as any).status = Number(chunk.error.code);
-                        if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
-                        throw error;
-                    }
-                    if (chunk) {
-                        toolBuf.push(chunk?.choices?.[0]?.delta || {});
-                        const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
-                        if (visible) yield visible;
-                    }
+            const data = sseEventPayload(buffer);
+            if (data && data !== '[DONE]') {
+                let chunk: any;
+                try {
+                    chunk = JSON.parse(data);
+                } catch { /* trailing partial event — ignore */ }
+                if (chunk?.error) {
+                    // Provider error in the final event must propagate, not
+                    // be silently swallowed like a partial event would be.
+                    const error = new Error(chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`);
+                    if (typeof chunk.error.code === 'number') (error as any).status = chunk.error.code;
+                    else if (typeof chunk.error.code === 'string' && /^\d{3}$/.test(chunk.error.code)) (error as any).status = Number(chunk.error.code);
+                    if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
+                    throw error;
+                }
+                if (chunk) {
+                    toolBuf.push(chunk?.choices?.[0]?.delta || {});
+                    const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
+                    if (visible) yield visible;
                 }
             }
         }

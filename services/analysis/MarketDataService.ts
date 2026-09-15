@@ -131,6 +131,17 @@ export interface OrderBookData {
 
 /**
  * Recent Liquidation data - Shows forced position closures
+ *
+ * `unavailableReason` distinguishes the two ways this block can come back
+ * empty, which the surfaces used to conflate into one forever-N/A branch:
+ * - 'source_retired': Binance removed the public forceOrders endpoints — the
+ *   data will NEVER arrive, prompts must say so instead of hinting "quiet
+ *   market".
+ * - 'fetch_failed': transient transport/endpoint failure (or was, before the
+ *   retirement latch) — a later call may still succeed.
+ * A SUCCESSFUL fetch with zero events in the hour keeps available:true and
+ * reads "Low liquidation activity — stable market": "no recent liquidations"
+ * is a real observation, "source retired" is not data.
  */
 export interface LiquidationData {
     // Recent liquidations (last hour)
@@ -152,6 +163,7 @@ export interface LiquidationData {
     liquidationPressure: 'high' | 'medium' | 'low';
     sentiment: string; // e.g., "Heavy long liquidations - bearish pressure"
     available?: boolean;
+    unavailableReason?: 'source_retired' | 'fetch_failed';
 }
 
 /**
@@ -201,6 +213,18 @@ const setCache = (key: string, data: any): void => {
     cache.set(key, { data, timestamp: Date.now() });
 };
 
+/**
+ * True when any numeric leaf of a plain data object/array is NaN/Infinity.
+ * Used to refuse caching poisoned analyses (a NaN from an empty book side
+ * once propagated through wall detection and into the 30s cache).
+ */
+const containsNonFinite = (value: unknown): boolean => {
+    if (typeof value === 'number') return !Number.isFinite(value);
+    if (Array.isArray(value)) return value.some(containsNonFinite);
+    if (value && typeof value === 'object') return Object.values(value).some(containsNonFinite);
+    return false;
+};
+
 // List of available Binance API endpoints to try
 const BINANCE_ENDPOINTS = [
     'https://api.binance.com',
@@ -210,12 +234,17 @@ const BINANCE_ENDPOINTS = [
     'https://data-api.binance.vision' // Fallback data API (usually works when others fail)
 ];
 
-// List of available Binance Futures API endpoints to try
+// List of available Binance Futures API endpoints to try.
+// NO testnet here: testnet.binancefuture.com used to sit at the end of this
+// chain as a "last resort", but on a geo-block (451 on the prod hosts) the
+// testnet happily answers 200 with SYNTHETIC prices — which were then cached
+// 30s and served to the model and the desk as "live" mark/funding/OI. A wrong
+// price labeled live is worse than a failed fetch, so the prod path must only
+// ever talk to the real futures hosts.
 const BINANCE_FUTURES_ENDPOINTS = [
     'https://fapi.binance.com',
     'https://fapi1.binance.com',
     'https://fapi2.binance.com',
-    'https://testnet.binancefuture.com' // Testnet fallback (may have limited data)
 ];
 
 /**
@@ -824,9 +853,25 @@ export const fetchOpenInterest = async (symbol: string): Promise<{ oi: number; o
         // robustFuturesFetch throws on non-ok responses
 
         const data = await response.json();
+        const oi = parseFloat(data.openInterest) || 0;
+        // OI is FUTURES contracts — valuing it at the SPOT last price made
+        // openInterestValue a cross-market figure (the same mixing class as
+        // the order book below). Price it at the futures mark; fall back to
+        // the futures 24h last, then spot only if the perp feed is dead.
+        let priceRef = 0;
+        const mark = await fetchMarkIndex(normalizedSymbol);
+        if (mark.available && mark.markPrice > 0) priceRef = mark.markPrice;
+        if (!priceRef) {
+            const futTicker = await fetchFuturesTicker24h(normalizedSymbol).catch(() => null);
+            priceRef = futTicker?.currentPrice || 0;
+        }
+        if (!priceRef) {
+            const spot = await fetchMarketData(normalizedSymbol).catch(() => null);
+            priceRef = spot?.currentPrice || 0;
+        }
         const result = {
-            oi: parseFloat(data.openInterest) || 0,
-            oiValue: parseFloat(data.openInterest) * (await fetchMarketData(normalizedSymbol)).currentPrice || 0
+            oi,
+            oiValue: (oi * priceRef) || 0
         };
 
         setCache(cacheKey, result);
@@ -1177,7 +1222,17 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
         // robustFuturesFetch throws on non-ok responses
 
         const data = await response.json();
-        const currentPrice = await fetchMarketData(normalizedSymbol).then(m => m.currentPrice);
+
+        // Reference price must live on the SAME market as the book. This used
+        // to pull the SPOT ticker: the spread %, the ±1% depth window and the
+        // wall distances were all measured against a different instrument
+        // than the ladder they classify (same cross-market class the
+        // futures-native packet fix closed — on moving symbols the
+        // spot↔perp basis skewed every number). Use the futures MARK price
+        // (premiumIndex, already fetched near-stream-fresh elsewhere in this
+        // file); the book's own mid is the fallback when mark is unavailable.
+        const mark = await fetchMarkIndex(normalizedSymbol);
+        const markPrice = mark.available && mark.markPrice > 0 ? mark.markPrice : 0;
 
         // Parse bids and asks: [[price, quantity], ...]
         const bids: { price: number; qty: number }[] = data.bids.map((b: string[]) => ({
@@ -1190,34 +1245,42 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
             qty: parseFloat(a[1])
         }));
 
-        const bestBid = bids[0]?.price || currentPrice;
-        const bestAsk = asks[0]?.price || currentPrice;
-        const spread = bestAsk - bestBid;
-        const spreadPercent = (spread / currentPrice) * 100;
+        const bookMid = bids[0] && asks[0]
+            ? (bids[0].price + asks[0].price) / 2
+            : (bids[0]?.price ?? asks[0]?.price ?? 0);
+        const refPrice = markPrice > 0 ? markPrice : bookMid;
 
-        // Calculate depth within 1% of current price
-        const priceRange = currentPrice * 0.01;
+        const bestBid = bids[0]?.price || refPrice;
+        const bestAsk = asks[0]?.price || refPrice;
+        const spread = bestAsk - bestBid;
+        const spreadPercent = refPrice > 0 ? (spread / refPrice) * 100 : 0;
+
+        // Calculate depth within 1% of the futures reference price
+        const priceRange = refPrice * 0.01;
         const bidDepth = bids
-            .filter(b => b.price >= currentPrice - priceRange)
+            .filter(b => b.price >= refPrice - priceRange)
             .reduce((sum, b) => sum + (b.qty * b.price), 0);
         const askDepth = asks
-            .filter(a => a.price <= currentPrice + priceRange)
+            .filter(a => a.price <= refPrice + priceRange)
             .reduce((sum, a) => sum + (a.qty * a.price), 0);
         const depthImbalance = (bidDepth + askDepth) > 0
             ? (bidDepth - askDepth) / (bidDepth + askDepth)
             : 0;
 
-        // Detect walls (orders > 3x average size)
-        const avgBidSize = bids.reduce((sum, b) => sum + b.qty, 0) / bids.length;
-        const avgAskSize = asks.reduce((sum, a) => sum + a.qty, 0) / asks.length;
+        // Detect walls (orders > 3x average size). A side can legitimately be
+        // empty on a one-sided book — dividing by bids.length/asks.length == 0
+        // produced NaN, `qty >= NaN * 3` is false for every row, so all walls
+        // on the OTHER side silently vanished and the NaN result got cached.
+        const avgBidSize = bids.length > 0 ? bids.reduce((sum, b) => sum + b.qty, 0) / bids.length : 0;
+        const avgAskSize = asks.length > 0 ? asks.reduce((sum, a) => sum + a.qty, 0) / asks.length : 0;
 
         const buyWalls = bids
-            .filter(b => b.qty >= avgBidSize * 3)
+            .filter(b => avgBidSize > 0 && b.qty >= avgBidSize * 3)
             .slice(0, 3)
             .map(b => ({ price: b.price, quantity: b.qty, usdValue: b.qty * b.price }));
 
         const sellWalls = asks
-            .filter(a => a.qty >= avgAskSize * 3)
+            .filter(a => avgAskSize > 0 && a.qty >= avgAskSize * 3)
             .slice(0, 3)
             .map(a => ({ price: a.price, quantity: a.qty, usdValue: a.qty * a.price }));
 
@@ -1228,16 +1291,16 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
 
         // Calculate wall distances
         const wallDistance: OrderBookData['wallDistance'] = {};
-        if (buyWalls.length > 0) {
+        if (buyWalls.length > 0 && refPrice > 0) {
             wallDistance.nearestBuyWall = {
                 price: buyWalls[0].price,
-                distance: ((currentPrice - buyWalls[0].price) / currentPrice) * 100
+                distance: ((refPrice - buyWalls[0].price) / refPrice) * 100
             };
         }
-        if (sellWalls.length > 0) {
+        if (sellWalls.length > 0 && refPrice > 0) {
             wallDistance.nearestSellWall = {
                 price: sellWalls[0].price,
-                distance: ((sellWalls[0].price - currentPrice) / currentPrice) * 100
+                distance: ((sellWalls[0].price - refPrice) / refPrice) * 100
             };
         }
 
@@ -1257,6 +1320,14 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
             wallDistance,
             available: true
         };
+
+        // Never cache a NaN/Infinity-poisoned analysis — the whole point of
+        // the guard above is that one bad number gets replayed for 30s and
+        // empties the DOM wall column. Serve the honest default instead.
+        if (containsNonFinite(result)) {
+            console.warn(`[MarketDataService] order book for ${normalizedSymbol} contains non-finite numbers; not caching`);
+            return getDefaultOrderBook();
+        }
 
         setCache(cacheKey, result);
         return result;
@@ -1284,12 +1355,44 @@ const getDefaultOrderBook = (): OrderBookData => ({
 });
 
 /**
+ * RETIRED-SOURCE LATCH for liquidations.
+ *
+ * Both public force-order endpoints the liquidations feature used are gone
+ * from Binance: /fapi/v1/forceOrders is now signed-only (401 without an API
+ * key + HMAC signature — a browser can never call it) and
+ * /fapi/v1/allForceOrders was removed outright (404). Before this latch every
+ * call burned ~8 serial endpoint attempts (4 futures hosts × 2 endpoints,
+ * each with a 15s timeout budget) and returned the same forever-N/A object,
+ * uncached — a permanent tax on autopilot loops and desk tools, with nobody
+ * (including the model) told the source is dead rather than quiet.
+ *
+ * The first 401/403/404-class failure latches this for the lifetime of the
+ * module; subsequent calls return the honest RETIRED result immediately with
+ * zero network attempts. There is no per-call retry by design — a websocket
+ * re-home (`!forceOrder@arr`) would be the replacement path, not polling
+ * endpoints Binance deleted.
+ */
+let liquidationsSourceUnavailable = false;
+
+/** 401/403/404 from robustFuturesFetch means the endpoint itself is gone or
+ *  locked — a permanent, source-level verdict. Timeouts/5xx/429 are NOT. */
+const isRetiredSourceError = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return /status:\s*40[134]\b/.test(message);
+};
+
+/**
  * Fetch Recent Liquidations from Binance Futures
- * Note: The forceOrders endpoint may require authentication for symbol-specific queries.
- * We try fetching all liquidations first and filter client-side.
+ * The public forceOrders endpoints were retired by Binance (see
+ * liquidationsSourceUnavailable); this keeps the contract intact for any
+ * future re-home while short-circuiting the dead path honestly.
  */
 export const fetchRecentLiquidations = async (symbol: string): Promise<LiquidationData> => {
     const normalizedSymbol = normalizeSymbol(symbol);
+
+    // Short-circuit FIRST — don't even read the cache, don't hammer.
+    if (liquidationsSourceUnavailable) return getRetiredLiquidations();
+
     const cacheKey = `liquidations_${normalizedSymbol}`;
 
     const cached = getCached<LiquidationData>(cacheKey);
@@ -1306,6 +1409,12 @@ export const fetchRecentLiquidations = async (symbol: string): Promise<Liquidati
             data = await symbolResponse.json();
             console.log(`[MarketDataService] Got ${(data || []).length} liquidations for ${normalizedSymbol}`);
         } catch (symbolError) {
+            if (isRetiredSourceError(symbolError)) {
+                liquidationsSourceUnavailable = true;
+                console.warn(`[MarketDataService] Liquidations source RETIRED by Binance (forceOrders is signed-only/removed); latching off — no further attempts.`);
+                return getRetiredLiquidations();
+            }
+
             console.warn(`[MarketDataService] Symbol-specific liquidations failed, trying all liquidations...`);
 
             // Fallback: fetch all recent liquidations and filter
@@ -1315,6 +1424,11 @@ export const fetchRecentLiquidations = async (symbol: string): Promise<Liquidati
                 data = (allData || []).filter((o: any) => o.symbol === normalizedSymbol);
                 console.log(`[MarketDataService] Filtered ${data.length} liquidations for ${normalizedSymbol} from all`);
             } catch (allError) {
+                if (isRetiredSourceError(allError)) {
+                    liquidationsSourceUnavailable = true;
+                    console.warn(`[MarketDataService] Liquidations source RETIRED by Binance (allForceOrders removed); latching off — no further attempts.`);
+                    return getRetiredLiquidations();
+                }
                 console.warn(`[MarketDataService] All liquidations fetch also failed:`, allError);
                 // Return default with "data unavailable" note
                 return getDefaultLiquidations();
@@ -1325,28 +1439,35 @@ export const fetchRecentLiquidations = async (symbol: string): Promise<Liquidati
         const oneHourAgo = Date.now() - (60 * 60 * 1000);
         const recentOrders = (data || []).filter((o: any) => o.time >= oneHourAgo);
 
+        const eventOf = (o: any): LiquidationData['recentEvents'][number] => {
+            const side: 'LONG' | 'SHORT' = o.side === 'BUY' ? 'SHORT' : 'LONG'; // Buy to close = was short, Sell to close = was long
+            const qty = parseFloat(o.origQty) || 0;
+            const price = parseFloat(o.price) || 0;
+            return {
+                side,
+                price,
+                quantity: qty,
+                usdValue: qty * price,
+                timestamp: new Date(o.time).toISOString()
+            };
+        };
+
+        // Totals cover the WHOLE last hour: the recentLong/ShortLiquidations
+        // contract says "last hour", but the old code accumulated them inside
+        // `.slice(0, 10).map()` — so the $10M/$1M pressure thresholds and the
+        // dominant-side ratio compared against the 10 DISPLAYED events, not
+        // the hour's flow. Sum over all events first; slice only for display.
         let recentLongLiquidations = 0;
         let recentShortLiquidations = 0;
+        for (const o of recentOrders) {
+            const { side, usdValue } = eventOf(o);
+            if (side === 'LONG') recentLongLiquidations += usdValue;
+            else recentShortLiquidations += usdValue;
+        }
 
         const recentEvents: LiquidationData['recentEvents'] = recentOrders
             .slice(0, 10)
-            .map((o: any) => {
-                const side: 'LONG' | 'SHORT' = o.side === 'BUY' ? 'SHORT' : 'LONG'; // Buy to close = was short, Sell to close = was long
-                const qty = parseFloat(o.origQty) || 0;
-                const price = parseFloat(o.price) || 0;
-                const usdValue = qty * price;
-
-                if (side === 'LONG') recentLongLiquidations += usdValue;
-                else recentShortLiquidations += usdValue;
-
-                return {
-                    side,
-                    price,
-                    quantity: qty,
-                    usdValue,
-                    timestamp: new Date(o.time).toISOString()
-                };
-            });
+            .map(eventOf);
 
         const totalRecentLiquidations = recentLongLiquidations + recentShortLiquidations;
 
@@ -1407,8 +1528,38 @@ const getDefaultLiquidations = (): LiquidationData => ({
     dominantLiquidations: 'balanced',
     liquidationPressure: 'low',
     sentiment: 'No liquidation data available',
-    available: false
+    available: false,
+    unavailableReason: 'fetch_failed'
 });
+
+/**
+ * The honest RETIRED-source object: `available:false` keeps the existing
+ * "N/A — do NOT infer" guard alive on every surface (the packet formatter,
+ * desk tools and LiveMarket all key off it), while the sentiment text and
+ * `unavailableReason` tell anyone who reads further that the silence is a
+ * dead exchange endpoint, not a quiet market.
+ */
+const getRetiredLiquidations = (): LiquidationData => ({
+    recentLongLiquidations: 0,
+    recentShortLiquidations: 0,
+    totalRecentLiquidations: 0,
+    recentEvents: [],
+    dominantLiquidations: 'balanced',
+    liquidationPressure: 'low',
+    sentiment: 'Liquidation data source RETIRED by Binance — the public forceOrders endpoints are signed-only/removed. Zero events here means "no data exists", NOT "no liquidations happened".',
+    available: false,
+    unavailableReason: 'source_retired'
+});
+
+/**
+ * Test hook: clears the module-level caches and re-arms the liquidations
+ * probe (same __reset*ForTests pattern used by notify/chatStore/watchService).
+ */
+export const __resetMarketDataForTests = (): void => {
+    liquidationsSourceUnavailable = false;
+    cache.clear();
+    inFlightOHLCV.clear();
+};
 
 /**
  * Fetch complete market snapshot for a symbol
