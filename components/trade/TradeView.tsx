@@ -64,8 +64,11 @@ interface TradeViewProps {
     groupSessionRequest?: { groupId: string; nonce: number };
     coachSessionRequest?: number;
     /** Run the FULL ensemble analysis from the Chart AI composer; resolves
-     *  with the verdict summary text to show back in the chat. */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<string>;
+     *  with the verdict summary text to show back in the chat — optionally
+     *  alongside the created analysis message id (lets the dock stamp the
+     *  answer entry for the gallery's Locate scroll). */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
+        Promise<string | { text: string; messageId?: string }>;
     /** "Log this trade" on a Chart AI proposal → record an OPEN trade. */
     onLogProposedTrade?: (proposal: TradeProposal) => void;
     /** Roster surfaces the Chart AI dock embeds (Coach inbox + group rooms). */
@@ -73,6 +76,10 @@ interface TradeViewProps {
     renderGroupSurface?: (groupId: string) => React.ReactNode;
     /** Group rooms offered in the dock's New-session menu (name for tabs). */
     groups?: Array<{ id: string; name: string }>;
+    /** Imperative scroll-to-entry bridge forwarded to the Chart AI dock:
+     *  App's "Jump to latest analysis" + gallery Locate route their scroll
+     *  through the function the dock registers (null on unmount). */
+    registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
     /** The Antigravity-style left sidebar (the order book) — toggled by
      *  clicking the active Trade icon in the activity bar. */
     sidebarOpen?: boolean;
@@ -180,7 +187,7 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     );
 };
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], sidebarOpen = true }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -545,6 +552,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         renderCoachSurface,
         renderGroupSurface,
         groups,
+        registerScrollToMessage,
     };
 
     return (

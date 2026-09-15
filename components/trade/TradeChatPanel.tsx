@@ -143,8 +143,13 @@ interface TradeChatPanelProps {
     groupSessionRequest?: { groupId: string; nonce: number };
     coachSessionRequest?: number;
     /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
-     *  debate verdict back as an AI entry). Absent ⇒ the option is hidden. */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<string>;
+     *  debate verdict back as an AI entry). Absent ⇒ the option is hidden.
+     *  May resolve with just the verdict text, or with `{ text, messageId }`
+     *  — the App-side analysis message id lets the dock stamp the answer
+     *  entry with `data-message-id`, so the saved-analyses gallery's Locate
+     *  can scroll straight to it. */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
+        Promise<string | { text: string; messageId?: string }>;
     /** "Log this trade" on a model proposal → App records it as an OPEN
      *  (PENDING) trade the outcome autopilot later scores. Absent ⇒ the Log
      *  button is hidden (no journal attached). */
@@ -164,6 +169,14 @@ interface TradeChatPanelProps {
     renderGroupSurface?: (groupId: string) => React.ReactNode;
     /** Group rooms available to open as a session (title for the tab). */
     groups?: Array<{ id: string; name: string }>;
+    /** Imperative scroll-to-entry bridge for App-level affordances ("Jump to
+     *  latest analysis", the saved-analyses gallery's Locate). This dock is
+     *  the app's only real transcript scroller, so it hands App a function
+     *  that scrolls the entry whose `data-message-id` matches the given id
+     *  into view; the cleanup passes null so App never calls into an
+     *  unmounted dock. (Replaces the old virtuosoRef, which pointed at a
+     *  list this panel never rendered as a Virtuoso.) */
+    registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
     /** Dock geometry controls, hoisted to the trade layout (drag handle). */
     collapsed?: boolean;
     onToggleCollapsed?: () => void;
@@ -315,6 +328,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
     renderCoachSurface, renderGroupSurface, groups = [],
+    registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
 }) => {
     // Session state lives in the module store (chatStore) so an in-flight
@@ -344,6 +358,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  proposalDisposition): the disposition itself must SURVIVE a dock
      *  unmount, the state here only makes React repaint the card. */
     const [proposalTick, setProposalTick] = useState(0);
+    /** entryId → App-side analysis message id for ensemble runs launched
+     *  from this dock (see onRunAnalysis): the answer entry's
+     *  `data-message-id` stamp, so the gallery's Locate can scroll to it.
+     *  Component-scoped by design — after a dock remount the mapping is
+     *  gone and Locate falls back to a no-op scroll (highlight still works). */
+    const [analysisMessageIds, setAnalysisMessageIds] = useState<Record<string, string>>({});
     const [panelPickerFor, setPanelPickerFor] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -665,6 +685,34 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (!last || last.role === 'user') stickToBottomRef.current = true;
         if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
     }, [entries, activeId]);
+
+    // ── Imperative scroll-to-entry bridge (see registerScrollToMessage) ────
+    // The dock owns the only real transcript scroller, so App's affordances
+    // ("Jump to latest analysis", the gallery's Locate) route the scroll
+    // through this registered function instead of a never-attached handle.
+    // Entries are stamped `data-entry-id` (the chatStore entry id — what
+    // jump-to-latest resolves from the store) and `data-message-id` (the
+    // App-side analysis message id when this entry carries one, else the
+    // entry id — what the gallery's Locate passes). A miss is a deliberate
+    // no-op: the coach/group surfaces render no transcript, and an analysis
+    // card that isn't in THIS dock's session must not yank the user
+    // somewhere unrelated.
+    useEffect(() => {
+        if (!registerScrollToMessage) return;
+        registerScrollToMessage((messageId: string): void => {
+            const container = scrollRef.current;
+            if (!container || !messageId) return;
+            const nodes = container.querySelectorAll<HTMLElement>('[data-entry-id]');
+            for (const node of Array.from(nodes)) {
+                if (node.getAttribute('data-entry-id') === messageId
+                    || node.getAttribute('data-message-id') === messageId) {
+                    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    return;
+                }
+            }
+        });
+        return () => { registerScrollToMessage(null); };
+    }, [registerScrollToMessage]);
 
     // The composer's "ctx HH:MM PHT" badge reports when the LAST packet was
     // fetched — a fetch made for a DIFFERENT coin or a DIFFERENT session
@@ -1219,13 +1267,20 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
         try {
-            const answer = await onRunAnalysis(text + fileNote, images);
+            const result = await onRunAnalysis(text + fileNote, images);
             if (controller.signal.aborted) {
                 // Stopped mid-run: the early return used to skip the settle,
                 // orphaning a streaming:true bubble that then blocked ALL
                 // session persistence until reload.
                 mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, streaming: false, text: e.text || 'The analysis was stopped.' } : e)) }));
                 return;
+            }
+            // The bridge may hand back the App-side message id alongside the
+            // verdict text — stamp the entry with it so Locate can scroll here.
+            const answer = typeof result === 'string' ? result : result.text;
+            const analysisMessageId = typeof result === 'string' ? undefined : result.messageId;
+            if (analysisMessageId) {
+                setAnalysisMessageIds(prev => ({ ...prev, [aiEntry.id]: analysisMessageId }));
             }
             mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, text: answer || 'The analysis produced no summary.', streaming: false } : e)) }));
         } catch (e) {
@@ -1634,7 +1689,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     const aiLevels = e.role === 'ai' && !e.notice ? parseKeyLevels(e.text) : null;
                     const shownText = aiLevels?.hadBlock ? aiLevels.clean : e.text;
                     return (
-                    <div key={e.id} className="chat-fade-in" data-testid={`chat-entry-${e.role}`}>
+                    <div key={e.id} className="chat-fade-in" data-entry-id={e.id} data-message-id={analysisMessageIds[e.id] ?? e.id} data-testid={`chat-entry-${e.role}`}>
                         {e.role === 'user' ? (
                             <div className="flex flex-col items-end gap-1">
                                 {e.image && (

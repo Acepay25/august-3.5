@@ -24,6 +24,11 @@ beforeEach(() => {
     levelWatch.__resetForTests();
     localStorage.clear();
     userRef.current = 'alice';
+    // The armed-plan REST-poll clock (cross-symbol Tier-0 #6) runs every
+    // second while a plan is armed — these suites never advance real time,
+    // but the guard keeps any leaked interval from ever hitting the network
+    // (same treatment as watchService.test.ts).
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in tests'); }));
 });
 
 const collectHits = (): LevelHit[] => {
