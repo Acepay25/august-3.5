@@ -64,6 +64,61 @@ const nowIso = (): string => new Date().toISOString();
 
 export interface ForgeValidation { ok: boolean; errors: string[] }
 
+// ── SSRF hardening (shared by save-time validation AND exec time) ──
+//
+// Save-time validation of the TEMPLATE is not enough: `{param}` slots live
+// wherever the proposal put them — including the host position — so the
+// EXPANDED url must be re-validated on every execution. The blacklist covers
+// the full private ranges (10/8, 172.16-31, 192.168/16, 169.254/16,
+// loopback incl. IPv6 + IPv4-mapped IPv6, and 0.0.0.0/8).
+
+const isBlockedHost = (hostname: string): boolean => {
+    const h = hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
+    if (!h) return true;
+    if (h === 'localhost' || h.endsWith('.localhost')) return true;
+    const mapped = h.match(/^::ffff:(.+)$/);
+    if (mapped) return isBlockedHost(mapped[1]);
+    if (h === '::1' || h === '::' || h.startsWith('fe80') || /^f[cd]/.test(h)) return true;
+    const octets = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (octets) {
+        const a = Number(octets[1]);
+        const b = Number(octets[2]);
+        if (a === 0 || a === 10 || a === 127) return true; // 0/8, 10/8, loopback
+        if (a === 169 && b === 254) return true;           // link-local
+        if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16/12
+        if (a === 192 && b === 168) return true;           // 192.168/16
+        if (a >= 224) return true;                         // multicast/reserved
+        return false;
+    }
+    return false;
+};
+
+/** Throws when a URL (template or EXPANDED) is not safe to fetch. */
+const assertSafeForgedUrl = (raw: string, context: string): URL => {
+    let u: URL;
+    try {
+        u = new URL(raw);
+    } catch {
+        throw new Error(`${context} is not a valid absolute URL`);
+    }
+    if (u.protocol !== 'https:') throw new Error(`${context} must use https://`);
+    if (u.username || u.password) throw new Error(`${context} must not embed credentials`);
+    if (u.port === '22') throw new Error(`${context} must not use port 22`);
+    if (isBlockedHost(u.hostname)) throw new Error(`${context} points at a private/loopback host`);
+    return u;
+};
+
+/** Host-position `{param}` slots are rejected at save time: they turn model
+ *  arguments into the request destination (SSRF by construction). */
+const hasHostSlot = (urlTemplate: string): boolean => {
+    try {
+        const u = new URL(urlTemplate);
+        return /\{[a-zA-Z_][a-zA-Z0-9_]*\}/.test(u.host);
+    } catch {
+        return false;
+    }
+};
+
 /** Validate a proposal against the forge's hard rules. */
 export const validateProposal = (p: ToolForgeProposal): ForgeValidation => {
     const errors: string[] = [];
@@ -75,13 +130,14 @@ export const validateProposal = (p: ToolForgeProposal): ForgeValidation => {
     }
     if ((p.urlTemplate ?? '').length > MAX_URL_LENGTH) errors.push(`urlTemplate exceeds ${MAX_URL_LENGTH} chars`);
     try {
-        const u = new URL(p.urlTemplate);
-        // SSRF guard: no credentials, no private/localhost hosts.
-        if (u.username || u.password) errors.push('urlTemplate must not embed credentials');
-        if (u.port === '22' || /^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|::1)/.test(u.hostname)) {
-            errors.push('urlTemplate must point at a public host');
-        }
-    } catch { errors.push('urlTemplate is not a valid URL'); }
+        assertSafeForgedUrl(p.urlTemplate, 'urlTemplate');
+        if (hasHostSlot(p.urlTemplate)) errors.push('urlTemplate must not place {param} slots in the host');
+    } catch (e) {
+        // Keep the legacy message shape for non-parseable templates.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes('not a valid absolute URL')) errors.push('urlTemplate is not a valid URL');
+        else errors.push(msg.replace(/^urlTemplate/, 'urlTemplate'));
+    }
     const method = (p.method ?? 'GET').toUpperCase();
     if (!FORGE_ALLOWED_METHODS.includes(method as 'GET' | 'POST')) errors.push('method must be GET or POST');
     for (const [k, v] of Object.entries(p.headers ?? {})) {
@@ -139,6 +195,48 @@ export const confirmedForgedToolDefinitions = (tools?: ForgedTool[]): DeskToolDe
 // ── Execution (the harness runs the recipe; never the model) ──
 
 /**
+ * Fetch with a redirect policy that never leaves the approved host:
+ * `redirect: 'manual'` + re-validate EVERY `Location` (https, no credentials,
+ * no private/loopback) AND require the same hostname as the original request
+ * before following. A redirect to a new host (or an internal range) fails
+ * closed instead of silently hopping there.
+ */
+const MAX_FORGED_REDIRECTS = 3;
+
+const fetchForgedRecipe = async (
+    startUrl: string,
+    init: { method: string; headers: Record<string, string> },
+    signal?: AbortSignal,
+): Promise<Response> => {
+    const origin = assertSafeForgedUrl(startUrl, 'Expanded url');
+    let current = origin;
+    for (let hop = 0; ; hop += 1) {
+        const res = await fetch(current.toString(), {
+            method: hop === 0 ? init.method : 'GET', // browsers downgrade 301/302 POST→GET; mirror that
+            headers: init.headers,
+            signal,
+            redirect: 'manual',
+        });
+        if (res.type === 'opaqueredirect') {
+            throw new Error('the endpoint redirected but did not disclose a Location (redirects are blocked)');
+        }
+        const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+        if (!location) return res;
+        if (hop >= MAX_FORGED_REDIRECTS) throw new Error('too many redirects');
+        let next: URL;
+        try {
+            next = assertSafeForgedUrl(new URL(location, current).toString(), 'Redirect target');
+        } catch (e) {
+            throw new Error(`redirect refused: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+        }
+        if (next.hostname.toLowerCase() !== origin.hostname.toLowerCase()) {
+            throw new Error(`redirect refused: ${next.hostname} is a different host than ${origin.hostname}`);
+        }
+        current = next;
+    }
+};
+
+/**
  * Execute a forged-tool call. Returns null when `name` is not a forged
  * tool (the desk executor falls through to the built-ins).
  */
@@ -153,28 +251,39 @@ export const executeForgedTool = async (
     if (!tool || tool.status !== 'confirmed') {
         return { toolCallId: call.id, name, ok: false, content: `${name} is not an approved tool` };
     }
+    const method = (tool.proposal.method ?? 'GET').toUpperCase();
+    // GET-only cache: a forged POST performs a WRITE on the third-party
+    // endpoint; replaying a cached "success" receipt for a re-issued POST
+    // within the TTL lies about an action that never happened (and hides one
+    // that did). Only reads are served from — and stored in — the cache.
+    const cacheable = method === 'GET';
     // Per-call cache keyed like the desk cache (name + JSON args) with the
     // tool's own TTL — forged recipes hit slower third-party APIs.
     const cacheKey = `forged:${name}:${JSON.stringify(call.arguments ?? {})}`;
-    const cached = forgedCache.get(cacheKey);
+    const cached = cacheable ? forgedCache.get(cacheKey) : undefined;
     const ttl = Math.min(MAX_TTL_MS, Math.max(MIN_TTL_MS, tool.proposal.ttlMs ?? DEFAULT_TTL_MS));
     if (cached && Date.now() - cached.at < ttl) {
         return { toolCallId: call.id, name, ok: true, content: cached.content };
     }
     try {
-        const method = (tool.proposal.method ?? 'GET').toUpperCase();
         const url = expandTemplate(tool.proposal.urlTemplate, call.arguments ?? {});
+        // EXEC-TIME re-validation of the EXPANDED url: save-time validation
+        // only ever saw the template, so `{param}` slots (even in the host
+        // position of a tool stored before the slot rule existed, or crafted
+        // directly in storage) can expand to a private/loopback target. This
+        // gate runs per call, immediately before the fetch.
+        const safeUrl = assertSafeForgedUrl(url, 'Expanded url');
         const queryEntries = Object.entries(tool.proposal.paramMapping ?? {})
             .map(([param, slot]) => [slot, (call.arguments ?? {})[param]] as const)
             .filter(([, v]) => v !== undefined && v !== null && v !== '');
-        const qs = queryEntries.length
-            ? `?${queryEntries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')}`
-            : '';
-        const res = await fetch(`${url}${qs}`, {
-            method,
-            headers: { Accept: 'application/json', ...(tool.proposal.headers ?? {}) },
+        for (const [slot, v] of queryEntries) safeUrl.searchParams.set(slot, String(v));
+        const finalUrl = safeUrl.toString();
+        assertSafeForgedUrl(finalUrl, 'Expanded url');
+        const res = await fetchForgedRecipe(
+            finalUrl,
+            { method, headers: { Accept: 'application/json', ...(tool.proposal.headers ?? {}) } },
             signal,
-        });
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = (await res.text()).slice(0, MAX_RESPONSE_CHARS * 4);
         let content: string;
@@ -194,7 +303,7 @@ export const executeForgedTool = async (
         }
         content = content.slice(0, MAX_RESPONSE_CHARS);
         if (!content.trim()) throw new Error('empty response');
-        forgedCache.set(cacheKey, { at: Date.now(), content });
+        if (cacheable) forgedCache.set(cacheKey, { at: Date.now(), content });
         recordForgedUse(name, true);
         return { toolCallId: call.id, name, ok: true, content };
     } catch (err) {
