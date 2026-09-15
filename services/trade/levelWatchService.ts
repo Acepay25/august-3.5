@@ -14,7 +14,9 @@
  * (`trade_level_hits_v1_${user}`, capped), so a reload — or re-watching the
  * same plan — never re-pings a level that already spoke. The latch tracks
  * which user it was loaded for, so a user switch reloads instead of leaking
- * one profile's latches into another's key (the chatStore lesson).
+ * one profile's latches into another's key (the chatStore lesson). Armed
+ * plans persist too (`trade_level_arms_v1_${user}`) — a reload no longer
+ * silently un-watches a live trade; the per-user adopt re-arms from storage.
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
@@ -33,29 +35,72 @@ interface ArmedPlan {
 const HITS_KEY_PREFIX = 'trade_level_hits_v1';
 /** Latched ids are warnings that already spoke — bound the blob. */
 const MAX_LATCHED = 200;
+/** Armed plans persist under the sibling key so a reload doesn't silently
+ *  un-watch a live trade (deep-dive Tier-1: the latch persisted, the armed
+ *  set was memory-only). */
+const ARMS_KEY_PREFIX = 'trade_level_arms_v1';
+const MAX_ARMS = 10;
 
 const hitsKey = (user: string): string => `${HITS_KEY_PREFIX}_${user}`;
+const armsKey = (user: string): string => `${ARMS_KEY_PREFIX}_${user}`;
 
 let armed = new Map<string, ArmedPlan>();
 let fired = new Set<string>();
 let firedFor = '';
 const subscribers = new Set<(hit: LevelHit, plan: WatchPlan) => void>();
 
-/** Adopt the CURRENT user's latch (cheap no-op while the user is unchanged).
- *  On a switch, ALSO drop the previous user's ARMED plans: the fired-latch is
- *  per-user, but `armed` is a module-global, so without this A's plan would be
- *  ticked against B's price feed and fire B's Chart AI. */
+const validPlan = (p: unknown): p is WatchPlan => {
+    const v = p as WatchPlan & Record<string, unknown>;
+    return !!v && typeof v === 'object'
+        && typeof v.planId === 'string' && typeof v.symbol === 'string'
+        && (v.direction === 'Long' || v.direction === 'Short')
+        && typeof v.entry === 'number' && Number.isFinite(v.entry)
+        && typeof v.stopLoss === 'number' && Number.isFinite(v.stopLoss)
+        && Array.isArray(v.takeProfits)
+        && v.takeProfits.every(t => typeof t === 'number' && Number.isFinite(t));
+};
+
+/** Rebuild the armed map from the current user's persisted plans. `prev`
+ *  resets to null — the first post-reload tick is judged on the plain touch
+ *  test (the "first-tick fallback" detectLevelHits already documents), and
+ *  the fire-once latch keeps anything that spoke pre-reload silent. */
+const loadArmed = (): void => {
+    try {
+        const raw = localStorage.getItem(armsKey(firedFor));
+        const parsed: unknown = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return;
+        for (const p of parsed.slice(-MAX_ARMS)) {
+            if (!validPlan(p)) continue;
+            armed.set(p.planId, { plan: p, levels: buildPlanLevels(p), prev: null });
+        }
+    } catch { /* fresh arms set */ }
+};
+
+const persistArmed = (): void => {
+    try {
+        const plans = [...armed.values()].slice(-MAX_ARMS).map(a => a.plan);
+        if (plans.length === 0) localStorage.removeItem(armsKey(firedFor));
+        else localStorage.setItem(armsKey(firedFor), JSON.stringify(plans));
+    } catch { /* private mode — plans live in memory this session */ }
+};
+
+/** Adopt the CURRENT user's latch + armed set (cheap no-op while the user is
+ *  unchanged). On a switch, ALSO drop the previous user's in-memory ARMED
+ *  plans before reloading this user's: the fired-latch is per-user, but
+ *  `armed` was a module-global, so without this A's plan would be ticked
+ *  against B's price feed and fire B's Chart AI. */
 const loadFired = (): void => {
     const user = getActiveUsername();
     if (user === firedFor) return;
     firedFor = user;
-    armed.clear();
+    armed = new Map();
     fired = new Set();
     try {
         const raw = localStorage.getItem(hitsKey(user));
         const parsed: unknown = raw ? JSON.parse(raw) : [];
         if (Array.isArray(parsed)) fired = new Set(parsed.filter((x): x is string => typeof x === 'string'));
     } catch { /* fresh latch */ }
+    loadArmed();
 };
 
 const persistFired = (): void => {
@@ -76,20 +121,27 @@ export const arm = (plan: WatchPlan, priceAtArm: number | null): void => {
         return;
     }
     armed.set(plan.planId, { plan, levels: buildPlanLevels(plan), prev: null });
+    persistArmed();
 };
 
-export const disarm = (planId: string): void => { armed.delete(planId); };
+export const disarm = (planId: string): void => {
+    loadFired();
+    if (armed.delete(planId)) persistArmed();
+};
 
 /** Drop every plan on a symbol (the trade surface resets its watch when the
  *  user switches instruments — fired latches persist, so nothing re-pings). */
 export const disarmSymbol = (symbol: string): void => {
-    for (const [id, a] of armed) if (a.plan.symbol === symbol) armed.delete(id);
+    loadFired();
+    let changed = false;
+    for (const [id, a] of armed) if (a.plan.symbol === symbol) { armed.delete(id); changed = true; }
+    if (changed) persistArmed();
 };
 
 /** One live price observation for a symbol (the feed's ~1s mark price). */
 export const tick = (symbol: string, price: number): void => {
-    if (armed.size === 0) return;
-    loadFired();
+    loadFired(); // adopt a user switch BEFORE the empty check — the reload
+    if (armed.size === 0) return; // may populate `armed` itself
     const isFired = (id: string): boolean => fired.has(id);
     for (const a of armed.values()) {
         if (a.plan.symbol !== symbol) continue;
@@ -112,8 +164,12 @@ export const subscribe = (cb: (hit: LevelHit, plan: WatchPlan) => void): (() => 
 };
 
 /** Plans currently under watch (the dock renders their levels into the
- *  model's context via describePlanForModel). */
-export const getArmedPlans = (): WatchPlan[] => [...armed.values()].map(a => a.plan);
+ *  model's context via describePlanForModel). loadFired() first so a
+ *  user switch adopted here re-reads the incoming user's persisted arms. */
+export const getArmedPlans = (): WatchPlan[] => {
+    loadFired();
+    return [...armed.values()].map(a => a.plan);
+};
 
 /** Which of an armed plan's levels have already fired. */
 export const firedLevelsFor = (planId: string): string[] => {

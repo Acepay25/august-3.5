@@ -40,6 +40,7 @@ import { SetupWatchService } from '../services/ui/SetupWatchService';
 import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import { storageService } from '../services/infrastructure/StorageService';
+import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { runMigrations, checkDataIntegrity, createStartupBackup, logIntegrityEvent } from '../services/validation/DataIntegrityService';
 import { startAutoBackup } from '../services/infrastructure/BackupService';
 import { getPreferenceObject, PREF_KEYS } from '../services/infrastructure/PreferencesService';
@@ -143,6 +144,12 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
     const [profileReady, setProfileReady] = useState(false);
     const profileSelectionStartedRef = useRef(false);
+    // Monotonic generation token for loadUserData (mirrors
+    // GlobalLearningService._initGeneration). A profile switch mid-load
+    // bumps it; every post-await write site in the loader bails when its
+    // captured seq is no longer current, so a superseded load can never
+    // stampede the outgoing profile's data into the incoming one's state.
+    const loadSeqRef = useRef(0);
 
     const resetAppState = useCallback(async (usernameToSave?: string | null) => {
         handleCancelAnalysis();
@@ -223,11 +230,24 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
     ]);
 
     const loadUserData = useCallback(async (username: string): Promise<void> => {
+        const seq = ++loadSeqRef.current;
+        const isStale = (): boolean => loadSeqRef.current !== seq;
+
         handleCancelAnalysis();
         invalidatePostMortemRuns();
         setIsLoading(true);
 
+        // SWITCH PATH: drop the outgoing profile's live state before the
+        // incoming one loads — the autopilot, the price-alert feed and the
+        // setup watches are singletons whose sockets/maps would otherwise
+        // keep resolving/monitoring the previous user's trades, and the
+        // offline queue must stop replaying the previous user's requests.
+        // (watchService/levelWatchService scope themselves per user.)
         OutcomeAutopilotService.reset();
+        PriceAlertService.reset();
+        SetupWatchService.reset();
+        offlineQueue.setActiveUser(username);
+
         setAutopilotResolutions({});
 
         try {
@@ -238,6 +258,10 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             await initPromptOverrides(username);
             await initStrategyDocs(username);
             await initMemoryFiles(username);
+            // No profile-derived state has been written yet, but a
+            // superseded load must not keep pushing per-username inits
+            // (prompt overrides, memory files) behind the newer one.
+            if (isStale()) return;
 
             void hydrateRegimeLedger(username).catch(() => { /* ledger is best-effort */ });
             void hydrateStrategyRegimeMatrix(username).catch(() => { /* matrix is best-effort */ });
@@ -262,6 +286,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
             try {
                 const cachedSelection = await getPreferenceObject<EnsembleModelSelection>(PREF_KEYS.ENSEMBLE_MODEL_SELECTION);
+                if (isStale()) return;
                 if (Array.isArray(cachedSelection) && cachedSelection.length > 0
                     && JSON.stringify(cachedSelection) !== JSON.stringify(ensembleModelSelection)) {
                     handleSetEnsembleModelSelection(cachedSelection);
@@ -270,16 +295,28 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 console.warn('[App] Failed to sync ensemble model selection:', e);
             }
 
-            await PriceAlertService.init();
-            await SetupWatchService.init();
-            await OutcomeAutopilotService.init();
+            // Monitoring/autopilot singletons take the INCOMING username
+            // explicitly (the `last_active_user` marker still points at the
+            // outgoing profile until this load's tail commits it).
+            if (isStale()) return;
+            await PriceAlertService.init(username);
+            if (isStale()) return;
+            await SetupWatchService.init(username);
+            if (isStale()) return;
+            await OutcomeAutopilotService.init(username);
+            if (isStale()) return;
             await VetoLedgerService.init(username);
+            if (isStale()) return;
             await initConfluenceService();
+            if (isStale()) return;
             await initPatternMemoryService();
+            if (isStale()) return;
             await GlobalLearningService.setActiveUser(username);
+            if (isStale()) return;
             setAttributedInsightsUser(username);
 
             const profile = await dbService.getUserProfile(username);
+            if (isStale()) return;
             if (profile) {
                 try {
                     await syncProfileMemory(profile, username);
@@ -288,6 +325,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 } catch (e) {
                     console.warn('[TraderNotebook] Initial sync failed:', e);
                 }
+                if (isStale()) return;
 
                 const correctedConvs = (profile.conversations || []).map(conv => {
                     const leverage = conv.leverage || DEFAULT_LEVERAGE;
@@ -405,6 +443,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 setActiveConversationId(lastActive.id);
 
                 await runMigrations(username);
+                if (isStale()) return;
 
                 const tradeCount = (profile.tradeLog || []).length;
                 createStartupBackup(username).catch(err =>
@@ -414,6 +453,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 startAutoBackup(username);
 
                 const integrityCheck = await checkDataIntegrity(username, tradeCount);
+                if (isStale()) return;
                 if (!integrityCheck.valid && integrityCheck.tradeCountChanged) {
                     logIntegrityEvent('DATA_LOSS_DETECTED', integrityCheck);
                     const message = ` Data Issue Detected\n\n` +
@@ -428,6 +468,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 await resetAppState(username);
             }
 
+            if (isStale()) return;
             setActiveUsername(username);
             sessionStorage.setItem('activeUsername', username);
             localStorage.setItem('last_active_user', username);
@@ -438,6 +479,9 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             setProfileReady(true);
         } catch (error) {
             console.error('App: failed to load user data', error);
+            // A superseded load must not mark the newer profile's pending
+            // load as failed — the current generation owns the UI now.
+            if (isStale()) return;
             setActiveUsername(username);
             sessionStorage.setItem('activeUsername', username);
             profileSelectionStartedRef.current = true;

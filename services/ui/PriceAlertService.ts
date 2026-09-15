@@ -15,8 +15,9 @@
 
 import { Capacitor } from '@capacitor/core';
 import { TradeAnalysis } from '../../types';
-import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { getPreferenceObject, setPreferenceObject, removePreference, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
+import { getActiveUsername } from '../../utils/activeUser';
 import { QuietHoursConfig, DEFAULT_QUIET_HOURS, isWithinQuietHours } from '../../utils/quietHours';
 
 export interface PriceAlert {
@@ -47,6 +48,11 @@ type AlertCallback = (trigger: AlertTrigger) => void;
 
 class PriceAlertServiceClass {
     private alerts: Map<string, PriceAlert> = new Map();
+    /** Profile the in-memory alerts were loaded for. Alerts persist under a
+     *  per-user key (audit §2.5: this service was one of the unscoped four). */
+    private storageUser: string | null = null;
+    /** Bumped by every init() so a superseded profile switch can't commit. */
+    private initGeneration = 0;
     private ws: WebSocket | null = null;
     private prices: Map<string, number> = new Map();
     private subscribers: Set<AlertCallback> = new Set();
@@ -63,6 +69,12 @@ class PriceAlertServiceClass {
     private isPaused = false; // true when app is backgrounded
     private nativeListenersRegistered = false;
     private nativeNotificationIdCounter = 1000;
+    /** Lowercase symbols actually present in the OPEN combined-stream URL.
+     *  The stream list is baked at connect time — comparing the needed set
+     *  against it is what lets ensureMonitoring detect a stale-but-OPEN
+     *  socket and rebuild it (Tier-0 #5: symbols armed mid-session used to
+     *  never receive ticks until an unrelated socket flap). */
+    private streamSymbols = new Set<string>();
     // SetupWatchService (and future consumers) can hook the same real-time
     // price feed instead of opening their own socket/poll loop.
     private priceSubscribers: Set<(symbol: string, price: number) => void> = new Set();
@@ -147,12 +159,56 @@ class PriceAlertServiceClass {
     }
 
     /**
-     * Initialize service (load alerts)
+     * Initialize service (load alerts for a profile). Idempotent per user:
+     * the profile loader calls reset() on the switch path, then init(username)
+     * rehydrates the INCOMING user's alerts from their own storage key.
+     * A generation token (mirrors GlobalLearningService._initGeneration)
+     * keeps a superseded switch from committing the OUTGOING profile's
+     * alerts after the incoming profile already initialized.
      */
-    async init(): Promise<void> {
-        await this.loadAlerts();
+    async init(username?: string): Promise<void> {
+        const user = username ?? getActiveUsername();
+        const gen = ++this.initGeneration;
+        if (this.storageUser !== user) {
+            // Defensive: never hydrate the outgoing profile's alerts into the
+            // incoming one, even if the caller skipped reset().
+            this.alerts.clear();
+            this.storageUser = user;
+        }
+        const fetched = await this.fetchAlerts(user);
+        if (gen !== this.initGeneration || this.storageUser !== user) return;
+        if (fetched) this.hydrateAlerts(fetched.alerts);
+        if (fetched?.migratedFromLegacy) {
+            // Persist the migrated blob under the NEW owner's key and retire
+            // the shared global one (post-staleness — never writes for an
+            // abandoned profile switch).
+            this.saveAlerts();
+            if (fetched.migratedFromGlobalKey) {
+                removePreference(PREF_KEYS.PRICE_ALERTS).catch(() => { /* best effort */ });
+            }
+        }
         await this.loadQuietHours();
+        if (gen !== this.initGeneration || this.storageUser !== user) return;
         await this.registerNativeLifecycle();
+    }
+
+    /**
+     * Profile switch: drop every alert, the quiet-hours queue, the WebSocket
+     * and the polling loop (audit §2.5 — this service had no reset at all, so
+     * the previous profile's alerts kept streaming + notifying under the next
+     * one). Storage is untouched: alerts live under the outgoing user's own
+     * key and are re-adopted when they log back in.
+     */
+    reset(): void {
+        this.alerts.clear();
+        this.pendingQuiet = [];
+        this.storageUser = null;
+        // The ref-counts of the OUTGOING profile's feed holds must not
+        // survive the switch — SetupWatch/autopilot release theirs around
+        // this call (no-ops on a cleared map), and a leaked count would
+        // strand the old user's symbols in every later stream.
+        this.trackedSymbols.clear();
+        this.stopMonitoring();
     }
 
     /**
@@ -365,6 +421,24 @@ class PriceAlertServiceClass {
     }
 
     /**
+     * Ref-counted symbol hold with a release function (mirrors
+     * acquireMonitor). The OutcomeAutopilotService wraps each registration's
+     * subscribeTicks window in one of these so autopilot-only coins actually
+     * receive ticks — without a price alert or setup watch tracking the
+     * symbol, getCurrentPrice stayed empty forever and the tick episodes
+     * silently never accumulated.
+     */
+    acquireSymbol(symbol: string): () => void {
+        this.trackSymbol(symbol);
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            this.untrackSymbol(symbol);
+        };
+    }
+
+    /**
      * Start monitoring prices via WebSocket
      */
     private ensureMonitoring(): void {
@@ -381,7 +455,63 @@ class PriceAlertServiceClass {
         // Also try WebSocket for faster updates
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.connectWebSocket();
+            return;
         }
+
+        // Socket is OPEN — but the combined-stream URL was baked at connect
+        // time, so symbols added mid-session never arrive (Tier-0 #5).
+        // Rebuild the stream whenever a needed symbol is missing from it.
+        // Removals are deliberately NOT a rebuild trigger: an extra streamed
+        // symbol is harmless, and closing on every untrack would cause
+        // reconnect churn.
+        const needed = this.neededStreamSymbols();
+        for (const symbol of needed) {
+            if (!this.streamSymbols.has(symbol)) {
+                console.log('[PriceAlertService] Tracked set changed while OPEN — rebuilding combined stream');
+                this.closeSocketQuietly();
+                this.connectWebSocket();
+                break;
+            }
+        }
+    }
+
+    /** Every symbol that must be in the live feed (alerts + tracked), lower
+     *  cased for the Binance stream URL. */
+    private neededStreamSymbols(): Set<string> {
+        return new Set([
+            ...Array.from(this.alerts.values()).map(a => a.symbol.toLowerCase()),
+            ...Array.from(this.trackedSymbols.keys()).map(s => s.toLowerCase()),
+        ]);
+    }
+
+    /** True when the OPEN socket's stream covers everything we need right now
+     *  (the polling loop uses this to decide it may stand down). */
+    private streamIsCurrent(): boolean {
+        for (const symbol of this.neededStreamSymbols()) {
+            if (!this.streamSymbols.has(symbol)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Detach every handler from the current socket and drop the reference
+     * BEFORE it is replaced or closed. Without this, a stale onclose from
+     * the old socket can schedule a reconnect over (or flap) the healthy
+     * replacement — and the old socket kept re-entering acceptTick after
+     * we considered it gone.
+     */
+    private closeSocketQuietly(): void {
+        const ws = this.ws;
+        this.ws = null;
+        this.streamSymbols = new Set();
+        if (!ws) return;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        try {
+            ws.close();
+        } catch { /* already closing/closed */ }
     }
 
     /**
@@ -389,16 +519,18 @@ class PriceAlertServiceClass {
      */
     private connectWebSocket(): void {
         try {
-            const symbols = [...new Set([
-                ...Array.from(this.alerts.values()).map(a => a.symbol.toLowerCase()),
-                ...Array.from(this.trackedSymbols.keys()).map(s => s.toLowerCase()),
-            ])];
+            const symbols = [...this.neededStreamSymbols()];
             if (symbols.length === 0) return;
+
+            // Drop any previous socket's handlers before the reference is
+            // replaced (its onclose must never touch the new one).
+            this.closeSocketQuietly();
 
             const streams = symbols.map(s => `${s}@ticker`).join('/');
             const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
 
             this.ws = new WebSocket(url);
+            this.streamSymbols = new Set(symbols);
 
             this.ws.onopen = () => {
                 console.log('[PriceAlertService] WebSocket connected');
@@ -429,7 +561,14 @@ class PriceAlertServiceClass {
                 // without this guard a backgrounded app re-spawns the socket
                 // (and the poll) five seconds later.
                 if (this.isPaused) return;
-                if ((this.alerts.size > 0 || this.trackedSymbols.size > 0) && this.wsReconnectAttempts < this.maxReconnectAttempts) {
+                // externalMonitorHolders MUST be in this guard: a
+                // SetupWatch-only consumer (zero alerts, zero tracked
+                // symbols of its own until createWatch) could never recover
+                // a flapped socket because nothing armed the reconnect.
+                const needsFeed = this.alerts.size > 0
+                    || this.externalMonitorHolders > 0
+                    || this.trackedSymbols.size > 0;
+                if (needsFeed && this.wsReconnectAttempts < this.maxReconnectAttempts) {
                     this.wsReconnectAttempts++;
                     this.wsReconnectTimer = setTimeout(() => {
                         this.wsReconnectTimer = null;
@@ -466,8 +605,11 @@ class PriceAlertServiceClass {
     private startPolling(): void {
         this.pollingInterval = setInterval(async () => {
             if (this.isPaused) return;
-            // WS healthy → the socket is the feed; skip the poll entirely.
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+            // WS healthy AND its stream covers every needed symbol → the
+            // socket is the feed; skip the poll. An OPEN-but-stale stream
+            // (symbols added mid-session before the rebuild landed) must NOT
+            // silence the poll — that early-return was half of Tier-0 #5.
+            if (this.ws && this.ws.readyState === WebSocket.OPEN && this.streamIsCurrent()) return;
             const symbols = [...new Set([
                 ...Array.from(this.alerts.values()).map(a => a.symbol),
                 ...Array.from(this.trackedSymbols.keys()),
@@ -495,10 +637,7 @@ class PriceAlertServiceClass {
      * Stop all monitoring
      */
     private stopMonitoring(): void {
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
+        this.closeSocketQuietly();
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
@@ -511,6 +650,37 @@ class PriceAlertServiceClass {
         // Forget the dedup memory: the next monitoring start must fan out its
         // first tick even if the price never changed while we were stopped.
         this.lastTickPrices.clear();
+    }
+
+    /**
+     * Direction-aware level touch — mirrors the (private) `touches()` in
+     * services/trade/tradePlanLevels.ts, replicated here because that helper
+     * is not exported and its file is outside this fix's edit budget. The old
+     * symmetric `|price-level|/level <= threshold` test missed gap-through
+     * prints: a stop blown straight from 1% away to 2% below reads "never
+     * approached". A level is touched when price enters its approach band OR
+     * prints past it. A Long's entry/stop sit below the market (touch = price
+     * at-or-BELOW the band's upper edge), its targets above (at-or-ABOVE the
+     * lower edge); a Short mirrors. Neutral keeps the symmetric band — there
+     * is no side to reason about.
+     */
+    private levelTouched(
+        level: number,
+        price: number,
+        threshold: number,
+        side: 'entryOrStop' | 'target',
+        direction: PriceAlert['direction'],
+    ): boolean {
+        if (!Number.isFinite(level) || level <= 0 || !Number.isFinite(price) || price <= 0) return false;
+        if (direction !== 'Long' && direction !== 'Short') {
+            return Math.abs((price - level) / level) <= threshold;
+        }
+        // The side the level sits on relative to the market for this direction:
+        // Long entry/stop below, Long targets above, Short mirrored.
+        const levelSitsBelow = side === 'target' ? direction === 'Short' : direction === 'Long';
+        return levelSitsBelow
+            ? price <= level * (1 + threshold)
+            : price >= level * (1 - threshold);
     }
 
     /**
@@ -532,8 +702,8 @@ class PriceAlertServiceClass {
 
             // Check Entry
             if (alert.entryPrice > 0 && !alert.triggeredLevels.has('ENTRY')) {
-                const percentAway = Math.abs((currentPrice - alert.entryPrice) / alert.entryPrice);
-                if (percentAway <= threshold) {
+                if (this.levelTouched(alert.entryPrice, currentPrice, threshold, 'entryOrStop', alert.direction)) {
+                    const percentAway = Math.abs((currentPrice - alert.entryPrice) / alert.entryPrice);
                     alert.triggeredLevels.add('ENTRY');
                     this.triggerAlert({
                         type: 'ENTRY',
@@ -547,8 +717,8 @@ class PriceAlertServiceClass {
 
             // Check Stop Loss
             if (alert.stopLoss > 0 && !alert.triggeredLevels.has('STOP_LOSS')) {
-                const percentAway = Math.abs((currentPrice - alert.stopLoss) / alert.stopLoss);
-                if (percentAway <= threshold) {
+                if (this.levelTouched(alert.stopLoss, currentPrice, threshold, 'entryOrStop', alert.direction)) {
+                    const percentAway = Math.abs((currentPrice - alert.stopLoss) / alert.stopLoss);
                     alert.triggeredLevels.add('STOP_LOSS');
                     this.triggerAlert({
                         type: 'STOP_LOSS',
@@ -564,8 +734,8 @@ class PriceAlertServiceClass {
             alert.takeProfits.forEach((tp, index) => {
                 const tpKey = `TP_${index}`;
                 if (tp > 0 && !alert.triggeredLevels.has(tpKey)) {
-                    const percentAway = Math.abs((currentPrice - tp) / tp);
-                    if (percentAway <= threshold) {
+                    if (this.levelTouched(tp, currentPrice, threshold, 'target', alert.direction)) {
+                        const percentAway = Math.abs((currentPrice - tp) / tp);
                         alert.triggeredLevels.add(tpKey);
                         this.triggerAlert({
                             type: 'TAKE_PROFIT',
@@ -707,6 +877,16 @@ class PriceAlertServiceClass {
     }
 
     /**
+     * Per-user storage key. Alerts used to live in one global blob shared by
+     * every profile (audit §2.5); they now persist under the user that owns
+     * them, with a one-time migration read of the legacy keys.
+     */
+    private alertsStorageKey(): string {
+        const user = this.storageUser ?? getActiveUsername();
+        return `${PREF_KEYS.PRICE_ALERTS}_v1_${user}`;
+    }
+
+    /**
      * Save alerts to storage
      */
     private saveAlerts(): void {
@@ -717,7 +897,7 @@ class PriceAlertServiceClass {
             }));
 
             // Fire and forget
-            setPreferenceObject(PREF_KEYS.PRICE_ALERTS, data).catch(e =>
+            setPreferenceObject(this.alertsStorageKey(), data).catch(e =>
                 console.warn('[PriceAlertService] Save error:', e)
             );
         } catch (e) {
@@ -726,30 +906,41 @@ class PriceAlertServiceClass {
     }
 
     /**
-     * Load alerts from storage
+     * Load alerts for the given profile. Read-only: hydration + migration
+     * writes happen in init() after the staleness check. Returns null when
+     * this profile has nothing persisted anywhere.
      */
-    private async loadAlerts(): Promise<void> {
+    private async fetchAlerts(user: string): Promise<{ alerts: any[]; migratedFromLegacy: boolean; migratedFromGlobalKey?: boolean } | null> {
         try {
-            const alerts = await getPreferenceObject<any[]>(PREF_KEYS.PRICE_ALERTS);
-
-            // Fallback to localStorage if native storage empty (migration scenario)
-            if (!alerts) {
-                const legacy = localStorage.getItem('august_price_alerts');
-                if (legacy) {
-                    try {
-                        const parsed = JSON.parse(legacy);
-                        this.hydrateAlerts(parsed);
-                        // Migrate to new storage
-                        this.saveAlerts();
-                        return;
-                    } catch (e) { /* intentionally ignored: alert parse failure */ }
-                }
-                return;
+            const key = `${PREF_KEYS.PRICE_ALERTS}_v1_${user}`;
+            const alerts = await getPreferenceObject<any[]>(key);
+            if (Array.isArray(alerts)) {
+                return { alerts, migratedFromLegacy: false };
             }
 
-            this.hydrateAlerts(alerts);
+            // One-time migration: the pre-scoping global blob goes to whoever
+            // loads it first (the alternative — handing the same blob to every
+            // profile — is the leak this key scoping closes).
+            const legacyGlobal = await getPreferenceObject<any[]>(PREF_KEYS.PRICE_ALERTS);
+            if (Array.isArray(legacyGlobal)) {
+                return { alerts: legacyGlobal, migratedFromLegacy: true, migratedFromGlobalKey: true };
+            }
+
+            // Older fallback: localStorage under the legacy app key.
+            const legacy = localStorage.getItem('august_price_alerts');
+            if (legacy) {
+                try {
+                    const parsed = JSON.parse(legacy);
+                    if (Array.isArray(parsed)) {
+                        localStorage.removeItem('august_price_alerts');
+                        return { alerts: parsed, migratedFromLegacy: true };
+                    }
+                } catch (e) { /* intentionally ignored: alert parse failure */ }
+            }
+            return null;
         } catch (e) {
             console.error('[PriceAlertService] Load error:', e);
+            return null;
         }
     }
 
