@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { Mock } from 'vitest';
 
 // TradeView render smoke: the Minara arrangement (stats strip, local canvas
@@ -93,6 +93,7 @@ vi.mock('../../services/analysis/DeskToolsService', () => ({
 
 import TradeView from '../../components/trade/TradeView';
 import * as chatStore from '../../services/trade/chatStore';
+import { getActiveUsername } from '../../utils/activeUser';
 import { streamChatWithDeskTools } from '../../services/analysis/DeskToolsService';
 import type { ProviderConfig } from '../../types/provider';
 
@@ -203,5 +204,89 @@ describe('TradeView level-watch wiring', () => {
         fireEvent.click(screen.getByTestId('symbol-row-ETHUSDT'));
         expect(lw.disarmSymbol).toHaveBeenCalledWith('BTCUSDT');
         expect(lw.disarmSymbol).not.toHaveBeenCalledWith('ETHUSDT');
+    });
+});
+
+// ── MOBILE 3-MODE SURFACE (audit 2026-09-16 item: "mobile Trade as
+// Chart/AI/Book modes") ─────────────────────────────────────────────────────
+// Below lg the stacked chart + dock + book flatten into ONE full-height pane
+// picked by a segmented control; every pane stays MOUNTED in every mode
+// (hidden, never unmounted) so the e2e/unit testid contract is mode-proof.
+// jsdom's default 1024px window evaluates `(min-width:1024px)` as matching —
+// the suites above run on the untouched desktop layout. These stub
+// matchMedia to pin a phone width.
+const stubViewport = (width: number): void => {
+    vi.stubGlobal('matchMedia', (query: string) => {
+        const min = Number(query.match(/min-width:\s*(\d+)/)?.[1] ?? '0');
+        return {
+            matches: width >= min,
+            media: query,
+            addEventListener: () => { },
+            removeEventListener: () => { },
+            onchange: null,
+        } as unknown as MediaQueryList;
+    });
+};
+
+describe('TradeView mobile 3-mode surface (<lg)', () => {
+    const modeKey = () => `august_trade_mode_v1_${getActiveUsername()}`;
+    beforeEach(() => {
+        localStorage.clear();
+        stubViewport(390);
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('renders the switcher, defaults to Chart, and keeps book + dock MOUNTED-HIDDEN', async () => {
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        await screen.findByTestId('trade-view');
+        const switcher = screen.getByTestId('trade-mode-switcher');
+        expect(within(switcher).getAllByRole('tab').map(b => b.textContent)).toEqual(['Chart', 'AI', 'Book']);
+        expect(screen.getByTestId('trade-mode-chart').getAttribute('aria-selected')).toBe('true');
+        // Chart pane active; book + dock hidden but present (testids + chat
+        // panel + ladder all stay in the DOM).
+        expect(screen.getByTestId('trade-chart-pane').className).not.toContain('hidden');
+        expect(screen.getByTestId('trade-sidebar').className).toContain('hidden');
+        expect(screen.getByTestId('trade-dock').className).toContain('hidden');
+        expect(screen.getByTestId('trade-chat-panel')).toBeTruthy();
+        expect(within(screen.getByTestId('trade-sidebar')).getByText('Order Book')).toBeTruthy();
+    });
+
+    it('Book mode shows the full-width ladder and hides chart + dock', async () => {
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        fireEvent.click(await screen.findByTestId('trade-mode-book'));
+        const book = screen.getByTestId('trade-sidebar');
+        expect(book.className).not.toContain('hidden');
+        expect(book.className).toContain('w-full');
+        expect(screen.getByTestId('trade-chart-pane').className).toContain('hidden');
+        expect(screen.getByTestId('trade-dock').className).toContain('hidden');
+    });
+
+    it('persists the choice per user and restores it on remount', async () => {
+        const { unmount } = render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        fireEvent.click(await screen.findByTestId('trade-mode-ai'));
+        expect(localStorage.getItem(modeKey())).toBe('ai');
+        unmount();
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        expect((await screen.findByTestId('trade-mode-ai')).getAttribute('aria-selected')).toBe('true');
+        expect(screen.getByTestId('trade-dock').className).not.toContain('hidden');
+        expect(screen.getByTestId('trade-chart-pane').className).toContain('hidden');
+    });
+
+    it('a junk persisted value falls back to Chart', async () => {
+        localStorage.setItem(modeKey(), 'grid');
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        await screen.findByTestId('trade-view');
+        expect(screen.getByTestId('trade-chart-pane').className).not.toContain('hidden');
+    });
+
+    it('lg+ never renders the switcher and keeps the desktop panes active', async () => {
+        stubViewport(1280);
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        await screen.findByTestId('trade-view');
+        expect(screen.queryByTestId('trade-mode-switcher')).toBeNull();
+        expect(screen.getByTestId('trade-chart-pane').className).toContain('lg:min-h-0');
+        expect(screen.getByTestId('trade-dock').className).toContain('lg:w-[var(--dock-w)]');
     });
 });

@@ -6,9 +6,12 @@
  * full-height canvas chart with TradingView-style drawing tools, with the
  * order-book ladder and the live-context Chart AI docked to the
  * right. The dock is drag-resizable, collapsible to a rail and expandable
- * over the chart; its width persists. Push-first: one websocket bundle per
- * symbol drives strip + book + candles; REST polling takes over the moment
- * the socket drops (and the chart's own stall watchdog re-syncs a quiet
+ * over the chart; its width persists. BELOW LG the three panes (book / chart
+ * / AI dock) flatten into an explicit Chart | AI | Book mode switcher — one
+ * full-height pane at a time, choice persisted per user. Push-first: one
+ * websocket bundle per symbol drives strip + book + candles; REST polling
+ * takes over the moment the socket drops (and the chart's own stall watchdog
+ * re-syncs a quiet
  * stream), so prices on the chart are realtime or visibly healing.
  * A Chart AI levels card can also push its key levels onto the canvas
  * (chatLevels — transient, coin-stamped, blanked on instrument switch).
@@ -25,6 +28,8 @@ import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import { loadSessionModelDrawings, saveSessionModelDrawings } from '../../services/trade/chartDrawings';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { baseOf } from '../../utils/symbol';
+import { getActiveUsername } from '../../utils/activeUser';
+import { fmtPrice } from '../../utils/formatters';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { formatLevelHitForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
@@ -32,7 +37,7 @@ import { formatWatchFiredForModel } from '../../services/trade/chartTriggers';
 import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
-import TradingChart, { toKlineInterval, type ChartInterval, type ChartHandle } from './TradingChart';
+import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import OrderBookPanel from './OrderBookPanel';
@@ -96,7 +101,8 @@ interface StripData {
 }
 
 const fmtUsd = (n: number): string => n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(2)}`;
-const fmtPrice = (n: number): string => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: n >= 1000 ? 2 : 4 });
+// fmtPrice now comes from utils/formatters (audit 2026-09-16 dedupe — the
+// hero/strip/ladder copy pair was byte-identical).
 
 /** Chart AI dock geometry — persisted like a panel, clamped to sane widths.
  *  The dock lives at the RIGHT of the chart, so dragging the separator LEFT
@@ -141,22 +147,44 @@ const fundingProgress = (nextFundingTime: number, nowMs: number): { frac: number
     return { frac, soon: left <= 30 * 60_000 };
 };
 
-/** Live (<md) viewport flag — the order-book sidebar is `hidden md:block`,
- *  so below the md breakpoint the NavRail's book toggle needs an overlay
- *  drawer instead. Guarded for jsdom (no matchMedia → assume wide). */
-const useIsBelowMd = (): boolean => {
+/** Live (<lg) viewport flag — below the lg breakpoint the desk switches to
+ *  the mobile 3-mode layout (Chart | AI | Book); at lg+ the original three-
+ *  column arrangement renders untouched. Guarded for jsdom (no matchMedia →
+ *  assume wide). */
+const useIsBelowLg = (): boolean => {
     const [below, setBelow] = useState<boolean>(() => {
-        try { return !window.matchMedia('(min-width: 768px)').matches; } catch { return false; }
+        try { return !window.matchMedia('(min-width: 1024px)').matches; } catch { return false; }
     });
     useEffect(() => {
         let mql: MediaQueryList;
-        try { mql = window.matchMedia('(min-width: 768px)'); } catch { return; }
+        try { mql = window.matchMedia('(min-width: 1024px)'); } catch { return; }
         const onChange = (): void => setBelow(!mql.matches);
         onChange();
         mql.addEventListener('change', onChange);
         return () => { mql.removeEventListener('change', onChange); };
     }, []);
     return below;
+};
+
+/** Mobile trade surface mode (audit 2026-09-16, crosscheck §9.6 "Chart/AI/
+ *  Book modes"): below lg the stacked chart + AI dock + book get flattened
+ *  into ONE full-height pane chosen by a segmented control under the header.
+ *  Last choice persists per user, same pattern as the timeframe bar. All
+ *  three panes STAY MOUNTED in every mode (inactive ones are hidden, not
+ *  unmounted) so the e2e/unit testid contract (trade-sidebar, trade-dock,
+ *  trading-chart, trade-chat-panel presence) never changes with the mode. */
+export type TradeMode = 'chart' | 'ai' | 'book';
+const TRADE_MODES: readonly TradeMode[] = ['chart', 'ai', 'book'];
+const TRADE_MODE_KEY = 'august_trade_mode_v1';
+const tradeModeKey = (): string => `${TRADE_MODE_KEY}_${getActiveUsername()}`;
+const readTradeMode = (): TradeMode => {
+    try {
+        const m = localStorage.getItem(tradeModeKey());
+        return TRADE_MODES.includes(m as TradeMode) ? (m as TradeMode) : 'chart';
+    } catch { return 'chart'; }
+};
+const writeTradeMode = (m: TradeMode): void => {
+    try { localStorage.setItem(tradeModeKey(), m); } catch { /* private mode */ }
 };
 
 /** Prototype hero-row sparkline: the last ~48 closes of the chart's OWN
@@ -182,7 +210,9 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     ).join(' ');
     return (
         <svg width="120" height="30" aria-hidden="true" className="hidden shrink-0 sm:block" data-testid="hero-spark">
-            <polyline fill="none" stroke={up ? '#07b56a' : '#f75d5f'} strokeWidth="1.5" points={pts} />
+            <polyline fill="none"
+                stroke={up ? chartColor('--color-emerald-500', '#07b56a') : chartColor('--color-rose-500', '#f75d5f')}
+                strokeWidth="1.5" points={pts} />
         </svg>
     );
 };
@@ -202,14 +232,16 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const [dockCollapsed, setDockCollapsed] = useState(false);
     const [dockExpanded, setDockExpanded] = useState(false);
     const [screenerOpen, setScreenerOpen] = useState(false);
-    // Below md the sidebar itself is `hidden md:block` — an invisible toggle.
-    // The book rides a fixed overlay drawer instead. The close button cannot
-    // flip App's `sidebarOpen` (NavRail owns it), so dismissal is a LOCAL
-    // override that resets whenever the toggle is flipped again.
-    const isBelowMd = useIsBelowMd();
-    const [bookDismissed, setBookDismissed] = useState(false);
-    useEffect(() => { setBookDismissed(false); }, [sidebarOpen]);
-    const bookDrawerOpen = isBelowMd && sidebarOpen && !bookDismissed;
+    // Mobile 3-mode surface (<lg): the stacked panes collapse into one, and
+    // the old `hidden md:block` sidebar + the below-md book overlay drawer the
+    // md toggle used to summon are replaced by an explicit Chart | AI | Book
+    // segmented control (the NavRail book toggle stays a lg+ control).
+    const isBelowLg = useIsBelowLg();
+    const [mode, setMode] = useState<TradeMode>(readTradeMode);
+    const pickMode = useCallback((m: TradeMode): void => {
+        setMode(m);
+        writeTradeMode(m);
+    }, []);
     /** Key-level lines a Chat AI message card is currently SHOWING on the
      *  chart (toggle / pin / hover resolved by the dock). Transient view state
      *  — never persisted, stamped with its symbol so a coin switch blanks it. */
@@ -628,20 +660,60 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 </div>
             </div>
 
-            {/* Chart + book + AI chat (drag-resizable dock). BELOW lg the
-                column stacks (chart min-h-420 + dock h-96) inside
-                overflow-hidden ancestors — it MUST scroll or the chat dock
-                is unreachable; at lg+ the row layout owns the height. */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible">
+            {/* MOBILE MODE SWITCHER (<lg): Chart | AI | Book, pinned under the
+                header; each mode shows exactly ONE full-height pane. Default
+                Chart; the choice persists per user. At lg+ this row is not
+                rendered at all. */}
+            {isBelowLg && (
+                <div role="tablist" aria-label="Trade surface mode" data-testid="trade-mode-switcher"
+                    className="flex shrink-0 items-center gap-1 border-b border-white/[0.06] bg-zinc-900/60 px-3 py-1">
+                    {TRADE_MODES.map(m => (
+                        <button
+                            key={m}
+                            type="button"
+                            role="tab"
+                            aria-selected={mode === m}
+                            data-testid={`trade-mode-${m}`}
+                            onClick={() => pickMode(m)}
+                            className={`rounded-control px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                                mode === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
+                            }`}
+                        >
+                            {m === 'chart' ? 'Chart' : m === 'ai' ? 'AI' : 'Book'}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {/* Chart + book + AI chat (drag-resizable dock). BELOW lg exactly
+                one pane shows (the mode switcher above); every pane stays
+                MOUNTED-HIDDEN, and the container is overflow-hidden so the
+                active pane fills the height. At lg+ the original stacked-
+                scroll-then-row layout owns the height, untouched. */}
+            <div className={isBelowLg
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible'}>
                 {/* Left sidebar (Antigravity's Explorer position): the order
                     book, open/closed from the activity bar's active Trade
-                    icon. Closed = the chart owns the whole middle. */}
-                {sidebarOpen && (
-                    <div className="hidden w-[300px] shrink-0 md:block" data-testid="trade-sidebar">
+                    icon. Closed = the chart owns the whole middle. BELOW lg
+                    it belongs to the Book mode instead: always mounted,
+                    hidden unless the Book tab is active (sidebarOpen doesn't
+                    gate it there — the mode switcher owns phone/tablet). */}
+                {(sidebarOpen || isBelowLg) && (
+                    <div
+                        data-testid="trade-sidebar"
+                        className={isBelowLg
+                            ? (mode === 'book' ? 'min-h-0 w-full flex-1' : 'hidden')
+                            : 'hidden w-[300px] shrink-0 md:block'}
+                    >
                         <OrderBookPanel symbol={symbol} live={live} liveDepth={feed.depth} />
                     </div>
                 )}
-                <div className={`min-h-[420px] flex-1 lg:min-h-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}>
+                <div
+                    data-testid="trade-chart-pane"
+                    className={isBelowLg
+                        ? (mode === 'chart' ? 'min-h-0 flex-1' : 'hidden')
+                        : `min-h-[420px] flex-1 lg:min-h-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}
+                >
                     <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
                         markPrice={Number.isFinite(markPrice) ? markPrice : null}
@@ -651,7 +723,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         modelDrawings={modelDrawings}
                         onRemoveModelShape={removeModelShape} />
                 </div>
-                {!dockCollapsed && (
+                {/* The dock belongs to the AI mode below lg (always mounted
+                    there — the desktop collapse toggle is a lg+ affordance
+                    and must never blank the chat pane on phones). */}
+                {(!dockCollapsed || isBelowLg) && (
                     <>
                         {/* Drag handle: resize the Chart AI dock (TradingView-style). */}
                         <div
@@ -668,7 +743,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         <div
                             data-testid="trade-dock"
                             style={{ '--dock-w': `${dockWidth}px` } as React.CSSProperties}
-                            className={`h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-2/3 xl:!w-3/4' : ''}`}
+                            className={isBelowLg
+                                ? (mode === 'ai' ? 'min-h-0 w-full flex-1' : 'hidden')
+                                : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-2/3 xl:!w-3/4' : ''}`}
                         >
                             <TradeChatPanel
                                 {...dockProps}
@@ -680,7 +757,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         </div>
                     </>
                 )}
-                {dockCollapsed && (
+                {dockCollapsed && !isBelowLg && (
                     <div className="hidden shrink-0 lg:block" data-testid="trade-dock-rail">
                         <TradeChatPanel
                             {...dockProps}
@@ -692,30 +769,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     </div>
                 )}
             </div>
-            {/* Phone/tablet stand-in for the `hidden md:block` book sidebar:
-                when the toggle says "book open" but the viewport is below md,
-                render the ladder as a fixed drawer (backdrop + close). */}
-            {bookDrawerOpen && (
-                <div className="fixed inset-0 z-40" data-testid="orderbook-drawer">
-                    <div className="absolute inset-0 bg-black/60" aria-hidden="true" onClick={() => setBookDismissed(true)} />
-                    <aside role="dialog" aria-label="Order book" className="absolute inset-y-0 left-0 flex w-[300px] max-w-[85vw] flex-col border-r border-white/10 bg-zinc-950 shadow-2xl">
-                        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-3 py-2">
-                            <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Order Book</span>
-                            <button
-                                type="button"
-                                onClick={() => setBookDismissed(true)}
-                                aria-label="Close order book"
-                                className="rounded p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <div className="min-h-0 flex-1">
-                            <OrderBookPanel symbol={symbol} live={live} liveDepth={feed.depth} />
-                        </div>
-                    </aside>
-                </div>
-            )}
+            {/* The pre-2026-09-16 below-md book overlay drawer lived here;
+                the Book mode of the mobile switcher replaced it (same
+                OrderBookPanel, no backdrop, no `orderbook-drawer` testid —
+                grep of e2e/ + tests/ found zero references). */}
             <ScreenerPanel open={screenerOpen} onClose={() => setScreenerOpen(false)} onChangeSymbol={changeSymbol} trades={trades} />
         </div>
     );

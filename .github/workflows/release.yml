@@ -24,6 +24,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # Android release signing MECHANISM (audit 2026-09-16) — dormant until
+      # the repo secrets exist, and a no-op even then until an Android build
+      # step is added (this workflow ships Electron only). When ANDROID_KEYSTORE_B64
+      # is set, the base64 .jks is decoded to android/release.keystore and its
+      # companion secrets are written to android/keystore.properties, which
+      # android/app/build.gradle consumes — and ONLY then signs the release.
+      # Without any of the secrets the step's condition is false and every run
+      # proceeds exactly as before.
+      - name: Provision Android signing (no-op unless ANDROID_KEYSTORE_B64 is set)
+        if: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          $b64 = ($env:ANDROID_KEYSTORE_B64 -replace '\s', '')
+          [IO.File]::WriteAllBytes((Join-Path $env:GITHUB_WORKSPACE 'android/release.keystore'), [Convert]::FromBase64String($b64))
+          @(
+            'storeFile=release.keystore'
+            "storePassword=$env:ANDROID_KEYSTORE_PASSWORD"
+            "keyAlias=$env:ANDROID_KEY_ALIAS"
+            "keyPassword=$env:ANDROID_KEY_PASSWORD"
+          ) | Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE 'android/keystore.properties') -Encoding ascii
+          Write-Host 'Provisioned android/release.keystore + android/keystore.properties (picked up by app/build.gradle)'
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:

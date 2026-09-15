@@ -1894,18 +1894,6 @@ export function parseOpenAIToolCalls(message: unknown): DeskToolCall[] {
     }).filter(c => c.name);
 }
 
-/** Parse Anthropic tool_use content blocks. */
-export function parseAnthropicToolCalls(content: unknown): DeskToolCall[] {
-    if (!Array.isArray(content)) return [];
-    return content
-        .filter((block: any) => block?.type === 'tool_use' && typeof block?.name === 'string')
-        .map((block: any, i: number) => ({
-            id: typeof block.id === 'string' ? block.id : `toolu_${i}`,
-            name: block.name as string,
-            arguments: block.input && typeof block.input === 'object' ? block.input as Record<string, unknown> : {},
-        }));
-}
-
 /**
  * Text-protocol fallback for formats without native tools.
  * `<tool_call name="web_search">{"query":"..."}</tool_call>`

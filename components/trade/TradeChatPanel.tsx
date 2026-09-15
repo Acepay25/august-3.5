@@ -464,6 +464,19 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // made — the difference between a fresh level and a stale one.
         const snap = getChartSnapshot?.() ?? null;
         const drawnPrice = snap?.markPrice ?? null;
+        // CANVAS HONESTY (residual of the per-turn identity refactor): the
+        // snapshot is the VIEWED canvas, but a turn keeps running after the
+        // user switches instruments. When the two disagree, every stamp taken
+        // from it — drawnPrice, the bars-ago anchor, the arm-time stale call —
+        // is NOT the turn's coin's live data. Say so in the receipt instead of
+        // silently stamping the viewed coin's numbers onto another coin's
+        // turn (the text-level half of the identity class; the canvas itself
+        // stays owned by TradeView).
+        const canvasSymbol = snap && typeof snap.symbol === 'string' && snap.symbol ? snap.symbol : '';
+        const crossCanvas = !!canvasSymbol && !!turn.symbol && canvasSymbol !== turn.symbol;
+        const canvasNote = crossCanvas
+            ? ` NOTE: the canvas shows ${canvasSymbol}; this snapshot was taken while the turn was on ${turn.symbol} — treat its prices/bar times as stale for ${turn.symbol}, not as its live mark.`
+            : '';
         // ── Watch / schedule harness (model arms a price trigger or a time
         //    wake-up; the harness wakes it back up when the condition holds).
         if (name === 'watch_price' || name === 'wake_me') {
@@ -527,10 +540,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 ? (Math.abs(proposal.takeProfits[0] - proposal.entry) / Math.abs(proposal.entry - proposal.stopLoss)).toFixed(1) : '—';
             const levelIds = [`${proposal.planId}:ENTRY`, `${proposal.planId}:SL`,
                 ...proposal.takeProfits.map((_, i) => `${proposal.planId}:TP${i + 1}`)];
+            const staleWatchLine = `WARNING: the harness REFUSED to watch this plan — price ${drawnPrice}${crossCanvas ? ` (a ${canvasSymbol} canvas print — see note)` : ''} is already through a stop/target, so every level (${stale.join(', ')}) latched as already-reached and NO [HARNESS SIGNAL] will come for them. Do not claim a watch is live; if the user still wants one, re-present a plan whose levels sit ahead of price.`;
             const watchLine = stale.length > 0
-                ? `WARNING: the harness REFUSED to watch this plan — price ${drawnPrice} is already through a stop/target, so every level (${stale.join(', ')}) latched as already-reached and NO [HARNESS SIGNAL] will come for them. Do not claim a watch is live; if the user still wants one, re-present a plan whose levels sit ahead of price.`
+                ? staleWatchLine
                 : `The harness now watches these levels — ids ${levelIds.join(', ')} — and will send you a [HARNESS SIGNAL] when one is reached; refer to levels by those ids and never re-announce one that already fired.`;
-            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. The user sees a "Log this trade" card. ${watchLine}`);
+            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. The user sees a "Log this trade" card. ${watchLine}${canvasNote}`);
         }
         if (name === 'clear_chart_drawings') {
             const scope = args.scope === 'all' ? 'all' : 'model';
@@ -547,7 +561,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             if (error) return receipt(false, `mark_trade_levels rejected: ${error}`);
             addModelDrawings(drawings, turn);
             const listed = drawings.map(d => `${d.label} ${d.points[0].p}`).join(', ');
-            return receipt(true, `Marked on the chart: ${listed}. The user sees these lines now.`);
+            return receipt(true, `Marked on the chart: ${listed}. The user sees these lines now.${canvasNote}`);
         }
         // draw_on_chart — resolve bars-ago anchors against the newest candle.
         const lastBarTime = snap && snap.candles.length > 0
@@ -558,7 +572,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         addModelDrawings(drawings, turn);
         const d = drawings[0];
         const described = describeDrawingsForModel([d]).split('\n').slice(1).join(' ').trim();
-        return receipt(true, `Drew on the chart: ${described || d.kind}. The user sees it now.`);
+        return receipt(true, `Drew on the chart: ${described || d.kind}. The user sees it now.${canvasNote}`);
     }, [addModelDrawings, clearModelDrawings, clearAllDrawings, getChartSnapshot, onPlanPresented]);
 
     // The solo chat model: a `providerId::modelId` selection (the composer's

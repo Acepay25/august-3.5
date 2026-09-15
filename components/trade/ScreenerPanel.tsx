@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { Loader2, Search, X, BrainCircuit } from 'lucide-react';
 import { runScreenerWithStatus, type ScreenerRow } from '../../services/trade/screener';
 import { display as symbolDisplay } from '../../utils/symbol';
+import { fmtPrice } from '../../utils/formatters';
 import type { LoggedTrade } from '../../types/trade';
 
 export interface ScreenerPanelProps {
@@ -23,8 +24,10 @@ export interface ScreenerPanelProps {
 
 type SortKey = 'volume' | 'movers' | 'rsi' | 'setups';
 
-const fmtPrice = (v: number): string =>
-    v.toLocaleString(undefined, { maximumFractionDigits: v < 1 ? 6 : 2 });
+// fmtPrice lives in utils/formatters (audit 2026-09-16 dedupe). The canonical
+// keeps this table's sub-$1 six-decimal precision and pins the locale to
+// en-US like the rest of the desk; visible delta here is trailing ".00" on
+// whole-dollar cells (tabular-nums column was built for it).
 
 export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onChangeSymbol, trades = [] }) => {
     const [rows, setRows] = useState<ScreenerRow[]>([]);

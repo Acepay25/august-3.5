@@ -19,7 +19,12 @@
   --color-zinc-300: #b7b7b1;
   --color-zinc-400: #a3a39d;
   --color-zinc-500: #8c8c86;
-  --color-zinc-600: #6e6e68;
+  /* zinc-600 is bumped one warm step above Minara's ramp end (#6e6e68,
+     3.84:1) so the ~250 text-zinc-600 micro-labels at 9-11px clear WCAG AA:
+     4.82:1 on page #0b0b0a, 4.52:1 on panels #141412. Side effects audited:
+     bg/border/ring/placeholder consumers are text-free fills, affordances,
+     or hover states — all improve from being slightly brighter. */
+  --color-zinc-600: #7e7e78;
   --color-zinc-700: #2f2f2f;
   --color-zinc-800: #1f1f1c;
   --color-zinc-900: #141412;
@@ -1071,7 +1076,7 @@ code,
 
 ::-webkit-scrollbar-thumb:hover {
   background: #56564f;
-  /* zinc-600 */
+  /* warm ink, deliberately dimmer than the AA-minimum --color-zinc-600 */
 }
 
 /* ===== ANIMATIONS ===== */
