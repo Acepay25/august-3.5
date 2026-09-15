@@ -18,6 +18,18 @@
  * plans persist too (`trade_level_arms_v1_${user}`) — a reload no longer
  * silently un-watches a live trade; the per-user adopt re-arms from storage.
  *
+ * ENTRY re-touch exception (deep-dive Tier-1: a strict fire-once latch on
+ * ENTRY killed the "is my entry live?" signal — price dips to entry, prints
+ * back above, dips again, and the second touch was silenced). The ENTRY
+ * latch is per-VISIT, not per-life: once a printed price sits on the FAR
+ * side of the entry (above it for a Long, below for a Short), the ENTRY id
+ * is un-latched, so the NEXT touch of the entry re-fires and re-notifies.
+ * SL and TP levels keep the strict fire-once latch — an invalidated or paid
+ * plan must never re-ping. The persistence contract is untouched: every
+ * latch add/remove still writes the same per-user blob immediately, and a
+ * reload inherits exactly the current latch state (fired + still in the
+ * entry's zone ⇒ silent; far side ⇒ re-armed).
+ *
  * Ticks ride the visible chart's live feed (TradeView calls tick() with its
  * mark, ~1s) — but that feed only ever carries the VIEWED coin. A plan armed
  * for another symbol (a background/harness turn presenting an off-view
@@ -214,6 +226,16 @@ export const disarmSymbol = (symbol: string): void => {
     if (changed) { persistArmed(); syncClock(); }
 };
 
+/** Does `price` currently TOUCH the plan's entry (at or through it,
+ *  direction-aware — same test as tradePlanLevels.touches for an entry
+ *  level)? A print on the FAR side is what re-arms the ENTRY latch: the
+ *  entry's "visit" ended, and the next touch deserves a fresh "is my entry
+ *  live?" ping. SL/TP ids are never re-armed here. */
+const touchingEntry = (level: PlanLevel, price: number, direction: 'Long' | 'Short'): boolean => {
+    if (!Number.isFinite(level.price) || level.price <= 0) return false;
+    return direction === 'Long' ? price <= level.price : price >= level.price;
+};
+
 /** One live price observation for a symbol — either the visible chart's
  *  ~1s mark feed (TradeView) or the internal REST poll feeding an off-view
  *  symbol. Records the print (freshness gates the poller) and runs the
@@ -229,9 +251,18 @@ export const tick = (symbol: string, price: number): void => {
         if (a.plan.symbol !== symbol) continue;
         const hits = detectLevelHits(a.levels, a.plan.direction, a.prev, price, isFired);
         a.prev = price;
-        if (hits.length === 0) continue;
         for (const h of hits) fired.add(h.levelId);
-        persistFired();
+        // ENTRY re-touch: a print on the far side of the entry ends the
+        // current "visit" and un-latches ENTRY, so the next touch re-fires.
+        // Runs even when this tick fired nothing.
+        let rearmed = false;
+        const entry = a.levels.find(l => l.kind === 'entry');
+        if (entry && fired.has(entry.id) && !touchingEntry(entry, price, a.plan.direction)) {
+            fired.delete(entry.id);
+            rearmed = true;
+        }
+        if (hits.length === 0 && !rearmed) continue;
+        persistFired(); // latch mutations (fires AND re-arms) persist at once
         for (const h of hits) {
             for (const cb of subscribers) {
                 try { cb(h, a.plan); } catch { /* one bad listener must not stall the watch */ }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as dbService from '../services/infrastructure/dbService';
 import { isValidUserProfile } from '../utils/profileUtils';
 import { exportDataAsFile, exportPreferencesData, importPreferencesData } from '../services/infrastructure/ExportService';
+import { clearQueueForUser } from '../services/infrastructure/OfflineQueueService';
 
 export interface UseUserProfilesParams {
     resetAppState: (usernameToSave?: string | null) => Promise<void>;
@@ -64,12 +65,22 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
         }
     };
 
-    const handleDeleteUser = async (username: string) => {
+    const handleDeleteUser = async (username: string): Promise<void> => {
         const ok = confirmDialog
             ? await confirmDialog({ title: `Delete user "${username}"?`, message: 'This cannot be undone.', destructive: true })
             : confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`);
         if (ok) {
             await dbService.deleteUserProfile(username);
+            // Drop the deleted profile's pending offline-queue work too — items
+            // stamped with their enqueueing username (clearQueueForUser only
+            // removes that user's entries; other profiles' queues survive,
+            // and legacy unstamped items can't be attributed). Non-fatal: an
+            // IndexedDB hiccup must not abort the rest of the delete cascade.
+            try {
+                await clearQueueForUser(username);
+            } catch (e) {
+                console.warn('[useUserProfiles] Failed to clear offline queue for deleted user:', e);
+            }
             setExistingUsernames(prev => prev.filter(u => u !== username));
             if (activeUsername === username) {
                 setActiveUsername(null);

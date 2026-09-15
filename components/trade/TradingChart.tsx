@@ -70,6 +70,29 @@ const INTERVAL_SECONDS: Record<ChartInterval, number> = {
 };
 export const intervalSeconds = (interval: ChartInterval): number => INTERVAL_SECONDS[interval] ?? 900;
 
+/**
+ * Resolve one of index.css's `@theme` CSS custom properties to a concrete
+ * color for the JS-side surfaces that cannot take Tailwind classes:
+ * lightweight-charts options and raw canvas fills (deep-dive 2026-09-15 UI
+ * finding — "6 hardcoded chart-lib hexes that should read the token once").
+ * The chart lib takes plain color strings, so we read the live value off
+ * :root at call time. `fallback` is the token's palette value, used when no
+ * CSS is loaded (unit tests/jsdom import no stylesheet, exotic webviews,
+ * first paint before the CSS chunk) — the chart never renders "undefined".
+ */
+export const chartColor = (token: string, fallback: string): string => {
+    try {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+        return v.length > 0 ? v : fallback;
+    } catch { return fallback; }
+};
+
+/** Chart-internal palette: the semantic ramp, resolved from the theme at
+ *  call time (never at module-eval time — in dev the style tag is injected
+ *  by JS, so an import-time read could fall back forever). */
+const CANDLE_UP = (): string => chartColor('--color-emerald-500', '#07b56a');
+const CANDLE_DOWN = (): string => chartColor('--color-rose-500', '#f75d5f');
+
 // ── The user's chosen timeframe bar (persisted per user, like dock width) ──
 const TF_BAR_KEY = 'trade_tf_bar_v1';
 const tfBarKey = (): string => `${TF_BAR_KEY}_${getActiveUsername()}`;
@@ -286,7 +309,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             autoSize: true,
             layout: {
                 background: { color: 'transparent' },
-                textColor: '#8c8c86',
+                textColor: chartColor('--color-zinc-500', '#8c8c86'),
                 attributionLogo: false,
             },
             grid: {
@@ -311,9 +334,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             crosshair: { mode: 0 },
         });
         const candles = chart.addSeries(CandlestickSeries, {
-            upColor: '#07b56a', downColor: '#f75d5f',
-            borderUpColor: '#07b56a', borderDownColor: '#f75d5f',
-            wickUpColor: '#07b56a', wickDownColor: '#f75d5f',
+            upColor: CANDLE_UP(), downColor: CANDLE_DOWN(),
+            borderUpColor: CANDLE_UP(), borderDownColor: CANDLE_DOWN(),
+            wickUpColor: CANDLE_UP(), wickDownColor: CANDLE_DOWN(),
             priceLineSource: 1, // last price line
         });
         const volume = chart.addSeries(HistogramSeries, {
@@ -479,7 +502,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         }
         try {
             markLineRef.current = cs.createPriceLine({
-                price, color: '#399ef7', lineWidth: 1, lineStyle: 2,
+                price, color: chartColor('--color-cyan-500', '#399ef7'), lineWidth: 1, lineStyle: 2,
                 axisLabelVisible: true, title: 'mark',
             }) ?? null;
         } catch { /* series without price-line support (test mock) */ }
@@ -493,7 +516,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             if (smaRef.current) { chart.removeSeries(smaRef.current); smaRef.current = null; }
             return;
         }
-        if (!smaRef.current) smaRef.current = chart.addSeries(LineSeries, { color: '#f08800', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        if (!smaRef.current) smaRef.current = chart.addSeries(LineSeries, { color: chartColor('--color-yellow-500', '#f08800'), lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
         const candles = (candlesRef.current?.data?.() ?? []) as readonly { time: number; close: number }[];
         if (candles.length > 0 && smaRef.current) {
             const values = sma(candles.map(c => c.close), 20);
@@ -921,7 +944,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     out.height = base.height;
                     const ctx = out.getContext('2d');
                     if (!ctx) return null;
-                    ctx.fillStyle = '#0b0b0a';
+                    ctx.fillStyle = chartColor('--color-zinc-950', '#0b0b0a');
                     ctx.fillRect(0, 0, out.width, out.height);
                     ctx.drawImage(base, 0, 0);
                     // The drawing overlay is a CSS-pixel canvas over the chart

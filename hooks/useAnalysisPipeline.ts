@@ -118,6 +118,32 @@ import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { CLARIFICATION_MARKERS_RE, DEBATE_END_MARKERS_RE, MODERATOR_ERROR_BLOCK_RE, MODERATOR_RETRY_MARKER, MODERATOR_RETRY_RE, REPLACEMENT_TIMEOUT_MARKER } from '../constants/debateMarkers';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 
+// ─── Run Outcome ──────────────────────────────────────────────────────────────
+
+/**
+ * What `handleSendMessage` resolves with once the run ENDS. The offline
+ * queue's replay callback is the consumer that makes this load-bearing:
+ * `processQueue` awaits the callback before dequeuing, and an analysis that
+ * fails INTERNALLY lands in the catch and lands an error bubble instead of
+ * throwing — without an outcome flag the replayed item was consumed by a
+ * failed run (audit 2026-09-15 §2.3 residual). App maps `ok:false` to a
+ * throw so the queue's existing retryCount/MAX_RETRIES backoff applies.
+ *
+ * `ok:false` means "this attempt did not produce a completed analysis and
+ * the work is worth retrying": the generic provider/pipeline error (error
+ * bubble), the 429 rate-limit branch, the quota branch, and the pre-run
+ * team/config blocks (no providers ready, missing moderator, incomplete
+ * roster — retried with backoff, dropped after MAX_RETRIES, since the queue
+ * item would otherwise vanish silently, which is the very bug).
+ * `ok:true` covers a completed run, a user CANCEL (deliberate stop — a
+ * retry would fight the user), a superseded/replaced run, a send parked
+ * into the steering queue, a notebook quick-save short-circuit, and the
+ * offline branch that re-queued the analysis as a FRESH item.
+ */
+export interface ChatRunOutcome {
+    ok: boolean;
+}
+
 // ─── Params Interface ──────────────────────────────────────────────────────────
 
 export interface UseAnalysisPipelineParams {
@@ -626,7 +652,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // the bottom of this hook — the drain fires after commit, so it must
     // call through the freshest closure, not the one that started the run.
     // Assigned after handleSendMessage below.
-    const drainSendRef = useRef<((text?: string) => Promise<void>) | null>(null);
+    const drainSendRef = useRef<((text?: string) => Promise<ChatRunOutcome>) | null>(null);
     // Which pipeline phase is running — used to fail the CORRECT step when a
     // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
     // failures marked the wrong step and the finally force-completed everything).
@@ -797,7 +823,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         /** Slash-mode chip (Deep Research / Visualize). Absent ⇒ the active
          *  composer chip (read from the ref); null-like ⇒ a plain send. */
         composerMode?: 'research' | 'visualize';
-    }) => {
+    }): Promise<ChatRunOutcome> => {
         const isAutomationRun = !!options?.automation;
         // The mode chip is consumed by exactly one send — and never by
         // parked/queued drafts (the chip stays visible for the real send).
@@ -843,7 +869,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setInput('');
                 }
             }
-            return;
+            // Parked into the steering queue (it WILL run against the live
+            // debate or as the end-of-run drain) — consumed, not failed.
+            return { ok: true };
         }
 
         // A real send consumes the chip (a parked draft above returned early
@@ -937,7 +965,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             : undefined;
         const imagesToUse = followSource ? [] : (customImages || images);
 
-        if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited) return;
+        // Nothing ran: a live loading/summarize state, a rate-limit flag, or
+        // an empty payload. A replay hitting this must stay queued (the
+        // transient block will clear; an empty item dies at MAX_RETRIES) —
+        // ok:false so App's callback throws and the backoff path applies.
+        if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited) return { ok: false };
 
         // Setup problems no longer toast — they render as a normal chat
         // exchange (the user's message + an explanation bubble) so the reason
@@ -965,7 +997,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             appendBlockedRunNotice(
                 'No AI models are ready yet. Add an API key and enable at least one provider in Settings → AI Models, then send this again.'
             );
-            return;
+            // Config block, not a completed run — ok:false keeps a replayed
+            // item on the queue's backoff path (dropped at MAX_RETRIES).
+            return { ok: false };
         }
 
         // Moderator pre-flight: the debate cannot function without its
@@ -978,7 +1012,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             appendBlockedRunNotice(
                 'The debate cannot start: no moderator model is available. Pick a moderator (Team picker or Settings → AI Models), make sure it is enabled and has an API key, then send this again.'
             );
-            return;
+            return { ok: false };
         }
 
         // ─── TRADER NOTEBOOK QUICK-SAVE ────────────────────────────────
@@ -1039,7 +1073,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             } finally {
                 setLoadingMessage(null);
             }
-            return;
+            // The notebook quick-save completed (or reported its own failure
+            // in-chat) — this was never an analysis run; consume it.
+            return { ok: true };
         }
         if (runEnsembleEnabled && !isAutomationRun) {
             // Role-assignment requirements only apply when Lenses are ON —
@@ -1051,13 +1087,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     appendBlockedRunNotice(
                         `Your analyst team is incomplete. Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in the Team menu, then send again.`
                     );
-                    return;
+                    return { ok: false };
                 }
                 if (!hasCompleteAnalystAssignments) {
                     appendBlockedRunNotice(
                         'Analysts must use different models. Each lens role needs its own model (the same provider is allowed) — reassign the duplicates in the Team menu, then send again.'
                     );
-                    return;
+                    return { ok: false };
                 }
             } else if (enabledProviders.length > 1) {
                 // Normal mode (Lenses OFF): the same provider+model may not
@@ -1069,7 +1105,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     appendBlockedRunNotice(
                         'Two debate seats share a model. Identical prompts through an identical model return identical output — pick a different model per seat in the Team menu, then send again.'
                     );
-                    return;
+                    return { ok: false };
                 }
             }
         }
@@ -1084,7 +1120,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             appendBlockedRunNotice(
                 `Too many providers for a Standard-mode debate. A maximum of ${TEAM_MAX_SEATS} AI providers can join — disable at least one in Settings → AI Models, then send again.`
             );
-            return;
+            return { ok: false };
         }
 
         const runStartedAt = Date.now();
@@ -4153,6 +4189,9 @@ ${accuracyVerificationNote}`
                 }
                 }
             }
+            // End of the try — the run completed (or, for automation runs,
+            // delivered through its own onMessage callback). Success.
+            return { ok: true };
         } catch (error: any) {
             // Runs for BOTH errors and user cancels. Previously the
             // `!isCurrentRequest()` early-return skipped this cleanup on abort,
@@ -4207,8 +4246,11 @@ ${accuracyVerificationNote}`
                 };
             }).filter((m): m is Message => m !== null));
 
-            // User cancels / stale runs get no error bubbles.
-            if (cancelled) return;
+            // User cancels / stale runs get no error bubbles. A deliberate
+            // Stop (or a superseded run) is NOT a retryable failure —
+            // ok:true lets a queued replay of it dequeue instead of fighting
+            // the user with a backoff retry.
+            if (cancelled) return { ok: true };
 
             // Rate limits first — isQuotaError also claims status === 429, so
             // the dedicated rate-limit path below was previously unreachable.
@@ -4224,7 +4266,8 @@ ${accuracyVerificationNote}`
                         setIsRateLimited(false);
                     }
                 }, 60_000);
-                return;
+                // Transient — a queued replay must RETRY with backoff.
+                return { ok: false };
             }
 
             if (isQuotaError(error)) {
@@ -4236,7 +4279,7 @@ ${accuracyVerificationNote}`
                     }
                 });
                 updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: `Model "${flaggedModel || 'an enabled AI'}" has exceeded its usage quota.` }]);
-                return;
+                return { ok: false };
             }
 
             // Offline sends are queued and re-dispatched on reconnect instead
@@ -4249,7 +4292,9 @@ ${accuracyVerificationNote}`
                 try {
                     await offlineQueue.add({ type: 'analysis', username: getActiveUsername(), payload: { prompt: effectiveInput, images: imagesToUse.map(img => img.dataURL) } });
                     updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "You're offline — this analysis was queued and will run automatically when you're back online." }]);
-                    return;
+                    // Re-queued as a FRESH item — this attempt is done; let
+                    // the replayed original dequeue (no duplicate retry).
+                    return { ok: true };
                 } catch (queueErr) {
                     console.warn('[Pipeline] Failed to queue offline request:', queueErr);
                 }
@@ -4269,6 +4314,10 @@ ${accuracyVerificationNote}`
             if (isAutomationRun) {
                 options?.automation?.onError?.(safeMessage || 'Automation run failed.');
             }
+            // The generic error-bubble path: the analysis FAILED internally.
+            // ok:false is what keeps an offline-queue replay on the
+            // retry/backoff path instead of dequeuing a dead run (§2.3).
+            return { ok: false };
         } finally {
             endPromptLane();
             stopTokenUsage?.();

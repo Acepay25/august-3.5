@@ -348,19 +348,6 @@ const createTables = async (): Promise<void> => {
     console.log('[SqliteService] Tables created successfully');
 };
 
-/**
- * Close database connection
- */
-export const closeSqlite = async (): Promise<void> => {
-    if (db) {
-        await db.close();
-        await sqliteConnection?.closeConnection(DB_NAME, false);
-        db = null;
-        setSqliteDb(null);
-        isInitialized = false;
-    }
-};
-
 // ============================================================================
 // USER OPERATIONS
 // ============================================================================

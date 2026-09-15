@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useCallback, useReducer } from 're
 import { BrainCircuit, ChevronDownIcon } from 'lucide-react';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
-import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '../../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, computeTopLessons } from '../../services/learning/MemoryFilesService';
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
@@ -217,7 +217,10 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         () => reviewSkillEffectiveness({ liftByFileId, injectedFileNames: injectedSkillFiles }),
         [notebook, liftByFileId, injectedSkillFiles],
     );
-    const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), []);
+    // Brier summaries are a cheap sync read of a cached store, but the store
+    // mutates as trades settle — recompute with the trade log so a refresh
+    // actually refreshes (the old [] deps served the first snapshot forever).
+    const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), [trades]);
 
     // Veto falsification rollup: per-skill hits/runs/pending
     // from the veto ledger — refreshed with the notebook.
@@ -334,19 +337,44 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     );
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
-    // + how many queries hit the cold-start flag.
-    const poolStats = useMemo(() => {
-        const sample = closedWindowed.slice(-50);
-        let matches = 0, queries = 0, coldStarts = 0;
-        for (const t of sample) {
-            const s = summarizeSimilarSetups(
-                { coinName: t.analysis?.coinName, direction: t.analysis?.direction, detectedPatternFamily: t.analysis?.detectedPatternFamily },
-                closedWindowed.filter(x => x.id !== t.id),
-                t.marketRegime
-            );
-            if (s) { matches += s.total; queries += 1; if (s.isColdStart) coldStarts += 1; }
+    // + how many queries hit the cold-start flag. The sampling loop runs up
+    // to 50× summarizeSimilarSetups, each re-scanning the whole closed pool —
+    // far too heavy to do synchronously on tab mount, so it is deferred to an
+    // idle callback (2s timeout cap; setTimeout fallback where
+    // requestIdleCallback is unavailable). Math is identical to the old memo;
+    // only WHEN it runs changed. Cards read 0/— until the first result lands.
+    const [poolSample, setPoolSample] = useState({ avgMatches: 0, coldStartQueries: 0, sampled: 0 });
+    const poolStats = useMemo(
+        () => ({ indexed: closedWindowed.length, ...poolSample }),
+        [closedWindowed.length, poolSample],
+    );
+    useEffect(() => {
+        const source = closedWindowed;
+        let cancelled = false;
+        const compute = (): void => {
+            if (cancelled) return;
+            const sample = source.slice(-50);
+            let matches = 0, queries = 0, coldStarts = 0;
+            for (const t of sample) {
+                const s = summarizeSimilarSetups(
+                    { coinName: t.analysis?.coinName, direction: t.analysis?.direction, detectedPatternFamily: t.analysis?.detectedPatternFamily },
+                    source.filter(x => x.id !== t.id),
+                    t.marketRegime
+                );
+                if (s) { matches += s.total; queries += 1; if (s.isColdStart) coldStarts += 1; }
+            }
+            if (!cancelled) setPoolSample({ avgMatches: queries ? matches / queries : 0, coldStartQueries: coldStarts, sampled: queries });
+        };
+        const w = window as unknown as {
+            requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+            cancelIdleCallback?: (id: number) => void;
+        };
+        if (typeof w.requestIdleCallback === 'function') {
+            const handle = w.requestIdleCallback(compute, { timeout: 2000 });
+            return () => { cancelled = true; w.cancelIdleCallback?.(handle); };
         }
-        return { indexed: closedWindowed.length, avgMatches: queries ? matches / queries : 0, coldStartQueries: coldStarts, sampled: queries };
+        const timer = window.setTimeout(compute, 300);
+        return () => { cancelled = true; window.clearTimeout(timer); };
     }, [closedWindowed]);
 
     // Drawdown — explicitly split: current (open) vs historical max.
@@ -405,7 +433,10 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const [lessonRegimeFilter, setLessonRegimeFilter] = useState<string>('all');
     const [lessonPnlThreshold, setLessonPnlThreshold] = useState(false); // ≤ -2% only
 
-    const lessonMatches = (lesson: TopLesson): LoggedTrade[] => {
+    // Matches per lesson, memoized as a parallel array. This used to be a
+    // plain function called from inside topLessons.map — every render of the
+    // dashboard re-filtered + re-sorted the whole closed log once per lesson.
+    const lessonMatches = useMemo(() => topLessons.map(lesson => {
         const splitAt = lesson.label.lastIndexOf(' ');
         const coin = lesson.label.slice(0, splitAt);
         const direction = lesson.label.slice(splitAt + 1);
@@ -418,7 +449,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         )
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
             .slice(-15);
-    };
+    }), [topLessons, closedWindowed, lessonRegimeFilter, lessonPnlThreshold]);
 
     const notebookSection = (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
@@ -471,7 +502,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             ) : (
                 <div className="space-y-1.5">
                     {topLessons.map((l, i) => {
-                        const matches = lessonMatches(l);
+                        const matches = lessonMatches[i] ?? [];
                         const isOpen = expandedLesson === i;
                         return (
                             <div key={i} className="rounded-lg border border-white/5 bg-zinc-950/40 px-2.5 py-2">

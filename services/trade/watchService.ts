@@ -221,10 +221,6 @@ export const tick = (symbol: string, price: number): void => {
     evaluateWatches(Date.now());
 };
 
-/** Clock-only evaluation — for when the feed is quiet but wakes are due.
- *  The internal 1s clock calls this too; exported for tests. */
-export const tickTime = (): void => { evaluateWatches(Date.now()); };
-
 export const subscribe = (cb: (fired: WatchFired, remaining: WatchItem[]) => void): (() => void) => {
     subscribers.add(cb);
     return () => { subscribers.delete(cb); };

@@ -15,7 +15,6 @@ import DeskSeatMappingEditor from './DeskSeatMappingEditor';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
-import { AlertManager } from './AlertManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
 import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
@@ -1002,7 +1001,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
                                         <h3 className="text-base font-bold text-white">Data</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Usage, backups, and price alerts.</p>
+                                        <p className="text-xs text-zinc-500 mt-1">Usage and backups.</p>
                                     </div>
 
                                     <SessionUsagePanel />
@@ -1011,11 +1010,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     {username && onProfileRestored && (
                                         <BackupManager username={username} onProfileRestored={onProfileRestored} />
                                     )}
-
-                                    {/* Price alerts — list/toggle/delete */}
-                                    <div className="border-t border-zinc-800 pt-6">
-                                        <AlertManager />
-                                    </div>
                                 </div>
                             )}
 

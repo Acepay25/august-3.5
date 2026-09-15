@@ -43,7 +43,6 @@ export interface UseWatchAndAutopilotResult {
     watchedSignals: ReturnType<typeof collectWatchedSignals>;
     watchOpenR: string | undefined;
     handleFollowUpTicket: (messageId: string, text: string) => void;
-    handlePreReadCommit: (messageId: string, prior: { direction: 'Long' | 'Short' | 'Flat'; confidencePct: number }) => void;
     handleOpenWatchedSignal: (conversationId: string, messageId: string) => void;
     handleConfirmAutopilot: (messageId: string) => void;
     runWatchListAction: (
@@ -117,17 +116,10 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         stableHandleSendMessage(text, [], hidden, { followUpFromMessageId: messageId });
     }, [stableHandleSendMessage]);
 
-    // Pre-read capture: persist the user's committed prior
-    // call onto the settled verdict's message BEFORE the card reveals.
-    // Rides conversation history (same path as the watch toggle), copied
-    // onto the LoggedTrade at log time by useTradeLogging.
-    const handlePreReadCommit = useCallback((messageId: string, prior: { direction: 'Long' | 'Short' | 'Flat'; confidencePct: number }) => {
-        const convId = activeConversationId;
-        if (!convId) return;
-        updateMessages(prev => prev.map(m => m.id === messageId
-            ? { ...m, userPriorCall: { ...prior, confidencePct: Math.min(100, Math.max(0, prior.confidencePct)), createdAt: new Date().toISOString() } }
-            : m), convId);
-    }, [activeConversationId, updateMessages]);
+    // Pre-read capture (handlePreReadCommit) was deleted in the audit purge:
+    // its only UI (the PreReadGate checkbox) never existed, so nothing ever
+    // wrote userPriorCall. The READ side (utils/preRead, useTradeLogging)
+    // stays for any historical rows carrying the field.
 
     const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
         handleLoadConversation(conversationId);
@@ -250,7 +242,6 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         watchedSignals,
         watchOpenR,
         handleFollowUpTicket,
-        handlePreReadCommit,
         handleOpenWatchedSignal,
         handleConfirmAutopilot,
         runWatchListAction,

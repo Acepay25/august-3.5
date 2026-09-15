@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getModelConfidenceCalibration } from '../services/backtesting/ModelPerformanceService';
+import { getCalibrationSummaries } from '../services/backtesting/ModelPerformanceService';
 
 const SHARED = 'confidence_calibration';
 const OWN = 'model_confidence_calibration';
@@ -27,10 +27,15 @@ describe('confidence calibration — no more shared-key collision', () => {
         };
         localStorage.setItem(SHARED, JSON.stringify(providersBlob));
 
-        const out = getModelConfidenceCalibration('gemini' as never);
+        // Cold read of the calibration store triggers the lift. (Previously
+        // exercised via the dead getModelConfidenceCalibration; the read
+        // surface that survives is getCalibrationSummaries, which loads the
+        // same blob through the same migration path.)
+        const summaries = getCalibrationSummaries();
 
-        // The blob was adopted (not lost) — 3/4 high win rate survives the lift.
-        expect(out.high).toEqual({ wins: 3, total: 4, winRate: 75 });
+        // The blob was adopted (not lost) — gemini's 7 samples survive the lift.
+        const gemini = summaries.find(s => s.provider === 'gemini');
+        expect(gemini?.samples).toBe(7);
         // It now lives under MPS's OWN key…
         expect(localStorage.getItem(OWN)).toBeTruthy();
         // …and is REMOVED from the shared key the dashboard reads, so the two

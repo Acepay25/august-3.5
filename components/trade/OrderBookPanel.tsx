@@ -8,6 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchOrderBookDepth, type OrderBookData } from '../../services/analysis/MarketDataService';
+import { fmtPrice } from '../../utils/formatters';
 import type { LiveDepth } from '../../services/trade/futuresStreams';
 
 interface OrderBookPanelProps {
@@ -19,7 +20,8 @@ interface OrderBookPanelProps {
 }
 
 const fmtQty = (n: number): string => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toFixed(n >= 10 ? 1 : 3);
-const fmtPrice = (n: number): string => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: n >= 1000 ? 2 : 4 });
+// fmtPrice lives in utils/formatters (audit 2026-09-16 dedupe — this file's
+// copy was byte-identical to TradeView's).
 
 /** Wall = level ≥3× the average size of the visible ladder (the same rule
  *  the REST OrderBookData uses, recomputed locally for the live snapshot). */
