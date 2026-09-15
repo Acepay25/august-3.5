@@ -6,9 +6,11 @@
  * the analysis had merely begun (failed runs vanished from the queue).
  *
  * Service-level behavior tests prove the contract processQueue enforces,
- * and source scans pin App's callback to `return handleSendMessage(...)`
- * (the completion promise) plus the explicit username stamp at the
- * pipeline's enqueue site. IDB fake mirrors tests/offlineQueueProfile.test.ts.
+ * the ok:false-resolution tests prove App's outcome→throw mapping routes a
+ * silently-failed replay into the retry path, and source scans pin App's
+ * callback to `await handleSendMessage(...)` + `throw` (the ChatRunOutcome
+ * contract) plus the explicit username stamp at the pipeline's enqueue
+ * site. IDB fake mirrors tests/offlineQueueProfile.test.ts.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -138,14 +140,99 @@ describe('processQueue awaits the replay callback to COMPLETION', () => {
     });
 });
 
+describe('replayed run FAILURE reaches the retry path (ChatRunOutcome)', () => {
+    // handleSendMessage catches an internally-failed analysis (error bubble,
+    // 429, quota, config block) and RESOLVES — resolving is not succeeding.
+    // The completion contract alone would dequeue that dead run. The fix:
+    // the run resolves with { ok } and App's onAnalysis maps ok:false to a
+    // THROW, so processQueue's existing retryCount/backoff/MAX_RETRIES path
+    // applies. Service-level: prove the App-shaped wrapper behaves exactly
+    // like the rejection test above for an ok:false resolution, and keeps
+    // the dequeue behavior for ok:true / undefined resolutions.
+    const appShapedCallback = (run: () => Promise<{ ok: boolean }>) => async () => {
+        const outcome = await run();
+        if (outcome && outcome.ok === false) {
+            throw new Error('Queued analysis replay failed — deferring to the retry/backoff path.');
+        }
+    };
+
+    it('an ok:false resolution (failed run, no throw) stays queued with the retry path armed', async () => {
+        await addToQueue({ type: 'analysis', payload: { prompt: 'go' }, username: 'alice' });
+        let ran = 0;
+        const results = await processQueue({
+            onAnalysis: appShapedCallback(async () => { ran++; return { ok: false }; }),
+        });
+        expect(ran).toBe(1);
+        expect(results.failed).toBe(1);
+        const items = await getAllQueued();
+        expect(items).toHaveLength(1);               // NOT consumed
+        expect(items[0].retryCount).toBe(1);         // backoff armed
+        expect(items[0].lastAttempt).toBeTruthy();
+    });
+
+    it('an ok:true resolution completes and dequeues as before', async () => {
+        await addToQueue({ type: 'analysis', payload: { prompt: 'go' }, username: 'alice' });
+        const results = await processQueue({
+            onAnalysis: appShapedCallback(async () => ({ ok: true })),
+        });
+        expect(results).toEqual({ processed: 1, failed: 0, skipped: 0 });
+        expect(await getAllQueued()).toHaveLength(0);
+    });
+
+    it('backoff then final drop: MAX_RETRIES still bounds a permanently-failing replay', async () => {
+        await addToQueue({ type: 'analysis', payload: { prompt: 'go' }, username: 'alice' });
+        // Burn attempts by backdating lastAttempt past every required delay.
+        // (The IDB fake hands out the stored reference, so mutating the
+        // returned item IS mutating the row — and the service's
+        // post-increment >= MAX_RETRIES check fires on the attempt that takes
+        // retryCount to 5 — four failures must leave the item parked.)
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const [item] = await getAllQueued();
+            if (!item) break;
+            item.lastAttempt = new Date(Date.now() - 10 * 60_000).toISOString();
+            await processQueue({ onAnalysis: appShapedCallback(async () => ({ ok: false })) });
+        }
+        const [item] = await getAllQueued();
+        expect(item).toBeTruthy();
+        expect(item.retryCount).toBe(4);
+        // The next failure hits MAX_RETRIES and removes the item.
+        item.lastAttempt = new Date(Date.now() - 10 * 60_000).toISOString();
+        await processQueue({ onAnalysis: appShapedCallback(async () => ({ ok: false })) });
+        expect(await getAllQueued()).toHaveLength(0); // exhausted, dropped
+    });
+});
+
 describe('App/pipeline wiring of the queue contract (source)', () => {
-    it('App RE-TURNS the handleSendMessage promise from onAnalysis (awaits end-of-run)', () => {
-        expect(appSrc).toMatch(/return handleSendMessage\(payload\?\.prompt \|\| '', images\);/);
-        // The old fire-and-forget shape must not come back.
+    it('App awaits handleSendMessage and THROWS on ok:false (failure retries, not vanishes)', () => {
+        expect(appSrc).toMatch(/const outcome = await handleSendMessage\(payload\?\.prompt \|\| '', images\);/);
+        expect(appSrc).toMatch(/if \(outcome && outcome\.ok === false\) \{/);
+        // The old fire-and-forget shape must not come back…
         expect(appSrc).not.toMatch(/^\s*handleSendMessage\(payload\?\.prompt/m);
+        // …and neither must the old resolve-and-dequeue return (completion
+        // without the outcome check silently loses failed replays).
+        expect(appSrc).not.toMatch(/return handleSendMessage\(payload\?\.prompt \|\| '', images\);/);
     });
 
     it('the pipeline enqueue site stamps the username explicitly', () => {
         expect(pipelineSrc).toMatch(/offlineQueue\.add\(\{[^}]*username: getActiveUsername\(\)/);
+    });
+
+    it('handleSendMessage declares the outcome and flags the catch failure paths', () => {
+        // Public signature: the run resolves with a ChatRunOutcome.
+        expect(pipelineSrc).toMatch(/\}\): Promise<ChatRunOutcome> => \{/);
+        expect(pipelineSrc).toMatch(/export interface ChatRunOutcome \{\s*\n\s*ok: boolean;/);
+        // End of try = success; end of catch (generic error bubble) = failure.
+        // Slice from the MAIN run's catch (there are smaller inner catches).
+        const catchAt = pipelineSrc.indexOf('const cancelled = currentAbortController');
+        expect(catchAt).toBeGreaterThan(-1);
+        expect(pipelineSrc.slice(0, catchAt))
+            .toMatch(/return \{ ok: true \};\s*\n\s*\} catch \(error: any\) \{/);
+        expect(pipelineSrc.slice(catchAt))
+            .toMatch(/return \{ ok: false \};\s*\n\s*\} finally \{/);
+        // The transient/config arms inside the catch report ok:false too…
+        expect(pipelineSrc.slice(catchAt))
+            .toMatch(/\/\/ Transient — a queued replay must RETRY with backoff\.\s*\n\s*return \{ ok: false \};/);
+        // …while cancellation and the offline re-queue arm dequeue honestly.
+        expect(pipelineSrc.slice(catchAt)).toMatch(/if \(cancelled\) return \{ ok: true \};/);
     });
 });

@@ -16,6 +16,40 @@ def semver = (packageJson.version as String).trim()
 def coreParts = semver.split('-')[0].split('\\.')
 def appVersionCode = (coreParts[0] as int) * 10000 + (coreParts[1] as int) * 100 + (coreParts.size() > 2 ? (coreParts[2] as int) : 0)
 
+// ── Release signing — OPTIONAL and self-disarming (audit 2026-09-16) ───────
+// The MECHANISM only; the certificate itself is still a purchase/creation
+// decision. If android/keystore.properties exists (created by hand, or
+// provisioned in CI from the ANDROID_KEYSTORE_B64 secrets — see
+// .github/workflows/release.yml "Provision Android signing"), the release
+// build type gets a real signingConfig. Without it — the state of the world
+// today — the release build stays UNSIGNED with a loud console warning,
+// exactly the previous behavior, and no build fails.
+// Expected properties (relative paths resolve against the android/ dir):
+//   storeFile=release.keystore
+//   storePassword=…  keyAlias=…  keyPassword=…
+// NOTE: keystore.properties and *.jks are NOT covered by android/.gitignore
+// (the template lines are commented out) — the file must never be committed.
+def keystoreProperties = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+def releaseSigningReady = false
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProperties.load(it) }
+    def missingKeys = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
+        .findAll { key -> !keystoreProperties.getProperty(key)?.trim() }
+    if (missingKeys) {
+        logger.warn("[signing] android/keystore.properties present but incomplete (missing ${missingKeys.join(', ')}) — release build stays UNSIGNED")
+    } else {
+        def store = new File(rootDir, keystoreProperties['storeFile'])
+        if (store.exists()) {
+            releaseSigningReady = true
+        } else {
+            logger.warn("[signing] keystore file '${store}' referenced by android/keystore.properties does not exist — release build stays UNSIGNED")
+        }
+    }
+} else {
+    logger.warn("[signing] No android/keystore.properties — release APK/AAB stays UNSIGNED (debug installs unaffected; see the signing block in android/app/build.gradle)")
+}
+
 android {
     namespace "com.august35.tradingapp"
     compileSdk rootProject.ext.compileSdkVersion
@@ -32,10 +66,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseSigningReady) {
+            release {
+                storeFile new File(rootDir, keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Signed ONLY when android/keystore.properties was complete at
+            // configuration time; otherwise the release build keeps the AGP
+            // default (unsigned) exactly as before.
+            if (releaseSigningReady) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

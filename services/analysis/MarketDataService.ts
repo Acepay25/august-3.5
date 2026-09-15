@@ -1371,6 +1371,23 @@ const getDefaultOrderBook = (): OrderBookData => ({
  * zero network attempts. There is no per-call retry by design — a websocket
  * re-home (`!forceOrder@arr`) would be the replacement path, not polling
  * endpoints Binance deleted.
+ *
+ * 2026-09-16 WS re-home PROBE (kept RETIRED — the re-home stayed unbuildable
+ * from this network): `wss://fstream.binance.com/ws/!forceOrder@arr` plus
+ * the per-symbol `btcusdt@forceOrder` / `ethusdt@forceOrder` /
+ * `solusdt@forceOrder` forms all completed the 101 handshake but delivered
+ * ZERO frames across two 90 s windows — and crucially, so did every control
+ * stream on the same host: `btcusdt@aggTrade` AND the 1 Hz
+ * `btcusdt@markPrice@1s` THE APP'S OWN futures desk feed rides. The same
+ * manual client against `stream.binance.com:9443` (spot trade stream)
+ * received 530+ frames in 25 s and a generic echo server round-tripped.
+ * So futures WS data (fstream.binance.com) is silently dropped at the
+ * network layer here — liquidation sparsity cannot be distinguished from a
+ * blocked feed, and "data flows" was never demonstrated. Per the audit's
+ * rule the surface stays honestly retired; before building the ring-buffer
+ * re-home, re-run the probe from a network where the desk shows 'live' (the
+ * markPrice@1s control must produce frames) — if it does, !forceOrder@arr
+ * will too.
  */
 let liquidationsSourceUnavailable = false;
 

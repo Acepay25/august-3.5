@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { CloseIcon, ActivityIcon, BellIcon, TrashIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
+import { CloseIcon, ActivityIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
 import { Spinner } from '../ui/Spinner';
 import { Kline } from '../../types';
 import { ChartCandle } from '../../types/chart';
@@ -16,14 +16,6 @@ interface LiveMarketProps {
     /** Rendered inside a surface page instead of the full-screen overlay:
      *  no fixed positioning, no close button, Esc does not navigate. */
     isEmbedded?: boolean;
-}
-
-interface Alert {
-    id: string;
-    price: number;
-    symbol: string;
-    condition: 'above' | 'below';
-    active: boolean;
 }
 
 declare global {
@@ -202,11 +194,6 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
     // global setInterval, making any future bare setInterval(...) call throw
     // "setInterval is not a function".
     const [chartInterval, setChartInterval] = useState('15m');
-    const [alerts, setAlerts] = useState<Alert[]>([]);
-    const alertsRef = useRef<Alert[]>([]);
-
-    const [newAlertPrice, setNewAlertPrice] = useState('');
-    const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
     const [notification, setNotification] = useState<string | null>(null);
     const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
@@ -233,10 +220,6 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
     const lastPriceRef = useRef<number | null>(null);
 
     const isMountedRef = useRef(true);
-
-    useEffect(() => {
-        alertsRef.current = alerts;
-    }, [alerts]);
 
     useEffect(() => {
         isMountedRef.current = true;
@@ -404,20 +387,6 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                     lastPriceRef.current = price;
                 });
             }
-
-            const currentAlerts = alertsRef.current;
-            let hasUpdates = false;
-            const nextAlerts = currentAlerts.map(alert => {
-                if (!alert.active || alert.symbol !== symbol) return alert;
-                const triggered = (alert.condition === 'above' && price >= alert.price) || (alert.condition === 'below' && price <= alert.price);
-                if (triggered) {
-                    showNotification(`Price Alert: ${symbol} crossed ${alert.price}`);
-                    hasUpdates = true;
-                    return { ...alert, active: false };
-                }
-                return alert;
-            });
-            if (hasUpdates) setAlerts(nextAlerts);
         };
 
         const stopPolling = () => {
@@ -793,14 +762,6 @@ ${JSON.stringify(marketData, null, 2)}
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 shrink-0">
                         <button
-                            onClick={() => setIsAlertModalOpen(true)}
-                            className="h-12 w-12 flex items-center justify-center text-zinc-400 hover:text-yellow-400 bg-zinc-800 hover:bg-yellow-500/10 border border-white/5 hover:border-yellow-500/30 rounded-xl transition-all active:scale-95"
-                            aria-label="Price Alerts"
-                        >
-                            <BellIcon className="w-5 h-5" />
-                        </button>
-
-                        <button
                             onClick={handleExtractAndAnalyze}
                             disabled={!!analysisProgress}
                             className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
@@ -986,64 +947,6 @@ ${JSON.stringify(marketData, null, 2)}
                 <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
                     <CheckIcon className="w-5 h-5 shrink-0" />
                     <span className="font-medium text-sm">{notification}</span>
-                </div>
-            )}
-
-            {/* Alert Modal - Mobile Optimized */}
-            {isAlertModalOpen && (
-                <div className="absolute top-32 left-4 right-4 sm:left-4 sm:right-auto sm:w-80 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-5 animate-fade-in z-50">
-                    <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4">Price Alerts</h3>
-                    <div className="flex gap-3 mb-4">
-                        <input
-                            type="number"
-                            value={newAlertPrice}
-                            onChange={(e) => setNewAlertPrice(e.target.value)}
-                            placeholder="Target Price"
-                            className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-cyan-500 outline-none"
-                        />
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const targetPrice = Number(newAlertPrice);
-                                if (Number.isFinite(targetPrice) && targetPrice > 0 && lastPriceRef.current !== null) {
-                                    setAlerts(p => [...p, { id: Date.now().toString(), price: targetPrice, symbol, condition: targetPrice > lastPriceRef.current! ? 'above' : 'below', active: true }]);
-                                    setNewAlertPrice('');
-                                    setIsAlertModalOpen(false);
-                                }
-                            }}
-                            disabled={!Number.isFinite(Number(newAlertPrice)) || Number(newAlertPrice) <= 0 || lastPriceRef.current === null}
-                            aria-label="Add price alert"
-                            className="h-12 w-12 flex items-center justify-center bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform"
-                        >
-                            +
-                        </button>
-                    </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-                        {alerts.filter(a => a.symbol === symbol).map(alert => (
-                            <div key={alert.id} className="flex items-center justify-between bg-black/30 p-3 rounded-xl border border-white/5">
-                                <span className={`text-sm font-mono ${alert.active ? 'text-zinc-300' : 'text-zinc-600'}`}>
-                                    {alert.condition === 'above' ? '≥' : '≤'} ${alert.price.toLocaleString()}
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() => setAlerts(p => p.filter(a => a.id !== alert.id))}
-                                    aria-label={`Delete ${alert.symbol} price alert`}
-                                    className="p-2 text-zinc-600 hover:text-rose-400 transition-colors"
-                                >
-                                    <TrashIcon />
-                                </button>
-                            </div>
-                        ))}
-                        {alerts.filter(a => a.symbol === symbol).length === 0 && (
-                            <p className="text-zinc-600 text-sm text-center py-4">No alerts set for {symbol}</p>
-                        )}
-                    </div>
-                    <button
-                        onClick={() => setIsAlertModalOpen(false)}
-                        className="mt-4 w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-sm rounded-xl font-medium transition-colors active:scale-[0.98]"
-                    >
-                        Close
-                    </button>
                 </div>
             )}
         </div>

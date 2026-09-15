@@ -1370,59 +1370,6 @@ export const settleShadow = (
 };
 
 /**
- * Apply a settled shadow under the write lock (public entry for the
- * dashboard / tests): promote or discard exactly as the evidence path's
- * inline settle does, without needing a new trade to close the window.
- */
-export const settleSkillShadow = (fileId: string, username: string): Promise<'promoted' | 'discarded' | 'pending'> =>
-    withNotebookWriteLock(() => settleShadowUnlocked(fileId, username));
-
-const settleShadowUnlocked = async (
-    fileId: string,
-    username: string,
-): Promise<'promoted' | 'discarded' | 'pending'> => {
-    const file = getMemoryFiles().files.find(f => f.id === fileId);
-    const meta = file ? parseSkillMarkdown(file.content) : null;
-    if (!meta || !meta.shadow) return 'pending';
-    const windowEvidence = { wins: meta.shadow.wins, losses: meta.shadow.losses };
-    const verdict = settleShadow(meta, windowEvidence);
-    if (!verdict.promoted && !verdict.discarded) return 'pending';
-    // Refinement recovery — a settled shadow is one sample.
-    void recordRefinementOutcome(username, verdict.promoted);
-    if (verdict.promoted && meta.shadow) {
-        meta.previousVersion = {
-            kind: meta.kind,
-            ifCondition: meta.ifCondition,
-            thenAction: meta.thenAction,
-        };
-        meta.kind = meta.shadow.kind;
-        meta.ifCondition = meta.shadow.ifCondition;
-        meta.thenAction = meta.shadow.thenAction;
-        meta.body = meta.shadow.body;
-    } else if (meta.shadow) {
-        // Refinement lost the shadow comparison — a lesson about the
-        // HARNESS (keyed on the refinement gate, not any provider).
-        try {
-            const { recordHarnessLesson } = await import('./harnessLessons');
-            recordHarnessLesson({
-                kind: 'injection',
-                scope: 'skillGuidance',
-                pattern: `skill-refinement:${fileId}`,
-                lesson: verdict.lesson ?? 'refinement overfit',
-                evidenceId: fileId,
-            });
-        } catch { /* lesson store is best-effort */ }
-    }
-    meta.shadow = undefined;
-    meta.modifiedAt = new Date().toISOString();
-    await updateMemoryFileUnlocked(fileId, {
-        content: serializeSkill(meta, titleFromMeta(meta)),
-        enabled: meta.status !== 'retired',
-    }, username);
-    return verdict.promoted ? 'promoted' : 'discarded';
-};
-
-/**
  * Act on the worth-gate's 'merge' verdict. Previously the
  * second-most-useful gate outcome was DROPPED silently — overlaps festered
  * until consolidateSkills destroyed the extras. The named target skill is
@@ -2529,31 +2476,6 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         recordEnforcement([repeat]);
     }
     return next;
-};
-
-export const listAppliedSkills = (
-    analysis: { coinName?: string; direction?: string; detectedPatternFamily?: string; marketConditions?: { pattern?: string } },
-    options?: { regime?: string },
-): Array<{ title: string; kind: SkillKind; status: SkillStatus; wins: number; losses: number; hitRate: number | null; procedure?: string }> => {
-    const setup = {
-        coin: analysis.coinName,
-        direction: analysis.direction,
-        family: analysis.detectedPatternFamily,
-        pattern: analysis.marketConditions?.pattern,
-        ...(options?.regime ? { regime: options.regime } : {}),
-    };
-    return getMemoryFiles().files
-        .map(enabledSkillMeta)
-        .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)))
-        .map(m => ({
-            title: titleFromMeta(m),
-            kind: m.kind,
-            status: m.status,
-            wins: m.wins,
-            losses: m.losses,
-            hitRate: skillHitRate(m.wins, m.losses),
-            procedure: m.thenAction || m.ifCondition,
-        }));
 };
 
 export const confirmedAvoidForSetup = (

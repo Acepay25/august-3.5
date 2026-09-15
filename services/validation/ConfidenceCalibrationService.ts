@@ -456,33 +456,6 @@ export const getRecommendedConfidenceAdjustment = (
 };
 
 /**
- * Calculate Bayesian Posterior Probability
- * 
- * Bayes' Theorem: P(A|B) = (P(B|A) * P(A)) / P(B)
- * - P(A|B): Posterior (Probability of Winning given this Confidence level)
- * - P(B|A): Likelihood (Probability of this Confidence level given a Win)
- * - P(A): Prior (Overall Win Rate of the specific Provider)
- * - P(B): Evidence (Overall Probability of this Confidence level being output)
- * 
- * @param prior - The historical win rate of the provider (0-1)
- * @param likelihood - Estimated accuracy of the current confidence level (0-1)
- * @param evidence - Frequency at which this provider outputs this confidence level (0-1)
- */
-export const calculateBayesianProbability = (
-    prior: number,
-    likelihood: number,
-    evidence: number
-): number => {
-    // Avoid division by zero
-    if (evidence <= 0) return 0;
-
-    const posterior = (likelihood * prior) / evidence;
-
-    // Clamp result between 0 and 1
-    return Math.min(Math.max(posterior, 0), 1);
-};
-
-/**
  * Get Bayesian Calibrated Confidence
  * Adjusts raw confidence based on historical provider performance.
  * 

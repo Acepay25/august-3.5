@@ -498,10 +498,19 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     }, [selected, editModelInput, onUpdateModel, onUpdateProvider]);
 
     const catalogRefreshed = useRef<Record<string, number>>({});
+    // In-flight marker: refreshCatalog awaits onUpdateProvider, which changes
+    // `configs` and re-fires the auto-refresh effect below WHILE the previous
+    // sweep is still mid-await (catalogRefreshed only stamps on completion) —
+    // without this guard, overlapping discover sweeps hammer the same
+    // /models endpoint. A second call for a provider already refreshing is a
+    // no-op; the running sweep is the refresh.
+    const catalogInFlight = useRef<Set<string>>(new Set());
     const [catalogStatus, setCatalogStatus] = useState<string>('');
 
     const refreshCatalog = useCallback(async (cfg: ProviderConfig, silent: boolean): Promise<void> => {
         if (!cfg.apiKey.trim() || !cfg.baseUrl.trim()) return;
+        if (catalogInFlight.current.has(cfg.id)) return;
+        catalogInFlight.current.add(cfg.id);
         if (!silent) setCatalogStatus(`Updating ${cfg.name}…`);
         try {
             const discovered = await discoverProviderModels({
@@ -518,6 +527,8 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             if (!silent) setCatalogStatus(`Updated ${cfg.name} · ${models.length} models`);
         } catch {
             if (!silent) setCatalogStatus(`Could not update ${cfg.name} — keeping the saved list.`);
+        } finally {
+            catalogInFlight.current.delete(cfg.id);
         }
     }, [onUpdateProvider]);
 

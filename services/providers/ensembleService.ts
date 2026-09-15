@@ -1320,31 +1320,6 @@ Start the simulation now. Begin with <DEBATE_START>.
     return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal, onReasoning, undefined, undefined, undefined, undefined, undefined, undefined, undefined, opts?.onToolAction);
 };
 
-/**
- * Sanitizes the analyst output to ensure no internal thought process or hidden fields are leaked to the moderator.
- * This enforces "Context Isolation" where the moderator only sees the final, public proposal.
- */
-const sanitizeAnalystOutput = (analysis: TradeAnalysis): TradeAnalysis => {
-    return {
-        coinName: analysis.coinName,
-        direction: analysis.direction,
-        entryPoints: analysis.entryPoints,
-        stopLoss: analysis.stopLoss,
-        takeProfit: analysis.takeProfit,
-        confidence: analysis.confidence,
-        probability: analysis.probability,
-        strategy: analysis.strategy,
-        marketConditions: analysis.marketConditions,
-        detectedPatternFamily: analysis.detectedPatternFamily,
-        detectedPatterns: analysis.detectedPatterns,
-        keyLevels: analysis.keyLevels,
-        validityDurationMinutes: analysis.validityDurationMinutes,
-        rrRatio: analysis.rrRatio
-    } as TradeAnalysis;
-};
-
-
-
 // =============================================================================
 // REAL INTER-MODEL DEBATE
 // =============================================================================

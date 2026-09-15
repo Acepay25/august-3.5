@@ -1,8 +1,11 @@
 /**
  * levelWatchService — the harness arm/tick/subscribe loop. The load-bearing
  * guarantees: fire-once per level (across ticks AND across reloads, via the
- * persisted per-user latch), the stale-plan guard at arm time, symbol
- * routing, and silent disarm. Advisory-only: nothing here resolves trades.
+ * persisted per-user latch — with the ENTRY re-touch exception: ENTRY is a
+ * per-VISIT latch, re-armed when price prints to its far side so a renewed
+ * touch re-pings "is my entry live?"), the stale-plan guard at arm time,
+ * symbol routing, and silent disarm. Advisory-only: nothing here resolves
+ * trades.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -111,6 +114,82 @@ describe('stale-plan guard at arm', () => {
         expect(levelWatch.getArmedPlans().map(p => p.planId)).toEqual(['btc-1']);
         levelWatch.tick('BTCUSDT', 100);
         expect(hits.map(h => h.levelId)).toEqual(['btc-1:ENTRY']);
+    });
+});
+
+describe('ENTRY re-touch (far-side re-arm — the "is my entry live?" signal)', () => {
+    it('a Long re-fires ENTRY after price re-crosses above it and touches again', () => {
+        const hits = collectHits();
+        levelWatch.arm(PLAN, 105);
+        levelWatch.tick('BTCUSDT', 99);   // visit 1 → ping
+        levelWatch.tick('BTCUSDT', 98);   // still in the zone — no spam
+        levelWatch.tick('BTCUSDT', 101);  // far side: visit ends, ENTRY re-arms (silent)
+        levelWatch.tick('BTCUSDT', 99.5); // visit 2 → re-ping
+        expect(hits.map(h => h.levelId)).toEqual(['btc-1:ENTRY', 'btc-1:ENTRY']);
+        expect(hits[1].hitPrice).toBe(99.5);
+    });
+
+    it('a Short mirrors: re-cross below entry re-arms, the next touch re-fires', () => {
+        const shortPlan: WatchPlan = {
+            planId: 'eth-s', symbol: 'ETHUSDT', direction: 'Short',
+            entry: 3000, stopLoss: 3100, takeProfits: [2900],
+        };
+        const hits = collectHits();
+        levelWatch.arm(shortPlan, 2950);
+        levelWatch.tick('ETHUSDT', 3010); // >= entry → fires
+        levelWatch.tick('ETHUSDT', 2980); // far side (below) → re-arm
+        levelWatch.tick('ETHUSDT', 3005); // re-touch → re-fire
+        expect(hits.map(h => h.levelId)).toEqual(['eth-s:ENTRY', 'eth-s:ENTRY']);
+    });
+
+    it('re-arming mutates the PERSISTED latch: fired → far side → gone → re-touch → back', () => {
+        levelWatch.arm(PLAN, 105);
+        levelWatch.tick('BTCUSDT', 99);
+        expect(localStorage.getItem('trade_level_hits_v1_alice')).toContain('btc-1:ENTRY');
+        expect(levelWatch.firedLevelsFor('btc-1')).toEqual(['btc-1:ENTRY']);
+        levelWatch.tick('BTCUSDT', 102); // re-arm persists immediately
+        expect(localStorage.getItem('trade_level_hits_v1_alice')).not.toContain('btc-1:ENTRY');
+        expect(levelWatch.firedLevelsFor('btc-1')).toEqual([]);
+        levelWatch.tick('BTCUSDT', 99); // fired again, persisted again
+        expect(localStorage.getItem('trade_level_hits_v1_alice')).toContain('btc-1:ENTRY');
+        expect(levelWatch.firedLevelsFor('btc-1')).toEqual(['btc-1:ENTRY']);
+    });
+
+    it('a reload mid-visit keeps the ENTRY latch silent until the next far-side cross', () => {
+        levelWatch.arm(PLAN, 105);
+        levelWatch.tick('BTCUSDT', 99); // ENTRY fires + latches
+        levelWatch.__resetForTests();   // reload; latch persisted, plan re-adopted
+        const afterReload = collectHits();
+        levelWatch.tick('BTCUSDT', 98); // still inside the visit — stays silent
+        expect(afterReload.length).toBe(0);
+        levelWatch.tick('BTCUSDT', 101); // far side → re-arm
+        levelWatch.tick('BTCUSDT', 99);  // new visit → re-ping
+        expect(afterReload.map(h => h.levelId)).toEqual(['btc-1:ENTRY']);
+    });
+
+    it('SL and TP stay strict fire-once across far-side re-crossings', () => {
+        const hits = collectHits();
+        levelWatch.arm(PLAN, 105);
+        levelWatch.tick('BTCUSDT', 95);   // ENTRY fires (visit 1)
+        levelWatch.tick('BTCUSDT', 89);   // still on the entry's near side: only SL fires
+        levelWatch.tick('BTCUSDT', 105);  // far side: ENTRY re-arms; SL stays latched forever
+        levelWatch.tick('BTCUSDT', 89);   // ENTRY re-fires; SL touched again — must NOT re-fire
+        levelWatch.tick('BTCUSDT', 115);  // TP1 fires once (and ENTRY re-arms again, far)
+        levelWatch.tick('BTCUSDT', 105);  // under TP1…
+        levelWatch.tick('BTCUSDT', 116);  // …through it again — TP1 must NOT re-fire
+        expect(hits.map(h => h.levelId)).toEqual([
+            'btc-1:ENTRY', 'btc-1:SL', 'btc-1:ENTRY', 'btc-1:TP1',
+        ]);
+    });
+
+    it('polled far-side prints re-arm an off-view plan too', () => {
+        // Same tick() path the REST poll feeds — re-arm is not view-feed-only.
+        const hits = collectHits();
+        levelWatch.arm(PLAN, 105);
+        levelWatch.tick('BTCUSDT', 99);   // fires
+        levelWatch.tick('BTCUSDT', 105);  // polled far-side print → re-arm
+        levelWatch.tick('BTCUSDT', 99);   // fires again
+        expect(hits.map(h => h.levelId)).toEqual(['btc-1:ENTRY', 'btc-1:ENTRY']);
     });
 });
 

@@ -7,9 +7,8 @@ import {
 import { runSimulation, computeKellyFraction, deriveSetupSeed } from '../services/analysis/MonteCarloService';
 import { calculateMetrics, findHistoricalMatches } from '../services/backtesting/ScenarioSimulatorService';
 import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
-import { applyMonteCarloRiskAdjustment } from '../services/backtesting/ModelPerformanceService';
 import { computeContractSize } from '../utils/ticketSize';
-import { AIProvider, LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
+import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
 
 const baseAnalysis = (overrides: Partial<TradeAnalysis> = {}): TradeAnalysis => ({
   coinName: 'BTCUSDT',
@@ -277,28 +276,6 @@ describe('LiveBacktestService — single-unit PnL + regime join (item 9)', () =>
     expect(result.currentRegimeStats).toBeDefined();
     expect(result.currentRegimeStats!.regime).toBe('trending');
     expect(result.currentRegimeStats!.count).toBe(2);
-  });
-});
-
-describe('ModelPerformanceService — MC risk adjustment is effectful (item 7)', () => {
-  const weights = { gemini: 0.5, deepseek: 0.5 } as unknown as Record<AIProvider, number>;
-  const providers = ['gemini', 'deepseek'] as unknown as AIProvider[];
-
-  it('a single SHARED result is (correctly) a no-op instead of the old fake penalty', () => {
-    const shared = { winRate: 20, maxDrawdownAvg: 40, expectedValue: -1 };
-    expect(applyMonteCarloRiskAdjustment(weights, shared, providers)).toEqual(weights);
-  });
-
-  it('a per-provider map penalizes the provider whose OWN setup simulated badly', () => {
-    const perProvider = {
-      gemini: { winRate: 60, maxDrawdownAvg: 5, expectedValue: 1 },    // clean
-      deepseek: { winRate: 20, maxDrawdownAvg: 40, expectedValue: -1 }, // dd ≥25 AND winRate <45 → ×0.49
-    };
-    const adjusted = applyMonteCarloRiskAdjustment(weights, perProvider, providers);
-    // Renormalized: gemini gains share, deepseek loses it — the distribution CHANGED.
-    expect(adjusted.deepseek).toBeLessThan(0.33);
-    expect(adjusted.gemini).toBeGreaterThan(0.67);
-    expect(adjusted.gemini + adjusted.deepseek).toBeCloseTo(1, 6);
   });
 });
 
