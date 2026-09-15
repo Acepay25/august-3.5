@@ -166,6 +166,16 @@ const buildBinanceSources = (symbol: string, interval: string, limit: number): F
  * watchdog / 15 s chart refresh) — without it the TTL halves their cadence
  * and can serve a just-closed bar its pre-close OHLC for up to 30 s. Fresh
  * results still land IN the cache (other consumers benefit either way).
+ *
+ * CACHE DOCTRINE: the cache key carries the SOURCE market. Spot-mirror
+ * candles used to land under the same key as native futures data (with only
+ * a console.warn at fetch time), so within the 30 s TTL a later native read
+ * could be served — or poison — the OTHER market's candles; on symbols with
+ * real basis the chart would silently flip between two instruments. Futures
+ * results live under `kline_f_*`, degraded spot-mirror results under
+ * `kline_s_*`, and total-failure empty results (source-agnostic) under
+ * `kline_e_*`. Reads prefer native, then degraded. In-flight coalescing
+ * stays source-agnostic because the fetch itself always tries futures first.
  */
 export const fetchKlines = async (
     symbol: string,
@@ -173,37 +183,56 @@ export const fetchKlines = async (
     limit: number = 300,
     opts?: { noCache?: boolean },
 ): Promise<Kline[]> => {
-    const cacheKey = `kline_${symbol}_${interval}_${limit}`;
-    const cached = klineCache.get(cacheKey);
-    if (cached && !opts?.noCache && Date.now() - cached.at < KLINE_CACHE_TTL_MS) return cached.data;
-    const inFlight = klineInFlight.get(cacheKey);
+    const inFlightKey = `kline_${symbol}_${interval}_${limit}`;
+    const futuresKey = `kline_f_${symbol}_${interval}_${limit}`;
+    const spotKey = `kline_s_${symbol}_${interval}_${limit}`;
+    const failedKey = `kline_e_${symbol}_${interval}_${limit}`;
+
+    const freshEntry = (key: string): Kline[] | null => {
+        const cached = klineCache.get(key);
+        return cached && Date.now() - cached.at < KLINE_CACHE_TTL_MS ? cached.data : null;
+    };
+
+    if (!opts?.noCache) {
+        const native = freshEntry(futuresKey);
+        if (native) return native;
+        const spot = freshEntry(spotKey);
+        if (spot && spot.length > 0) return spot;
+        const failed = freshEntry(failedKey);
+        if (failed) return failed;
+    }
+    const inFlight = klineInFlight.get(inFlightKey);
     if (inFlight) return inFlight;
 
     const promise = (async () => {
         try {
             // PRIMARY: the futures market itself — same instrument the user
             // trades, same basis as the markPrice@1s feed and the packet.
-            let data = await fetchKlinesFromSources(
+            const data = await fetchKlinesFromSources(
                 buildFuturesSources(symbol, interval, limit),
                 parseBinanceKlines,
                 `${symbol} ${interval} (futures)`,
             );
-            if (data.length === 0) {
-                console.warn(
-                    `[KlineService] futures klines unavailable for ${symbol} ${interval} — DEGRADED to the SPOT mirror chain; candles may deviate from the perp feed`,
-                );
-                data = await fetchKlinesFromSources(
-                    buildBinanceSources(symbol, interval, limit),
-                    parseBinanceKlines,
-                    `${symbol} ${interval} (spot fallback)`,
-                );
+            if (data.length > 0) {
+                klineCache.set(futuresKey, { at: Date.now(), data });
+                return data;
             }
-            klineCache.set(cacheKey, { at: Date.now(), data });
-            return data;
+            console.warn(
+                `[KlineService] futures klines unavailable for ${symbol} ${interval} — DEGRADED to the SPOT mirror chain; candles may deviate from the perp feed`,
+            );
+            const spotData = await fetchKlinesFromSources(
+                buildBinanceSources(symbol, interval, limit),
+                parseBinanceKlines,
+                `${symbol} ${interval} (spot fallback)`,
+            );
+            // The degraded market gets its OWN key — a later native success
+            // must never be served from (or serve) this entry.
+            klineCache.set(spotData.length > 0 ? spotKey : failedKey, { at: Date.now(), data: spotData });
+            return spotData;
         } finally {
-            klineInFlight.delete(cacheKey);
+            klineInFlight.delete(inFlightKey);
         }
     })();
-    klineInFlight.set(cacheKey, promise);
+    klineInFlight.set(inFlightKey, promise);
     return promise;
 };

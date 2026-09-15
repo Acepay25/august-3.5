@@ -79,4 +79,61 @@ describe('fetchKlines (futures-native chart history)', () => {
         expect(calls.some(u => u.includes('binance.vision') || u.includes('//api.binance.com'))).toBe(true);
         expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('DEGRADED to the SPOT mirror chain'));
     });
+
+    /**
+     * Cache doctrine (audit 2026-09-15 theme #3): the cache key carries the
+     * SOURCE market. Spot-mirror candles used to land under the shared key
+     * with only a console.warn, poisoning every later native read inside the
+     * 30 s TTL (the chart flipping instruments with no visible cause).
+     */
+    it('a degraded spot fetch never overwrites the native futures cache entry', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+            const url = String(input);
+            calls.push(url);
+            if (url.includes('fapi/v1/klines')) return respond(fapiCandles);
+            return respond({}, false);
+        }));
+        const native = await fetchKlines('CACHEPOISONUSDT', '15m', 60);
+        expect(native[0].close).toBeCloseTo(100.5, 6);
+
+        // Futures goes dark; a noCache re-sync degrades to the SPOT mirror.
+        vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+            const url = String(input);
+            calls.push(url);
+            if (url.includes('fapi/v1/klines')) return respond({}, false);
+            if (url.includes('klines')) return respond(spotCandles);
+            return respond({}, false);
+        }));
+        const degraded = await fetchKlines('CACHEPOISONUSDT', '15m', 60, { noCache: true });
+        expect(degraded[0].close).toBeCloseTo(200.5, 6);
+
+        // The poisoned regression: a normal read now — the shared key would
+        // serve the spot-mirror candles; the native key must still be intact.
+        const after = await fetchKlines('CACHEPOISONUSDT', '15m', 60);
+        expect(after[0].close).toBeCloseTo(100.5, 6);
+    });
+
+    it('prefers the native futures result over the degraded spot entry once futures recover', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+            const url = String(input);
+            if (url.includes('fapi/v1/klines')) return respond({}, false);
+            if (url.includes('klines')) return respond(spotCandles);
+            return respond({}, false);
+        }));
+        const degraded = await fetchKlines('CACHEPREFUSDT', '15m', 60);
+        expect(degraded[0].close).toBeCloseTo(200.5, 6);
+
+        // Futures recovers; the periodic noCache re-sync lands native data…
+        vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+            const url = String(input);
+            if (url.includes('fapi/v1/klines')) return respond(fapiCandles);
+            return respond({}, false);
+        }));
+        const resynced = await fetchKlines('CACHEPREFUSDT', '15m', 60, { noCache: true });
+        expect(resynced[0].close).toBeCloseTo(100.5, 6);
+
+        // …and cached reads return NATIVE, not the still-fresh spot entry.
+        const cached = await fetchKlines('CACHEPREFUSDT', '15m', 60);
+        expect(cached[0].close).toBeCloseTo(100.5, 6);
+    });
 });
