@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { VirtuosoHandle } from 'react-virtuoso';
 import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 
 // Apply the user's persisted idle-motion preference to <body> on app
@@ -20,6 +19,7 @@ import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
 import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
+import * as chatStore from './services/trade/chatStore';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -641,16 +641,18 @@ const App: React.FC = () => {
     const [insightProgress, setInsightProgress] = useState<{ done: number; total: number } | null>(null);
     const appRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    // KNOWN DEAD TARGET (audit UI-shell finding): the main transcript moved
-    // into the trade surface's Chart AI dock (TradeChatPanel renders a plain
-    // scroll container, NOT a Virtuoso) and the only mounted <Virtuoso> in
-    // the app is the journal's TradeLog list (different messages). So this
-    // handle cannot be attached anywhere from App — "Jump to latest analysis"
-    // and the gallery's onLocateMessage scroll calls no-op on it (the
-    // highlight side-effect still works). Fixing it needs a
-    // scrollToMessage(messageId) imperative prop threaded
-    // App → TradeView → TradeChatPanel — peer-owned files, see wave report.
-    const virtuosoRef = useRef<VirtuosoHandle>(null);
+    // ── Scroll-to-message bridge (audit UI-shell fix, 2026-09-15) ──────────
+    // The main transcript lives in the trade surface's Chart AI dock
+    // (TradeChatPanel renders a plain scroll container, NOT a Virtuoso), so
+    // the old virtuosoRef could never be attached and both scroll affordances
+    // were silent no-ops. The dock now registers a scrollToMessage(id)
+    // function here on mount (and null on unmount); "Jump to latest
+    // analysis" and the gallery's Locate call it. Ids are the chatStore
+    // entry ids stamped as `data-message-id` on each rendered entry.
+    const scrollToMessageRef = useRef<((messageId: string) => void) | null>(null);
+    const registerScrollToMessage = useCallback((fn: ((messageId: string) => void) | null): void => {
+        scrollToMessageRef.current = fn;
+    }, []);
     const mobileMenuRef = useRef<HTMLDivElement>(null);
 
     // Chart AI dock routing (the Chat surface is gone — roster clicks open
@@ -1431,7 +1433,7 @@ const App: React.FC = () => {
     const handleLocateMessage = useCallback((messageId: string) => {
         const index = messages.findIndex(m => m.id === messageId);
         if (index >= 0) {
-            virtuosoRef.current?.scrollToIndex({ index, behavior: 'smooth' });
+            scrollToMessageRef.current?.(messageId);
             setHighlightedAnalysisId(messageId);
         }
         setIsSavedGalleryOpen(false);
@@ -1765,15 +1767,28 @@ const App: React.FC = () => {
     };
 
     const handleScrollToBottom = () => {
-        let index = messages.length - 1;
-        for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === MessageRole.AI) {
-                index = i;
-                break;
+        // The transcript is the Chart AI dock now: aim the bridge at the
+        // LAST AI entry of the active dock session (what "latest analysis"
+        // means on screen). With an empty dock, fall back to the last
+        // App-side AI message id — a deliberate no-op scroll if that card
+        // isn't rendered in the transcript, exactly like before, while the
+        // highlight clear below always runs.
+        let targetId: string | undefined;
+        const snap = chatStore.getSnapshot();
+        const session = snap.sessions.find(s => s.id === snap.activeId);
+        if (session) {
+            for (let i = session.entries.length - 1; i >= 0; i--) {
+                const e = session.entries[i];
+                if (e.role === 'ai' && !e.notice) { targetId = e.id; break; }
             }
         }
-        if (index < 0) return;
-        virtuosoRef.current?.scrollIntoView({ index, align: 'end', behavior: 'smooth' });
+        if (!targetId) {
+            for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === MessageRole.AI) { targetId = messages[i].id; break; }
+            }
+        }
+        if (!targetId) return;
+        scrollToMessageRef.current?.(targetId);
         setHighlightedAnalysisId(null);
     };
 
@@ -1992,7 +2007,7 @@ const App: React.FC = () => {
         updateMessages(prev => [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)]);
     }, [updateMessages]);
 
-    const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string> => {
+    const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
         if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
         if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
         const images: ImageMetadata[] = chatImages.map(img => ({
@@ -2010,7 +2025,7 @@ const App: React.FC = () => {
             moderatorModel: moderatorModel ?? '',
             leverage: parseInt(leverageInput, 10) || DEFAULT_LEVERAGE,
         };
-        return new Promise<string>((resolve, reject) => {
+        return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
             let settled = false;
             handleSendMessage(prompt, images, undefined, {
                 automation: {
@@ -2025,7 +2040,13 @@ const App: React.FC = () => {
                         const verdict = a
                             ? `${a.direction ?? '—'} ${a.coinName ?? ''} · confidence ${a.confidence ?? '—'}${a.entryPoints?.[0]?.price ? ` · entry ${a.entryPoints[0].price}` : ''}${a.stopLoss ? ` · stop ${a.stopLoss}` : ''}`
                             : '';
-                        resolve([summary.slice(0, 8000), verdict].filter(Boolean).join('\n\n') || 'The analysis completed with no summary.');
+                        // Carry the message id back to the dock: it stamps
+                        // the answer entry's data-message-id so the gallery's
+                        // Locate can scroll straight to it.
+                        resolve({
+                            text: [summary.slice(0, 8000), verdict].filter(Boolean).join('\n\n') || 'The analysis completed with no summary.',
+                            messageId: aiMessage.id,
+                        });
                     },
                     onError: (error) => {
                         if (settled) return;
@@ -2932,6 +2953,7 @@ const App: React.FC = () => {
                                     coachSessionRequest={tradeCoachRequest || undefined}
                                     onRunAnalysis={handleRunAnalysisFromChat}
                                     onLogProposedTrade={handleLogProposedTrade}
+                                    registerScrollToMessage={registerScrollToMessage}
                                     renderCoachSurface={() => (
                                         <React.Suspense fallback={null}>
                                             <CoachThreadPanel

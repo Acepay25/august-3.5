@@ -121,10 +121,9 @@ describe('refinement runs OUTSIDE the notebook write lock', () => {
         // Let the evidence pass finish and RELEASE the lock, then race an
         // ordinary notebook write against the (still pending) refinement.
         await new Promise(r => setTimeout(r, 15));
-        let writerResolvedAt = 0;
         const folder = getMemoryFiles().folders.find(f => f.name === 'profile')!;
         await createMemoryFile(folder.id, 'racer.md', '# raced while refining', USER, true);
-        writerResolvedAt = Date.now();
+        const writerResolvedAt = Date.now();
 
         expect(refineResolvedAt).toBe(0); // the LLM is still in flight
         await evidence;

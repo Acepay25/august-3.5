@@ -17,9 +17,24 @@
  * one profile's latches into another's key (the chatStore lesson). Armed
  * plans persist too (`trade_level_arms_v1_${user}`) — a reload no longer
  * silently un-watches a live trade; the per-user adopt re-arms from storage.
+ *
+ * Ticks ride the visible chart's live feed (TradeView calls tick() with its
+ * mark, ~1s) — but that feed only ever carries the VIEWED coin. A plan armed
+ * for another symbol (a background/harness turn presenting an off-view
+ * instrument — reachable since the wave-3 turn-context; or an adopted
+ * reload/user-switch plan on a coin the chart isn't on) could therefore never
+ * see a tick and went silent — the same Tier-0 #6 shape watchService fixed
+ * for price watches. So the service runs its own 1s interval while ANY plan
+ * is armed and REST-polls the mark price (Binance futures premiumIndex,
+ * ~5s per symbol, same fetch+throttle shape as watchService's) for symbols
+ * whose last feed print went stale; a polled print runs through the exact
+ * same tick() crossing logic, so notify/queueHarnessSignal routing is
+ * automatic. A fresh live tick suppresses polling for its symbol, and the
+ * interval stops as soon as nothing is armed.
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
+import { fetchMarkPrice } from './markPricePoll';
 import {
     buildPlanLevels, detectLevelHits, staleLevelsAtArm,
     type LevelHit, type PlanLevel, type WatchPlan,
@@ -40,6 +55,11 @@ const MAX_LATCHED = 200;
  *  set was memory-only). */
 const ARMS_KEY_PREFIX = 'trade_level_arms_v1';
 const MAX_ARMS = 10;
+/** Per-symbol REST throttle for armed-but-not-visible symbols — the visible
+ *  chart feed refreshes its symbol ~1s, so in practice only off-view symbols
+ *  go stale and get polled (a quiet/unmounted chart degrades to polled too).
+ *  Same 5s cadence as watchService's cross-symbol poll. */
+const PRICE_POLL_INTERVAL_MS = 5_000;
 
 const hitsKey = (user: string): string => `${HITS_KEY_PREFIX}_${user}`;
 const armsKey = (user: string): string => `${ARMS_KEY_PREFIX}_${user}`;
@@ -48,6 +68,14 @@ let armed = new Map<string, ArmedPlan>();
 let fired = new Set<string>();
 let firedFor = '';
 const subscribers = new Set<(hit: LevelHit, plan: WatchPlan) => void>();
+/** Last price per symbol + when it arrived. tick() (the visible chart feed)
+ *  and the REST poll both write here; the freshness check is what identifies
+ *  the symbols the poller owns — the poller never fetches a symbol the view
+ *  feed printed within the last ~5s. */
+let priceBySymbol = new Map<string, { price: number; at: number }>();
+const lastPollAttempt = new Map<string, number>();
+const pollInFlight = new Set<string>();
+let clock: ReturnType<typeof setInterval> | null = null;
 
 const validPlan = (p: unknown): p is WatchPlan => {
     const v = p as WatchPlan & Record<string, unknown>;
@@ -101,12 +129,57 @@ const loadFired = (): void => {
         if (Array.isArray(parsed)) fired = new Set(parsed.filter((x): x is string => typeof x === 'string'));
     } catch { /* fresh latch */ }
     loadArmed();
+    // A switch can empty or populate `armed` — the REST-poll clock follows it.
+    syncClock();
 };
 
 const persistFired = (): void => {
     try {
         localStorage.setItem(hitsKey(firedFor), JSON.stringify([...fired].slice(-MAX_LATCHED)));
     } catch { /* private mode — latches live in memory this session */ }
+};
+
+/** REST-poll every armed plan's symbol whose feed went stale. The visible
+ *  chart tick refreshes its symbol ~1s, so in practice only off-view symbols
+ *  reach this (a plan armed by a background turn for a coin the chart isn't
+ *  on — Tier-0 #6 for this watch family). Each symbol is attempted at most
+ *  once per PRICE_POLL_INTERVAL_MS (throttle counts attempts, not successes,
+ *  so a dead endpoint can't hot-loop); a successful print runs the existing
+ *  tick() crossing logic, which carries the subscriber routing (notify +
+ *  queueHarnessSignal live on the subscribe path, so polled hits route the
+ *  same as view-fed ones). */
+const pollStaleSymbols = (nowMs: number): void => {
+    loadFired(); // a user switch mid-watch replaces `armed` (and may end the clock)
+    if (armed.size === 0) { syncClock(); return; }
+    const targets = new Set<string>();
+    for (const a of armed.values()) {
+        const entry = priceBySymbol.get(a.plan.symbol);
+        if (entry && nowMs - entry.at < PRICE_POLL_INTERVAL_MS) continue; // feed is fresh
+        targets.add(a.plan.symbol);
+    }
+    for (const symbol of targets) {
+        if (pollInFlight.has(symbol)) continue;
+        if (nowMs - (lastPollAttempt.get(symbol) ?? 0) < PRICE_POLL_INTERVAL_MS) continue;
+        lastPollAttempt.set(symbol, nowMs);
+        pollInFlight.add(symbol);
+        void fetchMarkPrice(symbol).then(price => {
+            if (price !== null) tick(symbol, price);
+        }).finally(() => pollInFlight.delete(symbol));
+    }
+};
+
+/** The 1s poll clock. It runs while ANY plan is armed — deliberately NOT only
+ *  while a symbol looks stale: if the clock stopped the moment every print
+ *  was fresh, a view feed that then died (unmounted chart, dropped socket)
+ *  would have nothing left to notice the staleness, and the silent-starvation
+ *  gap would re-open. An armed plan with no live feed to tick it is exactly
+ *  the case this exists for (same reasoning as watchService's clock). */
+const syncClock = (): void => {
+    const needsClock = armed.size > 0;
+    if (needsClock && !clock) {
+        clock = setInterval(() => pollStaleSymbols(Date.now()), 1000);
+    }
+    if (!needsClock && clock) { clearInterval(clock); clock = null; }
 };
 
 /** Start watching a plan. `priceAtArm` (the live mark, if known) feeds the
@@ -122,11 +195,14 @@ export const arm = (plan: WatchPlan, priceAtArm: number | null): void => {
     }
     armed.set(plan.planId, { plan, levels: buildPlanLevels(plan), prev: null });
     persistArmed();
+    // The arm may have introduced a symbol the live feed never ticks — make
+    // sure the REST poll clock exists to cover it.
+    syncClock();
 };
 
 export const disarm = (planId: string): void => {
     loadFired();
-    if (armed.delete(planId)) persistArmed();
+    if (armed.delete(planId)) { persistArmed(); syncClock(); }
 };
 
 /** Drop every plan on a symbol (the trade surface resets its watch when the
@@ -135,13 +211,19 @@ export const disarmSymbol = (symbol: string): void => {
     loadFired();
     let changed = false;
     for (const [id, a] of armed) if (a.plan.symbol === symbol) { armed.delete(id); changed = true; }
-    if (changed) persistArmed();
+    if (changed) { persistArmed(); syncClock(); }
 };
 
-/** One live price observation for a symbol (the feed's ~1s mark price). */
+/** One live price observation for a symbol — either the visible chart's
+ *  ~1s mark feed (TradeView) or the internal REST poll feeding an off-view
+ *  symbol. Records the print (freshness gates the poller) and runs the
+ *  crossing logic for that symbol's armed plans. */
 export const tick = (symbol: string, price: number): void => {
     loadFired(); // adopt a user switch BEFORE the empty check — the reload
-    if (armed.size === 0) return; // may populate `armed` itself
+    // may populate `armed` itself
+    if (!Number.isFinite(price) || price <= 0) return; // never poison `prev`/freshness
+    priceBySymbol.set(symbol, { price, at: Date.now() });
+    if (armed.size === 0) return;
     const isFired = (id: string): boolean => fired.has(id);
     for (const a of armed.values()) {
         if (a.plan.symbol !== symbol) continue;
@@ -185,4 +267,8 @@ export const __resetForTests = (): void => {
     fired = new Set();
     firedFor = '';
     subscribers.clear();
+    priceBySymbol = new Map();
+    lastPollAttempt.clear();
+    pollInFlight.clear();
+    if (clock) { clearInterval(clock); clock = null; }
 };
