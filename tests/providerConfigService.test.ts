@@ -66,6 +66,68 @@ describe('ProviderConfigService', () => {
     });
   });
 
+  describe('API key decryption (Electron safeStorage bridge)', () => {
+    const setBridge = (decryptSecret: (payload: string) => Promise<string | null>) => {
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        encryptSecret: vi.fn(async (plain: string) => `enc:v1:${plain}`),
+        decryptSecret,
+      };
+    };
+    const clearBridge = () => {
+      delete (window as unknown as { electronAPI?: unknown }).electronAPI;
+    };
+
+    it('returns the decrypted key when the bridge succeeds', async () => {
+      setBridge(async (payload) => payload === 'enc:v1:xyz' ? 'sk-live' : null);
+      store = [makeConfig({ apiKey: 'enc:v1:xyz' })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].apiKey).toBe('sk-live');
+      expect(getReadyProviders(loaded).map((c) => c.id)).toEqual(['prov-a']);
+      clearBridge();
+    });
+
+    it('FAILED decryption yields an EMPTY key (not-ready), never the ciphertext blob', async () => {
+      setBridge(async () => null);
+      store = [makeConfig({ apiKey: 'enc:v1:cipherblob' })];
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const loaded = await loadProviderConfigs();
+      // Pre-fix this returned 'enc:v1:cipherblob' — non-empty, so it passed the
+      // readiness check and was sent verbatim as the Bearer token.
+      expect(loaded[0].apiKey).toBe('');
+      expect(getReadyProviders(loaded)).toEqual([]);
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+      clearBridge();
+    });
+
+    it('a decrypt bridge that THROWS is also handled as not-ready', async () => {
+      setBridge(async () => {
+        throw new Error('keyring locked');
+      });
+      store = [makeConfig({ apiKey: 'enc:v1:cipherblob' })];
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].apiKey).toBe('');
+      warn.mockRestore();
+      clearBridge();
+    });
+
+    it('bridge-absent keeps the documented raw-payload passthrough (web/Capacitor plaintext)', async () => {
+      clearBridge();
+      store = [makeConfig({ apiKey: 'enc:v1:cipherblob' })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].apiKey).toBe('enc:v1:cipherblob');
+    });
+
+    it('plaintext (non-enc) values pass through untouched even with a bridge', async () => {
+      setBridge(async () => null);
+      store = [makeConfig({ apiKey: 'sk-plain' })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].apiKey).toBe('sk-plain');
+      clearBridge();
+    });
+  });
+
   describe('addCustomProvider / removeCustomProvider', () => {
     it('adds a provider with a generated id and isBuiltIn=false', async () => {
       const updated = await addCustomProvider({

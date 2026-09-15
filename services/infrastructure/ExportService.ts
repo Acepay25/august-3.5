@@ -200,6 +200,7 @@ export const canShare = async (): Promise<boolean> => {
 
 import { getAllKeys, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './PreferencesService';
 import { ProviderConfig } from '../../types/provider';
+import { validateProviderUrl } from '../../utils/providerUrlValidation';
 
 const redactPreferenceValue = (key: string, value: unknown): unknown => {
     if (key !== PREF_KEYS.PROVIDER_CONFIGS || !Array.isArray(value)) return value;
@@ -261,24 +262,225 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
 };
 
 /**
- * Import preference keys from backup
+ * Preference keys a backup is allowed to restore.
+ *
+ * `exportPreferencesData` sweeps EVERY key in the Preferences/localStorage
+ * store, so an unfiltered import lets a crafted backup plant arbitrary keys
+ * (arbitrary pref-key injection). Restores are therefore gated by this
+ * allow-list, which enumerates what the app itself writes at backup time:
+ * the PREF_KEYS constants plus every username-scoped / service namespace
+ * greppable in the codebase (memory files, learning rules, chat sessions,
+ * drawings, automations, desk state, forged tools, agent roster, …).
+ * Unknown keys are skipped and reported, never silently persisted.
  */
-export const importPreferencesData = async (backup: Record<string, any>): Promise<void> => {
-    for (const [key, value] of Object.entries(backup)) {
-        try {
-            if (key === PREF_KEYS.PROVIDER_CONFIGS && Array.isArray(value)) {
-                const existing = await getPreferenceObject<ProviderConfig[]>(key) || [];
-                const merged = value.map((provider: ProviderConfig) => {
-                    const current = existing.find(item => item.id === provider.id);
-                    return provider.apiKey
-                        ? provider
-                        : { ...provider, apiKey: current?.apiKey || '' };
-                });
-                await setPreferenceObject(key, merged);
+const RESTORABLE_PREFERENCE_KEYS: ReadonlySet<string> = new Set<string>(
+    Object.values(PREF_KEYS) as string[],
+);
+
+/** Prefix-matched namespaces for dynamic/scoped keys. */
+const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
+    // Learning / memory (username-scoped)
+    'memory_files_v1_',
+    'memory_injections_v1_',
+    'learning_rules_v2_',
+    'global_learning_state_',
+    'rl_signals_data',
+    'profile_memory_v1',
+    'belief_challenge_v1_',
+    'monthly_report_v1_',
+    'meta_calibration_v1_',
+    'regime_ledger_v1_',
+    'preflight_results_v1_',
+    'skill_graveyard_v1_',
+    'strategy_regime_matrix_v1_',
+    'weekly_review_v1_',
+    'weekly_rollup_v1_',
+    'pass_mining_v1_',
+    'skill_veto_ledger_v1_',
+    'learning_proposals_v1',
+    'skill_drafts_v1',
+    'session_review_counter_v1',
+    'session_review_drafted_v1',
+    'session_review_open_theses_v1',
+    'session_review_resolver_v1',
+    'trader_learning_v1',
+    'trader_learner_counter_v1',
+    'supervisor_auto_v1',
+    // Per-user prompt/strategy docs + automations
+    'prompt_overrides_v1_',
+    'strategy_docs_v1_',
+    'automations_v1_',
+    'automation_runs_v1_',
+    'automation_last_seen_v1_',
+    // Trading surface (watches, levels, chat sessions, drawings)
+    'trade_level_hits_v1',
+    'trade_level_arms_v1',
+    'trade_watches_v1',
+    'trade_chat_sessions_v1_',
+    'trade_chat_active_v1_',
+    'trade_drawings_v1_',
+    'trade_session_drawings_v1_',
+    'trade_sidebar_open_v1',
+    'trade_tf_bar_v1',
+    // Bots / agents / desk
+    'bots_v1_',
+    'agents_bots_v1',
+    'agents_groups_v1',
+    'agents_teams_v1',
+    'agents_active_team_v1',
+    'agent_threads_opened_v1',
+    'desk_tools_forged_v1',
+    'desk_idle_motion_v1',
+    'desk_role_overrides_v1',
+    'desk_room_layout_v1',
+    // Shell / misc app state
+    'harness_settings_v1',
+    'book_drafts_seeded_v1',
+    'august_active_user',
+    'last_active_user',
+    'august_sidebar_pane',
+    // Per-user variants of PREF_KEYS values (`<key>_<username>`)
+    'data_version_',
+    'last_session_',
+    'last_trade_count_',
+];
+
+export const isRestorablePreferenceKey = (key: string): boolean =>
+    RESTORABLE_PREFERENCE_KEYS.has(key) ||
+    RESTORABLE_PREFERENCE_KEY_PREFIXES.some(prefix => key.startsWith(prefix));
+
+/** Outcome of an importPreferencesData run (returned + logged; callers may ignore). */
+export interface ImportPreferencesReport {
+    /** Allowed keys successfully persisted. */
+    keysWritten: number;
+    /** Keys present in the backup that are NOT on the restore allow-list. */
+    skippedKeys: string[];
+    /** Allowed keys whose write threw (restore was partial). */
+    failedKeys: string[];
+    /** Provider entries accepted into provider_configs_v1. */
+    providersImported: number;
+    /** Provider entries dropped for an unparseable/invalid baseUrl or shape. */
+    providersDropped: number;
+    /** Entries that inherited the live key (backup pointed at the same endpoint). */
+    providersKeyGrafted: number;
+    /** Entries kept but with an EMPTY key — the user must re-enter it. */
+    providersRequiringKeyReentry: number;
+}
+
+/**
+ * Merge a backup's provider list into the live one WITHOUT ever letting the
+ * merge exfiltrate a live API key. Exported backups redact keys, so a naive
+ * "keep the current key when the backup's is empty" graft lets a crafted
+ * backup pair `{apiKey:'', baseUrl:'https://evil.tld'}` with the user's REAL
+ * key (key grafting onto an attacker-chosen host). Rules:
+ *  - every imported baseUrl must pass validateProviderUrl or the entry is
+ *    dropped (counted);
+ *  - the live key is grafted ONLY when the backup entry points at exactly the
+ *    same validated endpoint as the current config for that id;
+ *  - a changed or absent baseUrl with an empty backup key yields a
+ *    present-but-not-ready entry (empty key) so the UI asks the user to
+ *    re-enter it instead of silently sending their key somewhere new.
+ */
+const mergeProviderConfigsForImport = async (
+    backupProviders: unknown[],
+    existing: ProviderConfig[],
+): Promise<{ merged: ProviderConfig[]; dropped: number; grafted: number; reentry: number }> => {
+    const merged: ProviderConfig[] = [];
+    let dropped = 0;
+    let grafted = 0;
+    let reentry = 0;
+
+    for (const raw of backupProviders) {
+        if (!raw || typeof raw !== 'object' || typeof (raw as { id?: unknown }).id !== 'string') {
+            dropped += 1;
+            continue;
+        }
+        const provider = raw as ProviderConfig;
+        const rawBaseUrl = typeof provider.baseUrl === 'string' ? provider.baseUrl.trim() : '';
+
+        let normalizedBackupUrl: string | null = null;
+        if (rawBaseUrl) {
+            const validation = validateProviderUrl(rawBaseUrl);
+            if (!validation.valid) {
+                console.warn(`[ExportService] Dropped imported provider "${provider.id}": invalid baseUrl (${validation.message})`);
+                dropped += 1;
                 continue;
             }
-            // Check if this is a known preference key or legacy key
-            // Start simple: just save it
+            normalizedBackupUrl = validation.normalizedUrl;
+        }
+
+        const backupKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
+        if (backupKey) {
+            // The backup carries its own key (non-redacted / hand-made file) —
+            // keep it; nothing is grafted from the live config.
+            merged.push({ ...provider, baseUrl: normalizedBackupUrl ?? provider.baseUrl });
+            continue;
+        }
+
+        // Empty backup key (the normal redacted case). Graft the live key only
+        // when both sides validate to the SAME endpoint.
+        const current = existing.find(item => item?.id === provider.id);
+        const currentKey = typeof current?.apiKey === 'string' ? current.apiKey : '';
+        const currentBaseUrl = typeof current?.baseUrl === 'string' ? current.baseUrl.trim() : '';
+        const currentValidation = currentBaseUrl ? validateProviderUrl(currentBaseUrl) : null;
+        if (
+            currentKey &&
+            normalizedBackupUrl &&
+            currentValidation?.valid &&
+            currentValidation.normalizedUrl === normalizedBackupUrl
+        ) {
+            merged.push({ ...provider, baseUrl: normalizedBackupUrl, apiKey: currentKey });
+            grafted += 1;
+        } else {
+            if (currentKey) reentry += 1; // would have been grafted pre-fix
+            merged.push({ ...provider, apiKey: '' });
+        }
+    }
+
+    return { merged, dropped, grafted, reentry };
+};
+
+/**
+ * Import preference keys from backup.
+ *
+ * SECURITY: only allow-listed keys are persisted (see
+ * {@link isRestorablePreferenceKey}); provider entries go through the
+ * hardened key-graft rules (see {@link mergeProviderConfigsForImport}).
+ * The returned report counts drops/skips so restore callers can surface
+ * a partial restore instead of it being silent.
+ */
+export const importPreferencesData = async (
+    backup: Record<string, any>,
+): Promise<ImportPreferencesReport> => {
+    const report: ImportPreferencesReport = {
+        keysWritten: 0,
+        skippedKeys: [],
+        failedKeys: [],
+        providersImported: 0,
+        providersDropped: 0,
+        providersKeyGrafted: 0,
+        providersRequiringKeyReentry: 0,
+    };
+
+    for (const [key, value] of Object.entries(backup)) {
+        try {
+            if (!isRestorablePreferenceKey(key)) {
+                console.warn(`[ExportService] Skipped non-allow-listed backup key: ${key}`);
+                report.skippedKeys.push(key);
+                continue;
+            }
+            if (key === PREF_KEYS.PROVIDER_CONFIGS && Array.isArray(value)) {
+                const existing = await getPreferenceObject<ProviderConfig[]>(key) || [];
+                const { merged, dropped, grafted, reentry } = await mergeProviderConfigsForImport(value, existing);
+                await setPreferenceObject(key, merged);
+                report.keysWritten += 1;
+                report.providersImported = merged.length;
+                report.providersDropped = dropped;
+                report.providersKeyGrafted = grafted;
+                report.providersRequiringKeyReentry = reentry;
+                continue;
+            }
+            // Known preference key — persist exactly as before.
             if (typeof value === 'object') {
                 await setPreferenceObject(key, value);
             } else {
@@ -286,8 +488,15 @@ export const importPreferencesData = async (backup: Record<string, any>): Promis
                 // wrapper might be needed if base is string
                 await setPreferenceObject(key, value);
             }
+            report.keysWritten += 1;
         } catch (error) {
             console.error(`[ExportService] Failed to import key ${key}:`, error);
+            report.failedKeys.push(key);
         }
     }
+
+    if (report.skippedKeys.length || report.failedKeys.length || report.providersDropped || report.providersRequiringKeyReentry) {
+        console.warn('[ExportService] importPreferencesData report:', report);
+    }
+    return report;
 };

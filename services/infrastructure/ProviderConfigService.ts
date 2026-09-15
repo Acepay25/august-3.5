@@ -54,14 +54,25 @@ async function encryptKey(apiKey: string): Promise<string> {
 async function decryptKey(stored: string): Promise<string> {
     if (!stored || !isEncrypted(stored)) return stored;
     const bridge = getCryptoBridge();
-    // Fail open: when the bridge is unavailable (web/Capacitor) or the OS
-    // keychain can't decrypt (fresh OS session, changed DPAPI/keyring
-    // credentials), return the stored payload as-is. Returning '' here made
-    // the next save re-encrypt an empty key and permanently destroy the
-    // stored secret — unrecoverable key loss.
+    // Bridge unavailable (web/Capacitor — documented plaintext storage): return
+    // the stored payload as-is, unchanged behavior for those platforms.
     if (!bridge) return stored;
-    const decrypted = await bridge.decryptSecret(stored);
-    return decrypted || stored;
+    // The bridge EXISTS but the DECRYPT failed (OS keychain rotated, fresh
+    // session, DPAPI/keyring credentials changed). Returning the raw
+    // `enc:v1:…` blob as the apiKey was fail-OPEN in the wrong direction: the
+    // ciphertext satisfies the non-empty readiness check (`apiKey.trim().length
+    // > 0`) and got sent verbatim as the Bearer token to the provider. Mark
+    // the provider NOT-READY instead — an empty key keeps it present in the
+    // list, fails readiness, and the UI prompts the user to re-enter the key.
+    try {
+        const decrypted = await bridge.decryptSecret(stored);
+        if (decrypted) return decrypted;
+        console.warn('[ProviderConfigService] Failed to decrypt stored API key (OS keychain unavailable or rotated). Provider marked not ready — re-enter the key in Settings → Providers.');
+        return '';
+    } catch (error) {
+        console.warn('[ProviderConfigService] API key decryption threw; provider marked not ready — re-enter the key in Settings → Providers.', error);
+        return '';
+    }
 }
 
 // ─── Provider Configuration Service ───────────────────────────────────────
