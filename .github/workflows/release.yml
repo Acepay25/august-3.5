@@ -30,10 +30,21 @@ jobs:
       # is set, the base64 .jks is decoded to android/release.keystore and its
       # companion secrets are written to android/keystore.properties, which
       # android/app/build.gradle consumes — and ONLY then signs the release.
-      # Without any of the secrets the step's condition is false and every run
-      # proceeds exactly as before.
+      # NOTE: `secrets` is NOT an available context in step-level `if:` (a
+      # `secrets.X` reference there fails the whole workflow with an invalid-
+      # file, zero-job run on every push), so presence is bridged through a
+      # step output; secrets are only read via `env:`, where they ARE allowed.
+      - name: Detect Android signing secrets
+        id: android-signing
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if ($env:ANDROID_KEYSTORE_B64) { 'present=true' >> $env:GITHUB_OUTPUT }
+          else { 'present=false' >> $env:GITHUB_OUTPUT }
+
       - name: Provision Android signing (no-op unless ANDROID_KEYSTORE_B64 is set)
-        if: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
+        if: steps.android-signing.outputs.present == 'true'
         shell: pwsh
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
