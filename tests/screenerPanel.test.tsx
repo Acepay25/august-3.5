@@ -13,7 +13,7 @@ const { runScreenerMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../services/trade/screener', () => ({
-    runScreener: (...args: unknown[]) => runScreenerMock(...args),
+    runScreenerWithStatus: (...args: unknown[]) => runScreenerMock(...args),
 }));
 
 import ScreenerPanel from '../components/trade/ScreenerPanel';
@@ -32,10 +32,10 @@ const ROWS = [
 
 beforeEach(() => {
     runScreenerMock.mockReset();
-    runScreenerMock.mockImplementation(async ({ onRows }) => {
+    runScreenerMock.mockImplementation(async ({ onRows }: { onRows?: (r: unknown[]) => void }) => {
         onRows?.(ROWS.slice(0, 1));
         onRows?.(ROWS);
-        return ROWS;
+        return { rows: ROWS, universeFailed: false };
     });
 });
 
@@ -80,5 +80,32 @@ describe('ScreenerPanel', () => {
         rerender(<ScreenerPanel open={false} onClose={onClose} onChangeSymbol={vi.fn()} />);
         // A closed panel renders nothing at all.
         expect(screen.queryByTestId('screener-panel')).toBeNull();
+    });
+
+    it('shows a red feed-failed row with retry when the universe fetch failed', async () => {
+        runScreenerMock.mockImplementation(async () => ({ rows: [], universeFailed: true }));
+        mount();
+        await waitFor(() => expect(screen.getByText(/Feed failed/i)).toBeTruthy());
+        // NOT the honest-empty message — a blind screen must never read "No coins match".
+        expect(screen.queryByText(/No coins match/)).toBeNull();
+        expect(screen.getByTestId('screener-retry')).toBeTruthy();
+    });
+
+    it('retry re-runs the scan and recovers when the feed answers', async () => {
+        runScreenerMock.mockImplementationOnce(async () => ({ rows: [], universeFailed: true }));
+        mount();
+        await waitFor(() => expect(screen.getByTestId('screener-retry')).toBeTruthy());
+        fireEvent.click(screen.getByTestId('screener-retry'));
+        await waitFor(() => expect(runScreenerMock).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.getByTestId('screener-row-BTCUSDT')).toBeTruthy());
+        expect(screen.queryByText(/Feed failed/i)).toBeNull();
+        expect(screen.queryByText(/No coins match/)).toBeNull();
+    });
+
+    it('empty-but-alive universe still says "No coins match" (honest empty)', async () => {
+        runScreenerMock.mockImplementation(async () => ({ rows: [], universeFailed: false }));
+        mount();
+        await waitFor(() => expect(screen.getByText('No coins match.')).toBeTruthy());
+        expect(screen.queryByText(/Feed failed/i)).toBeNull();
     });
 });

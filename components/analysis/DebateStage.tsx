@@ -88,7 +88,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                 <div className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5">
                     {stages.map((stage, i) => (
                         <React.Fragment key={stage.id}>
-                            {i > 0 && <span className="text-[9px] text-zinc-700">›</span>}
+                            {i > 0 && <span className="text-[9px] text-zinc-500">›</span>}
                             <span
                                 title={stage.note || stage.label}
                                 className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${

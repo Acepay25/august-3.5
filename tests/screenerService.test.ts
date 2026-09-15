@@ -22,7 +22,7 @@ vi.mock('../services/learning/EvidencePackService', () => ({
     computeSetupClusterStats: (...args: unknown[]) => clusterMock(...args),
 }));
 
-import { runScreener, screenerToMarkdown } from '../services/trade/screener';
+import { runScreener, runScreenerWithStatus, screenerToMarkdown } from '../services/trade/screener';
 import type { Kline } from '../services/analysis/MarketDataService';
 
 const UNIVERSE = [
@@ -85,6 +85,24 @@ describe('runScreener', () => {
         const rows = await runScreener({});
         expect(Array.isArray(rows[0].setups)).toBe(true);
         rows[0].setups.forEach(s => expect(['long', 'short', 'watch']).toContain(s.side));
+    });
+
+    it('flags universeFailed when the universe feed answers with nothing', async () => {
+        // fetchAllFuturesSymbols swallows transport failure to [] — the
+        // screener must surface that as a DEAD FEED, not an empty result.
+        universeMock.mockResolvedValue([]);
+        const result = await runScreenerWithStatus({});
+        expect(result.universeFailed).toBe(true);
+        expect(result.rows).toEqual([]);
+        // The compat wrapper (desk tool path) keeps its array contract.
+        await expect(runScreener({})).resolves.toEqual([]);
+    });
+
+    it('reports universeFailed false for a normal scan', async () => {
+        klinesMock.mockResolvedValue(klines(Array.from({ length: 60 }, (_, i) => 100 + i)));
+        const result = await runScreenerWithStatus({ limit: 2 });
+        expect(result.universeFailed).toBe(false);
+        expect(result.rows.map(r => r.symbol)).toEqual(['BTCUSDT', 'ETHUSDT']);
     });
 });
 

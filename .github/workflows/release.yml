@@ -1,7 +1,9 @@
 name: Build & Release
 
-# Verify gates live on CI (push/PR to main). This job only packages.
-# Tag must still match package.json (v1.0.17 === version 1.0.17).
+# Verify gates are duplicated here on purpose: release.yml can be dispatched
+# manually (workflow_dispatch) without ever having passed CI, and publishing
+# to every updater is irreversible. Tag must still match package.json
+# (v1.0.17 === version 1.0.17).
 on:
   push:
     tags:
@@ -37,6 +39,12 @@ jobs:
           $version = (Get-Content package.json | ConvertFrom-Json).version
           if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag $env:GITHUB_REF_NAME does not match package version v$version" }
 
+      - name: Tests
+        run: npm run test
+
+      - name: Lint
+        run: npm run lint
+
       - name: Build renderer (Vite)
         run: npm run build
 
@@ -49,6 +57,12 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run e2e
+
+      # Prod-bundle boot probe (v1.0.20 splash-hang lesson): serves dist/ via
+      # vite preview and fails on any pageerror. Needs the chromium installed
+      # by the smoke step above.
+      - name: Boot probe (production bundle)
+        run: npm run boot-probe
 
       - name: Build & publish Electron app
         run: npx electron-builder --win --publish always

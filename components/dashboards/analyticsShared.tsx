@@ -31,6 +31,10 @@ export interface MonteCarloResult {
         lower: number;
         upper: number;
     };
+    /** TRUE average win from the positive-PnL sample (MonteCarloService
+     *  wave-2 fix). Optional: legacy results predate it. The Kelly pill
+     *  feeds this to computeKellyFraction as the 5th arg. */
+    avgWinPercent?: number;
 }
 
 export interface LiveBacktestResult {

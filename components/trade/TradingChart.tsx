@@ -363,7 +363,12 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         let cancelled = false;
         let timer = 0;
         let watchdog = 0;
+        // In-flight flag: the stall watchdog fires every 5 s while a fetch is
+        // still pending — without this guard the stalled loads pile up.
+        let inFlight = false;
         const load = async (isInitial: boolean): Promise<void> => {
+            if (cancelled || inFlight) return;
+            inFlight = true;
             try {
                 // Refreshes (non-initial) bypass the 30 s kline cache — with it
                 // the 15 s poll and the live-stall watchdog re-fetch the same
@@ -403,8 +408,15 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 }
                 if (!live) timer = window.setTimeout(() => void load(false), REFRESH_MS);
             } catch {
-                if (!cancelled) setStatus('unavailable');
-                timer = window.setTimeout(() => void load(false), 4000);
+                // EVERYTHING post-failure stays inside the cancellation guard:
+                // arming the retry outside it kept dead-symbol effects retrying
+                // a fetch every 4 s forever after a symbol switch.
+                if (!cancelled) {
+                    setStatus('unavailable');
+                    timer = window.setTimeout(() => void load(false), 4000);
+                }
+            } finally {
+                inFlight = false;
             }
         };
         void load(true);

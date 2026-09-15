@@ -30,6 +30,11 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
   useEffect(() => {
     if (!active) return;
 
+    // If the container ref was never attached, an unattached trap is worse
+    // than no trap: the keydown handler would preventDefault Tab with zero
+    // focusables and freeze the keyboard document-wide. Stay inert.
+    if (!containerRef.current) return;
+
     // Save the currently focused element to restore later
     previousFocusRef.current = document.activeElement as HTMLElement;
 

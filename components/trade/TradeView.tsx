@@ -19,7 +19,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { GripVertical } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade } from '../../types';
-import { fetchMarkIndex, fetchMarketData, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
+import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import { loadSessionModelDrawings, saveSessionModelDrawings } from '../../services/trade/chartDrawings';
@@ -37,6 +37,7 @@ import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel from './TradeChatPanel';
+import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
 import type { AgentBot } from '../../services/agents/agentRoster';
@@ -133,6 +134,24 @@ const fundingProgress = (nextFundingTime: number, nowMs: number): { frac: number
     return { frac, soon: left <= 30 * 60_000 };
 };
 
+/** Live (<md) viewport flag — the order-book sidebar is `hidden md:block`,
+ *  so below the md breakpoint the NavRail's book toggle needs an overlay
+ *  drawer instead. Guarded for jsdom (no matchMedia → assume wide). */
+const useIsBelowMd = (): boolean => {
+    const [below, setBelow] = useState<boolean>(() => {
+        try { return !window.matchMedia('(min-width: 768px)').matches; } catch { return false; }
+    });
+    useEffect(() => {
+        let mql: MediaQueryList;
+        try { mql = window.matchMedia('(min-width: 768px)'); } catch { return; }
+        const onChange = (): void => setBelow(!mql.matches);
+        onChange();
+        mql.addEventListener('change', onChange);
+        return () => { mql.removeEventListener('change', onChange); };
+    }, []);
+    return below;
+};
+
 /** Prototype hero-row sparkline: the last ~48 closes of the chart's OWN
  *  timeframe, from one small fetch (KlineService's 30 s cache covers a coin
  *  round-trip). Null while loading/failed — the row never shows a fake line. */
@@ -176,6 +195,14 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const [dockCollapsed, setDockCollapsed] = useState(false);
     const [dockExpanded, setDockExpanded] = useState(false);
     const [screenerOpen, setScreenerOpen] = useState(false);
+    // Below md the sidebar itself is `hidden md:block` — an invisible toggle.
+    // The book rides a fixed overlay drawer instead. The close button cannot
+    // flip App's `sidebarOpen` (NavRail owns it), so dismissal is a LOCAL
+    // override that resets whenever the toggle is flipped again.
+    const isBelowMd = useIsBelowMd();
+    const [bookDismissed, setBookDismissed] = useState(false);
+    useEffect(() => { setBookDismissed(false); }, [sidebarOpen]);
+    const bookDrawerOpen = isBelowMd && sidebarOpen && !bookDismissed;
     /** Key-level lines a Chat AI message card is currently SHOWING on the
      *  chart (toggle / pin / hover resolved by the dock). Transient view state
      *  — never persisted, stamped with its symbol so a coin switch blanks it. */
@@ -251,9 +278,15 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         let cancelled = false;
         const load = async (): Promise<void> => {
             try {
+                // Futures-native ticker: the strip's 24h change/volume used
+                // to come from the SPOT ticker (fetchMarketData) while the
+                // mark, oracle, funding and OI beside them are all perp-side
+                // — the cross-market-mixing class. fetchFuturesTicker24h is
+                // the perp counterpart; the live socket's <s>@ticker stream
+                // already overrides this one-shot while connected.
                 const [mi, market, deriv] = await Promise.all([
                     fetchMarkIndex(symbol),
-                    fetchMarketData(symbol),
+                    fetchFuturesTicker24h(symbol),
                     fetchDerivativesData(symbol),
                 ]);
                 if (!cancelled) {
@@ -281,7 +314,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             try {
                 const [mi, market, deriv] = await Promise.all([
                     fetchMarkIndex(symbol),
-                    fetchMarketData(symbol),
+                    fetchFuturesTicker24h(symbol),
                     fetchDerivativesData(symbol),
                 ]);
                 if (!cancelled) {
@@ -368,12 +401,15 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // memoized; the mark re-renders every second).
     const markPriceRef = useRef<number | undefined>(markPrice);
     markPriceRef.current = markPrice;
-    const handlePlanPresented = useCallback((plan: WatchPlan): void => {
+    const handlePlanPresented = useCallback((plan: WatchPlan, turn?: PanelTurnContext): void => {
         // A level watch is exactly "alert me when price gets there" — request
         // the OS notification permission NOW so the grant exists when the
         // level hits later (same treatment as the watch_price/wake_me tools).
         void ensureNotifyPermission();
-        const at = markPriceRef.current;
+        // The viewed mark is only authoritative for the viewed coin; a
+        // background turn's plan gets a null anchor (plain first-tick touch
+        // test) rather than another coin's price.
+        const at = plan.symbol === symbolRef.current ? markPriceRef.current : undefined;
         levelWatch.arm(plan, typeof at === 'number' && Number.isFinite(at) ? at : null);
     }, []);
     // Tick the level-watch AND the model's price watches on every live mark
@@ -441,19 +477,45 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const captureChart = useCallback((): string | null => chartHandleRef.current?.capturePng() ?? null, []);
     const getChartSnapshot = useCallback(() => chartHandleRef.current?.getSnapshot() ?? null, []);
     /** Desk-tool drawing surface: the panel hands these to the model's
-     *  draw_on_chart / mark_trade_levels / clear_chart_drawings calls. */
-    const addModelDrawings = useCallback((drawings: ChartDrawing[]): void => {
-        setModelDrawings(prev => [...prev, ...drawings].slice(-60));
+     *  draw_on_chart / mark_trade_levels / clear_chart_drawings calls.
+     *  A turn's drawings belong to the session+coin that turn RAN on, not
+     *  whatever the user happens to be watching now (deep-dive chat/desk
+     *  identity leak): when the turn is off-view, write straight into that
+     *  session's bucket and leave the visible canvas untouched. */
+    const isViewTurn = (turn?: PanelTurnContext): boolean =>
+        !turn || (turn.sid === chatStore.getActiveId() && turn.symbol === symbolRef.current);
+    const addModelDrawings = useCallback((drawings: ChartDrawing[], turn?: PanelTurnContext): void => {
+        if (isViewTurn(turn)) {
+            setModelDrawings(prev => [...prev, ...drawings].slice(-60));
+            return;
+        }
+        const t = turn as PanelTurnContext;
+        const merged = [...loadSessionModelDrawings(t.sid, t.symbol), ...drawings].slice(-60);
+        saveSessionModelDrawings(t.sid, t.symbol, merged);
     }, []);
-    const clearModelDrawings = useCallback((): void => setModelDrawings([]), []);
+    const clearModelDrawings = useCallback((turn?: PanelTurnContext): void => {
+        if (isViewTurn(turn)) {
+            setModelDrawings([]);
+            return;
+        }
+        const t = turn as PanelTurnContext;
+        saveSessionModelDrawings(t.sid, t.symbol, []);
+    }, []);
     // Erasing one of the model's shapes (the chart's eraser routes it here);
     // the persist effect re-saves the coin's model bucket minus this shape.
     const removeModelShape = useCallback((id: string): void => {
         setModelDrawings(prev => prev.filter(d => d.id !== id));
     }, []);
-    const clearAllDrawings = useCallback((): void => {
-        setModelDrawings([]);
-        chartHandleRef.current?.clearUserDrawings();
+    const clearAllDrawings = useCallback((turn?: PanelTurnContext): void => {
+        if (isViewTurn(turn)) {
+            setModelDrawings([]);
+            chartHandleRef.current?.clearUserDrawings();
+            return;
+        }
+        // Off-view 'all': only the model bucket is ours to clear — the user's
+        // own strokes belong to the canvas the user is looking at.
+        const t = turn as PanelTurnContext;
+        saveSessionModelDrawings(t.sid, t.symbol, []);
     }, []);
 
     const dockProps = {
@@ -558,8 +620,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 </div>
             </div>
 
-            {/* Chart + book + AI chat (drag-resizable dock) */}
-            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            {/* Chart + book + AI chat (drag-resizable dock). BELOW lg the
+                column stacks (chart min-h-420 + dock h-96) inside
+                overflow-hidden ancestors — it MUST scroll or the chat dock
+                is unreachable; at lg+ the row layout owns the height. */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible">
                 {/* Left sidebar (Antigravity's Explorer position): the order
                     book, open/closed from the activity bar's active Trade
                     icon. Closed = the chart owns the whole middle. */}
@@ -619,6 +684,30 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     </div>
                 )}
             </div>
+            {/* Phone/tablet stand-in for the `hidden md:block` book sidebar:
+                when the toggle says "book open" but the viewport is below md,
+                render the ladder as a fixed drawer (backdrop + close). */}
+            {bookDrawerOpen && (
+                <div className="fixed inset-0 z-40" data-testid="orderbook-drawer">
+                    <div className="absolute inset-0 bg-black/60" aria-hidden="true" onClick={() => setBookDismissed(true)} />
+                    <aside role="dialog" aria-label="Order book" className="absolute inset-y-0 left-0 flex w-[300px] max-w-[85vw] flex-col border-r border-white/10 bg-zinc-950 shadow-2xl">
+                        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-3 py-2">
+                            <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Order Book</span>
+                            <button
+                                type="button"
+                                onClick={() => setBookDismissed(true)}
+                                aria-label="Close order book"
+                                className="rounded p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="min-h-0 flex-1">
+                            <OrderBookPanel symbol={symbol} live={live} liveDepth={feed.depth} />
+                        </div>
+                    </aside>
+                </div>
+            )}
             <ScreenerPanel open={screenerOpen} onClose={() => setScreenerOpen(false)} onChangeSymbol={changeSymbol} trades={trades} />
         </div>
     );

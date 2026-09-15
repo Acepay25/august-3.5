@@ -180,6 +180,13 @@ export async function addCustomProvider(provider: {
 }): Promise<ProviderConfig[]> {
     return runExclusiveProviderWrite(async () => {
         const configs = await loadProviderConfigs();
+        // No phantom 'default' model seed (audit 2026-09-15): readiness is
+        // `models.length > 0 || selectedModel`, so seeding ['default'] minted
+        // a provider that looked READY with a fake model that 400s on every
+        // call — and the picker rendered the phantom. A provider added
+        // without models stays NOT ready until the user refreshes/picks real
+        // models from the endpoint.
+        const firstModel = provider.selectedModel || provider.models?.[0] || '';
         const newConfig: ProviderConfig = {
             id: `custom-${Date.now()}`,
             name: provider.name,
@@ -188,9 +195,9 @@ export async function addCustomProvider(provider: {
             apiFormat: provider.apiFormat,
             isEnabled: true,
             isBuiltIn: false,
-            models: provider.models || ['default'],
-            selectedModel: provider.selectedModel || provider.models?.[0] || 'default',
-            ensembleModels: [provider.selectedModel || provider.models?.[0] || 'default'],
+            models: provider.models ?? [],
+            selectedModel: firstModel,
+            ensembleModels: firstModel ? [firstModel] : [],
         };
         const updated = [...configs, newConfig];
         await saveProviderConfigs(updated);

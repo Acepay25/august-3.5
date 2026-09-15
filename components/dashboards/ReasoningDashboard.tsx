@@ -294,7 +294,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
           </div>
         ) : allRecords.length === 0 ? (
           <div className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 flex flex-col items-center justify-center py-16">
-            <Brain className="w-10 h-10 text-zinc-700 mb-3" />
+            <Brain className="w-10 h-10 text-zinc-500 mb-3" />
             <p className="text-sm text-zinc-500">No reasoning records yet</p>
             <p className="text-xs text-zinc-600 mt-1">Run an analysis to capture thinking here.</p>
           </div>

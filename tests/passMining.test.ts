@@ -35,6 +35,15 @@ import {
     type PassRecord,
 } from '../services/learning/passMining';
 import { listSkillDrafts } from '../utils/skillDrafts';
+// Prewarm the draft-gate module graph at FILE-LOAD time (outside any
+// per-test timeout). runPassMiningSweep lazy-imports draftGates/skillPrediction
+// on the first drafted cluster; that cold dynamic import (~950ms idle here,
+// multi-second on a loaded Windows box running the full suite) was the real
+// wall-clock behind the 15s flake on the draft test — everything else in the
+// sweep is fully awaited (PreferencesService mocked, fetchKlines injected,
+// no timers anywhere). Side-effect imports only.
+import '../services/learning/draftGates';
+import '../utils/skillPrediction';
 import type { LoggedTrade } from '../types';
 import { TradeOutcome } from '../types/enums';
 import type { Kline } from '../types/message';
