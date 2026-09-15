@@ -152,6 +152,23 @@ const JournalInner: React.FC<JournalProps> = ({
 
     const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
 
+    // Roving-tabindex arrow navigation for the embedded tab strip.
+    const tabListRef = useRef<HTMLDivElement>(null);
+    const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+        event.preventDefault();
+        const current = Math.max(0, TABS.findIndex(t => t.id === activeTab));
+        const next = event.key === 'ArrowLeft'
+            ? (current - 1 + TABS.length) % TABS.length
+            : event.key === 'ArrowRight'
+                ? (current + 1) % TABS.length
+                : event.key === 'Home'
+                    ? 0
+                    : TABS.length - 1;
+        setActiveTab(TABS[next].id);
+        tabListRef.current?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+    };
+
     if (!isVisible) return null;
 
     const renderContent = () => (
@@ -223,21 +240,54 @@ const JournalInner: React.FC<JournalProps> = ({
     if (isEmbedded) {
         return (
             <div className="flex flex-col h-full bg-zinc-950 overflow-hidden animate-fade-in">
-                <div className="shrink-0 px-8 pt-10 pb-2">
-                    <h2 className="text-3xl font-semibold text-zinc-100 tracking-tight">Journal</h2>
+                <div className="shrink-0 px-8 pt-10 pb-2 flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <h2 className="text-3xl font-semibold text-zinc-100 tracking-tight">Journal</h2>
+                        {!documentOpen && (
+                            <p className="text-sm text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
+                        )}
+                    </div>
+                    {/* CSV / printable-report export — these buttons used to
+                        live only in the removed overlay branch, so the
+                        embedded journal silently lost trade export. */}
                     {!documentOpen && (
-                        <p className="text-sm text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
+                        <div className="shrink-0 flex items-center gap-2 pt-1">
+                            <button
+                                onClick={() => exportTradesCSV(trades)}
+                                disabled={trades.length === 0}
+                                title="Download trade log as CSV"
+                                aria-label="Export trades as CSV"
+                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
+                            >
+                                CSV
+                            </button>
+                            <button
+                                onClick={() => exportTradesHTML(trades)}
+                                disabled={trades.length === 0}
+                                title="Open printable report (Ctrl+P to save as PDF)"
+                                aria-label="Open printable trade report"
+                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
+                            >
+                                Report
+                            </button>
+                        </div>
                     )}
                 </div>
                 {!documentOpen && (
-                <div className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-1 overflow-x-auto custom-scrollbar">
+                <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-1 overflow-x-auto custom-scrollbar">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id;
                         return (
                             <button
                                 key={tab.id}
+                                type="button"
+                                role="tab"
+                                id={`journal-tab-${tab.id}`}
+                                aria-selected={isActive}
+                                aria-controls={`journal-panel-${activeTab}`}
+                                tabIndex={isActive ? 0 : -1}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`px-3.5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                                className={`px-3.5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
                                     isActive
                                         ? 'bg-zinc-800 text-zinc-100'
                                         : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
@@ -249,7 +299,12 @@ const JournalInner: React.FC<JournalProps> = ({
                     })}
                 </div>
                 )}
-                <div className="flex-1 overflow-hidden min-h-[480px]">
+                <div
+                    role="tabpanel"
+                    id={`journal-panel-${activeTab}`}
+                    aria-labelledby={`journal-tab-${activeTab}`}
+                    className="flex-1 overflow-hidden min-h-[480px]"
+                >
                     {renderContent()}
                 </div>
             </div>

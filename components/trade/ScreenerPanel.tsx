@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Search, X, BrainCircuit } from 'lucide-react';
-import { runScreener, type ScreenerRow } from '../../services/trade/screener';
+import { runScreenerWithStatus, type ScreenerRow } from '../../services/trade/screener';
 import { display as symbolDisplay } from '../../utils/symbol';
 import type { LoggedTrade } from '../../types/trade';
 
@@ -34,9 +34,15 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
     const [query, setQuery] = useState('');
     const [setupsOnly, setSetupsOnly] = useState(false);
     const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'volume', desc: true });
+    // True when the futures universe feed failed to answer — the scan is
+    // BLIND, not empty. Rendered as a red retry row, never as "No coins
+    // match" (the old byte-identical failure/empty presentation).
+    const [universeFailed, setUniverseFailed] = useState(false);
+    const [runNonce, setRunNonce] = useState(0);
     const runIdRef = useRef(0);
 
-    // Each open starts a FRESH scan; closing aborts the in-flight one.
+    // Each open (and each explicit retry) starts a FRESH scan; closing
+    // aborts the in-flight one.
     useEffect(() => {
         if (!open) return;
         const runId = runIdRef.current + 1;
@@ -44,8 +50,9 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
         const controller = new AbortController();
         setRows([]);
         setScanned(0);
+        setUniverseFailed(false);
         setRunning(true);
-        void runScreener({
+        void runScreenerWithStatus({
             limit: 100,
             trades,
             signal: controller.signal,
@@ -54,15 +61,18 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                 setRows(latest);
                 setScanned(latest.length);
             },
-        }).then(all => {
+        }).then(result => {
             if (runIdRef.current !== runId) return;
-            setScanTotal(all.length);
+            setScanTotal(result.rows.length);
+            setUniverseFailed(result.universeFailed);
         }).finally(() => {
             if (runIdRef.current !== runId) return;
             setRunning(false);
         });
         return () => controller.abort();
-    }, [open]);
+        // `trades` is intentionally sampled at scan start; `runNonce` drives
+        // explicit retries.
+    }, [open, runNonce]);
 
     const visible = useMemo(() => {
         const q = query.trim().toUpperCase();
@@ -184,8 +194,21 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                     <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-500">{r.edge || '—'}</td>
                                 </tr>
                             ))}
-                            {visible.length === 0 && !running && (
-                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[11px] text-zinc-500">No coins match the filter.</td></tr>
+                            {visible.length === 0 && !running && universeFailed && (
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[11px]">
+                                    <span className="text-rose-400 font-semibold" role="alert">Feed failed — the futures ticker could not be reached.</span>{' '}
+                                    <button
+                                        type="button"
+                                        data-testid="screener-retry"
+                                        onClick={() => setRunNonce(n => n + 1)}
+                                        className="rounded-control border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/20"
+                                    >
+                                        Retry
+                                    </button>
+                                </td></tr>
+                            )}
+                            {visible.length === 0 && !running && !universeFailed && (
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[11px] text-zinc-500">No coins match.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -195,7 +218,9 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                     <span>
                         {running
                             ? `scanning ${scanned}${scanTotal ? `/${scanTotal}` : ''}… rows fill in as they land`
-                            : `${rows.length} coins scanned · click a row to load it on the chart`}
+                            : universeFailed
+                                ? 'universe feed unreachable — nothing scanned'
+                                : `${rows.length} coins scanned · click a row to load it on the chart`}
                     </span>
                     <span className="ml-auto">sorted by {sort.key}{sort.desc ? ' ↓' : ' ↑'}</span>
                 </div>

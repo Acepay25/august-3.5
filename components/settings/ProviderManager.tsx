@@ -773,8 +773,8 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 {isEditingThis ? (
                                                     <div className="flex min-w-0 flex-1 items-center gap-2" onClick={e => e.stopPropagation()}>
                                                         <input type="text" value={editModelInput} onChange={(e) => setEditModelInput(e.target.value)} className="w-full rounded-lg border border-zinc-600 bg-zinc-950 px-2 py-1 font-mono text-sm text-zinc-100 focus:outline-none" autoFocus />
-                                                        <button onClick={() => handleUpdateModelSubmit(m)} className="text-xs text-zinc-300">✓</button>
-                                                        <button onClick={() => setEditingModelId(null)} className="text-xs text-zinc-500">✕</button>
+                                                        <button onClick={() => handleUpdateModelSubmit(m)} aria-label={`Confirm rename of model ${m}`} className="text-xs text-zinc-300">✓</button>
+                                                        <button onClick={() => setEditingModelId(null)} aria-label="Cancel rename" className="text-xs text-zinc-500">✕</button>
                                                     </div>
                                                 ) : (
                                                     <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{m}</span>

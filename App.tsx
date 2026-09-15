@@ -36,7 +36,7 @@ import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
-import { useJournalUI } from './hooks/useJournalUI';
+import { useJournalUI, type JournalUIState } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
 import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
@@ -161,6 +161,20 @@ const dataUrlToFile = (dataUrl: string, filename: string): File => {
     for (let i = 0; i < byteString.length; i++) bytes[i] = byteString.charCodeAt(i);
     return new File([bytes], filename, { type: mime });
 };
+
+/**
+ * Suspense fallback for the SURFACE-level lazy screens (TradeView,
+ * StrategyStudio, the Agents roster). With fallback={null} the whole surface
+ * flashed a blank black/white void for the duration of the chunk fetch
+ * (audit: 21× fallback={null}). This is a quiet pulsing zinc panel that
+ * matches the dark chrome — no new deps, no layout shift to the real screen.
+ */
+const SurfaceSkeleton: React.FC = () => (
+    <div className="flex h-full min-h-0 w-full flex-col gap-3 bg-zinc-950 p-4" role="status" aria-label="Loading">
+        <div className="h-8 w-40 animate-pulse rounded-control bg-zinc-900" />
+        <div className="flex-1 animate-pulse rounded-2xl border border-white/[0.06] bg-zinc-900" />
+    </div>
+);
 
 const App: React.FC = () => {
     const toast = useToastActions();
@@ -429,8 +443,10 @@ const App: React.FC = () => {
     const [pendingQueueCount, setPendingQueueCount] = useState<number>(0);
 
     // Journal and message expansion state
+    // (journalState/setJournalState intentionally NOT consumed — the legacy
+    // journal overlay is gone; the journal lives on its own surface, and the
+    // deep-link tab/trade-id state is declared with the surface block below.)
     const {
-        journalState, setJournalState,
         selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
         copiedMessageId, setCopiedMessageId,
@@ -440,32 +456,61 @@ const App: React.FC = () => {
         postMortemCandidate, setPostMortemCandidate,
     } = useJournalUI();
 
+    // ─── Hash router (URL ↔ surfaces/overlays) ─────────────────────────────
+    // The journal is a SURFACE, so #/journal routes to it; the remaining
+    // hash views (#/market, #/settings, #/watch) are overlays stacked on top
+    // of whatever surface is showing. Deep-link state the embedded Journal
+    // consumes: the tab (initialTab) and, for the Think-tab reasoning deep
+    // link, the focused trade id (initialTradeId).
+    const [journalTab, setJournalTab] = useState<JournalUIState['tab']>('log');
+    const [journalFocusTradeId, setJournalFocusTradeId] = useState<string | undefined>(undefined);
+    /** The single "open the journal" entry point for every affordance:
+     *  command palette, mobile drawer, Header action, home dashboard,
+     *  reasoning deep-link and the #/journal hash. */
+    const openJournal = useCallback((tab: JournalUIState['tab'] = 'log', focusTradeId?: string): void => {
+        setJournalTab(tab);
+        setJournalFocusTradeId(focusTradeId);
+        // Overlays sit above surfaces — close them so the journal actually
+        // lands visible.
+        setIsSettingsMenuVisible(false);
+        setIsLiveMarketVisible(false);
+        setIsWatchListVisible(false);
+        setIsApprovalInboxVisible(false);
+        setSurface('journal');
+    }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
+    /** NavRail/Alt-shortcut surface selection — the journal route re-runs
+     *  openJournal so a fresh entry always resets the tab. */
+    const handleSurfaceSelect = useCallback((next: AppSurface): void => {
+        if (next === 'journal') {
+            openJournal();
+            return;
+        }
+        setSurface(next);
+    }, [openJournal, setSurface]);
+
     useEffect(() => {
         const apply = (): void => {
             const route = parseAppHash(window.location.hash);
             applyingHashRef.current = true;
             if (route.view === 'journal') {
-                setJournalState({ isOpen: true, tab: route.tab || 'log' });
+                setJournalTab(route.tab || 'log');
+                setSurface('journal');
                 setIsSettingsMenuVisible(false);
                 setIsLiveMarketVisible(false);
                 setIsWatchListVisible(false);
             } else if (route.view === 'market') {
                 setIsLiveMarketVisible(true);
-                setJournalState(prev => ({ ...prev, isOpen: false }));
                 setIsSettingsMenuVisible(false);
                 setIsWatchListVisible(false);
             } else if (route.view === 'settings') {
                 setIsSettingsMenuVisible(true);
-                setJournalState(prev => ({ ...prev, isOpen: false }));
                 setIsLiveMarketVisible(false);
                 setIsWatchListVisible(false);
             } else if (route.view === 'watch') {
                 setIsWatchListVisible(true);
-                setJournalState(prev => ({ ...prev, isOpen: false }));
                 setIsSettingsMenuVisible(false);
                 setIsLiveMarketVisible(false);
             } else if (window.location.hash) {
-                setJournalState(prev => ({ ...prev, isOpen: false }));
                 setIsSettingsMenuVisible(false);
                 setIsLiveMarketVisible(false);
                 setIsWatchListVisible(false);
@@ -475,25 +520,31 @@ const App: React.FC = () => {
         apply();
         window.addEventListener('hashchange', apply);
         return () => window.removeEventListener('hashchange', apply);
-    }, [setJournalState, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
+    }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
 
     useEffect(() => {
         if (applyingHashRef.current) return;
-        const route = journalState.isOpen
-            ? { view: 'journal' as const, tab: journalState.tab }
+        // Overlay precedence: the topmost visible overlay owns the URL (it
+        // covers the surface). #/journal mirrors the deep-link tab so
+        // #/journal/reasoning round-trips.
+        const route = isSettingsMenuVisible
+            ? { view: 'settings' as const }
             : isLiveMarketVisible
                 ? { view: 'market' as const }
-                : isSettingsMenuVisible
-                    ? { view: 'settings' as const }
-                    : isWatchListVisible || isApprovalInboxVisible
-                        ? { view: 'watch' as const }
+                : isWatchListVisible || isApprovalInboxVisible
+                    ? { view: 'watch' as const }
+                    : surface === 'journal'
+                        ? { view: 'journal' as const, tab: journalTab }
                         : { view: 'chat' as const };
         if (route.view === 'chat' && !window.location.hash) return;
         const next = serializeAppHash(route);
         if (window.location.hash !== next) {
             history.replaceState(null, '', next);
         }
-    }, [journalState, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible]);
+        // isApprovalInboxVisible is READ by the route computation (watch
+        // precedence) — it was missing from the deps, so opening the inbox
+        // left a stale URL.
+    }, [surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible]);
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
     const handleSendMessageRef = useRef<(...args: any[]) => any>(null!);
@@ -590,6 +641,15 @@ const App: React.FC = () => {
     const [insightProgress, setInsightProgress] = useState<{ done: number; total: number } | null>(null);
     const appRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // KNOWN DEAD TARGET (audit UI-shell finding): the main transcript moved
+    // into the trade surface's Chart AI dock (TradeChatPanel renders a plain
+    // scroll container, NOT a Virtuoso) and the only mounted <Virtuoso> in
+    // the app is the journal's TradeLog list (different messages). So this
+    // handle cannot be attached anywhere from App — "Jump to latest analysis"
+    // and the gallery's onLocateMessage scroll calls no-op on it (the
+    // highlight side-effect still works). Fixing it needs a
+    // scrollToMessage(messageId) imperative prop threaded
+    // App → TradeView → TradeChatPanel — peer-owned files, see wave report.
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -937,13 +997,21 @@ const App: React.FC = () => {
             offlineQueue.process({
                 onAnalysis: async (payload) => {
                     // Re-dispatch queued analyses with their original charts
-                    // (dataURLs persisted at enqueue time).
+                    // (dataURLs persisted at enqueue time). RETURN the run's
+                    // promise: processQueue awaits this callback before it
+                    // removes the item, so the queued analysis is only
+                    // dropped once the pipeline run actually ENDS — previously
+                    // the fire-and-forget call resolved at the first internal
+                    // await and the item vanished the moment a run merely
+                    // STARTED (audit §2.3). Rejections (a throw before the
+                    // run's own error handling) propagate to the queue's
+                    // retry/backoff path instead.
                     const images = (payload?.images || []).map((url: string, i: number) => ({
                         file: dataUrlToFile(url, `chart-${i + 1}.png`),
                         dataURL: url,
                         isLoading: false,
                     }));
-                    handleSendMessage(payload?.prompt || '', images);
+                    return handleSendMessage(payload?.prompt || '', images);
                 },
                 onItemProcessed: () => updateQueueCount(),
                 onQueueEmpty: () => setPendingQueueCount(0)
@@ -1063,11 +1131,11 @@ const App: React.FC = () => {
                 setInput('Analyze the chart I attached with a clear verdict, entry, stop, targets, and invalidation criteria.');
                 requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea')?.focus());
             },
-            onOpenJournal: () => setJournalState({ isOpen: true, tab: 'log' }),
+            onOpenJournal: () => openJournal(),
             onOpenLiveMarket: () => setIsLiveMarketVisible(true),
             onOpenSettings: () => setIsSettingsMenuVisible(true),
         };
-    }, [activeUsername, conversationHistory, latestHistoricalAnalysis, loggedTrades, messages.length, providerConfigs.length, readyProviders.length, setInput, setJournalState]);
+    }, [activeUsername, conversationHistory, latestHistoricalAnalysis, loggedTrades, messages.length, openJournal, providerConfigs.length, readyProviders.length, setInput, setIsLiveMarketVisible, setIsSettingsMenuVisible]);
 
     // Track the previous active user in a ref mutated by this
     // effect itself. (A render-phase read of activeUsernameRef made
@@ -1348,16 +1416,16 @@ const App: React.FC = () => {
         } catch (err) {
             console.warn('[App] Failed to resolve reasoning records for card:', err);
         }
-        setJournalState({ isOpen: true, tab: 'reasoning', focusTradeId: tradeId });
-    }, [setJournalState, activeUsername]);
+        openJournal('reasoning', tradeId);
+    }, [openJournal, activeUsername]);
 
     // Stable identity for the Journal's deep-link consumer. An inline arrow
     // here would change on every render and refire ReasoningDashboard's load
     // effect (it lists this prop in its deps), re-querying the store during
     // every streaming debate update while the Think tab is open.
     const handleReasoningTradeConsumed = useCallback(() => {
-        setJournalState(prev => ({ ...prev, focusTradeId: undefined }));
-    }, [setJournalState]);
+        setJournalFocusTradeId(undefined);
+    }, []);
 
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const handleLocateMessage = useCallback((messageId: string) => {
@@ -1382,12 +1450,12 @@ const App: React.FC = () => {
             };
             if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
                 e.preventDefault();
-                setSurface(SURFACE_KEYS[e.key]);
+                handleSurfaceSelect(SURFACE_KEYS[e.key]);
             }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [setSurface]);
+    }, [handleSurfaceSelect]);
 
 
 
@@ -1726,7 +1794,7 @@ const App: React.FC = () => {
             id: 'journal',
             label: 'Open Journal',
             hint: 'Trades',
-            run: () => setJournalState({ isOpen: true, tab: 'log' }),
+            run: () => openJournal(),
         },
         {
             id: 'live-market',
@@ -1804,7 +1872,7 @@ const App: React.FC = () => {
             hint: 'Messages',
             run: () => { void handleClearChat(); },
         },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals]);
+    ], [handleScrollToBottom, input, stableHandleSendMessage, openJournal, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -2104,17 +2172,26 @@ const App: React.FC = () => {
             if (msg.analysis.marketSnapshot) {
                 try {
                     // Entry→TP distances (% of entry) so the decay is
-                    // distance-aware instead of a fixed step.
+                    // distance-aware instead of a fixed step. The entry→SL
+                    // distance rides the same math (5th arg) so the engine
+                    // can produce a REAL barrier-race stop probability
+                    // instead of the `100 − TP1` upper bound.
                     const entry = Number(String(msg.analysis.entryPoints?.[0]?.price ?? '').replace(/[$,\s]/g, ''));
+                    const parsePrice = (raw: unknown): number => Number(String(raw ?? '').replace(/[$,\s]/g, ''));
                     const tpPct = (msg.analysis.takeProfit ?? [])
-                        .map(tp => Number(String(tp.price ?? '').replace(/[$,\s]/g, '')))
+                        .map(tp => parsePrice(tp.price))
                         .filter(p => Number.isFinite(p) && Number.isFinite(entry) && entry > 0)
                         .map(p => Math.abs(p - entry) / entry * 100);
+                    const slPrice = parsePrice(msg.analysis.stopLoss);
+                    const slDistancePct = Number.isFinite(slPrice) && Number.isFinite(entry) && entry > 0 && slPrice !== entry
+                        ? Math.abs(slPrice - entry) / entry * 100
+                        : undefined;
                     const algoProbs = ProbabilityEngineService.calculateAlgoProbabilities(
                         msg.analysis.marketSnapshot,
                         loggedTrades,
                         msg.analysis.direction as 'Long' | 'Short' | 'Neutral',
-                        tpPct.length >= 2 ? tpPct : undefined
+                        tpPct.length >= 2 ? tpPct : undefined,
+                        slDistancePct
                     );
                     updateMessages(prev => prev.map(m =>
                         m.id === messageId
@@ -2190,8 +2267,8 @@ const App: React.FC = () => {
     }, [handleCalculateAIProbabilities]);
 
     const handleCloseJournal = useCallback(() => {
-        setJournalState(prev => ({ ...prev, isOpen: false }));
-    }, []);
+        setSurface('trade');
+    }, [setSurface]);
 
     const handleOpenJournal = useCallback(() => {
         // Open Settings directly to the Journal tab instead of the overlay
@@ -2704,7 +2781,7 @@ const App: React.FC = () => {
                 mobileMenuRef={mobileMenuRef}
                 setIsMobileMenuOpen={setIsMobileMenuOpen}
                 setIsVisionDataVisible={setIsVisionDataVisible}
-                setJournalState={setJournalState}
+                onOpenJournal={openJournal}
                 setIsSettingsVisible={setIsSettingsMenuVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 onOpenLiveMarket={handleOpenLiveMarket}
@@ -2728,54 +2805,10 @@ const App: React.FC = () => {
                 onOpenJobs={() => setIsJobsDrawerVisible(true)}
             />
 
-            {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
-            {/* <React.Suspense fallback={null}>
-            <Journal
-                isVisible={journalState.isOpen}
-                onClose={handleCloseJournal}
-                initialTab={journalState.tab}
-                initialTradeId={journalState.focusTradeId}
-                username={activeUsername || undefined}
-                onInitialTradeConsumed={handleReasoningTradeConsumed}
-                trades={loggedTrades}
-                enabledProviders={journalEnabledProviders}
-                selectedModels={journalSelectedModels}
-                onDeleteTrades={handleDeleteTrades}
-                onClearAllTrades={handleClearAllTrades}
-                modelIdToName={modelIdToName}
-                onUpdateInsights={handleManualInsightsUpdate}
-                isSummarizing={isSummaryInProgress}
-                currentInsightIds={currentInsightIds}
-                onUpdateTradeLeverage={handleUpdateTradeLeverage}
-                onUpdateOutcome={handleUpdateTradeOutcome}
-                onUpdatePnL={handleUpdateTradePnL}
-                familyWinRates={familyWinRates}
-                globalMemory={globalMemory}
-                threadSummary={activeConversation?.threadSummary}
-
-                finalSummary={finalTradeSummary}
-                individualSummaries={tradeSummaries}
-                isLoading={isSummaryInProgress}
-                isInsightGenerating={isInsightGenerating}
-                insightProgress={insightProgress}
-                newlyAddedInsightIds={newlyAddedInsightIds}
-                summarizationProvider={summarizationProvider}
-                summarizationModel={summarizationModel}
-                onSetSummarizationProvider={handleSetSummarizationProvider}
-                onSetSummarizationModel={handleSetSummarizationModel}
-                providers={readyProviders}
-
-                summaryCharLimit={summaryCharLimit}
-                onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
-                onRegenerateSummary={handleRegenerateFinalSummary}
-                onDeleteInsight={handleDeleteInsight}
-                useAlgorithmicSummary={useAlgorithmicSummary}
-                onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
-                useAlgorithmicInsights={useAlgorithmicInsights}
-                onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
-                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
-            />
-            </React.Suspense> */}
+            {/* The old Journal OVERLAY was removed (navigation rewired to the
+                journal surface): the live render is the embedded branch in
+                <main> below — do not re-add an overlay or journalState-style
+                plumbing. */}
 
             <React.Suspense fallback={null}>
             <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
@@ -2857,7 +2890,7 @@ const App: React.FC = () => {
                 {/* Minara arrangement, first column: the surface rail. */}
                 <NavRail
                     surface={surface}
-                    onSelect={setSurface}
+                    onSelect={handleSurfaceSelect}
                     onToggleSidebar={toggleTradeSidebar}
                     onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     username={activeUsername || undefined}
@@ -2884,7 +2917,7 @@ const App: React.FC = () => {
                     />
 
                     {surface === 'trade' && (
-                            <React.Suspense fallback={null}>
+                            <React.Suspense fallback={<SurfaceSkeleton />}>
                                 <TradeView
                                     providers={providerConfigs}
                                     selectedChatModel={selectedChatModel}
@@ -2939,8 +2972,10 @@ const App: React.FC = () => {
                         {surface === 'journal' && (
                             <Journal
                                 isVisible={true}
-                                onClose={() => setSurface('trade')}
-                                initialTab="log"
+                                onClose={handleCloseJournal}
+                                initialTab={journalTab}
+                                initialTradeId={journalFocusTradeId}
+                                onInitialTradeConsumed={handleReasoningTradeConsumed}
                                 isEmbedded={true}
                                 username={activeUsername || undefined}
                                 trades={loggedTrades}
@@ -2979,7 +3014,7 @@ const App: React.FC = () => {
                             />
                         )}
                         {surface === 'studio' && (
-                            <React.Suspense fallback={null}>
+                            <React.Suspense fallback={<SurfaceSkeleton />}>
                                 <StrategyStudio
                                     trades={loggedTrades}
                                     username={activeUsername || undefined}
@@ -2992,7 +3027,7 @@ const App: React.FC = () => {
                         {surface === 'agents' && (
                             <div className="flex h-full min-h-0">
                                 <div className="flex w-80 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50">
-                                    <React.Suspense fallback={null}>
+                                    <React.Suspense fallback={<SurfaceSkeleton />}>
                                         <AgentRosterRail
                                             variant="embedded"
                                             bots={bots}
@@ -3034,9 +3069,13 @@ const App: React.FC = () => {
                 {/* Desktop activity card: float progress over the
                     right side so the conversation keeps its width while a run
                     is live. Collapsible + closable so it never traps content
-                    underneath; the pill keeps Stop one click away. */}
+                    underneath; the pill keeps Stop one click away.
+                    Breakpoint: md (768px), NOT lg — the Electron window has an
+                    800px minimum width, and at lg (1024px) the whole
+                    800-1023px desktop band ran as a silent black box with no
+                    discoverable Stop. Mobile (<md) keeps the dock's Stop. */}
                 {showPipelineCard && (
-                    <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
+                    <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] md:block">
                         {isPipelineCollapsed ? (
                             /* Collapsed pill: status + expand/dismiss + Stop. */
                             <div className="pointer-events-auto flex h-fit items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950 px-3 py-1.5 shadow-lg" aria-label="Analysis progress (collapsed)">

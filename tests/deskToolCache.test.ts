@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Market data fetchers are mocked so the cache behavior is observable
 // without network calls.
-const { orderBookMock, liquidationsMock } = vi.hoisted(() => ({
+const { orderBookMock, liquidationsMock, hybridMock, injectionMock } = vi.hoisted(() => ({
   orderBookMock: vi.fn(),
   liquidationsMock: vi.fn(),
+  hybridMock: vi.fn(),
+  injectionMock: vi.fn(),
 }));
 vi.mock('../services/analysis/MarketDataService', () => ({
   extractSymbolFromPrompt: vi.fn(() => 'BTCUSDT'),
@@ -16,6 +18,12 @@ vi.mock('../services/analysis/MarketDataService', () => ({
   fetchRecentLiquidations: ((...args: unknown[]) => liquidationsMock(...args)) as never,
   normalizeSymbol: vi.fn((s: string) => s),
 }));
+// The hybrid packet behind get_market_packet — the CACHE must hold the
+// pre-stamp base, so this returns a fixed markdown body per call.
+vi.mock('../services/analysis/HybridIntelligenceService', () => ({
+  fetchHybridData: ((...args: unknown[]) => hybridMock(...args)) as never,
+  generateHybridPromptInjection: ((...args: unknown[]) => injectionMock(...args)) as never,
+}));
 
 import {
   executeDeskTool,
@@ -24,6 +32,7 @@ import {
   MAX_TOOL_CONTENT_CHARS,
   TOOL_CACHE_TTL_MS,
 } from '../services/analysis/DeskToolsService';
+import { formatLiveMarkStamp } from '../services/trade/tradeChatContext';
 
 const bigBook = () => ({
   symbol: 'BTCUSDT',
@@ -102,5 +111,41 @@ describe('Desk tool cache + result budget', () => {
     const result = await executeDeskTool({ id: 'c1', name: 'get_order_book', arguments: { symbol: 'BTCUSDT' } });
     const parsed = JSON.parse(result.content) as { buyWalls: unknown[] };
     expect(parsed.buyWalls).toHaveLength(5);
+  });
+
+  it('get_market_packet caches the PRE-STAMP base and re-stamps a hit with the CURRENT mark', async () => {
+    hybridMock.mockResolvedValue({});
+    injectionMock.mockReturnValue('## packet body');
+    const first = await executeDeskTool(
+      { id: 'p1', name: 'get_market_packet', arguments: {} },
+      { defaultSymbol: 'BTCUSDT', liveMarkPrice: 100 },
+    );
+    expect(first.ok).toBe(true);
+    expect(first.content).toContain(formatLiveMarkStamp(100));
+    // Second call, SAME args (→ cache hit, one fetch only) but a NEW mark:
+    // the stamp must be THIS call's — never a replay of the 100 "now".
+    const second = await executeDeskTool(
+      { id: 'p2', name: 'get_market_packet', arguments: {} },
+      { defaultSymbol: 'BTCUSDT', liveMarkPrice: 220 },
+    );
+    expect(hybridMock).toHaveBeenCalledTimes(1);
+    expect(second.content).toContain(formatLiveMarkStamp(220));
+    expect(second.content).not.toContain(formatLiveMarkStamp(100));
+  });
+
+  it('a full-size packet is truncated to make ROOM for its stamps (they survive the budget)', async () => {
+    hybridMock.mockResolvedValue({});
+    injectionMock.mockReturnValue('P'.repeat(9000)); // over the 6000-char packet budget
+    const result = await executeDeskTool(
+      { id: 'p3', name: 'get_market_packet', arguments: {} },
+      { defaultSymbol: 'BTCUSDT', liveMarkPrice: 330 },
+    );
+    const stamp = formatLiveMarkStamp(330);
+    expect(result.content).toContain(stamp);
+    // Truncated base + tail fit inside the tool's own budget (stamps were
+    // sliced off before — the whole "this is now" line could vanish).
+    // +24 for the truncation marker (same tolerance as the cap test above).
+    expect(result.content.length).toBeLessThanOrEqual(6000 + 24);
+    expect(result.content).toContain('…[truncated]');
   });
 });

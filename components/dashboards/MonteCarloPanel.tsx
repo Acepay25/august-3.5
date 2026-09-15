@@ -121,11 +121,16 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                         />
                         <StatPill
                             label="Kelly (position)"
+                            // 5th arg = TRUE average win from the positive-PnL
+                            // sample (wave-2 Kelly fix) — without it the
+                            // service falls back to EV/winRate, which is not
+                            // avg win and shrinks the fraction.
                             value={`${(computeKellyFraction(
                                 monteCarloResult!.winRate,
                                 monteCarloResult!.expectedValue,
                                 monteCarloResult!.probabilities.slHit,
-                                monteCarloResult!.confidenceInterval.lower
+                                monteCarloResult!.confidenceInterval.lower,
+                                monteCarloResult!.avgWinPercent
                             ) * 100).toFixed(0)}%`}
                             variant="neutral"
                         />

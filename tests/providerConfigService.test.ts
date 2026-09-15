@@ -150,6 +150,22 @@ describe('ProviderConfigService', () => {
       const updated = await removeCustomProvider('prov-a');
       expect(updated.map((c) => c.id)).toEqual(['prov-b']);
     });
+
+    it('seeds NO phantom "default" model — a model-less add stays not-ready', async () => {
+      const updated = await addCustomProvider({
+        name: 'Bare',
+        baseUrl: 'https://bare.example.com/v1',
+        apiKey: 'sk-test',
+        apiFormat: 'chat_completions',
+      });
+      expect(updated[0].models).toEqual([]);
+      expect(updated[0].selectedModel).toBe('');
+      expect(updated[0].ensembleModels).toEqual([]);
+      // Pre-fix the ['default'] seed made this READY (apiKey present), so
+      // callers sent model:'default' and 400'd on every call. It must stay
+      // not-ready until the user refreshes/picks real models.
+      expect(getReadyProviders(updated)).toEqual([]);
+    });
   });
 
   describe('model management', () => {

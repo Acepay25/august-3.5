@@ -134,3 +134,19 @@ describe('write-side refusals are error results', () => {
         expect(res.content.startsWith('remember rejected:')).toBe(true);
     });
 });
+
+describe('remember provenance (deep-dive 2026-09-15)', () => {
+    it('a model-written memory carries source:"model" — the profileMemory convention', async () => {
+        const res = await call('m1', 'remember', {
+            kind: 'user',
+            name: 'Runs 15m scalps',
+            description: 'When picking a timeframe or size.',
+            body: 'User runs 15m scalps on BTCUSDT only.',
+        });
+        expect(res.ok).toBe(true);
+        const { listProfileMemories } = await import('../services/learning/profileMemory');
+        const entry = listProfileMemories().find(e => e.slug === 'runs-15m-scalps');
+        // Without the tag, model and human entries were indistinguishable.
+        expect(entry?.source).toBe('model');
+    });
+});

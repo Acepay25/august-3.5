@@ -92,13 +92,24 @@ const scanRow = async (meta: { symbol: string; baseAsset: string; price: number;
     return row;
 };
 
-/** Scan the top-N universe; resolves with ALL rows (volume-ordered). */
-export const runScreener = async (options: ScreenerOptions = {}): Promise<ScreenerRow[]> => {
+export interface ScreenerResult {
+    rows: ScreenerRow[];
+    /** True when the futures universe feed could not be reached at all.
+     *  `fetchAllFuturesSymbols` swallows transport failures into `[]`, and a
+     *  live exchange never has an empty USDT-perp universe — so an empty
+     *  universe IS the failure signal. Callers must NOT render this as
+     *  "no coins match": the screen is blind, not empty. */
+    universeFailed: boolean;
+}
+
+/** Scan the top-N universe; resolves with ALL rows (volume-ordered) plus a
+ *  feed-failure flag that distinguishes a dead ticker from an empty result. */
+export const runScreenerWithStatus = async (options: ScreenerOptions = {}): Promise<ScreenerResult> => {
     const { limit = 100, concurrency = 6, interval = '15m', trades = [], onRows, signal } = options;
-    const universe = (await fetchAllFuturesSymbols())
-        .slice(0, Math.max(1, limit));
+    const universeMeta = await fetchAllFuturesSymbols();
+    if (universeMeta.length === 0) return { rows: [], universeFailed: true };
+    const universe = universeMeta.slice(0, Math.max(1, limit));
     const rows: ScreenerRow[] = [];
-    if (universe.length === 0) return rows;
     let cursor = 0;
     let stopped = false;
     signal?.addEventListener('abort', () => { stopped = true; }, { once: true });
@@ -121,6 +132,12 @@ export const runScreener = async (options: ScreenerOptions = {}): Promise<Screen
         }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, universe.length) }, worker));
+    return { rows, universeFailed: false };
+};
+
+/** Scan the top-N universe; resolves with ALL rows (volume-ordered). */
+export const runScreener = async (options: ScreenerOptions = {}): Promise<ScreenerRow[]> => {
+    const { rows } = await runScreenerWithStatus(options);
     return rows;
 };
 

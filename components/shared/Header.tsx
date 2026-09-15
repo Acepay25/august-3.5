@@ -19,7 +19,10 @@ interface HeaderProps {
     mobileMenuRef: React.RefObject<HTMLDivElement | null>;
     setIsMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsVisionDataVisible: (visible: boolean) => void;
-    setJournalState: (state: { isOpen: boolean; tab: 'log' | 'performance' | 'analytics' }) => void;
+    /** Open the Journal SURFACE (drawer action). The legacy journalState
+     *  overlay flag had no live consumer — navigation routes through App's
+     *  openJournal → setSurface('journal'). */
+    onOpenJournal: () => void;
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
     onOpenLiveMarket: () => void;
@@ -67,7 +70,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     mobileMenuRef,
     setIsMobileMenuOpen,
     setIsVisionDataVisible,
-    setJournalState,
+    onOpenJournal,
     setIsSettingsVisible,
     setIsLivePostMortemVisible,
     onOpenLiveMarket,
@@ -409,7 +412,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     onDeleteConversations={onDeleteConversations}
                                     onOpenLiveMarket={onOpenLiveMarket}
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
-                                    onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
+                                    onOpenJournal={onOpenJournal}
                                     onOpenWatchList={onOpenWatchList}
                                     onOpenSettings={() => setIsSettingsVisible(true)}
                                     automations={automations}

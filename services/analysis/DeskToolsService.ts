@@ -206,8 +206,11 @@ const TOOL_BUDGETS: Record<string, number> = {
  * Tool-result budget: shrink the array fields models actually skim (walls,
  * liquidation events) to their top entries by size, then hard-cap the total.
  * Keeps the JSON shape intact so prompts that reference fields stay valid.
+ * `tailReserve` holds back room at the END of the cap for text appended
+ * AFTER budgeting (the get_market_packet live stamps) — otherwise a full
+ * packet's hard-cap slice would chop the "this is now" marks off.
  */
-export const budgetToolContent = (name: string, content: string): string => {
+export const budgetToolContent = (name: string, content: string, tailReserve = 0): string => {
     let out = content;
     if (name === 'get_order_book' || name === 'get_liquidations') {
         try {
@@ -229,7 +232,7 @@ export const budgetToolContent = (name: string, content: string): string => {
             // Not JSON (error text) — fall through to the char cap.
         }
     }
-    const cap = TOOL_BUDGETS[name] ?? MAX_TOOL_CONTENT_CHARS;
+    const cap = Math.max(0, (TOOL_BUDGETS[name] ?? MAX_TOOL_CONTENT_CHARS) - Math.max(0, tailReserve));
     if (out.length > cap) {
         out = `${out.slice(0, cap)}\n…[truncated]`;
     }
@@ -1246,6 +1249,14 @@ export interface DeskToolContext {
      *  stamped onto get_market_packet so its snapshot candle rows can't
      *  contradict the painted chart. */
     formingCandle?: FormingCandle | null;
+    /** The seat's tool allow-list (chat-panel TRADE_TOOLS, arbiter
+     *  ARBITER_ALLOWED_TOOLS, bot presets…). When non-empty it is enforced
+     *  HERE, in the executor — not just in what gets OFFERED: on
+     *  text-protocol transports (chat_completions-responses without native
+     *  tools) the model can emit a tag for ANY tool, and only the executor
+     *  sees every call regardless of transport. An off-list name is refused.
+     *  Absent/empty = unrestricted (legacy debate/analysis callers). */
+    allowedTools?: string[];
 }
 
 /** Market-data tools whose result may need the coin named in the transcript —
@@ -1285,11 +1296,44 @@ const rejectedResult = (call: DeskToolCall, reason: string): DeskToolResult => (
     content: reason,
 });
 
+/** The get_market_packet "this is now" tail: the live websocket mark and the
+ *  forming candle, plus the foreign-symbol note. Built from the CALLER's
+ *  context at call time — the result cache deliberately stores the packet
+ *  WITHOUT these stamps (see executeDeskTool), so every call, cache hit or
+ *  not, carries ITS OWN freshness marks instead of replaying a previous
+ *  call's "now". */
+const packetStamps = (call: DeskToolCall, context: DeskToolContext): string => {
+    const fallback = context.defaultSymbol || 'BTCUSDT';
+    const sym = asSymbol(call.arguments?.symbol, fallback);
+    let stamps = '';
+    const mark = context.liveMarkPrice;
+    if (typeof mark === 'number' && Number.isFinite(mark) && mark > 0) {
+        stamps += `\n\n${formatLiveMarkStamp(mark)}`;
+    }
+    if (context.formingCandle) {
+        stamps += `\n\n${formatFormingCandleLine(context.formingCandle, context.chartInterval)}`;
+    }
+    if (!stamps) return '';
+    return stamps + (sym !== fallback
+        ? ` (note: the stamps are the CHART symbol's ${fallback} feed; this packet describes ${sym})`
+        : '');
+};
+
 export async function executeDeskTool(
     call: DeskToolCall,
     context: DeskToolContext = {},
 ): Promise<DeskToolResult> {
     const fallback = context.defaultSymbol || 'BTCUSDT';
+    // TRANSPORT-AGNATIVE ALLOW-LIST (deep-dive 2026-09-15): the offer-time
+    // filter in the loop only shapes what a NATIVE-format provider sees.
+    // On text-protocol transports the model can emit a tag for ANY desk
+    // tool — including ones its seat policy forbids (an arbiter seat
+    // writing `remember`/`write_memory_note`/`forget`). The executor is the
+    // one chokepoint every transport passes through, so the list is enforced
+    // HERE, before the cache and before the switch.
+    if (context.allowedTools && context.allowedTools.length > 0 && !context.allowedTools.includes(call.name)) {
+        return rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`);
+    }
     // Repeat calls within the TTL (every seat asks the same desk) are served
     // from cache — identical market data, zero extra network round-trips.
     // Only the whitelisted network readers take part (see CACHEABLE_TOOLS).
@@ -1297,7 +1341,13 @@ export async function executeDeskTool(
     const cacheable = cacheableResult(call.name);
     const cached = cacheable ? toolCache.get(cacheKey) : undefined;
     if (cached && Date.now() - cached.at < TOOL_CACHE_TTL_MS) {
-        return { toolCallId: call.id, name: call.name, ok: true, content: cached.content, ...resolvedSymbolField(call, fallback) };
+        // The cached packet body is PRE-STAMP: re-stamp with THIS call's
+        // live mark / forming candle so a cache hit can never replay the
+        // previous call's "this is now".
+        const hitContent = call.name === 'get_market_packet'
+            ? cached.content + packetStamps(call, context)
+            : cached.content;
+        return { toolCallId: call.id, name: call.name, ok: true, content: hitContent, ...resolvedSymbolField(call, fallback) };
     }
     try {
         let content: string;
@@ -1393,8 +1443,11 @@ export async function executeDeskTool(
                         return rejectedResult(call, 'remember rejected: description and body are both required');
                     }
                     const slug = asString(call.arguments.slug) || slugify(asString(call.arguments.name) || description);
+                    // Tag the writer: profileMemory's convention is that MODEL
+                    // writes carry source:'model' — without it, human/user and
+                    // model entries were indistinguishable in the notebook.
                     const { entry, created } = rememberProfileMemory(
-                        { slug, description, kind, body },
+                        { slug, description, kind, body, source: 'model' },
                         getActiveUsername(),
                     );
                     content = JSON.stringify({
@@ -1550,23 +1603,12 @@ export async function executeDeskTool(
                 const sym = asSymbol(call.arguments.symbol, fallback);
                 const { fetchHybridData, generateHybridPromptInjection } = await import('./HybridIntelligenceService');
                 const packet = await fetchHybridData(sym);
+                // ONLY the pre-stamp packet is produced here. The live-mark /
+                // forming-candle stamps are appended per call (see the tail
+                // below and packetStamps) and NEVER cached: a cached packet
+                // must not replay a previous call's "this is now" — exactly
+                // the seam the futures-native-packet fix closed.
                 content = generateHybridPromptInjection(packet, { compact: true });
-                // The packet's price and candle rows are REST snapshots
-                // (≤30s caches); when the desk runs beside a live chart, pin
-                // "now" to the websocket mark and the forming candle so the
-                // snapshot can't be narrated as a fresh move.
-                const mark = context.liveMarkPrice;
-                const stampSuffix = sym !== fallback
-                    ? ` (note: the stamps are the CHART symbol's ${fallback} feed; this packet describes ${sym})`
-                    : '';
-                let stamps = '';
-                if (typeof mark === 'number' && Number.isFinite(mark) && mark > 0) {
-                    stamps += `\n\n${formatLiveMarkStamp(mark)}`;
-                }
-                if (context.formingCandle) {
-                    stamps += `\n\n${formatFormingCandleLine(context.formingCandle, context.chartInterval)}`;
-                }
-                if (stamps) content += stamps + stampSuffix;
                 break;
             }
             case 'get_chart_view': {
@@ -1780,14 +1822,23 @@ export async function executeDeskTool(
                 content = `Unknown tool: ${call.name}`;
                 return { toolCallId: call.id, name: call.name, ok: false, content };
         }
-        content = budgetToolContent(call.name, content);
+        // Freshness stamps are appended AFTER the budget and are NOT cached.
+        // The budget reserves exactly the stamp length (tailReserve), so a
+        // full packet is truncated to leave room for them instead of slicing
+        // them off — and the cache keeps the pre-stamp base, so hits
+        // re-stamp with the CURRENT call's mark/candle (cacheTool below
+        // stores `budgeted`, never `withTail`).
+        const withTail = call.name === 'get_market_packet';
+        const tail = withTail ? packetStamps(call, context) : '';
+        const budgeted = budgetToolContent(call.name, content, tail.length);
         // A failure sentinel must not be cached — that would freeze an
         // outage into the TTL even after the source recovers. Only the
         // whitelisted network reads cache at all (see CACHEABLE_TOOLS).
-        if (cacheable && !isDataUnavailable(content)) {
-            cacheTool(cacheKey, content);
+        if (cacheable && !isDataUnavailable(budgeted)) {
+            cacheTool(cacheKey, budgeted);
         }
-        return { toolCallId: call.id, name: call.name, ok: true, content, ...resolvedSymbolField(call, fallback) };
+        const contentOut = budgeted + tail;
+        return { toolCallId: call.id, name: call.name, ok: true, content: contentOut, ...resolvedSymbolField(call, fallback) };
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         return {
@@ -2234,6 +2285,10 @@ export async function runDeskToolLoop(params: {
                 chartDrawings,
                 liveMarkPrice,
                 formingCandle,
+                // Enforce the seat's allow-list in the EXECUTOR, not just in
+                // what's offered: text-protocol seats can emit a tag for any
+                // tool, and these calls bypass the offer-time filter.
+                allowedTools,
             })
             : [];
         const results = [...extraResults, ...forgedResults, ...coreResults];
