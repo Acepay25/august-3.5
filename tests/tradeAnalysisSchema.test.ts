@@ -48,6 +48,19 @@ describe('parseTradeAnalysis — probability/confidence coupling', () => {
     expect(r.confidence).toBe('High');
   });
 
+  it('marks a model-stated probability as stated', () => {
+    expect(parseTradeAnalysis(rawAnalysis({ probability: 85 })).probabilitySource).toBe('stated');
+    expect(parseTradeAnalysis(rawAnalysis({ probability: '75%' })).probabilitySource).toBe('stated');
+  });
+
+  it('flags confidence-word→probability defaults as inferred (not model-stated)', () => {
+    // 85/65/45/15 are OUR fabrication from a word; ledgers must be able to
+    // exclude them from calibration.
+    expect(parseTradeAnalysis(rawAnalysis({ probability: 0, confidence: 'Low' })).probabilitySource).toBe('inferred');
+    expect(parseTradeAnalysis(rawAnalysis({ probability: undefined, confidence: undefined })).probabilitySource).toBe('inferred');
+    expect(createDefaultTradeAnalysis().probabilitySource).toBe('inferred');
+  });
+
   it('parses percent strings ("75%")', () => {
     const r = parseTradeAnalysis(rawAnalysis({ probability: '75%' }));
     expect(r.probability).toBe(75);
@@ -287,6 +300,95 @@ describe('parseTradeAnalysis — verdictReview quarantine stamp (REVIEW sentinel
   });
 });
 
+describe('parseTradeAnalysis — direction-aware level ordering gate (Tier-0 #7)', () => {
+  it('repairs a Long with the stop ABOVE entry and flags the correction', () => {
+    const r = parseTradeAnalysis(rawAnalysis({ stopLoss: '95500' }));
+    expect(r.stopLoss).toBe('94500'); // mirrored across the 95000 entry
+    expect(r.levelsCorrected).toBe(true);
+    expect(r.levelFixes).toHaveLength(1);
+    expect(r.levelFixes?.[0]).toMatch(/wrong side of the 95000 entry/i);
+    expect(r.takeProfit[0].price).toBe('96000'); // untouched — already valid
+  });
+
+  it('mirrors a fully inverted Short plan (stop below entry, target above)', () => {
+    const r = parseTradeAnalysis(rawAnalysis({
+      direction: 'Short',
+      stopLoss: '94500',
+      takeProfit: [{ price: '96000', percentage: '-10%' }],
+    }));
+    expect(r.stopLoss).toBe('95500');
+    expect(r.takeProfit[0].price).toBe('94000');
+    expect(r.levelsCorrected).toBe(true);
+    expect(r.levelFixes).toHaveLength(2);
+  });
+
+  it('re-sorts a scrambled TP ladder so TP1..TP3 ascend from entry', () => {
+    const r = parseTradeAnalysis(rawAnalysis({
+      takeProfit: [{ price: '97000' }, { price: '96000' }],
+    }));
+    expect(r.takeProfit.map((t) => t.price)).toEqual(['96000', '97000']);
+    expect(r.levelFixes?.[0]).toMatch(/re-sorted/i);
+  });
+
+  it('leaves a correctly ordered plan unflagged (no phantom corrections)', () => {
+    const r = parseTradeAnalysis(rawAnalysis());
+    expect(r.levelsCorrected).toBeUndefined();
+    expect(r.levelFixes).toBeUndefined();
+    expect(r.stopLoss).toBe('94500');
+    expect(r.takeProfit[0].price).toBe('96000');
+  });
+
+  it('tolerates missing legs instead of rejecting the plan', () => {
+    const r = parseTradeAnalysis(rawAnalysis({ stopLoss: '', takeProfit: [{ price: '96000' }] }));
+    expect(r.levelsCorrected).toBeUndefined();
+    expect(r.takeProfit[0].price).toBe('96000');
+  });
+
+  it('skips the gate once Avoid has neutralized the direction', () => {
+    const r = parseTradeAnalysis(rawAnalysis({ direction: 'Long', confidence: 'Avoid', probability: 20, stopLoss: '95500' }));
+    expect(r.direction).toBe('Neutral');
+    expect(r.levelsCorrected).toBeUndefined();
+    expect(r.stopLoss).toBe('95500'); // no direction → nothing to mirror against
+  });
+
+  it('preserves percentage labels while replacing repaired prices', () => {
+    const r = parseTradeAnalysis(rawAnalysis({ stopLoss: '95500', takeProfit: [{ price: '94000', percentage: '+5%' }] }));
+    expect(r.takeProfit[0].price).toBe('96000');
+    expect(r.takeProfit[0].percentage).toBe('+5%');
+    expect(r.levelsCorrected).toBe(true);
+  });
+
+  it('is pure — the coerced input keeps its inverted values', () => {
+    const coerced = CoercedTradeAnalysisSchema.parse(rawAnalysis({ stopLoss: '95500' }));
+    const out = applySemanticFixups(coerced);
+    expect(out.stopLoss).toBe('94500');
+    expect(coerced.stopLoss).toBe('95500');
+  });
+});
+
+describe('parseTradeAnalysis — dualScenario coercion', () => {
+  const dual = (selectedScenario: unknown) => rawAnalysis({
+    dualScenarioAnalysis: {
+      bullish: { trigger: '95500', confirmation: '4H close', target: '97000', invalidation: '94500' },
+      bearish: { trigger: '94000', confirmation: '4H close', target: '92000', invalidation: '95500' },
+      selectedScenario,
+      selectionReasoning: 'trend',
+      confidenceInSelection: 75,
+    },
+  });
+
+  it('coerces an unrecognized selection to neutral (not a fabricated bullish call)', () => {
+    expect(parseTradeAnalysis(dual('bullish_leak')).dualScenarioAnalysis?.selectedScenario).toBe('neutral');
+    expect(parseTradeAnalysis(dual(undefined)).dualScenarioAnalysis?.selectedScenario).toBe('neutral');
+    expect(parseTradeAnalysis(dual('sideways')).dualScenarioAnalysis?.selectedScenario).toBe('neutral');
+  });
+
+  it('keeps recognized scenarios verbatim', () => {
+    expect(parseTradeAnalysis(dual('bearish')).dualScenarioAnalysis?.selectedScenario).toBe('bearish');
+    expect(parseTradeAnalysis(dual('neutral')).dualScenarioAnalysis?.selectedScenario).toBe('neutral');
+  });
+});
+
 describe('secondary boundaries', () => {
   it('parseGlobalMemory validates and defaults', () => {
     const mem = parseGlobalMemory({ totalTradesAnalyzed: 5, aiPatternMemory: ['a'], lastUpdated: 'now' });
@@ -327,8 +429,7 @@ describe('applySemanticFixups is pure', () => {
   });
 });
 
-describe('CoercedTradeAnalysisSchema — object/bare price coercion (B9)', () => {
-  it('extracts a number from an object-shaped stopLoss instead of "[object Object]"', () => {
+describe('CoercedTradeAnalysisSchema — object/bare price coercion (B9)', () => {  it('extracts a number from an object-shaped stopLoss instead of "[object Object]"', () => {
     const result = CoercedTradeAnalysisSchema.parse(rawAnalysis({ stopLoss: { level: 94500 } }));
     expect(result.stopLoss).toBe('94500');
   });

@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import { cleanPriceField, sanitizeJSONString } from '../utils/sanitizers';
 import { classifyStrategyFamily } from '../utils/strategyFamily';
+import { sanitizeLevelOrdering } from '../utils/levelOrder';
 import { STRATEGY_FAMILIES, normalizeStrategyFamily } from '../types/strategy';
 import type { TradeAnalysis, MarketConditions, LevelProbabilities, ProbabilityReasoning } from '../types';
 
@@ -220,7 +221,30 @@ export const TradeAnalysisSchema = z.object({
   })).optional(),
   invalidationCriteria: z.array(InvalidationCriterionSchema).optional(),
   recommendationContract: z.any().optional(),
+  // ── Sanitizer audit fields (see SanitizerAuditFields below) ──
+  levelsCorrected: z.boolean().optional(),
+  levelFixes: z.array(z.string()).optional(),
+  probabilitySource: z.enum(['stated', 'inferred']).optional(),
 });
+
+/**
+ * Audit metadata the lenient sanitizer attaches to its output so downstream
+ * ledgers/calibration can stay honest about fabricated numbers (Tier-0 #7 /
+ * financial-tier findings):
+ *  - probabilitySource: 'inferred' marks a probability FABRICATED from the
+ *    confidence word (85/65/45/15) or safe default — never model-stated —
+ *    so ledgers can exclude it from calibration.
+ *  - levelsCorrected/levelFixes: the model's SL/TP ordering violated the
+ *    direction (e.g. a Long stop ABOVE entry); `sanitizeLevelOrdering`
+ *    mirrored/re-sorted it and recorded human-readable fix strings.
+ */
+export interface SanitizerAuditFields {
+  levelsCorrected?: boolean;
+  levelFixes?: string[];
+  probabilitySource?: 'stated' | 'inferred';
+}
+
+export type SanitizedTradeAnalysis = TradeAnalysis & SanitizerAuditFields;
 
 // =============================================================================
 // LENIENT AI-BOUNDARY PIPELINE
@@ -473,11 +497,12 @@ export const CoercedTradeAnalysisSchema = z.object({
 export type CoercedTradeAnalysis = z.infer<typeof CoercedTradeAnalysisSchema>;
 
 /** Safe defaults returned when parsing fails entirely. */
-export const createDefaultTradeAnalysis = (): TradeAnalysis => ({
+export const createDefaultTradeAnalysis = (): SanitizedTradeAnalysis => ({
   coinName: 'Unknown Asset',
   direction: 'Neutral',
   confidence: 'Medium',
   probability: 65, // Default to Medium/65 to prevent the "always 15%" bug
+  probabilitySource: 'inferred', // fabricated default — must not feed calibration
   strategy: 'Analysis unavailable',
   strategyFamily: undefined,
   activeStrategies: [],
@@ -560,12 +585,28 @@ export const parseLevelProbabilities = (raw: unknown): LevelProbabilities | null
   return hasContent ? normalized : null;
 };
 
+/** Parse a sanitizer price string ("95000", "94,500", '$95.5') to a number;
+ *  null when nothing numeric survives. Hoisted function — TDZ discipline. */
+function parseLevelPrice(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const cleaned = value.replace(/[^0-9.eE+-]/g, '');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Render a repaired level back to the string-price shape the schema uses. */
+function formatLevelPrice(value: number): string {
+  return String(value);
+}
+
 /**
  * Cross-field business rules applied after shape coercion. Ported 1:1 from
  * the legacy hand-rolled sanitizer — see tests/tradeAnalysisSchema.test.ts.
  */
-export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis => {
-  const analysis: TradeAnalysis = {
+export const applySemanticFixups = (raw: CoercedTradeAnalysis): SanitizedTradeAnalysis => {
+  const analysis: SanitizedTradeAnalysis = {
     coinName: raw.coinName,
     direction: raw.direction,
     tradeType: raw.tradeType,
@@ -624,6 +665,7 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
     if (probValue < 1) probValue = probValue * 100;
     if (probValue > 100) probValue = 100;
     analysis.probability = Math.round(probValue);
+    analysis.probabilitySource = 'stated';
 
     // An EXPLICIT 'Avoid' from the model stays an Avoid — the old code
     // force-fitted any number under 40 into Avoid/15, discarding genuine
@@ -634,8 +676,7 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
       analysis.confidence = 'Avoid';
     } else if (analysis.probability >= 80) analysis.confidence = 'High';
     else if (analysis.probability >= 60) analysis.confidence = 'Medium';
-    else if (analysis.probability >= 40) analysis.confidence = 'Low';
-    else analysis.confidence = 'Low'; // genuine 1-39% → Low, not Avoid
+    else analysis.confidence = 'Low'; // genuine 1-59% → Low, not Avoid
   } else {
     // Fallback: derive probability from the confidence string. Normalized
     // case-insensitively ("high", "High (85%)") — previously any variant
@@ -643,11 +684,46 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
     const conf = normalizeConfidence(raw.confidence) ?? 'Medium';
     analysis.confidence = conf;
     analysis.probability = conf === 'High' ? 85 : conf === 'Low' ? 45 : conf === 'Avoid' ? 15 : 65;
+    // The 85/65/45/15 numbers are OUR fabrication from a word, not a model
+    // estimate — flagged so ledgers/calibration can exclude them.
+    analysis.probabilitySource = 'inferred';
   }
 
   // Avoid is a no-trade grade, never a Long/Short ticket.
   if (analysis.confidence === 'Avoid') {
     analysis.direction = 'Neutral';
+  }
+
+  // ── Direction-aware SL/TP ordering gate (Tier-0 #7) ──
+  // A Long with the stop ABOVE entry (or a target below it) used to pass
+  // every downstream check with a Math.abs-flavored "healthy" R:R, and the
+  // outcome scanner then credited the inverted plan as an instant win.
+  // Malformed model JSON is CORRECTED here (mirror + re-sort via
+  // utils/levelOrder), never rejected — and the repair is flagged so
+  // downstream (journal, gate, outcome engine) can be honest about it.
+  const orderEntry = parseLevelPrice(analysis.entryPoints[0]?.price);
+  if (analysis.direction !== 'Neutral' && orderEntry !== null && orderEntry > 0) {
+    const order = sanitizeLevelOrdering(
+      analysis.direction,
+      orderEntry,
+      parseLevelPrice(analysis.stopLoss),
+      analysis.takeProfit.map((tp) => parseLevelPrice(tp.price)),
+    );
+    if (!order.ok) {
+      analysis.levelsCorrected = true;
+      analysis.levelFixes = order.fixes;
+      if (order.correctedStopLoss !== null && parseLevelPrice(analysis.stopLoss) !== order.correctedStopLoss) {
+        analysis.stopLoss = formatLevelPrice(order.correctedStopLoss);
+      }
+      // Build a NEW array (never mutate the coerced input — purity is pinned
+      // by tests/tradeAnalysisSchema.test.ts).
+      analysis.takeProfit = analysis.takeProfit.map((tp, i) => {
+        const corrected = order.correctedTakeProfits[i];
+        return corrected !== null && parseLevelPrice(tp.price) !== corrected
+          ? { ...tp, price: formatLevelPrice(corrected) }
+          : tp;
+      });
+    }
   }
 
   // ── Pattern family fallback mined from marketConditions.pattern ──
@@ -693,7 +769,10 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
       analysis.dualScenarioAnalysis = {
         bullish,
         bearish,
-        selectedScenario: ['bullish', 'bearish', 'neutral'].includes(dsa.selectedScenario) ? dsa.selectedScenario : 'bullish',
+        // Unrecognized selections coerce to 'neutral' — fabricating 'bullish'
+        // made a garbage string a directional call that flowed into cards and
+        // calibration (financial-tier fix, deep-dive 2026-09-15).
+        selectedScenario: ['bullish', 'bearish', 'neutral'].includes(dsa.selectedScenario) ? dsa.selectedScenario : 'neutral',
         selectionReasoning: coerceToString(dsa.selectionReasoning),
         confidenceInSelection: typeof dsa.confidenceInSelection === 'number'
           ? Math.max(0, Math.min(100, dsa.confidenceInSelection))
@@ -763,7 +842,7 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
  */
 export const SanitizedTradeAnalysisSchema = CoercedTradeAnalysisSchema.transform(applySemanticFixups);
 
-export const parseTradeAnalysis = (raw: unknown): TradeAnalysis => {
+export const parseTradeAnalysis = (raw: unknown): SanitizedTradeAnalysis => {
   if (!raw || typeof raw !== 'object') return createDefaultTradeAnalysis();
   // Some providers name the asset "symbol" or "asset" instead of "coinName".
   const obj = raw as Record<string, unknown>;
