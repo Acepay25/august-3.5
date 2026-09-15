@@ -50,12 +50,18 @@ let isInitialized = false;
 
 // Per-user fingerprints of the last persisted profile sections (see
 // sqliteSaveUserProfile) so no-op saves skip the per-row native writes.
-const lastSavedSections = new Map<string, {
+// Published ONLY after a successful COMMIT — staged updates live in a
+// transaction-local map — so a rolled-back save can never leave fingerprints
+// for rows that never actually persisted (a later save would skip the
+// dirty-section gate and silently lose that section forever).
+interface SectionFingerprints {
     trades?: string;
     conversations?: string;
     tradeSummaries?: string;
     savedAnalyses?: string;
-}>();
+}
+
+const lastSavedSections = new Map<string, SectionFingerprints>();
 
 /**
  * Check if running on native platform (Android/iOS)
@@ -492,9 +498,15 @@ const serializeConversationMessages = (messages: Message[]): string => JSON.stri
  * Delete rows of a collection that are absent from the profile being saved.
  * INSERT OR REPLACE can't remove rows; without this, deletions never
  * propagate to SQLite (stale snapshots and imports resurrected deleted rows).
- * The IN list is chunked: SQLite's default variable limit is 999 and large
- * profiles (1000+ trades) would otherwise throw "too many SQL variables"
- * inside the caller's transaction, rolling back the whole save.
+ * The stale set is computed in JS (existing ids for this user minus the ids
+ * present in the profile) and deleted with chunked `id IN (...)` statements:
+ * SQLite's default variable limit is 999, and large profiles (1000+ trades)
+ * would otherwise throw "too many SQL variables" inside the caller's
+ * transaction, rolling back the whole save. Chunking the DELETE IN list by
+ * ids-to-remove (rather than the old NOT IN present-ids chunks) is also what
+ * makes it CORRECT: a NOT IN delete chunked over present ids treats each
+ * 400-id chunk as the entire retained set and destroys every other chunk's
+ * rows whenever the collection exceeds one chunk.
  */
 const deleteAbsentRows = async (
     table: string,
@@ -506,12 +518,21 @@ const deleteAbsentRows = async (
         await db.run(`DELETE FROM ${table} WHERE username = ?`, [username]);
         return;
     }
+    const existing = await db.query(
+        `SELECT id FROM ${table} WHERE username = ?`,
+        [username]
+    );
+    const present = new Set(presentIds);
+    const staleIds = (existing.values || [])
+        .map(row => row.id as string)
+        .filter(id => !present.has(id));
+    if (staleIds.length === 0) return;
     const CHUNK_SIZE = 400;
-    for (let i = 0; i < presentIds.length; i += CHUNK_SIZE) {
-        const chunk = presentIds.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < staleIds.length; i += CHUNK_SIZE) {
+        const chunk = staleIds.slice(i, i + CHUNK_SIZE);
         const placeholders = chunk.map(() => '?').join(',');
         await db.run(
-            `DELETE FROM ${table} WHERE username = ? AND id NOT IN (${placeholders})`,
+            `DELETE FROM ${table} WHERE username = ? AND id IN (${placeholders})`,
             [username, ...chunk]
         );
     }
@@ -558,6 +579,10 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
         // re-parsed existing profile stringifies identically.
         const key = profile.username;
         const prev = lastSavedSections.get(key) ?? {};
+        // Fingerprints are staged here and published into lastSavedSections
+        // only after COMMIT succeeds — the DB writes below roll back with the
+        // transaction, and the Map must roll back with them.
+        const staged: SectionFingerprints = { ...prev };
 
         const tradesJson = JSON.stringify(profile.tradeLog || []);
         if (prev.trades !== tradesJson) {
@@ -574,7 +599,7 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 profile.username,
                 (profile.tradeLog || []).map(t => t.id)
             );
-            lastSavedSections.set(key, { ...prev, trades: tradesJson });
+            staged.trades = tradesJson;
         }
 
         const conversationsJson = JSON.stringify(profile.conversations || []);
@@ -612,7 +637,7 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 profile.username,
                 (profile.conversations || []).map(c => c.id)
             );
-            lastSavedSections.set(key, { ...lastSavedSections.get(key), conversations: conversationsJson });
+            staged.conversations = conversationsJson;
         }
 
         const summariesJson = JSON.stringify(profile.tradeSummaries || []);
@@ -629,7 +654,7 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 profile.username,
                 (profile.tradeSummaries || []).map(s => s.id)
             );
-            lastSavedSections.set(key, { ...lastSavedSections.get(key), tradeSummaries: summariesJson });
+            staged.tradeSummaries = summariesJson;
         }
 
         const analysesJson = JSON.stringify(profile.savedAnalyses || []);
@@ -656,11 +681,14 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 profile.username,
                 (profile.savedAnalyses || []).map(a => a.id)
             );
-            lastSavedSections.set(key, { ...lastSavedSections.get(key), savedAnalyses: analysesJson });
+            staged.savedAnalyses = analysesJson;
         }
 
         await db.execute('COMMIT');
         transactionOpen = false;
+        // The transaction is durable — now (and only now) publish the
+        // fingerprints of the sections written inside it.
+        lastSavedSections.set(key, staged);
     } catch (error) {
         // Only roll back when we own an open transaction — a failed BEGIN or
         // an already-rolled-back transaction would make this ROLLBACK throw
@@ -672,6 +700,9 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 console.error('[SqliteService] ROLLBACK failed:', rollbackError);
             }
         }
+        // lastSavedSections is deliberately NOT updated here — not even when
+        // the ROLLBACK itself threw: the rows never persisted, so the previous
+        // fingerprints remain the truth and the next save rewrites them.
         console.error('[SqliteService] Save failed, transaction rolled back:', error);
         throw error;
     }
