@@ -22,6 +22,11 @@ vi.mock('../services/bots/BotMemoryService', () => ({
 const prefStore = vi.hoisted(() => new Map<string, unknown>());
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: async (k: string) => prefStore.get(k),
+    getPreferenceArray: async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = prefStore.get(key);
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    },
     setPreferenceObject: async (k: string, v: unknown) => { prefStore.set(k, v); },
     removePreference: async (k: string) => { prefStore.delete(k); },
 }));

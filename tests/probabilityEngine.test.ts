@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ProbabilityEngineService } from '../services/analysis/ProbabilityEngineService';
+import { ProbabilityEngineService, normalizeMacdHist } from '../services/analysis/ProbabilityEngineService';
 
 // B6 regression tests: the feature extractor read the WRONG shapes
 // (indicators.rsi?.value instead of rsi.rsi14, snapshot.regime?.primaryRegime
@@ -113,5 +113,52 @@ describe('ProbabilityEngineService — target decay', () => {
     const r = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long');
     expect(r.tp2Probability).toBeCloseTo(r.tp1Probability! * 0.75, 1);
     expect(r.tp3Probability).toBeCloseTo(r.tp1Probability! * 0.55, 1);
+  });
+});
+
+// =============================================================================
+// Wave-2 (deep-dive 2026-09-15, item 11): MACD normalization + SL probability
+// =============================================================================
+
+describe('normalizeMacdHist — cross-coin comparability', () => {
+  it('expresses the histogram in ATR units, not raw price units', () => {
+    // BTC: histogram 16 USD with a 800 ATR → 0.02 ATRs.
+    const btc = normalizeMacdHist({ macd: { histogram: 16 }, atr: 800, currentPrice: 95000 });
+    // A 1000×-cheaper alt with proportionally small ATR: histogram 0.016,
+    // atr 0.8 → SAME 0.02. Raw units would have contributed |16 − 0.016|/50
+    // ≈ 0.32 of Euclidean distance — dominated by BTC's price scale.
+    const alt = normalizeMacdHist({ macd: { histogram: 0.016 }, atr: 0.8, currentPrice: 95 });
+    expect(btc).toBeCloseTo(0.02, 6);
+    expect(alt).toBeCloseTo(0.02, 6);
+  });
+
+  it('falls back to 1% of price as the denominator, then 0', () => {
+    expect(normalizeMacdHist({ macd: { histogram: 9.5 }, currentPrice: 95000 })).toBeCloseTo(0.01, 6);
+    expect(normalizeMacdHist({ macd: { histogram: 12 } })).toBe(0);
+  });
+});
+
+describe('SL probability — no complementary-event claim', () => {
+  const snap = { ...baseSnapshot(), regime: { regime: 'ranging', trendDirection: 'neutral', adx: 18, plusDI: 15, minusDI: 15, trendStrength: 'none', tradingBias: 'mean_reversion', recommendation: 'x' } };
+
+  it('computes the stop-hit probability from the barrier race when a stop distance is given', () => {
+    // Prior 55, TP1 2% away, SL 10% away → P(SL) ≈ 55 × 2/10 = 11.
+    // The old `100 − 55` complement claimed 45%.
+    const r = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long', [2, 3, 4], 10);
+    expect(r.slProbability).toBe(11);
+    expect(r.slReasoning.indicatorBasis).toMatch(/Barrier race/);
+  });
+
+  it('never claims "SL hit: ~50%" for a stop that is a hair away without a distance', () => {
+    // The near-stop absurdity: a 0.2%-away stop cannot be ~45% likely merely
+    // because TP1 is 55% unlikely. With an explicit tiny distance the
+    // barrier-race odds inflate toward 100 (clamped) instead:
+    const absurd = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long', [12, 20, 30], 0.2);
+    expect(absurd.slProbability).toBeGreaterThanOrEqual(absurd.tp1Probability!);
+    // Without ANY stop distance the number is labeled an UPPER BOUND, not a
+    // point estimate of the stop probability (the claim itself is removed).
+    const bound = ProbabilityEngineService.calculateAlgoProbabilities(snap, [], 'Long', [12, 20, 30]);
+    expect(bound.slReasoning.indicatorBasis).toMatch(/UPPER BOUND/);
+    expect(bound.slReasoning.indicatorBasis).toMatch(/NOT a point estimate/);
   });
 });

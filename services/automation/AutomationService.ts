@@ -8,7 +8,7 @@
  * cronParser.ts — this service only persists and reads.
  */
 
-import { getPreferenceObject, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
+import { getPreferenceArray, getPreferenceObject, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
 import { AutomationConfig, AutomationRun } from '../../types/automation';
 import { nextCronTime, countMissedRuns } from './cronParser';
 
@@ -25,12 +25,33 @@ export const uid = (): string => `automation_${Date.now().toString(36)}_${Math.r
 
 export const runUid = (): string => `run_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+/** Item guard for the configs blob: the scheduler maps every item through
+ *  `.id`/`.enabled`/`.schedule.cron`, so a junk entry (null, string, missing
+ *  cron) must be dropped at the read boundary, not hit in a .map later. */
+const isAutomationConfig = (item: unknown): item is AutomationConfig => {
+    const c = item as Partial<AutomationConfig> | null;
+    return !!c && typeof c === 'object'
+        && typeof c.id === 'string'
+        && typeof c.name === 'string'
+        && typeof c.enabled === 'boolean'
+        && !!c.schedule && typeof c.schedule.cron === 'string';
+};
+
+/** Item guard for the runs blob: consumers render `run.status`/`startedAt`
+ *  and dedupe by `run.id`. */
+const isAutomationRun = (item: unknown): item is AutomationRun => {
+    const r = item as Partial<AutomationRun> | null;
+    return !!r && typeof r === 'object'
+        && typeof r.id === 'string'
+        && typeof r.automationId === 'string'
+        && typeof r.status === 'string';
+};
+
 // ─── Configs ────────────────────────────────────────────────────────────────
 
 export const loadAutomationConfigs = async (username: string): Promise<AutomationConfig[]> => {
     try {
-        const stored = await getPreferenceObject<AutomationConfig[]>(`${CONFIGS_KEY_PREFIX}${username}`);
-        return Array.isArray(stored) ? stored : [];
+        return await getPreferenceArray<AutomationConfig>(`${CONFIGS_KEY_PREFIX}${username}`, isAutomationConfig);
     } catch (e) {
         console.warn('[Automation] Failed to load configs:', e);
         return [];
@@ -49,8 +70,7 @@ export const clearAutomationConfigs = async (username: string): Promise<void> =>
 
 export const loadAutomationRuns = async (username: string, automationId: string): Promise<AutomationRun[]> => {
     try {
-        const stored = await getPreferenceObject<AutomationRun[]>(`${RUNS_KEY_PREFIX}${username}_${automationId}`);
-        return Array.isArray(stored) ? stored : [];
+        return await getPreferenceArray<AutomationRun>(`${RUNS_KEY_PREFIX}${username}_${automationId}`, isAutomationRun);
     } catch (e) {
         console.warn('[Automation] Failed to load runs:', e);
         return [];

@@ -24,10 +24,16 @@ interface KeyLevelsCardProps {
     levels: ModelKeyLevel[];
     /** The instrument on the chart right now (the lines are stamped with it). */
     symbol: string;
+    /** The message this card belongs to — the OWNERSHIP key on the shared
+     *  chart-levels channel: unmount may only clear the layer if this card
+     *  is the one that last drew it (multiple cards share the one channel). */
+    messageId?: string;
     /** Freshest mark the canvas is showing (Dist column + the "last" divider). */
     getMark?: () => number | null;
-    /** Push the resolved line set to the chart; null blanks it. */
-    onChatLevels?: (payload: MessageLevelLines | null) => void;
+    /** Push the resolved line set to the chart; null blanks it. The second
+     *  argument is this card's id, so the channel owner can arbitrate whose
+     *  clears count (card A unmounting must not null card B's live lines). */
+    onChatLevels?: (payload: MessageLevelLines | null, ownerId?: string) => void;
 }
 
 const fmtPx = (p: number): string => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: p >= 1000 ? 2 : 4 });
@@ -46,7 +52,7 @@ const KIND_BORDER: Record<ModelKeyLevel['kind'], string> = {
     level: 'border-l-amber-400/70',
 };
 
-const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, getMark, onChatLevels }) => {
+const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId, getMark, onChatLevels }) => {
     const [allOn, setAllOn] = useState(false);
     const [pinned, setPinned] = useState<ReadonlySet<string>>(() => new Set());
     const [hoverId, setHoverId] = useState<string | null>(null);
@@ -57,21 +63,24 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, getMark, 
     // Push the resolved set up whenever it CHANGES — a card never blanks the
     // layer on mount (an old card settling must not erase a live card's
     // lines; the most-recent card to draw owns the layer). Null lands only
-    // when this card actively clears or unmounts while it was drawing.
+    // when this card actively clears or unmounts while it was drawing —
+    // and it carries THIS card's id so the shared channel can drop clears
+    // from non-owners (card A's unmount must not null card B's lines).
     const pushRef = useRef(onChatLevels);
     pushRef.current = onChatLevels;
+    const cardIdRef = useRef<string>(messageId ?? `keylevels-${Math.random().toString(36).slice(2, 9)}`);
     const pushedRef = useRef(false);
     const signature = JSON.stringify([symbol, drawing ? lines : null]);
     useEffect(() => {
         if (drawing) {
-            pushRef.current?.({ symbol, lines });
+            pushRef.current?.({ symbol, lines }, cardIdRef.current);
             pushedRef.current = true;
         } else if (pushedRef.current) {
-            pushRef.current?.(null);
+            pushRef.current?.(null, cardIdRef.current);
             pushedRef.current = false;
         }
     }, [signature]);
-    useEffect(() => () => { if (pushedRef.current) pushRef.current?.(null); }, []);
+    useEffect(() => () => { if (pushedRef.current) pushRef.current?.(null, cardIdRef.current); }, []);
 
     // Coin switch: the levels belonged to the PREVIOUS instrument — drop the
     // user's draw state instead of silently repainting it on a new coin.

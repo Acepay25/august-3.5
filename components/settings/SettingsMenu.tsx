@@ -325,11 +325,21 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         }).then(ok => { if (ok) onClose(); });
     }, [isDirty, onClose, confirm]);
 
+    // The open-effect below must re-run ONLY when the dialog opens/closes.
+    // Depending on `requestClose` directly (inline-identity `onClose` from the
+    // parent) re-added the keydown listener and re-queued the autofocus on
+    // every parent render — stealing focus mid-typing in provider forms.
+    // Route the latest callback through a ref and focus once per open.
+    const requestCloseRef = useRef(requestClose);
+    useEffect(() => {
+        requestCloseRef.current = requestClose;
+    }, [requestClose]);
+
     useEffect(() => {
         if (!isVisible) return;
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                requestClose();
+                requestCloseRef.current();
                 return;
             }
             if (event.key !== 'Tab' || !dialogRef.current) return;
@@ -343,7 +353,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         document.addEventListener('keydown', handleKeyDown);
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isVisible, requestClose]);
+    }, [isVisible]);
 
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
@@ -524,8 +534,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <details className="group">
                                     <summary className="text-[10px] text-zinc-600 hover:text-zinc-400 cursor-pointer select-none font-mono list-none flex items-center justify-between">
                                         <span>Developer</span>
-                                        <span className="text-zinc-700 group-open:hidden">▸</span>
-                                        <span className="text-zinc-700 hidden group-open:inline">▾</span>
+                                        <span className="text-zinc-500 group-open:hidden">▸</span>
+                                        <span className="text-zinc-500 hidden group-open:inline">▾</span>
                                     </summary>
                                     <div className="mt-2">
                                         <DiagnosticsPanel />

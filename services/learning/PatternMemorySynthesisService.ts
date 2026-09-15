@@ -19,7 +19,12 @@ import {
 // Cyclic-import note: severityInsights imports the store API below from this
 // module, and the enforcement context calls back into severity generators.
 // The cycle is safe — both sides only reference the other's exports inside
-// function bodies, never at module-evaluation time.
+// function bodies, never at module-evaluation time, AND every cross-referenced
+// export is a hoisted `function` declaration on both sides (TDZ discipline:
+// severityInsights → calculatePnlR/addAttributedInsight/upsertAttributedInsight/
+// loadAttributedInsights/markInsightUsed/calculateAggregatedStats and
+// PatternMemorySynthesis → extractCumulativeBleedInsight/recordSeverityInsight;
+// keep new cycle-crossing exports hoisted functions too).
 import { extractCumulativeBleedInsight, recordSeverityInsight } from './severityInsights';
 
 // The attributed-insight type moved to types/learning.ts with the store

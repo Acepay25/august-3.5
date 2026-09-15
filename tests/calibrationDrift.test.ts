@@ -3,8 +3,10 @@ import {
   getCalibrationDrift,
   getConfidenceAccuracy,
   initializeCalibration,
+  updateGranularCalibration,
 } from '../services/validation/ConfidenceCalibrationService';
-import type { ConfidenceCalibration } from '../types';
+import { MAX_TRADE_AGE_DAYS } from '../constants/calibrationConstants';
+import type { ConfidenceCalibration, GranularCalibrationEntry } from '../types';
 
 /** Calibration fixture with the given bucket populated; others empty. */
 const calibrationWith = (
@@ -80,5 +82,47 @@ describe('getCalibrationDrift', () => {
     expect(getConfidenceAccuracy(hot, 'High', 45)).toBe('underconfident');
     expect(getConfidenceAccuracy(undefined, 'High', 75)).toBe('insufficient_data');
     expect(getConfidenceAccuracy(calibrationWith('high', 3, 5), 'High', 75)).toBe('insufficient_data');
+  });
+});
+
+const entry = (over: Partial<GranularCalibrationEntry> & { timestamp: string }): GranularCalibrationEntry => ({
+  confidence: 'High',
+  outcome: 'WIN',
+  coin: 'BTCUSDT',
+  ...over,
+});
+
+describe('granularEntries are bounded by the same horizon as base entries', () => {
+  const now = Date.now();
+  const iso = (daysAgo: number): string => new Date(now - daysAgo * 86_400_000).toISOString();
+
+  it('prunes granular history older than MAX_TRADE_AGE_DAYS on every settled write', () => {
+    const loaded: ConfidenceCalibration = {
+      ...initializeCalibration(),
+      entries: [],
+      granularEntries: [
+        entry({ timestamp: iso(MAX_TRADE_AGE_DAYS + 30) }), // ancient → dropped
+        entry({ timestamp: iso(MAX_TRADE_AGE_DAYS + 1), outcome: 'LOSS' }), // just past → dropped
+        entry({ timestamp: iso(10) }), // inside the horizon → kept
+      ],
+    };
+    const out = updateGranularCalibration(loaded, entry({ timestamp: iso(0) }));
+    // Pre-fix this array grew UNBOUNDED (base `entries` were pruned to 90d,
+    // granularEntries never were) and every scan paid O(n) on it.
+    expect(out.granularEntries).toHaveLength(2);
+    const horizon = now - MAX_TRADE_AGE_DAYS * 86_400_000;
+    expect(out.granularEntries!.every(e => Date.parse(e.timestamp) >= horizon)).toBe(true);
+    expect(out.granularEntries!.some(e => e.timestamp === iso(10))).toBe(true);
+    expect(out.granularEntries!.some(e => e.timestamp === iso(0))).toBe(true);
+  });
+
+  it('keeps legacy rows with a missing/unparseable timestamp (unknown age ≠ stale)', () => {
+    const loaded: ConfidenceCalibration = {
+      ...initializeCalibration(),
+      granularEntries: [{ marker: 'REAL-HISTORY-ENTRY' } as unknown as GranularCalibrationEntry],
+    };
+    const out = updateGranularCalibration(loaded, entry({ timestamp: iso(0) }));
+    expect(out.granularEntries).toHaveLength(2);
+    expect(JSON.stringify(out.granularEntries)).toContain('REAL-HISTORY-ENTRY');
   });
 });

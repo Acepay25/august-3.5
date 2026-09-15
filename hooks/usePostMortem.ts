@@ -146,9 +146,15 @@ export const usePostMortem = (params: UsePostMortemParams) => {
 
     // ─── Main Analysis Function ───────────────────────────────────────────
     const startPostMortemAnalysis = async (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[], resolvedValidation?: TradeOutcomeValidation) => {
-        // Capture the run id at the start. If the user switches accounts while
-        // this async function is in flight, the ref will be bumped and our
-        // subsequent state writes will be skipped (see isRunStale checks).
+        // Bump the run id BEFORE aborting (same rule startTodayReassessment
+        // already follows): a second post-mortem supersedes any in-flight
+        // one, and the abandoned run must see a STALE id in its catch/
+        // finally so it discards silently. Without the bump the aborted run
+        // keeps the same id as the new one, isRunStale stays false, and it
+        // renders "Post-Mortem Failed: All AI providers failed" + a retry
+        // CTA over its superseded transcript. The bump precedes the capture
+        // so THIS run stays current.
+        postMortemRunIdRef.current += 1;
         const myRunId = postMortemRunIdRef.current;
         postMortemAbortControllerRef.current?.abort();
         const currentAbortController = new AbortController();

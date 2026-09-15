@@ -9,6 +9,7 @@
 import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
 import { runSimulationAsync, MonteCarloResult, SimulationConfig } from '../analysis/MonteCarloService';
 import { parsePrice } from '../../utils/analysisUtils';
+import { sanitizeLevelOrdering } from '../../utils/levelOrder';
 
 // =============================================================================
 // TYPES
@@ -23,6 +24,11 @@ export interface ScenarioConfig {
     // Trade parameters
     direction: 'Long' | 'Short';
     leverage: number;
+    /** NOTIONAL position value in USD — what the UI "Position ($)" field
+     *  means (a $1000 position is $1000 of BTC exposure; leverage only
+     *  determines the margin locked and the ROE-on-margin percentages).
+     *  riskUSD/rewardUSD are therefore price-distance × position WITHOUT an
+     *  extra leverage factor. */
     positionSizeUSD: number;
 
     // Context
@@ -94,11 +100,18 @@ export function calculateMetrics(config: ScenarioConfig): ScenarioMetrics {
         ? Math.round((tp1Distance / slDistance) * 100) / 100
         : 0;
 
-    // USD values
-    const riskUSD = (riskPercent / 100) * positionSizeUSD * leverage;
-    const rewardUSD = (rewardPercent / 100) * positionSizeUSD * leverage;
+    // USD values — `positionSizeUSD` is the NOTIONAL position value, so the
+    // dollar risk/reward is just the price distance × position. The old
+    // `× leverage` double-counted it: a 1% stop on a $1000 position at 100x
+    // reported $1,000 risk (= the entire notional), which is only true when
+    // positionSize means MARGIN — but the UI field says "Position ($)" and
+    // every readout divides these numbers by the position. Leverage belongs
+    // to the margin-relative percentages below, not to the notional math.
+    const riskUSD = (riskPercent / 100) * positionSizeUSD;
+    const rewardUSD = (rewardPercent / 100) * positionSizeUSD;
 
-    // Leveraged percentages
+    // Return on the MARGIN locked by the exchange: ROE% ≈ price move % ×
+    // leverage (riskUSD / margin; margin = position / leverage).
     const leveragedRiskPercent = riskPercent * leverage;
     const leveragedRewardPercent = rewardPercent * leverage;
 
@@ -146,10 +159,26 @@ export async function runScenarioMonteCarlo(
     numSimulations: number = 500
 ): Promise<MonteCarloResult | null> {
     try {
+        // Sanitize the level geometry BEFORE feeding the simulator: the "What
+        // If" sliders can produce an inverted plan (Long with the stop above
+        // entry, or a TP ladder out of order) and runSimulation's abs/zone
+        // math cannot tell a below-entry "TP" from a real target. Mirror +
+        // re-sort through the canonical level-order gate (same repair the
+        // outcome engines and the AI boundary use).
+        const ordered = sanitizeLevelOrdering(
+            config.direction,
+            config.entry,
+            config.stopLoss,
+            config.takeProfits.map(tp => (Number.isFinite(tp) && tp > 0 ? tp : null))
+        );
+        if (ordered.fixes.length > 0) {
+            console.log('[ScenarioSimulator] Level ordering repaired for MC:', ordered.fixes.join('; '));
+        }
+
         const simConfig: SimulationConfig = {
             entry: config.entry,
-            stopLoss: config.stopLoss,
-            takeProfits: config.takeProfits,
+            stopLoss: ordered.correctedStopLoss ?? config.stopLoss,
+            takeProfits: ordered.correctedTakeProfits.map(tp => tp ?? 0),
             direction: config.direction,
             atr: config.atr || Math.abs(config.entry - config.stopLoss) * 0.5, // Estimate ATR if not provided
             timeframe: '1h',
@@ -175,6 +204,9 @@ export function findHistoricalMatches(
 ): HistoricalMatch[] {
     const matches: HistoricalMatch[] = [];
 
+    // Scenario R:R computed once (was rebuilt per candidate trade).
+    const scenarioRR = calculateMetrics(config).rrRatio;
+
     // Filter to completed trades only (WIN or LOSS)
     const completedTrades = loggedTrades.filter(t =>
         t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS
@@ -183,18 +215,27 @@ export function findHistoricalMatches(
     for (const trade of completedTrades) {
         const reasons: string[] = [];
         let score = 0;
+        // Same rule LiveBacktestService.calculateSimilarity already enforces:
+        // a direction-only match (+25) used to clear the ≥25 gate on its own,
+        // so "Strong historical edge: X% win rate on similar setups" was just
+        // the global win rate re-labeled for ANY Long/Short. Require at least
+        // TWO independent matching dimensions before a trade counts as
+        // "similar" at all.
+        let matchedDimensions = 0;
 
         // Same coin bonus
         if (trade.analysis.coinName?.toLowerCase().includes(config.coinName.toLowerCase()) ||
             config.coinName.toLowerCase().includes(trade.analysis.coinName?.toLowerCase() || '')) {
             score += 30;
             reasons.push('Same coin');
+            matchedDimensions++;
         }
 
         // Same direction
         if (trade.analysis.direction === config.direction) {
             score += 25;
             reasons.push('Same direction');
+            matchedDimensions++;
         }
 
         // Same pattern family
@@ -204,19 +245,21 @@ export function findHistoricalMatches(
             if (scenarioFamily.includes(tradeFamily) || tradeFamily.includes(scenarioFamily)) {
                 score += 25;
                 reasons.push(`Same family (${trade.analysis.detectedPatternFamily})`);
+                matchedDimensions++;
             }
         }
 
         // Similar R:R range (within 0.5)
         if (trade.analysis.rrRatio) {
-            const scenarioRR = calculateMetrics(config).rrRatio;
             const diff = Math.abs(trade.analysis.rrRatio - scenarioRR);
             if (diff < 0.3) {
                 score += 15;
                 reasons.push('Similar R:R');
+                matchedDimensions++;
             } else if (diff < 0.5) {
                 score += 10;
                 reasons.push('Close R:R');
+                matchedDimensions++;
             }
         }
 
@@ -224,9 +267,10 @@ export function findHistoricalMatches(
         if (trade.leverage && Math.abs(trade.leverage - config.leverage) < 20) {
             score += 5;
             reasons.push('Similar leverage');
+            matchedDimensions++;
         }
 
-        if (score >= 25 && reasons.length > 0) {
+        if (score >= 25 && matchedDimensions >= 2) {
             matches.push({
                 trade,
                 similarityScore: Math.min(score, 100),

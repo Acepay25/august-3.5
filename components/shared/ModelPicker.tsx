@@ -11,6 +11,7 @@ import { ProviderConfig } from '../../types/provider';
 import {
     formatModelDisplayName,
     isFreeModelId,
+    isProviderReady,
     sortModelsFreeFirst,
     readFreeOnlyPref,
     writeFreeOnlyPref,
@@ -92,9 +93,11 @@ interface ModelPickerProps {
     compact?: boolean;
 }
 
-/** Filter to only ready providers (enabled + API key). */
-const getReadyProviders = (providers: ProviderConfig[]): ProviderConfig[] =>
-    providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
+// The "ready provider" filter is the SHARED providerUtils.isProviderReady
+// predicate — the same single source of truth the roster and the pipeline
+// use. A local copy here previously diverged from it (readiness rules like
+// keyless providers must be picked up by every surface at once), so it was
+// deleted rather than re-synced.
 
 const ModelPicker: React.FC<ModelPickerProps> = ({
     providers,
@@ -115,7 +118,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const flyoutRef = useRef<HTMLDivElement>(null);
 
-    const readyProviders = getReadyProviders(providers);
+    const readyProviders = providers.filter(isProviderReady);
 
     // Parse current value to extract providerId and modelId
     const parseValue = useCallback(() => {

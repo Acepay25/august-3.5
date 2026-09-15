@@ -1362,55 +1362,80 @@ export const REAL_DEBATE_RESPONSE_ROUNDS = 2;
  *                  clarification cycles allowed (MAX_CLARIFICATION_CYCLES).
  *  - 'extended'  — one extra rebuttal round for harder setups.
  *  - 'efficient' — devil round only when the floor disagrees; no clarifications.
- * The chosen protocol rides runStats.promptVersion so outcomes can be
- * attributed per-protocol alongside the prompt-lane A/B.
+ * The chosen protocol is a PER-DEBATE local inside conductRealDebate (it
+ * rides that debate's run log). The legacy runStats side channel
+ * (getLastDebateProtocol) still exists for the sequential pipeline — see below.
  */
 export type DebateProtocol = 'standard' | 'extended' | 'efficient';
 /**
- * Protocol assignment is DETERMINISTIC — hashed from the
- * setup (symbol + prompt + roster), so the same trade idea always runs the
- * same structure. The old Math.random() draw made verdicts on identical
- * setups incomparable, silently changed debate length run-to-run, and made
- * engine tests flake (call-count assertions needed a Math.random pin).
+ * Protocol assignment is DETERMINISTIC — hashed from the setup
+ * identity ALONE (symbol + prompt + roster), so the same trade idea always
+ * runs the same structure. The old Math.random() draw made verdicts on
+ * identical setups incomparable, and the intermediate version folded an
+ * hour-long epoch-time bucket into the hash key — which silently moved the
+ * same setup to a different lane every hour and broke same-trade
+ * comparability. There is no time component now.
  * Distribution is preserved in aggregate: a uniform hash over the key space
  * still lands ~60/20/20 across many DIFFERENT setups, while any single
  * setup stays reproducible. `rate` keeps the API for tests.
+ *
+ * PURE: takes the seed, returns the lane — writes NO module state. Each
+ * concurrent debate derives its own local from its own seed inside
+ * conductRealDebate, so lanes can no longer cross-assign. Prefer passing
+ * the seed per debate via `opts.protocolSeed` over the legacy
+ * setProtocolSeed() global side channel.
  */
 export const assignDebateProtocol = (
     rate = 0.2,
     seed?: string,
 ): DebateProtocol => {
-    const key = seed ?? lastProtocolSeedRef.key;
+    const key = (seed || '').trim();
     // No seed (engine tests, direct generator calls) → the CONTROL lane,
     // deterministically. Only seeded real debates spread across lanes.
-    if (!key) {
-        lastDebateProtocol = 'standard';
-        return 'standard';
-    }
+    if (!key) return 'standard';
     let h = 2166136261 >>> 0;
-    const text = `${key}|${Math.floor(Date.now() / DEBATE_PROTOCOL_EPOCH_MS)}`;
-    for (let i = 0; i < text.length; i++) {
-        h ^= text.charCodeAt(i);
+    for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
         h = Math.imul(h, 16777619) >>> 0;
     }
     const r = (h % 1000) / 1000;
-    const p: DebateProtocol = r < rate ? 'extended' : r < rate * 2 ? 'efficient' : 'standard';
-    lastDebateProtocol = p;
-    return p;
+    return r < rate ? 'extended' : r < rate * 2 ? 'efficient' : 'standard';
 };
-/** The most recently assigned protocol (read by the pipeline for runStats). */
-let lastDebateProtocol: DebateProtocol = 'standard';
-export const getLastDebateProtocol = (): DebateProtocol => lastDebateProtocol;
+
 /**
- * Per-debate protocol seed. conductRealDebate calls setProtocolSeed()
- * with the setup identity before assigning; when unset the assignment falls
- * back to a time-bucketed key (still deterministic within an epoch hour).
+ * LEGACY runStats side channel. The orchestrator
+ * (useAnalysisPipeline) builds promptVersion/protocol attribution from
+ * getLastDebateProtocol() AFTER its debate stream ends. It is no longer
+ * written at ASSIGNMENT time — concurrent debates used to overwrite each
+ * other's lane mid-run and mislabel the first debate with the second's
+ * protocol. conductRealDebate's wrapper writes it when its OWN generator
+ * completes, so a sequential read after the stream sees the protocol of the
+ * debate that just ran. Per-debate consumers never need this global: every
+ * debate announces its own lane on its own run log (the 'episode'
+ * onRunEvent line) and takes its seed via `opts.protocolSeed`.
  */
-export const DEBATE_PROTOCOL_EPOCH_MS = 60 * 60_000;
-const lastProtocolSeedRef: { key: string } = { key: '' };
+let lastDebateProtocol: DebateProtocol = 'standard';
+/** The protocol of the most recently COMPLETED debate ('standard' before any). */
+export const getLastDebateProtocol = (): DebateProtocol => lastDebateProtocol;
+
+/**
+ * LEGACY per-debate protocol seed side channel: the pipeline calls
+ * setProtocolSeed() with the setup identity immediately before creating
+ * each conductRealDebate generator. Seeds are queued and consumed (FIFO —
+ * set-before-create order matches per pipeline run) by the NEXT generator's
+ * first protocol assignment, so a second concurrent set() can no longer
+ * hijack the first debate's seed, and a never-consumed seed cannot leak
+ * into later unseeded engine calls. New callers pass `opts.protocolSeed`
+ * per debate instead.
+ */
+const pendingProtocolSeeds: string[] = [];
 export const setProtocolSeed = (seed: string): void => {
-    lastProtocolSeedRef.key = seed;
+    pendingProtocolSeeds.push(seed);
+    // A seeded debate that never starts must not gift its identity to a
+    // much later debate — cap the backlog.
+    if (pendingProtocolSeeds.length > 8) pendingProtocolSeeds.shift();
 };
+const consumeProtocolSeed = (): string => pendingProtocolSeeds.shift() ?? '';
 
 /** Wall-clock budget for the whole real debate — see conductRealDebate. */
 export const DEBATE_DEFAULT_TIMEOUT_MS = 8 * 60_000;
@@ -1840,7 +1865,31 @@ async function streamWithTransientRetry(
     throw lastError;
 }
 
+/** The real-debate engine. Thin exported wrapper around
+ * conductRealDebateImpl so the per-debate protocol lane stays isolated:
+ * the impl writes ITS lane into the call-local box, and the legacy
+ * getLastDebateProtocol() global is only published when THIS generator
+ * finishes — normal end, error, or consumer abandonment. Concurrent
+ * debates can no longer overwrite each other's attribution mid-run.
+ * The public parameter list is the impl's list MINUS the leading box. */
+type DropFirst<T extends readonly unknown[]> = T extends readonly [unknown, ...infer Rest] ? Rest : never;
 export const conductRealDebate = async function* (
+    ...args: DropFirst<Parameters<typeof conductRealDebateImpl>>
+): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
+    const protocolBox: { value: DebateProtocol } = { value: 'standard' };
+    try {
+        yield* conductRealDebateImpl(protocolBox, ...args);
+    } finally {
+        // Publish THIS debate's protocol (not whichever debate hashed last)
+        // to the legacy runStats side channel.
+        lastDebateProtocol = protocolBox.value;
+    }
+};
+
+const conductRealDebateImpl = async function* (
+    /** Call-local out-parameter: the impl records its protocol lane here;
+     *  the exported wrapper publishes it on completion. Never a global. */
+    protocolBox: { value: DebateProtocol },
     analysts: RealDebateAnalyst[],
     userPrompt: string,
     finalTradeSummary: string | null,
@@ -1925,6 +1974,12 @@ export const conductRealDebate = async function* (
          *  (forge_tool/amend_memory) and file creations, keyed by the seat
          *  that ran them. The pipeline persists them as Message.toolActions. */
         onToolAction?: (action: import('../../types/message').ToolAction) => void,
+        /** PER-DEBATE protocol lane seed — this setup's identity
+         *  (symbol + prompt + roster). Preferred over the legacy
+         *  setProtocolSeed() global: each concurrent debate carries its own
+         *  seed, so lanes can never cross-assign. Unseeded calls deterministically
+         *  take the CONTROL lane. */
+        protocolSeed?: string,
     },
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
@@ -2086,13 +2141,17 @@ export const conductRealDebate = async function* (
     // Consensus shortcut: when openings already agree tightly, the final rebuttal adds little — skip it and go to verdict sooner.
     let totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
     // Protocol lane: 'extended' adds a rebuttal round;
-    // 'efficient' drops clarifications + conditional devil round. The chosen
-    // protocol is announced on the run log and hashed into the pipeline's
-    // promptVersion so outcomes attribute per-protocol.
-    // The protocol seed is set by the ORCHESTRATOR (pipeline) via
-    // setProtocolSeed() before the generator runs — direct engine calls
+    // 'efficient' drops clarifications + conditional devil round. The lane is
+    // a PER-DEBATE local computed from THIS debate's seed —
+    // `opts.protocolSeed` (preferred, passed through by the caller) or the
+    // legacy setProtocolSeed() side channel, consumed exactly once here so a
+    // concurrent debate can never read or overwrite it. Direct engine calls
     // (tests) stay unseeded and deterministically take the control lane.
-    const debateProtocol = assignDebateProtocol();
+    // runStats attribution still works sequentially: the exported wrapper
+    // publishes protocolBox into the legacy global when this generator ends.
+    const protocolSeed = (opts?.protocolSeed ?? consumeProtocolSeed()).trim();
+    const debateProtocol = assignDebateProtocol(0.2, protocolSeed);
+    protocolBox.value = debateProtocol;
     if (debateProtocol === 'extended') totalRounds += 1;
     emitLog('episode', `Protocol lane: ${debateProtocol} (${totalRounds - 1} response rounds).`);
     try {
@@ -2276,7 +2335,17 @@ export const conductRealDebate = async function* (
         return false;
     };
 
-    const buildRebuttalTask = (analyst: RealDebateAnalyst, round: number, steeringNote: string, seatNote = '') => {
+    const buildRebuttalTask = (
+        analyst: RealDebateAnalyst,
+        round: number,
+        steeringNote: string,
+        seatNote = '',
+        /** Per-seat linked signal from launchSeat — carries the debate
+         *  abort AND the abandon-the-generator abort. Falls back to the
+         *  debate signal when absent. */
+        seatSignal?: AbortSignal,
+    ) => {
+        const seatAbort = seatSignal ?? signal;
         const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
         // Seat anonymization (Batch 4 b): seats address each other by LENS
         // role or seat number, never by provider/model name — model identity
@@ -2427,7 +2496,7 @@ export const conductRealDebate = async function* (
                 // (the drop path asks the user to pick a replacement).
                 const runOnce = () => streamChatWithDeskTools(analyst.provider.config, messages, {
                     temperature: 0.35,
-                    signal,
+                    signal: seatAbort,
                     trades: fullTradesForRecall,
                     maxTokens: TASK_BUDGETS.rebuttal,
                     // P2: rebuttals keep depth — the seat must argue its case
@@ -2475,7 +2544,7 @@ export const conductRealDebate = async function* (
                 // sealed CONVICTION for the auction. A truncated/ignored line is
                 // retried ONCE with a pointed nudge — the auction silently lost
                 // seats before, and nothing downstream ever flagged it.
-                if (round === totalRounds && !signal?.aborted) {
+                if (round === totalRounds && !seatAbort?.aborted) {
                     const produced = /CONVICTION:\s*\d{1,3}/i.test(localTurnText);
                     if (!produced) {
                         console.warn(`[RealDebate] ${analyst.provider.name} missed the CONVICTION line on the final round — retrying once.`);
@@ -2506,7 +2575,29 @@ export const conductRealDebate = async function* (
         | { kind: 'drop'; name: string; round: number };
     const pumpQueue: PumpItem[] = [];
     let pumpNotify: (() => void) | null = null;
+    // ── Abandonment guard ──
+    // Seat streams are detached promises: if the consumer breaks out of the
+    // for-await loop mid-debate (an AsyncGenerator .return()) or an abort
+    // surfaces as a throw, the generator body stops at the current yield —
+    // but without this guard every running seat keeps streaming into a queue
+    // nothing drains any more (burned tokens forever, pumpQueue grows
+    // unbounded). Each launch registers a linked AbortController; the pump
+    // loop's `finally` aborts them all, disarms pumpPush, and drops the
+    // queue refs. On a normal drain this is a no-op (inflight is empty).
+    const activeSeatControllers = new Set<AbortController>();
+    let pumpAbandoned = false;
+    /** A signal linked to the debate signal: aborts when the user stops the
+     *  run OR when the pump loop's finally abandons the generator. */
+    const linkSeatSignal = (): AbortController => {
+        const controller = new AbortController();
+        if (signal) {
+            if (signal.aborted) controller.abort(signal.reason);
+            else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+        }
+        return controller;
+    };
     const pumpPush = (item: PumpItem): void => {
+        if (pumpAbandoned) return;
         pumpQueue.push(item);
         if (pumpNotify) { const n = pumpNotify; pumpNotify = null; n(); }
     };
@@ -2522,7 +2613,9 @@ export const conductRealDebate = async function* (
         emitLog('round', `Rebuttal round ${round}`, round, analyst.provider.name);
         inflight.add(analyst.provider.name);
         onSpeakerStatus?.(analyst.provider.name, round, true);
-        const task = buildRebuttalTask(analyst, round, steeringNote, seatNote);
+        const seatController = linkSeatSignal();
+        activeSeatControllers.add(seatController);
+        const task = buildRebuttalTask(analyst, round, steeringNote, seatNote, seatController.signal);
         // TTFT metric: the launch timestamp rides the FIRST delta so the
         // consumer can measure real time-to-first-token per turn.
         const startedAt = new Date().toISOString();
@@ -2728,53 +2821,71 @@ export const conductRealDebate = async function* (
 
     if (!skipRebuttals) {
         scheduleReadySeats();
-        while (inflight.size > 0 || pumpQueue.length > 0 || pendingDrops.length > 0) {
-            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-            if (pumpQueue.length === 0) {
-                if (pendingDrops.length > 0) {
-                    yield* drainDrops();
+        try {
+            while (inflight.size > 0 || pumpQueue.length > 0 || pendingDrops.length > 0) {
+                if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+                if (pumpQueue.length === 0) {
+                    if (pendingDrops.length > 0) {
+                        yield* drainDrops();
+                        scheduleReadySeats();
+                        continue;
+                    }
+                    if (inflight.size === 0) break;
+                    await new Promise<void>(resolve => { pumpNotify = resolve; });
+                    continue;
+                }
+                const item = pumpQueue.shift()!;
+                if (item.kind === 'drop') {
+                    pendingDrops.push({ name: item.name, round: item.round });
+                    continue;
+                }
+                if (item.kind === 'done') {
+                    // A settled seat immediately schedules its next rebuttal —
+                    // the pump never waits for the slowest seat.
                     scheduleReadySeats();
                     continue;
                 }
-                if (inflight.size === 0) break;
-                await new Promise<void>(resolve => { pumpNotify = resolve; });
-                continue;
-            }
-            const item = pumpQueue.shift()!;
-            if (item.kind === 'drop') {
-                pendingDrops.push({ name: item.name, round: item.round });
-                continue;
-            }
-            if (item.kind === 'done') {
-                // A settled seat immediately schedules its next rebuttal —
-                // the pump never waits for the slowest seat.
-                scheduleReadySeats();
-                continue;
-            }
-            if (item.name === 'System') {
-                yield { speaker: 'System', round: item.round, text: item.text };
-                continue;
-            }
-            // Deltas arriving after the drop are discarded (partial text was
-            // already purged in the catch) — nothing further is yielded.
-            if (droppedNames.has(item.name)) continue;
-            // The conviction-retry marker CUTOFFS the truncated attempt —
-            // the seat's round text is replaced by the retry reply, not
-            // concatenated with it.
-            const markerIdx = item.text.indexOf(CONVICTION_RETRY_MARKER);
-            if (markerIdx >= 0) {
-                const before = item.text.slice(0, markerIdx).trim();
-                const after = item.text.slice(markerIdx + CONVICTION_RETRY_MARKER.length).trim();
-                roundTexts[item.name][item.round] = before || '';
-                if (before) yield { speaker: item.name, round: item.round, text: before };
-                if (after) {
-                    roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + after;
-                    yield { speaker: item.name, round: item.round, text: after };
+                if (item.name === 'System') {
+                    yield { speaker: 'System', round: item.round, text: item.text };
+                    continue;
                 }
-                continue;
+                // Deltas arriving after the drop are discarded (partial text was
+                // already purged in the catch) — nothing further is yielded.
+                if (droppedNames.has(item.name)) continue;
+                // The conviction-retry marker CUTOFFS the truncated attempt —
+                // the seat's round text is replaced by the retry reply, not
+                // concatenated with it.
+                const markerIdx = item.text.indexOf(CONVICTION_RETRY_MARKER);
+                if (markerIdx >= 0) {
+                    const before = item.text.slice(0, markerIdx).trim();
+                    const after = item.text.slice(markerIdx + CONVICTION_RETRY_MARKER.length).trim();
+                    roundTexts[item.name][item.round] = before || '';
+                    if (before) yield { speaker: item.name, round: item.round, text: before };
+                    if (after) {
+                        roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + after;
+                        yield { speaker: item.name, round: item.round, text: after };
+                    }
+                    continue;
+                }
+                roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + item.text;
+                yield { speaker: item.name, round: item.round, text: item.text, startedAt: item.startedAt };
             }
-            roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + item.text;
-            yield { speaker: item.name, round: item.round, text: item.text, startedAt: item.startedAt };
+        } finally {
+            // Abandonment cleanup (see the abandonment guard above). Reached
+            // on EVERY exit of the pump: normal drain (no-op — the seats have
+            // all settled), the abort throw, or the consumer breaking out of
+            // the for-await loop mid-stream (AsyncGenerator .return()). Seats
+            // still streaming are aborted so their provider calls stop, and
+            // the pump is disarmed so no late delta can grow a queue nobody
+            // reads.
+            pumpAbandoned = true;
+            for (const controller of activeSeatControllers) {
+                try { controller.abort(new DOMException('The operation was aborted.', 'AbortError')); } catch { /* already aborted */ }
+            }
+            activeSeatControllers.clear();
+            pumpQueue.length = 0;
+            pendingDrops.length = 0;
+            if (pumpNotify) { const n = pumpNotify; pumpNotify = null; n(); }
         }
         if (budgetNoticeEmitted) {
             const noticeRound = Math.max(rebuttalStart, Math.min(totalRounds, Math.max(1, ...[...seatRound.values()])));

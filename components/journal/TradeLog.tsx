@@ -525,6 +525,9 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
     // CLEAR before the modal's confirm button enables. The dialog
     // floats above the trade list at z-100.
     const { confirm: confirmClear, ConfirmDialogComponent: ClearDialog } = useConfirmDialog();
+    // Separate dialog instance for the bulk "Delete Selected" gate so the
+    // two confirm flows never stomp on each other's pending promise.
+    const { confirm: confirmDeleteSelected, ConfirmDialogComponent: DeleteSelectedDialog } = useConfirmDialog();
     const askClearAll = (): void => {
         void confirmClear({
             title: 'Clear all logged trades?',
@@ -561,6 +564,19 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
         return toPatternMemoryMarkdown(finalSummary, patternMemoryStatsFromTrades(trades));
     }, [finalSummary, isReviewLoading, showPatternMemory, trades]);
 
+    const handleSelect = useCallback((id: string) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
+        );
+    }, []);
+
+    // Stable detail-open handler for the memoized row — an inline arrow per
+    // row would rebuild on every render and defeat React.memo.
+    // Both callbacks sit ABOVE every conditional return: they used to live
+    // below them, which crashed row-click with "Rendered fewer hooks than
+    // expected" (a trade detail render has 2 fewer hooks than the list).
+    const openDetailForTrade = useCallback((id: string) => setDetailTradeId(id), []);
+
     if (showPatternMemory) {
         return (
             <PatternMemoryDetailView
@@ -589,26 +605,28 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
         );
     }
 
-    const handleSelect = useCallback((id: string) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
-        );
-    }, []);
-
-    // Stable detail-open handler for the memoized row — an inline arrow per
-    // row would rebuild on every render and defeat React.memo.
-    const openDetailForTrade = useCallback((id: string) => setDetailTradeId(id), []);
-
     const handleSelectActiveInsights = () => {
         const validIds = currentInsightIds.filter(id => trades.some(t => t.id === id));
         setSelectedIds(validIds);
     };
 
-    const handleDeleteSelected = () => {
-        if (selectedIds.length > 0) {
+    // Bulk delete cascades to reasoning records + autopilot watchers and has
+    // no undo system — gate it behind the same in-app dialog pattern used by
+    // "Clear all" (plain confirm; the typed-CLEAR requirement stays reserved
+    // for the wipe-everything action).
+    const handleDeleteSelected = (): void => {
+        if (selectedIds.length === 0) return;
+        const count = selectedIds.length;
+        void confirmDeleteSelected({
+            title: `Delete ${count} selected trade${count === 1 ? '' : 's'}?`,
+            message: 'This permanently deletes the selected trades, including their reasoning records and autopilot watches. This cannot be undone.',
+            confirmLabel: 'Delete',
+            destructive: true,
+        }).then(ok => {
+            if (!ok) return;
             onDeleteTrades(selectedIds);
             setSelectedIds([]);
-        }
+        });
     };
 
     const handleUpdateInsights = () => {
@@ -793,6 +811,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                 onClose={() => setViewerImageUrl(null)}
             />
             {ClearDialog}
+            {DeleteSelectedDialog}
         </div>
     );
 };

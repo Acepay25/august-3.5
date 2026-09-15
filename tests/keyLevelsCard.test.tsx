@@ -157,4 +157,39 @@ describe('the key-levels block inside the transcript', () => {
         expect(screen.queryByTestId('key-levels-card')).toBeNull();
         expect(screen.queryByText(/R1 \| 100/)).toBeNull();
     });
+
+    it('a NON-OWNING card unmounting must not blank the owning card\u2019s live lines', async () => {
+        const push = vi.fn();
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+            onSelectChatModel={() => {}} onChatLevelsChange={push} />);
+        act(() => { chatStore.mutate(chatStore.getActiveId(), s => ({
+            ...s,
+            entries: [
+                { id: 'k1', role: 'ai', text: 'first read\n```key-levels\nR2 | 77841 | hi\n```', tools: [] },
+                { id: 'k2', role: 'ai', text: 'second read\n```key-levels\nS1 | 77427 | lo\n```', tools: [] },
+            ],
+        })); });
+        await screen.findAllByTestId('key-levels-card');
+        const toggles = () => screen.getAllByTestId('key-levels-chart-toggle');
+        // Card k1 draws, then card k2 draws — k2 now OWNS the shared layer.
+        fireEvent.click(toggles()[0]);
+        await waitFor(() => expect(push).toHaveBeenCalled());
+        fireEvent.click(toggles()[1]);
+        await waitFor(() => {
+            const p = push.mock.calls.at(-1)![0] as MessageLevelLines;
+            expect(p).toBeTruthy();
+            expect(p.lines[0].price).toBe(77427);
+        });
+        // k1's message leaves the transcript → its card unmounts. Its clear
+        // must be DROPPED (it is not the owner): k2's lines stay drawn.
+        act(() => { chatStore.mutate(chatStore.getActiveId(), s => ({
+            ...s,
+            entries: s.entries.filter(e => e.id !== 'k1'),
+        })); });
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(push.mock.calls.at(-1)![0]).not.toBeNull();
+        // The OWNER leaving IS the legitimate clear — the channel blanks.
+        act(() => { chatStore.mutate(chatStore.getActiveId(), s => ({ ...s, entries: [] })); });
+        await waitFor(() => expect(push.mock.calls.at(-1)![0]).toBeNull());
+    });
 });

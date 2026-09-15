@@ -24,6 +24,11 @@ beforeEach(() => {
     levelWatch.__resetForTests();
     localStorage.clear();
     userRef.current = 'alice';
+    // The armed-plan REST-poll clock (cross-symbol Tier-0 #6) runs every
+    // second while a plan is armed — these suites never advance real time,
+    // but the guard keeps any leaked interval from ever hitting the network
+    // (same treatment as watchService.test.ts).
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in tests'); }));
 });
 
 const collectHits = (): LevelHit[] => {
@@ -130,5 +135,48 @@ describe('firedLevelsFor', () => {
         levelWatch.tick('BTCUSDT', 99);
         expect(levelWatch.firedLevelsFor('btc-1')).toEqual(['btc-1:ENTRY']);
         expect(levelWatch.firedLevelsFor('nope')).toEqual([]);
+    });
+});
+
+describe('armed-plan persistence (Tier-1: the armed set was memory-only)', () => {
+    it('an ARMED plan survives a reload and keeps firing without re-arm', () => {
+        levelWatch.arm(PLAN, 105);
+        expect(localStorage.getItem('trade_level_arms_v1_alice')).toContain('btc-1');
+
+        // Simulate reload: singleton resets, localStorage persists. The old
+        // service silently un-watched the live trade here.
+        levelWatch.__resetForTests();
+        const afterReload = collectHits();
+        levelWatch.tick('BTCUSDT', 99);  // ENTRY fires off the reloaded plan
+        levelWatch.tick('BTCUSDT', 89);  // SL fires
+        expect(afterReload.map(h => h.levelId)).toEqual(['btc-1:ENTRY', 'btc-1:SL']);
+    });
+
+    it('the armed set is per-user: a switch does not inherit the other profile\u2019s live watches', () => {
+        levelWatch.arm(PLAN, 105);
+        levelWatch.tick('BTCUSDT', 99); // alice's ENTRY fires + latches
+
+        userRef.current = 'bob';
+        levelWatch.__resetForTests();
+        const bobHits = collectHits();
+        levelWatch.tick('BTCUSDT', 89); // bob has no armed plans → silent
+        expect(bobHits.length).toBe(0);
+        expect(levelWatch.getArmedPlans().length).toBe(0);
+        // And back to alice, her plan is re-adopted from her own key.
+        userRef.current = 'alice';
+        levelWatch.__resetForTests();
+        const aliceHits = collectHits();
+        levelWatch.tick('BTCUSDT', 89);
+        expect(aliceHits.map(h => h.levelId)).toEqual(['btc-1:SL']);
+    });
+
+    it('disarming persists (a reload does not resurrect a dropped watch)', () => {
+        levelWatch.arm(PLAN, 105);
+        levelWatch.disarm('btc-1');
+        expect(localStorage.getItem('trade_level_arms_v1_alice')).toBeNull();
+        levelWatch.__resetForTests();
+        const hits = collectHits();
+        levelWatch.tick('BTCUSDT', 99);
+        expect(hits.length).toBe(0);
     });
 });

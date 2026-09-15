@@ -17,7 +17,7 @@ const { runScreenerMock, streamMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../services/trade/screener', () => ({
-    runScreener: (...args: unknown[]) => runScreenerMock(...args),
+    runScreenerWithStatus: (...args: unknown[]) => runScreenerMock(...args),
 }));
 vi.mock('../services/analysis/DeskToolsService', () => ({
     streamChatWithDeskTools: (...args: unknown[]) => streamMock(...args),
@@ -58,7 +58,7 @@ beforeEach(() => {
     runScreenerMock.mockReset();
     runScreenerMock.mockImplementation(async ({ onRows }: { onRows?: (r: unknown[]) => void }) => {
         onRows?.([ROW]);
-        return [ROW];
+        return { rows: [ROW], universeFailed: false };
     });
     streamMock.mockReset();
     chatStore.__resetForTests();

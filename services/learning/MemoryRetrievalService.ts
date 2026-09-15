@@ -29,6 +29,7 @@ import { findRelevantTrades } from './PatternMemorySynthesisService';
 import {
     isSkillFile,
     parseSkillMarkdown,
+    skillBody,
     skillMatchesSetup,
     skillInScopeForLens,
     skillStatusAt,
@@ -316,7 +317,12 @@ const matchedSkillBlock = (
     }
     const titleBits = [match.meta.kind === 'avoid' ? 'Avoid' : 'Repeat', match.meta.coin, match.meta.direction]
         .filter(Boolean).join(' ');
-    const body = substituteSkillContext(match.file.content.trim(), query);
+    // Inject the BODY, never the raw file: a real skill file carries 25-35
+    // YAML frontmatter lines (status/counts/history/shadow JSON…), and under
+    // the 400-char cap the raw file meant the metadata ate the entire budget
+    // and the actual PROCEDURE was truncated away. skillBody() makes the
+    // budget buy procedure text — which is all the model can act on.
+    const body = substituteSkillContext(skillBody(match.file.content), query);
     const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
     // Provenance: how many logged trades
     // shaped this rule — from the monotonic evidence counter, not the
@@ -705,7 +711,10 @@ export function handleRecallTool(
     const matches = rankedMatchedSkills(query).slice(0, 1 + VERDICT_EXTRA_SKILLS);
     matches.forEach((m, i) => {
         if (i === 0) {
-            const body = substituteSkillContext(m.file.content.trim(), query);
+            // Body, not the raw file — same frontmatter-budget rule as the
+            // verdict slice; the model asked for the PROCEDURE, not the
+            // bookkeeping YAML.
+            const body = substituteSkillContext(skillBody(m.file.content), query);
             const capped = body.length > 700 ? `${body.slice(0, 700).trimEnd()}\n…` : body;
             sections.push(
                 `SKILL ${m.meta.status.toUpperCase()} (${Math.round(m.meta.wins)}W/${Math.round(m.meta.losses)}L · ${evidenceFreshness(m.meta)}):\n${capped}`

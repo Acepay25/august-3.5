@@ -16,6 +16,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = store[key];
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
         store[key] = value;
     }),
@@ -324,6 +329,11 @@ describe('veto falsification ledger', () => {
             takeProfits: [{ price: 110 }],
             stopLoss: 95,
         });
+        // Flush the fire-and-forget veto telemetry (recordMemoryInjection,
+        // now serialized through the per-key prefs queue — it lands one or two
+        // microtasks later than before) so the write-count baseline is stable
+        // when "no new persist" is asserted below.
+        await new Promise(resolve => setTimeout(resolve, 0));
         const writesAfterRecord = writes();
 
         // An improving tick (price up, still below TP) raises MFE only — it
@@ -485,6 +495,46 @@ describe('sequential eval verdict gating', () => {
         const meta = readMeta(fileId);
         expect(meta.status).toBe('confirmed');
         expect(meta.history![meta.history!.length - 1].reason).toContain('eval helps');
+    });
+
+    it("an eval-demoted candidate cannot re-promote through the CI gate on evidence alone (the 'hurts' pin is status-agnostic)", async () => {
+        const now = new Date().toISOString();
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const file = await createMemoryFile(skills.id, 'seq-nodepromo.md', `---
+status: candidate
+kind: avoid
+coin: BTCUSDT
+direction: Short
+wins: 1
+losses: 9
+ifCondition: BTC short setup
+thenAction: skip the short
+tradeIds: a,b,c,d,e,f,g,h,i,j
+evalVerdict: hurts
+evalStreak: 2
+lastEvalAt: ${now}
+lastEvidenceAt: ${now}
+---
+
+# Avoid BTC short
+`, USER, true);
+        // The record itself CLEARS the confirmation CI gate: one WIN brings
+        // it to 2W/9L — avoid skill, n=11 ≥ cold-start minimum, Wilson upper
+        // bound (.477) excludes 50%. Guarding the hurts-pin on
+        // `status === 'confirmed'` meant exactly this candidate re-promoted
+        // silently on the next evidence trade — the two-consecutive-'helps'
+        // rehabilitation bar in SkillEvalService was bypassed without the
+        // skill ever proving itself again.
+        const win = makeTrade('np-1', 'WIN' as TradeOutcome);
+        await applySkillEvidence(win, USER, [win]);
+        const pinned = readMeta(file.id);
+        expect(pinned.wins).toBe(2); // the trade was counted…
+        expect(pinned.status).toBe('candidate'); // …but the pin holds the tier
+        // Rehabilitation stays available: two consecutive 'helps' flips the
+        // verdict off 'hurts' and restores the tier.
+        await recordEvalVerdict(file.id, { verdict: 'helps', flips: 3, alignedFlips: 3 }, USER);
+        await recordEvalVerdict(file.id, { verdict: 'helps', flips: 3, alignedFlips: 3 }, USER);
+        expect(readMeta(file.id).status).toBe('confirmed');
     });
 });
 

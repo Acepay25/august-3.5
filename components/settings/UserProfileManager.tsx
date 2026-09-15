@@ -94,14 +94,33 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest pl-1 block">Continue Session</label>
                      <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                          {existingUsers.map(user => (
-                             <div key={user} className="group flex items-center gap-3 p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-white/5 hover:border-cyan-500/30 transition-all cursor-pointer" onClick={() => onUserSelect(user)}>
+                             <div
+                                key={user}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Continue session as ${user}`}
+                                className="group flex items-center gap-3 p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-white/5 hover:border-cyan-500/30 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                                onClick={() => onUserSelect(user)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        // Space would otherwise scroll the list
+                                        e.preventDefault();
+                                        onUserSelect(user);
+                                    }
+                                }}
+                             >
                                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-cyan-400 group-hover:bg-cyan-500/10 transition-colors">
                                      <UserIcon />
                                  </div>
                                  <span className="flex-1 font-medium text-zinc-200 group-hover:text-white">{user}</span>
-                                 <button 
+                                 {/* Delete stays in the tab order at low
+                                     opacity (hover-only was keyboard-
+                                     unreachable) with a real label. */}
+                                 <button
                                     onClick={(e) => { e.stopPropagation(); onDeleteUser(user); }}
-                                    className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+                                    aria-label={`Delete user ${user}`}
+                                    className="p-2 text-zinc-600 hover:text-red-400 focus-visible:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                                     title="Delete User"
                                  >
                                      <TrashIcon />

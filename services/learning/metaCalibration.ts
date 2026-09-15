@@ -28,6 +28,7 @@
  */
 
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { withSerializedPref } from '../infrastructure/serializedPrefs';
 import { recordHarnessLesson } from './harnessLessons';
 
 const KEY_PREFIX = 'meta_calibration_v1_';
@@ -75,12 +76,38 @@ const empty = (): MetaCalibrationData => ({
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
 
+/** Coerce one raw blob field into a finite counter (junk → fallback). */
+const num = (v: unknown, fallback: number): number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback;
+
+/** Coerce one raw blob field into an array of non-empty strings (junk → []). */
+const strArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+
+/**
+ * Read + NORMALIZE the blob. getPreferenceObject is an unchecked cast, and a
+ * corrupted/hand-edited store (string counters, non-array watch lists) used
+ * to poison every `+=`/`.includes`/spread below — the recorders' blanket
+ * catch then silently swallowed the resulting TypeError, losing the event.
+ */
 const read = async (username: string): Promise<MetaCalibrationData> => {
     try {
-        const raw = await getPreferenceObject<MetaCalibrationData>(keyFor(username));
-        return raw && typeof raw === 'object'
-            ? { ...empty(), ...raw }
-            : empty();
+        const raw = await getPreferenceObject<Partial<MetaCalibrationData>>(keyFor(username));
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return empty();
+        return {
+            worthGateApproved: num(raw.worthGateApproved, 0),
+            worthGateConfirmed: num(raw.worthGateConfirmed, 0),
+            pendingGateWatch: strArray(raw.pendingGateWatch),
+            refinements: num(raw.refinements, 0),
+            refinementsRecovered: num(raw.refinementsRecovered, 0),
+            evalVerdicts: num(raw.evalVerdicts, 0),
+            evalVerdictsAgreed: num(raw.evalVerdictsAgreed, 0),
+            evalErasCounted: strArray(raw.evalErasCounted),
+            updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : empty().updatedAt,
+            ratios: raw.ratios && typeof raw.ratios === 'object' && !Array.isArray(raw.ratios)
+                ? raw.ratios
+                : undefined,
+        };
     } catch {
         return empty();
     }
@@ -96,42 +123,56 @@ const write = async (username: string, data: MetaCalibrationData): Promise<void>
 const normCondition = (ifCondition: string | undefined): string =>
     (ifCondition || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
+/**
+ * Every recorder below is a read→mutate→write on the per-user blob. They fire
+ * concurrently (gate approvals, confirms, refinement settlements and eval
+ * agreements from several trades/skills at once), and an unserialized pair
+ * loses whichever write read before the other landed — silently dropping
+ * counters and watch entries (the same lost-credit class as the injection
+ * log, serialized in MemoryInjectionService).
+ */
 export const recordWorthGateApproval = async (username: string, ifCondition?: string): Promise<void> => {
     try {
-        const d = await read(username);
-        d.worthGateApproved += 1;
-        const key = normCondition(ifCondition);
-        if (key && !d.pendingGateWatch.includes(key)) {
-            d.pendingGateWatch = [...d.pendingGateWatch, key].slice(-WATCH_CAP);
-        }
-        d.updatedAt = new Date().toISOString();
-        await write(username, d);
+        await withSerializedPref(keyFor(username), async () => {
+            const d = await read(username);
+            d.worthGateApproved += 1;
+            const key = normCondition(ifCondition);
+            if (key && !d.pendingGateWatch.includes(key)) {
+                d.pendingGateWatch = [...d.pendingGateWatch, key].slice(-WATCH_CAP);
+            }
+            d.updatedAt = new Date().toISOString();
+            await write(username, d);
+        });
     } catch { /* ignore */ }
 };
 
 /** A gate-approved skill just reached 'confirmed' for the first time. */
 export const recordWorthGateConfirm = async (username: string, ifCondition?: string): Promise<void> => {
     try {
-        const d = await read(username);
-        const key = normCondition(ifCondition);
-        const idx = key ? d.pendingGateWatch.indexOf(key) : -1;
-        if (idx >= 0) {
-            d.pendingGateWatch.splice(idx, 1);
-            d.worthGateConfirmed += 1;
-            d.updatedAt = new Date().toISOString();
-            await write(username, d);
-        }
+        await withSerializedPref(keyFor(username), async () => {
+            const d = await read(username);
+            const key = normCondition(ifCondition);
+            const idx = key ? d.pendingGateWatch.indexOf(key) : -1;
+            if (idx >= 0) {
+                d.pendingGateWatch.splice(idx, 1);
+                d.worthGateConfirmed += 1;
+                d.updatedAt = new Date().toISOString();
+                await write(username, d);
+            }
+        });
     } catch { /* ignore */ }
 };
 
 /** A shadow refinement settled: recovered = it won the comparison. */
 export const recordRefinementOutcome = async (username: string, recovered: boolean): Promise<void> => {
     try {
-        const d = await read(username);
-        d.refinements += 1;
-        if (recovered) d.refinementsRecovered += 1;
-        d.updatedAt = new Date().toISOString();
-        await write(username, d);
+        await withSerializedPref(keyFor(username), async () => {
+            const d = await read(username);
+            d.refinements += 1;
+            if (recovered) d.refinementsRecovered += 1;
+            d.updatedAt = new Date().toISOString();
+            await write(username, d);
+        });
     } catch { /* ignore */ }
 };
 
@@ -142,13 +183,15 @@ export const recordEvalAgreement = async (
     agreed: boolean,
 ): Promise<void> => {
     try {
-        const d = await read(username);
-        if (!eraKey || d.evalErasCounted.includes(eraKey)) return;
-        d.evalVerdicts += 1;
-        if (agreed) d.evalVerdictsAgreed += 1;
-        d.evalErasCounted = [...d.evalErasCounted, eraKey].slice(-ERA_CAP);
-        d.updatedAt = new Date().toISOString();
-        await write(username, d);
+        await withSerializedPref(keyFor(username), async () => {
+            const d = await read(username);
+            if (!eraKey || d.evalErasCounted.includes(eraKey)) return;
+            d.evalVerdicts += 1;
+            if (agreed) d.evalVerdictsAgreed += 1;
+            d.evalErasCounted = [...d.evalErasCounted, eraKey].slice(-ERA_CAP);
+            d.updatedAt = new Date().toISOString();
+            await write(username, d);
+        });
     } catch { /* ignore */ }
 };
 
@@ -168,12 +211,16 @@ export const loadMetaCalibration = async (username: string): Promise<MetaCalibra
  * scope+kind+pattern matching.
  */
 export const runWeeklyMetaCalibration = async (username: string): Promise<MetaCalibrationRatios> => {
-    const d = await read(username);
-    const ratios = computeMetaCalibrationRatios(d);
-    d.ratios = ratios;
-    d.updatedAt = new Date().toISOString();
-    await write(username, d);
+    const ratios = await withSerializedPref(keyFor(username), async () => {
+        const d = await read(username);
+        const r = computeMetaCalibrationRatios(d);
+        d.ratios = r;
+        d.updatedAt = new Date().toISOString();
+        await write(username, d);
+        return r;
+    });
 
+    const d = await read(username);
     const precision = ratios.worthGatePrecision;
     if (precision !== null && d.worthGateApproved >= META_GATE_SAMPLE_MIN && precision < META_PRECISION_FLOOR) {
         recordHarnessLesson({

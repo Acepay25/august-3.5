@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // (the localStorage path is exercised directly in the selection test).
 vi.mock('../services/infrastructure/PreferencesService', () => ({
   getPreferenceObject: vi.fn(async () => null),
+  getPreferenceArray: vi.fn(async () => []),
   setPreferenceObject: vi.fn(async () => {}),
   PREF_KEYS: {
     ANALYST_LENS_CONFIG: 'analyst_lens_config',

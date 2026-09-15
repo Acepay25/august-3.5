@@ -13,11 +13,16 @@
  * silently at their deadline. Armed watches persist per user in localStorage
  * (`trade_watches_v1_${user}`, capped), so "check back in 30 minutes" survives
  * a reload — and firing needs a live clock: the service runs its own 1s
- * interval while wakes are armed (the price path is driven by the feed's
- * tick()), because a scheduled wake is about the CLOCK, not the tape.
+ * interval while ANY watch is armed. Price watches ride the visible chart
+ * feed's tick() when it covers their symbol, and the same clock REST-polls
+ * the mark price (Binance futures premiumIndex, ~5s per symbol) for the
+ * non-visible ones — before that, a watch armed while the chart pointed at
+ * another coin could never see a tick for its symbol and silently expired
+ * (Tier-0 #6).
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
+import { fetchMarkPrice } from './markPricePoll';
 import {
     watchConditionHolds, watchExpired,
     type WatchFired, type WatchItem,
@@ -25,13 +30,25 @@ import {
 
 const WATCHES_KEY_PREFIX = 'trade_watches_v1';
 const MAX_WATCHES = 10;
+/** A price is only trusted while fresh: the visible-chart feed prints ~1s
+ *  apart and the REST poll refreshes non-visible symbols every ~5s. Beyond
+ *  this window a cached print is worse than none (the cross-symbol gate). */
+const PRICE_MAX_AGE_MS = 10_000;
+/** Per-symbol REST throttle for armed-but-not-visible symbols. */
+const PRICE_POLL_INTERVAL_MS = 5_000;
 
 const storageKey = (user: string): string => `${WATCHES_KEY_PREFIX}_${user}`;
 
 let watches = new Map<string, WatchItem>();
 let loadedFor = '';
-let lastPrice: number | null = null;
-let lastPriceSymbol = '';
+/** Last price per symbol + when it arrived. The chart feed's tick() only
+ *  ever carries the ACTIVE symbol, so a per-symbol map (not one last-price)
+ *  is what lets the REST poll side-feed armed watches on other coins —
+ *  previously they silently expired because `lastPriceSymbol === w.symbol`
+ *  could never hold for a non-visible symbol (Tier-0 #6). */
+let priceBySymbol = new Map<string, { price: number; at: number }>();
+const lastPollAttempt = new Map<string, number>();
+const pollInFlight = new Set<string>();
 const subscribers = new Set<(fired: WatchFired, remaining: WatchItem[]) => void>();
 let clock: ReturnType<typeof setInterval> | null = null;
 
@@ -39,6 +56,34 @@ const persist = (): void => {
     try {
         localStorage.setItem(storageKey(loadedFor), JSON.stringify([...watches.values()].slice(-MAX_WATCHES)));
     } catch { /* private mode — watches live in memory this session */ }
+};
+
+/** REST-poll every armed price symbol whose feed went stale (the visible
+ *  chart tick refreshes its symbol ~1s, so in practice only non-visible
+ *  symbols reach this — and a unmounted chart degrades to polled, not
+ *  silently dead). Each symbol is attempted at most once per
+ *  PRICE_POLL_INTERVAL_MS (throttle counts attempts, not successes, so a
+ *  dead endpoint can't hot-loop). */
+const pollStaleSymbols = (nowMs: number): void => {
+    const targets = new Set<string>();
+    for (const w of watches.values()) {
+        if (w.kind !== 'price') continue;
+        const entry = priceBySymbol.get(w.symbol);
+        if (entry && nowMs - entry.at < PRICE_POLL_INTERVAL_MS) continue; // feed is fresh
+        targets.add(w.symbol);
+    }
+    for (const symbol of targets) {
+        if (pollInFlight.has(symbol)) continue;
+        if (nowMs - (lastPollAttempt.get(symbol) ?? 0) < PRICE_POLL_INTERVAL_MS) continue;
+        lastPollAttempt.set(symbol, nowMs);
+        pollInFlight.add(symbol);
+        void fetchMarkPrice(symbol).then(price => {
+            if (price !== null) {
+                priceBySymbol.set(symbol, { price, at: Date.now() });
+                evaluateWatches(Date.now());
+            }
+        }).finally(() => pollInFlight.delete(symbol));
+    }
 };
 
 const validWatch = (w: unknown): w is WatchItem => {
@@ -76,8 +121,18 @@ const loadWatches = (): void => {
 };
 
 const syncClock = (): void => {
-    const needsClock = [...watches.values()].some(w => w.kind === 'time');
-    if (needsClock && !clock) clock = setInterval(() => evaluateWatches(Date.now()), 1000);
+    // The clock now serves BOTH kinds: time wakes fire off it, and price
+    // watches on symbols the visible chart isn't feeding rely on it to run
+    // the REST poll — an armed price watch with no clock was the silent
+    // expiry (Tier-0 #6). It stops as soon as nothing is armed.
+    const needsClock = watches.size > 0;
+    if (needsClock && !clock) {
+        clock = setInterval(() => {
+            const now = Date.now();
+            pollStaleSymbols(now);
+            evaluateWatches(now);
+        }, 1000);
+    }
     if (!needsClock && clock) { clearInterval(clock); clock = null; }
 };
 
@@ -85,6 +140,16 @@ const emit = (fired: WatchFired, remaining: WatchItem[]): void => {
     for (const cb of subscribers) {
         try { cb(fired, remaining); } catch { /* one bad listener must not stall the harness */ }
     }
+};
+
+/** The freshest trustworthy mark for a watch's symbol: the visible chart
+ *  feed (tick) or the REST poll both write priceBySymbol; a print older
+ *  than PRICE_MAX_AGE_MS means the feed for it died — better none than a
+ *  stale cross-symbol number. */
+const priceFor = (symbol: string, nowMs: number): number | null => {
+    const entry = priceBySymbol.get(symbol);
+    if (!entry || nowMs - entry.at > PRICE_MAX_AGE_MS) return null;
+    return entry.price;
 };
 
 /** Evaluate every watch against the given clock + last known price; fire the
@@ -96,7 +161,7 @@ const evaluateWatches = (nowMs: number): void => {
         if (watchExpired(w, nowMs)) { watches.delete(w.id); continue; }
         // The price only rides the signal when it's THIS symbol's mark —
         // a cross-symbol number is worse than none.
-        const price = lastPriceSymbol === w.symbol ? lastPrice : null;
+        const price = priceFor(w.symbol, nowMs);
         if (!watchConditionHolds(w, price, nowMs)) continue;
         watches.delete(w.id);
         persist();
@@ -152,8 +217,7 @@ export const list = (symbol?: string): WatchItem[] => {
  *  the price and lets price watches fire the moment it touches. */
 export const tick = (symbol: string, price: number): void => {
     if (!Number.isFinite(price) || price <= 0) return;
-    lastPrice = price;
-    lastPriceSymbol = symbol;
+    priceBySymbol.set(symbol, { price, at: Date.now() });
     evaluateWatches(Date.now());
 };
 
@@ -171,8 +235,9 @@ export const subscribe = (cb: (fired: WatchFired, remaining: WatchItem[]) => voi
 export const __resetForTests = (): void => {
     watches = new Map();
     loadedFor = '';
-    lastPrice = null;
-    lastPriceSymbol = '';
+    priceBySymbol = new Map();
+    lastPollAttempt.clear();
+    pollInFlight.clear();
     subscribers.clear();
     if (clock) { clearInterval(clock); clock = null; }
 };

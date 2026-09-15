@@ -197,6 +197,68 @@ describe('scanTradeOutcome + resolveOutcomeFromScan — canonical semantics', ()
   });
 });
 
+// Tier-0 #7 (deep-dive 2026-09-15): an inverted plan (Long stop ABOVE entry,
+// "TP" BELOW it) used to print an instant same-candle WIN — the low ≤ entry
+// trigger and high ≥ tp both hit on bar one. The engine now refuses to score
+// such plans at all (defense-in-depth behind the sanitize-time repair gate).
+describe('scanTradeOutcome — inverted-plan refusal (Tier-0 #7)', () => {
+  it('gives an inverted Long no same-candle WIN (INVALID, no credit)', () => {
+    const scan = scanTradeOutcome(candles(T, [
+      [95200, 95300, 94900, 95100], // entry triggers on the low…
+      [95000, 95500, 93000, 94000], // …and "TP 94000" (below entry) prints here
+    ]), 95000, 95500, [94000, 0, 0], true);
+    expect(scan.planInvalid).toBe(true);
+    expect(scan.entryTriggered).toBe(false);
+    expect(scan.tpHits).toHaveLength(0);
+    const resolution = resolveOutcomeFromScan(scan);
+    expect(resolution.outcome).toBe('INVALID');
+    expect(resolution.hitTarget).toBe('NONE');
+    expect(resolution.invalidReason).toMatch(/wrong side of the 95000 entry/i);
+  });
+
+  it('gives an inverted Short no instant WIN either', () => {
+    // Short with stop BELOW entry and target ABOVE it: every candle's high
+    // ≥ tp would have banked a phantom win under abs-masked scanning.
+    const scan = scanTradeOutcome(candles(T, [
+      [94800, 95100, 94700, 95000],
+    ]), 95000, 94500, [96000, 0, 0], false);
+    expect(scan.planInvalid).toBe(true);
+    const resolution = resolveOutcomeFromScan(scan);
+    expect(resolution.outcome).toBe('INVALID');
+    expect(resolution.outcome).not.toBe('WIN');
+    expect(resolution.outcome).not.toBe('LOSS');
+  });
+
+  it('tolerates partially-missing plans (no stop → no inversion to refuse)', () => {
+    // Callers legitimately pass 0/absent legs; only PRESENT levels are checked.
+    const scan = scanTradeOutcome(candles(T, [
+      [95200, 95300, 94900, 95100],
+      [95100, 96100, 95050, 95900],
+    ]), 95000, 0, [96000, 0, 0], true);
+    expect(scan.planInvalid).toBeUndefined();
+    expect(resolveOutcomeFromScan(scan).outcome).toBe('WIN');
+  });
+
+  it('does not flag clean plans (normal behavior unchanged)', () => {
+    const scan = scanTradeOutcome(candles(T, [
+      [95200, 95300, 94900, 95100], // entry
+      [95100, 96100, 95050, 95900], // clean TP1
+    ]), LONG.entry, LONG.sl, LONG.tps, LONG.isLong);
+    expect(scan.planInvalid).toBeUndefined();
+    expect(scan.planInvalidReason).toBeUndefined();
+    expect(resolveOutcomeFromScan(scan)).toMatchObject({ outcome: 'WIN', hitTarget: 'TP1' });
+  });
+
+  it('refuses even with startIndex (a pre-filled inverted plan still gets no credit)', () => {
+    const scan = scanTradeOutcome(candles(T, [
+      [95200, 95300, 94900, 95100],
+      [95000, 95500, 93000, 94000],
+    ]), 95000, 95500, [94000, 0, 0], true, { startIndex: 1 });
+    expect(scan.planInvalid).toBe(true);
+    expect(resolveOutcomeFromScan(scan).outcome).toBe('INVALID');
+  });
+});
+
 describe('formatDurationMs', () => {
   it('formats hours and minutes', () => {
     expect(formatDurationMs(0)).toBe('0m');

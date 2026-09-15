@@ -18,6 +18,7 @@ import { getQuickResponse } from '../services/providers/GenericProviderService';
 import { initMemoryFiles, getMemoryFiles, createMemoryFile } from '../services/learning/MemoryFilesService';
 import {
     deterministicDraftGate, gateEvidenceBackedDraft, buildSyntheticTrade, validateIfThen,
+    coveredByLiveSkill,
 } from '../services/learning/draftGates';
 import { queueSkillDraft, listSkillDrafts, tombstoneSkillDraftKey, draftTriggerKey } from '../utils/skillDrafts';
 import { parseSkillMarkdown } from '../services/learning/SkillMemoryService';
@@ -120,6 +121,56 @@ thenAction: Enter long once the reclaim candle closes above the swept level
         expect(validateIfThen(crafted({ ifCondition: 'follow trend' }))).toMatch(/generic/);
         expect(validateIfThen(crafted({ ifCondition: 'short' }))).toMatch(/too short/);
         expect(deterministicDraftGate({ crafted: crafted({ ifCondition: 'follow trend' }), tradeId: 't1', username: USER }).ok).toBe(false);
+    });
+});
+
+describe('coverage dedupe is STRICT (coin/family/overlap, not vibes)', () => {
+    const seedSkill = async (content: string, name: string) => {
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, name, content, USER, true);
+    };
+
+    it('a DIRECTION-ONLY skill does NOT cover same-direction drafts on other coins', async () => {
+        // The loose matcher scored direction-equality alone as coverage, so
+        // one direction-only skill answered "an existing skill already
+        // covers this" for EVERY same-direction draft on EVERY coin and
+        // silently silenced all future drafts for them.
+        await seedSkill(`---
+status: confirmed
+kind: avoid
+direction: Short
+wins: 3
+losses: 0
+ifCondition: shorts into rising funding get squeezed
+thenAction: skip the short
+tradeIds: a,b,c
+---
+
+# Direction-only avoid
+`, 'direction-only.md');
+        expect(coveredByLiveSkill(
+            crafted({ ifCondition: 'ETH short fade into the daily supply zone', kind: 'avoid' }),
+            'ETHUSDT', 'Short', undefined,
+        )).toBe(false);
+        // …while a skill that genuinely shares the coin still covers.
+        await seedSkill(`---
+status: confirmed
+kind: avoid
+coin: ETHUSDT
+direction: Short
+wins: 3
+losses: 0
+ifCondition: ETH short fade into the daily supply zone
+thenAction: skip the short
+tradeIds: d,e,f
+---
+
+# ETH-scoped avoid
+`, 'eth-scoped.md');
+        expect(coveredByLiveSkill(
+            crafted({ ifCondition: 'ETH short fade into the daily supply zone', kind: 'avoid' }),
+            'ETHUSDT', 'Short', undefined,
+        )).toBe(true);
     });
 });
 

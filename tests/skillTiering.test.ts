@@ -9,6 +9,7 @@ import {
     deleteMemoryFile,
     getMemoryFiles,
 } from '../services/learning/MemoryFilesService';
+import { serializeSkill, type SkillMeta } from '../services/learning/SkillMemoryService';
 
 // Progressive-disclosure + invocation-control + dynamic-context tests.
 
@@ -63,7 +64,11 @@ describe('tiered skill injection', () => {
         await seedSkill('recall-full');
         const out = handleRecallTool({ topic: 'BTC short' }, undefined);
         expect(out).toContain('What I do');
-        expect(out).toContain('BTCUSDT');
+        // ${SYMBOL}/${REGIME} substituted in the BODY — previously this
+        // line passed because the raw frontmatter (`coin: BTCUSDT`) leaked
+        // into the recall text, not because substitution worked.
+        expect(out).toContain('BTC short during');
+        expect(out).not.toContain('coin: BTCUSDT');
         expect(out).toMatch(/evidence .* old|no counted evidence yet/);
     });
 });
@@ -190,5 +195,80 @@ tradeIds: d,e
         await seedSkill('noconflict-user');
         const q = { coin: 'BTCUSDT', direction: 'Short' as const, family: 'Family A' };
         expect(getMemoryFilesContext(q, undefined, 'analyst', 'verdict')).not.toContain('[notebook conflict]');
+    });
+});
+
+describe('frontmatter never eats the skill budget', () => {
+    // The verdict slice caps the injected skill at 400 chars and recall at
+    // 700. Real skill files carry 25-35 lines of YAML frontmatter — when the
+    // injection pushed the RAW file, the metadata consumed the entire budget
+    // and the actual PROCEDURE was truncated away. These seeds are produced
+    // by serializeSkill itself (exactly what the writer persists), so the
+    // raw markdown is over a kilobyte of frontmatter before the body begins.
+    const MARKER = 'LATE-BODY-MARKER stand aside until the reclaim close prints';
+
+    const seedRealSizeSkill = async (username: string): Promise<string> => {
+        const iso = new Date().toISOString();
+        const meta: SkillMeta = {
+            status: 'confirmed',
+            kind: 'avoid',
+            description: 'Avoid: IF BTC short in Family A without a reclaim close THEN skip the short — learned from a cluster of losing shorts in the ranging tape.',
+            coin: 'BTCUSDT',
+            direction: 'Short',
+            family: 'Family A',
+            regime: 'ranging',
+            wins: 1,
+            losses: 7,
+            consecutiveLosses: 2,
+            tradeIds: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'],
+            evidenceCount: 10,
+            ifCondition: 'BTC short setup in Family A without a reclaim close',
+            thenAction: 'skip the short until the reclaim candle closes',
+            strategyFamily: 'mean_reversion',
+            horizon: 'intraday',
+            recentOutcomes: 'LLWLWLLL',
+            prediction: { expectedLiftPts: 5, horizonTrades: 10, scope: { coin: 'BTC', family: 'Family A', regime: 'ranging' } },
+            lastEvidenceAt: iso,
+            modifiedAt: iso,
+            evalVerdict: 'helps',
+            evalDetail: '3/3',
+            lastEvalAt: iso,
+            controlIds: ['c1', 'c2'],
+            history: [
+                { status: 'candidate', validFrom: '2026-08-01T00:00:00.000Z', invalidAt: '2026-08-05T00:00:00.000Z', reason: 'evidence' },
+                { status: 'confirmed', validFrom: '2026-08-05T00:00:00.000Z', reason: 'evidence' },
+            ],
+            body: `**When:** BTC short in Family A\n**Procedure:** ${MARKER}.`,
+        };
+        const content = serializeSkill(meta, 'Avoid BTC short');
+        // The guard the old 10-line stubs failed to provide: in the RAW file
+        // the marker sits far beyond the 400-char verdict cap, so a raw-push
+        // implementation CANNOT pass this test.
+        expect(content.indexOf(MARKER)).toBeGreaterThan(400);
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, 'btc-real-size-avoid.md', content, username, true);
+        return content;
+    };
+
+    const q = { coin: 'BTCUSDT', direction: 'Short' as const, family: 'Family A', regime: 'ranging' };
+
+    it('verdict body injection delivers the procedure past the frontmatter, under the cap', async () => {
+        await initMemoryFiles('fm-verdict');
+        await seedRealSizeSkill('fm-verdict');
+        const verdict = getMemoryFilesContext(q, undefined, 'analyst', 'verdict');
+        expect(verdict).toContain(MARKER);
+        // Budget buys procedure text, not YAML bookkeeping.
+        expect(verdict).not.toContain('status: confirmed');
+        expect(verdict).not.toContain('recentOutcomes:');
+        expect(verdict).not.toContain('controlIds:');
+    });
+
+    it('recall also serves the body, not the raw frontmatter', async () => {
+        await initMemoryFiles('fm-recall');
+        await seedRealSizeSkill('fm-recall');
+        const out = handleRecallTool({ topic: 'BTC short' });
+        expect(out).toContain(MARKER);
+        expect(out).not.toContain('recentOutcomes:');
+        expect(out).not.toContain('claimTestedEvidence');
     });
 });

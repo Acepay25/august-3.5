@@ -1,9 +1,16 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, safeStorage, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
 const { createSseParser } = require('./sseParser.cjs');
+// Shared provider wire-request policy — the SAME module the renderer and the
+// vite dev proxy use (thinking gate + effort-scaled budget + messages
+// temperature, Gemini thinking params, HTTPS/private-LAN URL host rules).
+// Desktop used to carry drifted inline copies (stale Claude regex missing
+// sonnet-5/opus-5, fixed 0.35 budget, localhost-only HTTP rule); they are all
+// deleted and every decision now comes from this require.
+const policy = require('../shared/providerRequestPolicy.cjs');
 
 const isDev = !app.isPackaged;
 
@@ -21,8 +28,16 @@ const LEGACY_PRODUCT_NAME = 'August 3.5';
 
 const preserveLegacyUserData = () => {
     try {
+        // DEV GUARD (crosscheck §5): dev userData is named after the package
+        // name ('august-trading'), NOT the productName, so the basename check
+        // below never fires while running `npm run electron:dev` — a dev boot
+        // on a machine with legacy production data used to fs.renameSync the
+        // user's real keys/journal INTO the dev folder and stamp it migrated,
+        // stranding it from the packaged app. Only the packaged app may
+        // migrate.
+        if (!app.isPackaged) return;
         const current = app.getPath('userData');
-        if (path.basename(current) === LEGACY_PRODUCT_NAME) return; // dev / already legacy
+        if (path.basename(current) === LEGACY_PRODUCT_NAME) return; // still on the legacy name: nothing to carry over
         const legacy = path.join(path.dirname(current), LEGACY_PRODUCT_NAME);
         if (!fs.existsSync(legacy)) return; // fresh install, nothing to carry over
         const stamp = path.join(legacy, '.migrated-to-august-trading');
@@ -119,13 +134,14 @@ const activeProviderRequests = new Map();
 // PROVIDER TRANSPORT — main-process requests avoid renderer CORS restrictions
 // =============================================================================
 
-const LOCAL_PROVIDER_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-
 function normalizeProviderUrl(url) {
     const parsed = new URL(String(url || '').trim());
-    const isLocal = LOCAL_PROVIDER_HOSTS.has(parsed.hostname.toLowerCase());
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocal)) {
-        throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost.');
+    // HTTPS-only for remote hosts; plain HTTP only for loopback/RFC1918/
+    // link-local — the SAME predicate the renderer + dev proxy use. The old
+    // desktop-only localhost rule rejected saved LAN setups (e.g.
+    // http://192.168.x:11434) that worked fine on web.
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && policy.isPrivateOrLoopbackHost(parsed.hostname))) {
+        throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
     }
     if (parsed.username || parsed.password || parsed.search || parsed.hash) {
         throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
@@ -143,7 +159,12 @@ function normalizeProviderUrl(url) {
 function discoverProviderDetails(config) {
     const baseUrl = normalizeProviderUrl(config?.baseUrl);
     const apiKey = String(config?.apiKey || '').trim();
-    if (!apiKey) throw new Error('API key is required to discover models.');
+    // Local model servers (Ollama / LM Studio) answer /models with no auth —
+    // demanding a key here made desktop discovery reject exactly the hosts
+    // that never have one. Remote providers still require a key.
+    if (!apiKey && !policy.isLocalBaseUrl(config?.baseUrl)) {
+        throw new Error('API key is required to discover models.');
+    }
     const isGemini = config?.apiFormat === 'google' || /generativelanguage/i.test(baseUrl);
     const isAnthropic = config?.apiFormat === 'messages' && !isGemini;
     const url = isGemini
@@ -153,10 +174,57 @@ function discoverProviderDetails(config) {
     if (isAnthropic) {
         headers['x-api-key'] = apiKey;
         headers['anthropic-version'] = '2023-06-01';
-    } else if (!isGemini && apiKey !== 'not-needed') {
+    } else if (!isGemini && apiKey && apiKey !== 'not-needed') {
         headers.Authorization = `Bearer ${apiKey}`;
     }
     return { url, headers };
+}
+
+// Wall-clock budget for one main-process provider request (headers OR body
+// phase), matching the browser's stream budget (STREAM_TIMEOUT_MS 300s).
+const PROVIDER_REQUEST_TIMEOUT_MS = 300000;
+const MAX_REDIRECT_HOPS = 3;
+
+/**
+ * net.fetch wrapper with redirect:'manual' + re-validation of EVERY Location
+ * hop against the shared provider-URL policy (SSRF). net.fetch follows
+ * redirects by default, so the HTTPS+host gate on the configured endpoint
+ * only ever checked the INITIAL URL: a malicious/compromised provider could
+ * 302 the main process (which has no CORS confinement) to internal or
+ * plain-HTTP targets and the body still returned to the renderer. Each hop
+ * now passes policy.isSafeProviderTargetUrl, and the chain is capped at
+ * MAX_REDIRECT_HOPS.
+ */
+async function fetchUpstream(url, init) {
+    let current = String(url);
+    let method = init?.method || 'GET';
+    let fetchInit = init;
+    for (let hop = 0; ; hop++) {
+        if (!policy.isSafeProviderTargetUrl(current)) {
+            throw new Error('Provider request blocked: the target URL failed the provider URL policy.');
+        }
+        const response = await net.fetch(current, { ...fetchInit, redirect: 'manual' });
+        const status = response.status;
+        if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
+            const location = response.headers.get('location');
+            try { if (response.body?.cancel) await response.body.cancel(); } catch { /* already consumed */ }
+            if (!location) return response; // redirect without Location: surface the status as-is
+            if (hop >= MAX_REDIRECT_HOPS) throw new Error('Provider request exceeded the redirect limit.');
+            try {
+                current = new URL(location, current).toString();
+            } catch {
+                throw new Error('Provider request blocked: redirect target is not a valid URL.');
+            }
+            if (status === 303 && method !== 'GET' && method !== 'HEAD') {
+                // 303 See Other ⇒ retry as GET without the body (fetch spec).
+                method = 'GET';
+                fetchInit = { ...fetchInit, method: 'GET' };
+                delete fetchInit.body;
+            }
+            continue;
+        }
+        return response;
+    }
 }
 
 async function sendDiscoverRequest(config) {
@@ -164,7 +232,7 @@ async function sendDiscoverRequest(config) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-        const response = await net.fetch(url, {
+        const response = await fetchUpstream(url, {
             method: 'GET',
             headers,
             signal: controller.signal,
@@ -245,16 +313,24 @@ function providerRequestDetails(request) {
             })),
         };
         if (system) body.system = contentToText(system.content);
-        if (request.temperature !== undefined) body.temperature = request.temperature;
-        // Extended thinking for thinking-capable Claude models (mirrors
-        // GenericProviderService.messagesCall). Older models reject the
-        // `thinking` block with a 400 — gate by model id and skip tiny calls
-        // (connection tests). Anthropic requires temperature unset with
-        // extended thinking, so the explicit value drops.
-        if (!request.jsonMode && /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/i.test(model) && (request.maxTokens ?? 4096) >= 4096) {
-            body.thinking = { type: 'enabled', budget_tokens: Math.max(1024, Math.floor((request.maxTokens ?? 4096) * 0.35)) };
-            delete body.temperature;
-        }
+        // Temperature + extended thinking come from the SHARED policy module
+        // (identical to the renderer by construction): 0.7 default when no
+        // thinking, thinking active → temperature omitted, effort-scaled
+        // budget from request.reasoningEffort (the renderer now forwards the
+        // composer tier over the bridge). The old inline copy had a stale
+        // Claude regex (missed sonnet-5/opus-5), a fixed 0.35 budget, ignored
+        // 'off', and only passed temperature when explicitly defined.
+        const thinkingFields = policy.anthropicThinkingFields({
+            modelId: model,
+            displayName: String(config.name || ''),
+            capabilityOverride: config.thinkingCapable,
+            maxTokens: request.maxTokens,
+            temperature: request.temperature,
+            jsonMode: request.jsonMode,
+            reasoningEffort: request.reasoningEffort,
+        });
+        if (typeof thinkingFields.temperature === 'number') body.temperature = thinkingFields.temperature;
+        if (thinkingFields.thinking) body.thinking = thinkingFields.thinking;
     } else if (format === 'responses') {
         url = `${baseUrl}/responses`;
         if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -308,9 +384,11 @@ function providerRequestDetails(request) {
         };
         if (systemBits.length > 0) body.systemInstruction = { parts: [{ text: systemBits.join('\n\n') }] };
         if (request.jsonMode) body.generationConfig.responseMimeType = 'application/json';
-        if (!request.jsonMode && /gemini|thinking/i.test(geminiModel)) {
-            body.generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: 8192 };
-        }
+        // Canonical Gemini thinking decision (includeThoughts + 8192 budget,
+        // never under JSON mode) from the shared policy module.
+        const geminiThinking = policy.geminiThinkingParams(request.jsonMode, geminiModel);
+        if (geminiThinking) body.generationConfig.thinkingConfig = geminiThinking;
+        else delete body.generationConfig.thinkingConfig;
     } else {
         throw new Error('Unknown provider API format.');
     }
@@ -478,12 +556,26 @@ async function sendProviderRequest(request, sender) {
     // 300s — matches the browser's stream budget (STREAM_TIMEOUT_MS). The old
     // 120s cap hard-aborted legitimate long reasoning streams on desktop that
     // survive in the browser.
-    const timeout = setTimeout(() => controller.abort(), 300000);
+    let timeout = setTimeout(() => controller.abort(), PROVIDER_REQUEST_TIMEOUT_MS);
+    // Re-arm the SAME controller's guard when a new phase begins (stream
+    // drain, body read, degrade re-fetch) so each phase gets a full 300s.
+    const armBodyPhase = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => controller.abort(), PROVIDER_REQUEST_TIMEOUT_MS);
+    };
     if (request.requestId) activeProviderRequests.set(request.requestId, controller);
     let response;
     let streamActive = streamRequested(request);
+    let raw = null;
+    let data = {};
+    // Cancellation + timeout stay registered through the BODY phase. The
+    // old structure ran both down in a finally the moment HEADERS arrived, so
+    // a stalled response.text() hung forever, un-abortable, and
+    // cancelProviderChat returned false for the whole body phase
+    // (deep-dive ✅ :530-533,573). Everything await-able lives inside this
+    // try; the outer finally releases the controller once the bytes are in.
     try {
-        response = await net.fetch(url, {
+        response = await fetchUpstream(url, {
             method: 'POST',
             headers,
             body: JSON.stringify(body),
@@ -497,7 +589,8 @@ async function sendProviderRequest(request, sender) {
             } else {
                 delete fallbackBody.response_format;
             }
-            response = await net.fetch(url, {
+            armBodyPhase();
+            response = await fetchUpstream(url, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(fallbackBody),
@@ -505,7 +598,8 @@ async function sendProviderRequest(request, sender) {
             });
             if (!response.ok && (response.status === 400 || response.status === 422) && fallbackBody.response_format) {
                 delete fallbackBody.response_format;
-                response = await net.fetch(url, {
+                armBodyPhase();
+                response = await fetchUpstream(url, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(fallbackBody),
@@ -519,7 +613,8 @@ async function sendProviderRequest(request, sender) {
             const retryBody = { ...body };
             delete retryBody.stream;
             delete retryBody.stream_options;
-            response = await net.fetch(url, {
+            armBodyPhase();
+            response = await fetchUpstream(url, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(retryBody),
@@ -527,70 +622,62 @@ async function sendProviderRequest(request, sender) {
             });
             streamActive = false;
         }
+        if (streamActive && response.ok && response.body && request.requestId && sender) {
+            armBodyPhase();
+            const streamOut = await consumeProviderStream(response, request, sender);
+            if (streamOut.sawData) {
+                if (streamOut.toolCalls.length > 0) {
+                    return {
+                        text: streamOut.text,
+                        reasoning: streamOut.reasoning,
+                        usage: streamOut.usage || {},
+                        toolCalls: streamOut.toolCalls,
+                        assistantMessage: {
+                            role: 'assistant',
+                            content: streamOut.text || '',
+                            tool_calls: streamOut.toolCalls.map((c, i) => ({
+                                id: c.id || `call_${i}`,
+                                type: 'function',
+                                function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) },
+                            })),
+                        },
+                    };
+                }
+                return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamOut.usage || {} };
+            }
+            // Provider ignored stream:true and answered with one JSON body —
+            // feed the accumulated raw text into the buffered parse below.
+            raw = streamOut.raw;
+        }
+        if (raw === null) {
+            armBodyPhase();
+            raw = await response.text();
+        }
+        try { data = raw ? JSON.parse(raw) : {}; } catch { /* handled by fallback below */ }
+
+        if (response.ok && (request.jsonMode || request.jsonSchema) && body.response_format) {
+            const message = data?.choices?.[0]?.message || {};
+            const content = Array.isArray(message.content)
+                ? message.content.filter(block => typeof block?.text === 'string').map(block => block.text).join('')
+                : message.content;
+            const reasoning = message.reasoning_content || message.reasoning;
+            if (!content && !reasoning) {
+                const fallbackBody = { ...body };
+                delete fallbackBody.response_format;
+                armBodyPhase();
+                response = await fetchUpstream(url, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(fallbackBody),
+                    signal: controller.signal,
+                });
+                raw = await response.text();
+                try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+            }
+        }
     } finally {
         clearTimeout(timeout);
         if (request.requestId) activeProviderRequests.delete(request.requestId);
-    }
-    let raw = null;
-    let data = {};
-    if (streamActive && response.ok && response.body && request.requestId && sender) {
-        // Re-arm cancel + the 300s guard for the BODY phase: the finally
-        // above released both when headers arrived, and an SSE stream can
-        // run long after — a wedged one must stay abortable.
-        activeProviderRequests.set(request.requestId, controller);
-        const bodyTimeout = setTimeout(() => controller.abort(), 300000);
-        let streamOut;
-        try {
-            streamOut = await consumeProviderStream(response, request, sender);
-        } finally {
-            clearTimeout(bodyTimeout);
-            activeProviderRequests.delete(request.requestId);
-        }
-        if (streamOut.sawData) {
-            if (streamOut.toolCalls.length > 0) {
-                return {
-                    text: streamOut.text,
-                    reasoning: streamOut.reasoning,
-                    usage: streamOut.usage || {},
-                    toolCalls: streamOut.toolCalls,
-                    assistantMessage: {
-                        role: 'assistant',
-                        content: streamOut.text || '',
-                        tool_calls: streamOut.toolCalls.map((c, i) => ({
-                            id: c.id || `call_${i}`,
-                            type: 'function',
-                            function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) },
-                        })),
-                    },
-                };
-            }
-            return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamOut.usage || {} };
-        }
-        // Provider ignored stream:true and answered with one JSON body —
-        // feed the accumulated raw text into the buffered parse below.
-        raw = streamOut.raw;
-    }
-    if (raw === null) raw = await response.text();
-    try { data = raw ? JSON.parse(raw) : {}; } catch { /* handled by fallback below */ }
-
-    if (response.ok && (request.jsonMode || request.jsonSchema) && body.response_format) {
-        const message = data?.choices?.[0]?.message || {};
-        const content = Array.isArray(message.content)
-            ? message.content.filter(block => typeof block?.text === 'string').map(block => block.text).join('')
-            : message.content;
-        const reasoning = message.reasoning_content || message.reasoning;
-        if (!content && !reasoning) {
-            const fallbackBody = { ...body };
-            delete fallbackBody.response_format;
-            response = await net.fetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(fallbackBody),
-                signal: controller.signal,
-            });
-            raw = await response.text();
-            try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
-        }
     }
 
     if (!response.ok) {
@@ -692,6 +779,49 @@ async function sendProviderRequest(request, sender) {
     return { text, reasoning, usage: extractTokenUsageJs(data) };
 }
 
+// =============================================================================
+// APP PROTOCOL HANDLER — registered EXACTLY ONCE at whenReady
+// =============================================================================
+// protocol.handle used to sit inside createWindow(); with the macOS
+// activate-recreate path that re-registers the scheme on every window
+// rebuild (replacing the prior handler — benign, but structural sloppiness
+// the audit flagged). One idempotent registration at boot instead.
+let appProtocolRegistered = false;
+function registerAppProtocol() {
+    if (appProtocolRegistered || isDev) return;
+    appProtocolRegistered = true;
+    const distPath = path.resolve(__dirname, '../dist');
+    protocol.handle('app', (request) => {
+        const url = new URL(request.url);
+        if (url.protocol !== 'app:' || url.hostname !== '.') {
+            return new Response('Not found', { status: 404 });
+        }
+
+        let filePath;
+        try {
+            filePath = decodeURIComponent(url.pathname);
+        } catch {
+            return new Response('Bad request', { status: 400 });
+        }
+
+        if (filePath === '/' || filePath === '') {
+            filePath = '/index.html';
+        }
+
+        const fullPath = path.resolve(distPath, `.${filePath}`);
+        const relativePath = path.relative(distPath, fullPath);
+        if (
+            relativePath === '..' ||
+            relativePath.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relativePath)
+        ) {
+            return new Response('Forbidden', { status: 403 });
+        }
+
+        return net.fetch(pathToFileURL(fullPath).toString());
+    });
+}
+
 async function createWindow() {
     const saved = loadWindowState();
     mainWindow = new BrowserWindow({
@@ -782,38 +912,7 @@ async function createWindow() {
         mainWindow.webContents.openDevTools();
     } else {
         // Serve the built dist/ folder via the custom app:// protocol
-        const distPath = path.resolve(__dirname, '../dist');
-
-        protocol.handle('app', (request) => {
-            const url = new URL(request.url);
-            if (url.protocol !== 'app:' || url.hostname !== '.') {
-                return new Response('Not found', { status: 404 });
-            }
-
-            let filePath;
-            try {
-                filePath = decodeURIComponent(url.pathname);
-            } catch {
-                return new Response('Bad request', { status: 400 });
-            }
-
-            if (filePath === '/' || filePath === '') {
-                filePath = '/index.html';
-            }
-
-            const fullPath = path.resolve(distPath, `.${filePath}`);
-            const relativePath = path.relative(distPath, fullPath);
-            if (
-                relativePath === '..' ||
-                relativePath.startsWith(`..${path.sep}`) ||
-                path.isAbsolute(relativePath)
-            ) {
-                return new Response('Forbidden', { status: 403 });
-            }
-
-            return net.fetch(pathToFileURL(fullPath).toString());
-        });
-
+        // (registered once at whenReady — see registerAppProtocol).
         mainWindow.loadURL('app://./index.html');
     }
 }
@@ -1075,7 +1174,10 @@ if (!gotSingleInstanceLock) {
     app.quit();
 } else {
     app.on('second-instance', () => {
-        if (mainWindow) {
+        // Guard the window ALIVE first: 'second-instance' can land after the
+        // window was closed (macOS keeps the app running), and isMinimized()
+        // on a destroyed BrowserWindow throws.
+        if (mainWindow && !mainWindow.isDestroyed()) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
         }
@@ -1084,6 +1186,15 @@ if (!gotSingleInstanceLock) {
 
 if (gotSingleInstanceLock) {
 app.whenReady().then(() => {
+    // Deny EVERY permission request (media, geolocation, clipboard,
+    // notifications, …) outright: Electron's default grants them, so a
+    // compromised renderer (a TradingView script runs in the app origin)
+    // could otherwise ask the OS for camera/mic/clipboard. The trading
+    // terminal needs none of them.
+    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+        callback(false);
+    });
+    registerAppProtocol();
     createWindow();
     setupAutoUpdater();
 

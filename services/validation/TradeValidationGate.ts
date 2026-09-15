@@ -202,8 +202,22 @@ export const validateAnalysisOutput = (analysis: TradeAnalysis): string[] => {
 // ============================================================================
 
 /**
+ * Normalize a coin label for pattern-memory comparison: uppercase and strip
+ * the quote suffix, mirroring the skill matchers ('BTCUSDT' → 'BTC').
+ */
+const normalizePatternCoin = (coin: string | undefined): string =>
+    (coin || '').toUpperCase().replace(/USDT?$/, '');
+
+/**
  * Compares current setup to historical losses to identify similar failing patterns.
  * Returns a warning if similarity > 70% with a loss.
+ *
+ * PATTERN MEMORY IS SYMBOL-SCOPED: a BTC loss is not evidence about an ETH
+ * setup. The old scorer never looked at the coin, so direction + family +
+ * confidence + RSI agreement on a BTC loss could fire "similar to a
+ * previous LOSS" on an ETH analysis (and downgrade its confidence). A loss
+ * only enters the comparison when the coins agree, or when either side is
+ * explicitly market-wide (no symbol recorded — a generic lesson).
  */
 export const matchPatternMemory = (
     analysis: TradeAnalysis,
@@ -220,10 +234,17 @@ export const matchPatternMemory = (
         return { warning: null, matchedTrade: null, similarity: 0 };
     }
 
+    const currentCoin = normalizePatternCoin(analysis.coinName);
+
     let bestMatch: LoggedTrade | null = null;
     let highestSimilarity = 0;
 
     for (const loss of losses) {
+        // Symbol agreement (or an explicitly market-wide side): different
+        // recorded coins never match, full stop.
+        const lossCoin = normalizePatternCoin(loss.analysis?.coinName);
+        if (currentCoin && lossCoin && currentCoin !== lossCoin) continue;
+
         let similarityScore = 0;
 
         // Check direction match
