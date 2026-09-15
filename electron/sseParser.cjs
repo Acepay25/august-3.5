@@ -130,6 +130,29 @@ function createSseParser(apiFormat) {
     };
 
     /**
+     * Data lines of the CURRENT event, buffered until its terminating blank
+     * line. Multi-line `data:` payloads are legal SSE (some gateways split
+     * large JSON frames across several lines); the old line-at-a-time parse
+     * fed each fragment to JSON.parse separately, silently dropping every
+     * multi-line event — tool-call and usage chunks included. This mirrors
+     * the renderer's streamViaProxy fix exactly: join with '\n', then parse.
+     * @type {string[]}
+     */
+    let dataLines = [];
+
+    /** Dispatch the buffered event (if it carried any data lines). */
+    const dispatch = (out) => {
+        if (dataLines.length === 0) return;
+        const data = dataLines.join('\n').trim();
+        dataLines = [];
+        if (!data) return;
+        sawData = true;
+        const res = handleData(data);
+        out.events.push(...res.events);
+        if (res.done) out.done = true;
+    };
+
+    /**
      * Feed decoded text as it lands. Returns the delta events parsed so far
      * and whether the stream signalled completion.
      * @param {string} chunkText
@@ -141,29 +164,27 @@ function createSseParser(apiFormat) {
         while ((nl = lineBuf.indexOf('\n')) !== -1) {
             const line = lineBuf.slice(0, nl).replace(/\r$/, '');
             lineBuf = lineBuf.slice(nl + 1);
-            if (!line.startsWith('data:')) continue; // event:/id:/comments/blank
-            const data = line.slice(5).trim();
-            if (!data) continue;
-            sawData = true;
-            const res = handleData(data);
-            out.events.push(...res.events);
-            if (res.done) out.done = true;
+            if (line === '') { dispatch(out); continue; } // blank line ⇒ event boundary
+            if (!line.startsWith('data:')) continue; // event:/id:/retry:/comments
+            // Per spec only ONE leading space is stripped from the value.
+            dataLines.push(line.slice(5).replace(/^ /, ''));
         }
         return out;
     };
 
-    /** Flush any unterminated trailing line, then report the accumulated
-     *  tool calls (arguments JSON parsed best-effort) and usage. */
+    /** Flush any unterminated trailing line and pending event, then report
+     *  the accumulated tool calls (arguments JSON parsed best-effort) and
+     *  usage. */
     const finish = () => {
-        let events = [];
-        let done = false;
-        const trailing = lineBuf.trim();
-        lineBuf = '';
-        if (trailing.startsWith('data:')) {
-            sawData = true;
-            const res = handleData(trailing.slice(5).trim());
-            events = res.events; done = res.done;
+        if (lineBuf.length > 0) {
+            const line = lineBuf.replace(/\r$/, '');
+            lineBuf = '';
+            if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
         }
+        const pending = { events: [], done: false };
+        dispatch(pending); // providers may omit the final blank line
+        const events = pending.events;
+        const done = pending.done;
         const toolCalls = [...toolSlots.entries()]
             .sort((a, b) => (a[0] - b[0]))
             .map(([, s], i) => {

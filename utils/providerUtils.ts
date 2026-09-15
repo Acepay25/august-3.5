@@ -5,14 +5,20 @@
 // =============================================================================
 
 import { ProviderConfig } from '../types/provider';
+import { isLocalBaseUrl } from '../shared/providerRequestPolicy.cjs';
 
 /**
- * A provider is "ready" when it is enabled AND has an API key configured.
- * Mirrors getReadyProviders() in ProviderConfigService (kept dependency-free
- * so it can be used inside hooks/memos without service imports).
+ * A provider is "ready" when it is enabled AND has a usable model AND has an
+ * API key — or points at a local model server (Ollama / LM Studio, see
+ * isLocalBaseUrl), which is keyless by design. Mirrors getReadyProviders() in
+ * ProviderConfigService exactly, including the models-presence clause (its
+ * absence here used to hand callers a `model: ''` config that 400s on every
+ * call). Kept dependency-free so it can run inside hooks/memos.
  */
 export function isProviderReady(config: ProviderConfig): boolean {
-    return config.isEnabled && config.apiKey.trim().length > 0;
+    if (!config.isEnabled) return false;
+    if (!(config.models.length > 0 || !!config.selectedModel)) return false;
+    return config.apiKey.trim().length > 0 || isLocalBaseUrl(config.baseUrl);
 }
 
 /**

@@ -22,6 +22,10 @@
 export interface ProviderHealth {
   providerId: string;
   requestCount: number;
+  /** Successes ONLY — the denominator behind avgLatencyMs. requestCount
+   *  counts errors too, and errors carry no latency: averaging over it
+   *  pulled the mean toward 0 as failures accumulated. */
+  successCount?: number;
   errorCount: number;
   rateLimitCount: number;
   lastError?: string;
@@ -62,9 +66,14 @@ export const recordProviderSuccess = (providerId: string, latencyMs: number): vo
   entry.requestCount++;
   entry.lastSuccessAt = new Date().toISOString();
   entry.lastLatencyMs = latencyMs;
-  entry.avgLatencyMs = entry.avgLatencyMs
-    ? Math.round((entry.avgLatencyMs * (entry.requestCount - 1) + latencyMs) / entry.requestCount)
-    : latencyMs;
+  // The running average is over SUCCESSFUL requests only: errors increment
+  // requestCount (and never a latency sample), so folding them into the
+  // denominator silently dragged avgLatencyMs toward 0 as failures piled up.
+  const successes = (entry.successCount ?? 0) + 1;
+  entry.successCount = successes;
+  entry.avgLatencyMs = successes === 1
+    ? latencyMs
+    : Math.round(((entry.avgLatencyMs ?? latencyMs) * (successes - 1) + latencyMs) / successes);
   entry.lastCheckedAt = new Date().toISOString();
   // A success proves the provider is back — clear the cooldown path.
   entry.recentErrorAts = [];

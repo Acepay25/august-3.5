@@ -447,6 +447,41 @@ describe('scanCandlePatterns — dominance and sequence', () => {
         expect(scan.bearishCount).toBe(1);
         expect(scan.dominantTrend).toBe('bullish');
     });
+
+    it('counts dojis (close === open) as NEUTRAL, never bearish (item 14)', () => {
+        // A quiet window of pure dojis: the old `else → bearish` bucketing
+        // marked every one of them 🔴 and skewed dominantTrend red.
+        const dojiSeries = buildSeries([
+            [100, 101, 99, 100],
+            [100.2, 101, 99.8, 100.2],
+            [100, 101.5, 98.5, 100],
+            [99.8, 100.5, 99.5, 99.8],
+            [100, 100.4, 99.6, 100], // incomplete — excluded
+        ]);
+        const scan = scanCandlePatterns(dojiSeries, 30);
+        expect(scan.bullishCount).toBe(0);
+        expect(scan.bearishCount).toBe(0);
+        expect(scan.sequence).toEqual(['⚪', '⚪', '⚪', '⚪']);
+        expect(scan.dominantTrend).toBe('neutral');
+    });
+
+    it('quiet windows do not bias dominantTrend toward bearish', () => {
+        // 4 dojis + 1 tiny bullish + incomplete: dojis must not tip the read.
+        const mixed = buildSeries([
+            [100, 101, 99, 100],
+            [100, 101, 99, 100],
+            [100, 101, 99, 100],
+            [100, 101, 99, 100],
+            [100, 100.6, 99.9, 100.3], // bullish
+            [100.3, 100.5, 100.1, 100.2], // incomplete
+        ]);
+        const scan = scanCandlePatterns(mixed, 30);
+        expect(scan.bearishCount).toBe(0);
+        expect(scan.bullishCount).toBe(1);
+        // total = 1 → bullishPct 100 → bullish, but crucially NOT driven by
+        // the dojis; with old bucketing bearish would have dominated 4:1.
+        expect(scan.dominantTrend).toBe('bullish');
+    });
 });
 
 describe('scanCandlePatterns — three-candle timing order', () => {

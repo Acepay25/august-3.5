@@ -46,6 +46,27 @@ describe('ProviderHealthService', () => {
     expect(health?.rateLimitCount).toBe(0);
   });
 
+  it('averages latency over SUCCESSFUL requests only (errors dilute nothing)', () => {
+    recordProviderSuccess('prov-a', 100);
+    // Five failures between the successes: they raise requestCount but carry
+    // no latency sample — the old divisor dragged the mean toward 0.
+    for (let i = 0; i < 5; i++) recordProviderError('prov-a', new Error('boom'));
+    recordProviderSuccess('prov-a', 300);
+
+    const health = getProviderHealth('prov-a');
+    expect(health?.requestCount).toBe(7);
+    expect(health?.successCount).toBe(2);
+    // (100 + 300) / 2 — NOT the diluted (100*6 + 300)/7 ≈ 129.
+    expect(health?.avgLatencyMs).toBe(200);
+  });
+
+  it('treats a legitimate 0ms first success as a sample (not as unset)', () => {
+    recordProviderSuccess('prov-a', 0);
+    recordProviderSuccess('prov-a', 200);
+    const health = getProviderHealth('prov-a');
+    expect(health?.avgLatencyMs).toBe(100);
+  });
+
   it('returns undefined for providers with no recorded calls', () => {
     expect(getProviderHealth('never-called')).toBeUndefined();
   });

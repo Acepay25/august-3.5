@@ -31,6 +31,11 @@ vi.mock('../services/infrastructure/PreferencesService', async (importOriginal) 
     return {
         ...actual,
         getPreferenceObject: vi.fn(async (key: string) => (key in prefStore ? clone(prefStore[key]) : null)),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = key in prefStore ? clone(prefStore[key]) : null;
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
         setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
             prefStore[key] = clone(value);
             writtenKeys.push(key);

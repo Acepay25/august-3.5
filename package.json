@@ -96,7 +96,9 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "shared/**/*",
+      "public/favicon.ico"
     ],
     "win": {
       "target": "nsis",

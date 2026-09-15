@@ -14,8 +14,24 @@
 
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { getMemoryFiles, ARCHIVE_FOLDER_NAME } from './MemoryFilesService';
-import { parseSkillMarkdown } from './SkillMemoryService';
+import * as SkillMemoryService from './SkillMemoryService';
+import type { SkillMeta } from './SkillMemoryService';
 import { queueLearningProposal } from '../../utils/learningQueue';
+
+/**
+ * CYCLE HYGIENE (v1.0.20 TDZ class): SkillMemoryService statically imports
+ * this module (recordTombstone/findArchiveTwin/queueRevivalProposal/
+ * retirementReasonFromHistory) while we import its `parseSkillMarkdown` —
+ * a module-global cycle, and the target is a `const` arrow export, i.e.
+ * hoisted-but-uninitialized (TDZ) for part of the cyclic evaluation. This
+ * file keeps every reference to the other side behind a HOISTED `function`
+ * and resolves the binding through the module namespace AT CALL TIME, so no
+ * evaluation-order flip (dev vs Rollup chunking) can dereference the const
+ * before its declaration runs.
+ */
+function parseArchivedSkill(content: string): SkillMeta | null {
+    return SkillMemoryService.parseSkillMarkdown(content);
+}
 
 const KEY_PREFIX = 'skill_graveyard_v1_';
 const MAX_TOMBSTONES = 40;
@@ -55,14 +71,15 @@ const write = async (username: string, list: SkillTombstone[]): Promise<void> =>
     } catch { /* graveyard must never break the retirement path */ }
 };
 
-export const listTombstones = async (username: string): Promise<SkillTombstone[]> =>
-    read(username);
+export async function listTombstones(username: string): Promise<SkillTombstone[]> {
+    return read(username);
+}
 
 /** Record (or refresh) one retired skill's tombstone line. */
-export const recordTombstone = async (
+export async function recordTombstone(
     username: string,
     entry: Omit<SkillTombstone, 'retiredAt'> & { retiredAt?: string },
-): Promise<void> => {
+): Promise<void> {
     try {
         const list = await read(username);
         const next: SkillTombstone = {
@@ -73,20 +90,20 @@ export const recordTombstone = async (
         const rest = list.filter(t => t.slug !== next.slug);
         await write(username, [{ ...next }, ...rest]);
     } catch { /* ignore */ }
-};
+}
 
 /** One-line graveyard entries, newest first — the worth-gate context block. */
-export const graveyardBlock = async (username: string, max = MAX_TOMBSTONES): Promise<string> => {
+export async function graveyardBlock(username: string, max = MAX_TOMBSTONES): Promise<string> {
     const list = await read(username);
     if (list.length === 0) return '';
     return list
         .slice(0, max)
         .map(t => `- ${t.slug}: tried, retired: ${t.reason} after N=${t.sampleN}, lift ${t.liftPts !== null ? `${t.liftPts >= 0 ? '+' : ''}${t.liftPts}pt` : 'unknown'}`)
         .join('\n');
-};
+}
 
 /** Re-entry rules per reason (table). */
-export const reEntryRuleForReason = (reason: RetirementReason): string => {
+export function reEntryRuleForReason(reason: RetirementReason): string {
     switch (reason) {
         case 'regime-shifted':
             return 'MAY auto-revive (user-confirmed) when the regime ledger shows its regime returning with ≥3 fresh episodes.';
@@ -98,22 +115,22 @@ export const reEntryRuleForReason = (reason: RetirementReason): string => {
         case 'user-veto':
             return 'explicit human action required — no auto path.';
     }
-};
+}
 
 /**
  * Map a ledger transition reason (the string stamped when the skill left
  * 'confirmed'/'candidate' for 'retired') to the retirement taxonomy.
  */
-export const retirementReasonFromHistory = (
+export function retirementReasonFromHistory(
     lastTransitionReason: string | undefined,
-): RetirementReason => {
+): RetirementReason {
     const r = (lastTransitionReason || '').toLowerCase();
     if (r.includes('superseded') || r.includes('worth-gate merge')) return 'superseded';
     if (r.includes('eval hurts') || r.includes('eval')) return 'eval-hurts';
     if (r.includes('user-veto') || r.includes('manual')) return 'user-veto';
     if (r.includes('regime')) return 'regime-shifted';
     return 'insufficient-evidence';
-};
+}
 
 /** Normalized trigger identity for twin matching: lowercase, ids/paths/numbers
  *  stripped, collapsible spaces. */
@@ -145,22 +162,22 @@ export interface ArchiveTwinMatch {
  * token-shuffled)? Retired/archive files only — live dedup is already handled
  * by the creation path.
  */
-export const findArchiveTwin = (
+export function findArchiveTwin(
     username: string,
     ifCondition: string | undefined,
-): ArchiveTwinMatch | null => {
+): ArchiveTwinMatch | null {
     const norm = normTrigger(ifCondition);
     if (!norm) return null;
     const tokens = tokenSet(ifCondition);
     const archive = getMemoryFiles().folders.find(f => f.name === ARCHIVE_FOLDER_NAME);
     // No archive folder ⇒ there is no retired twin to find. (isSkillFile is
     // folder-based — archive files are NOT skill files — so the folder IS the
-    // filter and parseSkillMarkdown discriminates the content.)
+    // filter and parseArchivedSkill discriminates the content.)
     if (!archive) return null;
     for (const file of getMemoryFiles().files) {
         if (file.folderId !== archive.id) continue;
         if (!file.name.endsWith('.md')) continue;
-        const meta = parseSkillMarkdown(file.content);
+        const meta = parseArchivedSkill(file.content);
         if (!meta) continue;
         const metaNorm = normTrigger(meta.ifCondition);
         if (metaNorm === norm) {
@@ -174,13 +191,13 @@ export const findArchiveTwin = (
         }
     }
     return null;
-};
+}
 
-const twinMatch = (
+function twinMatch(
     slug: string,
-    meta: NonNullable<ReturnType<typeof parseSkillMarkdown>>,
+    meta: SkillMeta,
     how: 'exact' | 'tokens',
-): ArchiveTwinMatch => {
+): ArchiveTwinMatch {
     const last = meta.history?.[meta.history.length - 1];
     return {
         slug: slug.replace(/\.md$/i, ''),
@@ -189,14 +206,14 @@ const twinMatch = (
         sampleN: (meta.wins || 0) + (meta.losses || 0),
         how,
     };
-};
+}
 
 /** Draft a REVIVAL review card instead of a fresh skill. Returns the queued
  *  proposal (null when a matching proposal is already pending). */
-export const queueRevivalProposal = (
+export function queueRevivalProposal(
     username: string,
     twin: ArchiveTwinMatch,
-): ReturnType<typeof queueLearningProposal> => {
+): ReturnType<typeof queueLearningProposal> {
     const rule = reEntryRuleForReason(twin.reason);
     return queueLearningProposal({
         kind: 'revival',
@@ -205,4 +222,4 @@ export const queueRevivalProposal = (
         fingerprint: `revival|${twin.slug}|${twin.ifCondition}`,
         payload: { slug: twin.slug, reason: twin.reason, sampleN: twin.sampleN },
     }, username);
-};
+}

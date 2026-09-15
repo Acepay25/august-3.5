@@ -155,9 +155,21 @@ export const scanSetups = (candles: ScanCandle[]): LiveSetup[] => {
     const ago = (i: number): number => n - 1 - i;
     const closes = candles.map(c => c.close);
     const avgRange = candles.slice(-20).reduce((s, c) => s + range(c), 0) / 20;
-    const hi30 = Math.max(...candles.slice(-30).map(c => c.high));
-    const lo30 = Math.min(...candles.slice(-30).map(c => c.low));
+    // Range extremes over the PRIOR 30 bars — the current bar is excluded.
+    // Including it made "close above the 30-bar high" overstate its own
+    // evidence: hi30 always contains last.high, so the breakout condition
+    // (`last.close > hi30 * 0.995` with `last.high >= hi30 * 0.998`) could be
+    // satisfied by the very bar it claims to have broken. A breakout is
+    // strength only against the range that EXISTED before this bar printed.
     const last = candles[n - 1];
+    const prior30 = candles.slice(-31, -1);
+    const priorBars = prior30.length > 0 ? prior30 : candles.slice(0, -1);
+    const hi30 = priorBars.length > 0
+        ? Math.max(...priorBars.map(c => c.high))
+        : last.high;
+    const lo30 = priorBars.length > 0
+        ? Math.min(...priorBars.map(c => c.low))
+        : last.low;
 
     // --- Range edges: breakout with body, or rejection at the edge.
     const nearTop = last.high >= hi30 * 0.998;

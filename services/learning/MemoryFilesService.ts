@@ -33,6 +33,17 @@ export interface MemoryFilesStore {
 /** Synchronous cache — populated by initMemoryFiles and every mutation. */
 let memoryCache: MemoryFilesStore = { version: 1, folders: [], files: [] };
 
+/**
+ * The username the CACHE currently holds the notebook for — set by
+ * initMemoryFiles on every load/seed. Every persist writes to THIS key, never
+ * to the username a writer captured at entry: with one module-global cache,
+ * a profile switch mid-`applySkillEvidence`/post-mortem used to hand the new
+ * user's notebook to the old writer, which persisted it under the OLD user's
+ * Preferences key (and back). Keying persistence to the cache's own owner
+ * makes that impossible: data always lands in the key that owns the bytes.
+ */
+let memoryCacheOwner: string | null = null;
+
 const uid = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 /** Folder/file names are slugified everywhere (UI and AI writer) so the
@@ -89,13 +100,21 @@ The model treats every line here as a binding rule.`,
  * NOTE: DEFAULT_FOLDERS objects are shared module state — rename/move mutate
  * folder fields in place, so every seed must deep-copy them or a moved/renamed
  * folder silently rewrites the defaults for all future users.
+ *
+ * Serialized through the notebook write lock: without it, an init landing
+ * mid-mutation swaps the cache under a writer, and the writer's persist then
+ * flushes the NEW user's notebook (see memoryCacheOwner).
  */
-export const initMemoryFiles = async (username: string): Promise<void> => {
+export const initMemoryFiles = (username: string): Promise<void> =>
+    withNotebookWriteLock(() => initMemoryFilesUnlocked(username));
+
+const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
     const freshSeed = (): MemoryFilesStore => ({
         version: 1,
         folders: DEFAULT_FOLDERS.map(f => ({ ...f })),
         files: [],
     });
+    memoryCacheOwner = username;
     try {
         const stored = await getPreferenceObject<MemoryFilesStore>(`${MEMORY_KEY_PREFIX}${username}`);
         if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
@@ -112,6 +131,9 @@ export const initMemoryFiles = async (username: string): Promise<void> => {
         memoryCache = freshSeed();
     }
 };
+
+/** The notebook the sync cache currently holds, as loaded by initMemoryFiles. */
+export const getMemoryFilesOwner = (): string | null => memoryCacheOwner;
 
 /** Current notebook state (for the Settings UI and prompt injection). */
 export const getMemoryFiles = (): MemoryFilesStore => memoryCache;
@@ -149,17 +171,29 @@ export const ensureSkillsArchiveFolderUnlocked = async (username: string): Promi
     return folder;
 };
 
-/** Persist the cache for the active user (empty store clears the key). */
+/**
+ * Persist the cache for the user the cache was LOADED for (memoryCacheOwner),
+ * not for the username the caller captured at entry — see the memoryCacheOwner
+ * note. The passed username is only a fallback for writers that run before any
+ * init has ever assigned an owner. Empty store clears the key.
+ */
 const persist = async (username: string): Promise<void> => {
+    const owner = memoryCacheOwner ?? username;
+    if (owner !== username) {
+        console.warn(
+            `[MemoryFiles] Writer captured "${username}" but the cache is owned by "${owner}" ` +
+            '(profile switched mid-write) — persisting to the cache owner\'s key.'
+        );
+    }
     if (persistSilentDepth === 0) upsertNotebookIndexInCache();
     if (memoryCache.folders.length === 0 && memoryCache.files.length === 0) {
-        await removePreference(`${MEMORY_KEY_PREFIX}${username}`);
+        await removePreference(`${MEMORY_KEY_PREFIX}${owner}`);
     } else {
         warnIfNotebookHuge();
-        await setPreferenceObject(`${MEMORY_KEY_PREFIX}${username}`, memoryCache);
+        await setPreferenceObject(`${MEMORY_KEY_PREFIX}${owner}`, memoryCache);
     }
     if (persistSilentDepth === 0) {
-        memoryChangeListeners.forEach(handler => handler(username));
+        memoryChangeListeners.forEach(handler => handler(owner));
     }
 };
 

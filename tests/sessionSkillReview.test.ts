@@ -18,9 +18,9 @@ import { fetchKlines } from '../services/analysis/KlineService';
 import {
     scoreHypotheticalTrade, thesisFingerprint, recordSessionForReview,
     extractDiscussedTrades, runSessionSkillReview, runThesisResolver,
-    cacheOpenThesis, type DiscussedThesis,
+    cacheOpenThesis, craftedSkillFromThesis, type DiscussedThesis,
 } from '../services/learning/sessionSkillReview';
-import { listSkillDrafts } from '../utils/skillDrafts';
+import { listSkillDrafts, tombstoneSkillDraftKey, draftTriggerKey } from '../utils/skillDrafts';
 
 const USER = 'alice';
 const cfg = { id: 'p', name: 'P', apiKey: 'k', baseUrl: 'https://x/v1', apiFormat: 'chat_completions', isEnabled: true, isBuiltIn: false, models: ['m'], selectedModel: 'm' } as never;
@@ -97,7 +97,7 @@ describe('runSessionSkillReview', () => {
         vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
             { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
         ]));
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
         const n = await runSessionSkillReview(USER, [session], cfg);
         expect(n).toBe(1);
         const drafts = listSkillDrafts(USER);
@@ -109,7 +109,7 @@ describe('runSessionSkillReview', () => {
         vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
             { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
         ]));
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 100, low: 89, close: 90, volume: 1 }] as never);
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 100, low: 89, close: 90, volume: 1 }] as never);
         const n = await runSessionSkillReview(USER, [session], cfg);
         expect(n).toBe(1);
         expect(listSkillDrafts(USER)[0].crafted.kind).toBe('avoid');
@@ -118,10 +118,10 @@ describe('runSessionSkillReview', () => {
     it('skips unresolved theses and never double-drafts the same idea', async () => {
         const thesis = JSON.stringify([{ symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' }]);
         vi.mocked(sendChatRequest).mockResolvedValue(thesis);
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 101, low: 99, close: 100, volume: 1 }] as never); // open
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 101, low: 99, close: 100, volume: 1 }] as never); // open
         expect(await runSessionSkillReview(USER, [session], cfg)).toBe(0);
         // Now resolve it as a win and run twice — second run must dedupe.
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
         expect(await runSessionSkillReview(USER, [session], cfg)).toBe(1);
         expect(await runSessionSkillReview(USER, [session], cfg)).toBe(0);
         expect(listSkillDrafts(USER).length).toBe(1);
@@ -159,6 +159,64 @@ describe('runSessionSkillReview', () => {
         expect(await runSessionSkillReview(USER, [s], cfg)).toBe(1);
         expect(listSkillDrafts(USER)[0].crafted.kind).toBe('repeat');
     });
+
+    it('REFUSES to score when the fetched 120-bar window starts AFTER the thesis (partial window ⇒ no verdict)', async () => {
+        // A 3-day-old thesis on 15m candles: the last 120 bars cover ~30h,
+        // so the fetch starts 2.5 days AFTER the discussion. Within that
+        // partial window price touches TP and never the stop — the old code
+        // minted a false 'repeat' WIN draft even though the stop may have
+        // blown two days earlier, OUTSIDE the covered window. The honest
+        // answer is "cannot tell": cache as open, queue nothing.
+        const T = Date.now() - 3 * 86_400_000;
+        vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
+            { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
+        ]));
+        vi.mocked(fetchKlines).mockResolvedValue([
+            { time: T + 2.5 * 86_400_000, open: 100, high: 111, low: 99, close: 110, volume: 1 },
+            { time: T + 2.9 * 86_400_000, open: 105, high: 112, low: 100, close: 111, volume: 1 },
+        ] as never);
+        const s = { id: 'sOld', transcript: 'user: long BTC 100 stop 90 target 110 here', atMs: T, symbol: 'BTCUSDT' };
+        expect(await runSessionSkillReview(USER, [s], cfg)).toBe(0);
+        expect(listSkillDrafts(USER)).toHaveLength(0);
+        // Not discarded either — kept as an open thesis for the resolver.
+        expect(localStorage.getItem('session_review_open_theses_v1:alice')).toContain('"BTCUSDT"');
+    });
+
+    it('a SKIPPED gate result never marks the thesis drafted (cooldown cannot silence it forever)', async () => {
+        const thesis = { symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', atMs: 0, interval: '15m' } as DiscussedThesis;
+        const fp = thesisFingerprint(thesis);
+        vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
+            { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
+        ]));
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never); // WIN
+        // Active tombstone cooldown for this exact trigger → the evidence
+        // gate returns 'skipped' WITHOUT ever judging the idea.
+        tombstoneSkillDraftKey(draftTriggerKey('BTC', craftedSkillFromThesis(thesis, 'win')), USER);
+
+        const s = { id: 'sSkip', transcript: 'user: long BTC 100 stop 90 target 110 here', atMs: 0, symbol: 'BTCUSDT' };
+        expect(await runSessionSkillReview(USER, [s], cfg)).toBe(0);
+
+        const drafted = JSON.parse(localStorage.getItem('session_review_drafted_v1:alice') || '[]') as string[];
+        // Pre-fix markDrafted fired on 'skipped' too — the thesis could
+        // NEVER be drafted again even after the cooldown expired.
+        expect(drafted).not.toContain(fp);
+        // It remains eligible: still in the open cache for a later resolver run.
+        expect(localStorage.getItem('session_review_open_theses_v1:alice')).toContain('"BTCUSDT"');
+    });
+
+    it('the dedupe set stores thesis FINGERPRINTS, not session ids (eviction stays honest)', async () => {
+        const thesis = { symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', atMs: 0, interval: '15m' } as DiscussedThesis;
+        vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
+            { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
+        ]));
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
+        const s = { id: 's-42', transcript: 'user: long BTC 100 stop 90 target 110 here', atMs: 0, symbol: 'BTCUSDT' };
+        expect(await runSessionSkillReview(USER, [s], cfg)).toBe(1);
+        const drafted = JSON.parse(localStorage.getItem('session_review_drafted_v1:alice') || '[]') as string[];
+        // Exactly the judged fingerprint — the dead `session.id` write used
+        // to occupy slots of the 200-cap set and evict real fingerprints.
+        expect(drafted).toEqual([thesisFingerprint(thesis)]);
+    });
 });
 
 describe('runThesisResolver (event-driven resolution)', () => {
@@ -167,12 +225,12 @@ describe('runThesisResolver (event-driven resolution)', () => {
     it('queues a cached thesis the moment price resolves it — once', async () => {
         cacheOpenThesis(USER, 's1', thesis);
         // Still unresolved → nothing queued, thesis stays cached.
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 101, low: 99, close: 100, volume: 1 }] as never);
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 101, low: 99, close: 100, volume: 1 }] as never);
         clearThrottle();
         expect(await runThesisResolver(USER, cfg)).toBe(0);
         // Price resolves it as a win → the draft lands WITHOUT another
         // extraction pass.
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never);
         clearThrottle();
         expect(await runThesisResolver(USER, cfg)).toBe(1);
         expect(listSkillDrafts(USER)[0].tradeId).toBe(thesisFingerprint(thesis));
@@ -186,12 +244,12 @@ describe('runThesisResolver (event-driven resolution)', () => {
         vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
             { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
         ]));
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 101, low: 99, close: 100, volume: 1 }] as never); // open
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 101, low: 99, close: 100, volume: 1 }] as never); // open
         expect(await runSessionSkillReview(USER, [session], cfg)).toBe(0);
         expect(listSkillDrafts(USER)).toHaveLength(0);
         // Days later, the bars printed — the resolver catches it on the next
         // send without waiting for the next 3-session boundary.
-        vi.mocked(fetchKlines).mockResolvedValue([{ time: 1, open: 100, high: 89, low: 80, close: 85, volume: 1 }] as never); // SL hit
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 89, low: 80, close: 85, volume: 1 }] as never); // SL hit
         clearThrottle();
         expect(await runThesisResolver(USER, cfg)).toBe(1);
         expect(listSkillDrafts(USER)[0].crafted.kind).toBe('avoid');

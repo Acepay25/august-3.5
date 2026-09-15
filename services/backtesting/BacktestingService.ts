@@ -33,10 +33,17 @@ const getIntervalMs = (interval: string): number => {
 };
 
 /**
- * Align timestamp to the start of a candle interval
+ * Align a timestamp UP to the start of the next candle interval.
+ *
+ * This used to FLOOR (`timestamp - timestamp % intervalMs`), i.e. start the
+ * scan up to a full interval BELOW the analysis time — pulling in candles
+ * whose price action happened BEFORE the analysis existed (≤1m of
+ * look-ahead on the 1m tier, and the "setup candle" could print fills/outcomes
+ * the signal had not yet issued). Ceiling keeps every scanned candle
+ * strictly after the analysis moment.
  */
-const alignToIntervalStart = (timestamp: number, intervalMs: number): number => {
-    return timestamp - (timestamp % intervalMs);
+const alignToNextIntervalStart = (timestamp: number, intervalMs: number): number => {
+    return Math.ceil(timestamp / intervalMs) * intervalMs;
 };
 
 /**
@@ -88,116 +95,39 @@ export const simulateTradeSignal = async (
             };
         }
 
-        // Simulate trade execution
-        let triggered = false;
-        let triggerCandle = 0;
-        let maxDrawdown = 0;
-        let exitPrice = 0;
-        let hitTarget: BacktestResult['hitTarget'] = 'NONE';
-        let candlesToOutcome = 0;
+        // Simulate trade execution via the SHARED canonical engine.
+        // This local walk used to re-introduce both defects the shared engine
+        // fixed (see the ENTRY DETECTION comment below and outcomeEngine.ts):
+        //   1. TP credit on the ENTRY candle with no canCreditTp gate — a
+        //      limit fill happens somewhere inside the bar, so a same-candle
+        //      TP wick may have printed BEFORE the fill (same-bar look-ahead).
+        //   2. Entry detection by [low, high] OVERLAP — a candle that gapped
+        //      THROUGH the entry (open beyond the level) never "touched" it
+        //      for this loop, while a resting limit order would have filled.
+        // scanTradeOutcome + resolveOutcomeFromScan carry the canonical
+        // semantics (order-aware entry-candle crediting, gap-through fills,
+        // 150% zone, TP1 breakeven) for every engine.
+        const scan = scanTradeOutcome(klines, entryPrice, stopLoss, [tp1, tp2, tp3], isLong, { excludeFormingCandle: true });
+        const resolution = resolveOutcomeFromScan(scan);
 
-        // Look for entry trigger
-        for (let i = 0; i < klines.length; i++) {
-            const candle = klines[i];
-
-            // Check if entry would be triggered
-            if (!triggered) {
-                if (isLong) {
-                    // For long, price needs to drop to entry (limit order)
-                    if (candle.low <= entryPrice && candle.high >= entryPrice) {
-                        triggered = true;
-                        triggerCandle = i;
-                    }
-                } else {
-                    // For short, price needs to rise to entry (limit order)
-                    if (candle.high >= entryPrice && candle.low <= entryPrice) {
-                        triggered = true;
-                        triggerCandle = i;
-                    }
-                }
-                // If the entry triggered on THIS candle, fall through so a
-                // same-candle SL touch is not missed (the other outcome
-                // engines scan the entry candle; this `continue` used to skip
-                // it, so entry+SL-same-candle resolved NOT_TRIGGERED).
-                if (!triggered) continue;
-            }
-
-            // Trade is active, check for SL/TP
-            const candlesSinceTrigger = i - triggerCandle;
-
-            // Calculate drawdown
-            if (isLong) {
-                const dd = (entryPrice - candle.low) / entryPrice * 100;
-                maxDrawdown = Math.max(maxDrawdown, dd);
-
-                // Check stop loss (low touches SL)
-                if (candle.low <= stopLoss) {
-                    exitPrice = stopLoss;
-                    hitTarget = 'SL';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-
-                // Check take profits (high touches TP)
-                if (tp3 > 0 && candle.high >= tp3) {
-                    exitPrice = tp3;
-                    hitTarget = 'TP3';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-                if (tp2 > 0 && candle.high >= tp2) {
-                    exitPrice = tp2;
-                    hitTarget = 'TP2';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-                if (tp1 > 0 && candle.high >= tp1) {
-                    exitPrice = tp1;
-                    hitTarget = 'TP1';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-            } else {
-                // Short position
-                const dd = (candle.high - entryPrice) / entryPrice * 100;
-                maxDrawdown = Math.max(maxDrawdown, dd);
-
-                // Check stop loss (high touches SL)
-                if (candle.high >= stopLoss) {
-                    exitPrice = stopLoss;
-                    hitTarget = 'SL';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-
-                // Check take profits (low touches TP)
-                if (tp3 > 0 && candle.low <= tp3) {
-                    exitPrice = tp3;
-                    hitTarget = 'TP3';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-                if (tp2 > 0 && candle.low <= tp2) {
-                    exitPrice = tp2;
-                    hitTarget = 'TP2';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-                if (tp1 > 0 && candle.low <= tp1) {
-                    exitPrice = tp1;
-                    hitTarget = 'TP1';
-                    candlesToOutcome = candlesSinceTrigger;
-                    break;
-                }
-            }
-        }
+        const triggered = scan.entryTriggered;
+        const hitTarget: BacktestResult['hitTarget'] = resolution.hitTarget;
+        const exitPrice = resolution.exitPrice ?? 0;
+        const maxDrawdown = scan.maxDrawdown;
+        const candlesToOutcome = resolution.exitCandleIndex !== undefined
+            ? Math.max(0, resolution.exitCandleIndex - scan.entryTriggeredAtIndex)
+            : 0;
 
         // Determine outcome
         let outcome: BacktestResult['outcome'] = 'NOT_TRIGGERED';
-        if (triggered) {
-            if (hitTarget === 'SL') {
+        if (resolution.outcome === 'INVALID') {
+            // Inverted plan — the shared engine refused to score it. Surface
+            // the reason; never WIN/LOSS for a geometrically impossible plan.
+            outcome = 'NOT_TRIGGERED';
+        } else if (triggered) {
+            if (resolution.outcome === 'LOSS') {
                 outcome = 'LOSS';
-            } else if (hitTarget !== 'NONE') {
+            } else if (resolution.outcome === 'WIN') {
                 outcome = 'WIN';
             } else {
                 // Entry filled but neither SL nor TP hit inside the lookback:
@@ -209,10 +139,12 @@ export const simulateTradeSignal = async (
 
         // Generate simulation details
         let details = '';
-        if (!triggered) {
+        if (resolution.outcome === 'INVALID') {
+            details = `Plan rejected by the outcome engine (invalid level ordering): ${resolution.invalidReason || 'unknown'}`;
+        } else if (!triggered) {
             details = `Entry price $${entryPrice.toLocaleString()} was not reached in the last ${lookbackCandles} candles.`;
         } else if (hitTarget === 'NONE') {
-            details = `Trade triggered at $${entryPrice.toLocaleString()} but neither SL nor TP was hit within ${lookbackCandles - triggerCandle} candles.`;
+            details = `Trade triggered at $${entryPrice.toLocaleString()} but neither SL nor TP was hit within ${klines.length - scan.entryTriggeredAtIndex} candles.`;
         } else if (hitTarget === 'SL') {
             details = `Trade triggered at $${entryPrice.toLocaleString()}, stopped out at $${exitPrice.toLocaleString()} after ${candlesToOutcome} candles. Max drawdown: ${maxDrawdown.toFixed(2)}%`;
         } else {
@@ -328,8 +260,9 @@ export const simulateFromAnalysisTime = async (
         // Total coverage: ~8 hours + ~20 hours + ~2.6 days + ~20 days = ~24 days
         // The 5m tier provides better precision for swing trade entry detection
 
-        // Align start time to 1m candle boundary to include setup candle
-        const alignedStartTime = alignToIntervalStart(analysisTime, getIntervalMs('1m'));
+        // Start the fetch at the next interval boundary AT OR AFTER the
+        // analysis moment — never before it (see alignToNextIntervalStart).
+        const alignedStartTime = alignToNextIntervalStart(analysisTime, getIntervalMs('1m'));
 
         console.log(`[BacktestingService] Hybrid fetch from ${new Date(alignedStartTime).toISOString()}`);
 
@@ -804,6 +737,13 @@ export const batchBacktest = async (
     avgRR: number;
     avgDrawdown: number;
     results: BacktestResult[];
+    /** Filled entries the lookback window could not resolve (ENTERED_OPEN).
+     *  Excluded from winRate — scoring them as losses punished the strategy
+     *  for running out of candles, not for losing. */
+    openTrades: number;
+    /** Signals with no usable backtest data (insufficient klines, invalid
+     *  levels, or fetch errors). Counted out of winRate entirely. */
+    noData: number;
 }> => {
     const results: BacktestResult[] = new Array(analyses.length);
 
@@ -825,10 +765,17 @@ export const batchBacktest = async (
         Array.from({ length: Math.min(CONCURRENCY, Math.max(1, analyses.length)) }, runWorker)
     );
 
-    // Calculate statistics
+    // Calculate statistics. Only SETTLED trades (WIN/LOSS) may move the
+    // win rate. ENTERED_OPEN trades filled but the window ended before any
+    // level printed — the old denominator `wouldHaveTriggered` counted every
+    // one of them as a loss, biasing batch win rates down toward 0% whenever
+    // the lookback was short relative to the setup's horizon.
     const triggeredTrades = results.filter(r => r.wouldHaveTriggered);
-    const wins = triggeredTrades.filter(r => r.outcome === 'WIN').length;
-    const winRate = triggeredTrades.length > 0 ? (wins / triggeredTrades.length) * 100 : 0;
+    const settledTrades = triggeredTrades.filter(r => r.outcome === 'WIN' || r.outcome === 'LOSS');
+    const openTrades = triggeredTrades.filter(r => r.outcome === 'ENTERED_OPEN').length;
+    const noData = results.filter(r => !r.wouldHaveTriggered && isNoDataResult(r)).length;
+    const wins = settledTrades.filter(r => r.outcome === 'WIN').length;
+    const winRate = settledTrades.length > 0 ? (wins / settledTrades.length) * 100 : 0;
     const avgDrawdown = triggeredTrades.length > 0
         ? triggeredTrades.reduce((sum, r) => sum + r.maxDrawdown, 0) / triggeredTrades.length
         : 0;
@@ -862,8 +809,27 @@ export const batchBacktest = async (
         winRate: Math.round(winRate * 10) / 10,
         avgRR: Math.round(avgRR * 100) / 100,
         avgDrawdown: Math.round(avgDrawdown * 100) / 100,
-        results
+        results,
+        openTrades,
+        noData
     };
+};
+
+/**
+ * True when a BacktestResult carries NO market evidence at all: insufficient
+ * klines, invalid levels, or a fetch/simulation error. Distinct from
+ * "data existed but the entry never printed" (a real, informative
+ * NOT_TRIGGERED). BacktestResult is a frozen public shape (types/
+ * calibration.ts, outside this wave's owned files), so "no data" is derived
+ * from the sentinel details strings this file writes — keeping the flag
+ * plumbable without changing the shared type.
+ */
+const isNoDataResult = (result: BacktestResult): boolean => {
+    const d = result.simulationDetails || '';
+    return d.includes('Insufficient historical data')
+        || d.includes('Invalid entry or stop loss')
+        || d.includes('Plan rejected by the outcome engine')
+        || d.startsWith('Backtest simulation error');
 };
 
 /**
@@ -895,16 +861,27 @@ export const validateWithBacktest = async (
     shouldTake: boolean;
     reason: string;
     backtestResult: BacktestResult;
+    /** True when the backtest produced NO usable evidence at all (no klines,
+     *  unparseable levels, or the entry was never printed in the window).
+     *  Consumers must not read `shouldTake: false` here as a bearish signal —
+     *  this is absence of disproof, not disproof. (Cross-file callers that
+     *  only destructure the old three fields keep working; only this file's
+     *  scope could be updated.) */
+    noData: boolean;
 }> => {
     // Run backtest on 4h timeframe for more reliable results
     const result = await simulateTradeSignal(analysis, symbol, '4h', 50);
 
-    // Decision logic
+    // Decision logic. Absence of evidence used to be returned as
+    // `shouldTake: true` — "no backtest data" silently CONFIRMED the trade.
+    // Unproven is not approved: return an explicit noData verdict so neither
+    // this file nor a future consumer can treat silence as a green light.
     if (!result.wouldHaveTriggered) {
         return {
-            shouldTake: true, // No historical data to invalidate
-            reason: 'Entry level not tested in recent history - no backtest data.',
-            backtestResult: result
+            shouldTake: false,
+            reason: 'No backtest evidence for this entry level (insufficient data or level never tested) — the backtest can neither confirm nor refute the setup.',
+            backtestResult: result,
+            noData: true
         };
     }
 
@@ -912,7 +889,8 @@ export const validateWithBacktest = async (
         return {
             shouldTake: false,
             reason: `Historical backtest shows LOSS with ${result.maxDrawdown.toFixed(1)}% drawdown. Consider adjusting SL.`,
-            backtestResult: result
+            backtestResult: result,
+            noData: false
         };
     }
 
@@ -920,20 +898,23 @@ export const validateWithBacktest = async (
         return {
             shouldTake: true,
             reason: `Historical backtest supports this setup - would have hit ${result.hitTarget}.`,
-            backtestResult: result
+            backtestResult: result,
+            noData: false
         };
     }
 
     if (result.outcome === 'ENTERED_OPEN') {
         return {
-            shouldTake: true,
+            shouldTake: false,
+            noData: true,
             reason: 'Backtest entered but neither target nor stop was reached in the window - inconclusive.',
             backtestResult: result
         };
     }
 
     return {
-        shouldTake: true,
+        shouldTake: false,
+        noData: true,
         reason: 'Backtest inconclusive - use other validation methods.',
         backtestResult: result
     };
@@ -1047,8 +1028,11 @@ export const validateTradeOutcome = async (
     console.log(`[PostMortemValidation] Validating trade outcome for ${symbol} from ${analysisTimestamp}${userOutcome ? ` (user logged: ${userOutcome})` : ''}`);
 
     try {
-        // Use same 3-Tier Hybrid Fetch as backtesting
-        const alignedStartTime = alignToIntervalStart(analysisTime, getIntervalMs('1m'));
+        // Use same 3-Tier Hybrid Fetch as backtesting. Start at the next 1m
+        // boundary AFTER the analysis — flooring below it let the candle that
+        // was still forming at analysis time (up to a minute of pre-signal
+        // price action) count toward the verdict.
+        const alignedStartTime = alignToNextIntervalStart(analysisTime, getIntervalMs('1m'));
 
         // Tier 1: 1-minute candles (500 = ~8 hours precision)
         const klines1m = await fetchOHLCVFromTime(symbol, '1m', alignedStartTime);

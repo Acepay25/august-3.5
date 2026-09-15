@@ -36,6 +36,29 @@ describe('range breakout / fade', () => {
         expect(scanSetups(c).find(s => s.id === 'range-breakout-up')).toBeUndefined();
     });
 
+    it('measures the breakout against the PRIOR 30-bar high — the trigger bar is excluded (item 15)', () => {
+        // Base range high = 101. The breakout bar spikes to a high of 108 and
+        // closes at 104. Including the current bar made hi30 = 108, so the
+        // evidence claimed "close 104 beyond range high 108" — a number the
+        // bar itself printed. The quoted range high must now be the PRIOR
+        // one (101), which the close genuinely exceeds.
+        const c: ScanCandle[] = [];
+        for (let i = 0; i < 30; i += 1) c.push(bar(i, 100, 101, 99, 100));
+        c.push(bar(30, 100, 108.2, 99.9, 107.8)); // wick to 108.2, full-bodied close at 107.8
+        const b = scanSetups(c).find(s => s.id === 'range-breakout-up');
+        expect(b).toBeTruthy();
+        const evidence = b!.evidence.join(' ');
+        expect(evidence).toContain('beyond range high 101');
+        expect(evidence).not.toMatch(/beyond range high 108/);
+    });
+
+    it('does NOT flag a big green bar that stays under the prior range high', () => {
+        const c: ScanCandle[] = [];
+        for (let i = 0; i < 30; i += 1) c.push(bar(i, 100, 110, 99, 100)); // prior high 110
+        c.push(bar(30, 100, 109, 99.9, 108)); // wide-bodied bar INSIDE the range
+        expect(scanSetups(c).find(s => s.id === 'range-breakout-up')).toBeUndefined();
+    });
+
     it('flags a rejection wick at the range top as a short fade', () => {
         const c: ScanCandle[] = [];
         for (let i = 0; i < 30; i += 1) c.push(bar(i, 100, 101, 99, 100));

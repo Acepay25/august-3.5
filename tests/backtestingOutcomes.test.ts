@@ -19,6 +19,8 @@ vi.mock('../services/analysis/MarketDataService', () => ({
 import {
   simulateTradeSignal,
   simulateFromAnalysisTime,
+  batchBacktest,
+  validateWithBacktest,
 } from '../services/backtesting/BacktestingService';
 
 // --- Fixtures ---------------------------------------------------------------
@@ -229,5 +231,106 @@ describe('simulateFromAnalysisTime (hybrid 4-tier walk)', () => {
     const result = await sim(makeAnalysis());
     expect(result.wouldHaveTriggered).toBe(false);
     expect(result.outcome).toBe('NOT_TRIGGERED');
+  });
+
+  it('starts the fetch at/after the analysis moment — no pre-analysis candles (align look-ahead fix)', async () => {
+    // BASE_TIME + 30s sits MID-candle. The old floor aligned the 1m fetch
+    // START to BASE_TIME, pulling in a candle that was still FORMING when
+    // the analysis was made (up to a minute of look-ahead). Alignment must
+    // now CEIL: the first fetched candle opens at BASE_TIME + 60_000.
+    const analysis = makeAnalysis({
+      createdAt: new Date(BASE_TIME + 30_000).toISOString(),
+    });
+    scripted1m = [
+      [94950, 95100, 94900, 95000],
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    await simulateFromAnalysisTime(analysis, 'BTCUSDT', analysis.createdAt!, '1m', 1);
+    const firstCall = fetchOHLCVFromTimeMock.mock.calls.find(c => c[1] === '1m');
+    expect(firstCall).toBeTruthy();
+    expect(firstCall![2]).toBe(BASE_TIME + 60_000);
+  });
+});
+
+// =============================================================================
+// simulateTradeSignal — routed through the SHARED outcome engine (item 8)
+// =============================================================================
+
+describe('simulateTradeSignal via scanTradeOutcome', () => {
+  it('does NOT credit a TP that printed on the ambiguous entry candle', async () => {
+    // Long, entry 95000, TP1 96000. Candle 0 OPENS at 95500 (above the
+    // entry), wicks UP through 96000 then DROPS to 94800 filling the limit.
+    // The fill happened AFTER the TP touch inside that bar — the old local
+    // walk banked this as a same-candle WIN (look-ahead). The shared engine
+    // gates same-candle TP credit unless the candle opened already
+    // executable (open ≤ entry).
+    scripted1m = [
+      [95500, 96100, 94800, 94900],
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    const result = await simulateTradeSignal(makeAnalysis(), 'BTCUSDT');
+    expect(result.wouldHaveTriggered).toBe(true);
+    expect(result.outcome).toBe('ENTERED_OPEN');
+    expect(result.hitTarget).toBe('NONE');
+  });
+
+  it('fills on a gap THROUGH the entry (old [low,high] overlap missed it)', async () => {
+    // Price gaps DOWN below the 95000 entry: the bar trades entirely under
+    // it (high 93500 < entry). The old overlap check required
+    // high >= entryPrice → never triggered, though a resting buy limit
+    // fills at (better than) the level. The canonical engine fills.
+    scripted1m = [
+      [93000, 93500, 92000, 92800],
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    const result = await simulateTradeSignal(makeAnalysis(), 'BTCUSDT');
+    expect(result.wouldHaveTriggered).toBe(true);
+    // Candle opened (93000) already below entry → whole bar post-fill, but
+    // the neutral fillers touch neither the 94000 stop nor 96000 target…
+    // the stop is ABOVE the fill region → long SL 94000 > current prices →
+    // the shared engine refuses this inverted geometry rather than banking
+    // phantom outcomes. Either way it must NOT be a WIN.
+    expect(result.outcome).not.toBe('WIN');
+  });
+
+  it('batchBacktest does not score unresolved ENTERED_OPEN trades as losses', async () => {
+    scripted1m = [
+      [94950, 95100, 94900, 95000], // entry fills
+      [95100, 96100, 95050, 96000], // TP1 hit → analysis A resolves WIN
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    const winAnalysis = makeAnalysis();
+    const openAnalysis = makeAnalysis({
+      takeProfit: [{ price: '150000', percentage: '100%' }], // never reached
+    });
+    const batch = await batchBacktest([winAnalysis, openAnalysis], 'BTCUSDT', '1h');
+    expect(batch.results[0].outcome).toBe('WIN');
+    expect(batch.results[1].outcome).toBe('ENTERED_OPEN');
+    // OLD: winRate = wins / triggered = 1/2 = 50 (the open trade counted as
+    // a loss). NEW: only SETTLED trades move the rate → 1/1 = 100, and the
+    // open one is reported separately.
+    expect(batch.winRate).toBe(100);
+    expect(batch.openTrades).toBe(1);
+  });
+
+  it('validateWithBacktest reports no-evidence as shouldTake:false + noData:true', async () => {
+    // Entry never prints → zero backtest evidence. The old code returned
+    // shouldTake:true ("no historical data to invalidate") — absence of
+    // disproof as confirmation.
+    scripted1m = Array.from({ length: 15 }, () => [96000, 97000, 95500, 96500] as [number, number, number, number]);
+    const verdict = await validateWithBacktest(makeAnalysis(), 'BTCUSDT');
+    expect(verdict.noData).toBe(true);
+    expect(verdict.shouldTake).toBe(false);
+  });
+
+  it('validateWithBacktest supports a proven WIN and marks evidence real', async () => {
+    scripted1m = [
+      [94950, 95100, 94900, 95000],
+      [95100, 96100, 95050, 96000],
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    const verdict = await validateWithBacktest(makeAnalysis(), 'BTCUSDT');
+    expect(verdict.shouldTake).toBe(true);
+    expect(verdict.noData).toBe(false);
   });
 });

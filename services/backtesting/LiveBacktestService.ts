@@ -110,8 +110,13 @@ const familyKey = (family: string): string | null => {
 };
 
 const extractRegime = (trade: LoggedTrade): string => {
-    // Prefer the persisted normalized regime (now written at log time).
-    if (trade.marketRegime) return trade.marketRegime;
+    // Prefer the persisted regime (now written at log time). Either way the
+    // value is NORMALIZED to the shared buckets ('trending'/'ranging'/…) —
+    // matches used to carry RAW legacy labels ('strong_trend_up') while the
+    // current-regime lookup and the prompt's "← Current" marker used the
+    // normalized buckets, so the regime breakdown NEVER joined and the
+    // regime context was silently absent.
+    if (trade.marketRegime) return normalizeRegime(trade.marketRegime);
 
     // Fallback: try to extract from analysis text
     const pattern = trade.analysis?.marketConditions?.pattern?.toLowerCase() || '';
@@ -212,9 +217,20 @@ const calculateSimilarity = (
 };
 
 /**
- * Calculate PnL percent from trade
+ * Calculate PnL percent from a logged trade — in ONE unit: the leveraged
+ * percent of invested margin (ROE, "+200" = +200% on the margin posted),
+ * which is exactly what LoggedTrade.pnlPercent stores.
+ *
+ * Previously this blended incompatible units into the same avgWin/avgLoss/EV
+ * prompt injection: leveraged ROE (pnlPercent), dollar return on investment
+ * (pnlAmount/investmentAmount — coincidentally also ROE-ish only when the
+ * investment IS the margin), RAW unleveraged price percent from the level
+ * estimate, plus fabricated +2/−1 "defaults" that the model read as measured
+ * history. Now: real numbers in one unit only; a trade with no computable
+ * PnL returns null and is EXCLUDED from the averages (its WIN/LOSS still
+ * counts toward win rate).
  */
-const calculatePnlPercent = (trade: LoggedTrade): number => {
+const calculatePnlPercent = (trade: LoggedTrade): number | null => {
     // Prefer the autopilot-verified leveraged percent when available — it was
     // computed from the actual resolution price (TP/SL hit), so level-based
     // re-estimation below would skew the backtest stats.
@@ -226,24 +242,31 @@ const calculatePnlPercent = (trade: LoggedTrade): number => {
         return (trade.pnlAmount / trade.investmentAmount) * 100;
     }
 
-    // Estimate based on trade setup
+    // Level-based estimate, expressed in the SAME ROE unit: the raw price
+    // move scaled by the leverage the trade actually used
+    // (ROE% ≈ price move % × leverage).
+    const leverage = Number.isFinite(trade.leverage) && (trade.leverage ?? 0) > 0
+        ? (trade.leverage as number)
+        : 1;
     const analysis = trade.analysis;
-    if (!analysis) return trade.outcome === 'WIN' ? 2 : -1;
+    if (!analysis) return null;
 
     const entry = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const sl = parsePrice(analysis.stopLoss || '') || 0;
     const tp = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
 
     if (entry > 0) {
+        const dirSign = analysis.direction === 'Long' ? 1 : -1;
         if (trade.outcome === 'WIN' && tp > 0) {
-            return ((tp - entry) / entry) * 100 * (analysis.direction === 'Long' ? 1 : -1);
+            return ((tp - entry) / entry) * 100 * dirSign * leverage;
         } else if (trade.outcome === 'LOSS' && sl > 0) {
-            return ((sl - entry) / entry) * 100 * (analysis.direction === 'Long' ? 1 : -1);
+            return ((sl - entry) / entry) * 100 * dirSign * leverage;
         }
     }
 
-    // Default estimates
-    return trade.outcome === 'WIN' ? 2 : -1;
+    // No fabricated ±2/−1 fallback: an unmeasurable trade contributes nothing
+    // rather than a plausible-looking lie.
+    return null;
 };
 
 // =============================================================================
@@ -284,15 +307,23 @@ export const backtestSimilarSetups = (
         .filter(s => s.similarity >= 30)
         .sort((a, b) => b.similarity - a.similarity);
 
-    // Convert to BacktestMatch
-    const matches: BacktestMatch[] = matchingTrades.map(({ trade }) => ({
+    // Convert to BacktestMatch — computing the single-unit PnL once per
+    // trade. `null` means "no real PnL evidence"; the trade still counts for
+    // win rate but is excluded from avgWin/avgLoss/EV (no fabricated numbers).
+    const withPnl = matchingTrades.map(({ trade, similarity }) => ({
+        trade,
+        similarity,
+        pnl: calculatePnlPercent(trade)
+    }));
+    const matches: BacktestMatch[] = withPnl.map(({ trade, pnl }) => ({
         tradeId: trade.id,
         coin: trade.analysis?.coinName || 'Unknown',
         direction: trade.analysis?.direction || 'Unknown',
         pattern: trade.analysis?.detectedPatternFamily || trade.analysis?.marketConditions?.pattern || 'Unknown',
         regime: extractRegime(trade),
         outcome: trade.outcome as 'WIN' | 'LOSS',
-        pnlPercent: calculatePnlPercent(trade),
+        // Placeholder for the UI list only — averages never see nulls.
+        pnlPercent: pnl ?? 0,
         timestamp: trade.timestamp,
         confidence: trade.analysis?.confidence || 'Unknown'
     }));
@@ -300,29 +331,39 @@ export const backtestSimilarSetups = (
     // Calculate statistics
     const totalMatches = matches.length;
     const wins = matches.filter(m => m.outcome === 'WIN');
-    const losses = matches.filter(m => m.outcome === 'LOSS');
 
     const winRate = totalMatches > 0 ? (wins.length / totalMatches) * 100 : 0;
-    const avgWinPercent = wins.length > 0
-        ? wins.reduce((sum, m) => sum + m.pnlPercent, 0) / wins.length
+    const winPnls = withPnl.filter(x => x.trade.outcome === 'WIN' && x.pnl !== null).map(x => x.pnl as number);
+    const lossPnls = withPnl.filter(x => x.trade.outcome === 'LOSS' && x.pnl !== null).map(x => x.pnl as number);
+    const avgWinPercent = winPnls.length > 0
+        ? winPnls.reduce((sum, p) => sum + p, 0) / winPnls.length
         : 0;
-    const avgLossPercent = losses.length > 0
-        ? Math.abs(losses.reduce((sum, m) => sum + m.pnlPercent, 0) / losses.length)
+    const avgLossPercent = lossPnls.length > 0
+        ? Math.abs(lossPnls.reduce((sum, p) => sum + p, 0) / lossPnls.length)
         : 0;
+    // How many matches had NO real PnL evidence — drives an honest warning.
+    const missingPnlCount = withPnl.filter(x => x.pnl === null).length;
 
     // Expected Value
     const expectedValue = calculateExpectedValue(winRate / 100, avgWinPercent, avgLossPercent);
 
-    // Regime breakdown
-    const regimes = [...new Set(matches.map(m => m.regime))];
+    // Regime breakdown — built from the PnL-carrying rows so avgPnl only
+    // averages REAL numbers (placeholder zeros never pollute it).
+    const regimeRows = withPnl.map(x => ({
+        regime: extractRegime(x.trade),
+        outcome: x.trade.outcome as 'WIN' | 'LOSS',
+        pnl: x.pnl
+    }));
+    const regimes = [...new Set(regimeRows.map(r => r.regime))];
     const regimeBreakdown: RegimeBreakdown[] = regimes.map(regime => {
-        const regimeTrades = matches.filter(m => m.regime === regime);
-        const regimeWins = regimeTrades.filter(m => m.outcome === 'WIN');
+        const regimeTrades = regimeRows.filter(r => r.regime === regime);
+        const regimeWins = regimeTrades.filter(r => r.outcome === 'WIN');
+        const regimePnls = regimeTrades.filter(r => r.pnl !== null).map(r => r.pnl as number);
         return {
             regime,
             winRate: regimeTrades.length > 0 ? (regimeWins.length / regimeTrades.length) * 100 : 0,
             count: regimeTrades.length,
-            avgPnl: regimeTrades.reduce((sum, m) => sum + m.pnlPercent, 0) / (regimeTrades.length || 1)
+            avgPnl: regimePnls.length > 0 ? regimePnls.reduce((sum, p) => sum + p, 0) / regimePnls.length : 0
         };
     });
 
@@ -360,14 +401,15 @@ export const backtestSimilarSetups = (
     // === SESSION BREAKDOWN ===
     const allSessions: TradingSession[] = ['Asian', 'London', 'Overlap', 'New York'];
     const sessionBreakdown: SessionBreakdown[] = allSessions.map(session => {
-        const sessionTrades = matches.filter(m => getSessionFromTimestamp(m.timestamp) === session);
-        const sessionWins = sessionTrades.filter(m => m.outcome === 'WIN');
+        const sessionTrades = withPnl.filter(x => getSessionFromTimestamp(x.trade.timestamp) === session);
+        const sessionWins = sessionTrades.filter(x => x.trade.outcome === 'WIN');
+        const sessionPnls = sessionTrades.filter(x => x.pnl !== null).map(x => x.pnl as number);
         return {
             session,
             winRate: sessionTrades.length > 0 ? (sessionWins.length / sessionTrades.length) * 100 : 0,
             count: sessionTrades.length,
-            avgPnl: sessionTrades.length > 0
-                ? sessionTrades.reduce((sum, m) => sum + m.pnlPercent, 0) / sessionTrades.length
+            avgPnl: sessionPnls.length > 0
+                ? sessionPnls.reduce((sum, p) => sum + p, 0) / sessionPnls.length
                 : 0
         };
     }).filter(s => s.count > 0);
@@ -385,6 +427,10 @@ export const backtestSimilarSetups = (
     let warning: string | undefined;
     if (totalMatches < MIN_MATCHES_FOR_STATS) {
         warning = ` Insufficient historical data (${totalMatches} matches). Results may not be statistically significant.`;
+    } else if (winPnls.length + lossPnls.length === 0) {
+        warning = ` No recorded PnL magnitudes for the matched trades — win rate is real but avg win/loss/EV are not measurable.`;
+    } else if (missingPnlCount > 0 && missingPnlCount >= totalMatches / 2) {
+        warning = ` PnL magnitudes missing for ${missingPnlCount}/${totalMatches} matches — avg win/loss/EV are computed from the measurable subset only.`;
     } else if (expectedValue < 0) {
         warning = ` NEGATIVE EXPECTED VALUE (${expectedValue.toFixed(2)}%). This setup type has historically lost money.`;
     } else if (winRate < 40) {
@@ -467,13 +513,14 @@ ${result.warning}
 `;
     }
 
-    // Best/worst outcome
+    // Best/worst outcome — only from matches with REAL PnL evidence (the
+    // display placeholder 0 must never read as a measured ±0% outcome).
     if (result.matchedTrades.length > 0) {
         const best = result.matchedTrades
-            .filter(t => t.outcome === 'WIN')
+            .filter(t => t.outcome === 'WIN' && t.pnlPercent > 0)
             .sort((a, b) => b.pnlPercent - a.pnlPercent)[0];
         const worst = result.matchedTrades
-            .filter(t => t.outcome === 'LOSS')
+            .filter(t => t.outcome === 'LOSS' && t.pnlPercent < 0)
             .sort((a, b) => a.pnlPercent - b.pnlPercent)[0];
 
         if (best) {

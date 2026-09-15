@@ -79,7 +79,10 @@ describe('S3: consolidation archives duplicates instead of deleting', () => {
                     '3. size to half',
                     '**My rule:** when the 4h close breaks the range low on expanding volume, I stand aside until price reclaims the level.',
                 ].join('\n'),
-                ifCondition: 'the 4h candle CLOSES below the range low with above-average volume',
+                // SAME IF CLAIM as the stub — consolidation merges exact
+                // duplicates (identical scope AND identical claim) only; a
+                // different claim is a different belief (see the second test).
+                ifCondition: 'price closes below the range low on 4h volume expansion',
                 thenAction: 'skip long entries until an hourly reclaim prints',
             }),
             user,
@@ -114,6 +117,77 @@ describe('S3: consolidation archives duplicates instead of deleting', () => {
             const { deleteMemoryFile } = await import('../services/learning/MemoryFilesService');
             await deleteMemoryFile(f.id, user);
         }
+    });
+});
+
+describe('S3b: consolidation merges exact CLAIM duplicates, not loose scope twins', () => {
+    it('does NOT merge two same-scope skills with different IF claims', async () => {
+        const user = 's3b-claim-guard';
+        await initMemoryFiles(user);
+        // Same coin/direction/family/kind — but the two files make
+        // DIFFERENT claims. The old loose scope key merged them, inflating
+        // the survivor's sample with foreign evidence and silently
+        // destroying the absorbed skill's birth claim (its prediction was
+        // then tested against trades it never predicted).
+        await skillFile(
+            'claim-a.md',
+            skillContent({
+                coin: 'BTC', direction: 'Long', family: 'breakout', kind: 'avoid',
+                wins: 2, losses: 1, tradeIds: ['x1', 'x2', 'x3'],
+                ifCondition: 'price closes below the range low on 4h volume',
+                thenAction: 'stand aside',
+            }),
+            user,
+        );
+        await skillFile(
+            'claim-b.md',
+            skillContent({
+                coin: 'BTC', direction: 'Long', family: 'breakout', kind: 'avoid',
+                wins: 1, losses: 2, tradeIds: ['y1', 'y2', 'y3'],
+                ifCondition: 'funding flips negative right after the sweep',
+                thenAction: 'skip the reclaim long',
+            }),
+            user,
+        );
+
+        await consolidateSkills(user);
+
+        const both = getMemoryFiles().files.filter(f => f.name === 'claim-a.md' || f.name === 'claim-b.md');
+        expect(both).toHaveLength(2);
+        // Both survive ENABLED in the live skills folder — neither claim
+        // absorbs the other's evidence.
+        expect(both.filter(f => f.enabled)).toHaveLength(2);
+        const a = parseSkillMarkdown(both.find(f => f.name === 'claim-a.md')!.content)!;
+        expect(a.wins + a.losses).toBe(3); // NOT merged into 6
+    });
+
+    it('keeps the birth prediction alive when the group leader predates the certificate feature', async () => {
+        const user = 's3b-birth-preservation';
+        await initMemoryFiles(user);
+        const claim = 'price closes below the range low on 4h volume expansion';
+        // Leader: same claim but NO prediction (legacy row).
+        await skillFile(
+            'legacy-leader.md',
+            skillContent({ coin: 'BTC', direction: 'Long', wins: 1, losses: 1, tradeIds: ['p1'], ifCondition: claim }),
+            user,
+        );
+        // Twin: identical claim, carries the birth certificate.
+        const cert: SkillMeta = {
+            status: 'candidate', kind: 'repeat', coin: 'BTC', direction: 'Long',
+            wins: 2, losses: 2, consecutiveLosses: 0, tradeIds: ['p2', 'p3'],
+            ifCondition: claim, thenAction: 'test action', body: 'test body',
+            prediction: { expectedLiftPts: 8, horizonTrades: 10, scope: { coin: 'BTC' } },
+        };
+        await skillFile('cert-twin.md', serializeSkill(cert, 'Test BTC Long'), user);
+
+        await consolidateSkills(user);
+
+        const alive = getMemoryFiles().files
+            .filter(f => (f.name === 'legacy-leader.md' || f.name === 'cert-twin.md') && f.enabled);
+        expect(alive).toHaveLength(1);
+        const mergedMeta = parseSkillMarkdown(alive[0].content)!;
+        // The group's birth certificate survives the merge.
+        expect(mergedMeta.prediction?.expectedLiftPts).toBe(8);
     });
 });
 

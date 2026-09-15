@@ -74,6 +74,7 @@ import {
     updateThinkingOutcome,
     getAllThinkingForExport,
     getProviderReasoningStats,
+    getThinkingExemplars,
 } from '../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../types/thinking';
 import { TradeOutcome } from '../types';
@@ -213,5 +214,67 @@ describe('ThinkingStoreService (IndexedDB path)', () => {
         expect(bad).toBeDefined();
         const ok = rows.find(r => r.analysis && typeof r.analysis === 'object');
         expect(ok?.analysis).toEqual({ direction: 'Long' });
+    });
+});
+
+// Profile scoping for the WIN-reasoning exemplar path (deep-dive 2026-09-15,
+// item 4): the unscoped provider query used to feed one profile's winning
+// reasoning into every other profile's prompt (same class as the fixed
+// chatStore leak), and the IDB branch walked the index oldest-first.
+describe('getThinkingExemplars (IndexedDB path)', () => {
+    beforeEach(() => {
+        fakeDb.clear();
+    });
+
+    const win = (id: string, username: string, reasoning: string, createdAt: string) =>
+        makeRecord({ id, username, outcome: TradeOutcome.WIN, reasoning, createdAt });
+
+    it('scopes exemplars to the requesting username — other profiles never leak', async () => {
+        await saveThinkingBatch([
+            win('a-win', 'alice', 'alice winning thesis', '2026-08-01T00:00:00.000Z'),
+            win('b-win', 'bob', 'bob winning thesis', '2026-08-02T00:00:00.000Z'),
+        ]);
+        const alice = await getThinkingExemplars('gemini', 5, 'alice');
+        expect(alice.map(e => e.reasoning)).toEqual(['alice winning thesis']);
+        expect(alice[0].source).toBe('user');
+        const bob = await getThinkingExemplars('gemini', 5, 'bob');
+        expect(bob.map(e => e.reasoning)).toEqual(['bob winning thesis']);
+    });
+
+    it('returns NEWEST-first (the IDB branch used to keep the oldest WINs)', async () => {
+        await saveThinkingBatch([
+            win('old', 'alice', 'oldest reasoning', '2026-01-01T00:00:00.000Z'),
+            win('mid', 'alice', 'middle reasoning', '2026-05-01T00:00:00.000Z'),
+            win('new', 'alice', 'newest reasoning', '2026-08-01T00:00:00.000Z'),
+        ]);
+        const ex = await getThinkingExemplars('gemini', 2, 'alice');
+        expect(ex.map(e => e.reasoning)).toEqual(['newest reasoning', 'middle reasoning']);
+    });
+
+    it('falls back to the untagged legacy bucket, tagged source:legacy — never another profile\'s data', async () => {
+        await saveThinkingBatch([
+            // Pre-scoping records: no username at all.
+            win('legacy-1', '', 'shared pre-scoping reasoning', '2026-02-01T00:00:00.000Z'),
+            win('bob-only', 'bob', 'bob private reasoning', '2026-07-01T00:00:00.000Z'),
+        ]);
+        // carol has no records of her own → she may see the legacy bucket…
+        const carol = await getThinkingExemplars('gemini', 5, 'carol');
+        expect(carol.map(e => e.reasoning)).toEqual(['shared pre-scoping reasoning']);
+        expect(carol[0].source).toBe('legacy');
+        // …but never bob's tagged records.
+        expect(carol.map(e => e.reasoning)).not.toContain('bob private reasoning');
+        // A profile WITH its own corpus never gets the legacy fallback.
+        const bob = await getThinkingExemplars('gemini', 5, 'bob');
+        expect(bob.map(e => e.source)).toEqual(['user']);
+    });
+
+    it('defaults to the active profile when no username is passed', async () => {
+        localStorage.setItem('last_active_user', 'active-alice');
+        await saveThinkingBatch([
+            win('own', 'active-alice', 'active profile reasoning', '2026-08-01T00:00:00.000Z'),
+            win('theirs', 'intruder', 'intruder reasoning', '2026-08-02T00:00:00.000Z'),
+        ]);
+        const ex = await getThinkingExemplars('gemini', 5);
+        expect(ex.map(e => e.reasoning)).toEqual(['active profile reasoning']);
     });
 });

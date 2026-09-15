@@ -12,6 +12,11 @@ const prefStore: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
   PREF_KEYS: { OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state' },
   getPreferenceObject: vi.fn(async (key: string) => (prefStore[key] ?? null)),
+  getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+    const raw = prefStore[key] ?? null;
+    if (!Array.isArray(raw)) return [];
+    return guard ? raw.filter(guard) : raw;
+  }),
   setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
     prefStore[key] = value;
   }),

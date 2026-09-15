@@ -116,10 +116,17 @@ tradeIds: x,y
     it("'hurts' verdict demotes a confirmed skill via deriveStatus on next evidence pass", async () => {
         await initMemoryFiles('hurt-user');
         await seedConfirmed('hurt-user');
-        // Simulate the scheduler recording a hurts verdict...
+        // Simulate the scheduler recording a hurts verdict…
+        // NOTE: evalStreak 2 is included because recordEvalVerdict only
+        // DEMOTES after two consecutive 'hurts' runs (sequential-evidence
+        // gate) — a streak-less stub used to "pass" only because the
+        // missing lastEvidenceAt collapsed the lifetime counts to below
+        // the confirmation sample (an unrelated decay bug, now fixed).
         const file = getMemoryFiles().files.find(f => f.name === 'btc-short-avoid.md')!;
         const meta = parseSkillMarkdown(file.content)!;
         meta.evalVerdict = 'hurts';
+        meta.evalStreak = 2;
+        meta.lastEvalAt = new Date().toISOString();
         const { serializeSkill, titleFromMeta, applySkillEvidence } =
             await import('../services/learning/SkillMemoryService');
         const { updateMemoryFile } = await import('../services/learning/MemoryFilesService');

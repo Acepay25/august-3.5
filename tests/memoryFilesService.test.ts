@@ -5,6 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
   getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+  getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+      const raw = store[key];
+      if (!Array.isArray(raw)) return [];
+      return guard ? raw.filter(guard) : raw;
+  }),
   setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
     store[key] = value;
   }),
@@ -35,6 +40,9 @@ import {
   computeTopLessons,
   writeModelNote,
   SUGGESTIONS_FILE_NAME,
+  withNotebookWriteLock,
+  createMemoryFileUnlocked,
+  getMemoryFilesOwner,
 } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { LoggedTrade, MemoryFile, TradeOutcome, UserProfile } from '../types';
@@ -539,6 +547,61 @@ describe('MemoryFilesService', () => {
     it('writes a placeholder when no clusters exist yet', () => {
       const content = buildRecurringMistakesContent([makeTrade({ outcome: TradeOutcome.LOSS, pnlPercent: -1 })]);
       expect(content).toContain('No recurring loss clusters yet');
+    });
+  });
+
+  // Profile-switch race (deep-dive 2026-09-15 item 1): one module-global
+  // cache must always persist to the key that OWNS the cached bytes — never
+  // to the username a writer captured before the switch.
+  describe('cache-owner persistence (profile switch mid-write)', () => {
+    it('a stale writer for user A lands the data in the cache owner\'s (B) key, never A key', async () => {
+      await initMemoryFiles('alice');
+      await initMemoryFiles('bob'); // cache now holds BOB's notebook
+
+      // A writer that captured the OLD username mutates the shared cache.
+      await createMemoryFolder('post-switch', 'alice');
+
+      const bobBlob = store['memory_files_v1_bob'] as { folders: { name: string }[] };
+      const aliceBlob = store['memory_files_v1_alice'] as { folders: { name: string }[] };
+      expect(bobBlob.folders.map(f => f.name)).toContain('post-switch');
+      expect(aliceBlob.folders.map(f => f.name)).not.toContain('post-switch');
+    });
+
+    it('empty-store clearing targets the cache owner key, not the caller username', async () => {
+      await initMemoryFiles('carol');
+      await initMemoryFiles('dave');
+      for (const f of [...getMemoryFiles().folders]) await deleteMemoryFolder(f.id, 'carol');
+      // The writers captured 'carol' but the cache is owned by dave → dave's
+      // key is the one emptied; carol's seed stays intact.
+      expect(store['memory_files_v1_dave']).toBeUndefined();
+      expect(store['memory_files_v1_carol']).toBeDefined();
+    });
+
+    it('initMemoryFiles is serialized behind an in-flight writer', async () => {
+      await initMemoryFiles('erin');
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>(res => { release = res; });
+      // Hold the write lock with a running mutation…
+      const writer = withNotebookWriteLock(async () => {
+        await gate;
+        const rules = getMemoryFiles().folders.find(f => f.name === 'rules')!;
+        await createMemoryFileUnlocked(rules.id, 'during-switch.md', 'x', 'erin');
+      });
+      await Promise.resolve(); // let the writer enter the lock
+      // …then request the profile switch. It must QUEUE, not jump the cache swap.
+      const switcher = initMemoryFiles('flora');
+      release();
+      await Promise.all([writer, switcher]);
+
+      // Erin's write persisted to ERIN's key (the cache was still erin's while
+      // the writer ran); Flora's seed landed in FLORA's key only. Before the
+      // init lock, the swap could race the writer and land flora's notebook
+      // under erin's key (or vice versa).
+      const erinBlob = store['memory_files_v1_erin'] as { files: { name: string }[] };
+      const floraBlob = store['memory_files_v1_flora'] as { files: { name: string }[] };
+      expect(erinBlob.files.map(f => f.name)).toContain('during-switch.md');
+      expect(floraBlob.files.map(f => f.name)).not.toContain('during-switch.md');
+      expect(getMemoryFilesOwner()).toBe('flora');
     });
   });
 });

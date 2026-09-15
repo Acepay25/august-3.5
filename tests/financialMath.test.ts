@@ -4,7 +4,12 @@ import {
   parsePrice,
   clampProbabilityToGate,
 } from '../utils/analysisUtils';
-import { TradeAnalysis } from '../types';
+import { runSimulation, computeKellyFraction, deriveSetupSeed } from '../services/analysis/MonteCarloService';
+import { calculateMetrics, findHistoricalMatches } from '../services/backtesting/ScenarioSimulatorService';
+import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
+import { applyMonteCarloRiskAdjustment } from '../services/backtesting/ModelPerformanceService';
+import { computeContractSize } from '../utils/ticketSize';
+import { AIProvider, LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
 
 const baseAnalysis = (overrides: Partial<TradeAnalysis> = {}): TradeAnalysis => ({
   coinName: 'BTCUSDT',
@@ -117,5 +122,208 @@ describe('clampProbabilityToGate', () => {
     const over = clampProbabilityToGate(140, 1);
     expect(over.probability).toBe(100);
     expect(over.wasClamped).toBe(true);
+  });
+});
+
+// =============================================================================
+// Wave-2 (deep-dive 2026-09-15) financial/math regressions
+// =============================================================================
+
+describe('recalculateAnalysisMetrics — leverage double-compounding guard (item 12)', () => {
+  it('stashes originalPercentage in the price-parsed branch so a later fallback scales the RAW move once', () => {
+    const first = recalculateAnalysisMetrics(baseAnalysis(), 10);
+    // Price-parsed pass must record the UNLEVERAGED move.
+    expect(first.takeProfit?.[0]?.originalPercentage).toBe('10.0');
+    expect(first.originalStopLossPercentage).toBe('10.0');
+
+    // Second pass: the TP price has become unparseable (user edit / legacy
+    // row) — the fallback leg now scales from the stashed RAW 10%, not from
+    // the already-leveraged '+100.0%' percentage (which produced +1000%).
+    const legacyStyle: TradeAnalysis = JSON.parse(JSON.stringify(first));
+    legacyStyle.takeProfit = (legacyStyle.takeProfit || []).map(tp => ({ ...tp, price: 'n/a' }));
+    const second = recalculateAnalysisMetrics(legacyStyle, 10);
+    expect(second.takeProfit?.[0]?.percentage).toBe('+100.0%'); // 10 × 10, NOT 100 × 10
+  });
+});
+
+describe('MonteCarloService — seeded determinism + true sample stats (item 6)', () => {
+  const cfg = {
+    entry: 100, stopLoss: 97, takeProfits: [104, 110, 120],
+    direction: 'Long' as const, atr: 2, timeframe: '1h', numSimulations: 300,
+  };
+
+  it('produces identical results for the same setup (seeded RNG, stable Simulated Win Rate)', () => {
+    const a = runSimulation(cfg);
+    const b = runSimulation(cfg);
+    expect(a).toEqual(b);
+    expect(a.seedUsed).toBe(deriveSetupSeed(cfg));
+  });
+
+  it('different setups get different seeds', () => {
+    expect(deriveSetupSeed(cfg)).not.toBe(deriveSetupSeed({ ...cfg, stopLoss: 96.5 }));
+  });
+
+  it('excludes TIMEOUT runs from the expected value', () => {
+    // Levels 900% away and one single step: essentially nothing resolves.
+    const r = runSimulation({
+      ...cfg, numSimulations: 100, maxSteps: 1,
+      stopLoss: 1, takeProfits: [1000, 1100, 1200],
+    });
+    expect(r.probabilities.timeout).toBe(100);
+    expect(r.expectedValue).toBe(0);
+    expect(r.winRate).toBe(0);
+  });
+
+  it('avgWinPercent is the mean of the POSITIVE sample — greater than the EV/winRate proxy', () => {
+    const r = runSimulation({ ...cfg, numSimulations: 500 });
+    expect(r.winRate).toBeGreaterThan(0);          // some TP hits
+    expect(r.probabilities.slHit).toBeGreaterThan(0); // some losses
+    const legacyProxy = r.expectedValue / (r.winRate / 100);
+    expect(r.avgWinPercent!).toBeGreaterThan(legacyProxy);
+    expect(r.avgLossPercent!).toBeGreaterThan(0);
+  });
+
+  it('computeKellyFraction consumes the true average win when supplied', () => {
+    const legacy = computeKellyFraction(50, 2, 50, -3);            // proxy avgWin = 4
+    const trueWin = computeKellyFraction(50, 2, 50, -3, 10);       // avgWin = 10
+    // b = 10/3 → f* = 0.5 − 0.5/(10/3) = 0.35
+    expect(trueWin).toBeCloseTo(0.35, 6);
+    expect(trueWin).toBeGreaterThan(legacy);
+  });
+});
+
+describe('ScenarioSimulatorService — riskUSD semantics + match gating (item 10)', () => {
+  const cfg = {
+    entry: 100, stopLoss: 99, takeProfits: [102],
+    direction: 'Long' as const, leverage: 100, positionSizeUSD: 1000, coinName: 'BTCUSDT',
+  };
+
+  it('treats Position ($) as the notional: a 1% stop on $1000 risks $10, not $1000', () => {
+    const m = calculateMetrics(cfg);
+    expect(m.riskUSD).toBe(10);      // 1% price move × $1000 notional
+    expect(m.rewardUSD).toBe(20);    // 2% × $1000
+    // The MARGIN-relative (ROE) view keeps the leverage factor.
+    expect(m.leveragedRiskPercent).toBe(100);
+  });
+
+  const trade = (over: Partial<LoggedTrade>): LoggedTrade => ({
+    id: 'x', outcome: TradeOutcome.WIN, timestamp: new Date().toISOString(),
+    analysis: { coinName: 'ZZZUSDT', direction: 'Long', rrRatio: 2 } as TradeAnalysis,
+    ...over,
+  } as LoggedTrade);
+
+  it('requires ≥2 matching dimensions — a direction-only match is not a "similar setup"', () => {
+    const directionOnly = [trade({ analysis: { coinName: 'ZZZUSDT', direction: 'Long' } as TradeAnalysis })];
+    expect(findHistoricalMatches(cfg, directionOnly)).toHaveLength(0);
+
+    const twoDimensions = [trade({})]; // same direction + similar R:R (3 vs 3)
+    expect(findHistoricalMatches(cfg, twoDimensions)).toHaveLength(1);
+
+    const sameCoinOnly = [trade({ analysis: { coinName: 'BTCUSDT', direction: 'Short' } as TradeAnalysis })];
+    expect(findHistoricalMatches(cfg, sameCoinOnly)).toHaveLength(0);
+  });
+});
+
+describe('LiveBacktestService — single-unit PnL + regime join (item 9)', () => {
+  const current = { coinName: 'BTCUSDT', direction: 'Long' } as TradeAnalysis;
+  const trade = (over: Partial<LoggedTrade>): LoggedTrade => ({
+    id: 'x', outcome: TradeOutcome.WIN, timestamp: new Date().toISOString(),
+    analysis: {
+      coinName: 'BTCUSDT', direction: 'Long',
+      entryPoints: [{ price: '100' }], takeProfit: [{ price: '105' }], stopLoss: '98',
+    } as TradeAnalysis,
+    ...over,
+  } as LoggedTrade);
+  // Legacy rows persisted RAW regime labels ('strong_trend_up') despite the
+  // narrow union — the whole point of the join regression, so cast them in.
+  const legacyRegime = (r: string): LoggedTrade['marketRegime'] =>
+    r as unknown as LoggedTrade['marketRegime'];
+
+  it('expresses the level-based estimate as leveraged ROE (price % × leverage), matching pnlPercent units', () => {
+    const result = backtestSimilarSetups(current, [
+      trade({ outcome: TradeOutcome.WIN, pnlPercent: 200 }),                       // verified ROE
+      trade({ id: 'y', outcome: TradeOutcome.WIN, leverage: 50 }),                  // 5% × 50 = 250 ROE (old: raw 5)
+      trade({ id: 'z', outcome: TradeOutcome.LOSS, leverage: 100, analysis: {
+        coinName: 'BTCUSDT', direction: 'Long',
+        entryPoints: [{ price: '100' }], stopLoss: '99', takeProfit: [{ price: '102' }],
+      } as TradeAnalysis }),                                             // −1% × 100 = −100 ROE
+    ]);
+    expect(result.avgWinPercent).toBeCloseTo(225, 6);   // (200 + 250)/2 — one unit
+    expect(result.avgLossPercent).toBeCloseTo(100, 6);  // ROE, not the raw 1%
+    expect(result.expectedValue).toBeCloseTo((2 / 3) * 225 - (1 / 3) * 100, 1);
+  });
+
+  it('drops the fabricated ±2/−1 defaults: unmeasurable trades never pollute the averages', () => {
+    const noEvidence = [
+      trade({ analysis: { coinName: 'BTCUSDT', direction: 'Long' } as TradeAnalysis }),
+      trade({ id: 'b', outcome: TradeOutcome.LOSS, analysis: { coinName: 'BTCUSDT', direction: 'Long' } as TradeAnalysis }),
+      trade({ id: 'c', outcome: TradeOutcome.LOSS, analysis: { coinName: 'BTCUSDT', direction: 'Long' } as TradeAnalysis }),
+    ];
+    const result = backtestSimilarSetups(current, noEvidence);
+    expect(result.totalMatches).toBe(3);
+    expect(result.winRate).toBeCloseTo(100 / 3, 1); // outcomes still count
+    expect(result.avgWinPercent).toBe(0);           // but no invented magnitudes
+    expect(result.avgLossPercent).toBe(0);
+    expect(result.warning).toMatch(/PnL/);
+  });
+
+  it('joins regime stats: raw legacy marketRegime values bucket-match the current regime', () => {
+    const result = backtestSimilarSetups(current, [
+      trade({ marketRegime: legacyRegime('strong_trend_up') }),
+      trade({ id: 'b', marketRegime: legacyRegime('strong_trend_up') }),
+      trade({ id: 'c', outcome: TradeOutcome.LOSS, marketRegime: legacyRegime('volatile_chop') }),
+    ], 'strong_trend_up');
+    // 'strong_trend_up' must land in the same bucket the breakdown uses.
+    expect(result.currentRegimeStats).toBeDefined();
+    expect(result.currentRegimeStats!.regime).toBe('trending');
+    expect(result.currentRegimeStats!.count).toBe(2);
+  });
+});
+
+describe('ModelPerformanceService — MC risk adjustment is effectful (item 7)', () => {
+  const weights = { gemini: 0.5, deepseek: 0.5 } as unknown as Record<AIProvider, number>;
+  const providers = ['gemini', 'deepseek'] as unknown as AIProvider[];
+
+  it('a single SHARED result is (correctly) a no-op instead of the old fake penalty', () => {
+    const shared = { winRate: 20, maxDrawdownAvg: 40, expectedValue: -1 };
+    expect(applyMonteCarloRiskAdjustment(weights, shared, providers)).toEqual(weights);
+  });
+
+  it('a per-provider map penalizes the provider whose OWN setup simulated badly', () => {
+    const perProvider = {
+      gemini: { winRate: 60, maxDrawdownAvg: 5, expectedValue: 1 },    // clean
+      deepseek: { winRate: 20, maxDrawdownAvg: 40, expectedValue: -1 }, // dd ≥25 AND winRate <45 → ×0.49
+    };
+    const adjusted = applyMonteCarloRiskAdjustment(weights, perProvider, providers);
+    // Renormalized: gemini gains share, deepseek loses it — the distribution CHANGED.
+    expect(adjusted.deepseek).toBeLessThan(0.33);
+    expect(adjusted.gemini).toBeGreaterThan(0.67);
+    expect(adjusted.gemini + adjusted.deepseek).toBeCloseTo(1, 6);
+  });
+});
+
+describe('ticketSize.computeContractSize — exchange leverage cap (item 13)', () => {
+  const tightStopTrade = {
+    coinName: 'BTCUSDT', direction: 'Long', confidence: 'Medium',
+    entryPoints: [{ price: '100' }], stopLoss: '99.9',
+  } as unknown as TradeAnalysis;
+
+  it('caps notional at equity × leverage and reports the effective risk', () => {
+    // Risk-based size wants $10,000 notional (1% price risk, $10 risk);
+    // $1,000 equity at 5x can only carry $5,000.
+    const sized = computeContractSize(tightStopTrade, 1_000, 5, 1);
+    expect(sized.notionalUsd).toBe(5_000);
+    expect(sized.qty).toBeCloseTo(50, 6);
+    expect(sized.riskUsd).toBeCloseTo(5, 4); // 5000 × ~0.1% stop (float stopDist)
+    expect(sized.adjustments.some(a => /Leverage cap/.test(a.label))).toBe(true);
+  });
+
+  it('leaves affordable sizes untouched', () => {
+    // $100k at 200x carries $20M notional — the $1M wanted by a 0.1% stop
+    // against 1% risk fits with no clamp.
+    const sized = computeContractSize(tightStopTrade, 100_000, 200, 1);
+    expect(sized.notionalUsd).toBeCloseTo(1_000_000, 1);
+    expect(sized.riskUsd).toBe(1_000);
+    expect(sized.adjustments.some(a => /Leverage cap/.test(a.label))).toBe(false);
   });
 });

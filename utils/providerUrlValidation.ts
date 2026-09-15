@@ -1,18 +1,14 @@
+import { isPrivateOrLoopbackHost } from '../shared/providerRequestPolicy.cjs';
+
 export type ProviderUrlValidation =
     | { valid: true; normalizedUrl: string }
     | { valid: false; message: string };
 
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1', '0.0.0.0']);
-
-// Local model servers (Ollama, LM Studio, llama.cpp…) are commonly served
-// over plain HTTP on the loopback OR another machine on the LAN — blocking
-// RFC1918/private ranges meant those setups were rejected outright.
-const isLoopbackIp = (hostname: string): boolean => /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
-const isPrivateIp = (hostname: string): boolean =>
-    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname);
-const isLinkLocalIp = (hostname: string): boolean => /^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname);
+// The host policy (loopback + RFC1918 + link-local HTTP exemption) lives in
+// shared/providerRequestPolicy.cjs — the single source consumed by the
+// renderer, the vite dev proxy, and the Electron main process alike. This
+// module is the UX layer on top of it: normalization + the per-rule error
+// messages the Settings forms display.
 
 export function validateProviderUrl(value: string): ProviderUrlValidation {
     const trimmed = value.trim();
@@ -26,7 +22,7 @@ export function validateProviderUrl(value: string): ProviderUrlValidation {
     }
 
     const hostname = parsed.hostname.toLowerCase();
-    const isLocal = LOCAL_HOSTS.has(hostname) || isLoopbackIp(hostname) || isPrivateIp(hostname) || isLinkLocalIp(hostname);
+    const isLocal = isPrivateOrLoopbackHost(hostname);
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocal)) {
         return { valid: false, message: 'Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.' };
     }
