@@ -1,25 +1,18 @@
 /**
- * GateKeeperService - Two-Stage Workflow Orchestrator
- * 
- * Implements a Two-Stage architecture for crypto futures analysis:
- * - Stage 1 (Gate Scan): Fast filter with data integrity checks, Pattern Memory matching, and family pre-filtering
- * - Stage 2 (Full Analysis): Deep analysis with Gate constraints applied
- * 
- * The Gate's constraints (allowedFamilies, confidenceCap) become HARD LIMITS in Stage 2,
- * preventing AI hallucination from bypassing safety checks.
+ * GateKeeperService - Programmatic Gate Scan
+ *
+ * Fast, AI-free filter with data integrity checks, Pattern Memory matching,
+ * and family bias scoring. Its constraints (allowedFamilies, confidenceCap)
+ * are advisory inputs consumed downstream by the analysis pipeline.
  */
 
-import { MarketData, fetchMarketData, fetchOHLCV, Kline } from '../analysis/MarketDataService';
+import { MarketData, fetchMarketData, fetchOHLCV } from '../analysis/MarketDataService';
 import { TechnicalIndicators, calculateIndicators } from '../analysis/TechnicalAnalysisService';
 import {
-    synthesizePatternMemory,
     calculateSimilarity,
-    PatternMemorySynthesis,
     SetupContext,
-    generateSynthesizedPromptInjection
 } from '../learning/PatternMemorySynthesisService';
 import { LoggedTrade, TradeOutcome } from '../../types';
-import { GATE_SCAN_PROMPT, MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import { HARNESS_TIMEFRAMES, HarnessTimeframe } from '../../constants/harnessDataContract';
 
 // ============================================================================
@@ -62,22 +55,6 @@ export interface GateOutput {
     patternMemoryNote?: string;
     stage1Timestamp: string;
     processingTimeMs: number;
-}
-
-export interface Stage2Input {
-    gateOutput: GateOutput;
-    symbol: string;
-    marketData: MarketData;
-    indicators: GateInput['indicators'];
-    patternMemory: PatternMemorySynthesis;
-}
-
-export interface TwoStageResult {
-    symbol: string;
-    gateOutput: GateOutput;
-    stage2Performed: boolean;
-    stage2Prompt?: string; // The constructed Stage 2 prompt with Gate constraints injected
-    totalProcessingTimeMs: number;
 }
 
 // ============================================================================
@@ -379,77 +356,6 @@ function inferRegime(indicators: GateInput['indicators']): 'trending' | 'ranging
 }
 
 // ============================================================================
-// STAGE 2 PROMPT CONSTRUCTION
-// ============================================================================
-
-/**
- * Construct the Stage 2 prompt with Gate constraints injected
- */
-export function constructStage2Prompt(
-    stage2Input: Stage2Input,
-    basePrompt: string = MASTER_ANALYSIS_PROMPT
-): string {
-    const { gateOutput, patternMemory } = stage2Input;
-    const penalties = gateOutput.confidencePenalties;
-
-    // Build penalty breakdown (transparent)
-    const penaltyDetails = penalties.effectiveTotal > 0 ? `
- **Confidence Adjustments:**
-${penalties.dataIntegrity > 0 ? `  • Data Integrity: −${(penalties.dataIntegrity * 100).toFixed(0)}%` : ''}
-${penalties.patternMemory > 0 ? `  • Pattern Memory: −${(penalties.patternMemory * 100).toFixed(0)}%` : ''}
-${penalties.htfConflict > 0 ? `  • HTF Conflict: −${(penalties.htfConflict * 100).toFixed(0)}%` : ''}
-${penalties.volumeContext > 0 ? `  • Volume Context: −${(penalties.volumeContext * 100).toFixed(0)}%` : ''}
-  • **Effective Total: −${(penalties.effectiveTotal * 100).toFixed(0)}%** (raw: ${(penalties.rawTotal * 100).toFixed(0)}%)
-`.trim() : '';
-
-    // Build family bias section
-    const familyBiasSection = gateOutput.familyBias.reasoning.length > 0 ? `
- **Family Bias Analysis:**
-  • Family A: ${gateOutput.familyBias.A > 0 ? '+' : ''}${(gateOutput.familyBias.A * 100).toFixed(0)}%
-  • Family B: ${gateOutput.familyBias.B > 0 ? '+' : ''}${(gateOutput.familyBias.B * 100).toFixed(0)}%
-  • Family C: ${gateOutput.familyBias.C > 0 ? '+' : ''}${(gateOutput.familyBias.C * 100).toFixed(0)}%
-  • Family Omega: ${gateOutput.familyBias.Omega > 0 ? '+' : ''}${(gateOutput.familyBias.Omega * 100).toFixed(0)}%
-  • Reasoning: ${gateOutput.familyBias.reasoning.join('; ')}
-`.trim() : '';
-
-    // Build Gate constraints injection
-    const gateConstraintsBlock = `
-────────────────────────────────────────
- GATE SCAN RESULTS
-────────────────────────────────────────
-Symbol: ${gateOutput.symbol}
-Gate Status: ${gateOutput.pass ? 'PASSED' : 'BLOCKED'}
-Confidence Cap: ${(gateOutput.confidenceCap * 100).toFixed(0)}%
-Allowed Families: ${gateOutput.allowedFamilies.join(', ')}
-
-${penaltyDetails}
-${familyBiasSection}
-${gateOutput.suggestedDirection ? `
- **PATTERN MEMORY INSIGHT:**
-Suggested Direction: **${gateOutput.suggestedDirection}**
-Reason: ${gateOutput.patternMemoryNote || 'Based on historical pattern analysis'}
-` : ''}${gateOutput.warnings.length > 0 ? `
- **Warnings:**
-${gateOutput.warnings.map(w => `  • ${w}`).join('\n')}
-` : ''}${gateOutput.insights.length > 0 ? `
- **Insights:**
-${gateOutput.insights.map(i => `  • ${i}`).join('\n')}
-` : ''}
-**CONSTRAINTS:**
-• Confidence Weight ≤ ${(gateOutput.confidenceCap * 100).toFixed(0)}%
-${gateOutput.suggestedDirection ? `• PRIORITIZE ${gateOutput.suggestedDirection} direction analysis` : ''}
-────────────────────────────────────────
-
-`;
-
-    // Build Pattern Memory injection
-    const patternMemoryBlock = generateSynthesizedPromptInjection(patternMemory);
-
-    // Construct full prompt
-    return `${gateConstraintsBlock}${basePrompt}\n\n${patternMemoryBlock}`;
-}
-
-// ============================================================================
 // MAIN WORKFLOW ORCHESTRATION
 // ============================================================================
 
@@ -497,96 +403,6 @@ export async function fetchGateInputData(
         console.error(`[GateKeeper] Error fetching gate input data:`, error);
         return null;
     }
-}
-
-/**
- * Run the complete Two-Stage Workflow for a single symbol
- * 
- * @param symbol - The crypto symbol to analyze (e.g., "BTCUSDT")
- * @param tradeHistory - Historical logged trades for Pattern Memory
- * @returns TwoStageResult with gate output and optional Stage 2 prompt
- */
-export async function runTwoStageWorkflow(
-    symbol: string,
-    tradeHistory: LoggedTrade[] = []
-): Promise<TwoStageResult> {
-    const startTime = Date.now();
-
-    console.log(`[GateKeeper] Starting Two-Stage Workflow for ${symbol}`);
-
-    // ====== FETCH DATA ======
-    const gateInput = await fetchGateInputData(symbol, tradeHistory);
-
-    if (!gateInput) {
-        // Data fetch failed - return failed gate
-        const failedGate: GateOutput = {
-            symbol,
-            pass: false,
-            reason: 'Failed to fetch market data',
-            allowedFamilies: [],
-            confidenceCap: 0,
-            confidencePenalties: { dataIntegrity: 1.0, patternMemory: 0, htfConflict: 0, volumeContext: 0, rawTotal: 1.0, effectiveTotal: 1.0 },
-            familyBias: { A: 0, B: 0, C: 0, Omega: 0, reasoning: ['No data available'] },
-            warnings: ['Network or API error prevented data fetch'],
-            insights: [],
-            stage1Timestamp: new Date().toISOString(),
-            processingTimeMs: Date.now() - startTime
-        };
-
-        return {
-            symbol,
-            gateOutput: failedGate,
-            stage2Performed: false,
-            totalProcessingTimeMs: Date.now() - startTime
-        };
-    }
-
-    // ====== STAGE 1: GATE SCAN ======
-    const gateOutput = runProgrammaticGate(gateInput);
-
-    console.log(`[GateKeeper] Gate result for ${symbol}: ${gateOutput.pass ? 'PASSED' : 'BLOCKED'} - ${gateOutput.reason}`);
-
-    if (!gateOutput.pass) {
-        // Gate failed - do not proceed to Stage 2
-        return {
-            symbol,
-            gateOutput,
-            stage2Performed: false,
-            totalProcessingTimeMs: Date.now() - startTime
-        };
-    }
-
-    // ====== STAGE 2: CONSTRUCT FULL ANALYSIS PROMPT ======
-    // Synthesize Pattern Memory
-    const setupContext: SetupContext = {
-        coin: symbol,
-        direction: inferDirection(gateInput.indicators),
-        regime: inferRegime(gateInput.indicators)
-    };
-
-    const patternMemory = synthesizePatternMemory(setupContext, tradeHistory);
-
-    // Construct Stage 2 input
-    const stage2Input: Stage2Input = {
-        gateOutput,
-        symbol,
-        marketData: gateInput.marketData,
-        indicators: gateInput.indicators,
-        patternMemory
-    };
-
-    // Construct the Stage 2 prompt with Gate constraints
-    const stage2Prompt = constructStage2Prompt(stage2Input);
-
-    console.log(`[GateKeeper] Stage 2 prompt constructed for ${symbol} (${stage2Prompt.length} chars)`);
-
-    return {
-        symbol,
-        gateOutput,
-        stage2Performed: true,
-        stage2Prompt,
-        totalProcessingTimeMs: Date.now() - startTime
-    };
 }
 
 /**
@@ -680,12 +496,4 @@ ${gateOutput.insights.slice(0, 2).map(i => ` ${i}`).join('\n')}
     };
 }
 
-// ============================================================================
-// UTILITY EXPORTS
-// ============================================================================
-
-export {
-    GATE_SCAN_PROMPT,
-    MASTER_ANALYSIS_PROMPT
-};
 

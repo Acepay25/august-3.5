@@ -999,21 +999,29 @@ const App: React.FC = () => {
             offlineQueue.process({
                 onAnalysis: async (payload) => {
                     // Re-dispatch queued analyses with their original charts
-                    // (dataURLs persisted at enqueue time). RETURN the run's
+                    // (dataURLs persisted at enqueue time). AWAIT the run's
                     // promise: processQueue awaits this callback before it
                     // removes the item, so the queued analysis is only
                     // dropped once the pipeline run actually ENDS — previously
                     // the fire-and-forget call resolved at the first internal
                     // await and the item vanished the moment a run merely
-                    // STARTED (audit §2.3). Rejections (a throw before the
-                    // run's own error handling) propagate to the queue's
-                    // retry/backoff path instead.
+                    // STARTED (audit §2.3).
+                    //
+                    // Resolving is NOT the same as succeeding. handleSendMessage
+                    // catches a failing analysis internally (error bubble / rate
+                    // / quota) and resolves with { ok:false }; a bare await
+                    // would still dequeue that dead run. Throw on ok:false so
+                    // the existing retryCount / exponential-backoff / MAX_RETRIES
+                    // path applies instead of silently losing the work.
                     const images = (payload?.images || []).map((url: string, i: number) => ({
                         file: dataUrlToFile(url, `chart-${i + 1}.png`),
                         dataURL: url,
                         isLoading: false,
                     }));
-                    return handleSendMessage(payload?.prompt || '', images);
+                    const outcome = await handleSendMessage(payload?.prompt || '', images);
+                    if (outcome && outcome.ok === false) {
+                        throw new Error('Queued analysis replay failed — deferring to the retry/backoff path.');
+                    }
                 },
                 onItemProcessed: () => updateQueueCount(),
                 onQueueEmpty: () => setPendingQueueCount(0)
@@ -1716,7 +1724,6 @@ const App: React.FC = () => {
         watchedSignals,
         watchOpenR,
         handleFollowUpTicket,
-        handlePreReadCommit,
         handleOpenWatchedSignal,
         handleConfirmAutopilot,
         runWatchListAction,
@@ -2569,7 +2576,7 @@ const App: React.FC = () => {
         // subtree (e.g. a modal opening) does NOT blank the always-visible
         // chat/header. Per-component Suspense wrappers below isolate suspends.
         <React.Suspense fallback={null}>
-        <div ref={appRef} className="flex flex-col bg-zinc-950 text-zinc-100 font-sans h-full overflow-hidden transition-colors duration-500">
+        <div ref={appRef} className="flex flex-col bg-zinc-950 text-zinc-100 font-sans h-full overflow-hidden">
             {/* Custom confirm dialog + undo toast (replaces window.confirm) */}
             {ConfirmDialogComponent}
 

@@ -41,7 +41,7 @@ CI (`.github/workflows/release.yml`) runs `tsc`, `vitest`, `vite build`, then
 │   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), backtest data
 │   ├── backtesting/        # Backtesting, model performance, live backtest
 │   ├── learning/           # Pattern memory, rules, insights, global memory
-│   ├── ui/                 # Autopilot, debates, price alerts, share-image generation
+│   ├── ui/                 # Autopilot, debates, price alerts
 │   └── infrastructure/     # SQLite, Preferences, ProviderConfigService, backups
 ├── constants/              # models, prompts (per-domain files)
 ├── schemas/                # zod boundary schemas (tradeAnalysis, learning)

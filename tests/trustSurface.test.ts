@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Batch 7 trust-surface helpers: funding carry framing, quiet hours,
+// Batch 7 trust-surface helpers: funding carry framing,
 // rendered-copy sweep, plan amendments, calibration ledger.
 
 import {
@@ -10,11 +10,6 @@ import {
     planAmendmentDiff,
     FINANCIAL_ADVICE_DISCLAIMER,
 } from '../utils/trustSurface';
-import {
-    isWithinQuietHours,
-    quietHoursLabel,
-    DEFAULT_QUIET_HOURS,
-} from '../utils/quietHours';
 import {
     buildCalibrationLedger,
     ledgerFramingLine,
@@ -57,38 +52,6 @@ describe('fundingCarrySnapshotLine', () => {
         expect(fundingCarrySnapshotLine(0.0001)).toContain('longs pay / shorts receive');
         expect(fundingCarrySnapshotLine(-0.0001)).toContain('shorts pay / longs receive');
         expect(fundingCarrySnapshotLine(undefined)).toBe('');
-    });
-});
-
-describe('isWithinQuietHours', () => {
-    const at = (h: number): Date => new Date(2026, 7, 29, h, 30); // local time
-
-    it('disabled → never quiet', () => {
-        expect(isWithinQuietHours({ ...DEFAULT_QUIET_HOURS, enabled: false }, at(2))).toBe(false);
-    });
-
-    it('wrap-around window 23→07: 02:30 inside, 12:30 outside, 23:30 inside', () => {
-        const cfg: typeof DEFAULT_QUIET_HOURS = { enabled: true, startHour: 23, endHour: 7 };
-        expect(isWithinQuietHours(cfg, at(2))).toBe(true);
-        expect(isWithinQuietHours(cfg, at(12))).toBe(false);
-        expect(isWithinQuietHours(cfg, at(23))).toBe(true);
-        // Window end is exclusive: 07:30 is awake.
-        expect(isWithinQuietHours(cfg, at(7))).toBe(false);
-    });
-
-    it('forward window 13→14: 13:30 inside, 14:30 outside', () => {
-        const cfg: typeof DEFAULT_QUIET_HOURS = { enabled: true, startHour: 13, endHour: 14 };
-        expect(isWithinQuietHours(cfg, at(13))).toBe(true);
-        expect(isWithinQuietHours(cfg, at(14))).toBe(false);
-    });
-
-    it('equal start/end = off', () => {
-        const cfg: typeof DEFAULT_QUIET_HOURS = { enabled: true, startHour: 8, endHour: 8 };
-        expect(isWithinQuietHours(cfg, at(8))).toBe(false);
-    });
-
-    it('label pads hours', () => {
-        expect(quietHoursLabel({ enabled: true, startHour: 23, endHour: 7 })).toBe('23:00–07:00');
     });
 });
 

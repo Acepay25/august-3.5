@@ -93,10 +93,6 @@ export const createSession = (kind: SessionKind = 'solo', panelModels: PanelSeat
     };
 };
 
-/** The dock's session kinds: chats, panels, the Coach inbox, and room mirrors. */
-export const isSpecialKind = (kind: SessionKind | undefined): boolean =>
-    kind === 'coach' || kind === 'group';
-
 /** Session title = the first user question, one line, no markdown noise. */
 export const titleFromMessage = (text: string): string => {
     const line = (text.trim().split('\n')[0] || '').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').trim();

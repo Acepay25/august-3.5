@@ -26,7 +26,6 @@ dist-ssr/
 # Environment variables (API keys)
 .env*
 !.env.example
-dist/
 dist_electron/
 android/app/src/main/assets
 android/app/build
@@ -92,3 +91,25 @@ scripts/check_grids.cjs.bak
 # Local clutter (untracked 2026-09-13 dead-code purge):
 native_backup/
 delivery/
+
+# Root planning/audit markdown + one-shot artifacts (untracked 2026-09-16
+# hygiene purge — files stay on disk; run `git rm -r --cached` once to drop
+# them from the index). AGENTS.md and README.md remain tracked.
+.agent/
+.hermes/
+PROMPTS.md
+HARNESS_UPGRADE_PLAN.md
+plan.md
+DEBATE_FLOW_PLAN.md
+FAMILY_SYSTEM_PLAN.md
+MASTER_IMPROVEMENT_PLAN.md
+AUDIT_COMPONENTS_REPORT.md
+CONSOLIDATED_AUDIT.md
+FINAL_SWEEP_REPORT.md
+final-sweep-report.md
+performance-audit-report.md
+UI_UX_AUDIT_REPORT.md
+cleanup_final.ps1
+tests/test-rl.cjs
+tests/test-rl.ts
+tests/standalone-test-rl.ts

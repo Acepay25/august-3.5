@@ -225,7 +225,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             className="w-full bg-transparent text-xs text-purple-300 focus:outline-none cursor-pointer"
                                         >
                                             {rules.map((s, idx) => (
-                                                <option key={idx} value={idx} className="bg-zinc-900 text-gray-300">
+                                                <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
                                                     Skill #{idx + 1}: {s.file.name.replace(/\.md$/i, '').substring(0, 24)}
                                                 </option>
                                             ))}
@@ -272,7 +272,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             className="w-full bg-transparent text-xs text-amber-300 focus:outline-none cursor-pointer"
                                         >
                                             {insights.map((insight, idx) => (
-                                                <option key={idx} value={idx} className="bg-zinc-900 text-gray-300">
+                                                <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
                                                     Insight #{idx + 1} ({insight.category})
                                                 </option>
                                             ))}

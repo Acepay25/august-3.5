@@ -658,6 +658,74 @@ describe('present_trade reports the arm() disposition honestly', () => {
     });
 });
 
+describe('cross-symbol canvas honesty (per-turn identity residual)', () => {
+    /** Drive a stamped panel tool with the canvas showing a DIFFERENT coin
+     *  than the running turn — the mid-turn instrument switch the per-turn
+     *  refactor left un-annotated. The receipt must say the stamp came off
+     *  the viewed canvas instead of silently passing its prices off as the
+     *  turn's coin's live mark. */
+    const callStampedTool = async (
+        snapshot: unknown,
+        name: string,
+        args: Record<string, unknown>,
+    ) => {
+        let receipt: { ok: boolean; content: string } | null = null;
+        script(async function* (_c: unknown, _m: unknown, opts: {
+            executePanelTool?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<{ ok: boolean; content: string } | null>;
+        }) {
+            yield 'x';
+            receipt = await opts.executePanelTool?.({ id: 'c1', name, arguments: args }) ?? null;
+        });
+        render(
+            <TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+                onSelectChatModel={() => {}} getChartSnapshot={() => snapshot as never}
+                addModelDrawings={() => {}} />,
+        );
+        fireEvent.click(screen.getByText('Key levels?'));
+        await screen.findByText('x');
+        await waitFor(() => expect(receipt).toBeTruthy());
+        return receipt as unknown as { ok: boolean; content: string };
+    };
+
+    const canvasOn = (symbol: string, markPrice: number) => ({
+        symbol, interval: '15m', candles: [{ time: 1_700_000_000, open: 1, high: 2, low: 0.5, close: 1.5 }],
+        markPrice, levels: [], drawings: [], modelDrawings: [], capturedAt: Date.now(),
+    });
+
+    it('draw_on_chart stamps from another coin\'s canvas → the receipt labels it stale', async () => {
+        const receipt = await callStampedTool(canvasOn('ETHUSDT', 3000), 'draw_on_chart',
+            { kind: 'hline', prices: [100], label: 'range top' });
+        expect(receipt.ok).toBe(true);
+        expect(receipt.content).toContain('NOTE: the canvas shows ETHUSDT');
+        expect(receipt.content).toContain('turn was on BTCUSDT');
+        expect(receipt.content).toContain('stale');
+    });
+
+    it('mark_trade_levels gets the same honesty note', async () => {
+        const receipt = await callStampedTool(canvasOn('ETHUSDT', 3000), 'mark_trade_levels',
+            { entry: 100, stopLoss: 90, takeProfits: [110] });
+        expect(receipt.content).toContain('NOTE: the canvas shows ETHUSDT');
+    });
+
+    it('present_trade: the arm-disposition price is named as a viewed-canvas print', async () => {
+        // ETH mark 3000 is meaningless for the BTC plan — and 111 vs the plan
+        // below would REFUSE it; use a price that triggers the stale branch
+        // to also check the inline annotation.
+        const receipt = await callStampedTool(canvasOn('ETHUSDT', 111), 'present_trade',
+            { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] });
+        expect(receipt.content).toContain('REFUSED');
+        expect(receipt.content).toContain('(a ETHUSDT canvas print — see note)');
+        expect(receipt.content).toContain('NOTE: the canvas shows ETHUSDT');
+    });
+
+    it('a SAME-coin canvas stays byte-identical — no note, no noise', async () => {
+        const receipt = await callStampedTool(canvasOn('BTCUSDT', 105), 'mark_trade_levels',
+            { entry: 100, stopLoss: 90, takeProfits: [110] });
+        expect(receipt.content).toContain('Marked on the chart:');
+        expect(receipt.content).not.toContain('NOTE:');
+    });
+});
+
 describe('composer badge, proposal double-log, mid-turn retry chips', () => {
     it('the ctx packet-age badge clears on a symbol switch (no previous coin\u2019s fetch time)', async () => {
         script(yieldText('answer'));

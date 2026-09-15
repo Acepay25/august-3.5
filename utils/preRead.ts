@@ -4,33 +4,14 @@
  * direction + confidence BEFORE the reveal (cognitive forcing). The journal
  * then shows user-prior vs verdict vs outcome: the human-Brier vs
  * machine-Brier display that fights algorithm appreciation / automation
- * bias. Off by default — the friction can hurt satisfaction.
- *
- * Pure helpers here; the gate UI is components/chat/PreReadGate, the commit
- * handler lives in App.tsx, the copy-to-trade hop in useTradeLogging, and
- * the journal read-out in components/journal/Journal.tsx.
+ * bias. The capture gate UI and the Settings toggle were removed as dead
+ * code (the gate was never mounted); these pure helpers remain for the
+ * journal read-out in components/journal/Journal.tsx and the copy-to-trade
+ * hop in useTradeLogging.
  */
 
 import { UserPriorCall } from '../types/message';
 import { LoggedTrade } from '../types/trade';
-
-const PREF_KEY = 'pre_read_capture_v1';
-
-/** The toggle (Settings → Harness). Default OFF per. */
-export const loadPreReadEnabled = (): boolean => {
-    try {
-        return localStorage.getItem(PREF_KEY) === 'true';
-    } catch {
-        return false;
-    }
-};
-
-export const savePreReadEnabled = (enabled: boolean): boolean => {
-    try {
-        localStorage.setItem(PREF_KEY, String(enabled));
-    } catch { /* best-effort */ }
-    return enabled;
-};
 
 export interface PriorVsVerdict {
     direction: 'AGREE' | 'DISAGREE' | 'USER_FLAT' | 'NO_VERDICT';

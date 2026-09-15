@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Pre-read capture (Batch 5 remainder,): prior-vs-verdict comparison
-// and the human-Brier journal read-out.
+// and the human-Brier journal read-out. (The opt-in toggle and its gate UI
+// were removed as dead code; the pure comparison helpers stay.)
 
 import {
-    loadPreReadEnabled,
-    savePreReadEnabled,
     comparePriorToVerdict,
     buildHumanCalibration,
     humanCalibrationLine,
@@ -19,17 +18,6 @@ const trade = (over: Partial<LoggedTrade> & { outcome: TradeOutcome }): LoggedTr
     analysis: {} as TradeAnalysis,
     timestamp: new Date().toISOString(),
     ...over,
-});
-
-describe('pre-read toggle', () => {
-    beforeEach(() => localStorage.clear());
-    it('defaults OFF and round-trips the save', () => {
-        expect(loadPreReadEnabled()).toBe(false);
-        savePreReadEnabled(true);
-        expect(loadPreReadEnabled()).toBe(true);
-        savePreReadEnabled(false);
-        expect(loadPreReadEnabled()).toBe(false);
-    });
 });
 
 describe('comparePriorToVerdict', () => {

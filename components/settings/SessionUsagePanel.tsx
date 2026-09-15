@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeModelUsage, summarizeUsagePeriod } from '../../utils/sessionUsage';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { loadChecklistConfig, saveChecklistConfig } from '../../utils/checklist';
-import { loadPreReadEnabled, savePreReadEnabled } from '../../utils/preRead';
 import { HarnessLessonsBrowser } from './HarnessLessonsBrowser';
 import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
@@ -132,7 +131,6 @@ const SessionUsagePanel: React.FC = () => {
 const HarnessControls: React.FC = () => {
     const [settings, setSettings] = useState(getHarnessSettings);
     const [checklist, setChecklist] = useState(loadChecklistConfig);
-    const [preRead, setPreRead] = useState(loadPreReadEnabled);
     const persist = (next: Partial<ReturnType<typeof getHarnessSettings>>): void => {
         setSettings(saveHarnessSettings(next));
     };
@@ -250,18 +248,6 @@ const HarnessControls: React.FC = () => {
                     className="rounded border-zinc-700 bg-zinc-950"
                 />
                 Pre-trade checklist at capture (off by default)
-            </label>
-            {/* Pre-read capture: opt-in training mode — the
-                verdict card stays hidden until the user commits their own
-                direction + confidence. Off by default (friction). */}
-            <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer select-none">
-                <input
-                    type="checkbox"
-                    checked={preRead}
-                    onChange={e => setPreRead(savePreReadEnabled(e.target.checked))}
-                    className="rounded border-zinc-700 bg-zinc-950"
-                />
-                Pre-read capture: commit your call before the verdict reveals (off by default)
             </label>
             {/* Harness wire lessons: browse + clear what the harness
                 believes about provider wires. */}
