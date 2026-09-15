@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let store: unknown = null;
 vi.mock('../services/infrastructure/PreferencesService', () => ({
   getPreferenceObject: vi.fn(async () => store),
+  getPreferenceArray: vi.fn(async () => []),
   setPreferenceObject: vi.fn(async (_key: string, value: unknown) => {
     store = value;
   }),

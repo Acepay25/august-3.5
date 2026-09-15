@@ -7,6 +7,7 @@ import { ProviderConfig, ApiFormat, parseApiFormat } from '../../types/provider'
 import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import { usesGoogleGeminiDiscovery, googleModelsUrl } from '../../utils/googleGeminiFormat';
+import { isLocalBaseUrl } from '../../shared/providerRequestPolicy.cjs';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
@@ -273,12 +274,18 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
 }
 
 /**
- * Get only enabled providers that have an API key configured AND a usable
- * model — a provider whose last model was deleted (models: []) must not be
- * "ready" (its phantom 'default' model used to fail on every API call).
+ * Get only enabled providers that have a usable model AND either an API key
+ * or a local base URL — Ollama / LM Studio style servers are keyless, so an
+ * empty key must not make them "not ready" (users were inventing dummy keys
+ * to get past the old hard requirement). A provider whose last model was
+ * deleted (models: [] and no selectedModel) must not be "ready" either (its
+ * phantom 'default' model used to fail on every API call). Mirrors
+ * providerUtils.isProviderReady exactly.
  */
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
-    return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0 && (c.models.length > 0 || !!c.selectedModel));
+    return configs.filter(c => c.isEnabled
+        && (c.apiKey.trim().length > 0 || isLocalBaseUrl(c.baseUrl))
+        && (c.models.length > 0 || !!c.selectedModel));
 }
 
 /**
@@ -409,7 +416,11 @@ export async function discoverProviderModels(config: {
 }): Promise<string[]> {
     const key = (config.apiKey || '').trim();
     if (!(config.baseUrl || '').trim()) throw new Error('Base URL is required to discover models.');
-    if (!key) throw new Error('API key is required to discover models.');
+    // Keyless LOCAL providers (Ollama / LM Studio) answer /models with no
+    // auth — demanding a key here made the one endpoint that could tell the
+    // user "no key needed" reject them before the request. Remote providers
+    // still require a key.
+    if (!key && !isLocalBaseUrl(config.baseUrl)) throw new Error('API key is required to discover models.');
     assertValidProviderUrl(config.baseUrl);
 
     const { status, body } = await fetchDiscoverPayload(config);

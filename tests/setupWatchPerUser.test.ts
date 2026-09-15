@@ -14,6 +14,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const pref = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => pref.data[key] ?? null),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = pref.data[key];
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
         pref.data[key] = JSON.parse(JSON.stringify(value));
     }),

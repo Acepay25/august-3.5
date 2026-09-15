@@ -27,6 +27,7 @@ import { getMemoryFiles } from './MemoryFilesService';
 import {
     parseSkillMarkdown,
     isSkillFile,
+    skillBody,
     skillMatchesSetup,
     type SkillMeta,
 } from './SkillMemoryService';
@@ -214,10 +215,19 @@ export const buildDefaultRunner = (
         });
         let skillNote: string;
         if (skillEnabled && skill) {
-            const body = substituteSkillContext(skill.content.trim(), query);
+            // The treatment arm injects the PROCEDURE, never the raw file:
+            // the frontmatter (25-35 YAML lines on real skills) used to eat
+            // the EVAL_SKILL_BODY_MAX budget and truncate the body — and an
+            // arm contaminated by bookkeeping YAML is not what production
+            // injection ever sends, so the A/B verdict measured the wrong
+            // treatment. Same skillBody() rule as the retrieval slices.
+            const body = substituteSkillContext(skillBody(skill.content), query);
             const capped = body.length > EVAL_SKILL_BODY_MAX ? `${body.slice(0, EVAL_SKILL_BODY_MAX).trimEnd()}\n…` : body;
-            const provenance = skill.meta.tradeIds.length > 0
-                ? `learned from ${skill.meta.tradeIds.length} logged trade(s)`
+            // Same provenance source as the verdict slice: the monotonic
+            // counter, not the tail-20 id list.
+            const evidenceTotal = skill.meta.evidenceCount ?? skill.meta.tradeIds.length;
+            const provenance = evidenceTotal > 0
+                ? `learned from ${evidenceTotal} logged trade(s)`
                 : '';
             skillNote = [
                 'YOUR NOTEBOOK MEMORY for this exact setup (weigh it heavily):',

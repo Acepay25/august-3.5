@@ -11,7 +11,8 @@
  * literally true.
  */
 
-import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { getPreferenceArray, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { withSerializedPref } from '../infrastructure/serializedPrefs';
 
 export interface InjectedSource {
     path: string;
@@ -48,18 +49,37 @@ const KEY_PREFIX = 'memory_injections_v1_';
 /** Newest-first; oldest records fall off. A few hundred runs is plenty for attribution. */
 const MAX_RECORDS = 400;
 
+const keyFor = (username: string): string =>
+    `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
+
+/** Runtime shape check for a stored record — junk blobs must not flow into
+ *  skillAdherenceForRun's `for (const s of r.sources)` (see getPreferenceArray). */
+const isInjectionRecord = (item: unknown): item is MemoryInjectionRecord => {
+    const r = item as MemoryInjectionRecord | null;
+    return !!r && typeof r === 'object'
+        && typeof r.ts === 'string'
+        && typeof r.stage === 'string'
+        && Array.isArray(r.sources);
+};
+
 export const recordMemoryInjection = async (
     username: string,
     record: Omit<MemoryInjectionRecord, 'ts'>,
 ): Promise<void> => {
     try {
-        const key = `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
-        const prev = await getPreferenceObject<MemoryInjectionRecord[]>(key);
-        const next = [
-            { ...record, ts: new Date().toISOString() },
-            ...(Array.isArray(prev) ? prev : []),
-        ].slice(0, MAX_RECORDS);
-        await setPreferenceObject(key, next);
+        const key = keyFor(username);
+        // Serialized read-modify-write: per-stage/seat recorders run
+        // concurrently, and an unguarded read→append→write loses whichever
+        // append interleaved — a lost verdict record misroutes the followed
+        // trade into CONTROL and starves the skill of credit.
+        await withSerializedPref(key, async () => {
+            const prev = await getRecentMemoryInjections(username);
+            const next = [
+                { ...record, ts: new Date().toISOString() },
+                ...prev,
+            ].slice(0, MAX_RECORDS);
+            await setPreferenceObject(key, next);
+        });
     } catch {
         // Telemetry must never break prompt assembly.
     }
@@ -69,9 +89,7 @@ export const getRecentMemoryInjections = async (
     username: string,
 ): Promise<MemoryInjectionRecord[]> => {
     try {
-        const key = `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
-        const recs = await getPreferenceObject<MemoryInjectionRecord[]>(key);
-        return Array.isArray(recs) ? recs : [];
+        return await getPreferenceArray<MemoryInjectionRecord>(keyFor(username), isInjectionRecord);
     } catch {
         return [];
     }
@@ -139,9 +157,13 @@ export const annotateVerdictCitations = async (
     runId?: string,
 ): Promise<void> => {
     try {
+        const key = keyFor(username);
         // The verdict-stage record is written fire-and-forget by retrieval;
         // wait (briefly) for THIS run's record to land before stamping, so a
         // slow Preferences write can't make us annotate the PREVIOUS run.
+        // These polls are plain reads — the mutation+write below goes through
+        // the serialized queue so a concurrent recordMemoryInjection can't
+        // slip between our read and our rewrite of the whole list.
         let recs = await getRecentMemoryInjections(username);
         if (runId) {
             for (let i = 0; i < 10; i++) {
@@ -163,25 +185,31 @@ export const annotateVerdictCitations = async (
             if (titleWords.length >= 2 && titleWords.every(w => verdictWords.has(w))) return true;
             return false;
         };
-        // Newest-first: only the first verdict-stage record per slug is stamped.
-        // With a runId, ONLY that run's record is a candidate (exact join).
-        const seen = new Set<string>();
-        let changed = false;
-        for (const r of recs) {
-            if (r.stage !== 'verdict') continue;
-            if (runId && r.runId !== runId) continue;
-            for (const s of r.sources) {
-                if (s.kind !== 'skill' || !s.path.startsWith('skills/')) continue;
-                const slug = s.path.slice('skills/'.length);
-                if (!slug || seen.has(slug)) continue;
-                seen.add(slug);
-                s.cited = cites(slug);
-                changed = true;
+        await withSerializedPref(key, async () => {
+            // Re-read INSIDE the lock: the polls above may have raced appends
+            // that landed after the last read.
+            const current = await getRecentMemoryInjections(username);
+            if (current.length === 0) return;
+            // Newest-first: only the first verdict-stage record per slug is
+            // stamped. With a runId, ONLY that run's record is a candidate
+            // (exact join).
+            const seen = new Set<string>();
+            let changed = false;
+            for (const r of current) {
+                if (r.stage !== 'verdict') continue;
+                if (runId && r.runId !== runId) continue;
+                for (const s of r.sources) {
+                    if (s.kind !== 'skill' || !s.path.startsWith('skills/')) continue;
+                    const slug = s.path.slice('skills/'.length);
+                    if (!slug || seen.has(slug)) continue;
+                    seen.add(slug);
+                    s.cited = cites(slug);
+                    changed = true;
+                }
             }
-        }
-        if (!changed) return;
-        const key = `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
-        await setPreferenceObject(key, recs.slice(0, MAX_RECORDS));
+            if (!changed) return;
+            await setPreferenceObject(key, current.slice(0, MAX_RECORDS));
+        });
     } catch {
         // Telemetry must never break the verdict commit.
     }

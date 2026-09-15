@@ -110,6 +110,7 @@ vi.mock('../services/validation/DataIntegrityService', () => ({
 
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn().mockResolvedValue(null),
+    getPreferenceArray: vi.fn(async () => []),
     PREF_KEYS: { ENSEMBLE_MODEL_SELECTION: 'ensemble_model_selection' },
 }));
 

@@ -224,6 +224,18 @@ export const runSessionSkillReview = async (
             let candles;
             try {
                 const kl = await fetchKlines(thesis.symbol, thesis.interval || '15m', 120);
+                // WINDOW COVERAGE: 120 bars of the thesis interval reach back
+                // only so far. If the oldest fetched bar starts AFTER the
+                // thesis (kl[0].time > atMs), the bars in between are missing —
+                // whichever level touched FIRST overall may have touched
+                // outside the covered window, so anything the walk finds is an
+                // invention (a 3-day-old thesis "scored" against the last 30h
+                // of tape minted false WIN drafts). Treat as unresolved; the
+                // resolver re-tries while the TTL keeps the thesis alive.
+                if (kl.length === 0 || kl[0].time > thesis.atMs) {
+                    cacheOpenThesis(username, session.id, thesis);
+                    continue;
+                }
                 // KlineService stores time in MILLISECONDS — compare directly.
                 // (`k.time * 1000` made the filter a no-op, so pre-thesis
                 // candles leaked into scoring and minted false wins.)
@@ -253,11 +265,22 @@ export const runSessionSkillReview = async (
                 botContext: thesis.thesis,
             });
             if (result.action === 'queued') queued += 1;
-            // Judged once — merged/skipped/queued theses never re-nag.
+            if (result.action === 'skipped') {
+                // The gate never JUDGED (tombstone cooldown, provider
+                // hiccup, gate fell back to the deterministic bar and was
+                // refused there is 'skipped' too). markDrafted here used to
+                // permanently silence the thesis — even after a mere
+                // cooldown expired it could never be drafted, because the
+                // fingerprint stayed in the dedupe set forever. Keep it
+                // eligible: leave it in the open cache for the resolver
+                // (TTL-bounded) and do not fingerprint it as drafted.
+                cacheOpenThesis(username, session.id, thesis);
+                continue;
+            }
+            // JUDGED once — merged/queued theses never re-nag.
             markDrafted(username, [fp]);
             dropOpenThesis(username, fp);
         }
-        markDrafted(username, [`${session.id}`]);
     }
     return queued;
 };
@@ -331,6 +354,14 @@ export const runThesisResolver = async (
         if (already.has(fp) || existingDraftIds.has(fp)) continue; // handled by the review pass meanwhile
         try {
             const kl = await fetchKlines(thesis.symbol, thesis.interval || '15m', 120);
+            // Same window-coverage rule as the review pass: a fetched
+            // window that starts after the thesis cannot honestly say
+            // which level touched first — keep it cached (TTL-bounded)
+            // instead of scoring against a partial window.
+            if (kl.length === 0 || kl[0].time > thesis.atMs) {
+                if (Date.now() - thesis.cachedAtMs < OPEN_THESIS_TTL_MS) keep.push(thesis);
+                continue;
+            }
             const candles = kl.filter(k => k.time >= thesis.atMs);
             const outcome = scoreHypotheticalTrade(thesis, candles);
             if (outcome === 'open') {
@@ -356,6 +387,14 @@ export const runThesisResolver = async (
                 botContext: thesis.thesis,
             });
             if (result.action === 'queued') queued += 1;
+            if (result.action === 'skipped') {
+                // Gate never judged (cooldown / provider hiccup) — do NOT
+                // markDrafted: that permanently silences the thesis even
+                // after a cooldown expires. Keep it cached so the next
+                // throttled resolver pass retries (until the TTL ages it).
+                if (Date.now() - thesis.cachedAtMs < OPEN_THESIS_TTL_MS) keep.push(thesis);
+                continue;
+            }
             markDrafted(username, [fp]);
         } catch {
             keep.push(thesis); // a failed klines fetch must not lose the thesis

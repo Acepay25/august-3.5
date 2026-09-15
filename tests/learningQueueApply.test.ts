@@ -9,6 +9,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+        const raw = store[key];
+        if (!Array.isArray(raw)) return [];
+        return guard ? raw.filter(guard) : raw;
+    }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
         store[key] = value;
     }),
@@ -21,6 +26,8 @@ import {
     initMemoryFiles,
     getMemoryFiles,
     createMemoryFile,
+    createMemoryFolder,
+    deleteMemoryFolder,
     ensureSkillsArchiveFolderUnlocked,
 } from '../services/learning/MemoryFilesService';
 import {
@@ -116,6 +123,29 @@ describe('learning queue apply paths', () => {
         expect(revived.folderId).toBe(skills.id);
         const meta = parseSkillMarkdown(revived.content)!;
         expect(meta.status).toBe('candidate'); // never straight to confirmed
+    });
+
+    it('revival after the user RECREATED the skills folder lands in the current folder, not an orphan', async () => {
+        // Archived retired twin.
+        const archive = await ensureSkillsArchiveFolderUnlocked(USER);
+        await createMemoryFile(archive!.id, 'phoenix.md', skillMd('retired', 'phoenix trigger clause'), USER);
+        // The user deleted the skills folder and made a new one: same NAME,
+        // brand-new generated id. The old hardcoded `folderId: 'skills'`
+        // write pointed the revived file at the dead id — isSkillFile
+        // resolves folders by id, so the "revived" skill was orphaned
+        // outside every folder: invisible to retrieval, evidence and grids.
+        const original = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await deleteMemoryFolder(original.id, USER);
+        const fresh = await createMemoryFolder('skills', USER);
+        expect(fresh.id).not.toBe(original.id);
+
+        expect(await applyRevivalProposal('phoenix', USER)).toBe(true);
+        const revived = findSkill('phoenix.md')!;
+        expect(revived.folderId).toBe(fresh.id);
+        expect(parseSkillMarkdown(revived.content)!.status).toBe('candidate');
+        // …and it is a real LIVE skill again, not a folderless row.
+        const { listSkills } = await import('../services/learning/SkillMemoryService');
+        expect(listSkills().some(r => r.file.name === 'phoenix.md')).toBe(true);
     });
 
     it('demote: confirmed zero-evidence skill drops to candidate', async () => {

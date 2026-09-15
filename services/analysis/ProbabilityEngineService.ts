@@ -57,6 +57,9 @@ export const ProbabilityEngineService = {
          *  When present, each target's probability decays with how far past
          *  the first target it sits instead of a fixed step. */
         tpDistancesPct?: number[],
+        /** Optional entry→stop-loss distance in %. Enables a REAL stop-hit
+         *  probability (barrier race vs TP1) instead of an upper-bound label. */
+        slDistancePct?: number,
     ): LevelProbabilities {
 
         // 1. Extract Features
@@ -73,7 +76,31 @@ export const ProbabilityEngineService = {
 
         // 5. Final Calculation
         const finalProb = applyBayesianUpdate(prior.winRate, multipliers);
-        const slProb = 100 - finalProb; // Simple inverse for SL
+
+        // SL probability: the old `100 - finalProb` claimed TP1 and SL were
+        // complementary events. They are not — timeout is the third outcome,
+        // and it produced absurdities like "SL hit: 62%" for a stop 0.2%
+        // away just because TP1 was far. Now:
+        //   • with an entry→SL distance: barrier-race estimate. For a
+        //     driftless walk the first-hit odds are inverse to the barrier
+        //     distances, so P(SL-first) ≈ P(TP1-first) × dTP1 / dSL.
+        //   • without one: the number is only an UPPER BOUND on the SL
+        //     probability (P(SL) + P(TP1) ≤ 1, the remainder is timeout),
+        //     and the reasoning field says exactly that instead of the old
+        //     "Derived from inverse of TP probability" claim.
+        const dTp1 = typeof tpDistancesPct?.[0] === 'number' && tpDistancesPct[0] > 0
+            ? tpDistancesPct[0]
+            : undefined;
+        const dSl = typeof slDistancePct === 'number' && slDistancePct > 0 ? slDistancePct : undefined;
+        let slProb: number;
+        let slBasis: string;
+        if (dSl !== undefined && dTp1 !== undefined) {
+            slProb = Math.min(99, Math.max(1, Math.round(finalProb * (dTp1 / dSl))));
+            slBasis = `Barrier race: TP1 ${dTp1}% away vs SL ${dSl}% away (driftless-walk odds P(SL)=P(TP1)·dTP1/dSL)`;
+        } else {
+            slProb = 100 - finalProb;
+            slBasis = 'UPPER BOUND only: share of outcomes that do NOT reach TP1 (stop-hit or timeout) — NOT a point estimate of stop probability; pass slDistancePct for the barrier-race estimate';
+        }
 
         // 6. Construct Reasoning
         const reasoningText = generateReasoningText(prior, matches, multipliers);
@@ -92,14 +119,14 @@ export const ProbabilityEngineService = {
             tp2Probability: tpProbs[1],
             tp3Probability: tpProbs[2],
             slReasoning: {
-                indicatorBasis: "Derived from inverse of TP probability",
+                indicatorBasis: slBasis,
                 volatilityFactor: "N/A",
                 patternMemoryInfluence: "N/A",
                 aiAdjustments: "N/A"
             },
             // Legacy/Compat
             reasoning: {
-                sl: { indicatorBasis: "Inv(TP)", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: "N/A" },
+                sl: { indicatorBasis: slBasis, volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: "N/A" },
                 tp1: { indicatorBasis: "Algo Engine", volatilityFactor: "N/A", patternMemoryInfluence: "N/A", aiAdjustments: reasoningText }
             },
             tpProbabilities: [
@@ -125,21 +152,31 @@ function extractFeatures(snapshot: any): FeatureVector {
     if (!indicators) return getDefaultFeatures();
 
     return {
-        // Real indicator shapes (TechnicalAnalysisService): RSI lives at
-        // indicators.rsi.rsi14, MACD at indicators.macd.histogram, and ADX is
-        // NOT part of TechnicalIndicators — it lives on RegimeAnalysis
-        // (snapshot.regime.adx). The old reads always fell back to the
-        // defaults, so similarity matching degenerated to a pure confluence
-        // prior. BTC dominance is not part of the snapshot at all (it lives
-        // only in CorrelationRiskService), so it is not a feature here.
+        // RSI and ADX are 0-100 bounded. The MACD histogram is NOT — it is in
+        // raw price units, so BTC's term (~tens) vs an alt's (~hundredths)
+        // made Euclidean distance cross-coin incomparable and dominated by
+        // whichever coin has a bigger price. Normalize to dimensionless ATR
+        // units ("how many ATRs from zero"); fall back to 1% of price, then
+        // to the raw 0 default when the snapshot has neither.
         rsi: indicators.rsi?.rsi14 ?? 50,
         adx: snapshot.regime?.adx ?? 25,
-        macdHist: indicators.macd?.histogram ?? 0,
+        macdHist: normalizeMacdHist(indicators),
         fundingRate: snapshot.fundingRate || 0,
         // RegimeAnalysis: { regime: MarketRegime, trendDirection, ... } —
         // the string lives at .regime (primaryRegime kept as a legacy fallback).
         regime: snapshot.regime?.regime || snapshot.regime?.primaryRegime || 'ranging'
     };
+}
+
+/** MACD histogram in ATR-relative units so similarity is comparable across
+ *  coins and scales. Exported for direct regression testing. */
+export function normalizeMacdHist(indicators: any): number {
+    const histRaw = typeof indicators?.macd?.histogram === 'number' ? indicators.macd.histogram : 0;
+    const atr = typeof indicators?.atr === 'number' && indicators.atr > 0 ? indicators.atr : 0;
+    const price = typeof indicators?.currentPrice === 'number' && indicators.currentPrice > 0 ? indicators.currentPrice : 0;
+    const denom = atr > 0 ? atr : price > 0 ? price * 0.01 : 0;
+    if (!(denom > 0)) return 0;
+    return histRaw / denom;
 }
 
 function getDefaultFeatures(): FeatureVector {
@@ -171,7 +208,11 @@ function euclideanDistance(a: FeatureVector, b: FeatureVector): number {
     // Normalization factors (approximate variability)
     const wRSI = 1 / 20;
     const wADX = 1 / 20;
-    const wMACD = 1 / 50; // Hist can be large
+    // macdHist is ALREADY normalized to ATR units by extractFeatures (typical
+    // range ±3), so the old raw-price weight (1/50, tuned for histograms in
+    // tens/hundreds) is replaced by 1/2: a 2-ATR histogram gap contributes
+    // like a 40-point RSI gap.
+    const wMACD = 1 / 2;
     // Funding rate scaled to bps (0.01% = 1bp) — extracted into the feature
     // vector but previously never used in similarity; regime mismatch adds a
     // fixed term (0 same / 0.5 different) so context matches matter.

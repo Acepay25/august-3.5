@@ -8,6 +8,11 @@ const { getPreferenceObjectMock } = vi.hoisted(() => ({
 }));
 vi.mock('../services/infrastructure/PreferencesService', () => ({
   getPreferenceObject: getPreferenceObjectMock,
+  getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
+    const raw = await getPreferenceObjectMock(key);
+    if (!Array.isArray(raw)) return [];
+    return guard ? raw.filter(guard) : raw;
+  }),
   setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
     store[key] = value as Record<string, string>;
   }),

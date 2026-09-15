@@ -11,6 +11,48 @@ import {
   usesGoogleGeminiDiscovery,
   googleModelsUrl,
 } from './utils/googleGeminiFormat';
+import {
+  anthropicThinkingFields,
+  geminiThinkingParams,
+  isPrivateOrLoopbackHost,
+} from './shared/providerRequestPolicy.cjs';
+
+// shared/providerRequestPolicy.cjs is the single wire-policy source for the
+// Electron main process (require) AND the bundled renderer (ES import). Node
+// handles the CJS natively (this config's own import above); the browser
+// pipeline cannot execute `module.exports`, so this transform appends the ESM
+// named-export list — the guarded `module.exports = …` assignment in the file
+// then simply no-ops in the browser (where `typeof module === 'undefined'`).
+// Vitest consumes the same file as plain CJS through vite-node's interop, so
+// the module needs no second copy and the three transports ship ONE policy
+// implementation.
+const SHARED_POLICY_EXPORTS = [
+  'isExtendedThinkingModel',
+  'claudeThinkingBudgetTokens',
+  'anthropicShouldSendThinking',
+  'anthropicThinkingFields',
+  'geminiThinkingParams',
+  'isPrivateOrLoopbackHost',
+  'httpAllowedForHost',
+  'isSafeProviderTargetUrl',
+  'isLocalBaseUrl',
+  'EXTENDED_THINKING_MODEL_RE',
+  'MIN_EFFECTIVE_THINKING_TOKENS',
+  'ANTHROPIC_DEFAULT_TEMPERATURE',
+  'THINKING_BUDGET_FRACTIONS',
+];
+
+function sharedProviderPolicyEsmInterop(): any {
+  return {
+    name: 'shared-provider-policy-esm',
+    enforce: 'pre' as const,
+    transform(code: string, id: string): { code: string; map: null } | null {
+      const file = id.split('?')[0].replace(/\\/g, '/');
+      if (!file.endsWith('/shared/providerRequestPolicy.cjs')) return null;
+      return { code: `${code}\nexport { ${SHARED_POLICY_EXPORTS.join(', ')} };\n`, map: null };
+    },
+  };
+}
 
 function devProviderProxy() {
   return {
@@ -31,14 +73,11 @@ function devProviderProxy() {
           const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
           const config = request?.config || {};
           const parsed = new URL(String(config.baseUrl || '').trim());
-          const hostname = parsed.hostname.toLowerCase();
-          const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1' || hostname === '0.0.0.0' ||
-            /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-            /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-            /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-            /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-            /^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname);
-          if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocal)) {
+          // HTTPS by default; plain HTTP only for loopback / RFC1918 / link-local
+          // hosts (Ollama & friends on the LAN) — the SAME predicate the
+          // renderer's providerUrlValidation and electron/main.cjs now use
+          // (shared/providerRequestPolicy.cjs is the single source).
+          if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isPrivateOrLoopbackHost(parsed.hostname))) {
             throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
           }
           if (parsed.username || parsed.password || parsed.search || parsed.hash) {
@@ -107,13 +146,24 @@ function devProviderProxy() {
             const system = messages.find((message: any) => message?.role === 'system');
             body = { model: config.selectedModel, max_tokens: request.maxTokens ?? 4096, messages: messages.filter((message: any) => message?.role !== 'system').map((message: any) => ({ role: message.role, content: toAnthropicContent(message.content) })) };
             if (system) body.system = contentToText(system.content);
-            // Extended thinking for thinking-capable Claude models (mirrors
-            // GenericProviderService.messagesCall) — request a CoT budget so
-            // `thinking` blocks come back; older models 400 on the block, so
-            // gate by model id and skip tiny calls / JSON mode.
-            if (!request.jsonMode && /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/i.test(config.selectedModel) && (request.maxTokens ?? 4096) >= 4096) {
-              body.thinking = { type: 'enabled', budget_tokens: Math.max(1024, Math.floor((request.maxTokens ?? 4096) * 0.35)) };
-            }
+            // Extended thinking + temperature come from the SHARED policy
+            // module — model-id list, effort-scaled budget, 1024 floor,
+            // 0.7-default temperature omitted while thinking is active —
+            // identical to the renderer/desktop by construction. (The old
+            // local copy here had a stale model-id regex that missed
+            // sonnet-5/opus-5, a fixed 0.35 budget ignoring the effort tier,
+            // and never sent temperature at all.)
+            const thinkingFields = anthropicThinkingFields({
+              modelId: String(config.selectedModel || ''),
+              displayName: String(config.name || ''),
+              capabilityOverride: config.thinkingCapable,
+              maxTokens: request.maxTokens,
+              temperature: request.temperature,
+              jsonMode: request.jsonMode,
+              reasoningEffort: request.reasoningEffort,
+            });
+            if (typeof thinkingFields.temperature === 'number') body.temperature = thinkingFields.temperature;
+            if (thinkingFields.thinking) body.thinking = thinkingFields.thinking;
           } else if (config.apiFormat === 'responses') {
             url = `${baseUrl}/responses`;
             if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -142,6 +192,17 @@ function devProviderProxy() {
               jsonMode: request.jsonMode,
               model: config.selectedModel,
             }) as unknown as Record<string, unknown>;
+            // Canonical Gemini thinking decision from the shared policy
+            // (includeThoughts + 8192 budget; undefined under JSON mode),
+            // so all three transports emit an identical thinkingConfig.
+            {
+              const geminiConfig = body.generationConfig as Record<string, unknown> | undefined;
+              if (geminiConfig) {
+                const geminiThinking = geminiThinkingParams(request.jsonMode, String(config.selectedModel || ''));
+                if (geminiThinking) geminiConfig.thinkingConfig = geminiThinking;
+                else delete geminiConfig.thinkingConfig;
+              }
+            }
           } else {
             throw new Error('Unknown provider API format.');
           }
@@ -343,7 +404,7 @@ export default defineConfig(() => {
     define: {
       'import.meta.env.PACKAGE_VERSION': JSON.stringify(pkgVersion),
     },
-    plugins: [react(), tailwindcss(), devProviderProxy()],
+    plugins: [sharedProviderPolicyEsmInterop(), react(), tailwindcss(), devProviderProxy()],
     resolve: {
       alias: {
         '@': process.cwd(),

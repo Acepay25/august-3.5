@@ -1754,37 +1754,68 @@ interface MonteCarloResultForWeights {
 }
 
 /**
- * Apply Monte Carlo risk adjustment to provider weights
- * High drawdown or low MC win rate reduces weights
+ * Apply Monte Carlo risk adjustment to provider weights.
+ *
+ * FIXED (was a mathematical no-op): the old version multiplied EVERY
+ * enabled provider by the same 0.7 whenever the single shared MC result
+ * tripped a threshold, then renormalized the whole vector — dividing by a
+ * uniformly-scaled total restores the original weights exactly, so the
+ * "MC integration" never affected anything.
+ *
+ * Now providers are weighted by their OWN MC quality score. Pass
+ * `monteCarloResults` as a per-provider map (provider id → the MC result for
+ * the setup that provider proposed — the debate pipeline already runs
+ * per-analyst Monte Carlo via LabeledMonteCarloResult). Providers whose setup
+ * simulated into high drawdown or a low win rate lose weight relative to
+ * providers whose setup survived; that difference survives renormalization.
+ *
+ * Back-compat: passing a SINGLE shared result (the old shape) is detected and
+ * returns the weights unchanged with a console warning — one global number
+ * cannot differentiate providers, and pretending otherwise re-created the
+ * no-op.
  */
+const isSingleMonteCarloResult = (value: object): value is MonteCarloResultForWeights =>
+    typeof (value as MonteCarloResultForWeights).winRate === 'number';
+
+/** Per-provider MC quality multiplier: 1.0 baseline, penalized for high
+ *  drawdown and/or low simulated win rate (stacking). */
+const mcQualityMultiplier = (mc: MonteCarloResultForWeights): number => {
+    let factor = 1;
+    if (mc.maxDrawdownAvg >= HIGH_DRAWDOWN_THRESHOLD) factor *= HIGH_DRAWDOWN_PENALTY;
+    if (mc.winRate < LOW_WINRATE_MC_THRESHOLD) factor *= HIGH_DRAWDOWN_PENALTY;
+    return factor;
+};
+
 export const applyMonteCarloRiskAdjustment = (
     weights: Record<AIProvider, number>,
-    monteCarloResult: MonteCarloResultForWeights | null,
+    monteCarloResults: MonteCarloResultForWeights | Partial<Record<string, MonteCarloResultForWeights>> | null,
     affectedProviders: AIProvider[]
 ): Record<AIProvider, number> => {
-    if (!monteCarloResult) return weights;
+    if (!monteCarloResults) return weights;
 
-    const adjustedWeights = { ...weights };
-    let penaltyApplied = false;
-
-    // Check for high drawdown
-    if (monteCarloResult.maxDrawdownAvg >= HIGH_DRAWDOWN_THRESHOLD) {
-        console.log(`[MonteCarloWeights] High drawdown detected (${monteCarloResult.maxDrawdownAvg.toFixed(1)}%), applying penalty`);
-        penaltyApplied = true;
+    if (isSingleMonteCarloResult(monteCarloResults)) {
+        // A single shared MC result carries no per-provider information — a
+        // uniform penalty followed by renormalization is provably identity.
+        console.warn('[MonteCarloWeights] Single shared MonteCarlo result cannot differentiate providers; skipping (pass a per-provider map to make the adjustment effectful)');
+        return weights;
     }
 
-    // Check for low MC win rate
-    if (monteCarloResult.winRate < LOW_WINRATE_MC_THRESHOLD) {
-        console.log(`[MonteCarloWeights] Low MC win rate (${monteCarloResult.winRate.toFixed(1)}%), applying penalty`);
-        penaltyApplied = true;
-    }
+    const adjustedWeights: Record<AIProvider, number> = { ...weights };
+    let anyPenalty = false;
 
-    if (penaltyApplied) {
-        for (const provider of affectedProviders) {
-            adjustedWeights[provider] *= HIGH_DRAWDOWN_PENALTY;
+    for (const provider of affectedProviders) {
+        const mc = monteCarloResults[provider];
+        if (!mc || !isSingleMonteCarloResult(mc)) continue;
+        const factor = mcQualityMultiplier(mc);
+        if (factor < 1) {
+            adjustedWeights[provider] *= factor;
+            anyPenalty = true;
+            console.log(`[MonteCarloWeights] ${provider} MC penalty ×${factor.toFixed(2)} (winRate ${mc.winRate.toFixed(1)}%, maxDD ${mc.maxDrawdownAvg.toFixed(1)}%)`);
         }
+    }
 
-        // Re-normalize weights
+    if (anyPenalty) {
+        // Re-normalize weights (penalized providers now hold a smaller share)
         const total = Object.values(adjustedWeights).reduce((a, b) => a + b, 0);
         if (total > 0) {
             for (const provider of Object.keys(adjustedWeights) as AIProvider[]) {
@@ -1905,13 +1936,16 @@ export const getAllProviderInsightScores = (): Record<string, { avgScore: number
  * 2. Confidence calibration awareness
  * 3. Provider pair correlation insights
  * 4. Adaptive cold streak thresholds
- * 5. Monte Carlo risk adjustment (if provided)
+ * 5. Monte Carlo risk adjustment (if provided). Pass a per-provider map
+ *    (provider id → MC result for that provider's own setup) — that is what
+ *    makes the adjustment change the weights. A single shared result is a
+ *    no-op by construction and is skipped with a warning.
  */
 export const calculateDynamicWeightsWithAllImprovements = (
     currentRegime: MarketRegime,
     currentFamily: string,
     enabledProviders: AIProvider[],
-    monteCarloResult?: MonteCarloResultForWeights | null
+    monteCarloResult?: MonteCarloResultForWeights | Partial<Record<string, MonteCarloResultForWeights>> | null
 ): DynamicWeights => {
     const allTimeData = loadPerformanceData();
     const regimeKey = mapRegimeToKey(currentRegime);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateMultiTimeframeConfluence, validateRiskReward } from '../services/validation/AccuracyValidationService';
-import { validateTimeframeAlignment } from '../services/validation/TradeValidationGate';
+import { validateTimeframeAlignment, matchPatternMemory } from '../services/validation/TradeValidationGate';
+import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
 
 describe('accuracy validation confidence policy', () => {
     it('downgrades an ordinary opposing MTF read instead of forcing Avoid', () => {
@@ -97,5 +98,55 @@ describe('validateRiskReward — direction-aware ordering (Tier-0 #7)', () => {
         expect(result.isValid).toBe(false);
         expect(result.orderingValid).toBe(true);
         expect(result.warnings.some(w => /TIGHT STOP/.test(w))).toBe(true);
+    });
+});
+
+describe('matchPatternMemory is symbol-scoped', () => {
+    const analysis = (coinName: string): TradeAnalysis => ({
+        coinName,
+        direction: 'Long',
+        confidence: 'Medium',
+        probability: 60,
+        strategy: 'trend continuation',
+        activeStrategies: [],
+        entryPoints: [{ price: '100', description: 'retest' }],
+        stopLoss: '95',
+        takeProfit: [{ price: '110' }],
+        marketConditions: {
+            pattern: 'Breakout', candleBehavior: '', timeframeAlignment: '',
+            rsi: 'overbought', macd: '', sentiment: 'bullish',
+        },
+        historicalCorrelation: '',
+        detectedPatternFamily: 'Family C',
+        createdAt: new Date().toISOString(),
+    });
+
+    const btcLoss: LoggedTrade = {
+        id: 'loss-btc',
+        analysis: analysis('BTCUSDT'),
+        outcome: TradeOutcome.LOSS,
+        timestamp: '2026-08-01T00:00:00.000Z',
+    };
+
+    it('does NOT fire a LOSS warning for a different coin (direction+family+rsi+sentiment alone ≠ pattern memory)', () => {
+        // ETH setup vs the BTC loss: every dimension the old scorer checked
+        // is identical — only the COIN differs — yet that used to produce
+        // "similar to a previous LOSS (BTC Long…)" for an ETH analysis.
+        const out = matchPatternMemory(analysis('ETHUSDT'), [btcLoss]);
+        expect(out.warning).toBeNull();
+        expect(out.matchedTrade).toBeNull();
+    });
+
+    it('still fires for the SAME coin (normalized: BTC vs BTCUSDT)', () => {
+        const out = matchPatternMemory(analysis('BTC'), [btcLoss]);
+        expect(out.warning).toContain('PATTERN MEMORY ALERT');
+        expect(out.similarity).toBeGreaterThanOrEqual(70);
+        expect(out.matchedTrade?.id).toBe('loss-btc');
+    });
+
+    it('lets an explicitly market-wide view (no symbol) keep cross-coin precedent', () => {
+        const marketWide = { ...analysis(''), direction: 'Long' } as TradeAnalysis;
+        const out = matchPatternMemory(marketWide, [btcLoss]);
+        expect(out.warning).toContain('PATTERN MEMORY ALERT');
     });
 });

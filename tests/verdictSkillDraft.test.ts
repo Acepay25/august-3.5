@@ -8,7 +8,13 @@ const { listSkillsMock } = vi.hoisted(() => ({
 }));
 vi.mock('../services/learning/SkillMemoryService', () => ({
   listSkills: (() => listSkillsMock()) as never,
+  // draftGates' coverage check moved from the loose skillMatchesSetup to
+  // skillStrictlyMatchesSetup (a direction-only skill must not "cover"
+  // everything) — the stub predicate keeps the same observable: meta alive
+  // + real pattern-family overlap ⇒ covered.
   skillMatchesSetup: vi.fn((meta: { status?: string }, setup: { family?: string }) =>
+    meta.status !== 'retired' && Boolean(setup.family)),
+  skillStrictlyMatchesSetup: vi.fn((meta: { status?: string }, setup: { family?: string }) =>
     meta.status !== 'retired' && Boolean(setup.family)),
 }));
 

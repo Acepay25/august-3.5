@@ -124,6 +124,28 @@ export const getPreferenceObject = async <T>(key: string): Promise<T | null> => 
 };
 
 /**
+ * Get a JSON ARRAY with a runtime check — the hardened read for the many
+ * list-shaped prefs (automations, pass records, injection logs, tombstones).
+ * getPreferenceObject is `as T` with no check: a legacy/corrupted/foreign
+ * blob (an object, a number, an array of junk items) used to flow straight
+ * into callers' `.map`/`.filter`/`.slice` chains.
+ *
+ * - Non-array / unparseable / null → `[]`.
+ * - With `guard`: junk items are dropped (Array.prototype.filter with a type
+ *   predicate), so the result is `T[]` by construction.
+ * - Without `guard`: only the Array.isArray check is applied (items pass
+ *   through as-is) — prefer a guard when the element shape matters.
+ */
+export const getPreferenceArray = async <T>(
+    key: string,
+    guard?: (item: unknown) => item is T,
+): Promise<T[]> => {
+    const raw = await getPreferenceObject<unknown>(key);
+    if (!Array.isArray(raw)) return [];
+    return guard ? raw.filter(guard) : (raw as T[]);
+};
+
+/**
  * Check if a key exists
  */
 export const hasPreference = async (key: string): Promise<boolean> => {

@@ -120,16 +120,32 @@ export const shouldRetry = (parsedError: ParsedAPIError): boolean => {
 };
 
 /**
- * Get retry delay in milliseconds
+ * Get retry delay in milliseconds.
+ *
+ * Every delay carries JITTER. Ensemble seats fire in parallel and share
+ * gateway quota; a deterministic backoff makes every seat that got a 429
+ * on the same beat wake up and hammer the rate-limited gateway in lockstep,
+ * instantly tripping the limiter again. Randomized wake-ups spread the
+ * recovery window instead.
  */
 export const getRetryDelay = (parsedError: ParsedAPIError, attempt: number): number => {
-    if (parsedError.retryAfterSeconds) {
+    if (parsedError.retryAfterSeconds !== undefined) {
         // A real Retry-After header can be huge (e.g. 600s for quota resets) —
         // honor it but never let it stall the pipeline for minutes per attempt.
-        return Math.min(parsedError.retryAfterSeconds, 30) * 1000;
+        // The check is `!== undefined`, NOT truthiness: a numeric 0 ("retry
+        // now") is a valid server instruction and must yield an immediate
+        // retry instead of falling through to exponential backoff.
+        // Jitter only EXTENDS the wait the server asked for (never below it):
+        // base + up to +50%, so synchronized 429s wake up staggered. 0s
+        // stays exactly 0s.
+        const base = Math.min(parsedError.retryAfterSeconds, 30) * 1000;
+        return Math.round(base + Math.random() * base * 0.5);
     }
-    // Exponential backoff: 2s, 4s, 8s, max 30s
-    return Math.min(2000 * Math.pow(2, attempt), 30000);
+    // Exponential backoff — 2s, 4s, 8s, max 30s — with "equal jitter":
+    // sleep a uniform sample in [base/2, base]. Guarantees progress while
+    // decorrelating concurrent retrying seats.
+    const base = Math.min(2000 * Math.pow(2, attempt), 30000);
+    return Math.round(base / 2 + Math.random() * (base / 2));
 };
 
 /**
