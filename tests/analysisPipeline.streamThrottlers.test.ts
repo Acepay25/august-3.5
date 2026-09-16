@@ -205,7 +205,7 @@ describe('applyOpeningThinkingUpdate', () => {
         const reasoning = { 'k-macro': 'macro-cot' }; // tech has none
         const result = applyOpeningThinkingUpdate(prev, 'opening', analysts, reasoning, {});
         expect(result[0].debateTurns).toHaveLength(1);
-        expect(result[0].debateTurns[0]!.speaker).toBe('Macro');
+        expect(result[0]!.debateTurns[0]!.speaker).toBe('Macro');
     });
 
     it('returns prev unchanged when the opening message id is missing', () => {
