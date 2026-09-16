@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, safeStorage, session } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, net, safeStorage, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -23,6 +23,17 @@ if (isInstallerSmoke) {
     app.commandLine.appendSwitch('metrics-recording-only');
 }
 
+function blockSmokeNetwork() {
+    if (!isInstallerSmoke) return;
+    // Defense in depth: the probe also sets the renderer offline and aborts
+    // external routes, while this main-session guard catches Electron/net.fetch
+    // traffic (including accidental provider or updater calls).
+    session.defaultSession.webRequest.onBeforeRequest(
+        { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
+        (_details, callback) => callback({ cancel: true })
+    );
+}
+
 // =============================================================================
 // USERDATA PATH PRESERVATION (rename: "August 3.5" → "August Trading")
 // =============================================================================
@@ -37,6 +48,7 @@ const LEGACY_PRODUCT_NAME = 'August 3.5';
 
 const preserveLegacyUserData = () => {
     try {
+        if (isInstallerSmoke) return; // never migrate or inspect real user data
         // DEV GUARD (crosscheck §5): dev userData is named after the package
         // name ('august-trading'), NOT the productName, so the basename check
         // below never fires while running `npm run electron:dev` — a dev boot
@@ -1035,6 +1047,7 @@ function setupAutoUpdater() {
 
     // IPC handlers — called from the renderer via the preload bridge
     ipcMain.handle('update:check', async () => {
+        if (isInstallerSmoke) return updateInfo; // smoke runs must never contact the update service
         try {
             await autoUpdater.checkForUpdates();
             return updateInfo;
@@ -1046,6 +1059,7 @@ function setupAutoUpdater() {
     });
 
     ipcMain.handle('update:download', async () => {
+        if (isInstallerSmoke) return updateInfo; // smoke runs must never download an update
         try {
             await autoUpdater.downloadUpdate();
             return updateInfo;
@@ -1057,6 +1071,7 @@ function setupAutoUpdater() {
     });
 
     ipcMain.handle('update:install', () => {
+        if (isInstallerSmoke) return false; // smoke runs must never launch an installer
         // Only install when an update was actually downloaded — quitAndInstall
         // with nothing downloaded throws synchronously inside setImmediate
         // (uncaught exception in main).
@@ -1104,6 +1119,9 @@ function setupAutoUpdater() {
     ipcMain.handle('app:get-version', () => app.getVersion());
 
     ipcMain.handle('provider:discover', async (_event, config) => {
+        if (isInstallerSmoke) {
+            return { ok: false, message: 'Provider discovery is disabled during installer smoke.' };
+        }
         try {
             return await sendDiscoverRequest(config || {});
         } catch (error) {
@@ -1120,6 +1138,9 @@ function setupAutoUpdater() {
     });
 
     ipcMain.handle('provider:chat', async (event, request) => {
+        if (isInstallerSmoke) {
+            return { ok: false, message: 'Provider requests are disabled during installer smoke.' };
+        }
         try {
             return { ok: true, ...(await sendProviderRequest(request, event.sender)) };
         } catch (error) {
@@ -1209,6 +1230,7 @@ app.whenReady().then(() => {
         callback(false);
     });
     registerAppProtocol();
+    blockSmokeNetwork();
     createWindow();
     setupAutoUpdater();
 

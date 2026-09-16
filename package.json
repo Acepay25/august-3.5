@@ -121,10 +121,5 @@
       "repo": "august-3.5",
       "releaseType": "release"
     }
-  },
-  "allowScripts": {
-    "electron@40.0.0": true,
-    "esbuild@0.28.1": true,
-    "electron-winstaller@5.4.0": true
   }
 }
