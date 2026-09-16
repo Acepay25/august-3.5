@@ -13,6 +13,7 @@ import {
     appendDiaryEntry,
     createMemoryFileUnlocked,
     createMemoryFolderUnlocked,
+    ensureHarnessFolders,
     ensureHarnessFoldersUnlocked,
     ensureSkillsArchiveFolderUnlocked,
     extractLessonFromPostMortem,
@@ -830,6 +831,30 @@ const countTradeOutcome = (meta: SkillMeta, win: boolean): void => {
 };
 
 const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number }): SkillStatus => {
+    // ── birth certificate ──
+    // The skill's own pre-registered claim, tested against its followed
+    // evidence. evaluateClaim is pure arithmetic, so the ladder can consume
+    // it directly: a claim that has reached its horizon and FAILED blocks
+    // promotion (the skill must meet the bar it promised, not just the
+    // generic one); met or pending claims defer to the normal ladder.
+    const claim = meta.prediction
+        ? evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses })
+        : null;
+    const claimUnmet = Boolean(claim && !claim.pending && !claim.met);
+
+    const sample = meta.wins + meta.losses;
+    const winRate = sample > 0 ? meta.wins / sample : 0;
+    // RETIREMENT FIRST: the retire band is a statement about the skill's
+    // OUTCOMES (it has proven itself wrong often enough to leave the
+    // library), and it must outrank the eval pin below. A hurts-pinned
+    // 2W/8L skill used to early-return 'candidate' ABOVE this band, so it
+    // could never auto-retire while the verdict stayed fresh (30 days) —
+    // even as the effectiveness review kept recommending retire.
+    if (sample >= MIN_SAMPLE_RETIRE) {
+        if (meta.kind === 'repeat' && winRate < 0.4) return 'retired';
+        if (meta.kind === 'avoid' && winRate > 0.6) return 'retired';
+    }
+
     // ── Causal override ──
     // An automated A/B eval that shows the skill HURTS decisions pins it at
     // candidate regardless of outcome correlation — injection-causation
@@ -846,29 +871,15 @@ const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number 
     // ever proving itself again. A hurts-pinned skill climbs back only via
     // rehabilitation (two helps, which flips the verdict off 'hurts') or
     // after the verdict goes stale.
+    // It applies ABOVE the retirement floor only (hence its placement after
+    // the retire band): the pin blocks PROMOTION to confirmed, it must never
+    // hold a skill out of 'retired' — demotion to retired is not promotion,
+    // and the retire stats above are the stronger signal.
     if (
         meta.evalVerdict === 'hurts'
         && evalDemotionActive(meta)
         && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
     ) return 'candidate';
-
-    // ── birth certificate ──
-    // The skill's own pre-registered claim, tested against its followed
-    // evidence. evaluateClaim is pure arithmetic, so the ladder can consume
-    // it directly: a claim that has reached its horizon and FAILED blocks
-    // promotion (the skill must meet the bar it promised, not just the
-    // generic one); met or pending claims defer to the normal ladder.
-    const claim = meta.prediction
-        ? evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses })
-        : null;
-    const claimUnmet = Boolean(claim && !claim.pending && !claim.met);
-
-    const sample = meta.wins + meta.losses;
-    const winRate = sample > 0 ? meta.wins / sample : 0;
-    if (sample >= MIN_SAMPLE_RETIRE) {
-        if (meta.kind === 'repeat' && winRate < 0.4) return 'retired';
-        if (meta.kind === 'avoid' && winRate > 0.6) return 'retired';
-    }
     // ── alpha decay ──
     // A CONFIRMED skill whose recent window has decayed below the bar is
     // demoted to candidate even while lifetime stats look fine — the
@@ -2213,7 +2224,14 @@ export const syncClosedTradeToNotebook = async (
         .catch(() => { /* best-effort */ });
     try {
         const { evaluateSkillWorth, validateCraftedSkill } = await import('./skillWorthGate');
-        await ensureHarnessFoldersUnlocked(username);
+        // LOCKED variant: this function is NOT a *Unlocked helper — every
+        // earlier step of syncClosedTradeToNotebook goes through locked
+        // public APIs, and this folder-ensure can persist (it adds missing
+        // harness folders). Called unlocked, it could interleave with an
+        // in-flight initMemoryFiles and flush the half-swapped cache; the
+        // lock costs nothing here (we hold no lock at this point) and keeps
+        // the whole chain serialized like every other writer.
+        await ensureHarnessFolders(username);
         const key = clusterKey(trade);
         const cluster = allTrades.filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && clusterKey(t) === key);
         if (cluster.length >= MIN_CLUSTER_FOR_SKILL) {

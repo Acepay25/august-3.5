@@ -183,8 +183,19 @@ class OutcomeAutopilotServiceClass {
         const lev = leverage || DEFAULT_LEVERAGE;
         const existing = this.registrations.get(messageId);
         if (existing) {
+            // Symmetric re-hold: the update can swap in an analysis for a NEW
+            // symbol while registeredAt (and the acquired feed hold) stay from
+            // the old registration. Release the old symbol's hold and acquire
+            // for the new one, or the ref-count pins a coin we no longer watch
+            // and the new coin silently starves of ticks.
+            const previousSymbol = extractSymbolFromAnalysis(existing.analysis);
             existing.analysis = analysis;
             existing.leverage = lev;
+            const nextSymbol = extractSymbolFromAnalysis(analysis);
+            if (nextSymbol !== previousSymbol) {
+                existing.releaseSymbolTracking?.();
+                existing.releaseSymbolTracking = nextSymbol ? PriceAlertService.acquireSymbol(nextSymbol) : undefined;
+            }
             this.ensureLoop();
             void this.runChecks();
             return;

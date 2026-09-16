@@ -116,13 +116,18 @@ describe('granularEntries are bounded by the same horizon as base entries', () =
     expect(out.granularEntries!.some(e => e.timestamp === iso(0))).toBe(true);
   });
 
-  it('keeps legacy rows with a missing/unparseable timestamp (unknown age ≠ stale)', () => {
+  it('drops junk rows with a missing/unparseable timestamp (matches base entries)', () => {
     const loaded: ConfidenceCalibration = {
       ...initializeCalibration(),
       granularEntries: [{ marker: 'REAL-HISTORY-ENTRY' } as unknown as GranularCalibrationEntry],
     };
     const out = updateGranularCalibration(loaded, entry({ timestamp: iso(0) }));
-    expect(out.granularEntries).toHaveLength(2);
-    expect(JSON.stringify(out.granularEntries)).toContain('REAL-HISTORY-ENTRY');
+    // Legacy rule kept unknown-age rows forever — exactly the unbounded
+    // leak the prune exists to close (they can never satisfy the cutoff
+    // comparison, so they rode every settled write). The base `entries`
+    // prune drops them; granular entries now follow the same semantics.
+    expect(out.granularEntries).toHaveLength(1);
+    expect(JSON.stringify(out.granularEntries)).not.toContain('REAL-HISTORY-ENTRY');
+    expect(out.granularEntries![0].timestamp).toBe(iso(0));
   });
 });

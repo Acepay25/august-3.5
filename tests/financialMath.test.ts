@@ -5,7 +5,7 @@ import {
   clampProbabilityToGate,
 } from '../utils/analysisUtils';
 import { runSimulation, computeKellyFraction, deriveSetupSeed } from '../services/analysis/MonteCarloService';
-import { calculateMetrics, findHistoricalMatches } from '../services/backtesting/ScenarioSimulatorService';
+import { calculateMetrics, findHistoricalMatches, generateSuggestions, runScenarioMonteCarlo, isZeroDistanceTarget } from '../services/backtesting/ScenarioSimulatorService';
 import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
 import { computeContractSize } from '../utils/ticketSize';
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
@@ -221,6 +221,47 @@ describe('ScenarioSimulatorService — riskUSD semantics + match gating (item 10
     const sameCoinOnly = [trade({ analysis: { coinName: 'BTCUSDT', direction: 'Short' } as TradeAnalysis })];
     expect(findHistoricalMatches(cfg, sameCoinOnly)).toHaveLength(0);
   });
+
+  it('similar leverage is a TIE-BREAKER score weight, not a match dimension', () => {
+    // Same direction (+25 clears the numeric half of the gate) + leverage
+    // inside the <20 band (+5): this used to pass as 2 dimensions and re-open
+    // the direction-inflation hole. Only ONE setup property matches → no hit.
+    const directionPlusLeverage = [trade({
+      leverage: 100,
+      analysis: { coinName: 'ZZZUSDT', direction: 'Long' } as TradeAnalysis,
+    })];
+    expect(findHistoricalMatches(cfg, directionPlusLeverage)).toHaveLength(0);
+
+    // With a genuine second dimension the same trade matches, and leverage
+    // still contributes as a scoring nudge.
+    const coinDirectionLeverage = [trade({
+      leverage: 100,
+      analysis: { coinName: 'BTCUSDT', direction: 'Long' } as TradeAnalysis,
+    })];
+    const hits = findHistoricalMatches(cfg, coinDirectionLeverage);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].matchReasons).toContain('Similar leverage');
+  });
+
+  it('drops a zero-distance TP from the MC ladder instead of crediting fake 0% wins', async () => {
+    expect(isZeroDistanceTarget(100, 100)).toBe(true);
+    expect(isZeroDistanceTarget(100.000000001, 100)).toBe(true); // float dust
+    expect(isZeroDistanceTarget(102, 100)).toBe(false);
+    expect(isZeroDistanceTarget(90, 100)).toBe(false); // inverted → levelOrder mirrors it
+
+    // TP1 exactly on entry, SL far below. Pre-fix, EVERY sim resolved as an
+    // instant TP1 win at step 1 (the intra-step high always touches the
+    // entry) → winRate ≈ 100%. Post-fix the TP is dropped from the ladder.
+    const degenerate = { ...cfg, stopLoss: 90, takeProfits: [100] };
+    const result = await runScenarioMonteCarlo(degenerate, 300);
+    expect(result).not.toBeNull();
+    expect(result!.winRate).toBeLessThan(95);
+
+    // The drop is ANNOUNCED, not silent — the scenario result says the sim
+    // ran without the zero-distance target.
+    const suggestions = generateSuggestions(degenerate, calculateMetrics(degenerate), []);
+    expect(suggestions.some(s => /zero reward distance/i.test(s))).toBe(true);
+  });
 });
 
 describe('LiveBacktestService — single-unit PnL + regime join (item 9)', () => {
@@ -264,6 +305,10 @@ describe('LiveBacktestService — single-unit PnL + regime join (item 9)', () =>
     expect(result.avgWinPercent).toBe(0);           // but no invented magnitudes
     expect(result.avgLossPercent).toBe(0);
     expect(result.warning).toMatch(/PnL/);
+    // The match rows carry NULL, not a fabricated 0 — downstream journal
+    // renderers must never see "WIN (0.0%)" for an unmeasured trade.
+    expect(result.matchedTrades).toHaveLength(3);
+    expect(result.matchedTrades.every(m => m.pnlPercent === null)).toBe(true);
   });
 
   it('joins regime stats: raw legacy marketRegime values bucket-match the current regime', () => {

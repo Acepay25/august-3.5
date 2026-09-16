@@ -10,6 +10,10 @@ interface ReasoningDashboardProps {
   username: string;
   /** Deep link: auto-select this analysis run when the dashboard opens. */
   initialTradeId?: string;
+  /** Monotonic counter bumped by App's openJournal. Dedupe keys on
+   *  (id, nonce) — a re-click of "View reasoning" on the SAME trade while
+   *  mounted re-applies the selection instead of being silently swallowed. */
+  openNonce?: number;
   /** Called after the deep-linked trade has been consumed. */
   onInitialTradeConsumed?: () => void;
   onClose?: () => void;
@@ -49,6 +53,7 @@ const tradeFileName = (records: ThinkingRecord[], tradeId: string): string => {
 export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
   username,
   initialTradeId,
+  openNonce,
   onInitialTradeConsumed,
   onDocumentOpenChange,
 }) => {
@@ -59,7 +64,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
-  const lastConsumedInitialTradeId = useRef<string | null>(null);
+  const lastConsumedDeepLinkRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,8 +89,12 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
   }, [username]);
 
   useEffect(() => {
-    if (!initialTradeId || lastConsumedInitialTradeId.current === initialTradeId) return;
-    lastConsumedInitialTradeId.current = initialTradeId;
+    // (id, nonce) pair — App bumps the nonce on every openJournal, so a
+    // re-click of "View reasoning" on the SAME trade while mounted is a
+    // fresh intent, not a swallowed duplicate.
+    const deepLinkKey = `${initialTradeId ?? ''}#${openNonce ?? 0}`;
+    if (!initialTradeId || lastConsumedDeepLinkRef.current === deepLinkKey) return;
+    lastConsumedDeepLinkRef.current = deepLinkKey;
     let cancelled = false;
     (async () => {
       try {
@@ -101,7 +110,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
       }
     })();
     return () => { cancelled = true; };
-  }, [initialTradeId, onInitialTradeConsumed, username]);
+  }, [initialTradeId, openNonce, onInitialTradeConsumed, username]);
 
   useEffect(() => {
     onDocumentOpenChange?.(!!selectedTradeId);

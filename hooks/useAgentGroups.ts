@@ -35,6 +35,7 @@ import {
     type RoomEntry,
 } from '../services/agents/groupRounds';
 import { parseDmMarkers } from '../services/agents/botMailbox';
+import { isProviderReady } from '../utils/providerUtils';
 
 export interface GroupActivityEntry {
     id: string;
@@ -44,8 +45,12 @@ export interface GroupActivityEntry {
     detail?: string;
 }
 
-const isProviderReady = (p: ProviderConfig): boolean =>
-    p.isEnabled && p.apiKey.trim().length > 0 && p.models.length > 0;
+// Readiness comes from utils/providerUtils.isProviderReady — the shared
+// predicate (isEnabled + models/selectedModel + key OR keyless local server,
+// see shared/providerRequestPolicy.cjs). The old local copy demanded a non-empty
+// apiKey unconditionally, so a room member on Ollama/LM Studio was always
+// "provider offline". The bot's own model must additionally be listed by the
+// provider — checked at the call site.
 
 export interface UseAgentGroupsResult {
     workingBotId: string | null;

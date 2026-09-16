@@ -14,6 +14,13 @@ import { z } from 'zod';
 import { cleanPriceField, sanitizeJSONString } from '../utils/sanitizers';
 import { classifyStrategyFamily } from '../utils/strategyFamily';
 import { sanitizeLevelOrdering } from '../utils/levelOrder';
+// DELIBERATE CYCLE: utils/analysisUtils imports THIS file (parseTradeAnalysis).
+// The cycle is safe because `analysisUtils.parsePrice` is only touched at CALL
+// time inside `parseLevelPrice` (below) — never during module evaluation — so
+// both import orders resolve in ESM, vite-node and the Rollup bundle. The
+// namespace import keeps that lookup lazy by construction; parsePrice cannot
+// be hoisted to a leaf module (30+ call sites import it from analysisUtils).
+import * as analysisUtils from '../utils/analysisUtils';
 import { STRATEGY_FAMILIES, normalizeStrategyFamily } from '../types/strategy';
 import type { TradeAnalysis, MarketConditions, LevelProbabilities, ProbabilityReasoning } from '../types';
 
@@ -585,14 +592,19 @@ export const parseLevelProbabilities = (raw: unknown): LevelProbabilities | null
   return hasContent ? normalized : null;
 };
 
-/** Parse a sanitizer price string ("95000", "94,500", '$95.5') to a number;
- *  null when nothing numeric survives. Hoisted function — TDZ discipline. */
+/** Parse a sanitizer price string via the CANONICAL desk parser
+ *  (`parsePrice` in utils/analysisUtils) so the ordering gate below sees the
+ *  SAME number every other consumer derives: "95000", "94,500" and "$95.5"
+ *  parse as before, an annotated level ("94500 4h", "94500 - 4h") parses as
+ *  94500 — the old digit-strip glued the annotation onto the number
+ *  ("94500 4h" → 945004), feeding the gate a phantom price it then
+ *  "mirror-repaired" into a fabricated level persisted with ok. Ranges
+ *  ("3210 - 3220") resolve to their midpoint, like the desk path. Null when
+ *  nothing numeric survives. Hoisted function — TDZ discipline. */
 function parseLevelPrice(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string' || value.trim() === '') return null;
-  const cleaned = value.replace(/[^0-9.eE+-]/g, '');
-  if (!cleaned) return null;
-  const n = Number(cleaned);
+  const n = analysisUtils.parsePrice(value);
   return Number.isFinite(n) ? n : null;
 }
 

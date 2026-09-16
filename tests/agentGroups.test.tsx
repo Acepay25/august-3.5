@@ -400,6 +400,47 @@ describe('useAgentGroups cancel + hybrid', () => {
     });
 });
 
+// ── shared readiness policy: keyless LOCAL providers are selectable ────
+// The hook used to require a non-empty apiKey outright, so every bot on an
+// Ollama/LM Studio server (keyless by design) was "provider offline" in a
+// room. Readiness now flows through utils/providerUtils.isProviderReady,
+// which exempts local base URLs but NOT public ones.
+describe('useAgentGroups keyless-local readiness', () => {
+    const runWith = async (providerConfig: ProviderConfig) => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [providerConfig],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+        }));
+        await act(async () => {
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1'] }, 'analyze btc', [
+                bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
+            ]);
+        });
+        return { store, result };
+    };
+
+    it('a keyless provider on a LOCAL baseUrl speaks in the room', async () => {
+        streamMock.mockResolvedValue('local reply');
+        const { result } = await runWith(provider({
+            apiKey: '', baseUrl: 'http://127.0.0.1:11434/v1',
+        }));
+        expect(streamMock).toHaveBeenCalledTimes(1);
+        expect(result.current.activity.some(a => a.detail === 'provider offline')).toBe(false);
+    });
+
+    it('a keyless provider on a PUBLIC baseUrl stays offline', async () => {
+        streamMock.mockResolvedValue('should never run');
+        const { result } = await runWith(provider({
+            apiKey: '   ', baseUrl: 'https://api.example.com',
+        }));
+        expect(streamMock).not.toHaveBeenCalled();
+        const passed = result.current.activity.find(a => a.kind === 'passed');
+        expect(passed?.detail).toBe('provider offline');
+    });
+});
+
 // ── room transcripts never carry DM markers ────────────────────────────
 describe('useAgentGroups marker hygiene', () => {
     it('strips [[dm:@…]] markers from the persisted room reply', async () => {

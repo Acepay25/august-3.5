@@ -13,6 +13,7 @@ import {
   parseStrategySearchResults,
 } from '../schemas/learning';
 import { cleanPriceField } from '../utils/sanitizers';
+import { parsePrice } from '../utils/analysisUtils';
 
 /** Minimal valid-ish raw analysis; override fields per test. */
 const rawAnalysis = (overrides: Record<string, unknown> = {}) => ({
@@ -363,6 +364,37 @@ describe('parseTradeAnalysis — direction-aware level ordering gate (Tier-0 #7)
     const out = applySemanticFixups(coerced);
     expect(out.stopLoss).toBe('94500');
     expect(coerced.stopLoss).toBe('95500');
+  });
+
+  // Regression (parser corruption): the gate's price parser used to strip to
+  // [0-9.eE+-], gluing timeframe annotations onto the number — "94500 4h"
+  // became 945004, a phantom entry the gate then "mirror-repaired" into
+  // fabricated levels persisted with ok. It must parse like the desk path
+  // (canonical parsePrice), where the whitespace keeps the digits separate.
+  it('parses annotated level strings like the desk path — no phantom mirror-repair', () => {
+    const r = parseTradeAnalysis(rawAnalysis({
+      entryPoints: [{ price: '95000 4h', description: 'retest' }],
+      stopLoss: '94500 - 4h',
+      takeProfit: [{ price: '96000 4h', percentage: '+10%' }],
+    }));
+    expect(r.levelsCorrected).toBeUndefined();
+    expect(r.levelFixes).toBeUndefined();
+    expect(r.entryPoints[0].price).toBe('95000 4h'); // untouched — ordering valid at 95000
+    expect(r.stopLoss).toBe('94500 - 4h');
+    expect(r.takeProfit[0].price).toBe('96000 4h');
+    // Same numbers the desk (canonical parsePrice) would see.
+    expect(parsePrice('95000 4h')).toBe(95000);
+    expect(parsePrice('94500 - 4h')).toBe(94500);
+    expect(parsePrice('96000 4h')).toBe(96000);
+  });
+
+  it('mirrors an annotated Long stop against the TRUE entry, not a glued phantom', () => {
+    const r = parseTradeAnalysis(rawAnalysis({
+      entryPoints: [{ price: '95000 4h', description: 'retest' }],
+      stopLoss: '95500',
+    }));
+    expect(r.stopLoss).toBe('94500'); // 95500 mirrored across 95000 (was: 950004 phantom)
+    expect(r.levelsCorrected).toBe(true);
   });
 });
 

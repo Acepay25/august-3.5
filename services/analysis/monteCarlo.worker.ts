@@ -24,6 +24,10 @@ interface CalculateRuinRiskMessage {
   positionSize: number;
   leverage: number;
   monteCarloResult: MonteCarloResult;
+  /** Optional explicit seed. The main thread and this worker both fall back
+   *  to deriveRuinRiskSeed(inputs) inside calculateRuinRisk, so the loop is
+   *  deterministic and the two paths agree even when no seed is sent. */
+  seed?: number;
 }
 
 type WorkerMessage = RunSimulationMessage | CalculateRuinRiskMessage;
@@ -40,7 +44,8 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
         msg.accountBalance,
         msg.positionSize,
         msg.leverage,
-        msg.monteCarloResult
+        msg.monteCarloResult,
+        msg.seed
       );
       self.postMessage({ type: 'result', id: msg.id, result });
     }

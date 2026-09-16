@@ -152,6 +152,19 @@ export function compareScenarios(
 }
 
 /**
+ * A take-profit sitting (within float dust) exactly ON the entry has zero
+ * reward distance. sanitizeLevelOrdering FLAGS it — but cannot repair it
+ * (the mirror of entry is entry). Left in the ladder, the MC path evaluator
+ * checks `stepHigh >= tp1` on the very first step, which always touches the
+ * entry price — so every such sim is credited a 0% same-step "TP1 WIN".
+ * Shared by the simulator (drops these) and the suggestion generator
+ * (announces the drop).
+ */
+export const isZeroDistanceTarget = (tp: number, entry: number): boolean =>
+    Number.isFinite(tp) && tp > 0
+    && Math.abs(tp - entry) <= Math.max(entry * 1e-9, Number.EPSILON);
+
+/**
  * Run Monte Carlo simulation for a scenario
  */
 export async function runScenarioMonteCarlo(
@@ -175,10 +188,18 @@ export async function runScenarioMonteCarlo(
             console.log('[ScenarioSimulator] Level ordering repaired for MC:', ordered.fixes.join('; '));
         }
 
+        // Beyond the levelOrder flag: DROP zero-distance TPs from the ladder
+        // so an unreparable `tp === entry` can never score the instant 0%
+        // WIN described on isZeroDistanceTarget. generateSuggestions reports
+        // the drop so the result stays honest about what was simulated.
+        const takeProfits = ordered.correctedTakeProfits
+            .map(tp => tp ?? 0)
+            .filter(tp => !isZeroDistanceTarget(tp, config.entry));
+
         const simConfig: SimulationConfig = {
             entry: config.entry,
             stopLoss: ordered.correctedStopLoss ?? config.stopLoss,
-            takeProfits: ordered.correctedTakeProfits.map(tp => tp ?? 0),
+            takeProfits,
             direction: config.direction,
             atr: config.atr || Math.abs(config.entry - config.stopLoss) * 0.5, // Estimate ATR if not provided
             timeframe: '1h',
@@ -220,7 +241,9 @@ export function findHistoricalMatches(
         // so "Strong historical edge: X% win rate on similar setups" was just
         // the global win rate re-labeled for ANY Long/Short. Require at least
         // TWO independent matching dimensions before a trade counts as
-        // "similar" at all.
+        // "similar" at all. A DIMENSION is a property OF THE SETUP (coin,
+        // pattern family, regime, direction, R:R shape) — not a property of
+        // how the user once sized a ticket.
         let matchedDimensions = 0;
 
         // Same coin bonus
@@ -263,11 +286,16 @@ export function findHistoricalMatches(
             }
         }
 
-        // Similar leverage
+        // Similar leverage — a TIE-BREAKER weight, NOT a match dimension.
+        // Leverage is how an old ticket was sized, not a property of the
+        // setup, and counting it as a dimension let the same
+        // direction-inflation this gate exists to kill sneak back through:
+        // same direction + a loose |Δleverage| < 20 band cleared the ≥2 gate
+        // for ANY Long/Long pair traded at similar-ish leverage. It now only
+        // nudges the score (ranking / top-N) without helping the match pass.
         if (trade.leverage && Math.abs(trade.leverage - config.leverage) < 20) {
             score += 5;
             reasons.push('Similar leverage');
-            matchedDimensions++;
         }
 
         if (score >= 25 && matchedDimensions >= 2) {
@@ -315,6 +343,16 @@ export function generateSuggestions(
     historicalMatches: HistoricalMatch[]
 ): string[] {
     const suggestions: string[] = [];
+
+    // Zero-distance target: report the drop runScenarioMonteCarlo performs —
+    // the sim ran a DIFFERENT (default) ladder than the one on screen, and
+    // silently pretending otherwise would bake the fake-win bug back in as
+    // a silent behavior change.
+    if (config.takeProfits.some(tp => isZeroDistanceTarget(tp, config.entry))) {
+        suggestions.push(
+            ' A target sits exactly ON the entry (zero reward distance) — it was dropped from the Monte Carlo ladder instead of scoring an instant 0% "TP1 WIN".'
+        );
+    }
 
     // R:R too low
     if (metrics.rrRatio < 1.2) {

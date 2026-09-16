@@ -61,6 +61,18 @@ describe('parsePriceWatch', () => {
         const { watch } = parsePriceWatch({ condition: 'above', price: 5, expiresInMinutes: 999_999 }, defaults)!;
         expect(watch!.expiresAt).toBe(NOW + 7 * 24 * 60 * 60_000);
     });
+    it('normalizes a model-supplied bare base to the canonical futures form', () => {
+        // 'BTC' verbatim armed a watch the live 'BTCUSDT' ticks never hit,
+        // made fetchMarkPrice('BTC') 400 every 5s forever, and could not be
+        // disarmed by full symbol. It must parse to 'BTCUSDT' (utils/symbol).
+        expect(parsePriceWatch({ condition: 'above', price: 112_000, symbol: 'BTC' }, defaults).watch?.symbol).toBe('BTCUSDT');
+        expect(parsePriceWatch({ condition: 'above', price: 112_000, symbol: 'btc / usdt' }, defaults).watch?.symbol).toBe('BTCUSDT');
+        expect(parsePriceWatch({ condition: 'above', price: 112_000, symbol: 'ethusdc' }, defaults).watch?.symbol).toBe('ETHUSDC');
+        expect(parsePriceWatch({ condition: 'above', price: 112_000, symbol: 'BTCUSDT' }, defaults).watch?.symbol).toBe('BTCUSDT'); // idempotent
+        // Omitted/blank symbol still falls through to the (trusted) chart default.
+        expect(parsePriceWatch({ condition: 'above', price: 112_000 }, defaults).watch?.symbol).toBe('BTCUSDT');
+        expect(parsePriceWatch({ condition: 'above', price: 112_000, symbol: '  ' }, defaults).watch?.symbol).toBe('BTCUSDT');
+    });
 });
 
 describe('parseTimeWake', () => {
@@ -71,6 +83,10 @@ describe('parseTimeWake', () => {
     it('rejects under-a-minute / non-numeric', () => {
         expect(parseTimeWake({ inMinutes: 0.5 }, defaults).error).toMatch(/≥ 1/);
         expect(parseTimeWake({}, defaults).error).toMatch(/≥ 1/);
+    });
+    it('normalizes the symbol like the price watch does', () => {
+        expect(parseTimeWake({ inMinutes: 30, symbol: 'BTC' }, defaults).wake?.symbol).toBe('BTCUSDT');
+        expect(parseTimeWake({ inMinutes: 30 }, defaults).wake?.symbol).toBe('BTCUSDT'); // default passthrough
     });
 });
 

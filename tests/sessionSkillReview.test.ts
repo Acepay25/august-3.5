@@ -8,12 +8,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../services/providers/GenericProviderService', () => ({
     sendChatRequest: vi.fn(),
+    getQuickResponse: vi.fn(),
 }));
 vi.mock('../services/analysis/KlineService', () => ({
     fetchKlines: vi.fn(),
 }));
 
-import { sendChatRequest } from '../services/providers/GenericProviderService';
+import { sendChatRequest, getQuickResponse } from '../services/providers/GenericProviderService';
 import { fetchKlines } from '../services/analysis/KlineService';
 import {
     scoreHypotheticalTrade, thesisFingerprint, recordSessionForReview,
@@ -33,6 +34,10 @@ beforeEach(() => {
     localStorage.clear();
     vi.mocked(sendChatRequest).mockReset();
     vi.mocked(fetchKlines).mockReset();
+    // Default: the worth gate cannot parse a verdict out of undefined → the
+    // evidence tier falls back to the deterministic bar (historical test
+    // behavior). Judged-reject tests override this per test.
+    vi.mocked(getQuickResponse).mockReset();
 });
 
 describe('scoreHypotheticalTrade', () => {
@@ -202,6 +207,67 @@ describe('runSessionSkillReview', () => {
         expect(drafted).not.toContain(fp);
         // It remains eligible: still in the open cache for a later resolver run.
         expect(localStorage.getItem('session_review_open_theses_v1:alice')).toContain('"BTCUSDT"');
+    });
+
+    it('a JUDGED reject (worth-gate skip verdict) fingerprints the thesis — no re-judging churn', async () => {
+        const thesis = { symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', atMs: 0, interval: '15m' } as DiscussedThesis;
+        const fp = thesisFingerprint(thesis);
+        vi.mocked(sendChatRequest).mockResolvedValue(JSON.stringify([
+            { symbol: 'BTCUSDT', direction: 'long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', interval: '15m' },
+        ]));
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never); // WIN
+        // The worth gate JUDGES the idea and refuses it (confidence ≥ 0.55
+        // so the verdict rides through as 'skip').
+        vi.mocked(getQuickResponse).mockResolvedValue(JSON.stringify({
+            verdict: 'skip', reason: 'one-off narrative, not a repeatable edge', confidence: 0.8,
+        }));
+
+        const s = { id: 'sJudged', transcript: 'user: long BTC 100 stop 90 target 110 here', atMs: 0, symbol: 'BTCUSDT' };
+        expect(await runSessionSkillReview(USER, [s], cfg)).toBe(0);
+
+        // Pre-fix this returned plain 'skipped' → the thesis stayed eligible
+        // and the resolver re-ran the full klines+LLM worth-gate on it every
+        // 10 minutes for the whole 14-day TTL (each re-cache refreshed
+        // cachedAtMs, extending the TTL unboundedly).
+        const drafted = JSON.parse(localStorage.getItem('session_review_drafted_v1:alice') || '[]') as string[];
+        expect(drafted).toContain(fp);
+        // Not parked in the open cache either.
+        expect(localStorage.getItem('session_review_open_theses_v1:alice')).not.toContain('"BTCUSDT"');
+        // A later pass skips it WITHOUT paying the gate again.
+        clearThrottle();
+        expect(await runThesisResolver(USER, cfg)).toBe(0);
+        expect(vi.mocked(getQuickResponse)).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolver: a JUDGED reject markDrafts and ages out; a never-judged skip retries', async () => {
+        const thesis = { symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', atMs: 0, interval: '15m' } as DiscussedThesis;
+        const fp = thesisFingerprint(thesis);
+        cacheOpenThesis(USER, 's1', thesis);
+        vi.mocked(fetchKlines).mockResolvedValue([{ time: 0, open: 100, high: 111, low: 99, close: 110, volume: 1 }] as never); // WIN
+        vi.mocked(getQuickResponse).mockResolvedValue(JSON.stringify({
+            verdict: 'skip', reason: 'not repeatable', confidence: 0.8,
+        }));
+        clearThrottle();
+        expect(await runThesisResolver(USER, cfg)).toBe(0);
+        const drafted = JSON.parse(localStorage.getItem('session_review_drafted_v1:alice') || '[]') as string[];
+        expect(drafted).toContain(fp);
+        // Judged once → dropped from the open cache (not kept for retry).
+        expect(JSON.parse(localStorage.getItem('session_review_open_theses_v1:alice') || '[]')).toHaveLength(0);
+    });
+
+    it('cacheOpenThesis never refreshes cachedAtMs — re-caching cannot extend the TTL', async () => {
+        const thesis = { symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfit: 110, thesis: 'reclaim', atMs: 0, interval: '15m' } as DiscussedThesis;
+        cacheOpenThesis(USER, 's1', thesis);
+        const before = JSON.parse(localStorage.getItem('session_review_open_theses_v1:alice') || '[]');
+        await new Promise(res => setTimeout(res, 5));
+        // The pre-fix drop-and-re-push rewrote the row with a FRESH
+        // cachedAtMs — a never-judged skip path renewed its 14-day TTL
+        // every review pass and the cache never aged out.
+        cacheOpenThesis(USER, 's2', { ...thesis });
+        const rows = JSON.parse(localStorage.getItem('session_review_open_theses_v1:alice') || '[]');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].cachedAtMs).toBe(before[0].cachedAtMs);
+        expect(rows[0].sessionId).toBe('s1');
     });
 
     it('the dedupe set stores thesis FINGERPRINTS, not session ids (eviction stays honest)', async () => {

@@ -46,6 +46,14 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
 
     const statusLabel = isCalculating ? 'Thinking...' : undefined;
 
+    // The Algo engine publishes SL probability two ways: a barrier-race
+    // point estimate (when it knows the stop distance) or the
+    // 100 − P(TP1) UPPER BOUND (the stop-hit-or-timeout share). The basis
+    // string distinguishes them; a bound must not render as a bare point
+    // estimate next to the red/amber/green color-coding.
+    const slIsUpperBound = typeof levelProbabilities?.slReasoning?.indicatorBasis === 'string'
+        && /UPPER\s*BOUND/i.test(levelProbabilities.slReasoning.indicatorBasis);
+
     return (
         <SectionCard
             title="AI Probability"
@@ -101,17 +109,24 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                     )}
                     {/* Probability Grid */}
                     <div className="grid grid-cols-2 gap-2">
-                        {/* SL Probability */}
-                        <div className={`text-center p-3 rounded-xl border ${levelProbabilities.slProbability > 50 ? 'bg-rose-500/15 border-rose-500/30' :
+                        {/* SL Probability — '≤ (upper bound)' when the algo
+                            only knows the 100 − P(TP1) bound (no stop
+                            distance), so the color-coded number is never
+                            misread as a point estimate. */}
+                        <div
+                            title={slIsUpperBound ? 'Upper bound: share of outcomes that do NOT reach TP1 (stop-hit or timeout).' : undefined}
+                            className={`text-center p-3 rounded-xl border ${levelProbabilities.slProbability > 50 ? 'bg-rose-500/15 border-rose-500/30' :
                             levelProbabilities.slProbability > 30 ? 'bg-amber-500/10 border-amber-500/20' :
                                 'bg-emerald-500/10 border-emerald-500/20'
                             }`}>
-                            <span className="text-[9px] text-zinc-500 block mb-1">Stop Loss</span>
+                            <span className="text-[9px] text-zinc-500 block mb-1">
+                                {slIsUpperBound ? 'Stop Loss ≤ (upper bound)' : 'Stop Loss'}
+                            </span>
                             <span className={`text-xl font-bold font-mono ${levelProbabilities.slProbability > 50 ? 'text-rose-400' :
                                 levelProbabilities.slProbability > 30 ? 'text-amber-400' :
                                     'text-emerald-400'
                                 }`}>
-                                {levelProbabilities.slProbability}%
+                                {slIsUpperBound ? '≤ ' : ''}{levelProbabilities.slProbability}%
                             </span>
                         </div>
 

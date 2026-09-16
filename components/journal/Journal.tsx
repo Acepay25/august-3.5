@@ -24,6 +24,11 @@ interface JournalProps {
     isEmbedded?: boolean;
     /** Deep link: auto-select this analysis run in the Think (reasoning) tab. */
     initialTradeId?: string;
+    /** Monotonic counter bumped by App on every openJournal. Re-apply the
+     *  deep-linked tab whenever THIS moves — a second "View reasoning" for
+     *  the same tab value while mounted changes no prop and was silently
+     *  dropped by value-diffing. */
+    openNonce?: number;
     /** Called once the deep-linked trade has been consumed by the dashboard. */
     onInitialTradeConsumed?: () => void;
     /** Active user — scopes reasoning-record lookups (falls back to localStorage). */
@@ -104,7 +109,7 @@ const TABS: TabConfig[] = [
 
 const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
-    initialTradeId, onInitialTradeConsumed, username,
+    initialTradeId, openNonce, onInitialTradeConsumed, username,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL,
     // Performance Review Pass-through
@@ -138,17 +143,29 @@ const JournalInner: React.FC<JournalProps> = ({
     // Esc closes the overlay (the biggest navigation dead-end in the app).
     useEscapeClose(isVisible, onClose);
 
-    // Remember the last active tab across opens. Only re-apply `initialTab`
-    // when it actually CHANGES (a deep-link), not on every visibility flip —
-    // the old effect dumped users back to History every time they reopened.
+    // Remember the last active tab across opens. Re-apply `initialTab` when
+    // it actually CHANGES (a deep-link while mounted with a different tab) OR
+    // when App's openNonce moves (an explicit openJournal — including the
+    // SAME tab/trade re-entered while mounted, which a pure value-diff used
+    // to swallow). Never on a plain visibility flip: the old effect dumped
+    // users back to History every time they reopened.
     const lastInitialTabRef = useRef<TabId>(resolveTab(initialTab));
+    const lastOpenNonceRef = useRef<number>(openNonce ?? 0);
     useEffect(() => {
+        if (!isVisible) return;
         const next = resolveTab(initialTab);
-        if (isVisible && next !== lastInitialTabRef.current) {
+        const nonce = openNonce ?? 0;
+        if (nonce !== lastOpenNonceRef.current) {
+            lastOpenNonceRef.current = nonce;
+            lastInitialTabRef.current = next;
+            setActiveTab(next);
+            return;
+        }
+        if (next !== lastInitialTabRef.current) {
             lastInitialTabRef.current = next;
             setActiveTab(next);
         }
-    }, [isVisible, initialTab]);
+    }, [isVisible, initialTab, openNonce]);
 
     const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
 
@@ -230,6 +247,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 <ReasoningDashboard
                     username={activeUsername}
                     initialTradeId={initialTradeId}
+                    openNonce={openNonce}
                     onInitialTradeConsumed={onInitialTradeConsumed}
                     onDocumentOpenChange={setDocumentOpen}
                 />

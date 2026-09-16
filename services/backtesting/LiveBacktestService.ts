@@ -25,7 +25,13 @@ export interface BacktestMatch {
     pattern: string;
     regime: string;
     outcome: 'WIN' | 'LOSS';
-    pnlPercent: number;
+    /** Leveraged ROE percent, or NULL when the trade has no measurable
+     *  magnitude (calculatePnlPercent returned null). Previously a `?? 0`
+     *  placeholder — and SetupMemoryService copied that 0 into the journal
+     *  summary the model reads, so unmeasured trades printed "WIN (0.0%)":
+     *  a fabricated number presented as evidence. Nulls must render as
+     *  "magnitude unmeasured" and stay out of any derived stats. */
+    pnlPercent: number | null;
     timestamp: string;
     confidence: string;
 }
@@ -322,8 +328,10 @@ export const backtestSimilarSetups = (
         pattern: trade.analysis?.detectedPatternFamily || trade.analysis?.marketConditions?.pattern || 'Unknown',
         regime: extractRegime(trade),
         outcome: trade.outcome as 'WIN' | 'LOSS',
-        // Placeholder for the UI list only — averages never see nulls.
-        pnlPercent: pnl ?? 0,
+        // null = genuinely unmeasured, NOT a fabricated 0 — UI/journal
+        // renderers must treat null as "magnitude unmeasured". Averages
+        // below already filter nulls via `withPnl`.
+        pnlPercent: pnl,
         timestamp: trade.timestamp,
         confidence: trade.analysis?.confidence || 'Unknown'
     }));
@@ -513,13 +521,16 @@ ${result.warning}
 `;
     }
 
-    // Best/worst outcome — only from matches with REAL PnL evidence (the
-    // display placeholder 0 must never read as a measured ±0% outcome).
+    // Best/worst outcome — only from matches with REAL, non-zero PnL
+    // evidence (nulls are unmeasured and must never read as a ±0% outcome).
     if (result.matchedTrades.length > 0) {
-        const best = result.matchedTrades
+        const measurable = result.matchedTrades.filter(
+            (m): m is BacktestMatch & { pnlPercent: number } => m.pnlPercent !== null
+        );
+        const best = measurable
             .filter(t => t.outcome === 'WIN' && t.pnlPercent > 0)
             .sort((a, b) => b.pnlPercent - a.pnlPercent)[0];
-        const worst = result.matchedTrades
+        const worst = measurable
             .filter(t => t.outcome === 'LOSS' && t.pnlPercent < 0)
             .sort((a, b) => a.pnlPercent - b.pnlPercent)[0];
 

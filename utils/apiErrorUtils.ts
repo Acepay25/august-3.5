@@ -127,6 +127,11 @@ export const shouldRetry = (parsedError: ParsedAPIError): boolean => {
  * on the same beat wake up and hammer the rate-limited gateway in lockstep,
  * instantly tripping the limiter again. Randomized wake-ups spread the
  * recovery window instead.
+ *
+ * Worst-case waits per attempt: the Retry-After branch is capped at a 30s
+ * BASE but lands up to 45s after the +50% jitter (30s + 15s); the
+ * exponential branch (no Retry-After) tops out at 30s. There is no single
+ * 30s ceiling across both branches.
  */
 export const getRetryDelay = (parsedError: ParsedAPIError, attempt: number): number => {
     if (parsedError.retryAfterSeconds !== undefined) {
@@ -141,9 +146,11 @@ export const getRetryDelay = (parsedError: ParsedAPIError, attempt: number): num
         const base = Math.min(parsedError.retryAfterSeconds, 30) * 1000;
         return Math.round(base + Math.random() * base * 0.5);
     }
-    // Exponential backoff — 2s, 4s, 8s, max 30s — with "equal jitter":
-    // sleep a uniform sample in [base/2, base]. Guarantees progress while
-    // decorrelating concurrent retrying seats.
+    // Exponential backoff (no Retry-After header) — 2s, 4s, 8s, base capped
+    // at 30s — with "equal jitter": sleep a uniform sample in [base/2, base].
+    // Guarantees progress while decorrelating concurrent retrying seats. (The
+    // Retry-After branch above is a separate path: its 30s BASE can reach 45s
+    // after the +50% extension jitter.)
     const base = Math.min(2000 * Math.pow(2, attempt), 30000);
     return Math.round(base / 2 + Math.random() * (base / 2));
 };

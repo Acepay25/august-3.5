@@ -640,6 +640,19 @@ Please investigate this discrepancy in your analysis.
                     console.warn('[PostMortem] Memory/learning step failed (non-fatal):', memoryError);
                 }
 
+                // STALENESS GUARD (writes): every guard above silenced the
+                // post-mortem TEXT results, but the learning-write chain
+                // below (skill ingest, notebook sync, LLM craft, gate, AI
+                // note) spans awaits that the abort signal does not cover —
+                // and if updateGlobalMemory REJECTED (e.g. the abort landed
+                // inside it) the catch above swallowed and control fell
+                // straight through here. Without this check a superseded
+                // run kept writing the OLD user's notebook entries.
+                if (isRunStale(myRunId)) {
+                    console.log('[PostMortem] Discarding notebook/learning writes — run superseded');
+                    return;
+                }
+
                 // AI LEARNING: Extract insights and rules in BACKGROUND
                 try {
                     const tradeWithPM = {
@@ -679,6 +692,17 @@ Please investigate this discrepancy in your analysis.
                     // can be diffed out afterward.
                     const beforeSlugs = new Set(listSkillSlugs());
                     await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
+                    // The sync above is the first await of the chain — a
+                    // supersede landing inside it must not let the LLM
+                    // craft, the evidence gate, or the AI-note write below
+                    // continue publishing the OLD user's lesson (the
+                    // notebookUser captured at entry and the report text
+                    // are both the abandoned run's). The `return` exits to
+                    // the finally, which skips all UI writes for stale runs.
+                    if (isRunStale(myRunId)) {
+                        console.log('[PostMortem] Run superseded mid-notebook-sync — skipping remaining learning writes');
+                        return;
+                    }
                     try {
                         const created = listSkillSlugs().filter(s => !beforeSlugs.has(s));
                         for (const slug of created) {
@@ -690,6 +714,14 @@ Please investigate this discrepancy in your analysis.
                     } catch { /* ledger is best-effort */ }
                     if (craftConfig) {
                         const crafted = await craftSkillFromPostMortem(closed, craftConfig);
+                        // Another await passed — re-check before the gate
+                        // (its merge branch writes to the shared notebook
+                        // cache, which after a switch belongs to the NEW
+                        // user).
+                        if (isRunStale(myRunId)) {
+                            console.log('[PostMortem] Run superseded during craft — skipping evidence gate');
+                            return;
+                        }
                         // One post-mortem must not spawn BOTH an
                         // auto-ingested IF/THEN skill AND an inbox craft draft
                         // from the same report. The reverse collision is guarded
@@ -750,6 +782,14 @@ Please investigate this discrepancy in your analysis.
                 // ready analyst provider. Best-effort: the diary above is the
                 // guaranteed record.
                 try {
+                    // Last write phase (gate above awaited): the AI note is
+                    // generated from the OLD run's post-mortem — never let a
+                    // superseded run land it in the (possibly new user's)
+                    // notebook cache.
+                    if (isRunStale(myRunId)) {
+                        console.log('[PostMortem] Run superseded during evidence gate — skipping AI notebook note');
+                        return;
+                    }
                     const notebookUser = getActiveUsername();
                     const writerConfig = memoryConfig ?? enabledProviders[0]?.config;
                     if (writerConfig) {

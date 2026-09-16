@@ -135,8 +135,9 @@ describe('importPreferencesData — provider key-graft hardening (Tier-0 #3)', (
         expect(report.providersImported).toBe(0);
     });
 
-    it('keeps a backup-carried key untouched (nothing grafted, nothing dropped)', async () => {
-        prefStore[PREF_KEYS.PROVIDER_CONFIGS] = [makeConfig()];
+    it('keeps a backup-carried key on a FRESH machine (no live config to hijack)', async () => {
+        // No live providers at all — the restore IS the initial setup; the
+        // backup's own key is the user's key and must survive untouched.
         const report = await importPreferencesData({
             [PREF_KEYS.PROVIDER_CONFIGS]: [
                 { ...makeConfig(), apiKey: 'BACKUP-KEY', baseUrl: 'https://gateway.public.test/v1' },
@@ -144,6 +145,39 @@ describe('importPreferencesData — provider key-graft hardening (Tier-0 #3)', (
         });
         expect(storedProviders()[0].apiKey).toBe('BACKUP-KEY');
         expect(report.providersKeyGrafted).toBe(0);
+        expect(report.providersRequiringKeyReentry).toBe(0);
+    });
+
+    it('keeps a backup-carried key when the live config for the id already points at the same endpoint', async () => {
+        prefStore[PREF_KEYS.PROVIDER_CONFIGS] = [
+            makeConfig({ apiKey: 'LIVE-STALE-KEY', baseUrl: 'https://gateway.public.test/v1' }),
+        ];
+        const report = await importPreferencesData({
+            [PREF_KEYS.PROVIDER_CONFIGS]: [
+                { ...makeConfig(), apiKey: 'BACKUP-KEY', baseUrl: 'https://gateway.public.test/v1' },
+            ],
+        });
+        expect(storedProviders()[0].apiKey).toBe('BACKUP-KEY');
+        expect(report.providersRequiringKeyReentry).toBe(0);
+    });
+
+    it('CLEARS a backup-carried key when an EXISTING id is re-pointed at a different baseUrl (even with a key present)', async () => {
+        // The hardened rule: `{id:'openai', apiKey:'...', baseUrl:'https://evil'}`
+        // would otherwise wholesale replace the live config and route the
+        // user's prompts to the attacker. Key is cleared → present-but-not-
+        // ready; the user re-enters it on the endpoint they can see.
+        prefStore[PREF_KEYS.PROVIDER_CONFIGS] = [makeConfig()];
+        const report = await importPreferencesData({
+            [PREF_KEYS.PROVIDER_CONFIGS]: [
+                { ...makeConfig(), apiKey: 'attacker-provided-key', baseUrl: 'https://evil.tld' },
+            ],
+        });
+        const stored = storedProviders();
+        expect(stored).toHaveLength(1);
+        expect(stored[0].apiKey).toBe('');
+        expect(stored[0].baseUrl).toBe('https://evil.tld');
+        expect(report.providersKeyGrafted).toBe(0);
+        expect(report.providersRequiringKeyReentry).toBe(1);
     });
 });
 
@@ -179,6 +213,41 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         expect(prefStore['desk_tools_forged_v1']).toEqual([]);
         expect(prefStore['lastCrashError']).toBe('boom');
         expect(writtenKeys).toContain(PREF_KEYS.PRICE_ALERTS);
+    });
+
+    it('restores the per-user learning/setup keys and the exported singleton keys (allow-list data-loss fix)', async () => {
+        // These are all WRITTEN via setPreferenceObject (or JSON localStorage),
+        // so the export sweep captures them — they must come back on restore
+        // instead of being silently skipped (audit F1 data loss).
+        const report = await importPreferencesData({
+            'setup_watches_v1_alice': [{ id: 'w1', symbol: 'BTCUSDT' }],
+            'learning_judge_gate_v1_alice': { precision: 0.91, samples: 40, recordedAt: 'x' },
+            'learning_measure_v1_alice': [],
+            'model_catalog_sweep_v1': { lastSweepAt: 1726400000000 },
+            'session_usage_v1': [{ session: 's1', totalTokens: 1234 }],
+            'trading_checklist_v1': { items: [] },
+            'memory_amendments_v1': [],
+            'august_harness_lessons_v1': [],
+            'thinking_leak_bin_v1': [{ at: 'x', snippet: 'y' }],
+        });
+        expect(report.skippedKeys).toEqual([]);
+        expect(report.keysWritten).toBe(9);
+        expect(prefStore['setup_watches_v1_alice']).toEqual([{ id: 'w1', symbol: 'BTCUSDT' }]);
+        expect(prefStore['learning_judge_gate_v1_alice']).toEqual({ precision: 0.91, samples: 40, recordedAt: 'x' });
+        expect(prefStore['learning_measure_v1_alice']).toEqual([]);
+        expect(prefStore['thinking_leak_bin_v1']).toEqual([{ at: 'x', snippet: 'y' }]);
+    });
+
+    it('plain-string UI keys stay OFF the allow-list (the export sweep cannot even read them)', async () => {
+        // august_surface_v1 / sidebar_pane_v1 are stored as RAW strings, so
+        // getPreferenceObject (JSON) never exports them; allowing them would
+        // only open a restore write-path whose value the readers ignore.
+        const report = await importPreferencesData({
+            'august_surface_v1': 'trade',
+            'sidebar_pane_v1': 'bots',
+        });
+        expect(report.skippedKeys).toEqual(['august_surface_v1', 'sidebar_pane_v1']);
+        expect(report.keysWritten).toBe(0);
     });
 
     it('counts per-key write failures in the report instead of swallowing silently', async () => {

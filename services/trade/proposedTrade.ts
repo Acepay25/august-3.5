@@ -14,6 +14,7 @@
  */
 
 import { TradeAnalysis, TradeOutcome, Message, MessageRole } from '../../types';
+import { baseOf, quoteOf } from '../../utils/symbol';
 
 /** A structured trade the model puts on the table for the user to accept. */
 export interface TradeProposal {
@@ -74,9 +75,17 @@ export const parseTradeProposal = (args: Record<string, unknown>): { proposal?: 
     }
     const confidence = args.confidence === 'High' || args.confidence === 'Medium' || args.confidence === 'Low'
         ? args.confidence : 'Medium';
+    // SYMBOL DOCTRINE (utils/symbol, PR#5): models routinely answer with a bare
+    // base ("BTC"). Storing it verbatim armed the harness level-watch under
+    // 'BTC' — tick('BTCUSDT') never matches, fetchMarkPrice('BTC') 400s on
+    // every 5s poll forever (plans have no expiry), and disarmSymbol('BTCUSDT')
+    // can't remove it. Normalize at the PARSE site to the canonical full
+    // futures form (base + quote, bare base defaults to USDT): 'BTC' and
+    // 'BTC/USDT' both arm as 'BTCUSDT'; a canonical input is unchanged.
+    const rawSymbol = String(args.symbol ?? '').trim();
     return {
         proposal: {
-            symbol: String(args.symbol ?? '').toUpperCase() || 'BTCUSDT',
+            symbol: rawSymbol ? `${baseOf(rawSymbol)}${quoteOf(rawSymbol)}` : 'BTCUSDT',
             direction, entry, stopLoss, takeProfits, confidence,
             rationale: typeof args.rationale === 'string' ? args.rationale.slice(0, 600) : undefined,
             invalidation: typeof args.invalidation === 'string' ? args.invalidation.slice(0, 300) : undefined,

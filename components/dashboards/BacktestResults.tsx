@@ -36,6 +36,22 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                 ? 'Live'
                 : 'Need 3+ trades';
 
+    // Verdict bands are R-NORMALIZED (calibrated 2026-09-15). The journal
+    // PnL unification made `expectedValue` a LEVERAGED ROE figure (percent
+    // of margin, same unit as avgWin/avgLoss) — the old absolute
+    // 'EV >= 1.5' threshold was calibrated when EV was a raw price-% (where
+    // a typical stop risked ~1%), so under 50–125x leverage almost every
+    // journal read "Strong Edge" no matter how thin the edge really was.
+    // New bands, in risk units (scale with leverage automatically):
+    //   Strong Edge  : EV ≥ 1.5 × avgLoss  (EV ≥ 1.5R)
+    //   Marginal Edge: EV ≥ 0
+    //   Negative     : EV < 0
+    // The 0.1% floor on the risk unit mirrors the Ratios card guard below and
+    // keeps a no-measurable-loss pool from collapsing the threshold to 0.
+    const riskUnitPercent = Math.max(backtestResult?.avgLossPercent ?? 0, 0.1);
+    const hasStrongEdge = !!hasBacktestResults
+        && backtestResult!.expectedValue >= 1.5 * riskUnitPercent;
+
     return (
         <SectionCard
             title="Live Backtest"
@@ -107,13 +123,13 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                     </div>
 
                     {/* Verdict */}
-                    <div className={`p-3 rounded-xl text-center text-[11px] font-medium ${backtestResult!.expectedValue >= 1.5
+                    <div className={`p-3 rounded-xl text-center text-[11px] font-medium ${hasStrongEdge
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                         : backtestResult!.expectedValue >= 0
                             ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                             : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                         }`}>
-                        {backtestResult!.expectedValue >= 1.5
+                        {hasStrongEdge
                             ? ' Strong Edge — High Probability Setup'
                             : backtestResult!.expectedValue >= 0
                                 ? ' Marginal Edge — Proceed with Caution'
