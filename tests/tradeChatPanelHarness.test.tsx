@@ -366,6 +366,10 @@ describe('response quality: instant paint + thinking-strip repair', () => {
 
 describe('watch / schedule harness tools', () => {
     /** Drive executePanelTool through a scripted tool call and capture the receipt. */
+    // Handle to the dock rendered by callPanelTool so a second call in the
+    // SAME test (arm → cancel) can tear the first one down first — two live
+    // docks would double-match the suggestion chips.
+    let lastPanel: { unmount: () => void } | null = null;
     const callPanelTool = async (name: string, args: Record<string, unknown>) => {
         let result: { ok: boolean; content: string } | null | undefined = null;
         script(async function* (_c: unknown, _m: unknown, opts: {
@@ -374,12 +378,26 @@ describe('watch / schedule harness tools', () => {
             yield 'x';
             result = await opts.executePanelTool?.({ id: 'c1', name, arguments: args });
         });
-        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        lastPanel = render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
         fireEvent.click(screen.getByText('Key levels?'));
         await screen.findByText('x');
         // give the awaited tool call a tick to resolve
         await waitFor(() => expect(result).toBeTruthy());
         return result as unknown as { ok: boolean; content: string };
+    };
+    // RTL auto-cleanup unmounts between tests — drop the stale handle so the
+    // next call never re-unmounts a dead container.
+    beforeEach(() => { lastPanel = null; });
+    /** Let the scripted generator finish its run, tear the dock down and wipe
+     *  the (shared) transcript, so a second callPanelTool in the same test
+     *  starts clean — the first send's 'Key levels?' user bubble would
+     *  otherwise double-match the chip. Armed watches live in watchService,
+     *  a different store, and survive. */
+    const settleAndUnmount = async (): Promise<void> => {
+        const sid = chatStore.getActiveId();
+        await waitFor(() => expect(chatStore.getSnapshot().running[sid]).toBeFalsy());
+        if (lastPanel) { lastPanel.unmount(); lastPanel = null; }
+        chatStore.__resetForTests();
     };
 
     it('watch_price arms a price watch and the receipt names the id', async () => {
@@ -387,6 +405,23 @@ describe('watch / schedule harness tools', () => {
         expect(receipt.ok).toBe(true);
         expect(receipt.content).toMatch(/Watch w-.* armed: BTCUSDT above 112000/);
         expect(watchService.list('BTCUSDT').length).toBe(1);
+    });
+
+    it('cancel_watch with a bare base cancels plans armed under the normalized full form', async () => {
+        // The model arms with 'BTC' — chartTriggers canonicalizes it to
+        // 'BTCUSDT' (baseOf+quoteOf). A cancel back with the SAME bare 'BTC'
+        // must hit it: the old raw toUpperCase() target could not, leaving the
+        // watch armed while the receipt claimed "Nothing to cancel".
+        const armed = await callPanelTool('watch_price', { condition: 'above', price: 112000, note: 'range break', symbol: 'BTC' });
+        expect(armed.ok).toBe(true);
+        expect(watchService.list('BTCUSDT').length).toBe(1);
+        await settleAndUnmount();
+        const receipt = await callPanelTool('cancel_watch', { allForSymbol: true, symbol: 'BTC' });
+        expect(receipt.ok).toBe(true);
+        expect(receipt.content).toContain('Cancelled 1 watch');
+        expect(receipt.content).not.toContain('Nothing to cancel');
+        await settleAndUnmount();
+        expect(watchService.list().length).toBe(0);
     });
 
     it('wake_me arms a scheduled wake-up', async () => {
@@ -707,15 +742,25 @@ describe('cross-symbol canvas honesty (per-turn identity residual)', () => {
         expect(receipt.content).toContain('NOTE: the canvas shows ETHUSDT');
     });
 
-    it('present_trade: the arm-disposition price is named as a viewed-canvas print', async () => {
-        // ETH mark 3000 is meaningless for the BTC plan — and 111 vs the plan
-        // below would REFUSE it; use a price that triggers the stale branch
-        // to also check the inline annotation.
+    it('present_trade cross-canvas: the receipt PROMISES the watch (arm gets a null anchor off-view)', async () => {
+        // ETH canvas print 111 would REFUSE the BTC plan — but TradeView arms
+        // off-view plans with a NULL anchor (never the viewed coin's price),
+        // so the receipt must mirror that reality: promise the watch and keep
+        // the canvas-stale note, instead of lying about a REFUSED watch.
         const receipt = await callStampedTool(canvasOn('ETHUSDT', 111), 'present_trade',
             { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] });
-        expect(receipt.content).toContain('REFUSED');
-        expect(receipt.content).toContain('(a ETHUSDT canvas print — see note)');
+        expect(receipt.content).not.toContain('REFUSED');
+        expect(receipt.content).toContain('The harness now watches');
         expect(receipt.content).toContain('NOTE: the canvas shows ETHUSDT');
+    });
+
+    it('present_trade on the VIEWED canvas still refuses a plan through its levels', async () => {
+        // Same-coin mark 111 is the turn's live price — the stale gate applies
+        // and the REFUSED honesty must survive the cross-canvas fix.
+        const receipt = await callStampedTool(canvasOn('BTCUSDT', 111), 'present_trade',
+            { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] });
+        expect(receipt.content).toContain('REFUSED');
+        expect(receipt.content).not.toContain('The harness now watches');
     });
 
     it('a SAME-coin canvas stays byte-identical — no note, no noise', async () => {

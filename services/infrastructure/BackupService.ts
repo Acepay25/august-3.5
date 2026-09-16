@@ -438,7 +438,7 @@ export const exportBackupToFile = async (backupId: string): Promise<void> => {
  */
 export const restoreBackup = async (
     backupId: string
-): Promise<{ success: boolean; error?: string; username?: string }> => {
+): Promise<{ success: boolean; error?: string; username?: string; message?: string; skippedPreferenceKeys?: string[] }> => {
     try {
         const record = await readBackupProfile(backupId);
         if (!record) {
@@ -487,6 +487,12 @@ export const restoreBackup = async (
         // present, any failure (bad JSON, import crash, or per-key write
         // failures reported by the import) aborts the restore loudly — the
         // prefs generation must not silently diverge from the profile's.
+        // Keys skipped by the restore allow-list do NOT abort the restore
+        // (they're data the current app build can't name), but they must not
+        // vanish without a trace either: their names ride back to the UI in
+        // the success result (see findings F6/F12 — both import surfaces
+        // report the ImportPreferencesReport).
+        let skippedPreferenceKeys: string[] = [];
         if (record.preferencesJson) {
             try {
                 const preferences = JSON.parse(record.preferencesJson);
@@ -495,6 +501,7 @@ export const restoreBackup = async (
                     if (report.failedKeys.length > 0) {
                         throw new Error(`${report.failedKeys.length} preference key(s) could not be written: ${report.failedKeys.join(', ')}`);
                     }
+                    skippedPreferenceKeys = report.skippedKeys;
                 }
             } catch (error) {
                 throw new Error(
@@ -522,7 +529,10 @@ export const restoreBackup = async (
                 );
             }
         }
-        return { success: true, username: profile.username };
+        const message = skippedPreferenceKeys.length > 0
+            ? `Restore succeeded, but ${skippedPreferenceKeys.length} backup key(s) are not on this build's restore allow-list and were skipped: ${skippedPreferenceKeys.join(', ')}.`
+            : undefined;
+        return { success: true, username: profile.username, message, skippedPreferenceKeys };
     } catch (error) {
         console.error('[BackupService] Restore failed:', error);
         return {

@@ -310,6 +310,46 @@ describe('OutcomeAutopilotService', () => {
         expect(resolution?.pnlPercent).toBe(52.6);
         OutcomeAutopilotService.markProcessed(id);
     });
+
+    it('re-register with a NEW symbol MOVES the feed hold (release old, acquire new)', async () => {
+        // The update branch replaces analysis (possibly a different symbol)
+        // but used to keep the hold acquired for the OLD symbol — the ref
+        // count pinned a coin nobody watches anymore while the new one
+        // starved of ticks. Symmetric fix: release + re-acquire on change,
+        // no churn when the symbol is unchanged.
+        mockVerify.mockResolvedValue({ verified: true, outcome: 'STILL_OPEN', verificationDetails: '' } as any);
+        const { extractSymbolFromAnalysis } = await import('../services/ui/AutoCaptureService');
+        const extract = vi.mocked(extractSymbolFromAnalysis);
+        const original = extract.getMockImplementation();
+        extract.mockImplementation((a: any) => (a?.coinName === 'ETHUSDT' ? 'ETHUSDT' : 'BTCUSDT'));
+        try {
+            const id = nextId();
+            OutcomeAutopilotService.register(id, analysis(), 100);
+            expect(priceFeed.acquired).toContain('BTCUSDT');
+            await OutcomeAutopilotService.checkNow();
+
+            const btcHold = priceFeed.releases.at(-1); // the BTCUSDT hold fn
+            const releasesBefore = priceFeed.releases.length;
+            OutcomeAutopilotService.register(id, analysis({ coinName: 'ETHUSDT' }), 100);
+            // Old hold released exactly once, new hold acquired.
+            expect(btcHold).toHaveBeenCalledOnce();
+            expect(priceFeed.releases.length).toBe(releasesBefore + 1);
+            expect(priceFeed.acquired).toContain('ETHUSDT');
+            expect(priceFeed.acquired).not.toContain('BTCUSDT');
+
+            // Same-symbol re-register (the common leverage-change case) must
+            // NOT churn the hold.
+            const releasesAfterMove = priceFeed.releases.length;
+            OutcomeAutopilotService.register(id, analysis({ coinName: 'ETHUSDT' }), 50);
+            expect(priceFeed.releases.length).toBe(releasesAfterMove);
+            expect(priceFeed.acquired).toContain('ETHUSDT');
+
+            OutcomeAutopilotService.unregister(id);
+            expect(priceFeed.acquired).not.toContain('ETHUSDT');
+        } finally {
+            if (original) extract.mockImplementation(original);
+        }
+    });
 });
 
 // ── Profile isolation: per-username partitions ──────────────────────────────

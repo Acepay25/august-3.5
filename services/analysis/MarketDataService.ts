@@ -753,10 +753,11 @@ export const fetchMarkIndex = async (symbol: string): Promise<MarkIndexData> => 
 };
 
 /**
- * Top USDT-perpetual symbols by 24h quote volume from ONE public futures
- * endpoint (/fapi/v1/ticker/24hr returns every symbol). The Trade surface
- * uses this instead of a hardcoded watchlist; callers keep a static fallback
- * for offline/dev-CSP situations (returns [] on failure).
+ * 24h stats for one USDT-perpetual symbol as returned by the public futures
+ * ticker endpoint (/fapi/v1/ticker/24hr). Lives on as the base shape of
+ * `SymbolMeta` below; the old zero-caller `fetchTopFuturesSymbols` wrapper
+ * (a `topfutsymbols_<limit>` cached fetch) was removed in the 2026-09 audit
+ * dead-code purge.
  */
 export interface SymbolTicker {
     symbol: string;
@@ -764,32 +765,6 @@ export interface SymbolTicker {
     changePercent24h: number;
     quoteVolume: number;
 }
-
-export const fetchTopFuturesSymbols = async (limit = 20): Promise<SymbolTicker[]> => {
-    const cacheKey = `topfutsymbols_${limit}`;
-    const cached = getCached<SymbolTicker[]>(cacheKey);
-    if (cached) return cached;
-    try {
-        const response = await robustFuturesFetch('/fapi/v1/ticker/24hr');
-        const data = await response.json();
-        if (!Array.isArray(data)) return [];
-        const rows: SymbolTicker[] = data
-            .filter((t: any) => typeof t?.symbol === 'string' && t.symbol.endsWith('USDT') && !/[_-]/.test(t.symbol))
-            .map((t: any) => ({
-                symbol: t.symbol as string,
-                lastPrice: parseFloat(t.lastPrice) || 0,
-                changePercent24h: parseFloat(t.priceChangePercent) || 0,
-                quoteVolume: parseFloat(t.quoteVolume) || 0,
-            }))
-            .sort((a, b) => b.quoteVolume - a.quoteVolume)
-            .slice(0, limit);
-        setCache(cacheKey, rows);
-        return rows;
-    } catch (error) {
-        console.warn('Failed to fetch top futures symbols:', error);
-        return [];
-    }
-};
 
 /** One tradable USDT-perpetual in the symbol picker: ticker stats + the base
  *  asset (the description column) from exchangeInfo. The ticker endpoint

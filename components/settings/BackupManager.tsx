@@ -85,7 +85,14 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
     try {
       const result = await restoreBackup(id);
       if (result.success) {
-        setStatus({ kind: 'success', text: `Profile "${result.username}" restored. Reloading…` });
+        // Restore reports skipped allow-list misses — surface them (audit
+        // R1 #12: a partial restore that reads as fully clean is its own bug).
+        setStatus({
+          kind: result.skippedPreferenceKeys && result.skippedPreferenceKeys.length > 0 ? 'error' : 'success',
+          text: result.skippedPreferenceKeys && result.skippedPreferenceKeys.length > 0
+            ? result.message || `Profile "${result.username}" restored with skipped keys.`
+            : `Profile "${result.username}" restored. Reloading…`,
+        });
         onProfileRestored(result.username!);
       } else {
         setStatus({ kind: 'error', text: result.error || 'Restore failed.' });

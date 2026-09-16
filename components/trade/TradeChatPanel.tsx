@@ -63,7 +63,7 @@ import SupervisorPanel from './SupervisorPanel';
 import KeyLevelsCard from './KeyLevelsCard';
 import type { SupervisorPhase } from '../../services/learning/supervisorStore';
 import { getActiveUsername } from '../../utils/activeUser';
-import { baseOf, display as symbolDisplay } from '../../utils/symbol';
+import { baseOf, quoteOf, display as symbolDisplay } from '../../utils/symbol';
 import { listSkills } from '../../services/learning/SkillMemoryService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { isPassReply } from '../../services/agents/groupRounds';
@@ -503,8 +503,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             let n = 0;
             for (const id of ids) if (watchService.cancel(id)) n += 1;
             if (args.allForSymbol) {
-                const target = String(args.symbol ?? turn.symbol).toUpperCase();
-                n += watchService.cancelWhere(w => w.symbol === target);
+                // The SAME canonicalization chartTriggers applies at arm time
+                // (baseOf+quoteOf: 'BTC' → 'BTCUSDT'). Plans now live under the
+                // normalized full form, so a raw toUpperCase() target could
+                // never match a watch the model armed as bare 'BTC' — compare
+                // canonically on BOTH sides to stay robust to legacy rows.
+                const target = String(args.symbol ?? turn.symbol).trim();
+                const canon = target ? `${baseOf(target)}${quoteOf(target)}` : '';
+                n += watchService.cancelWhere(w => (w.symbol.trim() ? `${baseOf(w.symbol)}${quoteOf(w.symbol)}` : w.symbol) === canon);
             }
             const left = watchService.list().map(w => w.id);
             return receipt(true, n > 0
@@ -529,8 +535,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // The honest disposition of the watch TradeView is about to arm:
             // arm() REFUSES a plan already through its SL/target at the live
             // mark (staleLevelsAtArm is the same gate), so the receipt must
-            // not promise a watch that will never ping.
-            const stale = staleLevelsAtArm(plan, typeof drawnPrice === 'number' && Number.isFinite(drawnPrice) && drawnPrice > 0 ? drawnPrice : null);
+            // not promise a watch that will never ping. CROSS-CANVAS MIRROR
+            // OF TradeView.handlePlanPresented: off-view the viewed mark is
+            // NOT the turn's coin's live price, so arm() gets a null anchor
+            // (plain first-tick touch test, never a stale-refuse) — the
+            // receipt must evaluate the gate with the SAME null, or it lies
+            // "REFUSED… no HARNESS SIGNAL will come" about a watch that arms
+            // fine in the background-turn case this refactor exists for.
+            const armPrice = crossCanvas ? null : (typeof drawnPrice === 'number' && Number.isFinite(drawnPrice) && drawnPrice > 0 ? drawnPrice : null);
+            const stale = staleLevelsAtArm(plan, armPrice);
             onPlanPresented?.(plan, turn);
             // THE TURN's entry — not "whatever is streaming in the viewed
             // session": the card must land in this run's transcript even if
@@ -540,7 +553,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 ? (Math.abs(proposal.takeProfits[0] - proposal.entry) / Math.abs(proposal.entry - proposal.stopLoss)).toFixed(1) : '—';
             const levelIds = [`${proposal.planId}:ENTRY`, `${proposal.planId}:SL`,
                 ...proposal.takeProfits.map((_, i) => `${proposal.planId}:TP${i + 1}`)];
-            const staleWatchLine = `WARNING: the harness REFUSED to watch this plan — price ${drawnPrice}${crossCanvas ? ` (a ${canvasSymbol} canvas print — see note)` : ''} is already through a stop/target, so every level (${stale.join(', ')}) latched as already-reached and NO [HARNESS SIGNAL] will come for them. Do not claim a watch is live; if the user still wants one, re-present a plan whose levels sit ahead of price.`;
+            // Only reachable on the VIEWED canvas (crossCanvas ⇒ armPrice is
+            // null ⇒ stale is empty), so the price named here is genuinely
+            // the coin's live mark.
+            const staleWatchLine = `WARNING: the harness REFUSED to watch this plan — price ${drawnPrice} is already through a stop/target, so every level (${stale.join(', ')}) latched as already-reached and NO [HARNESS SIGNAL] will come for them. Do not claim a watch is live; if the user still wants one, re-present a plan whose levels sit ahead of price.`;
             const watchLine = stale.length > 0
                 ? staleWatchLine
                 : `The harness now watches these levels — ids ${levelIds.join(', ')} — and will send you a [HARNESS SIGNAL] when one is reached; refer to levels by those ids and never re-announce one that already fired.`;
@@ -1368,13 +1384,20 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // invisibly (the warning vanishes without ever reaching a model turn).
     // With a non-chat session selected the signals HOLD in the store;
     // switching back to a chat session re-fires this effect and drains.
+    // The hold notice logs ONCE per episode — `sessions` is a fresh array on
+    // every store emit, so an ungated log would spam the console per tick.
+    const heldNoticeRef = useRef<string | null>(null);
     useEffect(() => {
-        if (busy || snap.signals.length === 0) return;
+        if (busy || snap.signals.length === 0) { heldNoticeRef.current = null; return; }
         const session = sessions.find(s => s.id === activeId) ?? sessions[0];
         if (session && session.kind !== 'solo' && session.kind !== 'panel') {
-            console.info(`[Chart AI] holding ${snap.signals.length} harness signal(s): the active session is a ${session.kind}, not a chat — it will drain when a chat session is selected.`);
+            if (heldNoticeRef.current !== session.id) {
+                heldNoticeRef.current = session.id;
+                console.info(`[Chart AI] holding ${snap.signals.length} harness signal(s): the active session is a ${session.kind}, not a chat — it will drain when a chat session is selected.`);
+            }
             return;
         }
+        heldNoticeRef.current = null;
         const texts = chatStore.takeHarnessSignals();
         if (texts.length > 0) void runHarnessTurn(texts.join('\n\n'));
     }, [busy, snap.signals, runHarnessTurn, activeId, sessions]);
@@ -1569,10 +1592,16 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             </>
                         )}
                     </div>
-                    <button type="button" onClick={onToggleCollapsed} aria-label="Collapse Chart AI" title="Collapse"
-                        className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
-                        <X className="h-4 w-4" />
-                    </button>
+                    {/* Collapse is a lg+ affordance: below lg the owner passes no
+                        handler (the dock is the session's whole surface), and the
+                        old unguarded ✕ was a dead control that also armed the
+                        desktop rail when the window later grew (audit R6 #22). */}
+                    {onToggleCollapsed && (
+                        <button type="button" onClick={onToggleCollapsed} aria-label="Collapse Chart AI" title="Collapse"
+                            className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
                 </div>
             </div>
 

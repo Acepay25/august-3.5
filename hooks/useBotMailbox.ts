@@ -12,7 +12,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { AgentBot } from '../services/agents/agentRoster';
-import { findProviderById } from '../utils/providerUtils';
+import { findProviderById, isProviderReady } from '../utils/providerUtils';
 import type { ProviderConfig } from '../types/provider';
 import type { Message } from '../types';
 import { MessageRole } from '../types/enums';
@@ -73,9 +73,17 @@ export interface UseBotMailboxResult {
     runUserBotTurn: (bot: AgentBot, prompt: string) => Promise<boolean>;
 }
 
+/**
+ * Bot-level readiness: the SHARED provider predicate (isEnabled + models +
+ * key OR keyless local server — providerUtils.isProviderReady exempts
+ * Ollama/LM Studio base URLs, matching ProviderConfigService.getReadyProviders)
+ * plus the bot's specific model being offered. The old inline `apiKey` clause
+ * ignored the local exemption, so DMs to bots on a keyless local provider were
+ * refused as "no provider".
+ */
 const isProviderReadyFor = (configs: ProviderConfig[], providerId: string, modelId: string): boolean => {
     const p = findProviderById(configs, providerId);
-    return !!p && p.isEnabled && p.apiKey.trim().length > 0 && p.models.includes(modelId);
+    return !!p && isProviderReady(p) && p.models.includes(modelId);
 };
 
 export const useBotMailbox = ({
@@ -114,7 +122,10 @@ export const useBotMailbox = ({
         triggeredBy?: { envelope: DMEnvelope; from: AgentBot };
     }): Promise<void> => {
         const configs = configsRef.current;
-        const provider = configs.find(c => c.id === bot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(bot.modelId));
+        // Same shared predicate as isProviderReadyFor (see above) — the old
+        // inline key clause would have refused a keyless local provider even
+        // after runUserBotTurn's readiness check passed.
+        const provider = configs.find(c => c.id === bot.providerId && isProviderReady(c) && c.models.includes(bot.modelId));
         if (!provider) {
             if (opts.triggeredBy) notice(opts.triggeredBy.from, refuseText('no_provider', bot.name));
             return;

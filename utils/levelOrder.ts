@@ -11,8 +11,8 @@
  *  - outcomeEngine              — defense-in-depth refusal to score inverted plans
  *
  * Canonical rules (tolerant of missing legs):
- *  - Long:  stopLoss < entry <= tp1 <= tp2 <= tp3
- *  - Short: stopLoss > entry >= tp1 >= tp2 >= tp3
+ *  - Long:  stopLoss < entry < tp1 <= tp2 <= tp3
+ *  - Short: stopLoss > entry > tp1 >= tp2 >= tp3
  *
  * A mirror (reflect across the entry) is the repair that best preserves the
  * model's stated risk/reward MAGNITUDES when it flipped a side: a stop 500
@@ -93,14 +93,27 @@ export function sanitizeLevelOrdering(
   }
 
   // ── Take profits: must sit on the reward side of the entry ──
+  // STRICTLY beyond it: a target exactly ON the entry is zero reward — the
+  // outcome engines' abs/zone math would credit it as an instant same-candle
+  // WIN at zero profit. Mirrored like an inverted target it has no distinct
+  // counterpart (the mirror of entry is entry), so — same as the degenerate
+  // stop-on-entry case — it is flagged, left as-is, and the engine's re-check
+  // refuses the plan (INVALID) instead of scoring it.
   const correctedTakeProfits = passthroughTps.map((tp) => {
     if (tp === null) return null;
-    const tpOnRewardSide = isLong ? tp >= entry : tp <= entry;
+    const tpOnRewardSide = isLong ? tp > entry : tp < entry;
     if (tpOnRewardSide) return tp;
+    if (tp === entry) {
+      fixes.push(
+        `${direction} take-profit sits exactly on the ${fmt(entry)} entry — zero reward distance; ` +
+        'cannot be mirrored, plan left as-is and flagged.',
+      );
+      return tp;
+    }
     const mirrored = roundLevel(2 * entry - tp);
     fixes.push(
       `${direction} take-profit ${fmt(tp)} is on the wrong side of the ${fmt(entry)} entry` +
-      ` (a ${isLong ? 'long target must sit at/above' : 'short target must sit at/below'} it)` +
+      ` (a ${isLong ? 'long target must sit above' : 'short target must sit below'} it)` +
       ` — mirrored to ${fmt(mirrored)}.`,
     );
     return mirrored;

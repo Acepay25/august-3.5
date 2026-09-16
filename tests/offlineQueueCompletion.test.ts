@@ -138,6 +138,33 @@ describe('processQueue awaits the replay callback to COMPLETION', () => {
         expect(results).toEqual({ processed: 1, failed: 0, skipped: 0 });
         expect(await getAllQueued()).toHaveLength(0);
     });
+
+    it('REENTRANCY: a second processQueue during an in-flight replay no-ops (no double-run)', async () => {
+        // Two `online` transitions fired back-to-back used to snapshot the
+        // SAME items and run every callback twice (a queued analysis
+        // double-submitted). The in-flight flag makes the second call return
+        // zero counts immediately, and the guard must release afterwards.
+        await addToQueue({ type: 'analysis', payload: { prompt: 'go' }, username: 'alice' });
+        let finish!: () => void;
+        const gate = new Promise<void>(resolve => { finish = resolve; });
+        let runs = 0;
+        const first = processQueue({ onAnalysis: async () => { runs += 1; await gate; } });
+
+        await new Promise(resolve => setTimeout(resolve, 10)); // replay in flight
+        const second = await processQueue({ onAnalysis: async () => { runs += 100; } });
+        expect(second).toEqual({ processed: 0, failed: 0, skipped: 0 });
+        expect(runs).toBe(1);
+
+        finish();
+        expect(await first).toEqual({ processed: 1, failed: 0, skipped: 0 });
+
+        // Guard released: the next pass processes normally.
+        await addToQueue({ type: 'summary', payload: {}, username: 'alice' });
+        let summaries = 0;
+        const third = await processQueue({ onSummary: async () => { summaries += 1; } });
+        expect(summaries).toBe(1);
+        expect(third.processed).toBe(1);
+    });
 });
 
 describe('replayed run FAILURE reaches the retry path (ChatRunOutcome)', () => {

@@ -452,7 +452,13 @@ export const verifyHistoricalOutcome = async (
 
         // Build verification details
         let details = '';
-        if (outcome === 'STILL_OPEN') {
+        if (resolution.outcome === 'INVALID') {
+            // The enum has no "refused" member, so the bucket stays
+            // STILL_OPEN — but the reason must NOT be dropped: an inverted or
+            // zero-distance plan printed "⏳ TRADE STILL OPEN" as if a live
+            // position existed. Surface the engine's rejection instead.
+            details = ` Plan rejected by the outcome engine (invalid level ordering): ${resolution.invalidReason || 'unknown'}`;
+        } else if (outcome === 'STILL_OPEN') {
             details = `⏳ TRADE STILL OPEN | ${klines.length} candles checked (${limited1m.length}×1m + ${limited15m.length}×15m + ${limited1h.length}×1h). Neither SL nor TP hit.`;
         } else if (outcome === 'SL_HIT') {
             if (extendedSlExceeded) {

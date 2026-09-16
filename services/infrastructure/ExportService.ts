@@ -273,9 +273,29 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
  * drawings, automations, desk state, forged tools, agent roster, …).
  * Unknown keys are skipped and reported, never silently persisted.
  */
-const RESTORABLE_PREFERENCE_KEYS: ReadonlySet<string> = new Set<string>(
-    Object.values(PREF_KEYS) as string[],
-);
+const RESTORABLE_PREFERENCE_KEYS: ReadonlySet<string> = new Set<string>([
+    ...(Object.values(PREF_KEYS) as string[]),
+    // Exact static app-state keys written as JSON through
+    // setPreferenceObject / localStorage (so the export sweep captures
+    // them) but living outside PREF_KEYS:
+    //   model_catalog_sweep_v1 (hooks/useModelCatalogRefresh)
+    //   session_usage_v1       (utils/sessionUsage)
+    //   trading_checklist_v1   (utils/checklist)
+    //   memory_amendments_v1   (services/learning/memoryAmendments)
+    //   august_harness_lessons_v1 (services/learning/harnessLessons)
+    //   thinking_leak_bin_v1   (utils/thinkingLeakBin)
+    // NOT added: 'august_surface_v1' and 'sidebar_pane_v1' — the same sweep
+    // DROPS them because they are stored as PLAIN strings (raw
+    // localStorage.setItem / setPreference, no JSON), so getPreferenceObject
+    // can never parse them into a backup. Allowing them would open a restore
+    // write-path for a value the readers (raw string compares) would ignore.
+    'model_catalog_sweep_v1',
+    'session_usage_v1',
+    'trading_checklist_v1',
+    'memory_amendments_v1',
+    'august_harness_lessons_v1',
+    'thinking_leak_bin_v1',
+]);
 
 /** Prefix-matched namespaces for dynamic/scoped keys. */
 const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
@@ -306,6 +326,15 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'trader_learning_v1',
     'trader_learner_counter_v1',
     'supervisor_auto_v1',
+    // Self-improvement judge gate + measurement loop (per-user,
+    // services/learning/selfImprovement.ts: `learning_judge_gate_v1_<user>`,
+    // `learning_measure_v1_<user>`).
+    'learning_judge_gate_v1_',
+    'learning_measure_v1_',
+    // Per-user setup watches (services/ui/SetupWatchService.ts:
+    // `setup_watches_v1_<user>`; the legacy GLOBAL `setup_watches` blob is
+    // covered by PREF_KEYS).
+    'setup_watches_v1_',
     // Per-user prompt/strategy docs + automations
     'prompt_overrides_v1_',
     'strategy_docs_v1_',
@@ -379,7 +408,15 @@ export interface ImportPreferencesReport {
  *    same validated endpoint as the current config for that id;
  *  - a changed or absent baseUrl with an empty backup key yields a
  *    present-but-not-ready entry (empty key) so the UI asks the user to
- *    re-enter it instead of silently sending their key somewhere new.
+ *    re-enter it instead of silently sending their key somewhere new;
+ *  - symmetrically, a BACKUP-carried key is kept only when the id is new
+ *    (fresh-machine restore) or the live config for that id points at the
+ *    SAME validated endpoint. A crafted entry that re-uses an existing id
+ *    but swaps baseUrl to an attacker host (e.g.
+ *    `{id:'openai', apiKey:'...', baseUrl:'https://evil'}`) would otherwise
+ *    wholesale replace the live config and route the user's prompts there —
+ *    so on a changed (or unparseable) live baseUrl the backup key is
+ *    CLEARED unconditionally: present-but-not-ready, user re-enters.
  */
 const mergeProviderConfigsForImport = async (
     backupProviders: unknown[],
@@ -389,6 +426,14 @@ const mergeProviderConfigsForImport = async (
     let dropped = 0;
     let grafted = 0;
     let reentry = 0;
+
+    // Normalize an endpoint for same-host comparison: validated → normalized
+    // URL, absent/empty → '', present-but-invalid → null (never equal).
+    const normalizeEndpoint = (baseUrl: string): string | null => {
+        if (!baseUrl) return '';
+        const validation = validateProviderUrl(baseUrl);
+        return validation.valid ? validation.normalizedUrl : null;
+    };
 
     for (const raw of backupProviders) {
         if (!raw || typeof raw !== 'object' || typeof (raw as { id?: unknown }).id !== 'string') {
@@ -409,25 +454,39 @@ const mergeProviderConfigsForImport = async (
             normalizedBackupUrl = validation.normalizedUrl;
         }
 
+        const current = existing.find(item => item?.id === provider.id);
+        const currentBaseUrl = typeof current?.baseUrl === 'string' ? current.baseUrl.trim() : '';
+
         const backupKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
         if (backupKey) {
-            // The backup carries its own key (non-redacted / hand-made file) —
-            // keep it; nothing is grafted from the live config.
-            merged.push({ ...provider, baseUrl: normalizedBackupUrl ?? provider.baseUrl });
+            // The backup carries its own key (non-redacted / hand-made file).
+            // Keep it only when nothing is being re-pointed: either the id is
+            // new (fresh-machine restore — no live config to hijack) or the
+            // live config for this id already normalizes to the SAME
+            // endpoint. Otherwise the entry re-targets an existing provider
+            // at a different host and its key is cleared (see doc above).
+            const currentNormalized = normalizeEndpoint(currentBaseUrl);
+            const backupNormalized = normalizeEndpoint(rawBaseUrl);
+            const endpointChanged = Boolean(current) && currentNormalized !== backupNormalized;
+            if (endpointChanged) {
+                console.warn(`[ExportService] Cleared backup key for "${provider.id}": backup baseUrl differs from the live config's (restore will ask for the key)`);
+                merged.push({ ...provider, baseUrl: normalizedBackupUrl ?? provider.baseUrl, apiKey: '' });
+                reentry += 1;
+            } else {
+                merged.push({ ...provider, baseUrl: normalizedBackupUrl ?? provider.baseUrl });
+            }
             continue;
         }
 
         // Empty backup key (the normal redacted case). Graft the live key only
         // when both sides validate to the SAME endpoint.
-        const current = existing.find(item => item?.id === provider.id);
         const currentKey = typeof current?.apiKey === 'string' ? current.apiKey : '';
-        const currentBaseUrl = typeof current?.baseUrl === 'string' ? current.baseUrl.trim() : '';
-        const currentValidation = currentBaseUrl ? validateProviderUrl(currentBaseUrl) : null;
+        const currentNormalized = normalizeEndpoint(currentBaseUrl);
         if (
             currentKey &&
             normalizedBackupUrl &&
-            currentValidation?.valid &&
-            currentValidation.normalizedUrl === normalizedBackupUrl
+            currentNormalized &&
+            currentNormalized === normalizedBackupUrl
         ) {
             merged.push({ ...provider, baseUrl: normalizedBackupUrl, apiKey: currentKey });
             grafted += 1;

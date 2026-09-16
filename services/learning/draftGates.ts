@@ -79,6 +79,18 @@ export const coveredByLiveSkill = (
         const words = salientWords(crafted.ifCondition);
         return listSkills().some(({ meta }) => {
             if (meta.status === 'retired' || meta.supersededBy) return false;
+            // COIN AGREEMENT IS A PREREQUISITE FOR COVERAGE — checked FIRST,
+            // before every path below. skillStrictlyMatchesSetup returns true
+            // on sameFamily WITHOUT looking at the coin, so a BTC skill used
+            // to "cover" an ETH draft and the different-coin guard below it
+            // was dead code (a family skill suppressed the same family on
+            // every OTHER coin). Coverage is a suppression decision: an
+            // ETH setup is not covered by a BTC skill merely because they
+            // share a family. A skill with no coin (a general family/
+            // pattern lesson) still covers cross-coin drafts — it claims
+            // no coin scope.
+            const normCoin = (c: string): string => c.toUpperCase().replace(/USDT?$/, '');
+            if (coin && meta.coin && normCoin(coin) !== normCoin(meta.coin)) return false;
             // STRICT matcher — the LOOSE one scores direction-equality alone
             // as coverage (hits ≥ 2), so one direction-only skill claimed to
             // cover EVERY same-direction draft on EVERY coin and the gate
@@ -87,10 +99,6 @@ export const coveredByLiveSkill = (
             // decision, i.e. enforcement-grade overlap: the skill must share
             // the coin, the pattern family, or direction + regime.
             if (skillStrictlyMatchesSetup(meta, { coin, direction: dir, family })) return true;
-            if (coin && meta.coin
-                && coin.toUpperCase().replace(/USDT?$/, '') !== meta.coin.toUpperCase().replace(/USDT?$/, '')) {
-                return false;
-            }
             if (words.length >= 3) {
                 const hay = `${meta.ifCondition || ''}`.toLowerCase();
                 if (words.filter(w => hay.includes(w)).length >= 2) return true;
@@ -104,7 +112,12 @@ export const coveredByLiveSkill = (
 
 export type DraftGateVerdict =
     | { ok: true; crafted: CraftedSkill }
-    | { ok: false; reason: string };
+    /** A refusal carrying `judged: true` is a QUALITY verdict (covered /
+     *  malformed clause) — the draft was looked at and rejected. The
+     *  pre-judgment short-circuits (cooldown tombstone, pending duplicate)
+     *  leave `judged` unset: nothing decided anything about the idea's
+     *  worth, and a later pass must be allowed to retry. */
+    | { ok: false; reason: string; judged?: boolean };
 
 export interface DeterministicGateInput {
     crafted: CraftedSkill;
@@ -125,9 +138,11 @@ export const deterministicDraftGate = (input: DeterministicGateInput): DraftGate
     const dup = listSkillDrafts(username).some(d =>
         d.tradeId !== tradeId && draftTriggerKey(d.coin, d.crafted) === key);
     if (dup) return { ok: false, reason: 'an identical draft is already pending approval' };
-    if (coveredByLiveSkill(crafted, coin, direction, family)) return { ok: false, reason: 'an existing skill already covers this setup' };
+    if (coveredByLiveSkill(crafted, coin, direction, family)) {
+        return { ok: false, reason: 'an existing skill already covers this setup', judged: true };
+    }
     const ifThenFail = validateIfThen(crafted);
-    if (ifThenFail) return { ok: false, reason: ifThenFail };
+    if (ifThenFail) return { ok: false, reason: ifThenFail, judged: true };
     return {
         ok: true,
         crafted: crafted.prediction
@@ -190,7 +205,18 @@ export const buildSyntheticTrade = (ev: ScoredEvidence): LoggedTrade => {
 export type EvidenceGateResult =
     | { action: 'queued'; crafted: CraftedSkill }
     | { action: 'merged'; target: string; reason: string }
-    | { action: 'skipped'; reason: string };
+    /** A refusal. NEVER-JUDGED short-circuits (cooldown tombstone, pending
+     *  duplicate, no evidence cluster, or a pre-judgment deterministic
+     *  refusal) leave `judged` unset: the idea was never assessed, so a
+     *  later pass is ALLOWED to retry it. A refusal that carries
+     *  `judged: true` is a verdict — the gate LOOKED at the idea and said
+     *  no (worth-gate skip, merge-without-target, post-LLM validate
+     *  failure, covered setup, malformed IF/THEN). Thesis-scanning
+     *  callers fingerprint judged rejects instead of re-running the full
+     *  extraction+scoring+LLM-gate cycle on them forever. (A flag rather
+     *  than a 'rejected' action member so existing consumers that narrow
+     *  on action — e.g. chartScanSkills — keep compiling untouched.) */
+    | { action: 'skipped'; reason: string; judged?: boolean };
 
 export interface EvidenceGateInput {
     crafted: CraftedSkill;
@@ -237,14 +263,14 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
         );
         if (decision) {
             if (decision.verdict === 'merge') {
-                if (!decision.mergeTarget) return { action: 'skipped', reason: `merge without a target: ${decision.reason}` };
+                if (!decision.mergeTarget) return { action: 'skipped', judged: true, reason: `merge without a target: ${decision.reason}` };
                 await maybeMergeSkill(decision.mergeTarget, cluster[0], allTrades ?? [], username);
                 return { action: 'merged', target: decision.mergeTarget, reason: decision.reason };
             }
             if (decision.verdict === 'create') {
                 const wins = cluster.filter(t => t.outcome === TradeOutcome.WIN).length;
                 const fail = validateCraftedSkill(decision, wins, cluster.length - wins);
-                if (fail) return { action: 'skipped', reason: fail };
+                if (fail) return { action: 'skipped', judged: true, reason: fail };
                 const gated: CraftedSkill = {
                     ...crafted,
                     kind: decision.kind ?? crafted.kind,
@@ -255,13 +281,15 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
                 queueSkillDraft({ tradeId, coin, crafted: gated }, username);
                 return { action: 'queued', crafted: gated };
             }
-            return { action: 'skipped', reason: decision.reason };
+            // The worth gate JUDGED this idea and said skip — a verdict,
+            // not a transient skip. Callers must treat it as final.
+            return { action: 'skipped', judged: true, reason: decision.reason };
         }
     } catch { /* the gate must never break the calling flow — fall back */ }
     // Gate unavailable (no provider / parse failure): deterministic bar, then
     // the human inbox decides. This keeps drafts flowing when offline.
     const det = deterministicDraftGate({ crafted, tradeId, username, coin, direction, family });
-    if (!det.ok) return { action: 'skipped', reason: det.reason };
+    if (!det.ok) return { action: 'skipped', judged: det.judged, reason: det.reason };
     queueSkillDraft({ tradeId, coin, crafted: det.crafted }, username);
     return { action: 'queued', crafted: det.crafted };
 };

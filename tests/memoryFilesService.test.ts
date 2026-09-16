@@ -44,6 +44,7 @@ import {
   createMemoryFileUnlocked,
   getMemoryFilesOwner,
 } from '../services/learning/MemoryFilesService';
+import { getPreferenceObject } from '../services/infrastructure/PreferencesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { LoggedTrade, MemoryFile, TradeOutcome, UserProfile } from '../types';
 
@@ -602,6 +603,50 @@ describe('MemoryFilesService', () => {
       expect(erinBlob.files.map(f => f.name)).toContain('during-switch.md');
       expect(floraBlob.files.map(f => f.name)).not.toContain('during-switch.md');
       expect(getMemoryFilesOwner()).toBe('flora');
+    });
+
+    it('an unlocked persist racing an in-flight init writes the OLD owner key, never the new one', async () => {
+      // The memoryCacheOwner must be assigned ATOMICALLY with the cache
+      // swap. Pre-fix, init stamped the new username as owner BEFORE the
+      // storage read — while B's init was in flight the cache still held
+      // A's bytes under B's ownership, so any unlocked concurrent persist
+      // (the old ensureHarnessFoldersUnlocked-in-syncClosedTradeToNotebook
+      // shape) flushed A's stale notebook into B's Preferences key.
+      await initMemoryFiles('gina');
+      const getMock = vi.mocked(getPreferenceObject);
+      const originalImpl = getMock.getMockImplementation() as
+          ((key: string) => Promise<unknown>) | undefined;
+      let release: () => void = () => undefined;
+      const loadGate = new Promise<void>(res => { release = res; });
+      getMock.mockImplementation((async (key: string) => {
+        if (key === 'memory_files_v1_hal') { await loadGate; return null; }
+        return originalImpl ? originalImpl(key) : null;
+      }) as never);
+      try {
+        const halInit = initMemoryFiles('hal');
+        // Let init enter the gated getPreferenceObject await. The cache now
+        // still holds GINA's bytes — and must still be owned by GINA.
+        await new Promise(res => setTimeout(res, 0));
+        expect(getMemoryFilesOwner()).toBe('gina');
+
+        // Unlocked concurrent persist mid-init (simulates a caller that
+        // mutated the shared cache without holding the notebook lock).
+        const rules = getMemoryFiles().folders.find(f => f.name === 'rules')!;
+        await createMemoryFileUnlocked(rules.id, 'racy.md', 'x', 'gina');
+        const ginaBlob = store['memory_files_v1_gina'] as { files: { name: string }[] };
+        expect(ginaBlob.files.map(f => f.name)).toContain('racy.md');
+
+        release();
+        await halInit;
+        expect(getMemoryFilesOwner()).toBe('hal');
+        const halBlob = store['memory_files_v1_hal'] as { files: { name: string }[] };
+        // Hal's key only ever received HAL's own seed — never Gina's bytes.
+        expect(halBlob.files.map(f => f.name)).not.toContain('racy.md');
+        const racyGina = (store['memory_files_v1_gina'] as { files: { name: string }[] }).files;
+        expect(racyGina.map(f => f.name)).toContain('racy.md');
+      } finally {
+        getMock.mockImplementation((originalImpl ?? (async () => null)) as never);
+      }
     });
   });
 });

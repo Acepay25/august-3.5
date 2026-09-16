@@ -44,12 +44,12 @@ const envelope = (over: Partial<Parameters<ReturnType<typeof useBotMailbox>['del
     ...over,
 });
 
-const setup = (bots: AgentBot[] = [macro, risk], extra: { hybridEnabled?: boolean } = {}) => {
+const setup = (bots: AgentBot[] = [macro, risk], extra: { hybridEnabled?: boolean; configs?: ProviderConfig[] } = {}) => {
     const messages: Message[] = [];
     const ref = { current: messages };
     const h = renderHook(() => useBotMailbox({
         bots,
-        providerConfigs: CONFIGS,
+        providerConfigs: extra.configs ?? CONFIGS,
         username: 'tester',
         messagesRef: ref,
         appendMessage: m => { messages.push(m); },
@@ -57,7 +57,7 @@ const setup = (bots: AgentBot[] = [macro, risk], extra: { hybridEnabled?: boolea
             const m = messages.find(x => x.id === id);
             if (m) Object.assign(m, patch);
         },
-        ...extra,
+        hybridEnabled: extra.hybridEnabled,
     }));
     return { h, messages };
 };
@@ -141,6 +141,40 @@ describe('useBotMailbox', () => {
         const { h } = setup([dead]);
         expect(await h.result.current.runUserBotTurn(dead, 'hi')).toBe(false);
         expect(streamQuickResponse).not.toHaveBeenCalled();
+    });
+
+    // Shared readiness policy (providerUtils.isProviderReady): a keyless
+    // localhost/LAN server (Ollama, LM Studio) is ready WITHOUT an API key;
+    // a keyless PUBLIC baseUrl still is not. The old inline `apiKey` clause
+    // in isProviderReadyFor refused both, so bots on local providers could
+    // never be DM'd or take a user turn.
+    const localCfg = (baseUrl: string): ProviderConfig => ({
+        id: 'ollama', name: 'Ollama', isEnabled: true, apiKey: '', baseUrl,
+        apiFormat: 'chat_completions', models: ['llama3.2'], selectedModel: 'llama3.2',
+    } as ProviderConfig);
+    const localBot = bot({ id: 'bL', name: 'Local Mind', providerId: 'ollama', modelId: 'llama3.2' });
+
+    it('a keyless LOCAL provider is selectable for a user bot turn', async () => {
+        streamQuickResponse.mockResolvedValue('local answer');
+        const { h } = setup([localBot], { configs: [localCfg('http://127.0.0.1:11434/v1')] });
+        expect(await h.result.current.runUserBotTurn(localBot, 'hi')).toBe(true);
+        expect(streamQuickResponse).toHaveBeenCalledTimes(1);
+    });
+
+    it('a keyless PUBLIC baseUrl is still refused', async () => {
+        const { h } = setup([localBot], { configs: [localCfg('https://api.example.com')] });
+        expect(await h.result.current.runUserBotTurn(localBot, 'hi')).toBe(false);
+        expect(streamQuickResponse).not.toHaveBeenCalled();
+    });
+
+    it('a DM to a bot on a keyless LOCAL provider drains and runs (runBotTurn gate)', async () => {
+        streamQuickResponse.mockResolvedValue('size it at 0.5R');
+        const sender = bot({ id: 'bS', name: 'Sender', providerId: 'ollama', modelId: 'llama3.2' });
+        const { h } = setup([sender, localBot], { configs: [localCfg('http://localhost:11434/v1')] });
+        act(() => {
+            h.result.current.deliverDM(envelope({ fromBotId: 'bS', toBotId: 'bL' }), sender);
+        });
+        await waitFor(() => expect(streamQuickResponse).toHaveBeenCalledTimes(1));
     });
 
     it('with hybrid ON, a bot turn fetches live data and injects it into the system prompt', async () => {

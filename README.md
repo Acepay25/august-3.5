@@ -75,7 +75,10 @@ on `v*` tags (`.github/workflows/release.yml`).
 - `AGENTS.md` — conventions for coding agents working in this repo
 - `changelog.md` — plain-English log of change rounds (newest first)
 - `DEBATE_FLOW_PLAN.md` — verified map of the debate engine + enhancement plan
+  (local, untracked: working notes gitignored via the session-docs rules, not
+  shipped in the repo checkout)
 - `PROMPTS.md` — verbatim inventory of prompts sent to models
+  (local, untracked: same gitignored working-notes policy)
 
 ## License
 

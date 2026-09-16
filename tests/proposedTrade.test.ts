@@ -3,9 +3,11 @@
  * trade the outcome autopilot can score. Pure functions, no React/network.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseTradeProposal, buildProposedTradeAnalysis, buildProposedTradeMessage, computeRrRatio } from '../services/trade/proposedTrade';
 import { TradeOutcome } from '../types/enums';
+import * as levelWatch from '../services/trade/levelWatchService';
+import type { LevelHit, WatchPlan } from '../services/trade/tradePlanLevels';
 
 describe('parseTradeProposal', () => {
     it('accepts a well-formed Long', () => {
@@ -28,6 +30,45 @@ describe('parseTradeProposal', () => {
         expect(parseTradeProposal({ direction: 'Long', stopLoss: 95, takeProfits: [110] }).error).toMatch(/entry/);
         expect(parseTradeProposal({ direction: 'Long', entry: 100, takeProfits: [110] }).error).toMatch(/stopLoss/);
         expect(parseTradeProposal({ direction: 'Long', entry: 100, stopLoss: 95 }).error).toMatch(/takeProfits/);
+    });
+
+    it('normalizes a model bare-base symbol to the canonical futures form', () => {
+        // 'BTC' verbatim → the level-watch armed under 'BTC', never matched a
+        // 'BTCUSDT' tick, 400'd its mark-price poll forever, and could not be
+        // disarmed by full symbol (plans have no expiry). Canonical now.
+        const mk = (symbol: unknown) => parseTradeProposal({ direction: 'Long', entry: 100, stopLoss: 95, takeProfits: [110], symbol });
+        expect(mk('BTC').proposal?.symbol).toBe('BTCUSDT');
+        expect(mk('btc / usdt').proposal?.symbol).toBe('BTCUSDT');
+        expect(mk('ethusdc').proposal?.symbol).toBe('ETHUSDC');
+        expect(mk('BTCUSDT').proposal?.symbol).toBe('BTCUSDT'); // idempotent
+        expect(mk(undefined).proposal?.symbol).toBe('BTCUSDT'); // blank → fallback
+    });
+});
+
+describe('parseTradeProposal → level-watch harness (symbol normalization end-to-end)', () => {
+    it('a "BTC" proposal arms as BTCUSDT and ticks/disarms correctly', () => {
+        levelWatch.__resetForTests();
+        localStorage.clear();
+        // The arm clock may REST-poll a stale symbol; keep it off the network.
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in tests'); }));
+        const { proposal } = parseTradeProposal({ direction: 'Long', entry: 100, stopLoss: 95, takeProfits: [110], symbol: 'BTC' });
+        expect(proposal?.symbol).toBe('BTCUSDT');
+        const plan: WatchPlan = {
+            planId: 'btc-norm-1', symbol: proposal!.symbol, direction: 'Long',
+            entry: 100, stopLoss: 95, takeProfits: [110],
+        };
+        const hits: LevelHit[] = [];
+        const unsubscribe = levelWatch.subscribe(hit => hits.push(hit));
+        levelWatch.arm(plan, 105);
+        // The live feed prints the FULL symbol — this is the match the
+        // verbatim-'BTC' plan used to miss forever.
+        levelWatch.tick('BTCUSDT', 94); // through ENTRY and SL
+        expect(hits.map(h => h.levelId)).toEqual(['btc-norm-1:ENTRY', 'btc-norm-1:SL']);
+        // Coin switch disarms by the full symbol — it removes the plan.
+        levelWatch.disarmSymbol('BTCUSDT');
+        expect(levelWatch.getArmedPlans()).toHaveLength(0);
+        unsubscribe();
+        levelWatch.__resetForTests();
     });
 });
 

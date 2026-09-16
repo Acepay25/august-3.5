@@ -141,6 +141,7 @@ import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatc
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurface, type AppSurface } from './hooks/useSurface';
+import type { TradeMode } from './components/trade/TradeView';
 import NavRail from './components/shell/NavRail';
 import { Journal } from './components/journal/Journal';
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
@@ -405,7 +406,24 @@ const App: React.FC = () => {
     const [tradeSidebarOpen, setTradeSidebarOpen] = useState<boolean>(() => {
         try { return localStorage.getItem('trade_sidebar_open_v1') !== '0'; } catch { return true; }
     });
+    // Below lg there is no sidebar to toggle — the book is one of the mobile
+    // Chart|AI|Book modes owned by TradeView. The icon therefore requests a
+    // mode flip (nonce-keyed so a repeat 'book' request still applies)
+    // instead of silently mutating a flag nothing reads (audit R6 #4: the
+    // old toggle did exactly that on phones).
+    const [tradeModeRequest, setTradeModeRequest] = useState<{ mode: TradeMode; n: number } | null>(null);
+    const tradeModeReqNRef = useRef(0);
+    const lastRequestedTradeModeRef = useRef<TradeMode>('chart');
+    const isBelowLgNow = (): boolean => {
+        try { return !window.matchMedia('(min-width: 1024px)').matches; } catch { return false; }
+    };
     const toggleTradeSidebar = useCallback(() => {
+        if (isBelowLgNow()) {
+            const next: TradeMode = lastRequestedTradeModeRef.current === 'book' ? 'chart' : 'book';
+            lastRequestedTradeModeRef.current = next;
+            setTradeModeRequest({ mode: next, n: ++tradeModeReqNRef.current });
+            return;
+        }
         setTradeSidebarOpen(prev => {
             try { localStorage.setItem('trade_sidebar_open_v1', prev ? '0' : '1'); } catch { /* private mode */ }
             return !prev;
@@ -464,12 +482,19 @@ const App: React.FC = () => {
     // link, the focused trade id (initialTradeId).
     const [journalTab, setJournalTab] = useState<JournalUIState['tab']>('log');
     const [journalFocusTradeId, setJournalFocusTradeId] = useState<string | undefined>(undefined);
+    /** Monotonic counter bumped on EVERY openJournal. The mounted Journal and
+     *  its ReasoningDashboard key their deep-link effects on this nonce instead
+     *  of value-diffing their props: a second "View reasoning" for the SAME
+     *  tab/trade while the journal is already open changed no value and was
+     *  silently dropped (id-dedup) or applied late. */
+    const [journalOpenNonce, setJournalOpenNonce] = useState(0);
     /** The single "open the journal" entry point for every affordance:
      *  command palette, mobile drawer, Header action, home dashboard,
      *  reasoning deep-link and the #/journal hash. */
     const openJournal = useCallback((tab: JournalUIState['tab'] = 'log', focusTradeId?: string): void => {
         setJournalTab(tab);
         setJournalFocusTradeId(focusTradeId);
+        setJournalOpenNonce(n => n + 1);
         // Overlays sit above surfaces — close them so the journal actually
         // lands visible.
         setIsSettingsMenuVisible(false);
@@ -2951,6 +2976,9 @@ const App: React.FC = () => {
                                     selectedChatModel={selectedChatModel}
                                     onSelectChatModel={setSelectedChatModel}
                                     sidebarOpen={surface === 'trade' && tradeSidebarOpen}
+                                    modeRequest={tradeModeRequest ?? undefined}
+                                    activeUsername={activeUsername ?? undefined}
+                                    onTradeModeChange={(m) => { lastRequestedTradeModeRef.current = m; }}
                                     verdict={deskSceneMessage?.analysis}
                                     bots={bots}
                                     trades={loggedTrades}
@@ -3003,6 +3031,7 @@ const App: React.FC = () => {
                                 isVisible={true}
                                 onClose={handleCloseJournal}
                                 initialTab={journalTab}
+                                openNonce={journalOpenNonce}
                                 initialTradeId={journalFocusTradeId}
                                 onInitialTradeConsumed={handleReasoningTradeConsumed}
                                 isEmbedded={true}

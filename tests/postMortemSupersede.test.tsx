@@ -19,11 +19,52 @@ import type { PostMortemCandidate } from '../components/modals/PostTradeUploadMo
 import type { ProviderConfig } from '../types/provider';
 
 const conductPostMortemMock = vi.hoisted(() => vi.fn());
+// Notebook/learning-write spies for the supersede-WRITES tests.
+const pmMocks = vi.hoisted(() => ({
+    syncClosedTradeToNotebook: vi.fn(),
+    craftSkillFromPostMortem: vi.fn(),
+    gateEvidenceBackedDraft: vi.fn(),
+    writeNotebookNoteFromPostMortem: vi.fn(),
+    writeModelNote: vi.fn(),
+    getMemoryFiles: vi.fn(),
+    extractLessonFromPostMortem: vi.fn(() => ''),
+    parseSkillMarkdown: vi.fn(() => null),
+    listSkillSlugs: vi.fn(() => []),
+    updateGlobalMemory: vi.fn(),
+    addJob: vi.fn(),
+}));
 
 vi.mock('../services/providers/GenericAnalysisService', () => ({
     conductPostMortem: (...args: unknown[]) => conductPostMortemMock(...args),
     conductTodayReassessment: vi.fn(async () => ({ verdict: 'hold', text: '' })),
     writePostMortemMarkdownReport: vi.fn(),
+}));
+vi.mock('../services/learning/SkillMemoryService', () => ({
+    syncClosedTradeToNotebook: pmMocks.syncClosedTradeToNotebook,
+    parseSkillMarkdown: pmMocks.parseSkillMarkdown,
+    listSkillSlugs: pmMocks.listSkillSlugs,
+}));
+vi.mock('../services/learning/SkillCraftService', () => ({
+    craftSkillFromPostMortem: pmMocks.craftSkillFromPostMortem,
+}));
+vi.mock('../services/learning/draftGates', () => ({
+    gateEvidenceBackedDraft: pmMocks.gateEvidenceBackedDraft,
+}));
+vi.mock('../services/learning/NotebookWriterService', () => ({
+    writeNotebookNoteFromPostMortem: pmMocks.writeNotebookNoteFromPostMortem,
+}));
+vi.mock('../services/learning/MemoryFilesService', () => ({
+    writeModelNote: pmMocks.writeModelNote,
+    getMemoryFiles: pmMocks.getMemoryFiles,
+    // severityInsights (live in the graph) pulls the lesson miner.
+    extractLessonFromPostMortem: pmMocks.extractLessonFromPostMortem,
+}));
+vi.mock('../services/learning/MemoryService', () => ({
+    updateGlobalMemory: pmMocks.updateGlobalMemory,
+}));
+vi.mock('../services/infrastructure/JobQueueService', () => ({
+    jobQueue: { addJob: pmMocks.addJob },
+    JobType: { EXTRACT_INSIGHTS: 'extract_insights' },
 }));
 
 import { usePostMortem, type UsePostMortemParams } from '../hooks/usePostMortem';
@@ -88,6 +129,8 @@ const candidate = (id: string): PostMortemCandidate => ({
 beforeEach(() => {
     messages = [];
     conductPostMortemMock.mockReset();
+    Object.values(pmMocks).forEach(m => m.mockClear());
+    pmMocks.getMemoryFiles.mockReturnValue({ version: 1, folders: [], files: [] });
 });
 
 describe('post-mortem supersession', () => {
@@ -138,5 +181,87 @@ describe('post-mortem supersession', () => {
         const run1Bubble = messages.find(m => m.isPostMortem && !failed.includes(m));
         expect(run1Bubble).toBeDefined();
         expect((run1Bubble?.text || '')).toBe('');
+    });
+});
+
+// ─── Supersession of the WRITE half ──────────────────────────────────────────
+// The run-id guards above silence the post-mortem TEXT. The learning chain
+// (insight job, diary/skill sync, LLM craft, evidence gate, AI notebook
+// note) spans awaits that the abort signal does not cover, and when the
+// awaited global-memory step REJECTED (the abort landing inside it) the
+// catch swallowed and a superseded run fell straight through into the
+// chain — publishing the OLD user's notebook entries. These tests pin the
+// new staleness re-checks around the chain.
+
+const notebookTrade = (id: string): LoggedTrade => ({
+    id,
+    outcome: TradeOutcome.LOSS,
+    timestamp: new Date().toISOString(),
+    postMortem: 'old report',
+} as unknown as LoggedTrade);
+
+describe('post-mortem supersession — notebook/learning WRITES', () => {
+    const reportText = '## Final Report\nThe stop sat above structure; the thesis needed a fresh reclaim that never printed.';
+
+    it('a run superseded before the learning chain begins performs NO notebook writes', async () => {
+        const { result } = renderHook(() => usePostMortem({
+            ...baseParams(),
+            loggedTradesRef: { current: [notebookTrade('msg-nb')] } as MutableRefObject<LoggedTrade[]>,
+        }));
+        conductPostMortemMock.mockResolvedValue(reportText);
+        // The global-memory await rejects AFTER the supersede — exactly the
+        // pre-fix fall-through path (the catch above the chain swallowed it
+        // and the chain ran for the stale run).
+        let releaseMemory: () => void = () => undefined;
+        pmMocks.updateGlobalMemory.mockImplementation(() =>
+            new Promise<never>((_res, rej) => { releaseMemory = () => rej(new Error('provider aborted')); }));
+
+        let run: Promise<void> | undefined;
+        await act(async () => {
+            run = result.current.startPostMortemAnalysis(candidate('msg-nb'));
+            await tick(10);
+        });
+        act(() => { result.current.invalidatePostMortemRuns(); }); // e.g. account switch
+        act(() => { releaseMemory(); });
+        await act(async () => { await run; await tick(20); });
+
+        expect(pmMocks.updateGlobalMemory).toHaveBeenCalled();
+        // Pre-fix: control fell through the memory catch into the chain.
+        expect(pmMocks.addJob).not.toHaveBeenCalled();
+        expect(pmMocks.syncClosedTradeToNotebook).not.toHaveBeenCalled();
+        expect(pmMocks.craftSkillFromPostMortem).not.toHaveBeenCalled();
+        expect(pmMocks.gateEvidenceBackedDraft).not.toHaveBeenCalled();
+        expect(pmMocks.writeNotebookNoteFromPostMortem).not.toHaveBeenCalled();
+        expect(pmMocks.writeModelNote).not.toHaveBeenCalled();
+    });
+
+    it('a run superseded mid-notebook-sync skips every LATER learning write', async () => {
+        const { result } = renderHook(() => usePostMortem({
+            ...baseParams(),
+            loggedTradesRef: { current: [notebookTrade('msg-nb2')] } as MutableRefObject<LoggedTrade[]>,
+        }));
+        conductPostMortemMock.mockResolvedValue(reportText);
+        pmMocks.updateGlobalMemory.mockResolvedValue({} as never);
+        let releaseSync: () => void = () => undefined;
+        pmMocks.syncClosedTradeToNotebook.mockImplementation(() =>
+            new Promise<void>(res => { releaseSync = res; }));
+        pmMocks.craftSkillFromPostMortem.mockResolvedValue(null);
+
+        let run: Promise<void> | undefined;
+        await act(async () => {
+            run = result.current.startPostMortemAnalysis(candidate('msg-nb2'));
+            await tick(10);
+        });
+        expect(pmMocks.syncClosedTradeToNotebook).toHaveBeenCalledTimes(1); // chain entered while fresh
+        act(() => { result.current.invalidatePostMortemRuns(); });
+        act(() => { releaseSync(); });
+        await act(async () => { await run; await tick(20); });
+
+        // The in-flight sync cannot be recalled, but the superseded run must
+        // not continue: craft / gate / AI note are all gated behind it.
+        expect(pmMocks.craftSkillFromPostMortem).not.toHaveBeenCalled();
+        expect(pmMocks.gateEvidenceBackedDraft).not.toHaveBeenCalled();
+        expect(pmMocks.writeNotebookNoteFromPostMortem).not.toHaveBeenCalled();
+        expect(pmMocks.writeModelNote).not.toHaveBeenCalled();
     });
 });

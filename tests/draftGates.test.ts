@@ -172,6 +172,38 @@ tradeIds: d,e,f
             'ETHUSDT', 'Short', undefined,
         )).toBe(true);
     });
+
+    it('a same-FAMILY skill on a DIFFERENT coin does NOT suppress the draft', async () => {
+        // skillStrictlyMatchesSetup returns true on sameFamily WITHOUT
+        // looking at the coin, and it ran ABOVE the different-coin guard —
+        // so that guard was dead and a BTC sweep skill suppressed every
+        // ETH sweep draft. Coin agreement is now a prerequisite for
+        // coverage: the guard runs first.
+        await seedSkill(`---
+status: confirmed
+kind: repeat
+coin: BTCUSDT
+direction: Long
+family: sweep
+wins: 5
+losses: 1
+ifCondition: BTC long reclaim after a liquidity sweep of the prior low
+thenAction: take the reclaim
+tradeIds: a,b,c,d,e
+---
+
+# BTC sweep reclaim
+`, 'btc-sweep.md');
+        expect(coveredByLiveSkill(
+            crafted({ ifCondition: 'ETH long reclaim after a liquidity sweep of the prior low' }),
+            'ETHUSDT', 'Long', 'sweep',
+        )).toBe(false);
+        // …while the same-coin path still covers.
+        expect(coveredByLiveSkill(
+            crafted({ ifCondition: 'BTC long reclaim after a liquidity sweep of the prior low' }),
+            'BTCUSDT', 'Long', 'sweep',
+        )).toBe(true);
+    });
 });
 
 describe('buildSyntheticTrade', () => {
@@ -215,13 +247,16 @@ describe('gateEvidenceBackedDraft (worth gate wired)', () => {
         expect(drafts[0].crafted.ifCondition).toBe('BTC reclaims the swept low on a 15m close');
     });
 
-    it('a create verdict WITHOUT a prediction is rejected fail-closed', async () => {
+    it('a create verdict WITHOUT a prediction is rejected fail-closed — a JUDGED skip', async () => {
         vi.mocked(getQuickResponse).mockResolvedValue(worthJson('create'));
         const res = await gateEvidenceBackedDraft({
             crafted: crafted(), tradeId: 'fp-1', cluster: [makeTrade('fp-1', TradeOutcome.WIN)],
             username: USER, config: cfg,
         });
         expect(res.action).toBe('skipped');
+        // The LLM judged it and validateCraftedSkill rejected the artifact:
+        // thesis scanners must fingerprint it, not re-run the gate forever.
+        expect(res.action === 'skipped' && res.judged).toBe(true);
         expect(listSkillDrafts(USER)).toHaveLength(0);
     });
 
@@ -254,14 +289,41 @@ tradeIds: a,b
         expect(meta!.tradeIds).toContain('fp-1');
     });
 
-    it('a skip verdict queues nothing', async () => {
+    it('a skip verdict queues nothing — it is a JUDGED reject, not a transient skip', async () => {
         vi.mocked(getQuickResponse).mockResolvedValue(worthJson('skip'));
         const res = await gateEvidenceBackedDraft({
             crafted: crafted(), tradeId: 'fp-1', cluster: [makeTrade('fp-1', TradeOutcome.WIN)],
             username: USER, config: cfg,
         });
         expect(res.action).toBe('skipped');
+        // The worth gate spent an LLM call and said no: pre-judgment callers
+        // must NOT retry this every 10 minutes.
+        expect(res.action === 'skipped' && res.judged).toBe(true);
         expect(listSkillDrafts(USER)).toHaveLength(0);
+    });
+
+    it('a merge verdict without a target is a JUDGED reject (malformed artifact, retrying re-pays the LLM)', async () => {
+        vi.mocked(getQuickResponse).mockResolvedValue(worthJson('merge'));
+        const res = await gateEvidenceBackedDraft({
+            crafted: crafted(), tradeId: 'fp-1', cluster: [makeTrade('fp-1', TradeOutcome.WIN)],
+            username: USER, config: cfg,
+        });
+        expect(res.action).toBe('skipped');
+        expect(res.action === 'skipped' && res.judged).toBe(true);
+    });
+
+    it('a tombstone cooldown is a NEVER-JUDGED skip (the idea must stay retryable)', async () => {
+        tombstoneSkillDraftKey(draftTriggerKey('BTCUSDT', crafted()), USER);
+        vi.mocked(getQuickResponse).mockClear();
+        const res = await gateEvidenceBackedDraft({
+            crafted: crafted(), tradeId: 'fp-1', cluster: [makeTrade('fp-1', TradeOutcome.WIN)],
+            username: USER, config: cfg,
+        });
+        expect(res.action).toBe('skipped');
+        // Short-circuited BEFORE the worth gate — nothing was judged, so a
+        // later pass is allowed to retry once the cooldown expires.
+        expect(res.action === 'skipped' && res.judged === undefined).toBe(true);
+        expect(getQuickResponse).not.toHaveBeenCalled();
     });
 
     it('a gate failure falls back to the deterministic bar (draft still queues)', async () => {

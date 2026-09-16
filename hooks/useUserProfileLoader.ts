@@ -255,12 +255,19 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             await initNativeStatusBar();
             await initModelPerformanceService();
             await initAnalystLensService();
+            // The prompt-override / strategy-docs / memory-files trio writes
+            // MODULE SINGLETONS scoped to `username`. A superseded load that
+            // enters this trio after the newer profile's load already reset
+            // them would re-init the OUTGOING profile over the incoming one,
+            // so the staleness check runs BEFORE the trio and after each of
+            // its three awaits — a load that entered mid-trio still bails
+            // before the NEXT singleton write.
+            if (isStale()) return;
             await initPromptOverrides(username);
+            if (isStale()) return;
             await initStrategyDocs(username);
+            if (isStale()) return;
             await initMemoryFiles(username);
-            // No profile-derived state has been written yet, but a
-            // superseded load must not keep pushing per-username inits
-            // (prompt overrides, memory files) behind the newer one.
             if (isStale()) return;
 
             void hydrateRegimeLedger(username).catch(() => { /* ledger is best-effort */ });
