@@ -51,7 +51,7 @@ import { COMMON_WORDS } from '../constants/commonWords';
 import { archetypeDirectiveLine } from '../constants/prompts/archetypePrompts';
 import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
-import { useRafThrottle } from './useRafThrottle';
+import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
 
 // ─── Dev-only logging ─────────────────────────────────────────────────────
 // console.log calls are gated behind the Vite dev flag so production builds
@@ -443,141 +443,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             onToolAction: params.onToolAction,
         });
         return result;
-    }, []);
-
-    // ─── RAF-throttled debate stream updates ────────────────────────
-    // The debate `for await` loop below calls updateMessages on EVERY token
-    // chunk, rebuilding the messages array and re-rendering the chat subtree
-    // hundreds of times per response. This throttled wrapper coalesces those
-    // calls into one per animation frame (~60fps) — the fastest the browser
-    // can paint anyway. The final flush() at the end of the loop guarantees
-    // the last chunk's state is committed synchronously.
-    const throttledDebateUpdate = useRafThrottle((
-        conversationId: string | null,
-        debateMessageId: string,
-        currentTurns: DebateTurn[],
-        thoughtMap: Record<string, string>,
-        reasoningMap: Record<string, string>,
-        activeSpeakers: Record<string, number>,
-        runContractStages: Message['runContract']
-    ) => {
-        updateMessages(prev => {
-            const messageIndex = prev.findIndex(m => m.id === debateMessageId);
-            if (messageIndex === -1) return prev;
-            const updatedMessage = {
-                ...prev[messageIndex],
-                debateTurns: currentTurns,
-                thoughtProcesses: thoughtMap,
-                reasoningProcesses: reasoningMap,
-                activeDebateSpeakers: { ...activeSpeakers },
-                liveToolEvents: { ...liveToolEventsRef.current },
-                debateRunLog: [...debateRunLogRef.current],
-                runContract: runContractStages,
-                debateCheckpoint: currentTurns.length > 0 ? (() => {
-                    const analystNames = [...new Set(currentTurns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))];
-                    const completed = lastCompletedRound(currentTurns, analystNames);
-                    return {
-                        lastCompletedRound: completed,
-                        savedAt: new Date().toISOString(),
-                        analystNames,
-                        laneDrafts: laneDraftsFromTurns(currentTurns, completed),
-                    };
-                })() : prev[messageIndex].debateCheckpoint,
-            };
-            const newMessages = [...prev];
-            newMessages[messageIndex] = updatedMessage;
-            return newMessages;
-        }, conversationId);
-    });
-
-    // ─── Progressive verdict ───────────────────────────────────────────────
-    // While the moderator is still WRITING the final verdict, a complete
-    // trade plan often already exists in the stream. This throttled writer
-    // publishes it as `provisionalAnalysis` so the TradingSignalCard fills
-    // in live instead of appearing only after the debate concludes. The
-    // final commit replaces it with the authoritative `analysis`.
-    const throttledProvisionalVerdict = useRafThrottle((
-        conversationId: string | null,
-        debateMessageId: string,
-        provisional: TradeAnalysis | undefined,
-        planFields: Message['provisionalPlanFields']
-    ) => {
-        updateMessages(prev => {
-            const messageIndex = prev.findIndex(m => m.id === debateMessageId);
-            if (messageIndex === -1) return prev;
-            if (prev[messageIndex].analysis) return prev; // final verdict already committed
-            const newMessages = [...prev];
-            newMessages[messageIndex] = {
-                ...prev[messageIndex],
-                provisionalAnalysis: provisional,
-                provisionalPlanFields: planFields,
-            };
-            return newMessages;
-        }, conversationId);
-    });
-
-    // ─── RAF-throttled LIVE reasoning updates ─────────────────────────────
-    // The analyst onReasoning callback fires on EVERY streamed reasoning
-    // token (20-100/s per analyst). Rebuilding the message array per token
-    // re-renders the whole chat subtree dozens of times per second. This
-    // coalesces those updates into one per animation frame, same pattern as
-    // the debate loop above. The latest reasoning string wins per frame.
-    const throttledEnsembleProgress = useRafThrottle((
-        conversationId: string | null,
-        placeholderId: string,
-        thoughtsKey: string,
-        reasoning: string
-    ) => {
-        updateMessages(prev => {
-            const messageIndex = prev.findIndex(m => m.id === placeholderId);
-            if (messageIndex === -1) return prev;
-            const current = prev[messageIndex];
-            const next = {
-                ...current,
-                ensembleProgress: {
-                    ...(current.ensembleProgress ?? { analysts: [], moderator: { status: 'waiting' as const } }),
-                    analysts: (current.ensembleProgress?.analysts ?? []).map(analyst =>
-                        analyst.key === thoughtsKey ? { ...analyst, reasoning } : analyst),
-                },
-            };
-            const newMessages = [...prev];
-            newMessages[messageIndex] = next;
-            return newMessages;
-        }, conversationId);
-    });
-
-    // ─── RAF-throttled CASUAL-CHAT streaming updates ──────────────────────
-    // Casual replies used to appear all at once after the full response
-    // resolved. This streams visible deltas into the bubble one frame at a
-    // time (perceived speed). The latest accumulated text +
-    // reasoning win per frame; the final flush() commits the settled state.
-    const throttledCasualStream = useRafThrottle((
-        conversationId: string | null,
-        messageId: string,
-        text: string,
-        thinking: string,
-        providerId: string,
-        streaming: boolean
-    ) => {
-        updateMessages(prev => {
-            const messageIndex = prev.findIndex(m => m.id === messageId);
-            if (messageIndex === -1) return prev;
-            const current = prev[messageIndex];
-            const next = {
-                ...current,
-                text,
-                isStreaming: streaming,
-                thoughtProcesses: thinking ? { [providerId]: thinking } : current.thoughtProcesses,
-            };
-            const newMessages = [...prev];
-            newMessages[messageIndex] = next;
-            return newMessages;
-        }, conversationId);
-    });
-
-    // ─── RAF-throttled LIVE reasoning updates ─────────────────────────────
-    // (removed: the Live Neural Analysis view that consumed these was
-    // deleted; reasoning now lives in reasoningProcesses/thoughtProcesses)
+}, []);
 
     // ─── State ─────────────────────────────────────────────────────────────
     const [input, setInput] = useState('');
@@ -658,49 +524,25 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // failures marked the wrong step and the finally force-completed everything).
     const currentPhaseRef = useRef<'analysis' | 'debate'>('analysis');
 
-    // ─── RAF-throttled OPENING-PHASE thinking/output surfacing ───────────
-    // While the analysts run their initial analysis (before any debate round
-    // exists) their chain-of-thought and answer only live in ensembleProgress
-    // — tiny stage bubbles / a click-to-open seat. That left "the three
-    // models thinking" invisible in the transcript. This coalesces the
-    // accumulated reasoning (and the visible answer forming) into round-1
-    // (openings) turns and marks them live, so the debate floor streams each
-    // model's thinking + output exactly the way it streams later debate
-    // turns. Guarded to the analysis phase: once the debate loop starts it
-    // owns the transcript.
-    const throttledOpeningThinking = useRafThrottle((
-        conversationId: string | null,
-        messageId: string,
-        analysts: { name: string; thoughtsKey: string }[],
-        reasoningMap: Record<string, string>,
-        partialMap: Record<string, string>,
-    ) => {
-        if (currentPhaseRef.current !== 'analysis') return;
-        updateMessages(prev => {
-            const idx = prev.findIndex(m => m.id === messageId);
-            if (idx === -1) return prev;
-            const turns: DebateTurn[] = [];
-            for (const a of analysts) {
-                const key = a.thoughtsKey || a.name;
-                const cot = reasoningMap[key];
-                const text = partialMap[key] || '';
-                if ((cot && cot.trim()) || text.trim()) {
-                    turns.push({ speaker: a.name, round: 1, text, reasoning: cot || '' });
-                }
-            }
-            if (turns.length === 0) return prev;
-            const active: Record<string, number> = {};
-            for (const t of turns) active[t.speaker] = 1;
-            const next = {
-                ...prev[idx],
-                isDebating: true,
-                debateTurns: turns,
-                activeDebateSpeakers: active,
-            };
-            const copy = [...prev];
-            copy[idx] = next;
-            return copy;
-        }, conversationId);
+    // ─── RAF-throttled stream updates (debate + provisional verdict + ensemble
+    // reasoning + casual chat + opening-phase thinking) ─────────────────────
+    // Extracted to hooks/analysisPipeline/streamThrottlers.ts. All five writers
+    // share the same `useRafThrottle` primitive and the same shared deps
+    // (updateMessages + the live-tool/run-log refs + the run-contract view +
+    // the phase ref), so a single hook invocation replaces five hand-rolled
+    // inline closures. See the new module for per-writer semantics.
+    const {
+        throttledDebateUpdate,
+        throttledProvisionalVerdict,
+        throttledEnsembleProgress,
+        throttledCasualStream,
+        throttledOpeningThinking,
+    } = useStreamThrottlers({
+        updateMessages,
+        liveToolEventsRef,
+        debateRunLogRef,
+        runContractFor,
+        currentPhaseRef,
     });
 
     useEffect(() => {
