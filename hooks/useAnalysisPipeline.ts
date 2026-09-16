@@ -14,36 +14,31 @@ import { WireAuditEntry } from '../services/providers/reasoningControls';
 import * as ensembleService from '../services/providers/ensembleService';
 import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
-import { AnalystRole } from '../types/enums';
 import { getActiveUsername } from '../utils/activeUser';
 import { getBots, getGroups, AgentTeamSeat } from '../services/agents/agentRoster';
-import { seatPersonaPrompt, generalSeatMandate, GENERAL_DIMENSION_TAGS } from '../services/agents/seatPersonas';
+import { seatPersonaPrompt, generalSeatMandate } from '../services/agents/seatPersonas';
 import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
 import { extractSymbolFromPrompt } from '../services/analysis/MarketDataService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
-import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
-import { runValidationGate } from '../services/validation/TradeValidationGate';
+import { processAnalysisResult } from '../services/analysis/analysisResultProcessor';
+import { backtestSimilarSetups, type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
 import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperService';
 
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
-import { shouldSkillHoldout } from '../utils/skillHoldout';
-import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, isBindingMarkdownPlan } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, parsePrice } from '../utils/analysisUtils';
 import { stripQuoteSuffix } from '../utils/symbol';
 import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
-import { appendSessionUsage } from '../utils/sessionUsage';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
-import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { buildModelIdToName, chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
-import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
@@ -52,6 +47,7 @@ import { archetypeDirectiveLine } from '../constants/prompts/archetypePrompts';
 import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
+import { finalizeVerdict } from './analysisPipeline/verdictFinalizer';
 
 // ─── Dev-only logging ─────────────────────────────────────────────────────
 // console.log calls are gated behind the Vite dev flag so production builds
@@ -77,38 +73,27 @@ import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { writeModelNote, extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
-import { annotateVerdictCitations } from '../services/learning/MemoryInjectionService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { threadForProvider } from '../utils/agentThreads';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { toolActionStamp } from '../utils/toolActions';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
-import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
+import { confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
 import { sortByFitness, recordPreflightResult } from '../services/learning/providerFitness';
 import { buildPreflightBlock, applyPreflightGate } from '../services/learning/preflight';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, appendLensMemoryToPrompt, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
-import { buildRecommendationContract } from '../utils/recommendationContract';
-import { buildRunContractStages, type RunContractStage } from '../utils/runContract';
-import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../services/learning/EvidencePackService';
-import { maybeQueueVerdictSkillDraft } from '../utils/verdictSkillDraft';
+import { buildRunContractStages } from '../utils/runContract';
 import { applyReplyTo } from '../utils/debateReplyTo';
 import { parseProvisionalVerdict, parsePartialVerdictFields } from '../utils/provisionalVerdict';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
 import { parseStructuredAutoplayTranscript } from '../utils/debateTranscript';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
-import { parseKeptAnalyst } from '../utils/keptAnalyst';
-import { buildLevelCitations } from '../utils/levelEvidence';
-import { enforceUngroundedLevels } from '../utils/ungroundedGate';
-import { rescueSoftAvoid } from '../utils/avoidReason';
-import { applyHybridChartDrift } from '../utils/hybridChartDrift';
-import { computeContractSize, gradeRiskTierWithAdjustment, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
-import { planAmendmentDiff } from '../utils/trustSurface';
-import { withFinComMetadata, flagBannedVocabulary } from '../services/providers/debateScience';
+import { withFinComMetadata } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
@@ -262,20 +247,6 @@ export interface UseAnalysisPipelineParams {
 // Falls back to undefined when no keyword matches.
 
 
-
-/**
- * Stable fingerprint of the effective prompt layers for a run — lets prompt
- * edits be measured against outcomes (A/B without an experiment framework:
- * each run records WHICH prompt version produced it).
- */
-const computePromptVersion = (parts: Record<string, unknown>): string => {
-    let hash = 5381;
-    const payload = JSON.stringify(parts) || '';
-    for (let i = 0; i < payload.length; i++) {
-        hash = ((hash << 5) + hash + payload.charCodeAt(i)) >>> 0;
-    }
-    return `v${hash.toString(36)}`;
-};
 
 const MAX_INITIAL_ANALYSIS_RETRIES = 1;
 
@@ -968,7 +939,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const runStartedAt = Date.now();
         // Live-backtest summary (block-scoped result is captured here so the
         // final message update below can persist it on runStats).
-        let liveBtResult: { totalMatches: number; winRate: number; expectedValue: number } | undefined;
+        let liveBtResult: LiveBacktestResult | undefined;
         setHighlightedAnalysisId(null);
         setIsRateLimited(false);
         analysisAbortController.current?.abort();
@@ -1139,6 +1110,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             setIsHybridLoading(false);
         }
 
+        // eslint-disable-next-line no-useless-assignment -- consumed by the verdictFinalizer input below; the cluster owns the lane attribution now.
         let promptLane: 'live' | 'control' = 'live';
         // Id of the live-streaming casual-chat bubble (if this run is a casual
         // reply) so the catch block can settle it on cancel/error instead of
@@ -1487,355 +1459,82 @@ ${reflectionBlock}`
                     ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),
                     ...(userMessage.ocrCache?.texts ?? []),
                 ].filter((t, i, arr) => arr.indexOf(t) === i);
-                const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => {
-                    const finalAnalysis = sanitizeTradeAnalysis(analysis);
-                    finalAnalysis.originalStopLossPercentage = finalAnalysis.stopLossPercentage;
-                    finalAnalysis.takeProfit = Array.isArray(finalAnalysis.takeProfit)
-                        ? finalAnalysis.takeProfit.map(tp => ({ ...tp, originalPercentage: tp.percentage }))
-                        : [];
-
-                    // Explicitly inject isUpdate flag if this was an update action
-                    if (options?.isUpdate) {
-                        finalAnalysis.isUpdate = true;
-                        if (options.updateInterval) {
-                            finalAnalysis.updateInterval = options.updateInterval;
-                        }
-                        // Version stamp (Batch 7): a revision is an explicit
-                        // amendment with a recorded diff, never an overwrite.
-                        finalAnalysis.planVersion = (options.priorAnalysis?.planVersion ?? 1) + 1;
-                        if (options.priorMessageId) {
-                            finalAnalysis.amendsMessageId = options.priorMessageId;
-                        }
-                        if (options.priorAnalysis) {
-                            const diff = planAmendmentDiff(options.priorAnalysis, finalAnalysis);
-                            if (diff) finalAnalysis.planDiff = diff;
-                        }
-                    }
-
-                    // ========== GATE KEEPER RESULT ==========
-                    // Store Gate result in analysis for UI display
-                    if (capturedGateResult) {
-                        finalAnalysis.gateResult = {
-                            passed: capturedGateResult.pass,
-                            confidenceCap: capturedGateResult.confidenceCap,
-                            penalties: capturedGateResult.confidencePenalties,
-                            familyBias: capturedGateResult.familyBias,
-                            suggestedDirection: capturedGateResult.suggestedDirection,
-                            warnings: capturedGateResult.warnings.slice(0, 3),
-                            insights: capturedGateResult.insights.slice(0, 2)
-                        };
-                        devLog(`[GateKeeper] Result stored in analysis: cap=${(capturedGateResult.confidenceCap * 100).toFixed(0)}%`);
-                    }
-                    // ========== DETERMINISTIC RISK VETO ==========
-                    // Rules-based veto between the moderator's verdict and the
-                    // final signal (TradingAgents-style: consensus among models
-                    // is not risk control). Hard checks only — no LLM involved.
-                    if (capturedGateResult) {
-                        const vetoNotes: string[] = [];
-                        if (capturedGateResult.pass === false) {
-                            vetoNotes.push('GATE VETO: insufficient data — this signal must not be traded on its own.');
-                        }
-                        const verdictDir = finalAnalysis.direction?.toLowerCase();
-                        const gateDir = capturedGateResult.suggestedDirection?.toLowerCase();
-                        if (gateDir && verdictDir && gateDir !== verdictDir && (capturedGateResult.confidencePenalties?.patternMemory ?? 0) > 0.15) {
-                            vetoNotes.push(`PATTERN-MEMORY CONTRADICTION: gate favors ${capturedGateResult.suggestedDirection}, verdict is ${finalAnalysis.direction}.`);
-                            finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
-                            if (finalAnalysis.confidence === 'High') finalAnalysis.confidence = 'Medium';
-                        }
-                        const hasSL = parsePrice(finalAnalysis.stopLoss || '') > 0;
-                        const hasTP = finalAnalysis.takeProfit?.[0]?.price != null;
-                        if (!hasSL || !hasTP) {
-                            vetoNotes.push('INCOMPLETE PLAN: missing stop loss or take profit — not tradeable as-is.');
-                            if (finalAnalysis.confidence === 'High') {
-                                finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
-                                finalAnalysis.confidence = 'Medium';
-                            }
-                        }
-                        if (vetoNotes.length > 0) {
-                            if (!finalAnalysis.validationWarnings) finalAnalysis.validationWarnings = [];
-                            finalAnalysis.validationWarnings.push(...vetoNotes);
-                            finalAnalysis.riskVeto = vetoNotes.join(' ');
-                            devLog(`[RiskVeto] ${vetoNotes.join(' | ')}`);
-                        }
-                    }
-                    // ========== END GATE KEEPER RESULT ==========
-
-                    // ========== ACCURACY VALIDATION GATE ==========
-                    // Always run validation gate to ensure quality checks
-                    // The gate will handle gracefully when hybridData is null
-                    // Direction captured before the gate so a rescued soft
-                    // Avoid can restore it (Avoid forces Neutral below).
-                    const directionBeforeValidation = finalAnalysis.direction;
-                    let validationAdjustedConfidence: 'High' | 'Medium' | 'Low' | 'Avoid' | undefined;
-                    try {
-                        const validationResult = runValidationGate({
-                            analysis: finalAnalysis,
-                            hybridData: freshHybridData, // May be null in non-hybrid mode
-                            calibration: GlobalLearningService.getCalibration(), // Use global persistent calibration
-                            tradeHistory: loggedTrades
-                        });
-
-                        // Store original confidence if adjusted
-                        if (validationResult.confidenceWasAdjusted) {
-                            validationAdjustedConfidence = validationResult.adjustedConfidence;
-                            finalAnalysis.originalConfidence = validationResult.originalConfidence;
-                            finalAnalysis.confidence = validationResult.adjustedConfidence;
-                            if (finalAnalysis.confidence === 'Avoid') {
-                                // Avoid is a no-trade result. Keep the
-                                // direction field consistent with the card's
-                                // final action after a hard validation veto.
-                                finalAnalysis.direction = 'Neutral';
-                            }
-                            devLog(`[ValidationGate] Confidence adjusted: ${validationResult.originalConfidence} → ${validationResult.adjustedConfidence}`);
-                        }
-
-                        // Bayesian cap from the hybrid fetch: the calibration
-                        // pipeline computes a capped confidence level for this
-                        // setup — never let the analysis exceed it.
-                        if (bayesianConfidenceCap) {
-                            // 'Avoid' ranks BELOW 'low' — it is the strongest
-                            // veto the calibration pipeline has and must be
-                            // enforceable (previously missing from the ladder,
-                            // so an Avoid cap was silently never applied).
-                            const LEVEL_ORDER: Record<string, number> = { avoid: -1, low: 0, medium: 1, high: 2 };
-                            const cap = LEVEL_ORDER[bayesianConfidenceCap.toLowerCase()];
-                            const current = LEVEL_ORDER[finalAnalysis.confidence?.toLowerCase() || 'high'];
-                            if (cap !== undefined && current !== undefined && current > cap) {
-                                finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
-                                finalAnalysis.confidence = bayesianConfidenceCap;
-                                devLog(`[Bayesian] Confidence capped: ${current} → ${bayesianConfidenceCap}`);
-                            }
-                        }
-
-                        // Store validation warnings
-                        if (validationResult.warnings.length > 0 || validationResult.errors.length > 0) {
-                            finalAnalysis.validationWarnings = [
-                                ...validationResult.warnings,
-                                ...validationResult.errors.map(error => ` HARD VALIDATION: ${error.trim()}`),
-                            ];
-                            devLog(`[ValidationGate] ${validationResult.warnings.length} warnings added to analysis`);
-                        }
-
-                        // Store Devil's Advocate data if available
-                        if (validationResult.devilsAdvocate) {
-                            finalAnalysis.devilsAdvocate = {
-                                bearCaseReasons: validationResult.devilsAdvocate.bearCaseReasons,
-                                failureScenarios: validationResult.devilsAdvocate.tradeFailureScenarios,
-                                crowdedTradeWarning: validationResult.crowdedTradeWarning,
-                                riskScore: validationResult.devilsAdvocate.overallRiskScore
-                            };
-                        }
-
-                        // Store Entry Timing Score for display in trade card
-                        if (validationResult.entryTiming) {
-                            finalAnalysis.entryTimingScore = {
-                                score: validationResult.entryTiming.score,
-                                timingQuality: validationResult.entryTiming.timing,
-                                suggestedEntry: validationResult.entryTiming.suggestedEntry
-                            };
-                            devLog(`[ValidationGate] Entry Timing Score: ${validationResult.entryTiming.score}/100 (${validationResult.entryTiming.timing})`);
-
-                            // Store Entry Timing Score for HybridDataPanel display
-                            setCurrentEntryTimingScore({
-                                score: validationResult.entryTiming.score,
-                                timingQuality: validationResult.entryTiming.timing,
-                                suggestedEntry: validationResult.entryTiming.suggestedEntry
-                            });
-
-                            // Store suggested entry price for HybridDataPanel SL Optimization display
-                            if (validationResult.entryTiming.suggestedEntry?.price) {
-                                setCurrentSuggestedEntryPrice(validationResult.entryTiming.suggestedEntry.price);
-                                devLog(`[ValidationGate] Suggested Entry Price: $${validationResult.entryTiming.suggestedEntry.price}`);
-                            }
-                        }
-
-                        // Store SL Optimization for HybridDataPanel display
-                        if (validationResult.slOptimization) {
-                            setCurrentSlOptimization(validationResult.slOptimization);
-                            devLog(`[ValidationGate] SL Optimization: Recommended multiplier ${(validationResult.slOptimization.recommendedMultiplier * 100).toFixed(0)}%, Missed wins: ${validationResult.slOptimization.missedWinRate.toFixed(0)}%`);
-                        }
-
-                        // Log validation report (for debugging)
-                        const modeStr = isAccuracyModeEnabled
-                            ? (accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Accuracy Original')
-                            : 'Standard';
-                        devLog(`[ValidationGate] Mode: ${modeStr} | Hybrid: ${isHybridIntelligenceEnabled}`);
-                        devLog('[ValidationGate] Full Report:\n', validationResult.validationReport);
-
-                        // ========== MONTE CARLO SIMULATION ==========
-                        // Run simulation if we have hybrid data and a trade setup
-                        devLog('[MonteCarlo] Conditions check:', {
-                            hasHybridData: !!freshHybridData,
-                            hybridDataSymbol: freshHybridData?.symbol || 'none',
-                            hybridData1hATR: freshHybridData?.indicators?.['1h']?.atr || 'none',
-                            hasEntryPoints: !!finalAnalysis.entryPoints?.length,
-                            entryPointsLength: finalAnalysis.entryPoints?.length || 0,
-                            hasStopLoss: !!finalAnalysis.stopLoss,
+                const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => processAnalysisResult(analysis, {
+                    capturedGateResult,
+                    update: options?.isUpdate ? {
+                        isUpdate: options.isUpdate,
+                        updateInterval: options.updateInterval,
+                        priorAnalysis: options.priorAnalysis,
+                        priorMessageId: options.priorMessageId,
+                    } : undefined,
+                    freshHybridData,
+                    currentHybridData,
+                    bayesianConfidenceCap,
+                    loggedTrades,
+                    sessionLoggedTrades: loggedTradesRef.current,
+                    getCalibration: () => GlobalLearningService.getCalibration(),
+                    getActiveUsername,
+                    getHarnessSettings,
+                    getSessionGuardConfig,
+                    activeLeverage: activeConversation?.leverage,
+                    isAccuracyModeEnabled,
+                    accuracySubMode,
+                    isHybridIntelligenceEnabled,
+                    isAutomationRun,
+                    onMonteCarlo: (finalAnalysis, hybridData) => {
+                        runMonteCarloForSetupAsync({
+                            direction: finalAnalysis.direction,
+                            entryPoints: finalAnalysis.entryPoints,
                             stopLoss: finalAnalysis.stopLoss,
-                            hasTakeProfit: !!finalAnalysis.takeProfit?.length,
-                            direction: finalAnalysis.direction
-                        });
-
-                        // Run if we have entry points and stop loss (Hybrid data is optional - will use fallback ATR)
-                        if (finalAnalysis.entryPoints?.length && finalAnalysis.stopLoss) {
-                            // Worker-backed (async); only state setters depend on the
-                            // result, so this runs off the main thread fire-and-forget.
-                            runMonteCarloForSetupAsync({
-                                direction: finalAnalysis.direction,
-                                entryPoints: finalAnalysis.entryPoints,
-                                stopLoss: finalAnalysis.stopLoss,
-                                takeProfit: finalAnalysis.takeProfit
-                            }, freshHybridData || {
-                                // Fallback minimal hybrid data when Hybrid Intelligence is off
-                                indicators: {},
-                                regime: { detected: 'unknown', trendDirection: 'neutral' }
-                            } as any).then(mcResult => {
-                                if (!isCurrentRequest()) return;
-                                if (mcResult) {
-                                    setLatestMonteCarloResult(mcResult);
-                                    // Also add to perAI results as the final moderator result
-                                    // Uses functional update to ensure it appends to current per-AI results
-                                    setPerAIMonteCarloResults(current => [
-                                        ...current.filter(r => !r.isModeratorFinal), // Remove any previous moderator
-                                        {
-                                            provider: 'MODERATOR (Final)',
-                                            result: mcResult,
-                                            isModeratorFinal: true
-                                        }
-                                    ]);
-                                    devLog(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
-                                } else {
-                                    devLog('[MonteCarlo] Simulation returned null - insufficient trade data');
-                                }
-                            }).catch(mcError => {
-                                console.error('[MonteCarlo] Simulation failed:', mcError);
-                            });
-                        } else {
-                            devLog('[MonteCarlo] Skipped - missing conditions:', {
-                                needsEntryPoints: !finalAnalysis.entryPoints?.length ? 'No entry points in analysis' : 'present',
-                                needsStopLoss: !finalAnalysis.stopLoss ? 'No stop loss in analysis' : 'present'
-                            });
-                        }
-                        // ========== END MONTE CARLO ==========
-
-                        // ========== LIVE BACKTEST ==========
-                        // Run backtest if we have trade history
-                        devLog('[LiveBacktest] Conditions check:', {
-                            loggedTradesCount: loggedTrades.length,
-                            needsMinTrades: 3,
-                            hasCoinName: !!finalAnalysis.coinName,
-                            coinName: finalAnalysis.coinName
-                        });
-
-                        if (loggedTrades.length >= 3 && finalAnalysis.coinName) {
-                            try {
-                                const btResult = backtestSimilarSetups(
-                                    finalAnalysis,
-                                    loggedTrades,
-                                    freshHybridData?.regime?.regime
-                                );
-                                liveBtResult = btResult ?? undefined;
-
-                                if (btResult && btResult.totalMatches > 0) {
-                                    setLatestBacktestResult(btResult);
-                                    devLog(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
-                                } else {
-                                    devLog('[LiveBacktest] ⚠️ No similar trades found in history');
-                                }
-                            } catch (btError) {
-                                console.error('[LiveBacktest] ❌ Backtest failed:', btError);
+                            takeProfit: finalAnalysis.takeProfit
+                        }, hybridData).then(mcResult => {
+                            if (!isCurrentRequest()) return;
+                            if (mcResult) {
+                                setLatestMonteCarloResult(mcResult);
+                                setPerAIMonteCarloResults(current => [
+                                    ...current.filter(r => !r.isModeratorFinal),
+                                    {
+                                        provider: 'MODERATOR (Final)',
+                                        result: mcResult,
+                                        isModeratorFinal: true
+                                    }
+                                ]);
+                                devLog(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
+                            } else {
+                                devLog('[MonteCarlo] Simulation returned null - insufficient trade data');
                             }
-                        } else {
-                            devLog('[LiveBacktest] ⏭️ Skipped - missing conditions:', {
-                                needsMoreTrades: loggedTrades.length < 3 ? `Need ${3 - loggedTrades.length} more logged trades` : '✓',
-                                needsCoinName: !finalAnalysis.coinName ? 'No coin detected in analysis' : '✓'
-                            });
-                        }
-                        // ========== END LIVE BACKTEST ==========
-
-                    } catch (validationError) {
-                        console.error('[ValidationGate] Validation failed:', validationError);
-                    }
-                    // Regime-conditional enforcement: the live
-                    // hybrid regime flows into the strict matcher so a skill
-                    // scoped to one market regime doesn't veto in another.
-                    // username opts this run into enforcement telemetry.
-                    Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis, {
-                        regime: freshHybridData?.regime?.regime,
-                        username: getActiveUsername(),
-                    }));
-                    finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
-                    Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
-                    Object.assign(finalAnalysis, applyHybridChartDrift(finalAnalysis, freshHybridData || currentHybridData));
-                    // ========== SOFT AVOID RESCUE ==========
-                    // One weak rule must not collapse a valid Low/Medium setup
-                    // into Avoid. Floor soft Avoids back to Low (restoring the
-                    // direction the veto neutralized). Model-declared Avoids,
-                    // hard blockers (gate fail, ungrounded levels, R:R < 1:1,
-                    // hard validation), and the Bayesian calibration Avoid cap
-                    // all stay Avoid.
-                    if (finalAnalysis.confidence === 'Avoid' && String(bayesianConfidenceCap ?? '').toLowerCase() !== 'avoid') {
-                        rescueSoftAvoid(finalAnalysis, {
-                            directionBefore: directionBeforeValidation,
-                            modelDeclaredAvoid: validationAdjustedConfidence !== 'Avoid',
+                        }).catch(mcError => {
+                            console.error('[MonteCarlo] Simulation failed:', mcError);
                         });
-                    }
-                    // ========== END SOFT AVOID RESCUE ==========
-                    // Grade-tiered risk (Batch 2): the moderator's setup grade
-                    // scales the base risk — A full, B half, C/D quarter (the
-                    // no-trade guidance case). Kelly advisory rides the journaled
-                    // history; the session-guard verdict is snapshotted onto the
-                    // analysis so the journal records the state the moderator saw.
-                    const harnessSettingsNow = getHarnessSettings();
-                    const tier = gradeRiskTierWithAdjustment(finalAnalysis.grade, harnessSettingsNow.riskPercent);
-                    const guardVerdict = assessSession(loggedTradesRef.current, harnessSettingsNow.equityUsd, getSessionGuardConfig());
-                    const closedTrades = loggedTradesRef.current.filter(t =>
-                        t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
-                    const wins = closedTrades.filter(t => t.outcome === TradeOutcome.WIN);
-                    const losses = closedTrades.filter(t => t.outcome === TradeOutcome.LOSS);
-                    const avg = (xs: typeof closedTrades) => xs.length > 0
-                        ? xs.reduce((s, t) => s + (t.pnlAmount ?? 0), 0) / xs.length
-                        : 0;
-                    // Losses store pnlAmount NEGATIVE (capture flow negates) —
-                    // kellyAdvisory needs the payoff ratio magnitudes.
-                    const kelly = kellyAdvisory(wins.length, losses.length, avg(wins), Math.abs(avg(losses)));
-                    const sized = computeContractSize(
-                        finalAnalysis,
-                        harnessSettingsNow.equityUsd,
-                        activeConversation?.leverage || DEFAULT_LEVERAGE,
-                        tier.riskPercent,
-                        [tier.adjustment],
-                    );
-                    finalAnalysis.positionSize = {
-                        line: sized.line,
-                        riskUsd: sized.riskUsd,
-                        fraction: sized.fraction,
-                        label: sized.label,
-                        adjustments: sized.adjustments,
-                    };
-                    // Visible failure: an unsized ticket because equity is
-                    // unconfigured must say so out loud, not just render a
-                    // smaller line. Automation runs stay quiet (no user).
-                    if (sized.reason === EQUITY_NOT_SET && !isAutomationRun) {
-                        toast.warning('Equity not set', 'Add your account equity in Settings → Risk to size trades.');
-                    }
-                    finalAnalysis.sessionGuard = {
-                        level: guardVerdict.level,
-                        summary: guardVerdict.warnings.length > 0
-                            ? guardVerdict.warnings.join(' ')
-                            : `Trades today: ${guardVerdict.tradesToday} · Day P&L ${guardVerdict.dayPnlUsd >= 0 ? '+' : ''}$${Math.round(guardVerdict.dayPnlUsd)}`,
-                    };
-                    if (kelly.line) finalAnalysis.kellyAdvisory = kelly.line;
-                    // Funding carry snapshot (Batch 7): the rate the moderator
-                    // saw, framed verdict-relative on the card.
-                    if (typeof freshHybridData?.fundingRate === 'number') {
-                        finalAnalysis.fundingRate = freshHybridData.fundingRate;
-                    }
-                    finalAnalysis.recommendationContract = buildRecommendationContract(finalAnalysis);
-                    // ========== END VALIDATION GATE ==========
+                    },
+                    onBacktest: (finalAnalysis, tradeHistory, regime) => {
+                        try {
+                            const btResult = backtestSimilarSetups(
+                                finalAnalysis,
+                                tradeHistory,
+                                regime
+                            );
+                            liveBtResult = btResult ?? undefined;
 
-                    return recalculateAnalysisMetrics(finalAnalysis, activeConversation?.leverage || DEFAULT_LEVERAGE);
-                };
+                            if (btResult && btResult.totalMatches > 0) {
+                                setLatestBacktestResult(btResult);
+                                devLog(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
+                            } else {
+                                devLog('[LiveBacktest] ⚠️ No similar trades found in history');
+                            }
+                            return liveBtResult;
+                        } catch (btError) {
+                            console.error('[LiveBacktest] ❌ Backtest failed:', btError);
+                            return undefined;
+                        }
+                    },
+                    onSetCurrentEntryTimingScore: setCurrentEntryTimingScore,
+                    onSetCurrentSuggestedEntryPrice: setCurrentSuggestedEntryPrice,
+                    onSetCurrentSlOptimization: setCurrentSlOptimization,
+                    onWarning: (title, message) => {
+                        if (!isAutomationRun) toast.warning(title, message);
+                    },
+                });
 
                 if (enabledProviders.length > 1) {
                     if (!isAutomationRun) setLoadingMessage("Thinking...");
@@ -3222,436 +2921,67 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     throttledProvisionalVerdict.flush();
                     if (!isCurrentRequest()) assertCurrentRequest();
 
-                    let finalAnalysis: TradeAnalysis;
-                    try {
-                        // The moderator's final output is MARKDOWN: verdict
-                        // prose + a labeled **FINAL TRADE PLAN** block (no
-                        // JSON anywhere). Parse the plan deterministically;
-                        // the parser itself falls back to free-form prose.
-                        const moderatorErrorMatch = fullResponseText.match(/<MODERATOR_ERROR>([\s\S]*?)<\/MODERATOR_ERROR>/);
-                        const debateEnd = fullResponseText.match(/<\/?DEBATE_END>/i);
-                        // Prefer the last moderator turn (the verdict). Concatenating
-                        // every moderator round glues clarification questions onto
-                        // the Trading signal card.
-                        const lastModeratorTurn = [...debateTurnsRef.current]
-                            .reverse()
-                            .find(t => t.speaker === 'Moderator')?.text ?? '';
-                        const candidate = debateEnd && debateEnd.index !== undefined
-                            ? fullResponseText.slice(debateEnd.index + debateEnd[0].length)
-                            : (lastModeratorTurn || fullResponseText);
-                        try {
-                            const plan = parseMarkdownTradePlan(candidate);
-                            if (!plan || !isBindingMarkdownPlan(plan)) {
-                                throw new Error('No markdown trade plan found in the moderator response');
-                            }
-                            finalAnalysis = sanitizeTradeAnalysis({
-                                ...tradePlanToAnalysis(plan),
-                                // The card renders the moderator's own markdown
-                                // verdict + plan — the same markdown format as
-                                // the workspace, never a JSON schema.
-                                strategy: stripPlanTags(candidate).slice(0, 3000),
-                            });
-                            // Vocabulary flag (Batch 4 f): urgency-framed
-                            // wording in the rendered verdict is a measured
-                            // tell (urgency-framed calls averaged −0.42R in
-                            // the signal study) — surface it, don't rewrite it.
-                            const bannedHits = flagBannedVocabulary(candidate);
-                            if (bannedHits.length > 0) {
-                                finalAnalysis.validationWarnings = [
-                                    ...(finalAnalysis.validationWarnings ?? []),
-                                    `URGENCY WORDING: ${bannedHits.join(', ')} — urgency-framed confidence is historically inflated; discount accordingly.`,
-                                ];
-                            }
-                        } catch (e) {
-                            // Only surface the moderator error marker when no
-                            // plan could be recovered at all.
-                            if (moderatorErrorMatch) {
-                                throw new Error(`Moderator Error: ${moderatorErrorMatch[1]}`, { cause: e });
-                            }
-                            throw e;
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse final debate JSON:", e);
-                        const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-                        const isModeratorError = errorMessage.includes('Moderator Error');
-                        // Prose rescue: the moderator's markdown verdict often
-                        // carries the whole plan in WORDS even when the JSON
-                        // failed — parse the labeled fields so the card shows a
-                        // REAL signal (coin name, direction, entry/SL/TP,
-                        // probability) in the same markdown format, never a
-                        // dead "Unknown Asset · Neutral" card. The verdict
-                        // prose itself becomes the card's strategy text (tags
-                        // stripped — the JSON schema never renders).
-                        const lastModeratorTurn = [...debateTurnsRef.current]
-                            .reverse()
-                            .find(t => t.speaker === 'Moderator')?.text ?? '';
-                        const rescueSource = lastModeratorTurn || fullResponseText;
-                        const prosePlan = parseProseTradePlan(rescueSource);
-                        const rescuePlan = prosePlan ? { ...prosePlan } : null;
-                        const canRescue = Boolean(
-                            rescuePlan?.direction
-                            && rescuePlan.entry
-                            && rescuePlan.stopLoss
-                            && rescuePlan.takeProfit
-                            && !((rescuePlan.direction === 'Long' || rescuePlan.direction === 'Short') && /avoid/i.test(rescuePlan.confidence || '')),
-                        );
-                        const fallbackStrategy = isModeratorError
-                            ? `Connection Error: ${errorMessage}. Please try again.`
-                            : 'Plan incomplete — the moderator markdown could not be parsed. Open the Floor for the debate.';
-                        finalAnalysis = sanitizeTradeAnalysis({
-                            coinName: canRescue ? (prosePlan?.coinName ?? finalSymbol ?? undefined) : (finalSymbol ?? undefined),
-                            direction: canRescue ? (prosePlan?.direction ?? 'Neutral') : 'Neutral',
-                            confidence: canRescue ? (prosePlan?.confidence ?? 'Low') : 'Avoid',
-                            // A verdict nobody could parse is a measurement failure,
-                            // not a neutral opinion — quarantine it (never graded,
-                            // flagged in the UI and journal).
-                            verdictReview: canRescue ? undefined : { reason: 'incomplete-plan' },
-                            probability: canRescue ? prosePlan?.probability : undefined,
-                            entryPoints: canRescue && prosePlan?.entry ? [{ price: prosePlan.entry }] : undefined,
-                            stopLoss: canRescue ? prosePlan?.stopLoss : undefined,
-                            takeProfit: canRescue && prosePlan?.takeProfit ? [{ price: prosePlan.takeProfit }] : undefined,
-                            strategy: canRescue
-                                ? (stripPlanTags(rescueSource).slice(0, 3000) || fallbackStrategy)
-                                : fallbackStrategy,
-                        });
+                    const verdictMessages = isAutomationRun ? automationMessagesRef.current : messagesRef.current;
+                    const existingVerdictMessage = verdictMessages.find(m => m.id === debateMessageId);
+                    if (!existingVerdictMessage) {
+                        // The placeholder AI row was lost (conversation switch / race);
+                        // bail — without a row to mutate, side-effects can't be wired.
+                        return { ok: true };
                     }
-
-                    finalAnalysis = sanitizeTradeAnalysis(finalAnalysis);
-
-                    // === ACCURACY MODE VERIFICATION PASS ===
-                    // Standard mode has the clarification loop; accuracy mode is a
-                    // single autoplayed stream. This second focused moderator call
-                    // reviews the debate + plan and may adjust levels/confidence.
-                    // Fail-safe: any error keeps the moderator's plan untouched.
-                    let accuracyVerificationNote = '';
-                    if (runAccuracyMode && finalAnalysis.direction && finalAnalysis.direction !== 'Neutral') {
-                        try {
-                            const verification = await ensembleService.verifyAccuracyPlan(
-                                runModeratorConfig,
-                                runModeratorModel,
-                                fullResponseText,
-                                JSON.stringify(finalAnalysis),
-                                currentAbortController.signal,
-                                // Chart context + user strategies so the
-                                // verification pass is not blind.
-                                moderatorContextBundle,
-                                // Journal access so the verifier's recall
-                                // desk tool can check claims against history.
-                                loggedTrades,
-                            );
-                            if (verification.verdict === 'adjusted' && verification.planJson) {
-                                const adjustedPlan = parseMarkdownTradePlan(verification.planJson);
-                                if (adjustedPlan && adjustedPlan.direction) {
-                                    const adjusted = sanitizeTradeAnalysis(tradePlanToAnalysis(adjustedPlan));
-                                    if (adjusted.direction !== 'Neutral') {
-                                        finalAnalysis = adjusted;
-                                        accuracyVerificationNote = verification.note;
-                                    }
-                                }
-                            } else {
-                                accuracyVerificationNote = verification.note || 'Plan verified by the accuracy pass.';
-                            }
-                        } catch (verifyError) {
-                            const err = verifyError as { name?: string; code?: string; message?: string };
-                            // A user cancel must stay a cancel — it was being
-                            // swallowed here, so the run continued and emitted
-                            // the card after the user pressed stop.
-                            // A TIMEOUT is NOT a cancel: the debate + plan already
-                            // completed, so a slow verification pass must never
-                            // abort the finished run — keep the original plan
-                            // (mirrors verifyAccuracyPlan's own fail-safe).
-                            if ((err?.name === 'AbortError' || err?.code === 'ABORT_ERR') || !isCurrentRequest()) {
-                                throw verifyError;
-                            }
-                            console.warn('[AccuracyVerification] Skipped (kept original plan):', err?.message || verifyError);
-                        }
-                    }
-
-                    // === PROGRAMMATIC GATE CAP ENFORCEMENT ===
-                    // (moved below processNewAnalysis so the R:R-based clamp
-                    // tiers use the recomputed rrRatio)
-
-                    // Compute OUTSIDE the state updater: updaters may re-run in
-                    // StrictMode (duplicate notifications) and must stay pure
-                    // (processNewAnalysis performs synchronous setState calls).
-                    const processedAnalysis = processNewAnalysis(finalAnalysis);
-
-                    // === PROGRAMMATIC GATE CAP ENFORCEMENT ===
-                    // Runs AFTER processNewAnalysis so the R:R-based clamp
-                    // tiers use the RECOMPUTED rrRatio — clamping before the
-                    // metrics pass meant a moderator-emitted (or wrong)
-                    // rrRatio disabled the 54%/69% grade clamps entirely.
-                    if (processedAnalysis && capturedGateResult && processedAnalysis.probability != null) {
-                        const gateCap = capturedGateResult.confidenceCap ?? 1.0;
-                        const clampResult = clampProbabilityToGate(
-                            processedAnalysis.probability,
-                            gateCap,
-                            processedAnalysis.rrRatio
-                        );
-                        if (clampResult.wasClamped) {
-                            console.warn(`[Gate Enforcement] Clamped probability ${processedAnalysis.probability}% → ${clampResult.probability}% (${clampResult.reason})`);
-                            processedAnalysis.probability = clampResult.probability;
-                            // Also downgrade the confidence string if probability was clamped below the threshold
-                            if (clampResult.probability < 70 && processedAnalysis.confidence === 'High') {
-                                processedAnalysis.confidence = 'Medium';
-                            } else if (clampResult.probability < 55 && processedAnalysis.confidence === 'Medium') {
-                                processedAnalysis.confidence = 'Low';
-                            }
-                            // Record the clamping in validation warnings
-                            if (!processedAnalysis.validationWarnings) {
-                                processedAnalysis.validationWarnings = [];
-                            }
-                            processedAnalysis.validationWarnings.push(`Gate enforcement: ${clampResult.reason}`);
-                        }
-                    }
-
-                    if (freshHybridData && processedAnalysis) {
-                        // Inject market snapshot (Algo Mode & Regeneration).
-                        processedAnalysis.marketSnapshot = freshHybridData;
-                    }
-
-                    // Consensus explainability: per-analyst structured calls +
-                    // pre-debate divergence, attached to the verdict so the
-                    // result card can audit the call against its own inputs.
-                    if (processedAnalysis) {
-                        const consensus = ensembleService.buildAnalystConsensus(allFulfilledAnalysts);
-                        if (consensus) {
-                            processedAnalysis.analystConsensus = ensembleService.attachVerdictCitations(consensus, processedAnalysis);
-                            Object.assign(processedAnalysis, ensembleService.enforceCitedVerdict(
-                                processedAnalysis,
-                                processedAnalysis.analystConsensus,
-                                parseKeptAnalyst(fullResponseText),
-                            ));
-                        }
-                        processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
-                        // Citation stamp: annotate the newest verdict-stage
-                        // injection record with which skills the FINAL verdict
-                        // actually cited. Without this call the `cited` field is
-                        // never written, skillAdherenceForRun can only ever return
-                        // 'injected-unknown', and the OVERRIDDEN evidence state
-                        // (injected-but-ignored → amendment counter, not stat rot)
-                        // is dead. Fire-and-forget — telemetry must never break
-                        // the verdict commit.
-                        void annotateVerdictCitations(getActiveUsername(), fullResponseText, userMessage.id)
-                            .catch(() => { /* citation telemetry is best-effort */ });
-                    }
-
-                    // Veto falsification ledger — stamp the deferred
-                    // veto only if the final verdict actually stayed blocked. An
-                    // actionable Long/Short here means the floor defied the veto
-                    // end-to-end, so nothing was blocked and the trade earns
-                    // normal evidence attribution instead of a phantom entry.
-                    if (vetoRecordParams
-                        && processedAnalysis.direction !== 'Long'
-                        && processedAnalysis.direction !== 'Short') {
-                        void VetoLedgerService.recordVeto(vetoRecordParams)
-                            .catch(() => { /* ledger must never break the debate */ });
-                    }
-
-                    updateRequestMessages(prev => {
-                        const messageIndex = prev.findIndex(m => m.id === debateMessageId);
-                        if (messageIndex === -1) return prev;
-
-                        const existingMessage = prev[messageIndex];
-                        const updatedMessage = {
-                            ...existingMessage,
-                            isDebating: false,
-                            text: accuracyVerificationNote
-                                ? `The ensemble has concluded its debate.
-
-${accuracyVerificationNote}`
-                                : `The ensemble has concluded its debate.`,
-                            analysis: processedAnalysis,
-                            outcome: TradeOutcome.PENDING,
-                            // The authoritative verdict replaces the provisional
-                            // card that streamed while the moderator wrote.
-                            provisionalAnalysis: undefined,
-                            provisionalPlanFields: undefined,
-                            // Tool chips are live-only — the settled card keeps
-                            // the permanent run log instead.
-                            liveToolEvents: undefined,
-                            debateTurns: existingMessage.debateTurns,
-                            thoughtProcesses: { ...thoughtMap },
-                            reasoningProcesses: { ...reasoningMapRef.current },
-                            activeDebateSpeakers: {},
-                            // Any pending replacement offer is void once the
-                            // debate concludes (the banner must never persist
-                            // on the finished card).
-                            replacementOffer: undefined,
-                            // Multi-Timeframe Confluence from Hybrid Intelligence
-                            confluenceData: freshHybridData?.confluence ? {
-                                score: freshHybridData.confluence.score,
-                                direction: freshHybridData.confluence.direction,
-                                strength: freshHybridData.confluence.strength,
-                                alignedSignals: freshHybridData.confluence.alignment,
-                                conflictingSignals: freshHybridData.confluence.conflicts,
-                                timeframeCount: 4 // 5m, 15m, 1h, 4h
-                            } : undefined,
-                            isLensMode: runLensConfig?.enabled ?? lensConfig?.enabled ?? false,
-                            // Always set tradingStyle regardless of Lens mode
-                            tradingStyle: effectiveTradingStyle,
-                            debateRunLog: [...debateRunLogRef.current],
-                            // persisted model side-effects for this run.
-                            toolActions: toolActionsRef.current.length > 0 ? [...toolActionsRef.current] : undefined,
-                            debateCheckpoint: undefined,
-                            memoryRetrieved,
-                            // Audit surfaces: the finished
-                            // contract (frozen from the final log) + what the
-                            // arbiter's evidence pack contained.
-                            runContract: buildRunContractStages(debateRunLogRef.current, false),
-                            evidencePack: (() => {
-                                try {
-                                    return buildVerdictEvidencePack(
-                                        memoryQuery ?? deriveSetupQueryFromPrompt(effectiveInput),
-                                        loggedTrades,
-                                    ).ui;
-                                } catch { return undefined; }
-                            })(),
-                        };
-
-                        // Per-run execution summary (compare mode + diagnostics).
-                        updatedMessage.runStats = {
-                            // The run's identity — the user message that
-                            // triggered it, same id the injection records carry.
-                            // Trades copy it at log time so evidence attribution
-                            // joins exactly instead than by time window.
-                            runId: userMessage.id,
-                            startedAt: new Date(runStartedAt).toISOString(),
-                            finishedAt: new Date().toISOString(),
-                            durationMs: Date.now() - runStartedAt,
-                            promptVersion: computePromptVersion({
-                                accuracy: runAccuracyMode,
-                                ensemble: runEnsembleEnabled,
-                                hybrid: isHybridIntelligenceEnabled,
-                                lens: Boolean(runLensConfig?.enabled ?? lensConfig?.enabled),
-                                playbook: isPlaybookEnabledInPureAI,
-                                families: isFamiliesEnabledInPureAI,
-                                memory: isMemoryEnabledInPureAI,
-                                customEnsemble: Boolean(customEnsemblePrompt),
-                                promptLane,
-                                // Protocol lane attribution.
-                                protocol: ensembleService.getLastDebateProtocol(),
-                            }),
-                            promptLane,
-                            // Protocol lane attribution — on
-                            // runStats itself so the signal card can chip it.
-                            protocol: ensembleService.getLastDebateProtocol(),
-                            // ε-holdout classification for THIS run —
-                            // the same seeded decision the retrieval layer made
-                            // when it withheld skill injection.
-                            skillHoldout: shouldSkillHoldout(userMessage.id),
-                            // Point-in-time cutoff the notebook replayed to
-                            // (recorded posture; absent on live runs).
-                            asOfMs: memoryAsOfMs,
-                            gateCap: capturedGateResult?.confidenceCap,
-                            mcWinRate: perAIMC[0]?.result?.winRate,
-                            mcEV: perAIMC[0]?.result?.expectedValue,
-                            analystCount: allFulfilledAnalysts.length,
-                            btMatches: liveBtResult?.totalMatches,
-                            btWinRate: liveBtResult?.winRate,
-                            btEV: liveBtResult?.expectedValue,
-                            // Cost & latency ledger — the analysts that ACTUALLY
-                            // delivered (initial roster + mid-debate replacements),
-                            // with their model, wall time, and output size.
-                            analysts: allFulfilledAnalysts.map(a => {
-                                const timing = analystTimings.get(a.provider.thoughtsKey);
-                                const tokens = tokenByProvider.get(a.provider.config.id);
-                                // Seat identity for the floor/transcript tags:
-                                // the team role (or the unroled seat's focus
-                                // dimension) the harness actually ran with.
-                                const seat = teamSeatFor(a.provider.config.id, a.provider.model);
-                                const seatRole = !runLensConfig.enabled && runGroupMemberPersonas.length > 0 && seat?.role && seat.role !== AnalystRole.UNASSIGNED
-                                    ? ANALYST_ROLE_DEFINITIONS[seat.role]?.shortName
-                                    : undefined;
-                                const seatIndex = allFulfilledAnalysts.indexOf(a);
-                                const seatFocus = !runLensConfig.enabled && runGroupMemberPersonas.length > 0 && !seatRole
-                                    ? GENERAL_DIMENSION_TAGS[seatIndex % GENERAL_DIMENSION_TAGS.length]
-                                    : undefined;
-                                return {
-                                    providerId: a.provider.config.id,
-                                    displayName: a.provider.name,
-                                    modelId: a.provider.model,
-                                    ...(seatRole ? { seatRole } : {}),
-                                    ...(seatFocus ? { seatFocus } : {}),
-                                    ...(timing ? { durationMs: timing.durationMs, charsOut: timing.charsOut } : {}),
-                                    ...(tokens ? { promptTokens: tokens.promptTokens, completionTokens: tokens.completionTokens } : {}),
-                                };
-                            }),
-                            promptTokens: [...tokenByProvider.values()].reduce((sum, u) => sum + u.promptTokens, 0) || undefined,
-                            completionTokens: [...tokenByProvider.values()].reduce((sum, u) => sum + u.completionTokens, 0) || undefined,
-                            costUsd: (() => {
-                                let total = 0;
-                                let any = false;
-                                tokenByProvider.forEach((usage, providerId) => {
-                                    const cfg = providerConfigs.find(p => p.id === providerId);
-                                    const cost = estimateCostUsd(usage, cfg);
-                                    if (cost !== undefined) {
-                                        any = true;
-                                        total += cost;
-                                    }
-                                });
-                                return any ? total : undefined;
-                            })(),
-                        };
-
-                        void appendSessionUsage({
-                            at: updatedMessage.runStats.finishedAt,
-                            durationMs: updatedMessage.runStats.durationMs,
-                            promptTokens: updatedMessage.runStats.promptTokens ?? 0,
-                            completionTokens: updatedMessage.runStats.completionTokens ?? 0,
-                            tokensEst: updatedMessage.runStats.analysts?.reduce((sum, a) => sum + Math.round((a.charsOut ?? 0) / 4), 0) ?? 0,
-                            analystCount: updatedMessage.runStats.analystCount ?? 0,
-                            costUsd: updatedMessage.runStats.costUsd,
-                            coin: processedAnalysis?.coinName,
-                            direction: processedAnalysis?.direction,
-                            models: updatedMessage.runStats.analysts?.map(a => ({
-                                modelId: a.modelId,
-                                tokens: (a.promptTokens ?? 0) + (a.completionTokens ?? 0) || Math.round((a.charsOut ?? 0) / 4),
-                            })),
-                        });
-
-                        const newMessages = [...prev];
-                        newMessages[messageIndex] = updatedMessage;
-                        return newMessages;
+                    const verdictResult = await finalizeVerdict({
+                        userMessage,
+                        existingMessage: existingVerdictMessage,
+                        fullResponseText,
+                        debateTurnsRef,
+                        debateRunLogRef,
+                        reasoningMapRef,
+                        toolActionsRef,
+                        automationMessagesRef,
+                        isCurrentRequest,
+                        abortSignal: currentAbortController.signal,
+                        getActiveUsername,
+                        effectiveInput,
+                        freshHybridData,
+                        moderatorContextBundle,
+                        effectiveTradingStyle,
+                        finalSymbol,
+                        capturedGateResult,
+                        teamSeatFor,
+                        runGroupMemberPersonas,
+                        memoryQuery,
+                        memoryRetrieved,
+                        memoryAsOfMs,
+                        loggedTrades,
+                        analystTimings,
+                        tokenByProvider,
+                        providerConfigs,
+                        get liveBtResult() { return liveBtResult; },
+                        perAIMC,
+                        debateMessageId,
+                        thoughtMap,
+                        vetoRecordParams,
+                        allFulfilledAnalysts,
+                        runAccuracyMode,
+                        runLensConfig,
+                        runModeratorConfig,
+                        runModeratorModel,
+                        runEnsembleEnabled,
+                        runStartedAt,
+                        isHybridIntelligenceEnabled,
+                        lensConfig,
+                        isPlaybookEnabledInPureAI,
+                        isFamiliesEnabledInPureAI,
+                        isMemoryEnabledInPureAI,
+                        customEnsemblePrompt,
+                        promptLane,
+                        isAutomationRun,
+                        options,
+                        processNewAnalysis,
+                        applyUpdate: (updater) => updateRequestMessages(updater),
+                        setHighlightedAnalysisId,
                     });
 
-                    // Background completion notification (native, backgrounded only) —
-                    // outside the updater so StrictMode double-invocation can't
-                    // schedule duplicate notifications.
-                    void notifyAnalysisComplete(
-                        'Analysis complete',
-                        `${processedAnalysis?.direction ?? finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`
-                    );
-                    if (!isAutomationRun) {
-                        setHighlightedAnalysisId(debateMessageId);
-                    }
-
-                    // Verdict → skill draft: when the moderator cites a pattern
-                    // the notebook does not know yet, queue a draft for the
-                    // approval inbox (deterministic — no LLM call). Interactive
-                    // runs only; automation runs must not spam drafts.
-                    if (!isAutomationRun && runEnsembleEnabled) {
-                        try {
-                            maybeQueueVerdictSkillDraft(
-                                debateMessageId,
-                                processedAnalysis ?? finalAnalysis,
-                                getActiveUsername(),
-                            );
-                        } catch (draftError) {
-                            console.warn('[SkillDraft] Verdict draft queue failed (non-fatal):', draftError);
-                        }
-                    }
-
-                    // Automation run: deliver the completed card to the caller
-                    // (the main conversation was never touched).
-                    if (isAutomationRun) {
-                        const finalAiMessage = automationMessagesRef.current.find(m => m.id === debateMessageId);
-                        if (finalAiMessage) {
-                            options?.automation?.onMessage({ userMessage, aiMessage: finalAiMessage });
-                        } else {
-                            options?.automation?.onError?.('Automation run produced no result message.');
-                        }
-                    }
+                    const finalAnalysis = verdictResult.processedAnalysis;
 
                     // === ThinkingStore: Save reasoning for training & analysis ===
                     // Persist per-analyst reasoning, moderator synthesis, and debate turns
