@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
+import { Message, MessageRole, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
 import * as MemoryService from '../services/learning/MemoryService';
@@ -17,6 +17,7 @@ import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationSer
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { appendWatchEpisode } from '../utils/watchList';
 import { getActiveUsername } from '../utils/activeUser';
+import * as chatStore from '../services/trade/chatStore';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -75,6 +76,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
     // ─── State ────────────────────────────────────────────────────────────
     const [loggedTrades, setLoggedTrades] = useState<LoggedTrade[]>([]);
+    /** Latest-ref mirror of loggedTrades. The autopilot resolution site
+     *  fires pushTradeClosedEvent in the same tick that logTradeWithFeedback
+     *  calls setLoggedTrades — the closure-captured `loggedTrades` would still
+     *  hold the PRE-log array, so the trade lookup in
+     *  autoStartPostMortemForResolvedTrade reads the ref instead. */
+    const loggedTradesRef = useRef<LoggedTrade[]>([]);
+    useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
     const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>([]);
     const [tradeSummaries, setTradeSummaries] = useState<TradeSummary[]>([]);
     const [finalTradeSummary, setFinalTradeSummary] = useState<string | null>(null);
@@ -286,6 +294,42 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             const next = { ...m, outcome };
             return m.watched ? appendWatchEpisode(next, 'logged', outcome) : next;
         }));
+
+        // ─── Harness visibility: push a one-shot system entry into the
+        //  Chart AI dock's chat session that presented this trade AND add
+        //  the trade to that session's openTrades ledger. Without this the
+        //  chat session that RECOMMENDED the trade never sees "your last
+        //  call was logged at $ENTRY" — every downstream "did my last plan
+        //  play out?" question is unanswerable from inside the harness.
+        // The harness entry id is the conversation Message id (the present_
+        //  trade path reuses the message id as the chat entry id) — fall
+        //  back to the active session if we can't find a match.
+        try {
+            const analysis = message.analysis;
+            if (analysis) {
+                const entryPrices = (analysis.entryPoints || []).map(e => e.price).filter(Boolean);
+                const tpPrices = (analysis.takeProfit || []).map(t => t.price).filter(Boolean);
+                const entryStr = entryPrices.length > 0 ? entryPrices.join(' / ') : '—';
+                const tpStr = tpPrices.length > 0 ? tpPrices.join(' / ') : '—';
+                const symbol = analysis.coinName || '—';
+                const dir = String(analysis.direction || '');
+                const leverage = activeConversationLeverage || DEFAULT_LEVERAGE;
+                const loggedLine = `[HARNESS] Trade logged: ${symbol} ${dir} @ ${entryStr}, SL ${analysis.stopLoss || '—'}, TP ${tpStr}, leverage ${leverage}x · ${outcome}${message.userPriorCall ? ' (user-prior: ' + message.userPriorCall.direction + ' @ ' + message.userPriorCall.confidencePct + '%)' : ''}`;
+                const targetSid = chatStore.findSessionByEntryId(message.id) || undefined;
+                chatStore.addOpenTrade({
+                    tradeId: loggedTrade.id,
+                    symbol,
+                    direction: dir,
+                    entry: entryStr,
+                    stopLoss: analysis.stopLoss || '',
+                    takeProfits: tpPrices,
+                    openedAt: loggedTrade.timestamp,
+                }, targetSid);
+                chatStore.addChatSystemEntry(loggedLine, targetSid);
+            }
+        } catch (harnessErr) {
+            console.warn('[TradeLogging] harness visibility update failed (non-fatal):', harnessErr);
+        }
 
         const notebookUser = getActiveUsername();
         void syncClosedTradeToNotebook(loggedTrade, [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)], notebookUser)
@@ -599,6 +643,84 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         })();
     }, [activeConversationLeverage, memoryModel, memoryConfig, useAlgorithmicInsights, toast, onJournalAutoRefresh]);
 
+    // ─── Auto post-mortem on outcome resolution ───────────────────────────
+    // When the outcome autopilot resolves a logged trade (WIN / LOSS) the
+    // harness (Chart AI chat session) was previously silent — no close-
+    // message landed on the dock, and the post-mortem only fired when the
+    // user clicked the autopilot confirm button. pushTradeClosedEvent is the
+    // single entry point: it removes the trade from the session's
+    // openTrades ledger, pushes a one-shot "[HARNESS] Trade closed: …" entry,
+    // and auto-calls the post-mortem via autoStartPostMortemForResolvedTrade.
+    // Exported so the resolution site in useWatchAndAutopilot (and any
+    // future resolve path) can wire it in directly.
+
+    /** Build the auto-candidate from the trade record and run the
+     *  post-mortem. No-op if the trade isn't in loggedTradesRef yet (which
+     *  happens only when the caller forgets to await logTradeWithFeedback
+     *  before firing the resolver — by design the caller is expected to
+     *  await or otherwise sequence them). */
+    const autoStartPostMortemForResolvedTrade = useCallback((tradeId: string): void => {
+        const trade = loggedTradesRef.current.find(t => t.id === tradeId);
+        if (!trade) {
+            console.warn('[TradeLogging] autoStartPostMortemForResolvedTrade: trade not found', tradeId);
+            return;
+        }
+        if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) {
+            // ENTRY_NOT_HIT has its own post-mortem path; SKIPPED / PENDING
+            // are not resolvable outcomes. Skip silently.
+            return;
+        }
+        const message: Message = {
+            id: trade.id,
+            role: MessageRole.AI,
+            text: trade.moderatorSynthesis || '',
+            createdAt: trade.analysis?.createdAt || trade.timestamp,
+            analysis: trade.analysis,
+            outcome: trade.outcome,
+            isDebating: false,
+        };
+        startPostMortemAnalysis(
+            { message, outcome: trade.outcome, feedback: undefined },
+            undefined,
+            undefined
+        );
+    }, [startPostMortemAnalysis]);
+
+    /** Resolution side-effect: drop the trade from openTrades, push a close
+    //  message into the chat session that presented it, and auto-run the
+    //  post-mortem. Falls back to the active session if the message can't be
+    //  mapped (the manual resolve flow can land in any conversation). */
+    const pushTradeClosedEvent = useCallback((args: {
+        tradeId: string;
+        outcome: TradeOutcome.WIN | TradeOutcome.LOSS;
+        pnlPercent?: number;
+        sid?: string;
+    }): void => {
+        const { tradeId, outcome, pnlPercent } = args;
+        const targetSid = args.sid ?? chatStore.findSessionByEntryId(tradeId) ?? undefined;
+        // 1) Drop the trade from openTrades (silent if the session never
+        //    tracked it — manual resolve flows may not have an entry to
+        //    remove, and the harness visibility is best-effort).
+        if (targetSid) chatStore.removeOpenTrade(tradeId, targetSid);
+        // 2) Build the close line. pnlPercent is the leveraged percent the
+        //    autopilot already settled; a missing value means "magnitude
+        //    unmeasured" so we don't fabricate a number.
+        const trade = loggedTradesRef.current.find(t => t.id === tradeId);
+        const symbol = trade?.analysis?.coinName || '—';
+        const dir = trade?.analysis?.direction ? ` ${trade.analysis.direction}` : '';
+        const pnlLine = typeof pnlPercent === 'number' && Number.isFinite(pnlPercent)
+            ? ` at ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(1)}%`
+            : '';
+        const closeLine = `[HARNESS] Trade closed: ${symbol}${dir} ${outcome}${pnlLine}`;
+        if (targetSid) chatStore.addChatSystemEntry(closeLine, targetSid);
+        // 3) Auto-call the post-mortem (idempotent for the report text;
+        //    triggers the learning chain). Doing this last so the chat event
+        //    lands BEFORE the model stream starts typing — the close-line
+        //    reads as "the verdict on the prior recommendation" before the
+        //    post-mortem analysis begins.
+        autoStartPostMortemForResolvedTrade(tradeId);
+    }, [autoStartPostMortemForResolvedTrade]);
+
     // ─── Outcome Autopilot confirmation ───────────────────────────────────
     // One-click logging of autopilot-detected outcomes. Funnels through the
     // same writers as the manual modals so calibration/autoLearn/insight
@@ -621,12 +743,14 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // starts the post-mortem right after logging — the autopilot
         // one-click confirm must do the same, or a confirmed outcome never
         // gets its post-mortem analysis.
-        startPostMortemAnalysis(
-            { message, outcome, feedback: undefined },
-            undefined,
-            undefined
-        );
-    }, [logTradeWithFeedback, startPostMortemAnalysis]);
+        // Push the close-message + remove from openTrades + auto-call the
+        // post-mortem in one shot.
+        pushTradeClosedEvent({
+            tradeId: message.id,
+            outcome,
+            pnlPercent,
+        });
+    }, [logTradeWithFeedback, pushTradeClosedEvent]);
 
     const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
         logEntryNotHitTrade({ message });
@@ -638,6 +762,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             undefined
         );
     }, [logEntryNotHitTrade, startPostMortemAnalysis]);
+
+    // (pushTradeClosedEvent / autoStartPostMortemForResolvedTrade are declared
+    //  above so confirmAutopilotOutcome can reference them in its dep array
+    //  without a TDZ violation.)
 
     const handleEntryNotHitAutoCapture = useCallback(async () => {
         if (!entryNotHitCandidate || !entryNotHitCandidate.message.analysis) {
@@ -904,5 +1032,11 @@ ${result.comparisonBlock}
         handleConfirmUpdateTrade,
         handleUpdateAutoCapture,
         calculateTimeDifference,
+        // Outcome-resolution harness visibility: drops the trade from the
+        // chat session's openTrades ledger, pushes a close-message into the
+        // dock, and auto-runs the post-mortem. Surfaced for the autopilot
+        // resolution site and any future resolve path.
+        autoStartPostMortemForResolvedTrade,
+        pushTradeClosedEvent,
     };
 };

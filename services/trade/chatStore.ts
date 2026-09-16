@@ -28,6 +28,20 @@ import {
 import { getActiveUsername, LAST_ACTIVE_USER_KEY } from '../../utils/activeUser';
 import type { TradeProposal } from './proposedTrade';
 
+/** A trade currently open in this session (logged but not yet resolved by
+ *  the outcome autopilot). The model context loader in useAnalysisPipeline
+ *  can consult this so the chat session sees which of its recommendations are
+ *  still in flight. Runtime-only — never persisted (reset on rehydrate). */
+export interface OpenTradeRow {
+    tradeId: string;
+    symbol: string;
+    direction: string;
+    entry: string;
+    stopLoss: string;
+    takeProfits: string[];
+    openedAt: string;
+}
+
 /** Stored entry + the non-persisted streaming flag for the in-flight answer. */
 export type LiveEntry = StoredChatEntry & {
     streaming?: boolean;
@@ -35,7 +49,16 @@ export type LiveEntry = StoredChatEntry & {
      *  renders it as a card with Log-this-trade / Cancel. Not persisted. */
     proposal?: TradeProposal;
 };
-export type LiveSession = Omit<ChatSession, 'entries'> & { entries: LiveEntry[] };
+export type LiveSession = Omit<ChatSession, 'entries'> & {
+    entries: LiveEntry[];
+    /** Trades logged from this session whose outcome has not yet resolved.
+     *  Cleared when the autopilot (or manual flow) closes the trade. */
+    openTrades?: Record<string, OpenTradeRow>;
+    /** Chronological list of trade ids ever logged from this session — the
+     *  model context loader's channel for "do you remember your last
+     *  recommendation?" even after the trade has resolved. */
+    loggedTradeIds?: string[];
+};
 
 /** The immutable snapshot React reads via useSyncExternalStore. `running` is
  *  the set of session ids with a live stream, so the composer knows what's
@@ -93,6 +116,12 @@ const schedulePersist = (): void => {
             entries: s.entries
                 .filter(e => !e.streaming)
                 .map(({ streaming: _streaming, proposal: _proposal, ...rest }) => rest),
+            // openTrades / loggedTradeIds are runtime-only — persisted sessions
+            // never carry them (a reload means "we have no live trade state"),
+            // so strip them defensively here even though chatSessions.ts also
+            // doesn't write them out.
+            openTrades: undefined,
+            loggedTradeIds: undefined,
         }));
         saveSessions(stored);
         // The last-open session rides the same debounce — reopening the app
@@ -192,6 +221,82 @@ export const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void =>
     ensureLoaded();
     sessions = sessions.map(s => (s.id === id ? fn(s) : s));
     emit();
+};
+
+// ── Logged-trade harness visibility (openTrades, loggedTradeIds) ─────────────
+// The Chart AI dock's chat session is blind to its OWN trade-logging events
+// unless we hand it state. These helpers are the only allowed mutators for
+// the openTrades / loggedTradeIds invariants so the rest of the codebase
+// doesn't widen the surface.
+
+/** Push a notice-style entry ("trade logged", "trade closed…") into a
+ *  session — renders as a compact system line, not a model answer. The
+ *  session id defaults to the active session so the caller rarely has to
+ *  look it up. */
+export const addChatSystemEntry = (text: string, sid?: string): string | null => {
+    ensureLoaded();
+    const target = sid ?? activeId;
+    if (!target) return null;
+    if (!sessions.some(s => s.id === target)) return null;
+    const id = `sys-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    mutate(target, s => ({
+        ...s,
+        entries: [...s.entries, { id, role: 'ai', text: '', tools: [text], notice: true }],
+    }));
+    return id;
+};
+
+/** Record that `tradeId` was logged from `sid` (or the active session).
+ *  Adds it to the session's `openTrades` ledger AND to `loggedTradeIds`
+ *  (the model context loader's channel for "your last recommendation…").
+ *  No-op if the session doesn't exist. */
+export const addOpenTrade = (row: OpenTradeRow, sid?: string): void => {
+    ensureLoaded();
+    const target = sid ?? activeId;
+    if (!target) return;
+    if (!sessions.some(s => s.id === target)) return;
+    mutate(target, s => {
+        const prevIds = s.loggedTradeIds ?? [];
+        const nextIds = prevIds.includes(row.tradeId) ? prevIds : [...prevIds, row.tradeId];
+        return {
+            ...s,
+            openTrades: { ...(s.openTrades ?? {}), [row.tradeId]: row },
+            loggedTradeIds: nextIds,
+        };
+    });
+};
+
+/** Clear a trade from the openTrades ledger once the outcome resolves.
+ *  `loggedTradeIds` is preserved (it's the channel for resolved trades too).
+ *  No-op if the session or trade id is unknown. */
+export const removeOpenTrade = (tradeId: string, sid?: string): void => {
+    ensureLoaded();
+    const target = sid ?? activeId;
+    if (!target) return;
+    if (!sessions.some(s => s.id === target)) return;
+    mutate(target, s => {
+        if (!(s.openTrades && tradeId in s.openTrades)) return s;
+        const next = { ...s.openTrades };
+        delete next[tradeId];
+        return { ...s, openTrades: next };
+    });
+};
+
+/** Find the session id whose entries include a chat entry with id === `entryId`.
+ *  Used to route a "trade logged" event back to the harness that presented
+ *  the trade (the conversation Message.id and the chat entry id are the
+ *  same in the present_trade path). Returns undefined if no match. */
+export const findSessionByEntryId = (entryId: string): string | undefined => {
+    ensureLoaded();
+    return sessions.find(s => s.entries.some(e => e.id === entryId))?.id;
+};
+
+/** Convenience: snapshot of the openTrades ledger for the active session. */
+export const getOpenTrades = (sid?: string): Record<string, OpenTradeRow> => {
+    ensureLoaded();
+    const target = sid ?? activeId;
+    const s = sessions.find(x => x.id === target);
+    return s?.openTrades ? { ...s.openTrades } : {};
 };
 
 // ── Harness signal queue (level-watch price events) ─────────────────────────
