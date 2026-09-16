@@ -70,8 +70,19 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
     pushRef.current = onChatLevels;
     const cardIdRef = useRef<string>(messageId ?? `keylevels-${Math.random().toString(36).slice(2, 9)}`);
     const pushedRef = useRef(false);
+    const lastPushedSymbolRef = useRef(symbol);
     const signature = JSON.stringify([symbol, drawing ? lines : null]);
     useEffect(() => {
+        // Coin switch: the signature changes while the draw state still holds
+        // the PREVIOUS instrument's prices — pushing those stamped with the
+        // new symbol paints them through the chart's symbol filter for one
+        // commit before the reset effect settles. Drop the layer instead.
+        if (lastPushedSymbolRef.current !== symbol) {
+            lastPushedSymbolRef.current = symbol;
+            if (pushedRef.current) pushRef.current?.(null, cardIdRef.current);
+            pushedRef.current = false;
+            return;
+        }
         if (drawing) {
             pushRef.current?.({ symbol, lines }, cardIdRef.current);
             pushedRef.current = true;

@@ -109,10 +109,36 @@ describe('BackupService.restoreBackup — step failures are loud (no silent part
     it('restores all three generations and reports success', async () => {
         seedBackupFiles();
         const result = await restoreBackup(BACKUP_ID);
-        expect(result).toEqual({ success: true, username: USERNAME });
+        expect(result).toEqual({
+            success: true,
+            username: USERNAME,
+            message: undefined,
+            skippedPreferenceKeys: [],
+        });
         expect(h.overwriteUserProfile).toHaveBeenCalledTimes(1);
         expect(h.importPreferencesData).toHaveBeenCalledTimes(1);
         expect(h.saveThinkingBatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces allow-list SKIPPED keys in the success result (non-silent skip, audit F12)', async () => {
+        seedBackupFiles();
+        h.importPreferencesData.mockResolvedValueOnce({
+            keysWritten: 5,
+            skippedKeys: ['attacker_planted_key', 'some_future_namespace'],
+            failedKeys: [],
+            providersImported: 0,
+            providersDropped: 0,
+            providersKeyGrafted: 0,
+            providersRequiringKeyReentry: 0,
+        });
+        const result = await restoreBackup(BACKUP_ID);
+        // Skips are data the current build cannot name — they must NOT abort
+        // the restore, but they must NOT vanish without a trace either.
+        expect(result.success).toBe(true);
+        expect(result.skippedPreferenceKeys).toEqual(['attacker_planted_key', 'some_future_namespace']);
+        expect(result.message).toContain('2 backup key(s)');
+        expect(result.message).toContain('attacker_planted_key');
+        expect(result.message).toContain('some_future_namespace');
     });
 
     it('an old backup WITHOUT sidecars still restores cleanly', async () => {

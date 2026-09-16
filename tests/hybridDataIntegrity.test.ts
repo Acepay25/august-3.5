@@ -13,7 +13,8 @@ import {
     formatLiquidationsBlock,
     formatFibLadder,
     formatCandleHistoryInsight,
-    detectLiquiditySweeps
+    detectLiquiditySweeps,
+    analyzeCandleHistory
 } from '../services/analysis/HybridIntelligenceService';
 import {
     generateNumericChartData,
@@ -228,6 +229,69 @@ describe('Candle History Insight (per-TF skew honesty)', () => {
             '1d': tf(25, 5, 'bullish')
         }));
         expect(insight).toContain('HTF BULLISH: Both 4H and 1D show strong bullish candle dominance.');
+    });
+});
+
+describe('analyzeCandleHistory — doji neutrality (LLM-visible producer)', () => {
+    /** Candle with explicit open/close (high/low irrelevant here). Strings
+     *  mirror the raw API payload shape the function parseFloats. */
+    const bar = (open: number, close: number) => ({
+        time: 0,
+        open: String(open),
+        high: String(Math.max(open, close) + 1),
+        low: String(Math.min(open, close) - 1),
+        close: String(close),
+        volume: '1',
+    });
+    const up = () => bar(100, 101);
+    const down = () => bar(100, 99);
+    const doji = () => bar(100, 100);
+
+    it('dojis get ⚪ and count toward NEITHER bucket (was: pushed 🔴 "for simplicity")', () => {
+        // 6 up, 6 down, 8 dojis + one FORMING candle (always excluded).
+        // Old behavior: bearishCount = 14 vs 6 → bullishPercent 30% →
+        // dominantTrend 'bearish' off pure doji noise.
+        const klines = [
+            ...Array.from({ length: 6 }, up),
+            ...Array.from({ length: 6 }, down),
+            ...Array.from({ length: 8 }, doji),
+            up(),
+        ];
+        const h = analyzeCandleHistory(klines, 30);
+        expect(h.bullishCount).toBe(6);
+        expect(h.bearishCount).toBe(6);
+        expect(h.sequence.filter(s => s === '⚪')).toHaveLength(8);
+        expect(h.summary).toBe('6 Bullish, 6 Bearish, 8 Doji');
+        expect(h.dominantTrend).toBe('neutral');
+    });
+
+    it('an all-doji window claims no direction', () => {
+        const klines = [...Array.from({ length: 10 }, doji), doji()];
+        const h = analyzeCandleHistory(klines, 30);
+        expect(h.bullishCount).toBe(0);
+        expect(h.bearishCount).toBe(0);
+        expect(h.summary).toBe('0 Bullish, 0 Bearish, 10 Doji');
+        expect(h.dominantTrend).toBe('neutral');
+    });
+
+    it('direction is claimed on the non-neutral buckets only (60/40 tolerance)', () => {
+        // 14 up vs 4 down vs 12 dojis: 14/18 = 77.8% > 60 → bullish even
+        // though dojis are the plurality of the raw window.
+        const klines = [
+            ...Array.from({ length: 14 }, up),
+            ...Array.from({ length: 4 }, down),
+            ...Array.from({ length: 12 }, doji),
+            down(),
+        ];
+        const h = analyzeCandleHistory(klines, 40);
+        expect(h.dominantTrend).toBe('bullish');
+        expect(h.bullishCount).toBe(14);
+        expect(h.bearishCount).toBe(4);
+    });
+
+    it('summary has no Doji tail when the window has none (legacy format intact)', () => {
+        const h = analyzeCandleHistory([...Array.from({ length: 10 }, up), ...Array.from({ length: 5 }, down), down()], 30);
+        expect(h.summary).toBe('10 Bullish, 5 Bearish');
     });
 });
 

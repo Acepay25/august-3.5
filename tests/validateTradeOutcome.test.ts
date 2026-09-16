@@ -216,4 +216,36 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     expect(result.tpHits).toHaveLength(1);
     expect(result.tpHits[0].level).toBe('TP1');
   });
+
+  // A refused plan never gets scanned, so it must not be labelled "Entry
+  // price was never reached" — the summary carries the engine's rejection
+  // reason while the outcome stays in the tolerated "never evaluated" member.
+  it('reports an inverted plan as a PLAN REJECTION, not "entry never reached"', async () => {
+    scripted1m = [
+      [95200, 95300, 94900, 95100], // would trigger the entry…
+      [95000, 95500, 93000, 94000], // …and "TP" below entry — phantom win territory
+    ];
+    const inverted = makeAnalysis({ stopLoss: '95500', takeProfit: [{ price: '94000', percentage: '100%' }] });
+    const result = await validateTradeOutcome(inverted, 'BTCUSDT', new Date(BASE_TIME).toISOString());
+    expect(result.outcome).toBe('ENTRY_NOT_HIT');
+    expect(result.entryTriggered).toBe(false);
+    expect(result.tpHits).toHaveLength(0);
+    expect(result.isMismatch).toBe(false);
+    expect(result.validationSummary).toMatch(/^ Plan rejected: /);
+    expect(result.validationSummary).toMatch(/wrong side of the 95000 entry/i);
+    expect(result.validationSummary).not.toMatch(/never reached/i);
+  });
+
+  it('reports a zero-distance (tp1 === entry) plan as a PLAN REJECTION', async () => {
+    scripted1m = [
+      [94900, 96500, 94850, 95200], // opens executable; high prints over "TP1" 95000
+      [95200, 96100, 95100, 96000],
+    ];
+    const zeroTp = makeAnalysis({ takeProfit: [{ price: '95000', percentage: '0%' }] });
+    const result = await validateTradeOutcome(zeroTp, 'BTCUSDT', new Date(BASE_TIME).toISOString());
+    expect(result.outcome).toBe('ENTRY_NOT_HIT');
+    expect(result.tpHits).toHaveLength(0);
+    expect(result.validationSummary).toMatch(/^ Plan rejected: /);
+    expect(result.validationSummary).toMatch(/zero reward distance/i);
+  });
 });

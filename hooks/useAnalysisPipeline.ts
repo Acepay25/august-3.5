@@ -2195,9 +2195,15 @@ ${reflectionBlock}`
                                 const exemplars = await exemplarsPromise;
                                 if (exemplars.length > 0 && exemplars[0].reasoning.trim()) {
                                     const ex = exemplars[0];
+                                    // Untagged pre-scoping records fall back as
+                                    // source 'legacy' — presenting them as THIS
+                                    // profile's own history re-opens the very
+                                    // attribution leak the scoping closed.
                                     exemplarBlock = `
 
- **YOUR OWN PAST WINNING REASONING (EXEMPLAR — study the reasoning pattern, do not copy the numbers):**
+ ${ex.source === 'legacy'
+    ? '**A PAST WINNING REASONING FROM THIS APP\'S HISTORY (EXEMPLAR — not this profile\'s own record; study the reasoning pattern, do not copy the numbers):**'
+    : '**YOUR OWN PAST WINNING REASONING (EXEMPLAR — study the reasoning pattern, do not copy the numbers):**'}
 ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` | Confidence: ${ex.confidence}` : ''}${typeof ex.probability === 'number' ? ` | Probability: ${ex.probability}%` : ''}
 > ${ex.reasoning.replace(/\n/g, '\n> ')}`;
                                 }

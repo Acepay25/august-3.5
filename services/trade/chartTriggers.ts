@@ -15,6 +15,19 @@
  */
 
 import { phtClock } from '../../utils/timezone';
+import { baseOf, quoteOf } from '../../utils/symbol';
+
+/** Canonical full futures symbol from a model-supplied one ('BTC' → 'BTCUSDT',
+ *  'BTC/USDT' → 'BTCUSDT', 'BTCUSDT' unchanged) — the utils/symbol doctrine
+ *  (PR#5). Arming a watch under a bare base was a silent death loop: the live
+ *  feed ticks the FULL symbol so the watch never matched, the REST poll 400'd
+ *  on every 5s attempt (fetchMarkPrice('BTC')), and cancel/disarm by the full
+ *  symbol could not remove it. Empty input falls through to the caller's
+ *  default (already canonical from the viewed chart). */
+function normalizeWatchSymbol(value: string): string {
+    const trimmed = value.trim();
+    return trimmed ? `${baseOf(trimmed)}${quoteOf(trimmed)}` : trimmed;
+}
 
 /** A price condition the harness watches the live mark against. */
 export interface PriceWatch {
@@ -77,7 +90,10 @@ export const parsePriceWatch = (args: Record<string, unknown>, defaults: {
     return {
         watch: {
             kind: 'price', id: defaults.makeId(),
-            symbol: String(args.symbol ?? defaults.symbol ?? '').toUpperCase() || defaults.symbol,
+            // Model-supplied symbols are normalized to the canonical full
+            // futures form; the default comes from the viewed chart and is
+            // trusted. Empty/garbage-free args.symbol falls through to it.
+            symbol: normalizeWatchSymbol(String(args.symbol ?? '')) || defaults.symbol,
             condition, price: priceRaw,
             note: String(args.note ?? 'target reached').slice(0, 200),
             expiresAt: defaults.nowMs + minutes * 60_000, createdAt: defaults.nowMs,
@@ -95,7 +111,10 @@ export const parseTimeWake = (args: Record<string, unknown>, defaults: {
     return {
         wake: {
             kind: 'time', id: defaults.makeId(),
-            symbol: String(args.symbol ?? defaults.symbol ?? '').toUpperCase() || defaults.symbol,
+            // Model-supplied symbols are normalized to the canonical full
+            // futures form; the default comes from the viewed chart and is
+            // trusted. Empty/garbage-free args.symbol falls through to it.
+            symbol: normalizeWatchSymbol(String(args.symbol ?? '')) || defaults.symbol,
             atMs: defaults.nowMs + minutes * 60_000,
             note: String(args.note ?? 'scheduled re-check').slice(0, 200), createdAt: defaults.nowMs,
         },

@@ -208,6 +208,24 @@ describe('analysisUtils', () => {
       expect(a.grade).toBe('A');
     });
 
+    it('coerces a garbage prose selected-scenario to neutral, never a fabricated bullish call', () => {
+      // The old prose fallback mapped ANY unrecognized value to 'bullish' —
+      // the same fabrication the JSON boundary (schemas/tradeAnalysis.ts
+      // dualScenario coercion) already refuses. Recognized values pass.
+      const scenarioOf = (sel: string): unknown => tradePlanToAnalysis(parseMarkdownTradePlan(`**FINAL TRADE PLAN**
+- **Coin:** BTCUSDT
+- **Direction:** Long
+- **Entry:** 95000
+- **Stop Loss:** 94500
+- **Take Profit 1:** 96000
+- **Selected Scenario:** ${sel}`)!)
+        .dualScenarioAnalysis;
+      expect((scenarioOf('sideways vibes') as { selectedScenario: string }).selectedScenario).toBe('neutral');
+      expect((scenarioOf('NEUTRAL') as { selectedScenario: string }).selectedScenario).toBe('neutral');
+      expect((scenarioOf('Bearish — momentum fading') as { selectedScenario: string }).selectedScenario).toBe('bearish');
+      expect((scenarioOf('Bullish') as { selectedScenario: string }).selectedScenario).toBe('bullish');
+    });
+
     it('accepts the plain-label variant (no bullets or bold)', () => {
       const planMd = `**FINAL TRADE PLAN**
 Coin: ETHUSDT
@@ -493,6 +511,30 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       expect(md).toContain('**Setup**');
       expect(md).not.toContain('**Levels**');
       expect(md).not.toContain('**Odds**');
+    });
+
+    it('SL-hit prints as an upper bound only when the algo basis says the number is one', () => {
+      const withBasis = (indicatorBasis: string) => buildAnalysisMarkdown({
+        coinName: 'BTCUSDT',
+        direction: 'Long',
+        confidence: 'Medium',
+        levelProbabilities: {
+          slProbability: 78,
+          slReasoning: { indicatorBasis, volatilityFactor: 'N/A', patternMemoryInfluence: 'N/A', aiAdjustments: 'N/A' },
+          tpProbabilities: [{ level: 1, probability: 22 }],
+        },
+      } as any);
+
+      // Algo fallback WITHOUT a stop distance: 100 − P(TP1) is a worst-case
+      // bound (stop-hit-or-timeout), not a point estimate.
+      const bound = withBasis('UPPER BOUND only: share of outcomes that do NOT reach TP1 (stop-hit or timeout)');
+      expect(bound).toContain('SL hit ≤ **78%** (upper bound');
+      expect(bound).not.toContain('SL hit: **78%**');
+
+      // Barrier-race estimate keeps the point-estimate print.
+      const race = withBasis('Barrier race: TP1 2.0% away vs SL 0.5% away (driftless-walk odds P(SL)=P(TP1)·dTP1/dSL)');
+      expect(race).toContain('SL hit: **78%**');
+      expect(race).not.toContain('upper bound');
     });
   });
 

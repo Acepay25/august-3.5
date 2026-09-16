@@ -301,7 +301,12 @@ export function extractResponsesReasoning(output: unknown): string {
  * reports hostname 'localhost' — routing its provider calls to that path
  * POSTed at a non-existent middleware and every call 404'd. Only dev may
  * take the proxy; packaged mobile/web fall through to the direct-call
- * branches. Mirrors ProviderConfigService.fetchProviderCatalog's guard.
+ * branches. Deliberately NOT a full mirror of ProviderConfigService.fetchProviderCatalog's
+ * guard: that one ALSO excludes VITEST, while this one keeps the proxy branch
+ * live under tests on purpose — the transport suites (devProxyRouting,
+ * providerPayloads, desktopProviderParity) mock fetch and must be able to
+ * reach this branch in jsdom, whereas a catalog fetch under vitest has no
+ * dev server to talk to at all and must not be attempted.
  */
 export function usesDevProviderProxy(): boolean {
     return Boolean(import.meta.env.DEV)
@@ -1441,11 +1446,21 @@ export async function* streamChatRequest(
     try {
         const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
         if (electronAPI?.isElectron && electronAPI.providerChat) {
-            if (electronAPI.onProviderChunk) {
+            // JSON-mode streams take the BUFFERED bridge, not the chunk bridge:
+            // streamViaElectronBridge's payload carries no jsonMode/jsonSchema
+            // (the chunk protocol cannot express them — main.cjs parses streamed
+            // SSE as plain text and its streamRequested() guard only keeps
+            // jsonMode calls buffered when it can SEE them). Yielding the full
+            // text once via sendChatRequest — which DOES forward jsonMode/
+            // jsonSchema — keeps the wire policy intact; a chunk-bridged
+            // jsonMode call would silently lose constrained decoding on
+            // desktop while web/proxy streams honored it.
+            if (electronAPI.onProviderChunk && !options?.jsonMode) {
                 yield* streamViaElectronBridge(effectiveConfig, messages, options, electronAPI);
                 return;
             }
-            // Shell without the chunk channel (old preload) — buffered as before.
+            // Shell without the chunk channel (old preload), or a jsonMode
+            // stream the chunk bridge cannot represent — buffered as before.
             yield await sendChatRequest(effectiveConfig, messages, options);
             return;
         }

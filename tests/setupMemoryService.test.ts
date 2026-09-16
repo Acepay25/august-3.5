@@ -57,6 +57,31 @@ describe('SetupMemoryService', () => {
       expect(s!.sameCoinCount).toBe(3);
       expect(s!.sameCoinWinRate).toBeCloseTo(66.7, 0);
     });
+
+    it('carries NULL (not a fabricated 0) for matches with no measurable PnL', () => {
+      // Unmeasurable: no pnlPercent, no dollar pair, and NO entry/TP/SL
+      // levels in the analysis (calculatePnlPercent → null). Coin+direction
+      // still match the setup, so it lands in the journal recent list.
+      const unmeasurable = makeTrade({
+        id: 'u1',
+        outcome: TradeOutcome.WIN,
+        pnlPercent: undefined,
+        timestamp: '2026-08-11T12:00:00.000Z', // newest → recent[0]
+        analysis: { coinName: 'BTCUSDT', direction: 'Short' } as any,
+      });
+      const trades = [
+        makeTrade({ id: '1' }),
+        makeTrade({ id: '2', outcome: TradeOutcome.LOSS, pnlPercent: -2.1 }),
+        unmeasurable,
+      ];
+      const s = summarizeSimilarSetups({ coinName: 'BTCUSDT', direction: 'Short' }, trades);
+      expect(s).not.toBeNull();
+      expect(s!.recent[0].outcome).toBe('WIN');
+      expect(s!.recent[0].pnl).toBeNull();
+      // Derived stats ignore it: avg win/loss/EV come from measurable rows only.
+      expect(s!.avgWin).toBeCloseTo(3.2, 6);
+      expect(s!.avgLoss).toBeCloseTo(2.1, 6);
+    });
   });
 
   describe('buildSimilarSetupsContext', () => {
@@ -80,6 +105,26 @@ describe('SetupMemoryService', () => {
 
     it('returns empty for an empty journal', () => {
       expect(buildSimilarSetupsContext({ coinName: 'BTCUSDT' }, [])).toBe('');
+    });
+
+    it('renders unmeasured magnitudes as text, never as "(0.0%)"', () => {
+      const trades = [
+        makeTrade({
+          id: '1',
+          outcome: TradeOutcome.WIN,
+          pnlPercent: undefined,
+          timestamp: '2026-08-11T12:00:00.000Z',
+          analysis: { coinName: 'BTCUSDT', direction: 'Short' } as any,
+        }),
+        makeTrade({ id: '2', outcome: TradeOutcome.LOSS, pnlPercent: -2.1 }),
+        makeTrade({ id: '3', outcome: TradeOutcome.WIN, pnlPercent: 1.4 }),
+        makeTrade({ id: '4', outcome: TradeOutcome.WIN, pnlPercent: 2.0 }),
+        makeTrade({ id: '5', outcome: TradeOutcome.LOSS, pnlPercent: -1.2 }),
+      ];
+      const block = buildSimilarSetupsContext({ coinName: 'BTCUSDT', direction: 'Short' }, trades);
+      expect(block).toContain('magnitude unmeasured');
+      expect(block).not.toMatch(/WIN \(0\.0%\)/);
+      expect(block).not.toMatch(/LOSS \(0\.0%\)/);
     });
   });
 

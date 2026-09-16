@@ -233,6 +233,40 @@ describe('simulateFromAnalysisTime (hybrid 4-tier walk)', () => {
     expect(result.outcome).toBe('NOT_TRIGGERED');
   });
 
+  it('buckets a REFUSED plan as NOT_TRIGGERED + rejection detail (was ENTERED_OPEN)', async () => {
+    // Long with the stop ABOVE entry and the target below it: the shared
+    // engine refuses to score it. simulateTradeSignal already mapped that to
+    // NOT_TRIGGERED + the reason; this path used to fall through to the OPEN
+    // branch and present the phantom plan as a live "ENTERED_OPEN" position.
+    scripted1m = [
+      [95200, 95300, 94900, 95100], // entry would "fill" here
+      [95000, 95500, 93000, 94000], // …and the below-entry "TP" prints here
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    const inverted = makeAnalysis({
+      stopLoss: '95500',
+      takeProfit: [{ price: '94000', percentage: '100%' }],
+    });
+    const result = await sim(inverted);
+    expect(result.outcome).toBe('NOT_TRIGGERED');
+    expect(result.outcome).not.toBe('ENTERED_OPEN');
+    expect(result.hitTarget).toBe('NONE');
+    expect(result.simulationDetails).toMatch(/Plan rejected by the outcome engine/i);
+    expect(result.simulationDetails).toMatch(/wrong side of the 95000 entry/i);
+  });
+
+  it('refuses a zero-distance (tp1 === entry) plan instead of banking a WIN', async () => {
+    scripted1m = [
+      [94900, 96500, 94850, 95200], // opens executable; prints over "TP1" 95000
+      ...Array.from({ length: 12 }, () => filler),
+    ];
+    const zeroTp = makeAnalysis({ takeProfit: [{ price: '95000', percentage: '0%' }] });
+    const result = await sim(zeroTp);
+    expect(result.outcome).toBe('NOT_TRIGGERED');
+    expect(result.simulationDetails).toMatch(/Plan rejected by the outcome engine/i);
+    expect(result.simulationDetails).toMatch(/zero reward distance/i);
+  });
+
   it('starts the fetch at/after the analysis moment — no pre-analysis candles (align look-ahead fix)', async () => {
     // BASE_TIME + 30s sits MID-candle. The old floor aligned the 1m fetch
     // START to BASE_TIME, pulling in a candle that was still FORMING when

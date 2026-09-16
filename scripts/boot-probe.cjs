@@ -94,57 +94,73 @@ async function main() {
         server.stderr.on('data', (d) => { serverOut += String(d); });
     }
 
+    // SINGLE EXIT PATH: process.exit() inside the try would run BEFORE the
+    // finally and leave the spawned vite preview holding the port (and the
+    // CI runner with an orphaned child). All failure branches only SET the
+    // flag; the kill happens in finally and the process exits once, after.
+    let failed = false;
     try {
         if (!(await waitForServer(BASE))) {
             console.error('BOOT PROBE FAIL: vite preview never came up on', BASE, '\n', serverOut);
-            process.exit(1);
+            failed = true;
+        } else {
+            console.log('[probe] server reachable');
+
+            const browser = await chromium.launch({ headless: true });
+            console.log('[probe] browser launched');
+            const page = await browser.newPage();
+            const pageErrors = [];
+            page.on('pageerror', (err) => pageErrors.push(String(err && err.stack || err)));
+
+            await seedProfile(page);
+            console.log('[probe] profile seeded');
+            await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+
+            // Splash must clear (the v1.0.20 crash symptom WAS a splash hang)…
+            await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 20000 });
+            // …and the lazy Trade surface must actually mount — this loads the
+            // new chatStore/levelWatch modules from the PRODUCTION chunks.
+            await page.waitForSelector('[data-testid="trade-view"]', { timeout: 20000 });
+
+            // Double-sample liveness: the surface is still there seconds later
+            // (a post-mount TDZ/abort crash would take the tree down or hang).
+            await sleep(3000);
+            const aliveAfter = await page.locator('[data-testid="trade-view"]').count();
+            const dockCount = await page.locator('[data-testid="trade-chat-panel"]').count();
+
+            await browser.close();
+
+            if (pageErrors.length > 0) {
+                console.error('BOOT PROBE FAIL: page errors during prod boot:');
+                for (const e of pageErrors) console.error('---\n' + e);
+                failed = true;
+            }
+            if (aliveAfter !== 1) {
+                console.error('BOOT PROBE FAIL: trade surface gone on the liveness re-sample');
+                failed = true;
+            }
+            if (dockCount < 1) {
+                console.error('BOOT PROBE FAIL: Chart AI dock did not render');
+                failed = true;
+            }
+            if (!failed) {
+                console.log('BOOT PROBE OK — prod bundle boots, trade surface + Chart AI dock render, zero pageerrors.');
+            }
         }
-        console.log('[probe] server reachable');
-
-        const browser = await chromium.launch({ headless: true });
-        console.log('[probe] browser launched');
-        const page = await browser.newPage();
-        const pageErrors = [];
-        page.on('pageerror', (err) => pageErrors.push(String(err && err.stack || err)));
-
-        await seedProfile(page);
-        console.log('[probe] profile seeded');
-        await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-
-        // Splash must clear (the v1.0.20 crash symptom WAS a splash hang)…
-        await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 20000 });
-        // …and the lazy Trade surface must actually mount — this loads the
-        // new chatStore/levelWatch modules from the PRODUCTION chunks.
-        await page.waitForSelector('[data-testid="trade-view"]', { timeout: 20000 });
-
-        // Double-sample liveness: the surface is still there seconds later
-        // (a post-mount TDZ/abort crash would take the tree down or hang).
-        await sleep(3000);
-        const aliveAfter = await page.locator('[data-testid="trade-view"]').count();
-        const dockCount = await page.locator('[data-testid="trade-chat-panel"]').count();
-
-        await browser.close();
-
-        if (pageErrors.length > 0) {
-            console.error('BOOT PROBE FAIL: page errors during prod boot:');
-            for (const e of pageErrors) console.error('---\n' + e);
-            process.exit(1);
-        }
-        if (aliveAfter !== 1) {
-            console.error('BOOT PROBE FAIL: trade surface gone on the liveness re-sample');
-            process.exit(1);
-        }
-        if (dockCount < 1) {
-            console.error('BOOT PROBE FAIL: Chart AI dock did not render');
-            process.exit(1);
-        }
-        console.log('BOOT PROBE OK — prod bundle boots, trade surface + Chart AI dock render, zero pageerrors.');
+    } catch (err) {
+        // Selector/launch timeouts are failures too — report and exit 1 via
+        // the same single path (the finally still reaps the server).
+        console.error('BOOT PROBE FAIL (driver):', err);
+        failed = true;
     } finally {
         if (server) server.kill('SIGTERM');
     }
+    process.exit(failed ? 1 : 0);
 }
 
 main().catch((err) => {
+    // Belt-and-suspenders: main() now handles its own failures; reaching
+    // here means something threw OUTSIDE its try (e.g. module load).
     console.error('BOOT PROBE FAIL (driver):', err);
     process.exit(1);
 });

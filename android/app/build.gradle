@@ -9,12 +9,24 @@ apply plugin: 'com.android.application'
 // Groovy). versionCode = major*10000 + minor*100 + patch (supports 0-99
 // minor/patch, which semver-in-practice covers for this app); versionName =
 // the raw semver string. A pre-release suffix ("1.2.0-beta.1") is stripped
-// from the code but kept in the name.
+// from the code but kept in the name. A missing/unparseable package.json
+// version must NOT break Gradle sync: the derivation is guarded and falls
+// back to versionCode 1 / versionName "1.0" with a loud warning.
 def packageJsonFile = new File(projectDir, '../../package.json')
-def packageJson = new JsonSlurper().parse(packageJsonFile)
-def semver = (packageJson.version as String).trim()
-def coreParts = semver.split('-')[0].split('\\.')
-def appVersionCode = (coreParts[0] as int) * 10000 + (coreParts[1] as int) * 100 + (coreParts.size() > 2 ? (coreParts[2] as int) : 0)
+def semver = '1.0'
+def appVersionCode = 1
+try {
+    def packageJson = new JsonSlurper().parse(packageJsonFile)
+    def rawVersion = (packageJson.version as String).trim()
+    def coreParts = rawVersion.split('-')[0].split('\\.')
+    if (coreParts.size() < 2 || !coreParts[0].isInteger() || !coreParts[1].isInteger()) {
+        throw new IllegalStateException("version '${rawVersion}' has no integer major.minor")
+    }
+    semver = rawVersion
+    appVersionCode = (coreParts[0] as int) * 10000 + (coreParts[1] as int) * 100 + (coreParts.size() > 2 && coreParts[2].isInteger() ? (coreParts[2] as int) : 0)
+} catch (Exception e) {
+    logger.warn("[versioning] Could not derive the version from ${packageJsonFile} (${e.message}) — falling back to versionCode 1 / versionName \"1.0\" so Gradle sync still works. Fix package.json's \"version\" field.")
+}
 
 // ── Release signing — OPTIONAL and self-disarming (audit 2026-09-16) ───────
 // The MECHANISM only; the certificate itself is still a purchase/creation
@@ -27,8 +39,10 @@ def appVersionCode = (coreParts[0] as int) * 10000 + (coreParts[1] as int) * 100
 // Expected properties (relative paths resolve against the android/ dir):
 //   storeFile=release.keystore
 //   storePassword=…  keyAlias=…  keyPassword=…
-// NOTE: keystore.properties and *.jks are NOT covered by android/.gitignore
-// (the template lines are commented out) — the file must never be committed.
+// NOTE: this file must never be committed — and android/.gitignore now says
+// so: `*.jks`, `*.keystore`, `keystore.properties` and `release.keystore`
+// are all ignored, so the signing material and its passwords cannot be
+// staged by accident from the android/ tree.
 def keystoreProperties = new Properties()
 def keystorePropsFile = rootProject.file('keystore.properties')
 def releaseSigningReady = false
