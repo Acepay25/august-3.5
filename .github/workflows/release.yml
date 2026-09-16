@@ -110,6 +110,23 @@ jobs:
       - name: Boot probe (production bundle)
         run: npm run boot-probe
 
+      # Packaged-Electron smoke (v1.0.20 / v1.0.25 lessons): the renderer-only
+      # boot probe cannot catch prod-only failures that live inside the
+      # packaged main → app:// → renderer chain (custom protocol registration,
+      # safeStorage availability, auto-update IPC, packaged provider wire,
+      # window-state persistence). Build the unpacked output first, drive the
+      # real exe over CDP with a scratch user-data-dir, and ONLY then build +
+      # publish the NSIS installer. A smoke failure here blocks publish.
+      - name: Build unpacked Electron app (for installer smoke)
+        run: npx electron-builder --dir --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Installer smoke (packaged Electron boot)
+        run: npm run installer-smoke
+        env:
+          AUGUST_SMOKE_APP: dist_electron/win-unpacked/August Trading.exe
+
       - name: Build & publish Electron app
         run: npx electron-builder --win --publish always
         env:
