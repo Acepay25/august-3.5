@@ -13,6 +13,15 @@ const { createSseParser } = require('./sseParser.cjs');
 const policy = require('../shared/providerRequestPolicy.cjs');
 
 const isDev = !app.isPackaged;
+const isInstallerSmoke = process.env.AUGUST_SMOKE_TEST === '1';
+
+if (isInstallerSmoke) {
+    // The smoke probe must exercise the packaged renderer without contacting
+    // providers, market-data APIs, or the update service.
+    app.commandLine.appendSwitch('disable-background-networking');
+    app.commandLine.appendSwitch('disable-component-update');
+    app.commandLine.appendSwitch('metrics-recording-only');
+}
 
 // =============================================================================
 // USERDATA PATH PRESERVATION (rename: "August 3.5" → "August Trading")
@@ -1203,8 +1212,11 @@ app.whenReady().then(() => {
     createWindow();
     setupAutoUpdater();
 
-    // Check for updates on startup (production only, non-blocking)
-    if (!isDev) {
+    // Check for updates on startup (production only, non-blocking). The
+    // installer-smoke probe sets AUGUST_SMOKE_TEST=1 to skip this entirely:
+    // a packaged build without app-update.yml (electron-builder --dir) logs
+    // an ENOENT here, and a real installer probe should never talk to GitHub.
+    if (!isDev && !isInstallerSmoke) {
         // Delay the check so the app loads first
         setTimeout(() => {
             autoUpdater.checkForUpdates().catch(() => {

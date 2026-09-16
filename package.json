@@ -28,7 +28,8 @@
     "electron:build": "npm run build && electron-builder",
     "electron:release": "npm run build && electron-builder --publish always",
     "e2e": "playwright test",
-    "boot-probe": "node scripts/boot-probe.cjs"
+    "boot-probe": "node scripts/boot-probe.cjs",
+    "installer-smoke": "node scripts/installer-smoke.cjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",
@@ -120,5 +121,10 @@
       "repo": "august-3.5",
       "releaseType": "release"
     }
+  },
+  "allowScripts": {
+    "electron@40.0.0": true,
+    "esbuild@0.28.1": true,
+    "electron-winstaller@5.4.0": true
   }
 }
