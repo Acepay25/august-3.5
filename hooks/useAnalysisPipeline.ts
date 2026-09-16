@@ -24,8 +24,8 @@ import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
 import { extractSymbolFromPrompt } from '../services/analysis/MarketDataService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
-import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
-import { runValidationGate } from '../services/validation/TradeValidationGate';
+import { processAnalysisResult } from '../services/analysis/analysisResultProcessor';
+import { backtestSimilarSetups, type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
 import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperService';
 
 // Utils
@@ -43,7 +43,6 @@ import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens'
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { buildModelIdToName, chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
-import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
@@ -84,7 +83,7 @@ import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWrite
 import { toolActionStamp } from '../utils/toolActions';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
-import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
+import { confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
 import { sortByFitness, recordPreflightResult } from '../services/learning/providerFitness';
 import { buildPreflightBlock, applyPreflightGate } from '../services/learning/preflight';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
@@ -102,12 +101,6 @@ import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, recon
 import { parseStructuredAutoplayTranscript } from '../utils/debateTranscript';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { parseKeptAnalyst } from '../utils/keptAnalyst';
-import { buildLevelCitations } from '../utils/levelEvidence';
-import { enforceUngroundedLevels } from '../utils/ungroundedGate';
-import { rescueSoftAvoid } from '../utils/avoidReason';
-import { applyHybridChartDrift } from '../utils/hybridChartDrift';
-import { computeContractSize, gradeRiskTierWithAdjustment, kellyAdvisory, EQUITY_NOT_SET } from '../utils/ticketSize';
-import { planAmendmentDiff } from '../utils/trustSurface';
 import { withFinComMetadata, flagBannedVocabulary } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from '../utils/harnessSettings';
@@ -968,7 +961,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const runStartedAt = Date.now();
         // Live-backtest summary (block-scoped result is captured here so the
         // final message update below can persist it on runStats).
-        let liveBtResult: { totalMatches: number; winRate: number; expectedValue: number } | undefined;
+        let liveBtResult: LiveBacktestResult | undefined;
         setHighlightedAnalysisId(null);
         setIsRateLimited(false);
         analysisAbortController.current?.abort();
@@ -1487,355 +1480,82 @@ ${reflectionBlock}`
                     ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),
                     ...(userMessage.ocrCache?.texts ?? []),
                 ].filter((t, i, arr) => arr.indexOf(t) === i);
-                const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => {
-                    const finalAnalysis = sanitizeTradeAnalysis(analysis);
-                    finalAnalysis.originalStopLossPercentage = finalAnalysis.stopLossPercentage;
-                    finalAnalysis.takeProfit = Array.isArray(finalAnalysis.takeProfit)
-                        ? finalAnalysis.takeProfit.map(tp => ({ ...tp, originalPercentage: tp.percentage }))
-                        : [];
-
-                    // Explicitly inject isUpdate flag if this was an update action
-                    if (options?.isUpdate) {
-                        finalAnalysis.isUpdate = true;
-                        if (options.updateInterval) {
-                            finalAnalysis.updateInterval = options.updateInterval;
-                        }
-                        // Version stamp (Batch 7): a revision is an explicit
-                        // amendment with a recorded diff, never an overwrite.
-                        finalAnalysis.planVersion = (options.priorAnalysis?.planVersion ?? 1) + 1;
-                        if (options.priorMessageId) {
-                            finalAnalysis.amendsMessageId = options.priorMessageId;
-                        }
-                        if (options.priorAnalysis) {
-                            const diff = planAmendmentDiff(options.priorAnalysis, finalAnalysis);
-                            if (diff) finalAnalysis.planDiff = diff;
-                        }
-                    }
-
-                    // ========== GATE KEEPER RESULT ==========
-                    // Store Gate result in analysis for UI display
-                    if (capturedGateResult) {
-                        finalAnalysis.gateResult = {
-                            passed: capturedGateResult.pass,
-                            confidenceCap: capturedGateResult.confidenceCap,
-                            penalties: capturedGateResult.confidencePenalties,
-                            familyBias: capturedGateResult.familyBias,
-                            suggestedDirection: capturedGateResult.suggestedDirection,
-                            warnings: capturedGateResult.warnings.slice(0, 3),
-                            insights: capturedGateResult.insights.slice(0, 2)
-                        };
-                        devLog(`[GateKeeper] Result stored in analysis: cap=${(capturedGateResult.confidenceCap * 100).toFixed(0)}%`);
-                    }
-                    // ========== DETERMINISTIC RISK VETO ==========
-                    // Rules-based veto between the moderator's verdict and the
-                    // final signal (TradingAgents-style: consensus among models
-                    // is not risk control). Hard checks only — no LLM involved.
-                    if (capturedGateResult) {
-                        const vetoNotes: string[] = [];
-                        if (capturedGateResult.pass === false) {
-                            vetoNotes.push('GATE VETO: insufficient data — this signal must not be traded on its own.');
-                        }
-                        const verdictDir = finalAnalysis.direction?.toLowerCase();
-                        const gateDir = capturedGateResult.suggestedDirection?.toLowerCase();
-                        if (gateDir && verdictDir && gateDir !== verdictDir && (capturedGateResult.confidencePenalties?.patternMemory ?? 0) > 0.15) {
-                            vetoNotes.push(`PATTERN-MEMORY CONTRADICTION: gate favors ${capturedGateResult.suggestedDirection}, verdict is ${finalAnalysis.direction}.`);
-                            finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
-                            if (finalAnalysis.confidence === 'High') finalAnalysis.confidence = 'Medium';
-                        }
-                        const hasSL = parsePrice(finalAnalysis.stopLoss || '') > 0;
-                        const hasTP = finalAnalysis.takeProfit?.[0]?.price != null;
-                        if (!hasSL || !hasTP) {
-                            vetoNotes.push('INCOMPLETE PLAN: missing stop loss or take profit — not tradeable as-is.');
-                            if (finalAnalysis.confidence === 'High') {
-                                finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
-                                finalAnalysis.confidence = 'Medium';
-                            }
-                        }
-                        if (vetoNotes.length > 0) {
-                            if (!finalAnalysis.validationWarnings) finalAnalysis.validationWarnings = [];
-                            finalAnalysis.validationWarnings.push(...vetoNotes);
-                            finalAnalysis.riskVeto = vetoNotes.join(' ');
-                            devLog(`[RiskVeto] ${vetoNotes.join(' | ')}`);
-                        }
-                    }
-                    // ========== END GATE KEEPER RESULT ==========
-
-                    // ========== ACCURACY VALIDATION GATE ==========
-                    // Always run validation gate to ensure quality checks
-                    // The gate will handle gracefully when hybridData is null
-                    // Direction captured before the gate so a rescued soft
-                    // Avoid can restore it (Avoid forces Neutral below).
-                    const directionBeforeValidation = finalAnalysis.direction;
-                    let validationAdjustedConfidence: 'High' | 'Medium' | 'Low' | 'Avoid' | undefined;
-                    try {
-                        const validationResult = runValidationGate({
-                            analysis: finalAnalysis,
-                            hybridData: freshHybridData, // May be null in non-hybrid mode
-                            calibration: GlobalLearningService.getCalibration(), // Use global persistent calibration
-                            tradeHistory: loggedTrades
-                        });
-
-                        // Store original confidence if adjusted
-                        if (validationResult.confidenceWasAdjusted) {
-                            validationAdjustedConfidence = validationResult.adjustedConfidence;
-                            finalAnalysis.originalConfidence = validationResult.originalConfidence;
-                            finalAnalysis.confidence = validationResult.adjustedConfidence;
-                            if (finalAnalysis.confidence === 'Avoid') {
-                                // Avoid is a no-trade result. Keep the
-                                // direction field consistent with the card's
-                                // final action after a hard validation veto.
-                                finalAnalysis.direction = 'Neutral';
-                            }
-                            devLog(`[ValidationGate] Confidence adjusted: ${validationResult.originalConfidence} → ${validationResult.adjustedConfidence}`);
-                        }
-
-                        // Bayesian cap from the hybrid fetch: the calibration
-                        // pipeline computes a capped confidence level for this
-                        // setup — never let the analysis exceed it.
-                        if (bayesianConfidenceCap) {
-                            // 'Avoid' ranks BELOW 'low' — it is the strongest
-                            // veto the calibration pipeline has and must be
-                            // enforceable (previously missing from the ladder,
-                            // so an Avoid cap was silently never applied).
-                            const LEVEL_ORDER: Record<string, number> = { avoid: -1, low: 0, medium: 1, high: 2 };
-                            const cap = LEVEL_ORDER[bayesianConfidenceCap.toLowerCase()];
-                            const current = LEVEL_ORDER[finalAnalysis.confidence?.toLowerCase() || 'high'];
-                            if (cap !== undefined && current !== undefined && current > cap) {
-                                finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
-                                finalAnalysis.confidence = bayesianConfidenceCap;
-                                devLog(`[Bayesian] Confidence capped: ${current} → ${bayesianConfidenceCap}`);
-                            }
-                        }
-
-                        // Store validation warnings
-                        if (validationResult.warnings.length > 0 || validationResult.errors.length > 0) {
-                            finalAnalysis.validationWarnings = [
-                                ...validationResult.warnings,
-                                ...validationResult.errors.map(error => ` HARD VALIDATION: ${error.trim()}`),
-                            ];
-                            devLog(`[ValidationGate] ${validationResult.warnings.length} warnings added to analysis`);
-                        }
-
-                        // Store Devil's Advocate data if available
-                        if (validationResult.devilsAdvocate) {
-                            finalAnalysis.devilsAdvocate = {
-                                bearCaseReasons: validationResult.devilsAdvocate.bearCaseReasons,
-                                failureScenarios: validationResult.devilsAdvocate.tradeFailureScenarios,
-                                crowdedTradeWarning: validationResult.crowdedTradeWarning,
-                                riskScore: validationResult.devilsAdvocate.overallRiskScore
-                            };
-                        }
-
-                        // Store Entry Timing Score for display in trade card
-                        if (validationResult.entryTiming) {
-                            finalAnalysis.entryTimingScore = {
-                                score: validationResult.entryTiming.score,
-                                timingQuality: validationResult.entryTiming.timing,
-                                suggestedEntry: validationResult.entryTiming.suggestedEntry
-                            };
-                            devLog(`[ValidationGate] Entry Timing Score: ${validationResult.entryTiming.score}/100 (${validationResult.entryTiming.timing})`);
-
-                            // Store Entry Timing Score for HybridDataPanel display
-                            setCurrentEntryTimingScore({
-                                score: validationResult.entryTiming.score,
-                                timingQuality: validationResult.entryTiming.timing,
-                                suggestedEntry: validationResult.entryTiming.suggestedEntry
-                            });
-
-                            // Store suggested entry price for HybridDataPanel SL Optimization display
-                            if (validationResult.entryTiming.suggestedEntry?.price) {
-                                setCurrentSuggestedEntryPrice(validationResult.entryTiming.suggestedEntry.price);
-                                devLog(`[ValidationGate] Suggested Entry Price: $${validationResult.entryTiming.suggestedEntry.price}`);
-                            }
-                        }
-
-                        // Store SL Optimization for HybridDataPanel display
-                        if (validationResult.slOptimization) {
-                            setCurrentSlOptimization(validationResult.slOptimization);
-                            devLog(`[ValidationGate] SL Optimization: Recommended multiplier ${(validationResult.slOptimization.recommendedMultiplier * 100).toFixed(0)}%, Missed wins: ${validationResult.slOptimization.missedWinRate.toFixed(0)}%`);
-                        }
-
-                        // Log validation report (for debugging)
-                        const modeStr = isAccuracyModeEnabled
-                            ? (accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Accuracy Original')
-                            : 'Standard';
-                        devLog(`[ValidationGate] Mode: ${modeStr} | Hybrid: ${isHybridIntelligenceEnabled}`);
-                        devLog('[ValidationGate] Full Report:\n', validationResult.validationReport);
-
-                        // ========== MONTE CARLO SIMULATION ==========
-                        // Run simulation if we have hybrid data and a trade setup
-                        devLog('[MonteCarlo] Conditions check:', {
-                            hasHybridData: !!freshHybridData,
-                            hybridDataSymbol: freshHybridData?.symbol || 'none',
-                            hybridData1hATR: freshHybridData?.indicators?.['1h']?.atr || 'none',
-                            hasEntryPoints: !!finalAnalysis.entryPoints?.length,
-                            entryPointsLength: finalAnalysis.entryPoints?.length || 0,
-                            hasStopLoss: !!finalAnalysis.stopLoss,
+                const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => processAnalysisResult(analysis, {
+                    capturedGateResult,
+                    update: options?.isUpdate ? {
+                        isUpdate: options.isUpdate,
+                        updateInterval: options.updateInterval,
+                        priorAnalysis: options.priorAnalysis,
+                        priorMessageId: options.priorMessageId,
+                    } : undefined,
+                    freshHybridData,
+                    currentHybridData,
+                    bayesianConfidenceCap,
+                    loggedTrades,
+                    sessionLoggedTrades: loggedTradesRef.current,
+                    getCalibration: () => GlobalLearningService.getCalibration(),
+                    getActiveUsername,
+                    getHarnessSettings,
+                    getSessionGuardConfig,
+                    activeLeverage: activeConversation?.leverage,
+                    isAccuracyModeEnabled,
+                    accuracySubMode,
+                    isHybridIntelligenceEnabled,
+                    isAutomationRun,
+                    onMonteCarlo: (finalAnalysis, hybridData) => {
+                        runMonteCarloForSetupAsync({
+                            direction: finalAnalysis.direction,
+                            entryPoints: finalAnalysis.entryPoints,
                             stopLoss: finalAnalysis.stopLoss,
-                            hasTakeProfit: !!finalAnalysis.takeProfit?.length,
-                            direction: finalAnalysis.direction
-                        });
-
-                        // Run if we have entry points and stop loss (Hybrid data is optional - will use fallback ATR)
-                        if (finalAnalysis.entryPoints?.length && finalAnalysis.stopLoss) {
-                            // Worker-backed (async); only state setters depend on the
-                            // result, so this runs off the main thread fire-and-forget.
-                            runMonteCarloForSetupAsync({
-                                direction: finalAnalysis.direction,
-                                entryPoints: finalAnalysis.entryPoints,
-                                stopLoss: finalAnalysis.stopLoss,
-                                takeProfit: finalAnalysis.takeProfit
-                            }, freshHybridData || {
-                                // Fallback minimal hybrid data when Hybrid Intelligence is off
-                                indicators: {},
-                                regime: { detected: 'unknown', trendDirection: 'neutral' }
-                            } as any).then(mcResult => {
-                                if (!isCurrentRequest()) return;
-                                if (mcResult) {
-                                    setLatestMonteCarloResult(mcResult);
-                                    // Also add to perAI results as the final moderator result
-                                    // Uses functional update to ensure it appends to current per-AI results
-                                    setPerAIMonteCarloResults(current => [
-                                        ...current.filter(r => !r.isModeratorFinal), // Remove any previous moderator
-                                        {
-                                            provider: 'MODERATOR (Final)',
-                                            result: mcResult,
-                                            isModeratorFinal: true
-                                        }
-                                    ]);
-                                    devLog(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
-                                } else {
-                                    devLog('[MonteCarlo] Simulation returned null - insufficient trade data');
-                                }
-                            }).catch(mcError => {
-                                console.error('[MonteCarlo] Simulation failed:', mcError);
-                            });
-                        } else {
-                            devLog('[MonteCarlo] Skipped - missing conditions:', {
-                                needsEntryPoints: !finalAnalysis.entryPoints?.length ? 'No entry points in analysis' : 'present',
-                                needsStopLoss: !finalAnalysis.stopLoss ? 'No stop loss in analysis' : 'present'
-                            });
-                        }
-                        // ========== END MONTE CARLO ==========
-
-                        // ========== LIVE BACKTEST ==========
-                        // Run backtest if we have trade history
-                        devLog('[LiveBacktest] Conditions check:', {
-                            loggedTradesCount: loggedTrades.length,
-                            needsMinTrades: 3,
-                            hasCoinName: !!finalAnalysis.coinName,
-                            coinName: finalAnalysis.coinName
-                        });
-
-                        if (loggedTrades.length >= 3 && finalAnalysis.coinName) {
-                            try {
-                                const btResult = backtestSimilarSetups(
-                                    finalAnalysis,
-                                    loggedTrades,
-                                    freshHybridData?.regime?.regime
-                                );
-                                liveBtResult = btResult ?? undefined;
-
-                                if (btResult && btResult.totalMatches > 0) {
-                                    setLatestBacktestResult(btResult);
-                                    devLog(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
-                                } else {
-                                    devLog('[LiveBacktest] ⚠️ No similar trades found in history');
-                                }
-                            } catch (btError) {
-                                console.error('[LiveBacktest] ❌ Backtest failed:', btError);
+                            takeProfit: finalAnalysis.takeProfit
+                        }, hybridData).then(mcResult => {
+                            if (!isCurrentRequest()) return;
+                            if (mcResult) {
+                                setLatestMonteCarloResult(mcResult);
+                                setPerAIMonteCarloResults(current => [
+                                    ...current.filter(r => !r.isModeratorFinal),
+                                    {
+                                        provider: 'MODERATOR (Final)',
+                                        result: mcResult,
+                                        isModeratorFinal: true
+                                    }
+                                ]);
+                                devLog(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
+                            } else {
+                                devLog('[MonteCarlo] Simulation returned null - insufficient trade data');
                             }
-                        } else {
-                            devLog('[LiveBacktest] ⏭️ Skipped - missing conditions:', {
-                                needsMoreTrades: loggedTrades.length < 3 ? `Need ${3 - loggedTrades.length} more logged trades` : '✓',
-                                needsCoinName: !finalAnalysis.coinName ? 'No coin detected in analysis' : '✓'
-                            });
-                        }
-                        // ========== END LIVE BACKTEST ==========
-
-                    } catch (validationError) {
-                        console.error('[ValidationGate] Validation failed:', validationError);
-                    }
-                    // Regime-conditional enforcement: the live
-                    // hybrid regime flows into the strict matcher so a skill
-                    // scoped to one market regime doesn't veto in another.
-                    // username opts this run into enforcement telemetry.
-                    Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis, {
-                        regime: freshHybridData?.regime?.regime,
-                        username: getActiveUsername(),
-                    }));
-                    finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
-                    Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
-                    Object.assign(finalAnalysis, applyHybridChartDrift(finalAnalysis, freshHybridData || currentHybridData));
-                    // ========== SOFT AVOID RESCUE ==========
-                    // One weak rule must not collapse a valid Low/Medium setup
-                    // into Avoid. Floor soft Avoids back to Low (restoring the
-                    // direction the veto neutralized). Model-declared Avoids,
-                    // hard blockers (gate fail, ungrounded levels, R:R < 1:1,
-                    // hard validation), and the Bayesian calibration Avoid cap
-                    // all stay Avoid.
-                    if (finalAnalysis.confidence === 'Avoid' && String(bayesianConfidenceCap ?? '').toLowerCase() !== 'avoid') {
-                        rescueSoftAvoid(finalAnalysis, {
-                            directionBefore: directionBeforeValidation,
-                            modelDeclaredAvoid: validationAdjustedConfidence !== 'Avoid',
+                        }).catch(mcError => {
+                            console.error('[MonteCarlo] Simulation failed:', mcError);
                         });
-                    }
-                    // ========== END SOFT AVOID RESCUE ==========
-                    // Grade-tiered risk (Batch 2): the moderator's setup grade
-                    // scales the base risk — A full, B half, C/D quarter (the
-                    // no-trade guidance case). Kelly advisory rides the journaled
-                    // history; the session-guard verdict is snapshotted onto the
-                    // analysis so the journal records the state the moderator saw.
-                    const harnessSettingsNow = getHarnessSettings();
-                    const tier = gradeRiskTierWithAdjustment(finalAnalysis.grade, harnessSettingsNow.riskPercent);
-                    const guardVerdict = assessSession(loggedTradesRef.current, harnessSettingsNow.equityUsd, getSessionGuardConfig());
-                    const closedTrades = loggedTradesRef.current.filter(t =>
-                        t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
-                    const wins = closedTrades.filter(t => t.outcome === TradeOutcome.WIN);
-                    const losses = closedTrades.filter(t => t.outcome === TradeOutcome.LOSS);
-                    const avg = (xs: typeof closedTrades) => xs.length > 0
-                        ? xs.reduce((s, t) => s + (t.pnlAmount ?? 0), 0) / xs.length
-                        : 0;
-                    // Losses store pnlAmount NEGATIVE (capture flow negates) —
-                    // kellyAdvisory needs the payoff ratio magnitudes.
-                    const kelly = kellyAdvisory(wins.length, losses.length, avg(wins), Math.abs(avg(losses)));
-                    const sized = computeContractSize(
-                        finalAnalysis,
-                        harnessSettingsNow.equityUsd,
-                        activeConversation?.leverage || DEFAULT_LEVERAGE,
-                        tier.riskPercent,
-                        [tier.adjustment],
-                    );
-                    finalAnalysis.positionSize = {
-                        line: sized.line,
-                        riskUsd: sized.riskUsd,
-                        fraction: sized.fraction,
-                        label: sized.label,
-                        adjustments: sized.adjustments,
-                    };
-                    // Visible failure: an unsized ticket because equity is
-                    // unconfigured must say so out loud, not just render a
-                    // smaller line. Automation runs stay quiet (no user).
-                    if (sized.reason === EQUITY_NOT_SET && !isAutomationRun) {
-                        toast.warning('Equity not set', 'Add your account equity in Settings → Risk to size trades.');
-                    }
-                    finalAnalysis.sessionGuard = {
-                        level: guardVerdict.level,
-                        summary: guardVerdict.warnings.length > 0
-                            ? guardVerdict.warnings.join(' ')
-                            : `Trades today: ${guardVerdict.tradesToday} · Day P&L ${guardVerdict.dayPnlUsd >= 0 ? '+' : ''}$${Math.round(guardVerdict.dayPnlUsd)}`,
-                    };
-                    if (kelly.line) finalAnalysis.kellyAdvisory = kelly.line;
-                    // Funding carry snapshot (Batch 7): the rate the moderator
-                    // saw, framed verdict-relative on the card.
-                    if (typeof freshHybridData?.fundingRate === 'number') {
-                        finalAnalysis.fundingRate = freshHybridData.fundingRate;
-                    }
-                    finalAnalysis.recommendationContract = buildRecommendationContract(finalAnalysis);
-                    // ========== END VALIDATION GATE ==========
+                    },
+                    onBacktest: (finalAnalysis, tradeHistory, regime) => {
+                        try {
+                            const btResult = backtestSimilarSetups(
+                                finalAnalysis,
+                                tradeHistory,
+                                regime
+                            );
+                            liveBtResult = btResult ?? undefined;
 
-                    return recalculateAnalysisMetrics(finalAnalysis, activeConversation?.leverage || DEFAULT_LEVERAGE);
-                };
+                            if (btResult && btResult.totalMatches > 0) {
+                                setLatestBacktestResult(btResult);
+                                devLog(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
+                            } else {
+                                devLog('[LiveBacktest] ⚠️ No similar trades found in history');
+                            }
+                            return liveBtResult;
+                        } catch (btError) {
+                            console.error('[LiveBacktest] ❌ Backtest failed:', btError);
+                            return undefined;
+                        }
+                    },
+                    onSetCurrentEntryTimingScore: setCurrentEntryTimingScore,
+                    onSetCurrentSuggestedEntryPrice: setCurrentSuggestedEntryPrice,
+                    onSetCurrentSlOptimization: setCurrentSlOptimization,
+                    onWarning: (title, message) => {
+                        if (!isAutomationRun) toast.warning(title, message);
+                    },
+                });
 
                 if (enabledProviders.length > 1) {
                     if (!isAutomationRun) setLoadingMessage("Thinking...");
