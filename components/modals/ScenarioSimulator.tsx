@@ -591,8 +591,15 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                             <span className="text-xl font-black text-rose-400">
                                                 ${currentMetrics.riskUSD.toLocaleString()}
                                             </span>
+                                            {/* riskUSD is the NOTIONAL price-move
+                                                risk; leveragedRiskPercent is ROE on
+                                                the MARGIN (riskUSD ÷ margin = ×N).
+                                                Labeling it '% of position' showed
+                                                '$10' next to '100% of position' on
+                                                the shipped config — the two numbers
+                                                speak different units. */}
                                             <span className="text-[9px] text-zinc-500 block">
-                                                {currentMetrics.leveragedRiskPercent}% of position
+                                                {currentMetrics.leveragedRiskPercent}% of margin at {currentScenarioConfig?.leverage ?? scenarioLeverage}x
                                             </span>
                                         </div>
                                         <div className="text-center p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20">
@@ -601,7 +608,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 ${currentMetrics.rewardUSD.toLocaleString()}
                                             </span>
                                             <span className="text-[9px] text-zinc-500 block">
-                                                {currentMetrics.leveragedRewardPercent}% of position
+                                                {currentMetrics.leveragedRewardPercent}% of margin at {currentScenarioConfig?.leverage ?? scenarioLeverage}x
                                             </span>
                                         </div>
                                     </div>

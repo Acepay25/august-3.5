@@ -3,7 +3,7 @@ name: Build & Release
 # Verify gates are duplicated here on purpose: release.yml can be dispatched
 # manually (workflow_dispatch) without ever having passed CI, and publishing
 # to every updater is irreversible. Tag must still match package.json
-# (v1.0.17 === version 1.0.17).
+# (e.g. tag v1.0.24 === version 1.0.24 in package.json).
 on:
   push:
     tags:
@@ -23,6 +23,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      # Cheap-first: a bad tag must fail BEFORE any step that consumes
+      # secrets (the Android-signing detection below reads ANDROID_*).
+      - name: Validate release tag
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag $env:GITHUB_REF_NAME does not match package version v$version" }
 
       # Android release signing MECHANISM (audit 2026-09-16) — dormant until
       # the repo secrets exist, and a no-op even then until an Android build
@@ -71,17 +79,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate release tag
-        shell: pwsh
-        run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag $env:GITHUB_REF_NAME does not match package version v$version" }
-
       - name: Tests
         run: npm run test
 
       - name: Lint
         run: npm run lint
+
+      # Scripts/electron tooling types (tsconfig.scripts.json) — parity with
+      # ci.yml. `npm run build` only runs the APP tsc (tsconfig.app/), so
+      # without this a typecheck:scripts-only file could break unreleased.
+      - name: Typecheck scripts
+        run: npm run typecheck:scripts
 
       - name: Build renderer (Vite)
         run: npm run build

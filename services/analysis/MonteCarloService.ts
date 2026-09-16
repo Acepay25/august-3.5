@@ -32,6 +32,11 @@ export interface MonteCarloResult {
      *  explicit seed was passed, so the same setup yields the same
      *  "Simulated Win Rate" run after run. */
     seedUsed?: number;
+    /** Sims that RESOLVED (hit a TP or the SL), i.e. simulations − TIMEOUT.
+     *  Kelly inputs are computed on this subsample so p, EV and the win/loss
+     *  means all describe the same set. Optional for legacy/cached results
+     *  that predate it (derivable from probabilities.timeout). */
+    resolvedCount?: number;
     probabilities: {
         tp1Hit: number;
         tp2Hit: number;
@@ -98,7 +103,10 @@ const BIAS_STRENGTH = 0.001;          // How much trend bias affects drift
  * — while the prompt explicitly tells the model to use it to validate
  * confidence. A seeded generator makes results reproducible per setup; the
  * worker and the synchronous fallback import the same code, so both paths
- * yield identical numbers for identical inputs.
+ * yield identical numbers for identical inputs. `runSimulation` has always
+ * been seeded; `calculateRuinRisk` now threads the same seeded generator
+ * through its 1000×100 trade loop, so the whole module's determinism claim
+ * is actually true.
  */
 export const mulberry32 = (seed: number): (() => number) => {
     let a = seed >>> 0;
@@ -109,6 +117,21 @@ export const mulberry32 = (seed: number): (() => number) => {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+};
+
+/**
+ * FNV-1a over an identity string — the shared hashing path behind every
+ * derived seed in this module (setup identity AND ruin-risk inputs), so
+ * "rerun this setup" is stable everywhere while a genuinely different
+ * input still gets a different sample.
+ */
+const hashIdentity = (identity: string): number => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < identity.length; i++) {
+        h ^= identity.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h >>> 0;
 };
 
 /**
@@ -127,13 +150,32 @@ export const deriveSetupSeed = (config: SimulationConfig): number => {
         config.trendBias ?? 0,
         config.marketRegime ?? 'default'
     ].join('|');
-    let h = 0x811c9dc5;
-    for (let i = 0; i < identity.length; i++) {
-        h ^= identity.charCodeAt(i);
-        h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return h >>> 0;
+    return hashIdentity(identity);
 };
+
+/**
+ * Seed for the ruin simulation, derived from ITS inputs: the Monte Carlo
+ * result (which carries `seedUsed` — i.e. the setup identity that produced
+ * it), plus the account parameters. `calculateRuinRisk` runs the same code
+ * on the worker and the synchronous fallback over exactly these arguments,
+ * so the derived seed (and therefore the drawdown probabilities) are
+ * identical across both paths without any caller having to pass one.
+ */
+export const deriveRuinRiskSeed = (
+    accountBalance: number,
+    positionSize: number,
+    leverage: number,
+    monteCarloResult: MonteCarloResult
+): number => hashIdentity([
+    monteCarloResult.seedUsed ?? 0,
+    monteCarloResult.simulations,
+    monteCarloResult.winRate,
+    monteCarloResult.expectedValue,
+    monteCarloResult.timeframe,
+    accountBalance,
+    positionSize,
+    leverage
+].join('|'));
 
 /**
  * Generate a random number from standard normal distribution (Box-Muller
@@ -454,6 +496,7 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
         avgWinPercent: Math.round(avgWinPercent * 100) / 100,
         avgLossPercent: Math.round(avgLossPercent * 100) / 100,
         seedUsed,
+        resolvedCount: numSimulations - timeoutCount,
         probabilities: {
             tp1Hit: Math.round((tp1Count / numSimulations) * 1000) / 10,
             tp2Hit: Math.round((tp2Count / numSimulations) * 1000) / 10,
@@ -471,10 +514,13 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
 };
 
 /**
- * Calculate ruin risk given position sizing
- */
-/**
  * Kelly criterion fraction: f* = (bp - q) / b, with b = avgWin/avgLoss.
+ * `winRatePct` must be conditioned on the SAME sample as the money
+ * statistics — pass wins/RESOLVED (TP-or-SL) sims, NOT wins/ALL sims.
+ * TIMEOUT runs have no realized outcome, so EV/avgWin/avgLoss describe only
+ * the resolved subsample; feeding Kelly the unconditional p mixes samples:
+ * at long horizons most paths time out, p shrinks toward 0 and a genuinely
+ * positive edge (e.g. 3:1) collapses to f* = 0.
  * Guarded against the degenerate cases (winRate 0, zero avg loss, zero b)
  * that previously produced Infinity/NaN, and clamped to [0, 1] (never size
  * more than 100% of the account).
@@ -513,24 +559,52 @@ export const computeKellyFraction = (
     return b > 0 ? clamp01((b * winRate - lossRate) / b) : 0;
 };
 
+/**
+ * Calculate ruin risk given position sizing by simulating 1000 sequences of
+ * 100 trades. The loop runs on the SEEDED mulberry32 generator — an explicit
+ * `seed` wins; otherwise the seed is derived from the inputs via the same
+ * FNV path as deriveSetupSeed (the Monte Carlo result carries the setup
+ * identity in `seedUsed`, so it flows through to the worker and the sync
+ * fallback automatically). Identical arguments therefore produce identical
+ * drawdown probabilities run-to-run AND on both execution paths — the
+ * module-level determinism claim previously held only for runSimulation.
+ */
 export const calculateRuinRisk = (
     accountBalance: number,
     positionSize: number,
     leverage: number,
-    monteCarloResult: MonteCarloResult
+    monteCarloResult: MonteCarloResult,
+    seed?: number
 ): RuinRiskResult => {
     const winRate = monteCarloResult.winRate / 100;
-    const lossRate = 1 - winRate;
+
+    // Kelly's p must live on the same RESOLVED subsample as EV/avgWin/avgLoss
+    // (a TIMEOUT sim has no realized outcome — counting it as a non-win while
+    // the money stats ignore it mixes samples and collapses a positive edge
+    // to f* = 0 at long horizons; see computeKellyFraction). winRate itself
+    // stays the unconditional share of ALL sims — the honest "Simulated Win
+    // Rate" for the UI/prompt and the conservative per-trade win draw in the
+    // binary equity loop below (a trade that never tagged TP is treated as
+    // not-a-win, which errs toward MORE drawdown risk, not less).
+    const timeoutSimCount = Math.round(
+        (monteCarloResult.probabilities.timeout / 100) * monteCarloResult.simulations
+    );
+    const resolvedCount = monteCarloResult.resolvedCount
+        ?? Math.max(0, monteCarloResult.simulations - timeoutSimCount);
+    const winRatePctResolved = resolvedCount > 0
+        ? (monteCarloResult.winCount / resolvedCount) * 100
+        : 0;
 
     // Average win: prefer the TRUE sample mean (mean of positive-PnL sims)
     // recorded on the result. The legacy `expectedValue / winRate` is NOT an
     // average win — it nets the losses out of every win, systematically
     // understates b, and shrinks Kelly/ruin estimates. It remains only as a
-    // fallback for legacy results that predate avgWinPercent.
+    // fallback for legacy results that predate avgWinPercent — and it divides
+    // by the RESOLVED win rate so numerator and denominator share a sample.
     const avgWinPercent = typeof monteCarloResult.avgWinPercent === 'number' && monteCarloResult.avgWinPercent > 0
         ? monteCarloResult.avgWinPercent
-        : (winRate > 0 && monteCarloResult.expectedValue > 0
-            ? monteCarloResult.expectedValue / winRate
+        : (winRatePctResolved > 0 && monteCarloResult.expectedValue > 0
+            ? monteCarloResult.expectedValue / (winRatePctResolved / 100)
             : 0);
 
     const avgLossPercent = monteCarloResult.probabilities.slHit > 0 && Math.abs(monteCarloResult.confidenceInterval.lower) > 0
@@ -559,6 +633,13 @@ export const calculateRuinRisk = (
     const sequenceCount = 1000;
     const tradesPerSequence = 100;
 
+    // Simulate 1000 sequences of 100 trades on the seeded PRNG — bare
+    // Math.random() here made every call return different numbers, silently
+    // breaking the "worker and sync yield identical numbers" claim.
+    const rng = mulberry32(
+        seed ?? deriveRuinRiskSeed(accountBalance, positionSize, leverage, monteCarloResult)
+    );
+
     let count25pct = 0;
     let count50pct = 0;
     let count75pct = 0;
@@ -570,7 +651,7 @@ export const calculateRuinRisk = (
         let maxDrawdownReached = 0;
 
         for (let trade = 0; trade < tradesPerSequence; trade++) {
-            const isWin = Math.random() < winRate;
+            const isWin = rng() < winRate;
 
             // Fixed-fractional model: risk riskPerTrade of the CURRENT equity
             // per trade (win → equity × (1 + b·f), loss → equity × (1 − f)).
@@ -597,9 +678,10 @@ export const calculateRuinRisk = (
     const expectedEquity = finalEquities.reduce((a, b) => a + b, 0) / sequenceCount;
 
     // Kelly Criterion: f* = (bp - q) / b (guarded helper, fed the same true
-    // average win used above)
+    // average win used above and the RESOLVED win rate — same subsample as
+    // EV/avgWin, see computeKellyFraction docs)
     const kellyFraction = computeKellyFraction(
-        monteCarloResult.winRate,
+        winRatePctResolved,
         monteCarloResult.expectedValue,
         monteCarloResult.probabilities.slHit,
         monteCarloResult.confidenceInterval.lower,
@@ -831,24 +913,27 @@ export const runSimulationAsync = (config: SimulationConfig): Promise<MonteCarlo
 /**
  * Calculate ruin risk in a Web Worker (non-blocking).
  * Falls back to synchronous execution if Workers are unavailable or the
- * worker wedges past WORKER_TIMEOUT_MS.
+ * worker wedges past WORKER_TIMEOUT_MS. The optional `seed` is forwarded to
+ * BOTH paths; when omitted, both sides derive it from the same inputs
+ * (deriveRuinRiskSeed), so worker and sync results are identical.
  */
 export const calculateRuinRiskAsync = (
     accountBalance: number,
     positionSize: number,
     leverage: number,
-    monteCarloResult: MonteCarloResult
+    monteCarloResult: MonteCarloResult,
+    seed?: number
 ): Promise<RuinRiskResult> => {
     if (typeof Worker === 'undefined') {
-        return Promise.resolve(calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult));
+        return Promise.resolve(calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult, seed));
     }
     const id = `mc-${++requestId}`;
     const worker = getWorker();
     const workerPromise = new Promise<RuinRiskResult>((resolve, reject) => {
         pendingRequests.set(id, { resolve, reject, worker });
-        worker.postMessage({ type: 'calculateRuinRisk', id, accountBalance, positionSize, leverage, monteCarloResult });
+        worker.postMessage({ type: 'calculateRuinRisk', id, accountBalance, positionSize, leverage, monteCarloResult, seed });
     });
     return withWorkerTimeout(workerPromise, id, () =>
-        calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult)
+        calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult, seed)
     );
 };

@@ -85,7 +85,16 @@ export const buildAnalysisMarkdown = (analysis: TradeAnalysis): string => {
     // ── Odds ──
     const odds: string[] = [];
     if (typeof analysis.levelProbabilities?.slProbability === 'number') {
-        odds.push(`SL hit: **${analysis.levelProbabilities.slProbability}%**`);
+        // The Algo engine's SL number is EITHER a barrier-race estimate OR
+        // the 100 − P(TP1) UPPER BOUND (stop-hit-or-timeout share) — its
+        // reasoning basis says which. A bound must print as a bound:
+        // "SL hit: 78%" for a far stop (really "≤78% incl. timeout") read to
+        // the model as a point estimate of stop risk.
+        const slBasis = analysis.levelProbabilities.slReasoning?.indicatorBasis ?? '';
+        const slIsUpperBound = /UPPER\s*BOUND/i.test(slBasis);
+        odds.push(slIsUpperBound
+            ? `SL hit ≤ **${analysis.levelProbabilities.slProbability}%** (upper bound — worst case incl. timeout, not a point estimate)`
+            : `SL hit: **${analysis.levelProbabilities.slProbability}%**`);
     }
     (analysis.levelProbabilities?.tpProbabilities ?? []).forEach(p => {
         odds.push(`TP${p.level ?? '?'}: **${p.probability}%**`);
@@ -806,7 +815,12 @@ export const tradePlanToAnalysis = (plan: MarkdownTradePlan): Record<string, unk
             ? {
                 bullish: { trigger: ds.bullish?.trigger ?? '', confirmation: ds.bullish?.confirmation ?? '', target: ds.bullish?.target ?? '', invalidation: ds.bullish?.invalidation ?? '' },
                 bearish: { trigger: ds.bearish?.trigger ?? '', confirmation: ds.bearish?.confirmation ?? '', target: ds.bearish?.target ?? '', invalidation: ds.bearish?.invalidation ?? '' },
-                selectedScenario: selected === 'bearish' ? 'bearish' : selected === 'neutral' ? 'neutral' : 'bullish',
+                // Unrecognized/absent selection → 'neutral', mirroring the
+                // JSON boundary (schemas/tradeAnalysis.ts dualScenario
+                // coercion): the old `: 'bullish'` fallback fabricated a
+                // bullish CALL out of prose garbage — the same way the JSON
+                // boundary used to before its own coercion fix.
+                selectedScenario: selected === 'bearish' ? 'bearish' : selected === 'bullish' ? 'bullish' : 'neutral',
                 selectionReasoning: ds.reasoning ?? '',
                 confidenceInSelection: ds.confidence ?? 0,
             }

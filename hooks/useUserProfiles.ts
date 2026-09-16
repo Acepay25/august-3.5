@@ -46,8 +46,15 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
                 const prefsBackup = (data as unknown as Record<string, unknown>)?._preferencesBackup;
                 if (prefsBackup && typeof prefsBackup === 'object') {
                     try {
-                        await importPreferencesData(prefsBackup as Record<string, any>);
-                        toast.success("Profile Imported", "Profile and provider settings restored. Please select the user to log in.");
+                        const report = await importPreferencesData(prefsBackup as Record<string, any>);
+                        // Non-silent skip reporting (finding F12): the backup
+                        // sweep exports every key it can read, but restores
+                        // are gated by the allow-list — surface what did NOT
+                        // make it instead of pretending a full restore.
+                        const skipNote = report.skippedKeys.length > 0
+                            ? ` ${report.skippedKeys.length} setting(s) had no restorable slot in this build and were skipped (${report.skippedKeys.join(', ')}).`
+                            : '';
+                        toast.success("Profile Imported", `Profile and provider settings restored.${skipNote} Please select the user to log in.`);
                     } catch (prefsError) {
                         console.warn('[Import] Preferences restore failed (non-fatal):', prefsError);
                         toast.info("Profile Imported", "Profile restored, but provider settings could not be restored.");

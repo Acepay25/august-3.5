@@ -265,19 +265,25 @@ export const runSessionSkillReview = async (
                 botContext: thesis.thesis,
             });
             if (result.action === 'queued') queued += 1;
-            if (result.action === 'skipped') {
-                // The gate never JUDGED (tombstone cooldown, provider
-                // hiccup, gate fell back to the deterministic bar and was
-                // refused there is 'skipped' too). markDrafted here used to
-                // permanently silence the thesis — even after a mere
-                // cooldown expired it could never be drafted, because the
-                // fingerprint stayed in the dedupe set forever. Keep it
-                // eligible: leave it in the open cache for the resolver
-                // (TTL-bounded) and do not fingerprint it as drafted.
+            if (result.action === 'skipped' && !result.judged) {
+                // The gate never JUDGED (tombstone cooldown, pending dup,
+                // provider hiccup that fell back to a pre-judgment
+                // deterministic skip). markDrafted here used to permanently
+                // silence the thesis — even after a mere cooldown expired it
+                // could never be drafted, because the fingerprint stayed in
+                // the dedupe set forever. Keep it eligible: leave it in the
+                // open cache for the resolver (TTL-bounded) and do not
+                // fingerprint it as drafted.
                 cacheOpenThesis(username, session.id, thesis);
                 continue;
             }
-            // JUDGED once — merged/queued theses never re-nag.
+            // JUDGED once — queued/merged, and judged gate REJECTS too.
+            // A judged reject (worth-gate skip verdict, post-LLM validate
+            // failure) used to return plain 'skipped' and stay eligible, so
+            // the resolver re-ran the full klines+LLM worth-gate on the same
+            // refused thesis every 10 minutes for the whole TTL — and each
+            // re-cache refreshed cachedAtMs, extending the TTL unboundedly.
+            // The idea was assessed and said no to: fingerprint it.
             markDrafted(username, [fp]);
             dropOpenThesis(username, fp);
         }
@@ -316,9 +322,15 @@ const writeOpenTheses = (username: string, rows: OpenThesis[]): void => {
     } catch { /* best-effort */ }
 };
 
-/** Remember a discussed thesis that price hasn't resolved yet. */
+/** Remember a discussed thesis that price hasn't resolved yet. Re-caching an
+ *  ALREADY-cached thesis is a no-op: the old drop-and-re-push refreshed
+ *  cachedAtMs on every review pass, so a thesis kept alive by the never-
+ *  judged skip path renewed its 14-day TTL forever — the cache never aged
+ *  out and the resolver paid full klines+LLM cost on it indefinitely. */
 export const cacheOpenThesis = (username: string, sessionId: string, thesis: DiscussedThesis): void => {
-    const rows = readOpenTheses(username).filter(t => thesisFingerprint(t) !== thesisFingerprint(thesis));
+    const rows = readOpenTheses(username);
+    const fp = thesisFingerprint(thesis);
+    if (rows.some(t => thesisFingerprint(t) === fp)) return;
     rows.push({ ...thesis, sessionId, cachedAtMs: Date.now() });
     writeOpenTheses(username, rows);
 };
@@ -387,11 +399,15 @@ export const runThesisResolver = async (
                 botContext: thesis.thesis,
             });
             if (result.action === 'queued') queued += 1;
-            if (result.action === 'skipped') {
-                // Gate never judged (cooldown / provider hiccup) — do NOT
-                // markDrafted: that permanently silences the thesis even
-                // after a cooldown expires. Keep it cached so the next
-                // throttled resolver pass retries (until the TTL ages it).
+            if (result.action === 'skipped' && !result.judged) {
+                // Gate never judged (cooldown / pending dup / provider
+                // hiccup) — do NOT markDrafted: that permanently silences
+                // the thesis even after a cooldown expires. Keep it cached
+                // so the next throttled resolver pass retries (until the
+                // TTL ages it). A JUDGED reject (judged: true) falls
+                // through to markDrafted below — the worth gate assessed
+                // the idea and refused it, and re-judging it every 10
+                // minutes forever is the churn this split exists to stop.
                 if (Date.now() - thesis.cachedAtMs < OPEN_THESIS_TTL_MS) keep.push(thesis);
                 continue;
             }

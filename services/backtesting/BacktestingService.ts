@@ -492,6 +492,29 @@ export const simulateFromAnalysisTime = async (
         const scan = scanTradeOutcome(klines, triggeredEntryPrice, stopLoss, [tp1, tp2, tp3], isLong, { startIndex: entryTriggeredAtIndex, excludeFormingCandle: true });
         const resolution = resolveOutcomeFromScan(scan);
 
+        // Inverted / zero-distance plan — the shared engine refused to score
+        // it. Bucket as NOT_TRIGGERED + the rejection reason, EXACTLY like
+        // simulateTradeSignal does: mapping it onto the OPEN branch below
+        // labelled it ENTERED_OPEN, i.e. a phantom "live position" for a plan
+        // that never traded.
+        if (resolution.outcome === 'INVALID') {
+            const lastCandle = klines[klines.length - 1];
+            return {
+                wouldHaveTriggered: false,
+                outcome: 'NOT_TRIGGERED',
+                hitTarget: 'NONE',
+                maxDrawdown: 0,
+                timeToOutcome: 0,
+                priceAtExit: 0,
+                simulationDetails: ` Plan rejected by the outcome engine (invalid level ordering): ${resolution.invalidReason || 'unknown'}`,
+                analysisTime: analysisTimestamp,
+                candlesEvaluated: klines.length,
+                leverage,
+                currentPrice: lastCandle.close,
+                entryPrice,
+            };
+        }
+
         const maxDrawdown = scan.maxDrawdown;
         const slTouched = scan.slTouched;
         const extendedSlPrice = scan.extendedSlPrice;
@@ -1113,6 +1136,29 @@ export const validateTradeOutcome = async (
         // candle is excluded — a hit detected inside it can vanish as it
         // completes, and the autopilot re-polls every 60s anyway.
         const scan = scanTradeOutcome(klines, entryPrice, stopLoss, [tp1, tp2, tp3], isLong, { excludeFormingCandle: true });
+
+        // A refused plan (inverted geometry or zero-distance level) is never
+        // even scanned, so entryTriggered is false and the branch below would
+        // label it "Entry price was never reached" — FALSE. Report it through
+        // the same "never evaluated" enum member consumers already tolerate
+        // (they only mismatch-check WIN/LOSS and exclude OPEN/ENTRY_NOT_HIT
+        // from scoring), but carry the REAL reason in the summary.
+        if (scan.planInvalid) {
+            return {
+                entryTriggered: false,
+                outcome: 'ENTRY_NOT_HIT',
+                hitTarget: 'NONE',
+                tpHits: [],
+                slTouched: false,
+                entryPrice,
+                stopLoss,
+                maxDrawdown: 0,
+                validationSummary: ` Plan rejected: ${scan.planInvalidReason || 'invalid level ordering'}`,
+                candlesEvaluated: klines.length,
+                dataRange,
+                isMismatch: false
+            };
+        }
 
         // Entry not triggered
         if (!scan.entryTriggered) {

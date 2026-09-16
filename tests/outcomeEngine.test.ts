@@ -257,6 +257,32 @@ describe('scanTradeOutcome — inverted-plan refusal (Tier-0 #7)', () => {
     expect(scan.planInvalid).toBe(true);
     expect(resolveOutcomeFromScan(scan).outcome).toBe('INVALID');
   });
+
+  it('refuses a zero-distance plan (Long tp1 === entry) — INVALID, never a same-candle WIN', () => {
+    // `tp >= entry` used to treat a target printed ON the entry as valid, and
+    // the scan's `high >= tp1` then banked an instant WIN at zero profit on
+    // the fill candle itself. The gate is strict now (tp > entry), so the
+    // engine's re-check must refuse to score it.
+    const scan = scanTradeOutcome(candles(T, [
+      [94900, 96500, 94850, 95200], // opens executable; high blows through "TP1" 95000
+      [95200, 96100, 95100, 96000], // and every later candle too
+    ]), 95000, 94000, [95000, 0, 0], true);
+    expect(scan.planInvalid).toBe(true);
+    expect(scan.entryTriggered).toBe(false);
+    expect(scan.tpHits).toHaveLength(0);
+    const resolution = resolveOutcomeFromScan(scan);
+    expect(resolution.outcome).toBe('INVALID');
+    expect(resolution.invalidReason).toMatch(/zero reward distance/i);
+  });
+
+  it('refuses a zero-distance Short plan (tp1 === entry) mirrored', () => {
+    const scan = scanTradeOutcome(candles(T, [
+      [95100, 95200, 93900, 94800], // low prints below "TP1" 95000 instantly
+    ]), 95000, 96000, [95000, 0, 0], false);
+    expect(scan.planInvalid).toBe(true);
+    expect(resolveOutcomeFromScan(scan).outcome).toBe('INVALID');
+    expect(resolveOutcomeFromScan(scan).outcome).not.toBe('WIN');
+  });
 });
 
 describe('formatDurationMs', () => {

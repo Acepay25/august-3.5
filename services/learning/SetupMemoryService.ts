@@ -43,8 +43,10 @@ export interface SimilarSetupSummary {
     avgWin: number;
     avgLoss: number;
     expectedValue: number;
-    /** Newest-first, capped at 3. */
-    recent: { date: string; coin: string; direction: string; outcome: 'WIN' | 'LOSS'; pnl: number }[];
+    /** Newest-first, capped at 3. `pnl` is null when the trade has no
+     *  measurable magnitude — render as "magnitude unmeasured", never as a
+     *  fabricated 0%. */
+    recent: { date: string; coin: string; direction: string; outcome: 'WIN' | 'LOSS'; pnl: number | null }[];
     sameCoinCount: number;
     sameCoinWinRate: number | null;
     /**
@@ -141,7 +143,14 @@ export const buildSimilarSetupsContext = (
         `- ${s.total} similar setups · ${s.winRate.toFixed(0)}% win (${s.wins}W/${s.losses}L) · avg win +${s.avgWin.toFixed(1)}% · avg loss −${s.avgLoss.toFixed(1)}% · expected value ${s.expectedValue >= 0 ? '+' : ''}${s.expectedValue.toFixed(1)}% per trade`,
     ];
     if (s.recent.length > 0) {
-        lines.push(`- Recent: ${s.recent.map(r => `${r.date} ${r.coin} ${r.direction} ${r.outcome} (${r.pnl > 0 ? '+' : ''}${r.pnl.toFixed(1)}%)`).join(' · ')}`);
+        // Unmeasured PnL prints as "magnitude unmeasured" — the journal's
+        // source keeps nulls now (no `?? 0` placeholder), so a WIN/LOSS with
+        // no recorded magnitude must never read to the model as "(0.0%)".
+        lines.push(`- Recent: ${s.recent.map(r =>
+            `${r.date} ${r.coin} ${r.direction} ${r.outcome} (${r.pnl === null
+                ? 'magnitude unmeasured'
+                : `${r.pnl > 0 ? '+' : ''}${r.pnl.toFixed(1)}%`})`
+        ).join(' · ')}`);
     }
     if (s.sameCoinCount > 1 && s.sameCoinWinRate !== null) {
         lines.push(`- ${setup.coinName} overall: ${s.sameCoinCount} closed trades · ${s.sameCoinWinRate.toFixed(0)}% win`);

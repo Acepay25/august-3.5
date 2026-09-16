@@ -18,19 +18,23 @@ async function testCandleHistory() {
         else console.error(`❌ ${tf} missing candles`);
     }
 
-    // 2. Counts should sum to sequence length
+    // 2. Per-bucket counts must match the sequence. Dojis ('⚪') count toward
+    //    NEITHER bucket, so bullish + bearish no longer sums to the full
+    //    sequence length — compare each side against its own emoji tally.
     for (const tf of TIMEFRAMES) {
-        const total = ch[tf].bullishCount + ch[tf].bearishCount;
-        if (total === ch[tf].sequence.length) {
-            console.log(`✅ ${tf}: Count matches sequence length (${total})`);
+        const greens = ch[tf].sequence.filter((e: string) => e === '🟢').length;
+        const reds = ch[tf].sequence.filter((e: string) => e === '🔴').length;
+        if (greens === ch[tf].bullishCount && reds === ch[tf].bearishCount) {
+            console.log(`✅ ${tf}: Counts match sequence (${greens}🟢 / ${reds}🔴)`);
         } else {
-            console.error(`❌ ${tf}: Count mismatch ${total} vs ${ch[tf].sequence.length}`);
+            console.error(`❌ ${tf}: Count mismatch ${ch[tf].bullishCount}🟢+${ch[tf].bearishCount}🔴 vs sequence ${greens}🟢+${reds}🔴`);
         }
     }
 
-    // 3. Sequence should only contain valid emojis
+    // 3. Sequence should only contain valid emojis — 🟢 bullish, 🔴 bearish,
+    //    ⚪ doji (neutral; counted in neither bucket).
     for (const tf of TIMEFRAMES) {
-        const validEmojis = ch[tf].sequence.every((e: string) => e === '🟢' || e === '🔴');
+        const validEmojis = ch[tf].sequence.every((e: string) => e === '🟢' || e === '🔴' || e === '⚪');
         if (validEmojis) {
             console.log(`✅ ${tf}: Emojis valid`);
         } else {

@@ -277,10 +277,10 @@ export const buildMarketContext = (klines1h: Kline[], now = new Date()): MarketC
  * Candle history analysis for a single timeframe
  */
 interface CandleHistory {
-    sequence: ('🟢' | '🔴')[]; // Bullish/Bearish sequence, oldest first
+    sequence: ('🟢' | '🔴' | '⚪')[]; // Bullish/Bearish/Doji-neutral sequence, oldest first
     bullishCount: number;
     bearishCount: number;
-    summary: string;           // "12 Bullish, 8 Bearish"
+    summary: string;           // "12 Bullish, 8 Bearish" (+ ", 3 Doji" when neutral bars exist)
     dominantTrend: 'bullish' | 'bearish' | 'neutral'; // >55% = dominant
 }
 
@@ -290,7 +290,10 @@ interface CandleHistory {
  * @param candleCount - Number of candles to analyze (default: 30)
  * @returns CandleHistory object
  */
-const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHistory => {
+// Exported for direct unit testing (tests/hybridDataIntegrity.test.ts) — the
+// doji-neutrality regression below must not silently regress on the producer
+// the LLM tables are built from.
+export const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHistory => {
     // Safety check: if insufficient data, return empty analysis
     if (!klines || klines.length < 2) {
         return {
@@ -311,7 +314,8 @@ const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHi
 
     let bullishCount = 0;
     let bearishCount = 0;
-    const sequence: ('🟢' | '🔴')[] = [];
+    let neutralCount = 0;
+    const sequence: ('🟢' | '🔴' | '⚪')[] = [];
 
     for (const candle of completedCandles) {
         const open = parseFloat(candle.open);
@@ -320,10 +324,20 @@ const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHi
         if (close > open) {
             sequence.push('🟢');
             bullishCount++;
-        } else {
-            // Treat doji (close === open) as bearish for simplicity
+        } else if (close < open) {
             sequence.push('🔴');
             bearishCount++;
+        } else {
+            // Doji (close === open) is NEITHER side. The old code pushed '🔴'
+            // here ("treat doji as bearish for simplicity"), biasing quiet /
+            // range-heavy windows bearish on this LLM-visible producer — the
+            // exact bug already fixed in CandlePatternDetector
+            // .scanCandlePatterns. Dojis now get '⚪' and count toward neither
+            // bucket, so dominantTrend below claims a direction only when the
+            // bullish/bearish buckets actually diverge (same 60/40 tolerance
+            // as scanCandlePatterns, computed over the non-neutral bars).
+            sequence.push('⚪');
+            neutralCount++;
         }
     }
 
@@ -331,9 +345,9 @@ const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHi
     const bullishPercent = total > 0 ? (bullishCount / total) * 100 : 50;
 
     let dominantTrend: 'bullish' | 'bearish' | 'neutral';
-    if (bullishPercent > 60) {
+    if (total > 0 && bullishPercent > 60) {
         dominantTrend = 'bullish';
-    } else if (bullishPercent < 40) {
+    } else if (total > 0 && bullishPercent < 40) {
         dominantTrend = 'bearish';
     } else {
         dominantTrend = 'neutral';
@@ -343,7 +357,9 @@ const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHi
         sequence,
         bullishCount,
         bearishCount,
-        summary: `${bullishCount} Bullish, ${bearishCount} Bearish`,
+        summary: neutralCount > 0
+            ? `${bullishCount} Bullish, ${bearishCount} Bearish, ${neutralCount} Doji`
+            : `${bullishCount} Bullish, ${bearishCount} Bearish`,
         dominantTrend
     };
 };

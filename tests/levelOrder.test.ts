@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { sanitizeLevelOrdering } from '../utils/levelOrder';
 
 // The shared direction-aware TP/SL ordering gate (Tier-0 #7, deep-dive
-// 2026-09-15). Canonical rules: Long → sl < entry <= tp1 <= tp2 <= tp3;
+// 2026-09-15). Canonical rules: Long → sl < entry < tp1 <= tp2 <= tp3;
 // Short mirrors. Repairs mirror levels across the entry so the model's
 // stated risk/reward MAGNITUDES survive a flipped side.
 
@@ -66,6 +66,18 @@ describe('sanitizeLevelOrdering — Long', () => {
     expect(r.fixes[0]).toMatch(/zero risk distance/i);
   });
 
+  it('flags a target exactly on entry as unrepairable (zero-distance TP)', () => {
+    // `tp1 === entry` used to count as spec-valid (`tp >= entry`) and the
+    // outcome engine's same-candle scan credited it as an instant WIN at
+    // zero profit. Strict now: flagged like the degenerate stop case.
+    const r = sanitizeLevelOrdering('Long', 95000, 94000, [95000, 96000]);
+    expect(r.ok).toBe(false);
+    expect(r.correctedTakeProfits).toEqual([95000, 96000]); // left as-is, NOT fabricated
+    expect(r.fixes).toHaveLength(1);
+    expect(r.fixes[0]).toMatch(/take-profit sits exactly on the 95000 entry/i);
+    expect(r.fixes[0]).toMatch(/zero reward distance/i);
+  });
+
   it('round-trips float mirror math without noise', () => {
     const r = sanitizeLevelOrdering('Long', 95000, 95499.9, [96000]);
     expect(r.correctedStopLoss).toBe(94500.1);
@@ -90,6 +102,13 @@ describe('sanitizeLevelOrdering — Short mirrors the Long rules', () => {
     const r = sanitizeLevelOrdering('Short', 95000, 96000, [96000, 97000]);
     expect(r.ok).toBe(false);
     expect(r.correctedTakeProfits).toEqual([94000, 93000]);
+  });
+
+  it('flags a short target exactly on entry as unrepairable (mirrored rule)', () => {
+    const r = sanitizeLevelOrdering('Short', 95000, 96000, [95000]);
+    expect(r.ok).toBe(false);
+    expect(r.correctedTakeProfits).toEqual([95000]); // left as-is, NOT fabricated
+    expect(r.fixes[0]).toMatch(/zero reward distance/i);
   });
 });
 

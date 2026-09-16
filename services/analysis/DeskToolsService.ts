@@ -1788,8 +1788,16 @@ export async function executeDeskTool(
                 const top = Math.min(Math.max(Number.isFinite(rawTop) ? rawTop : 15, 5), 30);
                 const setupsOnly = call.arguments.setupsOnly === true;
                 const sort = asString(call.arguments.sort) || 'volume';
-                const { runScreener, screenerToMarkdown } = await import('../trade/screener');
-                let rows = await runScreener({ limit: top, trades: context.trades || [] });
+                const { runScreenerWithStatus, screenerToMarkdown } = await import('../trade/screener');
+                const scan = await runScreenerWithStatus({ limit: top, trades: context.trades || [] });
+                if (scan.universeFailed) {
+                    // Feed unreachable ≠ "nothing matches". The human panel and
+                    // the model digest both say UNKNOWN; the receipt must not
+                    // let an empty scan read as a genuine no-setups result.
+                    content = 'SCREENER: the futures ticker feed was unreachable — 0 coins scanned. This is UNKNOWN, not "no setups match". Say so; optionally retry once.';
+                    break;
+                }
+                let rows = scan.rows;
                 if (setupsOnly) rows = rows.filter(r => r.setups.length > 0);
                 if (sort === 'movers') rows = [...rows].sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h));
                 else if (sort === 'setups') rows = [...rows].sort((a, b) => b.setups.length - a.setups.length);
@@ -2255,11 +2263,19 @@ export async function runDeskToolLoop(params: {
         // compact status row (joined lines can't be attributed per-tool).
         for (const c of calls) onToolEvent?.(`calling ${toolLabel(c.name)}…`);
         // Forged tools (model-authored recipes) execute through their own
-        // hardened path BEFORE the built-in executor sees the calls.
+        // hardened path BEFORE the built-in executor sees the calls — but the
+        // SEAT POLICY applies here too: a restricted seat whose (merged) allow
+        // list does not carry the custom_* name must not reach the forge
+        // executor at all (the gate used to live only in the core executor,
+        // and custom_* routed around it).
         const forgedResults: DeskToolResult[] = [];
         const builtInCalls: DeskToolCall[] = [];
         for (const call of coreCalls) {
             if (!call.name.startsWith('custom_')) { builtInCalls.push(call); continue; }
+            if (allowedTools && allowedTools.length > 0 && !allowedTools.includes(call.name)) {
+                forgedResults.push(rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`));
+                continue;
+            }
             const forged = await executeForgedTool(call.name, call, options?.signal);
             if (forged) forgedResults.push(forged);
         }

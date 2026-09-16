@@ -142,6 +142,46 @@ tradeIds: x,y
         expect(updated.status).not.toBe('confirmed');
     });
 
+    it('a fresh hurts pin does NOT block auto-retirement (the retire band wins)', async () => {
+        await initMemoryFiles('retire-hurts-user');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const now = new Date().toISOString();
+        // 2W/8L REPEAT skill — deep inside the retire band (sample ≥ 6,
+        // winRate 0.2 < 0.4) — carrying a fresh, streak-reached 'hurts'
+        // verdict. Pre-fix the status-agnostic hurts pin early-returned
+        // 'candidate' ABOVE the retire band, so a skill the effectiveness
+        // review recommends retiring could never auto-retire for 30 days.
+        const file = await createMemoryFile(skills.id, 'btc-short-repeat.md', `---
+status: candidate
+kind: repeat
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 2
+losses: 8
+ifCondition: BTC short setup in Family A
+thenAction: take the short
+evalVerdict: hurts
+evalStreak: 2
+lastEvalAt: ${now}
+lastEvidenceAt: ${now}
+tradeIds: a,b,c
+---
+
+# Repeat BTC short
+`, 'retire-hurts-user', true);
+        const { applySkillEvidence } = await import('../services/learning/SkillMemoryService');
+        const loss = makeTrade({ id: 'hurt-loss', outcome: 'LOSS' as never });
+        await applySkillEvidence(loss, 'retire-hurts-user', [loss]);
+        const meta = parseSkillMarkdown(
+            getMemoryFiles().files.find(f => f.id === file.id)!.content
+        )!;
+        // Retirement stats win over the pin; the pin only holds ABOVE the
+        // retire floor (blocked-promotion behavior covered by the
+        // streak-expiry test below).
+        expect(meta.status).toBe('retired');
+    });
+
     it('a hurts-demoted candidate becomes due for re-evaluation once the gates pass', async () => {
         await initMemoryFiles('recover-user');
         const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;

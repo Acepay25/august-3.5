@@ -86,8 +86,18 @@ interface TradeViewProps {
      *  through the function the dock registers (null on unmount). */
     registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
     /** The Antigravity-style left sidebar (the order book) — toggled by
-     *  clicking the active Trade icon in the activity bar. */
+     *  clicking the active Trade icon in the activity bar. Below lg the icon
+     *  instead sends a mode request (below), since there is no sidebar. */
     sidebarOpen?: boolean;
+    /** App's activity-bar icon below lg requests a surface mode flip
+     *  (nonce-keyed so a repeat request applies). Consumed only <lg. */
+    modeRequest?: { mode: TradeMode; n: number };
+    /** Active profile — the persisted mobile mode is per-user, so a profile
+     *  switch re-reads it instead of keeping the previous user's choice. */
+    activeUsername?: string;
+    /** Reports every mode change upward so App's toggle semantics (which
+     *  mode is currently active) stay in sync with the user's own picks. */
+    onTradeModeChange?: (mode: TradeMode) => void;
 }
 
 interface StripData {
@@ -217,7 +227,7 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     );
 };
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -227,6 +237,13 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     /** Shapes the MODEL drew via desk tools — rendered on the chart, never
      *  persisted into the user's drawing file, cleared on symbol change. */
     const [modelDrawings, setModelDrawings] = useState<ChartDrawing[]>([]);
+    /** The `<sid>:<symbol>` bucket modelDrawings CURRENTLY holds. A turn may
+     *  only merge into React state when its bucket matches this stamp — a
+     *  stream-chunk tool call landing between a session-switch store emit
+     *  and the re-render would otherwise merge the new session's drawings
+     *  into the OLD bucket's state and persist that composite under the new
+     *  key (audit R6 #12). Off-stamp turns go through load-merge-save. */
+    const loadedBucketRef = useRef('');
     const chartHandleRef = useRef<ChartHandle | null>(null);
     const [dockWidth, setDockWidth] = useState<number>(readDockWidth);
     const [dockCollapsed, setDockCollapsed] = useState(false);
@@ -241,7 +258,24 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const pickMode = useCallback((m: TradeMode): void => {
         setMode(m);
         writeTradeMode(m);
-    }, []);
+        onTradeModeChange?.(m);
+    }, [onTradeModeChange]);
+    // App's activity-bar toggle below lg: apply each new nonce exactly once.
+    const lastModeReqNRef = useRef<number | undefined>(undefined);
+    useEffect(() => {
+        if (!modeRequest) { lastModeReqNRef.current = undefined; return; }
+        if (lastModeReqNRef.current === modeRequest.n) return;
+        lastModeReqNRef.current = modeRequest.n;
+        pickMode(modeRequest.mode);
+    }, [modeRequest, pickMode]);
+    // Profile switch: the persisted mode is per-user — re-read it so B gets
+    // B's layout instead of inheriting A's until a reload (audit R6 #23).
+    const prevModeUserRef = useRef<string | undefined>(activeUsername);
+    useEffect(() => {
+        if (prevModeUserRef.current === activeUsername) return;
+        prevModeUserRef.current = activeUsername;
+        setMode(readTradeMode());
+    }, [activeUsername]);
     /** Key-level lines a Chat AI message card is currently SHOWING on the
      *  chart (toggle / pin / hover resolved by the dock). Transient view state
      *  — never persisted, stamped with its symbol so a coin switch blanks it. */
@@ -403,6 +437,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         // Reload THIS coin's model-drawn shapes (persisted per session+coin),
         // so the model's lines survive a coin switch — instead of the old
         // blanket wipe that made "what the AI drew" vanish on the next coin.
+        loadedBucketRef.current = `${chatSnap.activeId}:${symbol}`;
         setModelDrawings(loadSessionModelDrawings(chatSnap.activeId, symbol));
     }, [symbol, chatSnap.activeId]);
 
@@ -522,7 +557,8 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
      *  identity leak): when the turn is off-view, write straight into that
      *  session's bucket and leave the visible canvas untouched. */
     const isViewTurn = (turn?: PanelTurnContext): boolean =>
-        !turn || (turn.sid === chatStore.getActiveId() && turn.symbol === symbolRef.current);
+        !turn || (turn.sid === chatStore.getActiveId() && turn.symbol === symbolRef.current
+            && loadedBucketRef.current === `${turn.sid}:${turn.symbol}`);
     const addModelDrawings = useCallback((drawings: ChartDrawing[], turn?: PanelTurnContext): void => {
         if (isViewTurn(turn)) {
             setModelDrawings(prev => [...prev, ...drawings].slice(-60));
@@ -750,7 +786,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             <TradeChatPanel
                                 {...dockProps}
                                 collapsed={false}
-                                onToggleCollapsed={() => { setDockCollapsed(true); setDockExpanded(false); }}
+                                onToggleCollapsed={isBelowLg ? undefined : () => { setDockCollapsed(true); setDockExpanded(false); }}
                                 expanded={dockExpanded}
                                 onToggleExpanded={() => setDockExpanded(v => !v)}
                             />

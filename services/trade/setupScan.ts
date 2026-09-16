@@ -154,7 +154,12 @@ export const scanSetups = (candles: ScanCandle[]): LiveSetup[] => {
     const recent = (i: number): boolean => n - 1 - i <= 5;
     const ago = (i: number): number => n - 1 - i;
     const closes = candles.map(c => c.close);
-    const avgRange = candles.slice(-20).reduce((s, c) => s + range(c), 0) / 20;
+    // Average range of the last 20 CLOSED bars. The old slice(-20) window
+    // included the FORMING bar — the breakout detectors then compared this
+    // bar's own range "vs avg" with the bar inside its own benchmark
+    // (apples vs mixed apples). Compare against closed candles only.
+    // n ≥ 25 (guard above) ⇒ slice(-21, -1) is always exactly 20 bars.
+    const avgRange = candles.slice(-21, -1).reduce((s, c) => s + range(c), 0) / 20;
     // Range extremes over the PRIOR 30 bars — the current bar is excluded.
     // Including it made "close above the 30-bar high" overstate its own
     // evidence: hi30 always contains last.high, so the breakout condition
@@ -162,14 +167,12 @@ export const scanSetups = (candles: ScanCandle[]): LiveSetup[] => {
     // satisfied by the very bar it claims to have broken. A breakout is
     // strength only against the range that EXISTED before this bar printed.
     const last = candles[n - 1];
-    const prior30 = candles.slice(-31, -1);
-    const priorBars = prior30.length > 0 ? prior30 : candles.slice(0, -1);
-    const hi30 = priorBars.length > 0
-        ? Math.max(...priorBars.map(c => c.high))
-        : last.high;
-    const lo30 = priorBars.length > 0
-        ? Math.min(...priorBars.map(c => c.low))
-        : last.low;
+    // n ≥ 25 ⇒ this slice always holds 24–30 closed bars; the old
+    // `prior30.length > 0 ? … : candles.slice(0, -1)` and the
+    // `: last.high` / `: last.low` empty guards were unreachable.
+    const priorBars = candles.slice(-31, -1);
+    const hi30 = Math.max(...priorBars.map(c => c.high));
+    const lo30 = Math.min(...priorBars.map(c => c.low));
 
     // --- Range edges: breakout with body, or rejection at the edge.
     const nearTop = last.high >= hi30 * 0.998;

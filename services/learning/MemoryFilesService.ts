@@ -34,13 +34,17 @@ export interface MemoryFilesStore {
 let memoryCache: MemoryFilesStore = { version: 1, folders: [], files: [] };
 
 /**
- * The username the CACHE currently holds the notebook for — set by
- * initMemoryFiles on every load/seed. Every persist writes to THIS key, never
- * to the username a writer captured at entry: with one module-global cache,
- * a profile switch mid-`applySkillEvidence`/post-mortem used to hand the new
- * user's notebook to the old writer, which persisted it under the OLD user's
- * Preferences key (and back). Keying persistence to the cache's own owner
- * makes that impossible: data always lands in the key that owns the bytes.
+ * The username the CACHE currently holds the notebook for — assigned
+ * ATOMICALLY with every memoryCache swap (see adoptCache). Every persist
+ * writes to THIS key, never to the username a writer captured at entry:
+ * with one module-global cache, a profile switch mid-`applySkillEvidence`/
+ * post-mortem used to hand the new user's notebook to the old writer, which
+ * persisted it under the OLD user's Preferences key (and back). Keying
+ * persistence to the cache's own owner makes that impossible: data always
+ * lands in the key that owns the bytes. The owner must NEVER be assigned
+ * while the cache still holds the previous user's bytes — an unlocked
+ * concurrent persist racing an in-flight init would then write the stale
+ * cache under the NEW user's key.
  */
 let memoryCacheOwner: string | null = null;
 
@@ -114,21 +118,33 @@ const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
         folders: DEFAULT_FOLDERS.map(f => ({ ...f })),
         files: [],
     });
-    memoryCacheOwner = username;
+    // OWNER + BYTES SWAP TOGETHER. Before this, the owner was assigned
+    // BEFORE the storage read below — so while B's init was in flight the
+    // cache still held A's bytes but was already stamped as B's, and any
+    // unlocked concurrent persist (e.g. the ensureHarnessFoldersUnlocked
+    // call in SkillMemoryService.syncClosedTradeToNotebook) flushed A's
+    // stale bytes into B's Preferences key. Adopting atomically keeps
+    // owner and bytes always belonging together.
+    const adoptCache = (store: MemoryFilesStore): void => {
+        memoryCache = store;
+        memoryCacheOwner = username;
+    };
     try {
         const stored = await getPreferenceObject<MemoryFilesStore>(`${MEMORY_KEY_PREFIX}${username}`);
         if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
-            memoryCache = stored;
+            adoptCache(stored);
             await ensureHarnessFoldersUnlocked(username);
             return;
         }
-        memoryCache = freshSeed();
+        adoptCache(freshSeed());
         const now = Date.now();
         memoryCache.files = SEED_FILES.map(f => ({ ...f, id: uid(), createdAt: now, updatedAt: now }));
         await persist(username);
     } catch (e) {
         console.warn('[MemoryFiles] Failed to load notebook:', e);
-        memoryCache = freshSeed();
+        // Even the fallback seed must arrive with its owner — bytes that
+        // belong to THIS user are adopted with THIS user's stamp.
+        adoptCache(freshSeed());
     }
 };
 

@@ -6,6 +6,9 @@ import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { SetupWatchService } from '../services/ui/SetupWatchService';
 import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
+import { initPromptOverrides } from '../services/infrastructure/PromptOverrideService';
+import { initStrategyDocs } from '../services/infrastructure/StrategyService';
+import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 
 vi.mock('../services/infrastructure/dbService', () => ({
     initDatabase: vi.fn().mockResolvedValue(undefined),
@@ -376,5 +379,53 @@ describe('useUserProfileLoader', () => {
         expect(localStorage.getItem('last_active_user')).toBe('bob');
         expect(sessionStorage.getItem('activeUsername')).toBe('bob');
         expect(args.setIsLoading).toHaveBeenLastCalledWith(false);
+    });
+
+    it('stale-write guard inside the per-username init trio: a load superseded mid-trio bails before the NEXT singleton write', async () => {
+        // The trio (initPromptOverrides / initStrategyDocs / initMemoryFiles)
+        // writes username-scoped MODULE SINGLETONS before any React state
+        // lands. If Alice's load is parked inside the first await when Bob's
+        // load overtakes and fully commits, releasing Alice must NOT let the
+        // remaining two inits run for 'alice' (they would re-init the
+        // OUTGOING profile over Bob's).
+        vi.mocked(dbService.getUserProfile).mockResolvedValue({
+            username: 'bob', conversations: [], tradeLog: [], savedAnalyses: [],
+            tradeSummaries: [], settings: {},
+        } as any);
+        let releaseAliceOverrides: () => void = () => {};
+        const aliceGate = new Promise<void>(res => { releaseAliceOverrides = res; });
+        // First call (Alice's) hangs; later calls (Bob's) resolve normally.
+        vi.mocked(initPromptOverrides).mockImplementationOnce(() => aliceGate);
+
+        const args = createMockArgs();
+        const { result } = renderHook(() => useUserProfileLoader(args));
+
+        let aliceLoad: Promise<void> | null = null;
+        await act(async () => {
+            aliceLoad = result.current.loadUserData('alice');
+        });
+        // Alice is now parked inside initPromptOverrides('alice'). Bob's load
+        // bumps the generation and runs the trio + tail to completion.
+        await act(async () => {
+            await result.current.loadUserData('bob');
+        });
+        expect(initPromptOverrides).toHaveBeenCalledWith('bob');
+        expect(initStrategyDocs).toHaveBeenCalledWith('bob');
+        expect(initMemoryFiles).toHaveBeenCalledWith('bob');
+
+        const strategyCallsBefore = vi.mocked(initStrategyDocs).mock.calls.length;
+        const memoryCallsBefore = vi.mocked(initMemoryFiles).mock.calls.length;
+
+        releaseAliceOverrides();
+        await act(async () => {
+            await aliceLoad;
+        });
+
+        // Alice bailed right after her released await: no further trio writes,
+        // no active-username/storage hijack from the superseded load.
+        expect(vi.mocked(initStrategyDocs).mock.calls.length).toBe(strategyCallsBefore);
+        expect(vi.mocked(initMemoryFiles).mock.calls.length).toBe(memoryCallsBefore);
+        expect(args.setActiveUsername).not.toHaveBeenCalledWith('alice');
+        expect(localStorage.getItem('last_active_user')).toBe('bob');
     });
 });

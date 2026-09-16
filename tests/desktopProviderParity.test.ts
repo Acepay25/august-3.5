@@ -156,4 +156,18 @@ describe('streamChatRequest over the chunk bridge', () => {
         const deltas = await collect(streamChatRequest(baseConfig({}), messages, {}));
         expect(deltas.join('')).toBe('Hello world');
     });
+
+    it('routes a jsonMode stream through the BUFFERED bridge (chunk payload cannot carry jsonMode)', async () => {
+        // The chunk bridge's payload has NO jsonMode/jsonSchema field, so
+        // main.cjs's streamRequested() jsonMode guard can never see the JSON
+        // request — a chunk-bridged jsonMode call would silently drop
+        // constrained decoding on desktop while web/proxy streams honored it.
+        // The buffered sendChatRequest path DOES forward jsonMode, and the
+        // generator contract holds (full text yielded once).
+        const deltas = await collect(streamChatRequest(baseConfig({}), messages, { jsonMode: true }));
+        expect(calls).toHaveLength(1);
+        expect(calls[0].stream).toBeUndefined();
+        expect(calls[0].jsonMode).toBe(true);
+        expect(deltas).toEqual(['Hello world']);
+    });
 });

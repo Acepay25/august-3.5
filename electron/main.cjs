@@ -215,8 +215,13 @@ async function fetchUpstream(url, init) {
             } catch {
                 throw new Error('Provider request blocked: redirect target is not a valid URL.');
             }
-            if (status === 303 && method !== 'GET' && method !== 'HEAD') {
-                // 303 See Other ⇒ retry as GET without the body (fetch spec).
+            if ((status === 301 || status === 302 || status === 303) && method !== 'GET' && method !== 'HEAD') {
+                // fetch spec: 301/302/303 ALL rewrite a POST into a bodyless
+                // GET (303 unconditionally; 301/302 in every real client and
+                // in both the web fetch and Node's proxy transports). The old
+                // 303-only handling re-POSTed the body after a 301/302 — a
+                // double-submit class bug and a divergence from the web/proxy
+                // paths. 307/308 by contrast MUST repeat the method + body.
                 method = 'GET';
                 fetchInit = { ...fetchInit, method: 'GET' };
                 delete fetchInit.body;

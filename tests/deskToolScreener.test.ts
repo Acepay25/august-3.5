@@ -11,11 +11,11 @@ const { runScreenerMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../services/trade/screener', () => ({
-    runScreener: (...args: unknown[]) => runScreenerMock(...args),
+    runScreenerWithStatus: (...args: unknown[]) => runScreenerMock(...args),
     screenerToMarkdown: (rows: unknown[]) => `MD:${rows.length}`,
 }));
 
-import { executeDeskTool, DESK_TOOL_DEFINITIONS, toolLabel } from '../services/analysis/DeskToolsService';
+import { executeDeskTool, DESK_TOOL_DEFINITIONS, toolLabel, clearDeskToolCache } from '../services/analysis/DeskToolsService';
 
 const ROW = (symbol: string, change24h: number, setups: number) => ({
     symbol, baseAsset: symbol.replace(/USDT$/, ''), price: 100, change24h, quoteVolume: 1e9,
@@ -31,7 +31,13 @@ const call = (args: Record<string, unknown>) => executeDeskTool(
 
 beforeEach(() => {
     runScreenerMock.mockReset();
-    runScreenerMock.mockResolvedValue([ROW('BTCUSDT', 1, 0), ROW('SOLUSDT', 6, 2)]);
+    runScreenerMock.mockResolvedValue({
+        rows: [ROW('BTCUSDT', 1, 0), ROW('SOLUSDT', 6, 2)],
+        universeFailed: false,
+    });
+    // The desk-tool result cache is module-level; identical {top:15} args
+    // across tests would otherwise replay the first test's digest.
+    clearDeskToolCache();
 });
 
 describe('run_screener desk tool', () => {
@@ -62,5 +68,14 @@ describe('run_screener desk tool', () => {
         const digestArg = await call({ setupsOnly: true, sort: 'movers' });
         // SOL (6% move, 2 setups) outranks BTC for both mover sort and the setup filter.
         expect(digestArg.content).toBe('MD:1');
+    });
+
+    it('an unreachable universe feed reads UNKNOWN to the model, not "no matches"', async () => {
+        runScreenerMock.mockResolvedValue({ rows: [], universeFailed: true });
+        const result = await call({ top: 15 });
+        expect(result.ok).toBe(true);
+        expect(result.content).toContain('unreachable');
+        expect(result.content).toContain('UNKNOWN');
+        expect(result.content).not.toContain('MD:0');
     });
 });

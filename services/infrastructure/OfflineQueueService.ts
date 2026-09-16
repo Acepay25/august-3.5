@@ -239,6 +239,14 @@ export interface QueueProcessingHandlers {
     onQueueEmpty?: () => void;
 }
 
+/** In-flight marker for processQueue. Two `online` transitions during one
+ *  long replay used to snapshot the SAME items twice and run every callback
+ *  concurrently (double-submit of a queued analysis). A reentrant call
+ *  returns an all-zero result immediately instead of queueing behind — the
+ *  in-flight pass already covers every currently-stored item, and anything
+ *  enqueued mid-flight is picked up by the next trigger/backoff tick. */
+let processingInFlight = false;
+
 /**
  * Process all queued requests
  * Removes successfully processed items from the queue
@@ -266,73 +274,82 @@ const isReadyForRetry = (item: QueuedRequest): boolean => {
 };
 
 export const processQueue = async (handlers: QueueProcessingHandlers): Promise<{ processed: number; failed: number; skipped: number }> => {
-    const items = await getAllQueued();
-    let processed = 0;
-    let failed = 0;
-    let skipped = 0;
+    if (processingInFlight) {
+        console.log('[OfflineQueue] processQueue already running — reentrant call skipped');
+        return { processed: 0, failed: 0, skipped: 0 };
+    }
+    processingInFlight = true;
+    try {
+        const items = await getAllQueued();
+        let processed = 0;
+        let failed = 0;
+        let skipped = 0;
 
-    console.log(`[OfflineQueue] Processing ${items.length} queued items...`);
+        console.log(`[OfflineQueue] Processing ${items.length} queued items...`);
 
-    for (const item of items) {
-        // PROFILE GATE: another user's queued item must never execute inside
-        // this session (wrong provider prefs, wrong trade log, wrong chat).
-        // Items predating the username field stay attributable to nobody —
-        // they run for whoever processes first (legacy, one-time window).
-        if (item.username && item.username !== activeUser) {
-            console.log(`[OfflineQueue] Skipping ${item.id} - belongs to another profile`);
-            skipped++;
-            continue;
-        }
-        // Check if item is ready for retry (exponential backoff)
-        if (!isReadyForRetry(item)) {
-            const nextRetryIn = calculateBackoffDelay(item.retryCount - 1) - (Date.now() - new Date(item.lastAttempt!).getTime());
-            console.log(`[OfflineQueue] Skipping ${item.id} - retry in ${Math.ceil(nextRetryIn / 1000)}s (attempt ${item.retryCount})`);
-            skipped++;
-            continue;
-        }
-
-        try {
-            switch (item.type) {
-                case 'analysis':
-                    await handlers.onAnalysis?.(item.payload);
-                    break;
-                case 'postMortem':
-                    await handlers.onPostMortem?.(item.payload);
-                    break;
-                case 'summary':
-                    await handlers.onSummary?.(item.payload);
-                    break;
-                case 'strategySearch':
-                    await handlers.onStrategySearch?.(item.payload);
-                    break;
+        for (const item of items) {
+            // PROFILE GATE: another user's queued item must never execute inside
+            // this session (wrong provider prefs, wrong trade log, wrong chat).
+            // Items predating the username field stay attributable to nobody —
+            // they run for whoever processes first (legacy, one-time window).
+            if (item.username && item.username !== activeUser) {
+                console.log(`[OfflineQueue] Skipping ${item.id} - belongs to another profile`);
+                skipped++;
+                continue;
+            }
+            // Check if item is ready for retry (exponential backoff)
+            if (!isReadyForRetry(item)) {
+                const nextRetryIn = calculateBackoffDelay(item.retryCount - 1) - (Date.now() - new Date(item.lastAttempt!).getTime());
+                console.log(`[OfflineQueue] Skipping ${item.id} - retry in ${Math.ceil(nextRetryIn / 1000)}s (attempt ${item.retryCount})`);
+                skipped++;
+                continue;
             }
 
-            await removeFromQueue(item.id);
-            processed++;
-            handlers.onItemProcessed?.(item.id, true);
-        } catch (error) {
-            console.error(`[OfflineQueue] Failed to process ${item.id}:`, error);
-            await updateRetryCount(item.id);
-            failed++;
-            handlers.onItemProcessed?.(item.id, false);
+            try {
+                switch (item.type) {
+                    case 'analysis':
+                        await handlers.onAnalysis?.(item.payload);
+                        break;
+                    case 'postMortem':
+                        await handlers.onPostMortem?.(item.payload);
+                        break;
+                    case 'summary':
+                        await handlers.onSummary?.(item.payload);
+                        break;
+                    case 'strategySearch':
+                        await handlers.onStrategySearch?.(item.payload);
+                        break;
+                }
 
-            // Remove if too many retries (with exponential backoff, use higher limit)
-            if (item.retryCount >= MAX_RETRIES) {
                 await removeFromQueue(item.id);
-                console.log(`[OfflineQueue] Removed ${item.id} after ${MAX_RETRIES} retries`);
-            } else {
-                const nextDelay = calculateBackoffDelay(item.retryCount);
-                console.log(`[OfflineQueue] Will retry ${item.id} in ${nextDelay / 1000}s`);
+                processed++;
+                handlers.onItemProcessed?.(item.id, true);
+            } catch (error) {
+                console.error(`[OfflineQueue] Failed to process ${item.id}:`, error);
+                await updateRetryCount(item.id);
+                failed++;
+                handlers.onItemProcessed?.(item.id, false);
+
+                // Remove if too many retries (with exponential backoff, use higher limit)
+                if (item.retryCount >= MAX_RETRIES) {
+                    await removeFromQueue(item.id);
+                    console.log(`[OfflineQueue] Removed ${item.id} after ${MAX_RETRIES} retries`);
+                } else {
+                    const nextDelay = calculateBackoffDelay(item.retryCount);
+                    console.log(`[OfflineQueue] Will retry ${item.id} in ${nextDelay / 1000}s`);
+                }
             }
         }
-    }
 
-    if (processed > 0 || (failed === 0 && skipped === 0)) {
-        handlers.onQueueEmpty?.();
-    }
+        if (processed > 0 || (failed === 0 && skipped === 0)) {
+            handlers.onQueueEmpty?.();
+        }
 
-    console.log(`[OfflineQueue] Processed: ${processed}, Failed: ${failed}, Skipped: ${skipped}`);
-    return { processed, failed, skipped };
+        console.log(`[OfflineQueue] Processed: ${processed}, Failed: ${failed}, Skipped: ${skipped}`);
+        return { processed, failed, skipped };
+    } finally {
+        processingInFlight = false;
+    }
 };
 
 // Export as a namespace for convenience

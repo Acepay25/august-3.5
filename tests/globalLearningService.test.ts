@@ -54,11 +54,14 @@ const entry = (n: number): GranularCalibrationEntry => ({
     coin: 'BTCUSDT',
 });
 
-/** A stored calibration that updateCalibration must never clobber blindly. */
+/** A stored calibration that updateCalibration must never clobber blindly.
+ *  The real-history row carries a CURRENT timestamp: the granular prune now
+ *  drops unknown-age junk rows (matching the base entries prune), and this
+ *  test guards the load path, not the prune. */
 const storedCalibration = () => ({
     overallStats: { wins: 40, losses: 10, total: 50 },
     confidenceLevels: {},
-    granularEntries: [{ marker: 'REAL-HISTORY-ENTRY' }],
+    granularEntries: [{ marker: 'REAL-HISTORY-ENTRY', timestamp: new Date().toISOString(), confidence: 'High', outcome: 'WIN' }],
     lastUpdated: '2026-09-01T00:00:00.000Z',
 });
 
