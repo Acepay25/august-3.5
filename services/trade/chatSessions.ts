@@ -67,6 +67,14 @@ export interface ChatSession {
     effort?: string;
     /** Solo sessions: the model (providerId:modelId) this chat answers with. */
     soloModel?: string;
+    /** Runtime-only open-trade ledger (chat store lives on this in memory,
+     *  but the on-disk shape mirrors the field so a round-trip through
+     *  saveSessions/loadSessions doesn't strip it). Cleared by the harness
+     *  resolution site — never meaningful across reloads. */
+    openTrades?: Record<string, import('./chatStore').OpenTradeRow>;
+    /** Runtime-only list of every trade id ever logged from this session.
+     *  Lives alongside openTrades for the same round-trip reason. */
+    loggedTradeIds?: string[];
 }
 
 export const MAX_SESSIONS = 12;
