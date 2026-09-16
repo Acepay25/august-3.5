@@ -31,12 +31,17 @@
  *   - Spawns the packaged exe with AUGUST_SMOKE_TEST=1,
  *     --remote-debugging-port=<port>, and the scratch user-data-dir.
  *   - Connects Playwright over CDP, seeds the same profile the renderer
- *     smoke uses, and verifies:
+ *     smoke uses, and verifies the DETERMINISTIC boot contract:
  *       * splash element is removed,
  *       * [data-testid="trade-view"] mounts,
  *       * [data-testid="trade-chat-panel"] mounts,
- *       * no pageerror fires,
+ *       * no pageerror and no main-process crash banner fires,
+ *       * every app:// (packaged-resource) load succeeds,
  *       * both surfaces survive a 3-second liveness re-sample.
+ *     console.error/warning diagnostics are RETAINED and printed in full
+ *     before the verdict, but never gate it — network unavailability
+ *     (offline runner, CORS from origins that don't whitelist `app://`,
+ *     DNS) is environmental and must not fail a boot smoke.
  *   - Quits the app cleanly (IPC `app:quit` preferred, fallback SIGTERM),
  *     removes the scratch user-data-dir, and exits non-zero on any
  *     failure.
@@ -132,34 +137,10 @@ async function waitFor(predicate, timeoutMs = 20000, intervalMs = 250) {
     throw new Error(`waitFor timed out after ${timeoutMs}ms (last=${JSON.stringify(last)})`);
 }
 
-/**
- * Console errors that are KNOWN BENIGN inside a packaged Electron run from
- * the `app://` origin and MUST NOT fail the smoke probe:
- *
- *   - Binance public market-data endpoints (fapi1/2.binance.com) reject the
- *     custom `app://` origin via CORS. The renderer's market-data fallback
- *     and the live-feed REST poll handle this gracefully; the failures only
- *     show up as console errors and do NOT throw pageerrors.
- *   - Web fetch attempts to third-party APIs (Binance Vision, etc.) that
- *     don't whitelist `app://`.
- *
- * Anything else — module-load errors, renderer crashes, IPC failures —
- * must still surface as a smoke failure.
- */
-const BENIGN_CONSOLE_PATTERNS = [
-    /fapi[12]?\.binance\.com.*CORS/i,
-    /fapi[12]?\.binance\.com.*ERR_FAILED/i,
-    /data-api\.binance\.vision.*CORS/i,
-    // Chromium logs the bare "Failed to load resource: net::ERR_FAILED"
-    // (no URL) for the same CORS-blocked fetches. In the packaged desktop
-    // run, ERR_FAILED on console.error is overwhelmingly the third-party
-    // CORS set above; anything else either throws a pageerror (caught
-    // separately) or surfaces with a URL we can see.
-    /^Failed to load resource: net::ERR_FAILED$/,
-];
-
-function isBenignConsoleError(text) {
-    return BENIGN_CONSOLE_PATTERNS.some((re) => re.test(text));
+// Only runtime fatal-error banners gate stderr; ordinary Chromium/network
+// diagnostics are still printed, but are not evidence of a failed boot.
+function isMainProcessFatal(text) {
+    return /App threw an error during load|Uncaught Exception:|UnhandledPromiseRejection(?:Warning|:)/i.test(text);
 }
 
 async function seedProfile(page) {
@@ -221,10 +202,12 @@ async function launchApp(exe, userDataDir) {
     let stderr = '';
     child.stdout.on('data', (d) => process.stdout.write(`[app] ${d}`));
     child.stderr.on('data', (d) => { stderr += String(d); process.stderr.write(`[app!] ${d}`); });
+    child.on('error', (err) => fail('packaged main process error', err));
     child.on('exit', (code, signal) => {
         console.log(`[smoke] app exited code=${code} signal=${signal}`);
     });
-    appProcess = { child, stderr };
+    // Keep the live buffer, including banners split across stderr chunks.
+    appProcess = { child, get stderr() { return stderr; } };
     await waitForCdp(CDP_PORT, 30000);
     return child;
 }
@@ -282,16 +265,31 @@ async function main() {
         if (!page) throw new Error('No app:// page found over CDP within 30s');
         console.log(`[smoke] connected to ${page.url()}`);
 
+        // The seeded reload must not cancel first-navigation asset requests.
+        await page.waitForLoadState('load');
+        const appResourceFailures = [];
         page.on('pageerror', (err) => pageErrors.push(String(err && err.stack || err)));
         page.on('console', (msg) => {
-            if (msg.type() !== 'error') return;
-            const text = msg.text();
-            // pageerror covers uncaught renderer exceptions (always fatal).
-            // console.error covers both real bugs AND benign CORS-noise from
-            // third-party origins that don't whitelist `app://`. Filter the
-            // known-benign set; everything else still fails the probe.
-            if (isBenignConsoleError(text)) return;
-            pageErrors.push(`[console.error] ${text}`);
+            if (msg.type() === 'error' || msg.type() === 'warning') {
+                // Diagnostics only: boot health must not depend on network
+                // availability. Packaged resource failures are checked by URL.
+                console.error(`[renderer ${msg.type()}] ${msg.text()}`);
+            }
+        });
+        // A failed PACKAGED resource (missing production chunk, 404 on an
+        // app:// URL) is a build bug — deterministic, so it gates. Failures
+        // on https:// (market data, providers) are environmental and do not.
+        page.on('requestfailed', (request) => {
+            if (request.url().startsWith('app://')) {
+                appResourceFailures.push(`${request.url()} → ${request.failure()?.errorText || 'unknown error'}`);
+            }
+        });
+        // The app protocol handler can also return 404/403 Responses without
+        // a network-level failure; catch those via the response event.
+        page.on('response', (response) => {
+            if (response.url().startsWith('app://') && response.status() >= 400) {
+                appResourceFailures.push(`${response.url()} → HTTP ${response.status()}`);
+            }
         });
 
         await seedProfile(page);
@@ -320,6 +318,14 @@ async function main() {
             console.error('INSTALLER SMOKE FAIL: page errors during packaged boot:');
             for (const e of pageErrors) console.error('---\n' + e);
             throw new Error(`${pageErrors.length} pageerror(s) during packaged boot`);
+        }
+
+        if (appResourceFailures.length > 0) {
+            throw new Error(`Packaged resource failures: ${appResourceFailures.join('; ')}`);
+        }
+
+        if (isMainProcessFatal(appProcess.stderr)) {
+            throw new Error(`Main-process fatal banner in stderr: ${appProcess.stderr.slice(-400)}`);
         }
 
         await browser.close();
