@@ -1,4 +1,3 @@
-/* eslint-env node, browser */
 /**
  * useFuturesLiveFeed REST polling fallback (logged-trade-and-rest-fallback).
  *
