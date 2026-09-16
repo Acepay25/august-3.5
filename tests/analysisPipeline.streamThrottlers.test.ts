@@ -45,7 +45,7 @@ describe('applyDebateStreamUpdate', () => {
         const active = { Macro: 1 };
         const liveTools = { Macro: 'fetched chart' };
         const runLog: any[] = [{ at: 'now', kind: 'budget', detail: 'wire ok' }];
-        const runContract = [{ id: 'opening', label: 'opening', status: 'complete' as const }];
+        const runContract = [{ id: 'opening', label: 'opening', state: 'done' as const }];
 
         const prev = [baseMessage({ id: 'debate-msg', debateTurns: [] })];
         const result = applyDebateStreamUpdate(
@@ -120,8 +120,8 @@ describe('applyEnsembleProgressUpdate', () => {
             id: 'placeholder',
             ensembleProgress: {
                 analysts: [
-                    { key: 'analyst-A', name: 'A', status: 'analyzing' as const, reasoning: '' },
-                    { key: 'analyst-B', name: 'B', status: 'analyzing' as const, reasoning: '' },
+                    { key: 'analyst-A', displayName: 'A', providerId: 'p1', providerName: 'P1', modelId: 'm1', modelName: 'M1', status: 'analyzing' as const, reasoning: '' },
+                    { key: 'analyst-B', displayName: 'B', providerId: 'p2', providerName: 'P2', modelId: 'm2', modelName: 'M2', status: 'analyzing' as const, reasoning: '' },
                 ],
                 moderator: { status: 'waiting' as const },
             },
@@ -205,7 +205,7 @@ describe('applyOpeningThinkingUpdate', () => {
         const reasoning = { 'k-macro': 'macro-cot' }; // tech has none
         const result = applyOpeningThinkingUpdate(prev, 'opening', analysts, reasoning, {});
         expect(result[0].debateTurns).toHaveLength(1);
-        expect(result[0].debateTurns[0].speaker).toBe('Macro');
+        expect(result[0].debateTurns[0]!.speaker).toBe('Macro');
     });
 
     it('returns prev unchanged when the opening message id is missing', () => {
