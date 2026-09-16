@@ -72,6 +72,7 @@ const pageErrors = [];
 const consoleErrors = [];
 const mainConsoleErrors = [];
 const blockedRequests = [];
+const appResourceFailures = [];
 const attachedPages = new WeakSet();
 let appOutput = '';
 
@@ -411,7 +412,8 @@ async function runProbe() {
 
     const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     const expectedVersion = String(packageJson.version);
-    const existingExe = findExePath();
+    const override = process.env.INSTALLER_SMOKE_EXECUTABLE || process.env.AUGUST_SMOKE_APP;
+    const existingExe = override ? resolveExePath() : findExePath();
     if (REBUILD || !existingExe) {
         if (SKIP_BUILD && !existingExe) throw new Error('INSTALLER_SMOKE_SKIP_BUILD=1 but no packaged executable is available');
         await buildExe();
@@ -479,7 +481,19 @@ async function runProbe() {
     page.setDefaultTimeout(PROBE_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(PROBE_TIMEOUT_MS);
 
+    await page.waitForLoadState('load');
     await seedProfile(page);
+    // Observe the seeded navigation without counting requests cancelled by seeding.
+    page.on('requestfailed', (request) => {
+        if (request.url().startsWith('app://')) {
+            appResourceFailures.push(`${request.url()} → ${request.failure()?.errorText || 'unknown error'}`);
+        }
+    });
+    page.on('response', (response) => {
+        if (response.url().startsWith('app://') && response.status() >= 400) {
+            appResourceFailures.push(`${response.url()} → HTTP ${response.status()}`);
+        }
+    });
     await page.goto(APP_PROTOCOL_URL, { waitUntil: 'domcontentloaded', timeout: PROBE_TIMEOUT_MS });
     console.log('[smoke] profile seeded and packaged renderer loaded');
 
@@ -492,10 +506,19 @@ async function runProbe() {
     if (consoleErrors.length > 0) {
         throw new Error(`${consoleErrors.length} unexpected renderer console.error message(s) during packaged boot`);
     }
+    if (mainConsoleErrors.length > 0) {
+        throw new Error(`${mainConsoleErrors.length} unexpected main-process console.error message(s)`);
+    }
+    if (/App threw an error during load|Uncaught Exception:|UnhandledPromiseRejection(?:Warning|:)/i.test(appOutput)) {
+        throw new Error('Main-process fatal banner in packaged app output');
+    }
+    if (appResourceFailures.length > 0) {
+        throw new Error(`Packaged resource failures: ${appResourceFailures.join('; ')}`);
+    }
     if (blockedRequests.length > 0) {
         console.log(`[smoke] blocked ${blockedRequests.length} external renderer request attempt(s); no request was allowed through`);
     }
-    if (appExited && appExitCode !== 0) {
+    if (appExited || appProcess.exitCode !== null || appProcess.signalCode !== null) {
         throw new Error(`Packaged Electron exited unexpectedly (code=${appExitCode} signal=${appExitSignal})`);
     }
 
