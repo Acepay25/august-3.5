@@ -1363,6 +1363,14 @@ const getDefaultOrderBook = (): OrderBookData => ({
  * re-home, re-run the probe from a network where the desk shows 'live' (the
  * markPrice@1s control must produce frames) — if it does, !forceOrder@arr
  * will too.
+ * RE-VERIFIED 2026-09-16 IN HEADLESS CHROMIUM (the app's own engine, via
+ * Playwright — the one gap in the Node probe): identical verdict — fstream
+ * markPrice@1s control 0 frames / 20 s, !forceOrder@arr + per-symbol
+ * forceOrder 0 frames / 60 s, while the SPOT stream.binance.com trade feed
+ * delivered 98 frames in the same 20 s. The block is specifically futures
+ * WS at the network layer, not a Node artifact. (PriceAlertService is
+ * unaffected — its socket rides the working spot host; the desk degrades to
+ * fapi REST polling, which answers fine.)
  */
 let liquidationsSourceUnavailable = false;
 
