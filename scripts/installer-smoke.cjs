@@ -480,6 +480,10 @@ async function runProbe() {
     attachPage(page);
     page.setDefaultTimeout(PROBE_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(PROBE_TIMEOUT_MS);
+    // Exercise the documented desktop Trade layout. GitHub-hosted Electron
+    // windows can default below the lg breakpoint, where the dock is
+    // intentionally hidden unless the user selects the AI mode.
+    await page.setViewportSize({ width: 1280, height: 800 });
 
     await page.waitForLoadState('load');
     await seedProfile(page);
