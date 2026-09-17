@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
-import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
-} from 'recharts';
+import { Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { APP_VERSION } from '../../constants/version';
 
 // Import services
 import { ReinforcementSignalService, ReinforcementSignal } from '../../services/learning/ReinforcementSignalService';
@@ -12,9 +11,10 @@ import GlobalLearningService from '../../services/learning/GlobalLearningService
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';
 import { recordInsightFeedback } from '../../services/learning/PatternMemorySynthesisService';
-import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Import JobQueue
+import { jobQueue } from '../../services/infrastructure/JobQueueService';
 import { ConfidenceCalibration } from '../../types';
 import { listSkills } from '../../services/learning/SkillMemoryService';
+import { getMemoryFilesStats } from '../../services/learning/MemoryFilesService';
 import {
     GATE_SCAN_JSON_SCHEMA,
     MASTER_TRADE_PLAN_MARKDOWN,
@@ -30,17 +30,15 @@ const validationSchemas: Record<string, any> = {
 };
 
 // -- ICONS (lucide-react) --
-import { X, Brain, Zap, Server, CheckCircle, AreaChart as AreaChartIcon, Sparkles, ChevronDown, Code } from 'lucide-react';
+import { X, Brain, Zap, Server, AreaChart as AreaChartIcon, Sparkles, Code } from 'lucide-react';
 
 const Icons = {
     Close: X,
     Brain,
     Zap,
     Server,
-    Check: CheckCircle,
     Chart: AreaChartIcon,
     Sparkles,
-    ChevronDown,
     Code,
 };
 
@@ -57,6 +55,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     // Real-time System Stats
     const [queueSize, setQueueSize] = useState<number>(0);
     const [storageCount, setStorageCount] = useState<number>(0);
+    const [memoryStats, setMemoryStats] = useState<{ enabledCount: number; charCount: number }>({ enabledCount: 0, charCount: 0 });
 
     // Selection states for dropdown outputs
     const [selectedRuleIndex, setSelectedRuleIndex] = useState<number>(0);
@@ -87,7 +86,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
             // 5s polling reloads the lists — clamp the selection so a shrink
             // between polls can't point past the end of the new array (the
             // <select> would render no matching <option>).
-            setSelectedRuleIndex(i => Math.min(i, Math.max(0, sk.length - 1)));
+            setSelectedRuleIndex(i => Math.max(0, Math.min(i, sk.length - 1)));
 
             const iStats = getAttributedInsightsSummary();
             const topInsights = iStats.topInsights || [];
@@ -97,8 +96,9 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
             // 2. System Data
             setQueueSize(jobQueue.getQueueLength());
+            setMemoryStats(getMemoryFilesStats());
 
-            // Simulate Storage Count (just for demo, usually async)
+            // Count only records this screen can actually explain.
             const logs = await storageService.getTradeLogs();
             setStorageCount(logs.length + sk.length + (iStats.totalInsights || 0));
         } catch (error) {
@@ -122,11 +122,13 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     const providerLabel = (provider: string): string =>
         provider === 'pattern-memory-severity-detector' ? 'Severity Detector' : provider;
 
+    const highConfidenceWinRate = calibration ? getCalibrationSummary(calibration).high.winRate : null;
+
     // -- Modern Card Component --
     const ModernCard = ({ title, value, subtitle, icon, accent = "blue", large = false, children }: any) => {
         const accentColors: any = {
-            blue: "from-blue-500/20 to-cyan-500/5 border-blue-500/20 text-blue-400",
-            purple: "from-purple-500/20 to-fuchsia-500/5 border-purple-500/20 text-purple-400",
+            blue: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-300",
+            purple: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-300",
             emerald: "from-emerald-500/20 to-teal-500/5 border-emerald-500/20 text-emerald-400",
             amber: "from-amber-500/20 to-orange-500/5 border-amber-500/20 text-amber-400",
             yellow: "from-yellow-500/20 to-amber-500/5 border-yellow-500/20 text-yellow-400",
@@ -180,31 +182,39 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-fade-in">
                         {/* 1.1 RL - Large Card */}
                         <ModernCard title="Reinforcement Loop" accent="emerald" icon={<Icons.Chart className="w-5 h-5" />} large>
-                            <div className="h-48 w-full -ml-2 min-w-0">
-                                <ResponsiveContainer width="100%" height="100%" minWidth={100}>
-                                    <AreaChart data={signals.length ? signals : [{ timestamp: 0, rewardScore: 0 }]}>
-                                        <defs>
-                                            <linearGradient id="colorReward" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#2fc97f" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#2fc97f" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <Tooltip
-                                            contentStyle={{ backgroundColor: '#141412', border: '1px solid #2f2f2f', borderRadius: '12px' }}
-                                            itemStyle={{ color: '#b7b7b1' }}
-                                        />
-                                        <Area type="monotone" dataKey="rewardScore" stroke="#2fc97f" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
+                            {signals.length > 0 ? (
+                                <div className="h-48 w-full -ml-2 min-w-0">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={100}>
+                                        <AreaChart data={signals}>
+                                            <defs>
+                                                <linearGradient id="colorReward" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#2fc97f" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="#2fc97f" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#141412', border: '1px solid #2f2f2f', borderRadius: '12px' }}
+                                                itemStyle={{ color: '#b7b7b1' }}
+                                            />
+                                            <Area type="monotone" dataKey="rewardScore" stroke="#2fc97f" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-48 w-full min-w-0 flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 text-center">
+                                    <Icons.Chart className="h-6 w-6 text-emerald-500/60" />
+                                    <p className="text-sm font-medium text-zinc-200">No feedback yet</p>
+                                    <p className="max-w-[240px] text-[11px] leading-relaxed text-zinc-500">Resolved trades will create the first reinforcement signal.</p>
+                                </div>
+                            )}
                             <div className="flex justify-between items-end mt-4">
                                 <div className="text-2xl font-light text-emerald-400">
-                                    {signals.length > 0 ? (signals.reduce((a, b) => a + b.rewardScore, 0) / signals.length).toFixed(2) : "0.00"}
+                                    {signals.length > 0 ? (signals.reduce((a, b) => a + b.rewardScore, 0) / signals.length).toFixed(2) : '—'}
                                     <span className="text-sm text-emerald-500/50 ml-2">Avg Reward</span>
                                 </div>
                                 <div className="flex flex-col items-end">
                                     <div className="text-xs text-emerald-500/40 font-mono">Real-time Feedback</div>
-                                    <div className="text-[10px] text-emerald-500/30">Last: {signals.length > 0 ? new Date(signals[signals.length - 1].timestamp).toLocaleTimeString() : '--:--'}</div>
+                                    <div className="text-[10px] text-zinc-500">{signals.length > 0 ? `Last: ${new Date(signals[signals.length - 1].timestamp).toLocaleTimeString()}` : 'Awaiting first resolved trade'}</div>
                                 </div>
                             </div>
                         </ModernCard>
@@ -250,9 +260,9 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 1.3 Bayesian */}
                         <ModernCard
                             title="Bayesian Confidence"
-                            value={calibration ? (getCalibrationSummary(calibration).high.winRate ?? 'N/A') + '%' : 'N/A'}
-                            subtitle="High Confidence Accuracy"
-                            accent="blue"
+                            value={highConfidenceWinRate != null ? `${highConfidenceWinRate}%` : 'No data'}
+                            subtitle={highConfidenceWinRate != null ? 'High-confidence outcomes' : 'Log resolved high-confidence trades to calibrate'}
+                            accent="zinc"
                             icon={<Icons.Sparkles className="w-5 h-5" />}
                         />
 
@@ -331,8 +341,8 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 1.5 Global Learning */}
                         <ModernCard
                             title="Cross-Session Memory"
-                            value="Active"
-                            subtitle="Context Injection Online"
+                            value={memoryStats.enabledCount > 0 ? `${memoryStats.enabledCount} active` : 'No files'}
+                            subtitle={memoryStats.enabledCount > 0 ? `${memoryStats.charCount.toLocaleString()} chars injected` : 'Enable memory files to inject context'}
                             accent="zinc"
                             icon={<Icons.Server className="w-5 h-5" />}
                         />
@@ -433,34 +443,21 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                 {/* Header Section */}
                 <div className="px-8 py-6 flex items-center justify-between bg-zinc-950 z-20">
                     <div className="flex items-center gap-4">
-                        <div className="bg-gradient-to-br from-blue-600 to-cyan-400 p-0.5 rounded-xl shadow-lg shadow-blue-500/20">
-                            <div className="bg-zinc-950 p-2 rounded-[10px]">
-                                <Icons.Sparkles className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 w-6 h-6" />
-                            </div>
+                        <div className="bg-zinc-800 border border-zinc-700 p-2 rounded-xl">
+                            <Icons.Sparkles className="text-zinc-300 w-6 h-6" />
                         </div>
                         <div>
                             <h1 className="text-xl font-medium text-white tracking-tight">System Intelligence</h1>
                             <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono mt-0.5">
-                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(176, 176, 182,0.5)]"></span>
-                                v6.0.0 Live
+                                Learning & runtime overview
                             </div>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-4">
-                        {/* Version Selector Dropdown - Cleaned up (Removed v4/v5 per request) */}
-                        <div className="relative group">
-                            <select
-                                value="v6"
-                                aria-label="System version"
-                                className="appearance-none bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm rounded-xl py-2 pl-4 pr-10 focus:outline-none focus:ring-1 focus:ring-blue-500 hover:bg-zinc-800 transition-colors"
-                            >
-                                <option value="v6">Version 6.0 (Current)</option>
-                            </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
-                                <Icons.ChevronDown className="w-4 h-4" />
-                            </div>
-                        </div>
+                        <span aria-label="System version" className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm font-mono rounded-xl py-2 px-4">
+                            v{APP_VERSION}
+                        </span>
 
                         <button
                             onClick={onClose}

@@ -52,6 +52,11 @@ export const DiagnosticsPanel: React.FC = () => {
                 </span>
             </div>
             <p className="text-xs text-zinc-300 break-all">{error.message}</p>
+            {error.message === 'Cannot redefine property: onmessage' && (
+                <p className="text-xs text-zinc-400">
+                    The origin of this error is unknown. It may involve instrumentation; the message alone does not establish the cause or impact.
+                </p>
+            )}
             {error.filename && (
                 <p className="text-[10px] text-zinc-500">
                     {error.filename}:{error.lineno}:{error.colno}

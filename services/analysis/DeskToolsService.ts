@@ -261,6 +261,7 @@ const TOOL_LABELS: Record<string, string> = {
     recall: 'notebook recall',
     get_setup_history_stats: 'setup history',
     run_screener: 'screener',
+    run_monte_carlo: 'monte carlo',
     recall_chat: 'session search',
     project_future_price: 'price projection',
     send_message: 'direct message',
@@ -830,6 +831,37 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'run_monte_carlo',
+            description:
+                'Run a Monte Carlo simulation on a CONCRETE trade setup you state (direction, entry, stop loss, 1–3 take profits): win rate, expected value per trade, TP/SL outcome probabilities, PnL percentile range, and — with account args — 100-trade drawdown/ruin risk and Kelly-optimal size. Use when the user asks about the odds of a plan, whether a risk/reward holds up, or before calling a setup high-probability. Levels are ABSOLUTE prices, not percentages.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    direction: { type: 'string', enum: ['long', 'short'], description: 'Trade direction (buy = long, sell = short).' },
+                    entry: { type: 'number', description: 'Entry price (absolute).' },
+                    stop_loss: { type: 'number', description: 'Stop-loss price (absolute; below entry for long, above for short).' },
+                    take_profits: {
+                        type: 'array',
+                        items: { type: 'number' },
+                        description: '1–3 take-profit prices (absolute; above entry for long, below for short).',
+                    },
+                    atr: { type: 'number', description: 'ATR in PRICE units (e.g. 2.5, not 2.5%). Default: 2× the entry→stop distance.' },
+                    symbol: { type: 'string', description: 'Perp symbol, e.g. ETHUSDT (default: the current chart symbol; label only).' },
+                    timeframe: { type: 'string', description: 'Timeframe label, e.g. 1h (default: the chart\'s current interval).' },
+                    num_simulations: { type: 'number', description: 'Simulation count, 100–5000 (default 1000).' },
+                    max_steps: { type: 'number', description: 'Max candles per path before timeout, 10–1000 (default 100).' },
+                    account_balance: { type: 'number', description: 'With position_size AND leverage: account balance for the 100-trade ruin-risk run.' },
+                    position_size: { type: 'number', description: 'With account_balance AND leverage: size per trade in account currency.' },
+                    leverage: { type: 'number', description: 'With account_balance AND position_size: leverage multiplier.' },
+                },
+                required: ['direction', 'entry', 'stop_loss', 'take_profits'],
+                additionalProperties: false,
+            },
+        },
+    },
 ];
 
 /**
@@ -980,6 +1012,7 @@ You can call live tools before you speak — opening analysis, rebuttal, clarifi
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
 The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
+run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
 
@@ -1275,6 +1308,7 @@ const MARKET_TOOLS = new Set([
     'scan_chart_skills',
     'project_future_price',
     'get_setup_history_stats',
+    'run_monte_carlo',
 ]);
 
 const resolvedSymbolField = (call: DeskToolCall, fallback: string): { symbol?: string } => {
@@ -1802,6 +1836,87 @@ export async function executeDeskTool(
                 if (sort === 'movers') rows = [...rows].sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h));
                 else if (sort === 'setups') rows = [...rows].sort((a, b) => b.setups.length - a.setups.length);
                 content = screenerToMarkdown(rows);
+                break;
+            }
+            case 'run_monte_carlo': {
+                const dirRaw = (asString(call.arguments.direction) || '').toLowerCase();
+                const dirWord = ['long', 'buy'].includes(dirRaw) ? 'Long' : ['short', 'sell'].includes(dirRaw) ? 'Short' : '';
+                const numeric = (value: unknown): number =>
+                    typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : NaN;
+                const entry = numeric(call.arguments.entry);
+                const stopLoss = numeric(call.arguments.stop_loss);
+                const rawTps = Array.isArray(call.arguments.take_profits) ? call.arguments.take_profits.map(numeric) : [];
+                if (!dirWord) {
+                    return rejectedResult(call, 'run_monte_carlo rejected: direction must be "long" (buy) or "short" (sell).');
+                }
+                const priceOk = (v: number): boolean => Number.isFinite(v) && v > 0;
+                if (!priceOk(entry) || !priceOk(stopLoss)) {
+                    return rejectedResult(call, 'run_monte_carlo rejected: entry and stop_loss must be positive prices.');
+                }
+                const stopSideOk = dirWord === 'Long' ? stopLoss < entry : stopLoss > entry;
+                if (!stopSideOk) {
+                    return rejectedResult(call, `run_monte_carlo rejected: for a ${dirWord.toLowerCase()}, stop_loss must be ${dirWord === 'Long' ? 'below' : 'above'} entry.`);
+                }
+                const winningSide = dirWord === 'Long'
+                    ? (t: number) => priceOk(t) && t > entry
+                    : (t: number) => priceOk(t) && t < entry;
+                if (rawTps.length < 1 || rawTps.length > 3 || !rawTps.every(winningSide)) {
+                    return rejectedResult(call, `run_monte_carlo rejected: take_profits needs 1–3 positive, finite prices ${dirWord === 'Long' ? 'above' : 'below'} entry.`);
+                }
+                const tps = [...new Set(rawTps)].sort((a, b) => (dirWord === 'Long' ? a - b : b - a));
+                const stopDistance = Math.abs(entry - stopLoss);
+                const atr = call.arguments.atr === undefined ? 2 * stopDistance : numeric(call.arguments.atr);
+                if (!priceOk(atr) || !Number.isFinite(atr / entry)) {
+                    return rejectedResult(call, 'run_monte_carlo rejected: atr must be a positive finite value in price units.');
+                }
+                const count = numeric(call.arguments.num_simulations ?? 1000);
+                const steps = numeric(call.arguments.max_steps ?? 100);
+                if (!Number.isFinite(count) || !Number.isFinite(steps)) {
+                    return rejectedResult(call, 'run_monte_carlo rejected: num_simulations and max_steps must be finite numbers.');
+                }
+                const numSimulations = Math.min(5000, Math.max(100, Math.round(count)));
+                const maxSteps = Math.min(1000, Math.max(10, Math.round(steps)));
+                const accountValues = [call.arguments.account_balance, call.arguments.position_size, call.arguments.leverage];
+                if (accountValues.some(value => value !== undefined && !priceOk(numeric(value)))) {
+                    return rejectedResult(call, 'run_monte_carlo rejected: account inputs must be positive finite numbers.');
+                }
+                const [balRaw, sizeRaw, levRaw] = accountValues.map(numeric);
+                const ruinArgs = accountValues.every(value => value !== undefined)
+                    ? { accountBalance: balRaw, positionSize: sizeRaw, leverage: levRaw }
+                    : null;
+                if (ruinArgs && (sizeRaw > balRaw || levRaw < 1 || !Number.isFinite(sizeRaw * levRaw))) {
+                    return rejectedResult(call, 'run_monte_carlo rejected: position_size is margin, cannot exceed account_balance, and leverage must be at least 1.');
+                }
+                const { runSimulationAsync, calculateRuinRiskAsync, monteCarloToMarkdown } = await import('./MonteCarloService');
+                const mc = await runSimulationAsync({
+                    entry,
+                    stopLoss,
+                    takeProfits: tps,
+                    explicitTargetsOnly: true,
+                    direction: dirWord,
+                    atr,
+                    timeframe: (asString(call.arguments.timeframe) || context.chartInterval || '1h').slice(0, 20),
+                    numSimulations,
+                    maxSteps,
+                });
+                let ruin;
+                if (ruinArgs) {
+                    ruin = await calculateRuinRiskAsync(ruinArgs.accountBalance, ruinArgs.positionSize, ruinArgs.leverage, mc);
+                }
+                content = monteCarloToMarkdown(mc, ruin, {
+                    symbol: asSymbol(call.arguments.symbol, fallback),
+                    direction: dirWord,
+                    entry,
+                    stopLoss,
+                    takeProfits: tps,
+                    atr,
+                    timeframe: (asString(call.arguments.timeframe) || context.chartInterval || '1h').slice(0, 20),
+                    maxSteps,
+                    estimatedAtr: call.arguments.atr === undefined,
+                });
+                if (!ruinArgs && (priceOk(balRaw) || sizeRaw > 0 || levRaw > 0)) {
+                    content += '\n(Ruin risk skipped: pass account_balance, position_size AND leverage together to run it.)';
+                }
                 break;
             }
             case 'get_setup_history_stats': {
