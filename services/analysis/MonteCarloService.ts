@@ -71,6 +71,8 @@ export interface SimulationConfig {
     entry: number;
     stopLoss: number;
     takeProfits: number[];            // [TP1, TP2, TP3]
+    /** Explicit plans must not acquire the legacy fallback targets. */
+    explicitTargetsOnly?: boolean;
     direction: 'Long' | 'Short';
     atr: number;                      // Current ATR for volatility
     timeframe: string;                // Timeframe of the chart
@@ -262,7 +264,8 @@ const evaluatePath = (
     entry: number,
     stopLoss: number,
     takeProfits: number[],
-    direction: 'Long' | 'Short'
+    direction: 'Long' | 'Short',
+    explicitTargetsOnly = false
 ): {
     outcome: 'TP1' | 'TP2' | 'TP3' | 'SL' | 'TIMEOUT';
     pnlPercent: number;
@@ -276,9 +279,10 @@ const evaluatePath = (
     let exitPrice = path[path.length - 1];
 
     const isLong = direction === 'Long';
-    const tp1 = takeProfits[0] || (isLong ? entry * 1.02 : entry * 0.98);
-    const tp2 = takeProfits[1] || (isLong ? entry * 1.04 : entry * 0.96);
-    const tp3 = takeProfits[2] || (isLong ? entry * 1.06 : entry * 0.94);
+    const absentTarget = isLong ? Infinity : -Infinity;
+    const tp1 = takeProfits[0] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.02 : entry * 0.98));
+    const tp2 = takeProfits[1] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.04 : entry * 0.96));
+    const tp3 = takeProfits[2] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.06 : entry * 0.94));
 
     // Per-step volatility estimate from the path's own log returns — used to
     // synthesize intra-step high/low. A TP/SL touch between closes was
@@ -439,7 +443,7 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
     // Run simulations
     for (let i = 0; i < numSimulations; i++) {
         const path = simulatePricePath(entry, volatility, drift, maxSteps, regimeConfig, rng);
-        const result = evaluatePath(path, entry, stopLoss, takeProfits, direction);
+        const result = evaluatePath(path, entry, stopLoss, takeProfits, direction, config.explicitTargetsOnly);
 
         outcomes.push(result.outcome);
         pnls.push(result.pnlPercent);
@@ -737,6 +741,44 @@ export const generateMonteCarloSummary = (
     summary += `╚═══════════════════════════════════════════════════════════════╝`;
 
     return summary;
+};
+
+/**
+ * Compact markdown digest for the model (run_monte_carlo desk tool).
+ * Labels must match what runSimulation actually computes: the TP/SL buckets
+ * are MUTUALLY EXCLUSIVE terminal outcomes (not cumulative touch odds), the
+ * confidence interval spans 5th–95th percentile trade PnL (not final equity),
+ * and expectedValue covers resolved TP/SL paths only.
+ */
+export const monteCarloToMarkdown = (
+    result: MonteCarloResult,
+    ruinRisk?: RuinRiskResult,
+    inputs?: { symbol?: string; direction: string; entry: number; stopLoss: number; takeProfits: number[]; atr: number; timeframe: string; maxSteps: number; estimatedAtr: boolean }
+): string => {
+    const p = result.probabilities;
+    const evSign = result.expectedValue >= 0 ? '+' : '';
+    const inLine = inputs
+        ? `\nSetup: ${inputs.symbol ? `${inputs.symbol} ` : ''}${inputs.direction} entry ${inputs.entry.toLocaleString()} · SL ${inputs.stopLoss.toLocaleString()} · TPs ${inputs.takeProfits.map(t => t.toLocaleString()).join(' / ')} · ATR ${inputs.atr.toLocaleString()} (${inputs.timeframe})`
+        : '';
+    const lines = [
+        `MONTE CARLO — ${result.simulations} simulated paths on ${result.timeframe}:${inLine}`,
+        `Win rate ${result.winRate.toFixed(1)}% (${result.winCount}/${result.simulations}) · EV ${evSign}${result.expectedValue.toFixed(2)}% over resolved paths only (timeouts excluded; unleveraged)`,
+        `Terminal outcomes (% of paths): TP1 ${p.tp1Hit.toFixed(1)} · TP2 ${p.tp2Hit.toFixed(1)} · TP3 ${p.tp3Hit.toFixed(1)} · SL ${p.slHit.toFixed(1)} · timeout ${p.timeout.toFixed(1)} (buckets are exclusive — a path counts once)`,
+        `Avg win ${result.avgWinPercent !== undefined ? result.avgWinPercent.toFixed(2) : '—'}% · avg loss ${result.avgLossPercent !== undefined ? result.avgLossPercent.toFixed(2) : '—'}% · avg adverse excursion ${result.maxDrawdownAvg.toFixed(2)}% · avg resolution ${result.timeToOutcomeAvg.toFixed(0)} candles`,
+        `5th–95th percentile trade PnL range: ${result.confidenceInterval.lower.toFixed(2)}% to ${result.confidenceInterval.upper.toFixed(2)}% (per-trade PnL, not account equity).`,
+    ];
+    if (inputs) {
+        lines.push(`Assumptions: ${inputs.maxSteps} candles maximum; ATR ${inputs.estimatedAtr ? 'estimated as twice stop distance' : 'supplied by caller'}, not fetched; timeframe is a label only; neutral initial drift/regime. Seed ${result.seedUsed ?? 'unknown'}. Average duration includes timeouts.`);
+    }
+    if (ruinRisk) {
+        lines.push(
+            `Account risk over 100 fixed-fractional trades: P(≥25% drawdown) ${ruinRisk.prob25pctDrawdown.toFixed(1)}% · P(≥50%) ${ruinRisk.prob50pctDrawdown.toFixed(1)}% · P(≥75%) ${ruinRisk.prob75pctDrawdown.toFixed(1)}% · mean equity after 100 trades ${ruinRisk.expectedEquityAfter100.toLocaleString()} · Kelly-optimal size ${ruinRisk.kellyOptimalSize.toFixed(1)}% of account.`,
+        );
+    }
+    lines.push(
+        'Statistical estimate from simulated price paths, NOT a forecast — quote probabilities with the setup assumptions, never as certainty.',
+    );
+    return lines.join('\n');
 };
 
 /**

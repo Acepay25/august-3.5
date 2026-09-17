@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
@@ -26,7 +26,7 @@ interface HeaderProps {
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
     onOpenLiveMarket: () => void;
-    onOpenVersionHistory: () => void; // New prop for Changelog
+    onOpenVersionHistory: () => void; // Opens System Intelligence
     // Network status
     isOnline?: boolean;
     pendingQueueCount?: number;
@@ -366,14 +366,15 @@ export const Header: React.FC<HeaderProps> = memo(({
                         </button>
                     )}
 
-                    {/* Changelog / Version History Button */}
+                    {/* System Intelligence */}
                     <button
+                        type="button"
                         onClick={onOpenVersionHistory}
                         className="p-2 text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800 rounded-lg transition-colors"
-                        title="Changelog & Features"
-                        aria-label="Changelog and features"
+                        title="System Intelligence"
+                        aria-label="System Intelligence"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+                        <HistoryIcon className="h-5 w-5" />
                     </button>
 
                     {isPostMortemInProgress && (

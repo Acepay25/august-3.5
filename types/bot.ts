@@ -24,7 +24,7 @@ export interface HermesBot {
 export const BOT_TOOL_PRESETS: Record<string, string[]> = {
     macro: ['get_session_context', 'get_btc_context', 'web_search'],
     technical: ['get_price_snapshot', 'get_order_book'],
-    risk: ['get_derivatives', 'get_liquidations', 'get_session_context'],
+    risk: ['get_derivatives', 'get_liquidations', 'get_session_context', 'run_monte_carlo'],
 };
 
 export const defaultToolsForRole = (role: AnalystRole): string[] => {

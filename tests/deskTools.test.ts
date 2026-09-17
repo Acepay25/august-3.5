@@ -44,6 +44,7 @@ describe('DeskToolsService', () => {
             'scan_chart_skills',
             'project_future_price',
             'run_screener',
+            'run_monte_carlo',
         ]);
         expect(toAnthropicTools().find(t => (t as { name: string }).name === 'web_search')).toMatchObject({
             name: 'web_search',

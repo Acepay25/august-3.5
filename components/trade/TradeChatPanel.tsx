@@ -190,7 +190,7 @@ const TRADE_TOOLS = [
     'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
     'project_future_price',
     // Market-wide discovery: grade the whole top-volume universe at once.
-    'run_screener',
+    'run_screener', 'run_monte_carlo',
     // Growth set: the model edits its own memory, skills and tools from here.
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill',
     'amend_memory', 'forge_tool', 'scan_chart_skills',
