@@ -113,3 +113,8 @@ cleanup_final.ps1
 tests/test-rl.cjs
 tests/test-rl.ts
 tests/standalone-test-rl.ts
+
+# Scratch fixes / debug scripts (one-shot, not for CI)
+scripts/fix-imports.cjs
+scripts/fix-imports-v2.cjs
+hybrid-payload-dump.md

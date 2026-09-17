@@ -300,9 +300,21 @@ export const Header: React.FC<HeaderProps> = memo(({
                 </div>
                 {/* Right Side: Minimal Actions */}
                 <div className="status-surface flex items-center gap-2">
-                    {saveStatus === 'SAVING' && <LoadingIcon className="h-4 w-4 text-zinc-500" />}
-                    {saveStatus === 'SAVED' && <CheckIcon className="h-4 w-4 text-emerald-500" />}
-                    {!isOnline && <CloudOffIcon className="h-4 w-4 text-yellow-500" />}
+                    {saveStatus === 'SAVING' && (
+                        <span role="status" aria-label="Saving">
+                            <LoadingIcon className="h-4 w-4 text-zinc-500" />
+                        </span>
+                    )}
+                    {saveStatus === 'SAVED' && (
+                        <span role="status" aria-label="Saved">
+                            <CheckIcon className="h-4 w-4 text-emerald-500" />
+                        </span>
+                    )}
+                    {!isOnline && (
+                        <span role="status" aria-label="Offline">
+                            <CloudOffIcon className="h-4 w-4 text-yellow-500" />
+                        </span>
+                    )}
 
                     {/* Desktop: Update button */}
                     <div className="hidden sm:block">

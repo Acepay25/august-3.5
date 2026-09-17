@@ -14,7 +14,7 @@ const CACHE_TTL = 30000; // 30 seconds
 // it for the full 30s made every "Live mark" line in the model's packet lag
 // the painted chart — the gap read as a fresh price move ("discrepancy
 // flagged"). Keep it near-stream-fresh; the endpoint is one cheap symbol call.
-const LIVE_MARK_TTL = 3000;
+const LIVE_MARK_TTL = 2000;
 
 // In-flight dedupe for fetchOHLCVFromTime — concurrent identical requests
 // share one promise instead of fanning out N identical Binance calls.

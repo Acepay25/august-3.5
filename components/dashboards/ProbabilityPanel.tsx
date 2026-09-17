@@ -9,8 +9,10 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Activity } from 'lucide-react';
 import { LevelProbabilities } from '../../types';
 import { SectionCard } from './analyticsShared';
+import { EmptyState } from '../ui/EmptyState';
 
 interface ProbabilityPanelProps {
     levelProbabilities?: LevelProbabilities | null;
@@ -268,13 +270,12 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                             </p>
                         </>
                     ) : (
-                        <>
-                            <div className="text-2xl mb-2 opacity-20"></div>
-                            <span className="text-xs text-zinc-500 font-medium">No Analysis Active</span>
-                            <p className="text-[10px] text-zinc-600 mt-1 text-center font-normal">
-                                Probabilities appear during live trade analysis.
-                            </p>
-                        </>
+                        <EmptyState
+                            compact
+                            icon={<Activity className="h-5 w-5" />}
+                            title="No Analysis Active"
+                            description="Probabilities appear during live trade analysis."
+                        />
                     )}
                 </div>
             )}

@@ -32,7 +32,6 @@ import { useToastActions } from './components/shared/Toast';
 import { FORGED_PROPOSAL_EVENT } from './services/tools/toolForge';
 import { AMENDMENT_EVENT } from './services/learning/memoryAmendments';
 import { useConfirmDialog } from './components/shared/ConfirmDialog';
-import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
@@ -219,6 +218,18 @@ const App: React.FC = () => {
     const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
     const [isBotManagerVisible, setIsBotManagerVisible] = useState(false);
     const applyingHashRef = useRef(false);
+
+    // Lazy-on-demand: only mount the legacy StrategySearch + Analytics side
+    // panels once the user opens them at least once. They stay mounted
+    // thereafter so the open/close animation is instant on the second open.
+    const [isStrategySearchEverOpened, setIsStrategySearchEverOpened] = useState(false);
+    const [isAdvancedAnalyticsEverOpened, setIsAdvancedAnalyticsEverOpened] = useState(false);
+    React.useEffect(() => {
+        if (isStrategySearchVisible) setIsStrategySearchEverOpened(true);
+    }, [isStrategySearchVisible]);
+    React.useEffect(() => {
+        if (isAdvancedAnalyticsOpen) setIsAdvancedAnalyticsEverOpened(true);
+    }, [isAdvancedAnalyticsOpen]);
 
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
     const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
@@ -2495,6 +2506,16 @@ const App: React.FC = () => {
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
     }, []);
 
+    // Allow inner surfaces (Chart AI dock composer empty-state, header
+    // updates) to open Settings without prop-drilling through every layer.
+    useEffect(() => {
+        const onOpenSettings = (): void => {
+            setIsSettingsMenuVisible(true);
+        };
+        window.addEventListener('august:open-settings', onOpenSettings);
+        return () => window.removeEventListener('august:open-settings', onOpenSettings);
+    }, []);
+
 
     useWatchSideEffects({
         messagesRef,
@@ -2864,7 +2885,9 @@ const App: React.FC = () => {
                 plumbing. */}
 
             <React.Suspense fallback={null}>
-            <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
+            {isStrategySearchEverOpened && (
+                <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
+            )}
             </React.Suspense>
             <SavedAnalyses analyses={savedAnalyses} isVisible={isSavedAnalysesVisible} onClose={() => setIsSavedAnalysesVisible(false)} onDelete={handleDeleteSavedAnalyses} onClearAll={handleClearAllSavedAnalyses} modelIdToName={modelIdToName} ocrModelIdToName={ocrModelIdToName} />
             <React.Suspense fallback={null}>
@@ -2910,33 +2933,38 @@ const App: React.FC = () => {
             )}
 
 
-            {/* Advanced Analytics Side Panel - Fixed on right edge */}
-            <AdvancedAnalyticsSidePanel
-                enabledProviders={readyProviders.map(p => p.id)}
-                monteCarloResult={latestMonteCarloResult}
-                backtestResult={latestBacktestResult}
-                isCalculating={isAnalysisInProgress || isCalculatingAIProbabilities}
-                perAIMonteCarloResults={perAIMonteCarloResults}
-                entryTimingScore={currentEntryTimingScore}
-                slOptimization={currentSlOptimization}
-                levelProbabilities={(() => {
-                    // Use selected message if available, otherwise fall back to latest
-                    const selectedMsg = selectedProbabilityMessageId
-                        ? analysisMessages.find(m => m.id === selectedProbabilityMessageId)
-                        : null;
-                    const targetMsg = selectedMsg || (analysisMessages.length > 0 ? analysisMessages[analysisMessages.length - 1] : null);
-                    return targetMsg?.analysis?.levelProbabilities || null;
-                })()}
-                selectedCoinName={(() => {
-                    const selectedMsg = selectedProbabilityMessageId
-                        ? analysisMessages.find(m => m.id === selectedProbabilityMessageId)
-                        : null;
-                    return selectedMsg?.analysis?.coinName || null;
-                })()}
-                onClearSelection={() => setSelectedProbabilityMessageId(null)}
-                isExternallyOpen={isAdvancedAnalyticsOpen}
-                onClose={() => setIsAdvancedAnalyticsOpen(false)}
-            />
+            {/* Advanced Analytics Side Panel — lazy-on-demand mount. */}
+            {isAdvancedAnalyticsEverOpened && (
+                <AdvancedAnalyticsSidePanel
+                    enabledProviders={readyProviders.map(p => p.id)}
+                    monteCarloResult={latestMonteCarloResult}
+                    backtestResult={latestBacktestResult}
+                    isCalculating={isAnalysisInProgress || isCalculatingAIProbabilities}
+                    perAIMonteCarloResults={perAIMonteCarloResults}
+                    entryTimingScore={currentEntryTimingScore}
+                    slOptimization={currentSlOptimization}
+                    levelProbabilities={(() => {
+                        // Use selected message if available, otherwise fall back to latest
+                        const selectedMsg = selectedProbabilityMessageId
+                            ? analysisMessages.find(m => m.id === selectedProbabilityMessageId)
+                            : null;
+                        const targetMsg = selectedMsg || (analysisMessages.length > 0 ? analysisMessages[analysisMessages.length - 1] : null);
+                        return targetMsg?.analysis?.levelProbabilities || null;
+                    })()}
+                    selectedCoinName={(() => {
+                        const selectedMsg = selectedProbabilityMessageId
+                            ? analysisMessages.find(m => m.id === selectedProbabilityMessageId)
+                            : null;
+                        return selectedMsg?.analysis?.coinName || null;
+                    })()}
+                    onClearSelection={() => setSelectedProbabilityMessageId(null)}
+                    isExternallyOpen={isAdvancedAnalyticsOpen}
+                    onClose={() => setIsAdvancedAnalyticsOpen(false)}
+                    onRegenerateProbabilities={(mode, messageId) => {
+                        if (messageId) void handleCalculateAIProbabilities(messageId, mode);
+                    }}
+                />
+            )}
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
@@ -2962,12 +2990,11 @@ const App: React.FC = () => {
                         </React.Suspense>
                     )}
 
-                    {/* First-run onboarding card. Shows when no providers are
-                        configured and the user hasn't dismissed it. */}
-                    <OnboardingCard
-                        hasAnyApiKey={readyProviders.length > 0}
-                        onOpenSettings={() => setIsSettingsMenuVisible(true)}
-                    />
+                    {/* The first-run onboarding card used to sit here as a
+                        centered banner, but it ate ~50% of the Trade surface
+                        width. The same nudge now lives inside the Chart AI
+                        dock's composer card (see TradeChatPanel) so it shows
+                        up exactly where the user needs to take action. */}
 
                     {surface === 'trade' && (
                             <React.Suspense fallback={<SurfaceSkeleton />}>

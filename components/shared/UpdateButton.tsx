@@ -1,15 +1,15 @@
 import React from 'react';
-import { RefreshCw, AlertCircle, Download, Loader2 } from 'lucide-react';
+import { RefreshCw, AlertCircle, Download, Loader2, Sparkles } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 /**
  * Header-level entry point for the desktop auto-update flow.
  *
  * Handles all states except active download/installation:
- * - idle: "Check for Updates" button + version label
+ * - idle: quiet version chip + icon-only refresh button
  * - checking: spinner with "Checking…" text
- * - available: "Update Available" badge + download button
- * - error: error indicator + retry button
+ * - available: Sparkle + v{version} chip + download button
+ * - error: error indicator + retry button (with inline caption when verbose)
  *
  * The `downloading`, `downloaded`, and `installing` states are rendered
  * by the full-screen `<UpdateOverlay />` mounted at the app root.
@@ -28,73 +28,86 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         return null;
     }
 
-    const baseClasses = 'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all';
+    const baseClasses = 'inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-medium transition-all';
+    const iconButtonClasses = 'inline-flex items-center justify-center h-7 w-7 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500';
 
-    // Checking state — show spinner
+    // Checking state — show spinner with text
     if (status === 'checking') {
         return (
-            <div className={`flex items-center gap-2 ${className}`}>
-                <span className="flex items-center gap-1.5 text-xs text-cyan-400">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <div className={`flex items-center gap-1.5 ${className}`}>
+                <span className="flex items-center gap-1.5 text-[11px] text-cyan-400" role="status" aria-live="polite">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Checking…
                 </span>
             </div>
         );
     }
 
-    // Available state — show update badge + download button
+    // Available state — Sparkle + version chip + download button
     if (status === 'available') {
         return (
             <div className={`flex items-center gap-2 ${className}`}>
-                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-xs font-medium animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    v{version} available
+                <span
+                    className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-emerald-300"
+                    title={`Version ${version} is available`}
+                >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    v{version}
                 </span>
                 <button
                     onClick={downloadUpdate}
                     className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95`}
                     aria-label={`Download update version ${version}`}
                 >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="h-3.5 w-3.5" />
                     Update
                 </button>
             </div>
         );
     }
 
-    // Error state — show error + retry
+    // Error state — inline caption + retry button
     if (status === 'error') {
+        const verboseError = (error || '').length > 30;
         return (
             <div className={`flex items-center gap-2 ${className}`}>
-                <span className="flex items-center gap-1.5 text-xs text-rose-400" title={error || ''}>
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    Update error
+                <span
+                    className={`flex items-center gap-1.5 text-[11px] text-rose-400 ${verboseError ? 'max-w-[260px]' : ''}`}
+                    title={error || ''}
+                >
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {verboseError && error ? <span className="truncate">{error}</span> : 'Update error'}
                 </span>
                 <button
                     onClick={checkForUpdates}
                     className={`${baseClasses} bg-zinc-800 hover:bg-zinc-700 text-zinc-300`}
                     aria-label="Retry update check"
                 >
-                    <RefreshCw className="w-3.5 h-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5" />
                     Retry
                 </button>
             </div>
         );
     }
 
-    // Idle state — show version + check button
+    // Idle state — icon-only refresh + tiny version chip
     return (
-        <div className={`flex items-center gap-2 ${className}`}>
+        <div className={`flex items-center gap-1.5 ${className}`}>
             {appVersion && (
-                <span className="text-[10px] text-zinc-600 font-mono">v{appVersion}</span>
+                <span
+                    className="text-[10px] text-zinc-600 font-mono"
+                    title={`Installed version ${appVersion}`}
+                >
+                    v{appVersion}
+                </span>
             )}
             <button
                 onClick={checkForUpdates}
-                className={`${baseClasses} bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-cyan-400`}
+                className={iconButtonClasses}
                 aria-label="Check for updates"
+                title="Check for updates"
             >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Check for Updates
+                <RefreshCw className="h-3.5 w-3.5" />
             </button>
         </div>
     );

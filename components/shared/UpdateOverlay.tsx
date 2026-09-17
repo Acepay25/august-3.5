@@ -54,6 +54,33 @@ const UpdateOverlay: React.FC = () => {
     const { isElectron, updateStatus, installUpdate, quitNow } = useAutoUpdate();
     const { status, progress, version, bytesPerSecond, transferred, total, releaseNotes } = updateStatus;
 
+    // Auto-expand the "What's new" details the first time this version's notes
+    // are shown — the user opted into an update, they probably want to read
+    // what changed. Persisted in localStorage so subsequent visits to the same
+    // version default to collapsed (the new version becomes "background" once
+    // they've seen it once).
+    const [notesOpen, setNotesOpen] = React.useState<boolean>(false);
+    const SEEN_KEY = 'august_update_notes_seen_v1';
+    React.useEffect(() => {
+        if (status !== 'downloaded' || !version) return;
+        try {
+            const raw = localStorage.getItem(SEEN_KEY);
+            const seen: Record<string, true> = raw ? JSON.parse(raw) : {};
+            if (!seen[version]) setNotesOpen(true);
+        } catch { /* private mode */ }
+    }, [status, version]);
+    const onNotesToggle = React.useCallback((ev: React.SyntheticEvent<HTMLDetailsElement>): void => {
+        const open = ev.currentTarget.open;
+        setNotesOpen(open);
+        if (!open || !version) return;
+        try {
+            const raw = localStorage.getItem(SEEN_KEY);
+            const seen: Record<string, true> = raw ? JSON.parse(raw) : {};
+            seen[version] = true;
+            localStorage.setItem(SEEN_KEY, JSON.stringify(seen));
+        } catch { /* private mode */ }
+    }, [version]);
+
     // ETA from electron-updater's live download telemetry.
     const etaLine = React.useMemo(() => {
         if (status !== 'downloading' || !total || !bytesPerSecond) return null;
@@ -135,7 +162,12 @@ const UpdateOverlay: React.FC = () => {
                                 v{version} is ready. The app will restart to complete the update.
                             </p>
                             {notes.length > 0 && (
-                                <details className="update-notes mb-5 w-full text-left" data-testid="update-release-notes">
+                                <details
+                                    className="update-notes mb-5 w-full text-left"
+                                    data-testid="update-release-notes"
+                                    open={notesOpen}
+                                    onToggle={onNotesToggle}
+                                >
                                     <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300">
                                         What's new in v{version}
                                     </summary>

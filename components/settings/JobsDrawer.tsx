@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Inbox } from 'lucide-react';
 import { jobQueue, Job } from '../../services/infrastructure/JobQueueService';
 import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryService';
+import { EmptyState } from '../ui/EmptyState';
 
 /**
  * JobsDrawer: a "status stack" of background work — every
@@ -69,9 +71,12 @@ const JobsDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-4 py-3">
                 {!hasContent && (
-                    <p className="py-8 text-center text-xs text-zinc-600">
-                        Nothing running. Learning passes (evals, doctrine, insight extraction) appear here.
-                    </p>
+                    <EmptyState
+                        compact
+                        icon={<Inbox className="h-5 w-5" />}
+                        title="Nothing running"
+                        description="Learning passes (evals, doctrine, insight extraction) appear here."
+                    />
                 )}
                 {jobs.length > 0 && (
                     <>
