@@ -117,14 +117,15 @@ test('app boots and shows the user modal on first run', async ({ page }) => {
     expect(errors).toEqual([]);
 });
 
-test('first-run chat shows the onboarding card when no providers are configured', async ({ page }) => {
+test('first-run chat explains provider setup when no providers are configured', async ({ page }) => {
     await seedWorkspace(page);
 
-    // The onboarding card should eventually render in an empty chat.
-    await expect(page.getByText(/To start analyzing charts, add at least one AI provider API key/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByPlaceholder('Configure a provider in Settings first')).toBeVisible({ timeout: 15_000 });
 
-    // And its CTA opens Settings.
-    await page.getByRole('button', { name: 'Add API Key', exact: true }).click();
+    // The setup guidance now lives in the Chart AI composer; the surface rail
+    // remains the direct path into provider configuration.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'AI setup', exact: true })).toBeVisible({ timeout: 10_000 });
 });

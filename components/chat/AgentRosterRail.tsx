@@ -11,8 +11,9 @@
  */
 
 import React from 'react';
-import { Trash2, SlidersHorizontal, Bot as BotIcon, Users, Swords, GraduationCap, ChevronDown, Repeat } from 'lucide-react';
+import { Trash2, SlidersHorizontal, Bot as BotIcon, Users, Swords, GraduationCap, ChevronDown, Repeat, SearchX, Plus } from 'lucide-react';
 import { BotAvatar, PixelAvatarFigure } from './BotAvatar';
+import { EmptyState } from '../ui/EmptyState';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { findBotById, groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
@@ -27,6 +28,7 @@ import {
     unreadCount,
     unreadInSlice,
 } from '../../utils/agentThreads';
+import { listSkillDrafts, type SkillDraft } from '../../utils/skillDrafts';
 
 export interface AgentRosterRailProps {
     bots: AgentBot[];
@@ -194,7 +196,16 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
 }) => {
     const [query, setQuery] = React.useState('');
     const [menuOpen, setMenuOpen] = React.useState(false);
+    const [drafts, setDrafts] = React.useState<SkillDraft[]>([]);
     const q = query.trim().toLowerCase();
+
+    React.useEffect(() => {
+        const refresh = (): void => setDrafts(listSkillDrafts().slice(-3).reverse());
+        refresh();
+        const handler = (): void => refresh();
+        window.addEventListener('august-skill-drafts', handler);
+        return () => window.removeEventListener('august-skill-drafts', handler);
+    }, []);
     // Message search: threads are derived views over ONE flat
     // message array, so searching messages is a filter over that array —
     // no index, no new store. A bot/group row stays visible when its NAME
@@ -229,6 +240,86 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
     const rowIdle = 'hover:bg-zinc-800/50';
 
     const embedded = variant === 'embedded';
+
+    // ── Coach drafts preview tile ────────────────────────────────────────
+    const CoachDraftsTile: React.FC = () => {
+        if (!onSelectCoach || drafts.length === 0) return null;
+        return (
+            <div className="mb-2 rounded-lg border border-white/[0.06] bg-zinc-800/40 p-2">
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                    <GraduationCap className="h-3 w-3" />
+                    Coach drafts
+                </div>
+                <ul className="space-y-1">
+                    {drafts.map(d => (
+                        <li key={d.id}>
+                            <button
+                                type="button"
+                                onClick={onSelectCoach}
+                                className="flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-zinc-700/60"
+                                title={`${d.crafted.name}: ${d.crafted.ifCondition} → ${d.crafted.thenAction}`}
+                            >
+                                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500" aria-hidden="true" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[11px] font-semibold text-zinc-200">{d.crafted.name}</span>
+                                    <span className="block truncate text-[10px] text-zinc-500">
+                                        IF {d.crafted.ifCondition} THEN {d.crafted.thenAction}
+                                    </span>
+                                </span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        );
+    };
+
+    // ── Group rooms preview tile ─────────────────────────────────────────
+    const GroupRoomsPreview: React.FC = () => {
+        if (groups.length === 0) return null;
+        const preview = groups.slice(0, 4);
+        return (
+            <div className="mt-2 rounded-lg border border-white/[0.06] bg-zinc-800/40 p-2">
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                    <Users className="h-3 w-3" />
+                    Rooms ({groups.length})
+                </div>
+                <ul className="space-y-1">
+                    {preview.map(g => {
+                        const members = g.memberIds
+                            .map(id => findBotById(bots, id))
+                            .filter((b): b is AgentBot => Boolean(b));
+                        const slice = threadForGroup(messages, members.map(m => ({ providerId: m.providerId, modelId: m.modelId })), g.id);
+                        const last = lastOf(slice);
+                        return (
+                            <li key={g.id}>
+                                <button
+                                    type="button"
+                                    onClick={() => onSelectGroup(g.id)}
+                                    className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-zinc-700/60"
+                                >
+                                    <span className="relative flex h-6 w-6 shrink-0 items-center">
+                                        {members.slice(0, 2).map((m, i) => (
+                                            <span key={m.id} className={i === 0 ? 'z-10' : '-ml-2'}>
+                                                <BotAvatar bot={m} size={22} />
+                                            </span>
+                                        ))}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-[11px] font-semibold text-zinc-200">{groupDisplayName(g, bots)}</span>
+                                        <span className="block truncate text-[10px] text-zinc-500">
+                                            {last ? (last.role === MessageRole.USER ? `You: ${previewTextFor(last)}` : previewTextFor(last)) : `${members.length} bots`}
+                                        </span>
+                                    </span>
+                                    <span className="shrink-0 text-[9px] text-zinc-600">{formatRelative(last?.createdAt ?? null)}</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </div>
+        );
+    };
     return (
         <aside
             data-testid="agent-roster-rail"
@@ -247,9 +338,10 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                         aria-label="New bot or group"
                         aria-expanded={menuOpen}
                         data-testid="bots-add"
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                        className="flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                     >
-                        +
+                        <Plus className="h-3 w-3" />
+                        New
                     </button>
                     {menuOpen && (
                         <div
@@ -308,6 +400,11 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                 </div>
             )}
 
+            {/* Coach drafts preview tile — last 1–3 pending skill drafts. */}
+            <div className="px-3 pb-2">
+                <CoachDraftsTile />
+            </div>
+
             {/* Roster */}
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
                 <ul className="space-y-0.5">
@@ -331,7 +428,10 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                 <span className="flex items-baseline gap-2">
                                     <span className="truncate text-[13px] font-semibold text-zinc-100">Team</span>
                                     {selection.kind === 'team' && (
-                                        <span className="ml-auto shrink-0 text-[10px] text-zinc-500">open</span>
+                                        <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-400">
+                                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                            Active
+                                        </span>
                                     )}
                                 </span>
                                 <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
@@ -362,7 +462,10 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                     <span className="truncate text-[13px] font-semibold text-zinc-100">Coach</span>
                                     {(coachCount ?? 0) > 0
                                         ? <UnreadBadge count={coachCount ?? 0} />
-                                        : <span className="ml-auto shrink-0 text-[10px] text-zinc-500">in sync</span>}
+                                        : <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-zinc-500">
+                                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                                            Idle
+                                        </span>}
                                 </span>
                                 <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
                                     {(coachCount ?? 0) > 0
@@ -503,16 +606,43 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                         read their bots as unfound, not gone); a genuinely
                         empty roster explains what will appear here. */}
                     {q && visibleBots.length === 0 && visibleGroups.length === 0 ? (
-                        <li className="px-2.5 py-3 text-[11px] leading-snug text-zinc-500">
-                            Nothing matches “{query.trim()}” — no bot, group, or thread here is named that or contains it.
+                        <li>
+                            <EmptyState
+                                compact
+                                iconVariant="subtle"
+                                icon={<SearchX className="h-5 w-5" />}
+                                title={`Nothing matches “${query.trim()}”`}
+                                description="No bot, group, or thread here is named that or contains it."
+                            />
                         </li>
                     ) : !q && bots.length === 0 && groups.length === 0 ? (
-                        <li className="px-2.5 py-3 text-[11px] leading-snug text-zinc-500">
-                            No bots yet — create one and pick a model for it to think with.
+                        <li>
+                            <EmptyState
+                                compact
+                                iconVariant="subtle"
+                                icon={<Plus className="h-5 w-5" />}
+                                title="No bots yet"
+                                description="Create one and pick a model for it to think with."
+                                action={
+                                    <button
+                                        type="button"
+                                        onClick={onNewBot}
+                                        className="rounded-lg border border-zinc-700 px-3 py-1.5 text-[11px] font-medium text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+                                    >
+                                        Create a bot
+                                    </button>
+                                }
+                            />
                         </li>
                     ) : null}
                 </ul>
             </nav>
+
+            {/* Group rooms preview — compact list of joined rooms with
+                stacked avatars + last-message snippet. */}
+            <div className="px-3 pb-2">
+                <GroupRoomsPreview />
+            </div>
 
             {/* New Agent — docked at the bottom, Hermes-style. Suppressed in
                 the embedded variant (the pane header's "+" menu covers it). */}

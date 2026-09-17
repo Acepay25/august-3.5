@@ -113,13 +113,13 @@ describe('fetchMarkIndex freshness (the live mark the packet quotes)', () => {
         await fetchMarkIndex('MARKTTLUSDT');
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
-        // 2s later: still inside the 3s live-mark window → cached.
-        vi.setSystemTime(1_760_000_002_000);
+        // 1.5s later: still inside the 2s live-mark window → cached.
+        vi.setSystemTime(1_760_000_001_500);
         await fetchMarkIndex('MARKTTLUSDT');
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
-        // 5s in: past the window → a fresh premiumIndex pull.
-        vi.setSystemTime(1_760_000_005_000);
+        // 2.5s in: past the window → a fresh premiumIndex pull.
+        vi.setSystemTime(1_760_000_002_500);
         await fetchMarkIndex('MARKTTLUSDT');
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });

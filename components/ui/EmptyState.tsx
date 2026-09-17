@@ -1,5 +1,8 @@
 import React from 'react';
 
+type IconVariant = 'subtle' | 'bold';
+type EmptyAlign = 'center' | 'start';
+
 interface EmptyStateProps {
   /** Icon element (SVG or component) */
   icon?: React.ReactNode;
@@ -7,8 +10,16 @@ interface EmptyStateProps {
   title: string;
   /** Supporting description */
   description?: string;
-  /** Optional action button/link */
+  /** Optional primary action button/link */
   action?: React.ReactNode;
+  /** Optional secondary action (link, ghost button) */
+  secondaryAction?: React.ReactNode;
+  /** `subtle` (smaller chrome, fits in narrow docks) or `bold` (full-page panels) */
+  iconVariant?: IconVariant;
+  /** `center` (default) or `start` for left-aligned compact layouts */
+  align?: EmptyAlign;
+  /** Compact padding (use inside narrow panels like the Chart AI dock) */
+  compact?: boolean;
   className?: string;
 }
 
@@ -21,6 +32,10 @@ interface EmptyStateProps {
  *     title="No saved analyses"
  *     description="Analyses you bookmark will appear here."
  *     action={<button>Run an Analysis</button>}
+ *     secondaryAction={<button>Learn more</button>}
+ *     iconVariant="subtle"
+ *     align="start"
+ *     compact
  *   />
  */
 export const EmptyState: React.FC<EmptyStateProps> = ({
@@ -28,22 +43,63 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   title,
   description,
   action,
+  secondaryAction,
+  iconVariant = 'bold',
+  align = 'center',
+  compact = false,
   className = '',
 }) => {
+  const isCenter = align === 'center';
+  const isSubtle = iconVariant === 'subtle';
+
   return (
-    <div className={`flex flex-col items-center justify-center py-16 px-6 text-center ${className}`}>
+    <div
+      className={[
+        'flex flex-col',
+        isCenter ? 'items-center text-center' : 'items-start text-left',
+        compact ? 'py-6 px-4' : 'py-16 px-6',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
       {icon && (
-        <div className="mb-5 w-16 h-16 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center text-zinc-500">
+        <div
+          className={[
+            'flex items-center justify-center rounded-full bg-zinc-900 border border-white/5 text-zinc-500',
+            compact ? (isSubtle ? 'mb-3 h-10 w-10' : 'mb-4 h-12 w-12') : (isSubtle ? 'mb-4 h-12 w-12' : 'mb-5 h-16 w-16'),
+          ].join(' ')}
+          aria-hidden="true"
+        >
           {icon}
         </div>
       )}
-      <h3 className="text-sm font-semibold text-zinc-300 mb-1.5">{title}</h3>
+      <h3
+        className={[
+          'font-semibold text-zinc-300',
+          compact ? 'text-[13px] mb-1' : 'text-sm mb-1.5',
+        ].join(' ')}
+      >
+        {title}
+      </h3>
       {description && (
-        <p className="text-xs text-zinc-600 max-w-xs leading-relaxed">{description}</p>
+        <p
+          className={[
+            'text-zinc-600 leading-relaxed',
+            compact ? 'text-[11px] max-w-[28ch]' : 'text-xs max-w-xs',
+          ].join(' ')}
+        >
+          {description}
+        </p>
       )}
-      {action && (
-        <div className="mt-5">
+      {(action || secondaryAction) && (
+        <div
+          className={[
+            'flex gap-2',
+            isCenter ? 'flex-col items-center mt-5' : 'flex-row items-center mt-4',
+            compact ? 'mt-4' : '',
+          ].filter(Boolean).join(' ')}
+        >
           {action}
+          {secondaryAction}
         </div>
       )}
     </div>

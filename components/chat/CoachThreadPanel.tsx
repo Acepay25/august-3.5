@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, Inbox } from 'lucide-react';
 import { listSkillDrafts, type SkillDraft } from '../../utils/skillDrafts';
+import { EmptyState } from '../ui/EmptyState';
 import {
     listLearningProposals,
     dismissLearningProposal,
@@ -150,12 +151,12 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
 
             {empty && (
                 <CardShell>
-                    <p className="text-[13px] leading-relaxed text-zinc-400">
-                        Nothing needs your decision right now. When the loop learns something worth
-                        installing — a repeated setup worth drafting, a skill that should displace
-                        another at the cap, a retired twin worth reviving — it lands here as a card.
-                        You approve or dismiss; the harness never mutates its own beliefs silently.
-                    </p>
+                    <EmptyState
+                        compact
+                        icon={<Inbox className="h-5 w-5" />}
+                        title="Nothing needs your decision right now"
+                        description="When the loop learns something worth installing — a repeated setup worth drafting, a skill that should displace another at the cap, a retired twin worth reviving — it lands here as a card. You approve or dismiss; the harness never mutates its own beliefs silently."
+                    />
                 </CardShell>
             )}
 

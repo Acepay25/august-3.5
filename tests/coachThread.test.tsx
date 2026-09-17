@@ -74,8 +74,8 @@ describe('Coach roster row', () => {
         render(<AgentRosterRail {...railBase} onSelectCoach={onSelectCoach} coachCount={0} />);
         fireEvent.click(screen.getByTestId('roster-coach'));
         expect(onSelectCoach).toHaveBeenCalledTimes(1);
-        // Zero count reads "in sync", no badge.
-        expect(screen.getByTestId('roster-coach').textContent).toContain('in sync');
+        // Zero count reads "Idle", no badge.
+        expect(screen.getByTestId('roster-coach').textContent).toContain('Idle');
     });
 });
 

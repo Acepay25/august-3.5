@@ -569,6 +569,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     onClick={() => { if (selected) void refreshCatalog(selected, false); }}
                     className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
                     title="Refresh model catalogs"
+                    aria-label="Refresh model catalogs"
                 >
                     <RefreshIcon />
                 </button>
@@ -675,7 +676,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     ) : (
                                         <>
                                             <h3 className="truncate text-[15px] font-semibold text-zinc-100">{nameDraft.trim() || selected.name}</h3>
-                                            <button onClick={() => setIsEditingName(true)} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit name">
+                                            <button onClick={() => setIsEditingName(true)} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit name" aria-label="Edit provider name">
                                                 <PencilIcon className="h-3.5 w-3.5" />
                                             </button>
                                         </>
@@ -706,6 +707,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     }}
                                     className="p-1.5 text-zinc-500 hover:text-rose-400 disabled:opacity-30"
                                     title={selected.isBuiltIn ? 'Built-in providers cannot be deleted' : 'Delete provider'}
+                                    aria-label={selected.isBuiltIn ? 'Built-in providers cannot be deleted' : `Delete provider ${selected.name}`}
                                 >
                                     <TrashIcon className="h-4 w-4" />
                                 </button>
@@ -740,7 +742,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <FieldLabel>API key</FieldLabel>
                                 <div className="relative">
                                     <input type={showKey ? 'text' : 'password'} value={draftKey} onChange={(e) => setDraftKey(e.target.value)} placeholder="••••••••••••••••••••••••••••••••" className={`${inputBase} pr-10`} autoComplete="off" />
-                                    <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300" title={showKey ? 'Hide key' : 'Show key'}>
+                                    <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300" title={showKey ? 'Hide key' : 'Show key'} aria-label={showKey ? 'Hide API key' : 'Show API key'}>
                                         {showKey ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                                     </button>
                                 </div>
@@ -792,10 +794,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 )}
                                                 <div className="ml-4 flex shrink-0 items-center gap-2.5" onClick={e => e.stopPropagation()}>
                                                     <span className="font-mono text-[10px] font-medium text-zinc-500">{badgeText}</span>
-                                                    <button type="button" onClick={() => void handleTestModel(m)} disabled={isTestingThis || isTesting || !draftUrlValidation.valid} className="p-1 text-zinc-500 hover:text-zinc-200 disabled:opacity-40" title={modelTest?.message || `Test ${m}`}>
+                                                    <button type="button" onClick={() => void handleTestModel(m)} disabled={isTestingThis || isTesting || !draftUrlValidation.valid} className="p-1 text-zinc-500 hover:text-zinc-200 disabled:opacity-40" title={modelTest?.message || `Test ${m}`} aria-label={modelTest?.message ? `Test ${m} — ${modelTest.message}` : `Test model ${m}`}>
                                                         {isTestingThis ? <LoadingIcon className="h-3.5 w-3.5 animate-spin" /> : <BoltIcon className="h-3.5 w-3.5" />}
                                                     </button>
-                                                    <button onClick={() => { setEditingModelId(m); setEditModelInput(m); }} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit model ID">
+                                                    <button onClick={() => { setEditingModelId(m); setEditModelInput(m); }} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit model ID" aria-label={`Edit model ID for ${m}`}>
                                                         <PencilIcon className="h-3.5 w-3.5" />
                                                     </button>
                                                     <button
@@ -809,6 +811,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                         }}
                                                         className="p-1 text-zinc-500 hover:text-rose-400"
                                                         title="Remove model"
+                                                        aria-label={`Remove model ${m}`}
                                                     >
                                                         <TrashIcon className="h-3.5 w-3.5" />
                                                     </button>

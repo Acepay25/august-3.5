@@ -53,11 +53,14 @@ const STALL_CHECK_MS = 5000;
 const POLL_INTERVAL_MS = 5000;
 
 /** How long the combined feed may stay silent before the REST poll arms.
- *  Twice the WS stall window (which closes the socket after STALL_MS) so
- *  the poll doesn't fight an alive-but-just-slow WS — once the stall
- *  watchdog closes, scheduleRetry flips status to 'polling' and this
- *  window will be re-evaluated from the next frame or retry. */
-const POLL_ARM_MS = STALL_MS * 2;
+ *  The 2026-09-16 repro on this network proved a 16 s window is wrong:
+ *  the WS opens and stays OPEN but never delivers a single markPrice@1s
+ *  frame — scheduleRetry never fires (no onclose), status stays 'connecting',
+ *  and the strip froze on the last good value. Arming at 2 s means the
+ *  user gets a fresh mark + ticker on every 5 s REST tick within ~5 s of
+ *  mount, even when the WS path is completely dead. A healthy WS producing
+ *  frames every 1 s keeps the poll dormant via the early-return in armTimer. */
+const POLL_ARM_MS = 2000;
 
 /** kline stream interval names (lowercase Binance form). The multi-day
  *  suffixes must NOT be lowercased — '1M'.toLowerCase() is '1m', which would
@@ -105,8 +108,10 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
         const klineUrl = `${FUTURE_WS}/ws/${s}@kline_${klineInterval(interval)}`;
 
         // Mutable handles shared between the WS path and the REST poll below.
-        // lastCombinedFrameAt: bumped by ws.onmessage so the poll can tell
-        //   live from dead; 0 means "no frame yet".
+        // lastMarkOrTickerAt: bumped ONLY by markPrice/ticker frames so the
+        //   poll arms even when depth20 keeps flowing (depth alone does not
+        //   guarantee a fresh mark price — on the user's network
+        //   markPrice@1s is silently dropped while depth20@100ms flows).
         // pollHandle: the current setInterval id for the REST fallback (0 if
         //   dormant). The WS onmessage handler clears it; the poll re-arms
         //   itself when the silence window has elapsed.
@@ -121,7 +126,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
         // recent status without re-binding on every setStatus call. Without
         // this the closure captured 'connecting' forever and the poll
         // would never arm.
-        const lastCombinedFrameAt = { current: 0 };
+        const lastMarkOrTickerAt = { current: 0 };
         const pollHandle = { current: 0 };
         const pollInFlight = { current: false };
         const depthSeenAt = { current: 0 };
@@ -193,23 +198,11 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                                 }
                             }, STALL_CHECK_MS);
                         }
-                        // Liveness rides the COMBINED feed (mark/depth/ticker)
-                        // — the kline nudge is advisory, so its dropout must
-                        // not read as "live" nor flip the surface to polling.
-                        if (isCombined) {
-                            setFeedStatus('live');
-                            // A live WS frame is the strongest "we're healthy"
-                            // signal — stop the REST fallback immediately. The
-                            // arming window below will re-mount it if the
-                            // socket goes silent again.
-                            lastCombinedFrameAt.current = Date.now();
-                            if (pollHandle.current) {
-                                window.clearInterval(pollHandle.current);
-                                pollHandle.current = 0;
-                            }
-                            setPollSource('ws');
-                            setDepthStaleSince(null);
-                        }
+                        // Per-frame liveness (status='live', clear poll,
+                        // bump lastMarkOrTickerAt) is handled inside `onData`
+                        // below — keyed on the actual frame type so depth
+                        // alone does NOT keep the REST fallback disarmed on
+                        // networks where markPrice@1s is silently dropped.
                         onData(payload);
                     }
                 };
@@ -220,15 +213,37 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
         };
 
         open(combinedUrl, true, msg => {
-            const mi = parseMarkPrice(msg); if (mi) { setMarkIndex(mi); return; }
-            const tk = parseTicker(msg); if (tk) { setTicker(tk); return; }
+            const mi = parseMarkPrice(msg); if (mi) {
+                setMarkIndex(mi);
+                lastMarkOrTickerAt.current = Date.now();
+                setFeedStatus('live');
+                if (pollHandle.current) {
+                    window.clearInterval(pollHandle.current);
+                    pollHandle.current = 0;
+                }
+                setPollSource('ws');
+                setDepthStaleSince(null);
+                return;
+            }
+            const tk = parseTicker(msg); if (tk) {
+                setTicker(tk);
+                lastMarkOrTickerAt.current = Date.now();
+                setFeedStatus('live');
+                if (pollHandle.current) {
+                    window.clearInterval(pollHandle.current);
+                    pollHandle.current = 0;
+                }
+                setPollSource('ws');
+                setDepthStaleSince(null);
+                return;
+            }
             const dp = parseDepth(msg); if (dp) {
                 setDepth(dp);
                 // Track the last depth frame so the surface can render
                 // "stale since X" honestly when only the REST fallback is
-                // updating mark/ticker. The arming window below uses
-                // depthSeenAt to detect depth silence specifically (mark
-                // frames keep landing).
+                // updating mark/ticker. Depth alone does not prove mark/ticker
+                // are healthy, so we do NOT bump lastMarkOrTickerAt and must
+                // not keep the REST poll disarmed.
                 depthSeenAt.current = Date.now();
                 setDepthStaleSince(null);
                 return;
@@ -294,7 +309,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                 // Stamp the depth column as stale ONLY the first time the
                 // REST fallback takes over without a prior depth frame — a
                 // later push frame will clear it. Use depthSeenAt rather
-                // than lastCombinedFrameAt because mark frames alone are
+                // than lastMarkOrTickerAt because mark frames alone are
                 // enough to keep status 'live' on the same socket; if depth
                 // is gone but mark keeps landing, the surface still wants
                 // the DOM column flagged.
@@ -315,14 +330,14 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
             if (closed) return;
             // Already running? Nothing to do — the interval will keep firing.
             if (pollHandle.current) return;
-            // WS is alive and recent — no REST fallback needed.
-            if (lastCombinedFrameAt.current > 0
-                && Date.now() - lastCombinedFrameAt.current <= POLL_ARM_MS) return;
+            // WS mark/ticker are alive and recent — no REST fallback needed.
+            if (lastMarkOrTickerAt.current > 0
+                && Date.now() - lastMarkOrTickerAt.current <= POLL_ARM_MS) return;
             // Arm the poll when EITHER:
-            //   (a) the combined feed has never produced a frame AND we've
-            //       passed the arming window from mount (the WS handshake
-            //       opened but the host silently drops frames — the user's
-            //       2026-09-16 repro on this network).
+            //   (a) the combined feed has never produced a mark/ticker frame
+            //       AND we've passed the arming window from mount (the WS
+            //       handshake opened but the host silently drops frames —
+            //       the user's 2026-09-16 repro on this network).
             //   (b) the WS was alive, has gone silent past POLL_ARM_MS, and
             //       `latestStatus` is now 'polling' — re-arm so we recover
             //       after a flap. The status flip happens in scheduleRetry
@@ -332,11 +347,11 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
             // Use latestStatus (mutable cell) instead of the captured `status`
             // closure variable — the latter freezes at 'connecting' for the
             // lifetime of the effect and would never let (b) fire.
-            const elapsedSinceFrame = lastCombinedFrameAt.current > 0
-                ? Date.now() - lastCombinedFrameAt.current
+            const elapsedSinceMarkOrTicker = lastMarkOrTickerAt.current > 0
+                ? Date.now() - lastMarkOrTickerAt.current
                 : Date.now(); // never produced: pretend mount = 0
-            const wantArm = (lastCombinedFrameAt.current === 0 && elapsedSinceFrame >= POLL_ARM_MS)
-                || (lastCombinedFrameAt.current > 0 && elapsedSinceFrame > POLL_ARM_MS
+            const wantArm = (lastMarkOrTickerAt.current === 0 && elapsedSinceMarkOrTicker >= POLL_ARM_MS)
+                || (lastMarkOrTickerAt.current > 0 && elapsedSinceMarkOrTicker > POLL_ARM_MS
                     && latestStatus.current === 'polling');
             if (!wantArm) return;
             // First poll fires immediately so a freshly-mounted user with a

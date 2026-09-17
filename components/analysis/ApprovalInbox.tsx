@@ -1,8 +1,10 @@
 import React from 'react';
+import { Inbox } from 'lucide-react';
 import { ApprovalItem, AutoJournalPolicy } from '../../utils/approvalInbox';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { CloseIcon } from '../shared/Icons';
+import { EmptyState } from '../ui/EmptyState';
 
 interface ApprovalInboxProps {
     isVisible: boolean;
@@ -35,7 +37,12 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
                     {items.length === 0 ? (
-                        <p className="px-2 py-8 text-center text-[13px] text-zinc-500">Nothing needs you. Outcomes, ungrounded tickets, dropped seats, and skill drafts land here.</p>
+                        <EmptyState
+                            compact
+                            icon={<Inbox className="h-5 w-5" />}
+                            title="Nothing needs you"
+                            description="Outcomes, ungrounded tickets, dropped seats, and skill drafts land here."
+                        />
                     ) : items.map(item => (
                         <div key={item.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{item.kind}</div>
