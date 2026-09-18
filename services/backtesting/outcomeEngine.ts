@@ -379,6 +379,10 @@ export const computeTradeExcursions = (
   let mfePercent = 0;
   for (let i = from; i <= to; i++) {
     const { high, low } = klines[i];
+    // Skip a malformed bar rather than folding it in: Math.max(0, NaN) is NaN,
+    // so one bad candle sticks for every later bar and the whole pair reports
+    // NaN — which the trade card then prints as "worst −NaN%".
+    if (!Number.isFinite(high) || !Number.isFinite(low)) continue;
     if (isLong) {
       maePercent = Math.max(maePercent, ((entryPrice - low) / entryPrice) * 100);
       mfePercent = Math.max(mfePercent, ((high - entryPrice) / entryPrice) * 100);
