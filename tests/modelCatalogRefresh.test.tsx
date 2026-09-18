@@ -165,4 +165,36 @@ describe('useModelCatalogRefresh (background model refresh)', () => {
         expect(state?.lastSweepFailed).toBe(false);
         expect(onUpdateProvider).toHaveBeenCalledWith('p2', expect.objectContaining({ models: expect.arrayContaining(['model-b']) }));
     });
+    it('prunes a deprecated id on a remote catalog provider', async () => {
+        discover.mockResolvedValue(['model-b']);
+        const onUpdateProvider = vi.fn(async () => {});
+        const configs = [provider({ models: ['model-a', 'model-b'], selectedModel: 'model-a' })];
+        const utils = renderHook(() => useModelCatalogRefresh(configs, onUpdateProvider));
+        await act(async () => { await utils.result.current.refreshNow(); });
+        // OpenAI deprecates a model id, the endpoint stops listing it, and the
+        // sweep drops it — the deliberate authoritative behavior.
+        // The vanished selection moves rather than pointing at nothing.
+        expect(onUpdateProvider).toHaveBeenCalledWith('p1', { models: ['model-b'], selectedModel: 'model-b' });
+    });
+
+    it('does NOT prune a hand-added model a local server merely has unloaded', async () => {
+        // Ollama's /api/tags lists only what is currently pulled. Treating that
+        // as the whole catalog deleted a configured model for anyone who had
+        // simply stopped their server.
+        // One model pulled, one newly pulled, and the unloaded qwen row the
+        // endpoint does not list — the write has to add without pruning.
+        discover.mockResolvedValue(['llama3.2:3b', 'mistral:7b']);
+        const onUpdateProvider = vi.fn(async () => {});
+        const configs = [provider({
+            baseUrl: 'http://127.0.0.1:11434', apiKey: '',
+            models: ['llama3.2:3b', 'qwen2.5:7b'], selectedModel: 'qwen2.5:7b',
+        })];
+        const utils = renderHook(() => useModelCatalogRefresh(configs, onUpdateProvider));
+        await act(async () => { await utils.result.current.refreshNow(); });
+        // The selection still resolves, so only the model list is rewritten.
+        expect(onUpdateProvider).toHaveBeenCalledWith('p1', expect.objectContaining({
+            models: expect.arrayContaining(['llama3.2:3b', 'qwen2.5:7b', 'mistral:7b']),
+        }));
+        expect(onUpdateProvider).toHaveBeenCalledWith('p1', expect.not.objectContaining({ selectedModel: expect.anything() }));
+    });
 });
