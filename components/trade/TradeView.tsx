@@ -262,18 +262,36 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     );
 };
 
-/** Hero-price tick flash: a print above the last one flashes emerald, below
- *  flashes rose. `seq` bumps on every direction change so the caller can key
- *  the element — re-applying an already-running animation class does nothing,
- *  and a remount restarts it cleanly. */
-const useTickFlash = (price: number | undefined): { cls: string; seq: number } => {
+/** Smallest move (basis points from the last FLASHED print) that earns a
+ *  flash, and the minimum gap between two. */
+export const TICK_FLASH_MIN_BPS = 2;
+export const TICK_FLASH_COOLDOWN_MS = 900;
+
+/** Hero-price tick flash: a print that moved at least TICK_FLASH_MIN_BPS from
+ *  the last one flashes emerald or rose. The mark streams at markPrice@1s, so
+ *  without a threshold every sub-tick blip re-keyed the node — a strobe for the
+ *  eye and a remount per second for the reconciler.
+ *
+ *  The baseline is the last price that FLASHED, not the last price seen, so a
+ *  slow one-directional grind still registers instead of averaging itself into
+ *  invisibility. `seq` bumps per flash so the caller can key the element —
+ *  re-applying an already-running animation class does nothing. */
+export const useTickFlash = (price: number | undefined): { cls: string; seq: number } => {
     const prevRef = useRef<number | undefined>(undefined);
+    const lastAtRef = useRef(0);
     const [flash, setFlash] = useState<{ cls: string; seq: number }>({ cls: '', seq: 0 });
     useEffect(() => {
-        if (typeof price !== 'number' || !Number.isFinite(price)) return;
+        if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return;
         const prev = prevRef.current;
+        if (prev === undefined) {
+            prevRef.current = price;
+            return;
+        }
+        const deltaBps = (Math.abs(price - prev) / prev) * 10_000;
+        const now = Date.now();
+        if (deltaBps < TICK_FLASH_MIN_BPS || now - lastAtRef.current < TICK_FLASH_COOLDOWN_MS) return;
         prevRef.current = price;
-        if (prev === undefined || prev === price) return;
+        lastAtRef.current = now;
         setFlash(f => ({ cls: price > prev ? 'tick-up' : 'tick-down', seq: f.seq + 1 }));
     }, [price]);
     return flash;

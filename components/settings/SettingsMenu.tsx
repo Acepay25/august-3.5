@@ -440,11 +440,17 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     };
     const dialogRef = useRef<HTMLDivElement>(null);
     const initialTabResolvedRef = useRef(false);
+    /** A tab the parent explicitly ASKED FOR outranks the heuristic landing.
+     *  Recorded here because the requested prop is consumed immediately, so by
+     *  the time the landing effect runs — declared later, same commit — there
+     *  is nothing left for it to see, and it used to overwrite the choice. */
+    const explicitTabChosenRef = useRef(false);
 
     // Handle settingsInitialTab prop changes (e.g., when handleOpenJournal sets it)
     useEffect(() => {
         if (isSettingsTab(props.settingsInitialTab)) {
             setActiveTab(props.settingsInitialTab);
+            explicitTabChosenRef.current = true;
             props.onSettingsInitialTabConsumed?.();
         }
     }, [props.settingsInitialTab]);
@@ -508,6 +514,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     useEffect(() => {
         if (!isVisible || !providerConfigsLoaded || initialTabResolvedRef.current) return;
         initialTabResolvedRef.current = true;
+        // Do not step on a deliberate first landing: the very first Profile
+        // click opened Analysis, because this effect ran after it.
+        if (explicitTabChosenRef.current) return;
         setActiveTab(readyConfigProviders.length > 0 ? 'general' : 'models');
     }, [isVisible, providerConfigsLoaded, readyConfigProviders.length]);
 

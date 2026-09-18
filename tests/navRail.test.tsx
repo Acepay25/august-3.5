@@ -14,26 +14,32 @@ describe('NavRail activity bar', () => {
     it('renders every surface as a visible icon; the active one is marked', () => {
         render(<NavRail surface="trade" onSelect={() => {}} onToggleSidebar={() => {}} onOpenSettings={() => {}} username="Rober" />);
         for (const label of ['Trade', 'Journal', 'Studio', 'Agents']) {
-            expect(screen.getByRole('button', { name: label })).toBeTruthy();
+            // Prefix match: each accessible name now also carries the badge
+            // detail and its keyboard shortcut.
+            expect(screen.getByRole('button', { name: new RegExp(`^${label}`) })).toBeTruthy();
         }
-        expect(screen.getByRole('button', { name: 'Trade' }).getAttribute('aria-current')).toBe('page');
+        const trade = screen.getByRole('button', { name: /^Trade/ });
+        expect(trade.getAttribute('aria-current')).toBe('page');
+        // The visual Tip is aria-hidden, so the key hint has to live in the
+        // accessible name or it exists for nobody but the mouse.
+        expect(trade.getAttribute('aria-label')).toContain('Alt+1');
     });
 
     it('clicking another surface selects it; clicking the ACTIVE one toggles the sidebar', () => {
         const onSelect = vi.fn();
         const onToggle = vi.fn();
         render(<NavRail surface="trade" onSelect={onSelect} onToggleSidebar={onToggle} onOpenSettings={() => {}} username="Rober" />);
-        fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Agents/ }));
         expect(onSelect).toHaveBeenCalledWith('agents');
         expect(onToggle).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Trade/ }));
         expect(onToggle).toHaveBeenCalledTimes(1);
     });
 
     it('settings + account stay pinned', () => {
         const onOpenSettings = vi.fn();
         render(<NavRail surface="journal" onSelect={() => {}} onToggleSidebar={() => {}} onOpenSettings={onOpenSettings} username="Rober" />);
-        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Settings/ }));
         expect(onOpenSettings).toHaveBeenCalled();
     });
 });
