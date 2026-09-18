@@ -1498,7 +1498,7 @@ const maybeMergeSkillUnlocked = async (
                 // floor reads the pre-append tradeIds length. Merge folds
                 // used to bump W/L only, so alpha-decay never saw this
                 // evidence and the provenance counter missed it too.
-                countTradeOutcome(latestMeta, trade.outcome === TradeOutcome.WIN);
+                countTradeOutcome(latestMeta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
                 latestMeta.tradeIds = [...latestMeta.tradeIds, trade.id];
                 // Merge-driven transitions ride the temporal ledger like every
                 // other path so skillStatusAt replay sees them. Stamp BEFORE

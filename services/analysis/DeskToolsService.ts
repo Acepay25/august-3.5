@@ -550,6 +550,12 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     skill_slug: { type: 'string', description: 'The skill file slug, e.g. "btc-momentum-continuation"' },
                     if_condition: { type: 'string', description: 'The revised IF clause' },
                     then_action: { type: 'string', description: 'The revised THEN clause' },
+                    // Rewriting the IF invalidates the machine-checkable form
+                    // that described the OLD one (SkillMemoryService overwrites
+                    // it on the refinement path), so a revision that does not
+                    // restate it silently disarms the gate. This is display
+                    // only — a human still applies it.
+                    predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Restate it whenever you change if_condition: the stored trigger describes the old clause.' },
                     reason: { type: 'string', description: 'Why the current clauses are wrong or blunted — cite evidence' },
                 },
                 required: ['skill_slug', 'reason'],
@@ -1653,6 +1659,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                             source: 'model:desk',
                             ifCondition: asString(call.arguments.if_condition) || undefined,
                             thenAction: asString(call.arguments.then_action) || undefined,
+                            predicate: asString(call.arguments.predicate) || undefined,
                         },
                     }, getActiveUsername());
                     content = proposal

@@ -284,6 +284,29 @@ describe('ProviderConfigService', () => {
         .rejects.toThrow('returned no models');
     });
 
+    it('reaches the fallback endpoint when the first one hangs', async () => {
+      // The candidate chain exists for exactly this case: /models timing out
+      // used to abort the whole sweep instead of falling through, so a server
+      // answering fine on /v1/models was never asked.
+      const abort = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockRejectedValueOnce(abort)
+        .mockResolvedValueOnce(okResponse({ data: [{ id: 'llama-3.3-70b' }] }));
+      const models = await discoverProviderModels({
+        baseUrl: 'http://127.0.0.1:11434', apiKey: '', apiFormat: 'chat_completions',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(models).toEqual(['llama-3.3-70b']);
+    });
+
+    it('still reports a timeout when no endpoint answers', async () => {
+      const abort = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(abort);
+      await expect(discoverProviderModels({
+        baseUrl: 'http://127.0.0.1:11434', apiKey: '', apiFormat: 'chat_completions',
+      })).rejects.toThrow(/timed out/i);
+    });
+
     it('uses the Electron discover bridge when present', async () => {
       const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse({ data: [] }));
       const previous = (window as unknown as { electronAPI?: unknown }).electronAPI;

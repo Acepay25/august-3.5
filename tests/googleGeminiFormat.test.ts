@@ -25,8 +25,25 @@ describe('googleGeminiFormat', () => {
         ], { model: 'gemini-2.5-flash', temperature: 0.2, maxTokens: 2048 });
         expect(body.systemInstruction?.parts[0].text).toBe('You are a desk.');
         expect(body.contents.map(c => c.role)).toEqual(['user', 'model', 'user']);
-        expect(body.generationConfig.thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 8192 });
         expect(body.generationConfig.maxOutputTokens).toBe(2048);
+        // Gemini bills thinking tokens INSIDE maxOutputTokens, so the old flat
+        // 8192 on a 2048-token call over-subscribed the response — this pinned
+        // that, not a working configuration.
+        expect(body.generationConfig.thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 2047 });
+    });
+
+    it('clamps the thinking budget to the output limit instead of overspending it', () => {
+        const msgs = [{ role: 'user', content: 'go' }];
+        // Effort 'max' asks for 16384; a full analysis call has 8192.
+        const capped = chatMessagesToGemini(msgs, { model: 'gemini-2.5-pro', maxTokens: 8192, reasoningEffort: 'max' });
+        expect(capped.generationConfig.thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 8191 });
+        // Room to spare: the requested tier is used as-is.
+        const roomy = chatMessagesToGemini(msgs, { model: 'gemini-2.5-pro', maxTokens: 32768, reasoningEffort: 'high' });
+        expect(roomy.generationConfig.thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 8192 });
+        // A connection test has no budget worth thinking with — send nothing
+        // rather than a config the API would reject.
+        const tiny = chatMessagesToGemini(msgs, { model: 'gemini-2.5-pro', maxTokens: 64 });
+        expect(tiny.generationConfig.thinkingConfig).toBeUndefined();
     });
 
     it('splits thought parts from answer text', () => {

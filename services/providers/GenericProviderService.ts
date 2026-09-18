@@ -857,13 +857,33 @@ async function googleCall(
     const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
     const key = (config.apiKey || '').trim();
     const url = googleGenerateUrl(base, config.selectedModel, key, false);
-    const geminiThinking = geminiThinkingParams(options?.jsonMode, config.selectedModel, options?.reasoningEffort);
-    options?.onWireAudit?.({
-        route: 'none',
-        effort: options?.reasoningEffort ?? 'auto',
-        applied: false,
-        reason: 'google generateContent: no verified reasoning route (fail closed)',
-    });
+    const geminiThinking = geminiThinkingParams(
+        options?.jsonMode,
+        config.selectedModel,
+        options?.reasoningEffort,
+        options?.maxTokens,
+    );
+    // The audit must say what the wire received. Effort now scales
+    // thinkingBudget, so reporting route:'none'/applied:false on a call that
+    // is sending a thinkingConfig poisons everything built on the run log —
+    // pinning, calibration and the known-answer probes all read this.
+    options?.onWireAudit?.(geminiThinking
+        ? {
+            route: 'gemini-thinking',
+            effort: options?.reasoningEffort ?? 'auto',
+            applied: true,
+            reason: `thinkingConfig.thinkingBudget=${geminiThinking.thinkingBudget}`,
+        }
+        : {
+            route: 'none',
+            effort: options?.reasoningEffort ?? 'auto',
+            applied: false,
+            reason: options?.jsonMode
+                ? 'google generateContent: JSON mode sends no thinkingConfig'
+                : (options?.reasoningEffort === 'off'
+                    ? 'google generateContent: effort=off suppresses thinkingConfig'
+                    : 'google generateContent: no thinkingConfig for this model'),
+        });
     const body = chatMessagesToGemini(messages, {
         maxTokens: options?.maxTokens,
         temperature: options?.temperature,

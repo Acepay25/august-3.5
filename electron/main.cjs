@@ -168,7 +168,7 @@ function normalizeProviderUrl(url) {
         throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
     }
     parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-    for (const suffix of ['/chat/completions', '/messages', '/responses', '/models']) {
+    for (const suffix of ['/chat/completions', '/messages', '/responses', '/models', '/chat', '/completions']) {
         if (parsed.pathname.endsWith(suffix)) {
             parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
             break;
@@ -273,6 +273,7 @@ async function fetchUpstream(url, init) {
 async function sendDiscoverRequest(config) {
     const { urls, headers } = discoverProviderDetails(config);
     let lastResult = { ok: false, status: 0, body: '' };
+    let timedOut = false;
 
     for (const url of urls) {
         const controller = new AbortController();
@@ -289,13 +290,16 @@ async function sendDiscoverRequest(config) {
                 return lastResult;
             }
         } catch (error) {
-            if (error?.name === 'AbortError') {
-                throw new Error('Model discovery timed out — check the base URL.', { cause: error });
-            }
+            // Same rule as the renderer: one hanging endpoint must not cancel
+            // the candidate chain it is being tried by.
+            if (error?.name === 'AbortError') timedOut = true;
             lastResult = { ok: false, status: 0, body: error instanceof Error ? error.message : String(error) };
         } finally {
             clearTimeout(timeout);
         }
+    }
+    if (timedOut) {
+        throw new Error('Model discovery timed out — check the base URL.');
     }
     return lastResult;
 }
