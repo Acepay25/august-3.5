@@ -284,8 +284,6 @@ export const parsePredicate = (src: string): PredicateParseResult => {
 };
 
 /** Public alias: the name the AI boundary calls, to make intent legible there. */
-export const validatePredicate = parsePredicate;
-
 /**
  * Normalize a predicate arriving from a model or an editor. Anything that does
  * not parse is dropped rather than stored, so a malformed clause degrades to

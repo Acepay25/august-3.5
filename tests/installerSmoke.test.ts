@@ -26,7 +26,11 @@ function loadHelpers(env: Record<string, string> = {}): ProbeHelpers {
 }
 
 describe('packaged smoke helpers', () => {
-    it('removes credentials, proxies and execution overrides from the child environment', () => {
+    // 45s, not the 15s default: this loads a real CJS script through
+    // createRequire, and under a loaded machine (parallel vitest runs, a
+    // cold module cache) it has been observed to exceed 15s while passing in
+    // 1.4s alone. A flaky gate is a gate nobody reads.
+    it('removes credentials, proxies and execution overrides from the child environment', { timeout: 45_000 }, () => {
         const { sanitizeEnv } = loadHelpers();
         expect(sanitizeEnv({
             PATH: 'tools', HOME: 'scratch', OPENAI_API_KEY: 'secret', GH_TOKEN: 'secret',

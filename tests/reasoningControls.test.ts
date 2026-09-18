@@ -107,6 +107,11 @@ describe('detectWireCapabilities (capability classes, not provider identity)', (
         expect(detectWireCapabilities(makeConfig({ selectedModel: 'o3-mini' })).openaiEffort).toBe(true);
         expect(detectWireCapabilities(makeConfig({ selectedModel: 'openai/o3-mini' })).openaiEffort).toBe(true);
         expect(detectWireCapabilities(makeConfig({ selectedModel: 'gpt-4o' })).openaiEffort).toBe(false);
+        // gpt-5 reasons on this transport too; gpt-4o and a bare "gpt-5x" do not.
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'gpt-5' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'gpt-5-mini' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'openai/gpt-5.1' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'gpt-5x' })).openaiEffort).toBe(false);
     });
 });
 

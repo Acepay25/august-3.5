@@ -146,14 +146,24 @@ describe('parseFinComMarkers', () => {
         expect(parseFinComMarkers('just plain debate prose')).toEqual([]);
     });
 
-    it('tallyFinCom counts across turns and reports absence as null, not zero', () => {
+    it('tallyFinCom counts seats, not marker lines, and reports absence as null', () => {
         const turns: DebateTurn[] = [
             { speaker: 'A', round: 2, text: '', fincom: [{ seat: 'B', stance: 'commit', why: 'x' }, { seat: 'C', stance: 'dissent', why: 'y' }] },
             { speaker: 'B', round: 3, text: '', fincom: [{ seat: 'C', stance: 'dissent', why: 'again' }] },
         ];
-        expect(tallyFinCom(turns)).toEqual({ commits: 1, dissents: 2, dissenters: ['C'] });
+        // C restated its dissent in a later round: one disagreement, and the
+        // count has to agree with the name list shown beside it.
+        expect(tallyFinCom(turns)).toEqual({ commits: 1, dissents: 1, dissenters: ['C'] });
         expect(tallyFinCom([{ speaker: 'A', round: 2, text: 'no markers' }])).toBeNull();
         expect(tallyFinCom(undefined)).toBeNull();
+    });
+
+    it('a seat that changes its mind is counted by where it landed', () => {
+        const turns: DebateTurn[] = [
+            { speaker: 'A', round: 2, text: '', fincom: [{ seat: 'B', stance: 'dissent', why: 'too thin' }] },
+            { speaker: 'B', round: 3, text: '', fincom: [{ seat: 'B', stance: 'commit', why: 'levels answered it' }] },
+        ];
+        expect(tallyFinCom(turns)).toEqual({ commits: 1, dissents: 0, dissenters: [] });
     });
 
     it('withFinComMetadata attaches markers to the turn copy', () => {

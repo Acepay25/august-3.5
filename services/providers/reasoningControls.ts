@@ -135,7 +135,11 @@ export const detectWireCapabilities = (
         // grok-4-fast rejects reasoning_effort; the rest of the family honors it.
         // Match both "xai" and the literal host "x.ai" spellings.
         xaiEffort: isChat && /x\.?ai|grok/.test(host + model) && !/fast/.test(model),
-        openaiEffort: isChat && /(?:^|\b|\/)(?:o1|o3|o4)(?:-mini|-preview)?(?::|\b|$)/i.test(model),
+        // gpt-5 is OpenAI's reasoning model on this transport and takes the
+        // same knob; a proxy that rejects it fails once and the harness pins
+        // the route off from the wire lesson, which is the designed path.
+        openaiEffort: isChat && (/(?:^|\b|\/)(?:o1|o3|o4)(?:-mini|-preview)?(?::|\b|$)/i.test(model)
+            || /(?:^|\/)gpt-5(?:[.-]|$)/i.test(model)),
         glmThinking: isChat && /z-ai|zhipu|bigmodel|glm/.test(host + model),
         deepseekThinking: isChat && /deepseek/.test(host + model),
         anthropicThinking: config.apiFormat === 'messages',

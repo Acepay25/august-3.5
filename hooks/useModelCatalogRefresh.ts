@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProviderConfig } from '../types/provider';
 import { discoverProviderModels } from '../services/infrastructure/ProviderConfigService';
 import { getPreferenceObject, setPreferenceObject } from '../services/infrastructure/PreferencesService';
-import { sortModelsFreeFirst } from '../utils/providerUtils';
+import { mergeDiscoveredModels, sortModelsFreeFirst } from '../utils/providerUtils';
 import { isLocalBaseUrl } from '../shared/providerRequestPolicy.cjs';
 
 const LAST_SWEEP_KEY = 'model_catalog_sweep_v1';
@@ -79,16 +79,27 @@ export const useModelCatalogRefresh = (
                         apiKey: provider.apiKey,
                         apiFormat: provider.apiFormat,
                     });
-                    const freshModels = sortModelsFreeFirst(discovered);
-                    const isUnchanged = provider.models.length === freshModels.length && provider.models.every((m, idx) => m === freshModels[idx]);
+                    // Where the endpoint lists the whole catalog, it IS the
+                    // source of truth and pruning deprecated ids is correct.
+                    // A local server is the exception: Ollama's /api/tags
+                    // returns only what is currently PULLED, so an idle model
+                    // reads as deprecated and the sweep would delete a model
+                    // the user merely stopped. Remote catalogs — including a
+                    // hand-added one — stay authoritative; the explicit
+                    // "Refresh models" button is a full re-sync either way and
+                    // toasts what it removed.
+                    const keepUserModels = isLocalBaseUrl(provider.baseUrl);
+                    const nextModels = keepUserModels
+                        ? mergeDiscoveredModels(provider.models, discovered)
+                        : sortModelsFreeFirst(discovered);
+                    const isUnchanged = provider.models.length === nextModels.length
+                        && provider.models.every((m, idx) => m === nextModels[idx]);
                     const existing = new Set(provider.models);
                     const fresh = discovered.filter(m => !existing.has(m));
-                    if (!isUnchanged && freshModels.length > 0) {
-                        // The discovered models from <base url>/models are authoritative:
-                        // fresh models are added and dropped/deprecated models are pruned.
-                        const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = { models: freshModels };
-                        if (provider.selectedModel && !freshModels.includes(provider.selectedModel)) {
-                            updates.selectedModel = freshModels[0] || '';
+                    if (!isUnchanged && nextModels.length > 0) {
+                        const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = { models: nextModels };
+                        if (provider.selectedModel && !nextModels.includes(provider.selectedModel)) {
+                            updates.selectedModel = nextModels[0] || '';
                         }
                         await updateRef.current(provider.id, updates);
                     }

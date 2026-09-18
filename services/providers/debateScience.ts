@@ -199,10 +199,18 @@ export interface FinComTally {
 export const tallyFinCom = (turns?: DebateTurn[]): FinComTally | null => {
     const rows = (turns ?? []).flatMap(t => t.fincom ?? []);
     if (rows.length === 0) return null;
+    // One stance per SEAT — its last marker wins. Turns arrive per round, so a
+    // seat that dissented in round 2 and again in round 3 disagreed ONCE;
+    // counting both rendered "2 dissents · 1 commit" directly above a list
+    // containing one name. The number measured how many rounds the debate ran,
+    // not how much of the floor disagreed.
+    const stanceBySeat = new Map<string, FinComMarker['stance']>();
+    for (const r of rows) stanceBySeat.set(r.seat, r.stance);
+    const dissenters = [...stanceBySeat].filter(([, s]) => s === 'dissent').map(([seat]) => seat);
     return {
-        commits: rows.filter(r => r.stance === 'commit').length,
-        dissents: rows.filter(r => r.stance === 'dissent').length,
-        dissenters: [...new Set(rows.filter(r => r.stance === 'dissent').map(r => r.seat))],
+        commits: [...stanceBySeat.values()].filter(s => s === 'commit').length,
+        dissents: dissenters.length,
+        dissenters,
     };
 };
 
