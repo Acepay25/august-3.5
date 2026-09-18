@@ -1687,6 +1687,11 @@ const conductRealDebateImpl = async function* (
          *  seed, so lanes can never cross-assign. Unseeded calls deterministically
          *  take the CONTROL lane. */
         protocolSeed?: string,
+        /** Notebook slice for the rebuttal rounds, built by the pipeline at
+         *  stage 'rebuttal' under the SAME runId as the openings (so the
+         *  per-run ε-holdout withholds it from control runs too). Absent ⇒
+         *  rebuttals run without retrieved memory, as they did before. */
+        rebuttalMemoryContext?: string,
     },
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
@@ -2147,6 +2152,10 @@ const conductRealDebateImpl = async function* (
             `${others}\n\n` +
             (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
             (buildLossPrimingBlock(similarTrades) ? buildLossPrimingBlock(similarTrades) + `\n\n` : '') +
+            // The seat's own retrieved memory. Without this the rebuttal argues
+            // about skills and doctrine it never saw — the openings had them,
+            // the verdict has them, and the middle of the debate had nothing.
+            (opts?.rebuttalMemoryContext ? `**MATCHED MEMORY FOR THIS SETUP:**\n${opts.rebuttalMemoryContext}\n\n` : '') +
             (sessionGuardBlock ? sessionGuardBlock + `\n\n` : '') +
             (round === rebuttalStart && seatCharges.has(analyst.provider.name)
                 ? `**MODERATOR'S CHARGE (your assignment this round):** ${seatCharges.get(analyst.provider.name)}\n\n`

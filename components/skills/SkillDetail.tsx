@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { setSkillStatus } from '../../services/learning/SkillMemoryService';
+import { setSkillStatus, skillExpectancyR, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import type { SkillProofResult } from '../../services/learning/skillProof';
+import { parsePredicate } from '../../services/analysis/skillPredicate';
 import { evaluateSkill, SkillEvalResult, recordEvalVerdict } from '../../services/learning/SkillEvalService';
 import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
@@ -95,6 +96,17 @@ const SkillDetail: React.FC<{
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
     const refined = Boolean(meta?.previousVersion && meta?.refinedAt);
+    // Average R per measured outcome. Undefined is the honest "not yet
+    // measured" state, not 0R — only trades whose R came from actual price
+    // levels feed it, so a young skill shows a sample count instead of a
+    // number it has not earned.
+    const expectancy = meta ? skillExpectancyR(meta) : undefined;
+    // A skill can carry a trigger that stopped parsing (hand edit, schema
+    // drift). Resolve it once so the card can distinguish "no trigger" from
+    // "trigger present but inert", which are very different states to a reader.
+    const predicateParse = meta?.predicate ? parsePredicate(meta.predicate) : null;
+    const parsedPredicate = predicateParse?.ok ?? false;
+    const parsedError = predicateParse && !predicateParse.ok ? predicateParse.error : '';
     // Manual A/B eval state — user-invoked, cost-capped by SKILL_EVAL_MAX_TRADES.
     const [evalState, setEvalState] = useState<'idle' | 'running' | 'done'>('idle');
     const [evalResult, setEvalResult] = useState<SkillEvalResult | null>(null);
@@ -200,6 +212,23 @@ const SkillDetail: React.FC<{
                 <MetaField label="Kind" value={meta?.kind ?? '—'} />
                 <MetaField label="Setup" value={[meta?.coin, meta?.direction].filter(Boolean).join(' ') || '—'} />
                 <MetaField label="Evidence" value={`${wins}W / ${losses}L`} />
+                <MetaField
+                    label="Expectancy"
+                    value={expectancy === undefined
+                        ? `unmeasured (${meta?.rSampled ?? 0}/${EXPECTANCY_MIN_R_SAMPLE} R)`
+                        : `${expectancy > 0 ? '+' : ''}${expectancy}R`}
+                />
+                {/* A stored predicate that no longer parses is inert, and inert
+                    must not look like "checked and clear" — so it says so. */}
+                {meta?.predicate && (
+                    <MetaField
+                        label="Code trigger"
+                        value={parsedPredicate
+                            ? meta.predicate
+                            : `not evaluated — ${parsedError || 'unparsable clause'}`}
+                        wide
+                    />
+                )}
                 <MetaField label="Trigger" value={meta?.ifCondition || '—'} wide />
             </div>
 

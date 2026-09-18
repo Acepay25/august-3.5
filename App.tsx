@@ -141,7 +141,7 @@ import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/Outc
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurface, type AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
-import NavRail from './components/shell/NavRail';
+import NavRail, { type NavBadge } from './components/shell/NavRail';
 import { Journal } from './components/journal/Journal';
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
@@ -1489,7 +1489,14 @@ const App: React.FC = () => {
                 e.preventDefault();
                 setIsCommandPaletteOpen(prev => !prev);
             }
-            // Alt+1..5 jumps the icon-rail surfaces (Minara nav; Alt keeps
+            // Ctrl/Cmd+, opens Settings — the platform convention the activity
+            // rail advertises in its tooltip. It was advertised but never
+            // bound, so the kbd hint was a dead affordance.
+            if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+                e.preventDefault();
+                setIsSettingsMenuVisible(true);
+            }
+            // Alt+1..4 jumps the icon-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
                 '1': 'trade', '2': 'journal', '3': 'studio', '4': 'agents',
@@ -1501,7 +1508,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [handleSurfaceSelect]);
+    }, [handleSurfaceSelect, setIsSettingsMenuVisible]);
 
 
 
@@ -2455,6 +2462,30 @@ const App: React.FC = () => {
             + listLearningProposals(activeUsername || undefined).length,
         [approvalItems, learningQueueNonce, activeUsername],
     );
+    // Activity-rail badges. Memoized because App re-renders on every price
+    // tick and NavRail is React.memo'd — a fresh object literal would
+    // invalidate the memo once a second for nothing.
+    const navBadges = useMemo<Partial<Record<AppSurface, NavBadge>>>(() => {
+        const next: Partial<Record<AppSurface, NavBadge>> = {};
+        // The group runner owns the working pulse; a draining DM queue counts
+        // too (the roster rail already read it this way — the rail didn't).
+        const working = workingBotId ?? dmWorkingBotId;
+        const agentReads: string[] = [];
+        if (working) agentReads.push('a bot is working');
+        if (coachCount > 0) agentReads.push(`${coachCount} awaiting your decision`);
+        if (agentReads.length > 0) {
+            next.agents = { active: !!working, count: coachCount, detail: agentReads.join(', ') };
+        }
+        if (isInsightGenerating) {
+            next.journal = {
+                active: true,
+                detail: insightProgress
+                    ? `summarizing ${insightProgress.done}/${insightProgress.total} trades`
+                    : 'generating insights',
+            };
+        }
+        return next;
+    }, [workingBotId, dmWorkingBotId, coachCount, isInsightGenerating, insightProgress]);
     const selectCoachThread = useCallback(() => setActiveThread({ kind: 'coach' }), []);
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
@@ -2690,8 +2721,6 @@ const App: React.FC = () => {
                 isVisible={isSettingsMenuVisible}
                 onClose={() => setIsSettingsMenuVisible(false)}
                 isLoading={isLoading}
-                onOpenSavedAnalyses={() => { setIsSavedAnalysesVisible(true); setIsSettingsMenuVisible(false); }}
-                onOpenStrategySearch={() => { setIsStrategySearchVisible(true); setIsSettingsMenuVisible(false); }}
                 onOpenStrategyStudio={() => { setSurface('studio'); setIsSettingsMenuVisible(false); }}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}
@@ -2969,13 +2998,18 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                {/* Minara arrangement, first column: the surface rail. */}
                 <NavRail
                     surface={surface}
                     onSelect={handleSurfaceSelect}
                     onToggleSidebar={toggleTradeSidebar}
-                    onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                    onOpenSettings={(tab) => {
+                        if (tab) setSettingsInitialTab(tab);
+                        setIsSettingsMenuVisible(true);
+                    }}
+                    onOpenVersionHistory={handleOpenVersionHistory}
+                    onSwitchUser={handleSwitchUser}
                     username={activeUsername || undefined}
+                    badges={navBadges}
                 />
                 {/* Surfaces (Minara arrangement): pages, not modals. The
                     Chat surface is gone — the trade surface's Chart AI dock

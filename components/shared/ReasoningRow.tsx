@@ -136,7 +136,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                 aria-label={`${label} — ${open ? 'collapse' : 'expand'}`}
             >
                 {running ? (
-                    <Lightbulb className="reasoning-row-glyph" aria-hidden="true" />
+                    <Lightbulb className="reasoning-row-glyph animate-pulse" aria-hidden="true" />
                 ) : (
                     <Brain className="reasoning-row-glyph" aria-hidden="true" />
                 )}
@@ -149,8 +149,11 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                     <span className="reasoning-row-label">{rowLabel}</span>
                 )}
                 {meta !== null && (
-                    <span className="reasoning-row-meta" aria-label={`${meta} thinking`}>
-                        · {meta}
+                    // Settled reads as a sentence ("Thought for 14s"); live
+                    // keeps the dot separator so the ticking number doesn't
+                    // look like part of the label.
+                    <span className="reasoning-row-meta" aria-label={`${meta} of thinking`}>
+                        {running ? `· ${meta}` : `for ${meta}`}
                     </span>
                 )}
             </summary>

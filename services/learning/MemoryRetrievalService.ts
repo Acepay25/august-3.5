@@ -36,8 +36,6 @@ import {
     type SkillMeta,
 } from './SkillMemoryService';
 import {
-    buildMemoryGraph,
-    walkMemoryNeighbors,
     type MemoryRetrievalQuery,
     type WalkedMemoryHit,
 } from './MemoryGraph';

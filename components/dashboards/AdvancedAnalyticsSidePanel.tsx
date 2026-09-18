@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { BarChart2, CheckCircle, Sparkles, TrendingUp } from 'lucide-react';
+import { BarChart2, CheckCircle, ChevronDown, Sparkles, TrendingUp } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AIProvider, LevelProbabilities } from '../../types';
@@ -183,6 +183,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                         <div key={item.provider} className="rounded-xl bg-rose-500/[0.05] border border-rose-500/20 overflow-hidden">
                                             <button
                                                 onClick={() => togglePromptView(index)}
+                                                aria-expanded={item.showPrompt}
                                                 className="w-full p-3 flex items-center justify-between hover:bg-rose-500/10 transition-all duration-200"
                                             >
                                                 <div className="flex items-center gap-2.5">
@@ -193,9 +194,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                                         {item.winRate}% win • {item.coldStreak} streak
                                                     </span>
                                                 </div>
-                                                <span className={`text-zinc-500 text-xs transition-transform duration-200 ${item.showPrompt ? 'rotate-180' : ''}`}>
-                                                    ▼
-                                                </span>
+                                                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${item.showPrompt ? 'rotate-180' : ''}`} aria-hidden="true" />
                                             </button>
 
                                             {item.showPrompt && (

@@ -120,6 +120,11 @@ export const CraftedSkillSchema = z.object({
   approval: z.string().min(4),
   ifCondition: z.string().min(8),
   thenAction: z.string().min(8),
+  // Optional machine-checkable trigger. Length-capped here and validated where
+  // it is STORED (services/learning/SkillMemoryService → sanitizePredicate),
+  // because the field whitelist lives with the evaluator and a boundary that
+  // rejected a whole craft over one bad clause would teach the loop nothing.
+  predicate: z.string().max(240).optional(),
   // Provenance stamped by a learner (not the model): the timeframe a pattern
   // was earned on, and which source minted the draft. Optional so chat/
   // post-mortem/verdict authors stay valid.

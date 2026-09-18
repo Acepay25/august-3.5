@@ -9,6 +9,7 @@ import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
 import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, SparklesIcon, BotIcon } from '../shared/Icons';
+import { FileSpreadsheet, FileText } from 'lucide-react';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
@@ -106,6 +107,40 @@ const TABS: TabConfig[] = [
     { id: 'models', label: 'Models', shortLabel: 'AI', icon: <BotIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
 ];
+
+/** CSV + printable-report export. The journal has TWO headers (the embedded
+ *  surface and the sliding overlay) and both need the pair, so it lives once
+ *  here — the duplicated copy is how the overlay version lost its aria-labels. */
+const ExportTray: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
+    const empty = trades.length === 0;
+    const cls = 'inline-flex items-center gap-1.5 rounded-control border border-white/[0.07] bg-zinc-800/80 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400 transition-colors hover:border-white/20 hover:bg-zinc-700/70 hover:text-zinc-100 disabled:opacity-40';
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => exportTradesCSV(trades)}
+                disabled={empty}
+                title={empty ? 'Log a trade to export' : 'Download trade log as CSV'}
+                aria-label="Export trades as CSV"
+                className={cls}
+            >
+                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                CSV
+            </button>
+            <button
+                type="button"
+                onClick={() => exportTradesHTML(trades)}
+                disabled={empty}
+                title={empty ? 'Log a trade to export' : 'Open printable report (Ctrl+P to save as PDF)'}
+                aria-label="Open printable trade report"
+                className={cls}
+            >
+                <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Report
+            </button>
+        </>
+    );
+};
 
 const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
@@ -260,7 +295,7 @@ const JournalInner: React.FC<JournalProps> = ({
             <div className="flex flex-col h-full bg-zinc-950 overflow-hidden animate-fade-in">
                 <div className="shrink-0 px-8 pt-10 pb-2 flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                        <h2 className="text-3xl font-semibold text-zinc-100 tracking-tight">Journal</h2>
+                        <h2 className="font-serif text-3xl tracking-tight text-zinc-100">Journal</h2>
                         {!documentOpen && (
                             <p className="text-sm text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
                         )}
@@ -270,24 +305,7 @@ const JournalInner: React.FC<JournalProps> = ({
                         embedded journal silently lost trade export. */}
                     {!documentOpen && (
                         <div className="shrink-0 flex items-center gap-2 pt-1">
-                            <button
-                                onClick={() => exportTradesCSV(trades)}
-                                disabled={trades.length === 0}
-                                title="Download trade log as CSV"
-                                aria-label="Export trades as CSV"
-                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
-                            >
-                                CSV
-                            </button>
-                            <button
-                                onClick={() => exportTradesHTML(trades)}
-                                disabled={trades.length === 0}
-                                title="Open printable report (Ctrl+P to save as PDF)"
-                                aria-label="Open printable trade report"
-                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
-                            >
-                                Report
-                            </button>
+                            <ExportTray trades={trades} />
                         </div>
                     )}
                 </div>
@@ -345,26 +363,11 @@ const JournalInner: React.FC<JournalProps> = ({
                 <header className="shrink-0 px-6 pt-6 pb-2">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Journal</h1>
+                            <h1 className="font-serif text-2xl tracking-tight text-zinc-100">Journal</h1>
                             <p className="text-sm text-zinc-500 mt-2">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => exportTradesCSV(trades)}
-                                disabled={trades.length === 0}
-                                title="Download trade log as CSV"
-                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
-                            >
-                                CSV
-                            </button>
-                            <button
-                                onClick={() => exportTradesHTML(trades)}
-                                disabled={trades.length === 0}
-                                title="Open printable report (Ctrl+P to save as PDF)"
-                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
-                            >
-                                Report
-                            </button>
+                            <ExportTray trades={trades} />
                             <button
                                 onClick={onClose}
                                 className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"

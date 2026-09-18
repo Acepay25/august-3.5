@@ -47,6 +47,9 @@ export interface PipelineMemoryContext {
     memoryFilesContext: string;
     /** Moderator-audience notebook slice. */
     moderatorMemoryContext: string;
+    /** Analyst-audience notebook slice for the rebuttal rounds (stage budget:
+     *  rebuttal). Built under the same runId as the opening slice. */
+    rebuttalMemoryContext: string;
     memoryRetrieved: RetrievedMemorySource[];
     similarSetupsContext: string;
     regimeWeightingContext: string;
@@ -127,6 +130,14 @@ export const assemblePipelineMemoryContext = (
     const withProfile = (ctx: string): string => [profileMemoryIndex, ctx].filter(Boolean).join('\n\n---\n\n');
     const memoryFilesContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
     const moderatorMemoryContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
+    // Rebuttal rounds re-enter the same seats, and until now they argued with
+    // ZERO retrieved memory — the 400-char rebuttal budget existed with no
+    // caller. Same runId as the opening slice on purpose: the ε-holdout is
+    // seeded per run, so a control run must be withheld here too or the holdout
+    // group would quietly receive treatment in round 2. Deliberately lean: no
+    // profile prefix and no bot memory, since the persona and openings are
+    // already on the seat's context and this budget is a third of the opening's.
+    const rebuttalMemoryContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'rebuttal', { runId, asOfMs });
     const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
     // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the analysts
@@ -173,6 +184,7 @@ export const assemblePipelineMemoryContext = (
         botMemoryContext,
         memoryFilesContext,
         moderatorMemoryContext,
+        rebuttalMemoryContext,
         memoryRetrieved,
         similarSetupsContext,
         regimeWeightingContext,

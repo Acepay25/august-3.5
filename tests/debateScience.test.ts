@@ -11,6 +11,7 @@ import {
     buildTargetedDevilQuestion,
     flagBannedVocabulary,
     parseFinComMarkers,
+    tallyFinCom,
     withFinComMetadata,
     computeEnsembleLine,
     formatEnsembleLineBlock,
@@ -120,8 +121,39 @@ describe('parseFinComMarkers', () => {
         expect(markers[2].seat).toBe('Seat 3');
     });
 
+    it('tolerates marker casing, a missing reason, and a hyphen inside the seat', () => {
+        const text = [
+            'dissent: Seat 9 — lowercase marker still counts',
+            'COMMIT: Seat 10',                       // stance with no reason
+            'DISSENT: Risk-Execution — unspaced hyphen is part of the name',
+        ].join('\n');
+        const markers = parseFinComMarkers(text);
+        expect(markers).toHaveLength(3);
+        expect(markers[0]).toEqual({ seat: 'Seat 9', stance: 'dissent', why: 'lowercase marker still counts' });
+        expect(markers[1]).toEqual({ seat: 'Seat 10', stance: 'commit', why: '' });
+        expect(markers[2].seat).toBe('Risk-Execution');
+        expect(markers[2].why).toBe('unspaced hyphen is part of the name');
+    });
+
+    it('collapses a seat restating the same stance instead of inflating the tally', () => {
+        const text = 'COMMIT: Seat 1 — first.\nCOMMIT: Seat 1 — restated.\nDISSENT: Seat 1 — but not this.';
+        const markers = parseFinComMarkers(text);
+        expect(markers).toHaveLength(2);
+        expect(markers.map(m => m.stance)).toEqual(['commit', 'dissent']);
+    });
+
     it('no markers → empty array', () => {
         expect(parseFinComMarkers('just plain debate prose')).toEqual([]);
+    });
+
+    it('tallyFinCom counts across turns and reports absence as null, not zero', () => {
+        const turns: DebateTurn[] = [
+            { speaker: 'A', round: 2, text: '', fincom: [{ seat: 'B', stance: 'commit', why: 'x' }, { seat: 'C', stance: 'dissent', why: 'y' }] },
+            { speaker: 'B', round: 3, text: '', fincom: [{ seat: 'C', stance: 'dissent', why: 'again' }] },
+        ];
+        expect(tallyFinCom(turns)).toEqual({ commits: 1, dissents: 2, dissenters: ['C'] });
+        expect(tallyFinCom([{ speaker: 'A', round: 2, text: 'no markers' }])).toBeNull();
+        expect(tallyFinCom(undefined)).toBeNull();
     });
 
     it('withFinComMetadata attaches markers to the turn copy', () => {

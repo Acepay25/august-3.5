@@ -16,7 +16,7 @@ import { LoggedTrade } from '../../types/trade';
 import { TradeOutcome } from '../../types/enums';
 import { DebateTurn } from '../../types/message';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
-import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
+import { buildDisciplineAnalytics, effectiveRMultiple } from '../../utils/disciplineAnalytics';
 import { rowPnlUsd } from '../validation/SessionGuardService';
 import { computeEnsembleLine, SeatConviction } from '../providers/debateScience';
 import { brierQuality } from '../validation/CalibrationLedgerService';
@@ -159,7 +159,7 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
     const wins = period.filter(t => t.outcome === TradeOutcome.WIN);
     const losses = period.filter(t => t.outcome === TradeOutcome.LOSS);
     const analytics = buildDisciplineAnalytics(period);
-    const rs = period.map(t => t.rMultiple).filter((r): r is number => typeof r === 'number' && Number.isFinite(r));
+    const rs = period.map(effectiveRMultiple).filter((r): r is number => r !== undefined);
 
     // Best trade by dollar P&L.
     let bestTrade: MonthlyReportCard['whatLearned']['bestTrade'] = null;

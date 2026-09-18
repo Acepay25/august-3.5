@@ -588,14 +588,38 @@ Please investigate this discrepancy in your analysis.
             // Update Trade Log. The trade row is matched by the card
             // (message) id — the analysis createdAt can be shared by two
             // trades and previously matched the wrong rows (or none).
-            setLoggedTrades(prev => prev.map(t => t.id === candidate.message.id ? {
-                ...t,
-                postMortem: finalPostMortemReport,
-                postMortemCreatedAt: new Date().toISOString(),
-                postMortemImages: imageUrls,
-                postMortemByProvider: postMortemContributions,
-                rootCauseClass: classifyRootCause(finalPostMortemReport, t.outcome),
-            } : t));
+            //
+            // The candle validation already fetched the tape and resolved an
+            // exit; carry its numbers onto the row instead of dropping them
+            // into the prompt text alone. Two traps this steers around:
+            // `maxDrawdown` is NOT the MAE (the shared scan keeps accumulating
+            // past the stop by design), and validation reports excursions in
+            // RAW price % while `pnlPercent` on this row is LEVERAGED % — so
+            // they are scaled here to keep capture efficiency dimensionless.
+            const realizedR = priceValidation?.rrRatio;
+            const toLeveragedPct = (raw: number | undefined, leverage: number | undefined): number | undefined =>
+                raw !== undefined
+                    ? Math.round(raw * (leverage && leverage > 0 ? leverage : 1) * 10) / 10
+                    : undefined;
+            setLoggedTrades(prev => prev.map(t => {
+                if (t.id !== candidate.message.id) return t;
+                const mae = toLeveragedPct(priceValidation?.maePercent, t.leverage);
+                const mfe = toLeveragedPct(priceValidation?.mfePercent, t.leverage);
+                return {
+                    ...t,
+                    postMortem: finalPostMortemReport,
+                    postMortemCreatedAt: new Date().toISOString(),
+                    postMortemImages: imageUrls,
+                    postMortemByProvider: postMortemContributions,
+                    rootCauseClass: classifyRootCause(finalPostMortemReport, t.outcome),
+                    // Spread-conditional, not `key: undefined` — a re-run whose
+                    // validation was skipped or never resolved an exit must
+                    // leave the numbers an earlier run earned in place.
+                    ...(mae !== undefined ? { maxAdverseExcursion: mae } : {}),
+                    ...(mfe !== undefined ? { maxFavorableExcursion: mfe } : {}),
+                    ...(typeof realizedR === 'number' && Number.isFinite(realizedR) ? { realizedR } : {}),
+                };
+            }));
 
             // The trade was logged in the same tick that started this
             // post-mortem (capture flows: logTradeWithFeedback → setLoggedTrades

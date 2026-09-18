@@ -8,10 +8,11 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, Search, X, BrainCircuit } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, BrainCircuit, Loader2, Minus, Search, X } from 'lucide-react';
 import { runScreenerWithStatus, type ScreenerRow } from '../../services/trade/screener';
 import { display as symbolDisplay } from '../../utils/symbol';
 import { fmtPrice } from '../../utils/formatters';
+import StatusPill from '../ui/StatusPill';
 import type { LoggedTrade } from '../../types/trade';
 
 export interface ScreenerPanelProps {
@@ -93,14 +94,45 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
 
     if (!open) return null;
 
-    const header = (key: SortKey, label: string): React.ReactNode => (
-        <button
-            type="button"
-            onClick={() => setSort(s => ({ key, desc: s.key === key ? !s.desc : true }))}
-            className={`shrink-0 text-left text-[9px] font-bold uppercase tracking-widest transition-colors hover:text-zinc-200 ${sort.key === key ? 'text-zinc-200' : 'text-zinc-500'}`}
-        >
-            {label}{sort.key === key ? (sort.desc ? ' ↓' : ' ↑') : ''}
-        </button>
+    /** Sortable column head. The arrow IS the direction read (no separate
+     *  caret to decode), and an idle column still shows a faint double arrow
+     *  so it reads as sortable rather than static. */
+    const sortTh = (key: SortKey, label: string, className = 'px-3 py-1.5'): React.ReactNode => {
+        const active = sort.key === key;
+        return (
+            <th className={className} aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'}>
+                <button
+                    type="button"
+                    onClick={() => setSort(s => ({ key, desc: s.key === key ? !s.desc : true }))}
+                    className={`inline-flex shrink-0 items-center gap-1 text-[9px] font-bold uppercase tracking-widest transition-colors hover:text-zinc-200 ${
+                        active ? 'text-zinc-100' : 'text-zinc-500'
+                    }`}
+                >
+                    {label}
+                    {active
+                        ? (sort.desc
+                            ? <ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />
+                            : <ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />)
+                        : <ArrowUpDown className="h-2.5 w-2.5 opacity-40" aria-hidden="true" />}
+                </button>
+            </th>
+        );
+    };
+
+    const plainTh = (label: string, className = 'px-3 py-1.5'): React.ReactNode => (
+        <th className={className}>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{label}</span>
+        </th>
+    );
+
+    /** EMA regime as a semantic chip: the color family is the direction, so
+     *  the column scans without reading the word. */
+    const regimePill = (regime: ScreenerRow['regime']): React.ReactNode => (
+        regime === 'up'
+            ? <StatusPill tone="up" icon={<ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />}>up</StatusPill>
+            : regime === 'down'
+                ? <StatusPill tone="down" icon={<ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />}>down</StatusPill>
+                : <StatusPill tone="neutral" icon={<Minus className="h-2.5 w-2.5" aria-hidden="true" />}>range</StatusPill>
     );
 
     return createPortal(
@@ -141,13 +173,13 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                     <table className="w-full border-collapse text-[11px]">
                         <thead className="sticky top-0 bg-zinc-900">
                             <tr className="border-b border-white/[0.06]">
-                                <th className="px-4 py-1.5">{header('volume', 'Symbol')}</th>
-                                <th className="px-3 py-1.5"><span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Price</span></th>
-                                <th className="px-3 py-1.5">{header('movers', '24h')}</th>
-                                <th className="px-3 py-1.5">{header('rsi', 'RSI')}</th>
-                                <th className="px-3 py-1.5"><span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Regime</span></th>
-                                <th className="px-3 py-1.5">{header('setups', 'Setups')}</th>
-                                <th className="px-3 py-1.5"><span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">You</span></th>
+                                {sortTh('volume', 'Symbol', 'px-4 py-1.5')}
+                                {plainTh('Price')}
+                                {sortTh('movers', '24h')}
+                                {sortTh('rsi', 'RSI')}
+                                {plainTh('Regime')}
+                                {sortTh('setups', 'Setups')}
+                                {plainTh('You')}
                             </tr>
                         </thead>
                         <tbody>
@@ -184,9 +216,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                     <td className={`px-3 py-1.5 font-mono tabular-nums ${r.rsi14 == null ? 'text-zinc-600' : r.rsi14 >= 70 ? 'text-rose-400' : r.rsi14 <= 30 ? 'text-emerald-400' : 'text-zinc-300'}`}>
                                         {r.rsi14 ?? '—'}
                                     </td>
-                                    <td className="px-3 py-1.5 text-zinc-400">
-                                        {r.regime === 'up' ? '▲ up' : r.regime === 'down' ? '▼ down' : '· range'}
-                                    </td>
+                                    <td className="px-3 py-1.5">{regimePill(r.regime)}</td>
                                     <td className="px-3 py-1.5">
                                         {r.setups.length > 0
                                             ? <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300" title={r.setups.map(s => `${s.title} (${s.side})`).join('; ')}>
@@ -225,7 +255,12 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                 ? 'universe feed unreachable — nothing scanned'
                                 : `${rows.length} coins scanned · click a row to load it on the chart`}
                     </span>
-                    <span className="ml-auto">sorted by {sort.key}{sort.desc ? ' ↓' : ' ↑'}</span>
+                    <span className="ml-auto inline-flex items-center gap-1">
+                        sorted by {sort.key}
+                        {sort.desc
+                            ? <ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />
+                            : <ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />}
+                    </span>
                 </div>
             </div>
         </>,

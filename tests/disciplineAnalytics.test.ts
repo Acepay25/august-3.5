@@ -5,7 +5,9 @@ import { describe, it, expect } from 'vitest';
 
 import {
     buildDisciplineAnalytics,
+    captureEfficiencyPct,
     computeRMultiple,
+    effectiveRMultiple,
 } from '../utils/disciplineAnalytics';
 import { LoggedTrade } from '../types/trade';
 import { TradeOutcome } from '../types/enums';
@@ -92,15 +94,90 @@ describe('buildDisciplineAnalytics', () => {
 });
 
 describe('computeRMultiple', () => {
-    it('pnlPercent ÷ stop-move percent (leveraged percents)', () => {
-        // Entry 100k, SL 95k → 5% stop move; +200% leveraged → 40R
+    it('divides the leveraged percent by the raw stop move at 1x', () => {
+        // Entry 100k, SL 95k → 5% raw stop move. With no leverage supplied the
+        // account percent IS the price percent, so +200% is 40R.
         expect(computeRMultiple('100000', '95000', 200)).toBeCloseTo(40);
         expect(computeRMultiple('100000', '95000', -100)).toBeCloseTo(-20);
+    });
+
+    it('divides leverage back out of the account percent', () => {
+        // The real bug this guards: 20x, a 5% stop and a +200% ACCOUNT move is
+        // a 10% price move → 2R, not the 40R the raw division reported.
+        expect(computeRMultiple('100000', '95000', 200, 20)).toBeCloseTo(2);
+        expect(computeRMultiple('100000', '95000', -100, 20)).toBeCloseTo(-1);
+        expect(computeRMultiple('100000', '95000', 200, 5)).toBeCloseTo(8);
+    });
+
+    it('treats a missing or nonsense leverage as 1x rather than dividing by zero', () => {
+        expect(computeRMultiple('100000', '95000', 200, 0)).toBeCloseTo(40);
+        expect(computeRMultiple('100000', '95000', 200, -3)).toBeCloseTo(40);
+        expect(computeRMultiple('100000', '95000', 200, NaN)).toBeCloseTo(40);
     });
 
     it('missing entry, SL, or pnl → undefined (never fabricated 0R)', () => {
         expect(computeRMultiple(undefined, '95000', 200)).toBeUndefined();
         expect(computeRMultiple('100000', undefined, 200)).toBeUndefined();
         expect(computeRMultiple('100000', '95000', undefined)).toBeUndefined();
+    });
+});
+
+describe('effectiveRMultiple', () => {
+    it('prefers the price-measured R over the log-time figure', () => {
+        expect(effectiveRMultiple(trade({ outcome: TradeOutcome.WIN, realizedR: 1.5, rMultiple: 30 }))).toBe(1.5);
+    });
+
+    it('falls back to the log-time R, and never invents a zero', () => {
+        expect(effectiveRMultiple(trade({ outcome: TradeOutcome.LOSS, rMultiple: -1 }))).toBe(-1);
+        expect(effectiveRMultiple(trade({ outcome: TradeOutcome.WIN }))).toBeUndefined();
+        expect(effectiveRMultiple(trade({ outcome: TradeOutcome.WIN, realizedR: NaN, rMultiple: 2 }))).toBe(2);
+    });
+});
+
+describe('captureEfficiencyPct', () => {
+    it('reads realized against the best move the tape offered', () => {
+        // +80% realized on a trade that ran +100% in favor before the exit.
+        expect(captureEfficiencyPct(trade({
+            outcome: TradeOutcome.WIN, pnlPercent: 80, maxFavorableExcursion: 100,
+        }))).toBe(80);
+        expect(captureEfficiencyPct(trade({
+            outcome: TradeOutcome.WIN, pnlPercent: 200, maxFavorableExcursion: 100,
+        }))).toBe(200);
+    });
+
+    it('floors a stopped-out trade at zero rather than reporting negative capture', () => {
+        expect(captureEfficiencyPct(trade({
+            outcome: TradeOutcome.LOSS, pnlPercent: -50, maxFavorableExcursion: 12,
+        }))).toBe(0);
+    });
+
+    it('stays null when either side was never measured', () => {
+        expect(captureEfficiencyPct(trade({ outcome: TradeOutcome.WIN, pnlPercent: 80 }))).toBeNull();
+        expect(captureEfficiencyPct(trade({ outcome: TradeOutcome.WIN, maxFavorableExcursion: 100 }))).toBeNull();
+        // A zero/absent best move is not a denominator.
+        expect(captureEfficiencyPct(trade({
+            outcome: TradeOutcome.WIN, pnlPercent: 80, maxFavorableExcursion: 0,
+        }))).toBeNull();
+    });
+});
+
+describe('excursion aggregate coverage', () => {
+    it('reports nothing until a trade carries a measured window', () => {
+        const a = buildDisciplineAnalytics([
+            trade({ outcome: TradeOutcome.WIN, pnlAmount: 100, rMultiple: 2 }),
+        ]);
+        expect(a.excursion).toEqual({ n: 0, meanMaePct: null, meanCapturePct: null });
+    });
+
+    it('averages only the measured subset and counts it honestly', () => {
+        const a = buildDisciplineAnalytics([
+            trade({ outcome: TradeOutcome.WIN, pnlAmount: 100, pnlPercent: 60, maxAdverseExcursion: 10, maxFavorableExcursion: 100 }),
+            trade({ outcome: TradeOutcome.LOSS, pnlAmount: -50, pnlPercent: -40, maxAdverseExcursion: 30, maxFavorableExcursion: 5 }),
+            trade({ outcome: TradeOutcome.WIN, pnlAmount: 100 }),
+        ]);
+        expect(a.excursion.n).toBe(2);
+        expect(a.excursion.meanMaePct).toBe(20);
+        // 60% and 0% (the loser captured nothing) average to 30.
+        expect(a.excursion.meanCapturePct).toBe(30);
     });
 });

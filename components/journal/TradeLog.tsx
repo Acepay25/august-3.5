@@ -10,6 +10,8 @@ import { EmptyState } from '../ui/EmptyState';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { captureEfficiencyPct } from '../../utils/disciplineAnalytics';
+import { tallyFinCom } from '../../services/providers/debateScience';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import MarkdownContent from '../shared/MarkdownContent';
@@ -99,6 +101,12 @@ const TradeDetailView: React.FC<{
     const [pnlDraftPercent, setPnlDraftPercent] = useState<string>(pnlPercent !== undefined ? String(pnlPercent) : '');
 
     const safeDirection = direction || 'Neutral';
+    // Realized share of the best move the tape offered. Null until the
+    // post-mortem measured an excursion window for this trade.
+    const capture = captureEfficiencyPct(trade);
+    // Peer disagreement recorded in the debate transcript, or null when the
+    // trade was never logged from a marked debate.
+    const dissent = tallyFinCom(trade.debateTurns);
 
     const handleLeverageBlur = () => {
         let val = parseInt(localLeverage, 10);
@@ -303,6 +311,53 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 </div>
 
+                                {/* Execution quality, measured from candles by the
+                                    post-mortem's validation. Rendered only once at
+                                    least one side exists, so the (large) population
+                                    of pre-feature trades stays clean rather than
+                                    showing dashes everywhere. */}
+                                {(trade.maxAdverseExcursion !== undefined || trade.maxFavorableExcursion !== undefined) && (
+                                    <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800" data-testid="trade-excursions">
+                                        <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Held Through</span>
+                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+                                            <span className="text-zinc-300">
+                                                worst −{trade.maxAdverseExcursion !== undefined ? `${trade.maxAdverseExcursion.toFixed(1)}%` : '—'}
+                                                <span className="text-[9px] uppercase tracking-wider text-zinc-600"> against</span>
+                                            </span>
+                                            <span className="text-zinc-300">
+                                                best +{trade.maxFavorableExcursion !== undefined ? `${trade.maxFavorableExcursion.toFixed(1)}%` : '—'}
+                                                <span className="text-[9px] uppercase tracking-wider text-zinc-600"> in favor</span>
+                                            </span>
+                                            {capture !== null && (
+                                                <span className={capture >= 50 ? 'text-emerald-300' : 'text-amber-300'}>
+                                                    {capture.toFixed(0)}%
+                                                    <span className="text-[9px] uppercase tracking-wider text-zinc-600"> captured</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="mt-1 text-[9px] text-zinc-600">
+                                            Leveraged percents over the candles the position actually occupied.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Peer disagreement from the debate transcript —
+                                    the stored markers previously had no reader at
+                                    all. A count, not a rate: one trade's dissent
+                                    is context, not evidence about a seat. */}
+                                {dissent && (
+                                    <div className="col-span-2 text-[10px] text-zinc-500" data-testid="trade-fincom">
+                                        Floor before the verdict:{' '}
+                                        <span className={dissent.dissents > 0 ? 'text-amber-300' : 'text-zinc-400'}>
+                                            {dissent.dissents} dissent{dissent.dissents === 1 ? '' : 's'}
+                                        </span>
+                                        {' · '}{dissent.commits} commit{dissent.commits === 1 ? '' : 's'}
+                                        {dissent.dissenters.length > 0 && (
+                                            <span className="text-zinc-600"> — {dissent.dissenters.join(', ')}</span>
+                                        )}
+                                    </div>
+                                )}
+
                                 {invalidationCriteria && invalidationCriteria.length > 0 && (
                                     <div className="col-span-2 p-2.5 bg-rose-950/20 rounded-lg border border-rose-500/15 hover:border-rose-500/30 transition-colors">
                                         <span className="text-[9px] uppercase font-bold text-rose-400/80 block mb-1">Invalidation Contract</span>
@@ -418,6 +473,10 @@ const TradeLogRowImpl: React.FC<{
     const alphaLabel = trade.benchmark && Number.isFinite(trade.benchmark.alphaPct)
         ? `α ${trade.benchmark.alphaPct >= 0 ? '+' : ''}${trade.benchmark.alphaPct.toFixed(1)}%`
         : null;
+    // Compact "how much of the move did I keep" tag; only once the post-mortem
+    // has measured an excursion window for this trade.
+    const capture = captureEfficiencyPct(trade);
+    const capLabel = capture !== null ? `cap ${capture.toFixed(0)}%` : null;
 
     return (
         <div className={`flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors ${isSelected ? 'bg-zinc-800' : ''}`}>
@@ -449,6 +508,7 @@ const TradeLogRowImpl: React.FC<{
                         {direction}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
                         {alphaLabel ? ` · ${alphaLabel}` : ''}
+                        {capLabel ? ` · ${capLabel}` : ''}
                     </p>
                 </div>
                 <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />

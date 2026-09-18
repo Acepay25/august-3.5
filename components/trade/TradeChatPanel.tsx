@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Brain, Camera, Check, CheckCircle, ChevronDown, Copy, FileText, Gavel, History, LayoutGrid, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X, Zap } from 'lucide-react';
+import { Activity, Brain, Camera, Check, CheckCircle, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, Gavel, History, LayoutGrid, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
@@ -209,7 +209,15 @@ const TRADE_TOOLS = [
     'remember', 'read_memory', 'forget',
 ];
 
-const QUICK_PROMPTS = ['Read this chart', 'Key levels?', 'What is the bias?', 'Order-flow pressure?', 'Scan chart → skills'];
+/** Empty-state starters. The glyph is a category cue so the row scans by
+ *  intent; the chip's text is what gets sent, byte-for-byte unchanged. */
+const QUICK_PROMPTS: { text: string; Icon: React.FC<{ className?: string }> }[] = [
+    { text: 'Read this chart', Icon: Eye },
+    { text: 'Key levels?', Icon: Crosshair },
+    { text: 'What is the bias?', Icon: Compass },
+    { text: 'Order-flow pressure?', Icon: Activity },
+    { text: 'Scan chart → skills', Icon: Sparkles },
+];
 
 /** Identity of a RUNNING model turn, captured the moment it starts. Every
  *  side-effect of a panel tool (proposal card attach, drawing persistence,
@@ -253,14 +261,33 @@ export const __clearProposalStateForTests = (): void => { proposalDisposition.cl
  *  that wait for approval in the Inbox. */
 const SCAN_SKILLS_PROMPT = 'Scan the full candle history of this chart with scan_chart_skills: study how the price actually moved (regimes, swings, gaps) and which entries have historically worked, then draft your best IF/THEN skill candidates from what the tape proves. Tell me what you found and what is waiting in the Inbox.';
 
-const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string }[] = [
-    { id: 'off', label: 'Off' },
-    { id: 'auto', label: 'Auto' },
-    { id: 'low', label: 'Low' },
-    { id: 'medium', label: 'Medium' },
-    { id: 'high', label: 'High' },
-    { id: 'max', label: 'Max' },
+/** Thinking-budget levels. `bars` drives the signal-meter so the cost of a
+ *  choice is visible without reading the word — `auto` gets a spark instead
+ *  of bars because it isn't a budget, it's "pick per task". Warm amber marks
+ *  the two settings that actually spend more. */
+const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string; bars: number | 'auto'; tone: string }[] = [
+    { id: 'off', label: 'Off', bars: 0, tone: 'text-zinc-600' },
+    { id: 'auto', label: 'Auto', bars: 'auto', tone: 'text-cyan-400' },
+    { id: 'low', label: 'Low', bars: 1, tone: 'text-zinc-300' },
+    { id: 'medium', label: 'Medium', bars: 2, tone: 'text-zinc-300' },
+    { id: 'high', label: 'High', bars: 3, tone: 'text-amber-400' },
+    { id: 'max', label: 'Max', bars: 4, tone: 'text-amber-400' },
 ];
+
+const EffortMeter: React.FC<{ bars: number | 'auto'; tone: string }> = ({ bars, tone }) => (
+    bars === 'auto'
+        ? <Sparkles className={`h-2.5 w-2.5 ${tone}`} aria-hidden="true" />
+        : (
+            <span className={`effort-meter ${tone}`} aria-hidden="true">
+                {[1, 2, 3, 4].map(n => <i key={n} className={n <= bars ? 'is-lit' : ''} />)}
+            </span>
+        )
+);
+
+/** The trigger and the open menu show the same read for the same id — one
+ *  lookup keeps them from drifting. */
+const effortChoiceOf = (id: ReasoningEffort | 'auto'): typeof EFFORT_CHOICES[number] =>
+    EFFORT_CHOICES.find(c => c.id === id) ?? EFFORT_CHOICES[1];
 
 /** Per-send cap on attached files (keeps prompts sane). */
 const MAX_ATTACHMENTS = 4;
@@ -1732,10 +1759,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             The model sees this chart live — a fresh code-calculated packet rides every message, it can pull the book, the full hybrid data or the exact screen state (including your drawings), take chart screenshots you attach, and grow itself: memory notes, skill proposals and new tools from this chat.
                         </p>
                         <div className="flex flex-wrap justify-center gap-1.5">
-                            {QUICK_PROMPTS.map(q => (
-                                <button key={q} type="button" disabled={!ready} onClick={() => void send(q)}
-                                    className="rounded-full border border-white/[0.07] bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 transition-colors hover:border-white/15 hover:text-zinc-100 disabled:opacity-40">
-                                    {q}
+                            {QUICK_PROMPTS.map(({ text, Icon }) => (
+                                <button key={text} type="button" disabled={!ready} onClick={() => void send(text)}
+                                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 transition-colors hover:border-white/15 hover:text-zinc-100 disabled:opacity-40">
+                                    <Icon className="h-3 w-3 shrink-0 text-zinc-500 transition-colors group-hover:text-cyan-400" aria-hidden="true" />
+                                    {text}
                                 </button>
                             ))}
                         </div>
@@ -2020,18 +2048,22 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 <ModelPicker providers={providers} value={selectedChatModel} onChange={changeSoloModel} mode="provider-model" onRefreshModels={onRefreshModels} compact />
                             )}
                             <button type="button" onClick={() => setShowEffortMenu(v => !v)} aria-label="Thinking effort"
-                                className="flex items-center gap-1 rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
+                                aria-expanded={showEffortMenu}
+                                title={`Thinking effort: ${effortChoiceOf(effort).label}`}
+                                className="flex items-center gap-1.5 rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
                                 <Brain className="h-3.5 w-3.5" />
-                                {effort === 'auto' ? 'Auto' : effort === 'off' ? 'Off' : effort[0].toUpperCase() + effort.slice(1)}
-                                <ChevronDown className="h-2.5 w-2.5" />
+                                {effortChoiceOf(effort).label}
+                                <EffortMeter bars={effortChoiceOf(effort).bars} tone={effortChoiceOf(effort).tone} />
+                                <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${showEffortMenu ? 'rotate-180' : ''}`} />
                             </button>
                             {showEffortMenu && (
-                                <div className="absolute bottom-8 right-0 z-30 w-28 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="effort-menu">
+                                <div className="absolute bottom-8 right-0 z-30 w-36 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="effort-menu" role="menu" aria-label="Thinking effort">
                                     {EFFORT_CHOICES.map(c => (
-                                        <button key={c.id} type="button"
+                                        <button key={c.id} type="button" role="menuitemradio" aria-checked={effort === c.id}
                                             onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
-                                            className={`block w-full rounded-lg px-2 py-1 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}>
+                                            className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}>
                                             {c.label}
+                                            <EffortMeter bars={c.bars} tone={c.tone} />
                                         </button>
                                     ))}
                                 </div>
