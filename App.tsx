@@ -1880,6 +1880,15 @@ const App: React.FC = () => {
             run: () => setIsStrategySearchVisible(true),
         },
         {
+            id: 'saved-analyses',
+            label: 'Open Saved Analyses',
+            hint: 'Archive',
+            // This overlay is the ONLY place a saved analysis can be deleted or
+            // cleared — the SettingsMenu restructure dropped its Header trigger
+            // and left handleDeleteSavedAnalyses with no way to be reached.
+            run: () => setIsSavedAnalysesVisible(true),
+        },
+        {
             id: 'strategy-studio',
             label: 'Open Strategy Studio',
             hint: 'Playbook',
