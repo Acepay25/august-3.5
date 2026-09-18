@@ -43,6 +43,11 @@ describe('parsePredicate — accepts', () => {
         expect(resolveField('volume-sma-20')).toBe('volumeSma20');
         expect(resolveField('Volume Ratio')).toBe('volumeRatio');
         expect(resolveField('rsi')).toBe('rsi14');
+        // Same spellings must survive the TOKENIZER, not just the alias table —
+        // otherwise the FIELD_ALIASES promise is true in unit isolation and
+        // false for every real predicate.
+        expect(ok('rsi-14 > 70')).toBe(true);
+        expect(ok('volume-sma-20 > 1')).toBe(true);
     });
 });
 
@@ -78,10 +83,20 @@ describe('parsePredicate — rejects', () => {
     });
 
     it('bounds length and nesting', () => {
-        expect(ok(`rsi14 > 1 and ${'close > 0 and '.repeat(40)}volume > 0`)).toBe(false);
+        // MAX_TERMS (64) is unreachable defense: a 240-char predicate cannot
+        // hold more than ~20 comparisons, so the length cap always fires
+        // first. Pinned as the length bound it actually is, rather than a
+        // term-count assertion that would pass for the wrong reason.
+        const chained = `rsi14 > 1 and ${'close > 0 and '.repeat(40)}volume > 0`;
+        expect(chained.length).toBeGreaterThan(PREDICATE_MAX_LENGTH);
+        expect(ok(chained)).toBe(false);
+        expect(err(chained)).toMatch(/longer than/);
         expect(err('x'.repeat(PREDICATE_MAX_LENGTH + 1))).toMatch(/longer than/);
+        // 40 nested groups inside the length cap: this one MUST be depth.
         const deep = `${'('.repeat(40)}rsi14 > 70${')'.repeat(40)}`;
-        expect(deep.length <= PREDICATE_MAX_LENGTH ? ok(deep) : false).toBe(false);
+        expect(deep.length).toBeLessThanOrEqual(PREDICATE_MAX_LENGTH);
+        expect(ok(deep)).toBe(false);
+        expect(err(deep)).toMatch(/nest/i);
     });
 });
 
@@ -175,5 +190,68 @@ describe('storage', () => {
             tradeIds: [], body: 'x', ifCondition: 'a prose-only trigger',
         } as Parameters<typeof serializeSkill>[0];
         expect(serializeSkill(meta, 'prose only')).not.toContain('predicate:');
+    });
+});
+
+/**
+ * A predicate only exists if something can WRITE one. The gate, the ledger and
+ * the evaluator all read `skill.predicate`, but until now no author surface
+ * asked for it — `propose_skill` ran with `additionalProperties: false` and no
+ * predicate key, so the model could not submit one and the gate judged an
+ * always-empty pool. These pins keep the three links from drifting apart again.
+ */
+describe('predicate author surface', () => {
+    it('propose_skill names predicate in its schema (an unlisted key is rejected outright)', async () => {
+        const { DESK_TOOL_DEFINITIONS } = await import('../services/analysis/DeskToolsService');
+        const propose = DESK_TOOL_DEFINITIONS.find(t => t.function.name === 'propose_skill');
+        expect(propose).toBeDefined();
+        const params = propose!.function.parameters as {
+            properties: Record<string, { description?: string }>;
+            additionalProperties: boolean;
+        };
+        expect(params.additionalProperties).toBe(false);
+        expect(params.properties.predicate).toBeDefined();
+        // The description must carry the real grammar — a field the model is
+        // asked for but never told how to write is a field it will hallucinate.
+        expect(params.properties.predicate.description).toContain('rsi14');
+        expect(params.properties.predicate.description).toContain(PREDICATE_MAX_LENGTH);
+    });
+
+    it('both craft prompts enumerate the predicate key the parser reads', async () => {
+        const { PROMPT_REGISTRY } = await import('../constants/promptRegistry');
+        for (const id of ['learning.skill_craft', 'learning.chart_scan']) {
+            const entry = PROMPT_REGISTRY.find(p => p.id === id);
+            expect(entry, id).toBeDefined();
+            expect(entry!.fallback, id).toContain('predicate');
+            expect(entry!.fallback, id).toContain('rsi14');
+        }
+    });
+
+    it('an over-long predicate costs the field, never the whole craft', async () => {
+        const { parseCraftedSkill } = await import('../schemas/learning');
+        const base = {
+            name: 'Band-walk fade',
+            kind: 'avoid',
+            when: 'price pins the upper band while volume dies',
+            inputs: ['coin'],
+            steps: ['check the band', 'check the tape'],
+            validate: 'confirm on the next close',
+            output: 'stand down',
+            approval: 'a human approves',
+            ifCondition: 'close > bbUpper and rsi14 > 75',
+            thenAction: 'skip the long',
+        };
+        // Pre-fix: `.max(240)` on an optional field failed the OBJECT parse, so
+        // one over-long clause deleted an otherwise-valid skill — the exact
+        // behaviour this field's own comment promises not to have.
+        const overLong = 'close > 1 and '.repeat(60);
+        expect(overLong.length).toBeGreaterThan(PREDICATE_MAX_LENGTH);
+        const craft = parseCraftedSkill({ ...base, predicate: overLong });
+        expect(craft).not.toBeNull();
+        expect(craft!.predicate).toBeUndefined();
+        expect(craft!.ifCondition).toBe('close > bbUpper and rsi14 > 75');
+        // A clause inside the cap still lands intact.
+        const fine = parseCraftedSkill({ ...base, predicate: 'rsi14 > 70 and close > bbUpper' });
+        expect(fine?.predicate).toBe('rsi14 > 70 and close > bbUpper');
     });
 });

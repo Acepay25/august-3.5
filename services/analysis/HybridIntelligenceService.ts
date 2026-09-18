@@ -814,10 +814,20 @@ export interface HybridInjectionOptions {
 
 export const generateHybridPromptInjection = (data: HybridDataPacket, options?: HybridInjectionOptions): string => {
     const fundingDisplay = (data.fundingRate * 100).toFixed(4);
-    const dataAgeMin = Math.max(0, Math.round((Date.now() - new Date(data.dataTimestamp).getTime()) / 60000));
-    const sourceNote = dataAgeMin <= 10
-        ? `Binance · ${dataAgeMin}m ago`
-        : `Binance · STALE ${dataAgeMin}m — verify vs live price`;
+    // Seconds, not minutes: a 30-second-old packet used to print "Binance · 0m
+    // ago", which reads as "fresh" to both the user and the model and hid the
+    // one number that settles whether a stated move is real.
+    const dataAgeMs = Date.now() - new Date(data.dataTimestamp).getTime();
+    const ageLabel = !Number.isFinite(dataAgeMs)
+        ? 'unknown age'
+        : dataAgeMs < 120_000
+            ? `${Math.max(0, Math.round(dataAgeMs / 1000))}s`
+            : `${Math.round(dataAgeMs / 60000)}m`;
+    const sourceNote = !Number.isFinite(dataAgeMs)
+        ? `Binance · age UNKNOWN — verify vs live price`
+        : dataAgeMs <= 10 * 60_000
+            ? `Binance · ${ageLabel} ago`
+            : `Binance · STALE ${ageLabel} — verify vs live price`;
     const qualityNote = data.dataQuality?.status === 'degraded'
         ? `degraded (missing: ${data.dataQuality.unavailableSources.join(', ')})`
         : 'complete';
@@ -888,8 +898,9 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
     const sections: string[] = [
         `## Hybrid market packet — REST snapshot (cross-check against the live chart mark)`,
         `This packet is calculated from REST ticker/kline data and can lag the chart by seconds. The chart's websocket mark (when supplied in the live price stamp or get_chart_view) is current and wins; treat any gap as snapshot age or perp basis, never as a fresh move. Before stating ANY price or indicator value, check it against the live mark first, then this packet.`,
+        `PRICE KINDS: the \`Last (ticker)\` column below is the last TRADED price from the 24h ticker; the live stamp is the perpetual MARK price. Those are different quantities — a few dollars between them is basis, not a move, and neither is evidence of direction on its own.`,
         mdTable(
-            ['Symbol', 'Price', '24h', 'High', 'Low', 'Vol 24h', 'Funding', 'Age', 'Quality'],
+            ['Symbol', 'Last (ticker)', '24h', 'High', 'Low', 'Vol 24h', 'Funding', 'Age', 'Quality'],
             [[
                 data.symbol,
                 `$${data.marketData.currentPrice}`,

@@ -1326,11 +1326,19 @@ export const halveCounts = (meta: SkillMeta, times: number): void => {
         // sample; once the sample floors to 0 the pair is dropped entirely
         // rather than left reporting a lone 0R.
         if (meta.rSampled) {
-            meta.rSampled = Math.floor(meta.rSampled / 2);
-            meta.netR = meta.rSampled > 0
-                ? Math.round(((meta.netR ?? 0) / 2) * 100) / 100
-                : undefined;
-            if (meta.rSampled === 0) meta.rSampled = undefined;
+            const sampledBefore = meta.rSampled;
+            meta.rSampled = Math.floor(sampledBefore / 2);
+            if (meta.rSampled > 0) {
+                // Scale the SUM by the count actually retained. Flooring the
+                // count alone silently RAISES the quoted average: 8R over 9
+                // reads +0.89R, and halving to 4R over 4 would quote +1.00R
+                // from evidence that just lost half its authority.
+                const net = meta.netR ?? 0;
+                meta.netR = Math.round(net * (meta.rSampled / sampledBefore) * 100) / 100;
+            } else {
+                meta.netR = undefined;
+                meta.rSampled = undefined;
+            }
         }
     }
 };

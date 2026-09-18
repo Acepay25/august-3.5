@@ -12,19 +12,30 @@
  * symbol is on screen. No model call, no desk tool, no new endpoint.
  */
 
-import { listSkills, titleFromMeta, type SkillKind, type SkillMeta } from './SkillMemoryService';
+import {
+    listSkills,
+    titleFromMeta,
+    MIN_SAMPLE_FOR_VETO,
+    type SkillKind,
+    type SkillMeta,
+} from './SkillMemoryService';
 import {
     buildPredicateSeries,
     evaluatePredicateSource,
     lastClosedIndex,
 } from '../analysis/skillPredicate';
 import type { ScanCandle } from '../trade/setupScan';
+import { shouldSkillHoldout } from '../../utils/skillHoldout';
 
 /** A fired `avoid` predicate caps verdict confidence here. The number matches
  *  the ceiling the existing prose-based avoid ladder already applies, so the
  *  code gate tightens nothing beyond what the skill already implied — it just
  *  makes the call deterministic instead of hoping a seat honors the sentence. */
 export const AVOID_PREDICATE_CEILING = 0.40;
+
+/** How many fired triggers the injected note renders. Sized so the whole
+ *  block stays under ~600 chars — comparable to one memory slice. */
+export const MAX_NOTE_LINES = 6;
 
 export interface PredicateGateResult {
     /** Skills whose predicate fired on the last closed bar. */
@@ -43,12 +54,33 @@ export interface PredicateGateResult {
 
 const EMPTY: PredicateGateResult = { fired: [], judged: 0, inconclusive: 0, note: '' };
 
+/**
+ * A predicate may only clamp what the model could itself have seen. Retrieval
+ * and enforcement both retire a skill on `status === 'retired'`/`supersededBy`
+ * (`SkillMemoryService.ts:681`, `:707`) and hold a zero-evidence candidate
+ * avoid skill back from vetoing (`:262`); the gate has to honour the same
+ * three guards or a retired BTC/LONG avoid skill caps a BTC/SHORT verdict at
+ * 40% behind a deterministic-looking technicality.
+ *
+ * `direction` deliberately FAILS CLOSED: a skill scoped to one side says
+ * nothing about the other, and a run with no detected direction leaves a
+ * scoped skill out instead of guessing which side it applies to.
+ */
+const mayClamp = (skill: SkillMeta, direction?: string): boolean => {
+    if (skill.status === 'retired' || skill.supersededBy) return false;
+    if (skill.kind === 'avoid' && skill.status === 'candidate'
+        && (skill.wins + skill.losses) < MIN_SAMPLE_FOR_VETO) return false;
+    if (skill.direction && skill.direction !== direction) return false;
+    return true;
+};
+
 /** Skills carrying a predicate, scoped to this coin (a coin-less skill applies
  *  to any setup and is kept). */
-export const predicateBearingSkills = (skills: SkillMeta[], coin?: string): SkillMeta[] => {
+export const predicateBearingSkills = (skills: SkillMeta[], coin?: string, direction?: string): SkillMeta[] => {
     const wanted = (coin || '').toUpperCase().replace(/USDT?$/, '');
     return skills.filter(s => {
         if (!s.predicate || !s.predicate.trim()) return false;
+        if (!mayClamp(s, direction)) return false;
         if (!s.coin) return true;
         return s.coin.toUpperCase().replace(/USDT?$/, '') === wanted;
     });
@@ -71,8 +103,27 @@ export async function evaluateSkillPredicates(args: {
     coin: string;
     skills?: SkillMeta[];
     bars?: number;
+    /** The run's own direction — a skill scoped to the other side must not
+     *  clamp it. 'Neutral' matches nothing, which is the point. */
+    direction?: string;
+    /** Replay cutoff. A backtest run time-travels its memory; judging a
+     *  trigger on a bar that closed after this instant leaks the future. */
+    asOfMs?: number;
+    /** The run's id, used only to honour the ε-holdout. A control run gets NO
+     *  skill treatment anywhere else (`MemoryRetrievalService.ts:577`), and a
+     *  code-side clamp is treatment — measuring a holdout group that is being
+     *  quietly served skill guidance would make the whole experiment a lie. */
+    runId?: string;
 }): Promise<PredicateGateResult> {
-    const pool = predicateBearingSkills(args.skills ?? listSkills().map(s => s.meta), args.coin);
+    if (shouldSkillHoldout(args.runId)) return EMPTY;
+    // `file.enabled` is what retirement writes (SkillMemoryService.ts:551), so
+    // checking it here keeps a switched-off skill out of the clamp pool even if
+    // its markdown still reads active.
+    const pool = predicateBearingSkills(
+        args.skills ?? listSkills().filter(s => s.file.enabled).map(s => s.meta),
+        args.coin,
+        args.direction,
+    );
     if (pool.length === 0) return EMPTY;
 
     const byTimeframe = new Map<string, SkillMeta[]>();
@@ -89,9 +140,11 @@ export async function evaluateSkillPredicates(args: {
         try {
             const { fetchKlines } = await import('../analysis/KlineService');
             const klines = await fetchKlines(args.coin, timeframe, args.bars ?? 120);
-            const candles: ScanCandle[] = klines.map(k => ({
-                time: k.time, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume,
-            }));
+            const candles: ScanCandle[] = klines
+                .filter(k => args.asOfMs === undefined || k.time * 1000 <= args.asOfMs)
+                .map(k => ({
+                    time: k.time, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume,
+                }));
             if (candles.length < 3) throw new Error('not enough history');
             series = buildPredicateSeries(candles);
         } catch {
@@ -113,11 +166,20 @@ export async function evaluateSkillPredicates(args: {
     }
 
     const ceilings = fired.filter(f => f.kind === 'avoid').map(() => AVOID_PREDICATE_CEILING);
+    // Every seat gets this block and it sits OUTSIDE the stage budgets the
+    // memory slices obey, so it renders avoid-first (those are the lines that
+    // move the verdict) and stops at a cap, naming what it hid.
+    const shown = [...fired]
+        .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'avoid' ? -1 : 1))
+        .slice(0, MAX_NOTE_LINES);
     const note = fired.length === 0
         ? ''
         : [
             '**CODE-CHECKED TRIGGERS (evaluated on the last closed candle, not by a model):**',
-            ...fired.map(f => `- ${f.name} — ${f.kind} @ ${f.timeframe}: ${f.predicate} → ${describeFired(f.kind)}`),
+            ...shown.map(f => `- ${f.name} — ${f.kind} @ ${f.timeframe}: ${f.predicate} → ${describeFired(f.kind)}`),
+            ...(fired.length > shown.length
+                ? [`…and ${fired.length - shown.length} more fired (pull the skill cards with recall).`]
+                : []),
             ...(ceilings.length > 0
                 ? [`An AVOID trigger is live: the verdict cannot exceed ${Math.round(AVOID_PREDICATE_CEILING * 100)}% confidence.`]
                 : []),

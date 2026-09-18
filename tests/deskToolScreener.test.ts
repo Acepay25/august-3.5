@@ -67,7 +67,11 @@ describe('run_screener desk tool', () => {
         expect(arg.trades).toEqual([]);
         const digestArg = await call({ setupsOnly: true, sort: 'movers' });
         // SOL (6% move, 2 setups) outranks BTC for both mover sort and the setup filter.
-        expect(digestArg.content).toBe('MD:1');
+        // Identical args ⇒ a cache hit by design. Same digest, but now marked
+        // as a replay so a model cannot read a cached scan as a fresh one.
+        expect(runScreenerMock).toHaveBeenCalledTimes(1);
+        expect(digestArg.content.startsWith('[DESK CACHE')).toBe(true);
+        expect(digestArg.content.endsWith('MD:1')).toBe(true);
     });
 
     it('an unreachable universe feed reads UNKNOWN to the model, not "no matches"', async () => {

@@ -67,6 +67,12 @@ const NOTEBOOK_SAVE_PATTERN = /\b(save|store|write|add|log|remember|record|put)\
 // ~99% of their payload once the hybrid envelope is in); staggering breaks
 // the simultaneous-identical window those caches key on.
 const SEAT_LAUNCH_STAGGER_MS = 700;
+/** How stale a prior run's packet may be and still be reused instead of
+ *  re-fetched. `dataTimestamp` is when the assembly ran, so this is a FLOOR on
+ *  the real age — every cell inside it additionally carries up to its own REST
+ *  cache window. Reusing a minutes-old packet was the worst link in the chain:
+ *  automation and follow-up runs got the previous tape labelled "real-time". */
+const HYBRID_REUSE_MAX_AGE_MS = 60_000;
 
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
@@ -1089,10 +1095,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // (e.g. ETH) — the wrong prices/ATR/regime would be injected into the
         // analyst prompts and persisted onto the new trade card.
         const detectedSymbol = extractSymbolFromPrompt(effectiveInput);
-        const cachedHybridData =
-            currentHybridData && detectedSymbol && currentHybridData.symbol === detectedSymbol
-                ? currentHybridData
-                : null;
+        const cachedHybridAgeMs = currentHybridData
+            ? Date.now() - new Date(currentHybridData.dataTimestamp).getTime()
+            : Number.POSITIVE_INFINITY;
+        const cachedHybridData = currentHybridData
+            && detectedSymbol
+            && currentHybridData.symbol === detectedSymbol
+            && Number.isFinite(cachedHybridAgeMs)
+            && cachedHybridAgeMs <= HYBRID_REUSE_MAX_AGE_MS
+            ? currentHybridData
+            : null;
         // Hybrid intelligence: automation runs ALWAYS fetch real-time market
         // data (that data IS the point of an automated analysis) — the
         // global toggle only gates MANUAL runs.
@@ -1298,7 +1310,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     : `${detectedLearningCoin.toUpperCase()}USDT`;
                 try {
                     const { evaluateSkillPredicates } = await import('../services/learning/skillPredicateGate');
-                    predicateGate = await evaluateSkillPredicates({ coin: gateSymbol });
+                    predicateGate = await evaluateSkillPredicates({
+                        coin: gateSymbol,
+                        // Same guards retrieval applies: the gate must not
+                        // clamp a Long verdict with a Short skill, and a
+                        // replay run must not read bars that had not closed
+                        // yet at its own cutoff.
+                        direction: pendingDirection,
+                        asOfMs: memoryAsOfMs,
+                        runId: userMessage.id,
+                    });
                 } catch (err) {
                     console.warn('[PredicateGate] skipped:', err);
                     predicateGate = null;
