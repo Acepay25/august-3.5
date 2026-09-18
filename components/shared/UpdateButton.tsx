@@ -17,14 +17,14 @@ import { useAutoUpdate } from '../../hooks/useAutoUpdate';
  * In the browser (non-Electron), this component renders nothing.
  */
 export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' }) => {
-    const { isElectron, appVersion, updateStatus, checkForUpdates, downloadUpdate } = useAutoUpdate();
+    const { isElectron, appVersion, updateStatus, checkForUpdates, downloadUpdate, installUpdate } = useAutoUpdate();
 
     if (!isElectron) return null;
 
-    const { status, error, version } = updateStatus;
+    const { status, error, version, progress } = updateStatus;
 
-    // Active download/installation states are shown in the full-screen overlay
-    if (status === 'downloading' || status === 'downloaded' || status === 'installing') {
+    // Installing state is handled by the full-screen overlay
+    if (status === 'installing') {
         return null;
     }
 
@@ -61,6 +61,34 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                 >
                     <Download className="h-3.5 w-3.5" />
                     Update
+                </button>
+            </div>
+        );
+    }
+
+    // Downloading state — compact downloading pill with progress
+    if (status === 'downloading') {
+        return (
+            <div className={`flex items-center gap-1.5 ${className}`}>
+                <span className="flex items-center gap-1.5 rounded-md bg-cyan-500/10 px-2.5 py-1 text-[11px] font-mono font-medium text-cyan-400 border border-cyan-500/20" role="status" aria-live="polite">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>{Number.isFinite(progress) && progress > 0 ? `${progress}%` : 'Downloading…'}</span>
+                </span>
+            </div>
+        );
+    }
+
+    // Downloaded state — Restart button to apply
+    if (status === 'downloaded') {
+        return (
+            <div className={`flex items-center gap-1.5 ${className}`}>
+                <button
+                    onClick={installUpdate}
+                    className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95`}
+                    aria-label={`Restart to apply version ${version ?? ''}`}
+                >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Restart
                 </button>
             </div>
         );

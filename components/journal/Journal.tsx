@@ -8,7 +8,7 @@ import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
+import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, SparklesIcon, BotIcon } from '../shared/Icons';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
@@ -100,11 +100,11 @@ interface TabConfig {
 const resolveTab = (tab: TabId): TabId => (tab === 'performance' ? 'log' : tab);
 
 const TABS: TabConfig[] = [
-    { id: 'log', label: 'History', shortLabel: 'History', icon: <HistoryIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'learning', label: 'Learning', shortLabel: 'Learn', icon: <span className="text-lg"></span>, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'models', label: 'Models', shortLabel: 'AI', icon: <span className="text-lg"></span>, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'log', label: 'History', shortLabel: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'learning', label: 'Learning', shortLabel: 'Learn', icon: <SparklesIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'models', label: 'Models', shortLabel: 'AI', icon: <BotIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
 ];
 
 const JournalInner: React.FC<JournalProps> = ({
@@ -292,7 +292,7 @@ const JournalInner: React.FC<JournalProps> = ({
                     )}
                 </div>
                 {!documentOpen && (
-                <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-1 overflow-x-auto custom-scrollbar">
+                <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-2 overflow-x-auto custom-scrollbar">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id;
                         return (
@@ -305,13 +305,14 @@ const JournalInner: React.FC<JournalProps> = ({
                                 aria-controls={`journal-panel-${activeTab}`}
                                 tabIndex={isActive ? 0 : -1}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`px-3.5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+                                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
                                     isActive
-                                        ? 'bg-zinc-800 text-zinc-100'
+                                        ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                                         : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
                                 }`}
                             >
-                                {tab.label}
+                                <span className={isActive ? 'text-zinc-100' : 'text-zinc-500'}>{tab.icon}</span>
+                                <span>{tab.label}</span>
                             </button>
                         );
                     })}

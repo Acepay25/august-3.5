@@ -2877,6 +2877,7 @@ const App: React.FC = () => {
                 onOpenApprovals={() => setIsApprovalInboxVisible(true)}
                 approvalCount={approvalItems.length}
                 onOpenJobs={() => setIsJobsDrawerVisible(true)}
+                onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             />
 
             {/* The old Journal OVERLAY was removed (navigation rewired to the
@@ -3016,6 +3017,9 @@ const App: React.FC = () => {
                                     onRunAnalysis={handleRunAnalysisFromChat}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
+                                    onToggleDeskScene={() => setIsDeskSceneOpen(v => !v)}
+                                    isDeskSceneOpen={isDeskSceneOpen}
+                                    hasDeskSceneMessage={!!deskSceneMessage}
                                     renderCoachSurface={() => (
                                         <React.Suspense fallback={null}>
                                             <CoachThreadPanel

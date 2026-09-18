@@ -98,6 +98,10 @@ interface TradeViewProps {
     /** Reports every mode change upward so App's toggle semantics (which
      *  mode is currently active) stay in sync with the user's own picks. */
     onTradeModeChange?: (mode: TradeMode) => void;
+    /** Toggles the 2D debate desk floor projection modal. */
+    onToggleDeskScene?: () => void;
+    isDeskSceneOpen?: boolean;
+    hasDeskSceneMessage?: boolean;
 }
 
 interface StripData {
@@ -129,9 +133,9 @@ const readDockWidth = (): number => {
 };
 
 const Stat: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-    <div className="flex min-w-0 flex-col px-3">
-        <span className="text-[9px] uppercase tracking-wider text-zinc-600">{label}</span>
-        <span className="truncate font-mono text-[12px] tabular-nums text-zinc-200">{value}</span>
+    <div className="flex min-w-0 flex-col px-3.5 first:pl-3">
+        <span className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</span>
+        <span className="truncate font-mono text-[12px] font-medium tabular-nums text-zinc-200">{value}</span>
     </div>
 );
 
@@ -227,7 +231,7 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     );
 };
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -620,6 +624,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         renderCoachSurface,
         renderGroupSurface,
         groups,
+        onToggleDeskScene,
+        isDeskSceneOpen,
+        hasDeskSceneMessage,
         registerScrollToMessage,
     };
 
@@ -669,26 +676,26 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             {/* ROW 2 · metrics strip — the quiet numbers a perp desk checks
                 without leaving the chart; Funding carries its own countdown +
                 depleting-window bar (amber + pulse inside 30 min). */}
-            <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
+            <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
                 <Stat label="Mark" value={Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'} />
                 <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
                 <Stat label="24h Change" value={Number.isFinite(changePct) ? `${changePct! >= 0 ? '+' : ''}${changePct!.toFixed(2)}%` : '—'} />
                 <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
-                <div className="flex w-[210px] shrink-0 flex-col px-3">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-600">Funding · next in</span>
+                <div className="flex w-[210px] shrink-0 flex-col px-3.5">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">Funding · next in</span>
                     {Number.isFinite(fundingRate) ? (() => {
                         const { frac, soon } = fundingProgress(nextFundingTime ?? 0, nowMs);
                         return (
                             <>
                                 <span className="flex items-baseline justify-between">
-                                    <span className={`font-mono text-[12px] tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <span className={`font-mono text-[12px] font-medium tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {(fundingRate! * 100).toFixed(4)}%
                                     </span>
                                     <span className="font-mono text-[11px] tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
                                 </span>
                                 <span className="mt-1 block h-[3px] overflow-hidden rounded-full bg-zinc-800" aria-hidden="true" data-testid="funding-bar">
-                                    <span className={`block h-full rounded-full ${soon ? 'animate-pulse bg-amber-400' : 'bg-cyan-400/70'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
+                                    <span className={`block h-full rounded-full transition-all duration-300 ${soon ? 'animate-pulse bg-amber-400 shadow-[0_0_6px_rgba(240,136,0,0.5)]' : 'bg-cyan-400/80'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
                                 </span>
                             </>
                         );

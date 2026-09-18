@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import { Message, TradeOutcome } from '../../types';
 import { CaptureJournalTags } from '../../types/trade';
 import { loadChecklistConfig, summarizeChecklist } from '../../utils/checklist';
@@ -87,7 +88,6 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
 
     const content = isWin ? {
         title: 'Log Trade Win',
-        emoji: '',
         pnlLabel: 'Profit Amount ($)',
         advancedToggle: 'Provide Final Take Profit',
         advancedLabel: 'Final Take Profit Price',
@@ -95,7 +95,6 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
         advancedHelp: 'This helps the AI learn if it was too conservative.'
     } : {
         title: 'Log Trade Loss',
-        emoji: '',
         pnlLabel: 'Loss Amount ($)',
         advancedToggle: 'Provide Corrected Stop Loss',
         advancedLabel: 'Corrected Stop Loss Price',
@@ -158,12 +157,20 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                 {/* Header */}
                 <div className={`p-5 border-b border-white/5 ${colors.bg}`}>
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl">{content.emoji}</span>
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${colors.border} ${colors.bg}`}>
+                            {isWin ? (
+                                <TrendingUp className="h-5 w-5 text-emerald-400" />
+                            ) : outcome === TradeOutcome.ENTRY_NOT_HIT ? (
+                                <Clock className="h-5 w-5 text-yellow-400" />
+                            ) : (
+                                <TrendingDown className="h-5 w-5 text-rose-400" />
+                            )}
+                        </div>
                         <div>
-                            <h3 className={`text-lg font-bold ${colors.text}`}>
+                            <h3 className={`text-base font-bold ${colors.text}`}>
                                 {content.title}
                             </h3>
-                            <p className="text-sm text-zinc-400 mt-0.5">
+                            <p className="text-xs text-zinc-400 mt-0.5 font-mono">
                                 <span className="text-white font-semibold">{coinName}</span>
                             </p>
                         </div>
