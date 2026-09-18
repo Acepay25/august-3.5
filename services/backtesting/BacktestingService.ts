@@ -15,7 +15,7 @@ import { fetchOHLCV, fetchOHLCVFromTime, Kline } from '../analysis/MarketDataSer
 // Single canonical price parser (ranges + annotations). A local copy here
 // stripped annotations differently ("94500 4h" → 945004), skewing SL/TP math.
 import { parsePrice } from '../../utils/analysisUtils';
-import { scanTradeOutcome, resolveOutcomeFromScan } from './outcomeEngine';
+import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions } from './outcomeEngine';
 
 /**
  * Convert timeframe string to milliseconds
@@ -1004,6 +1004,13 @@ export interface TradeOutcomeValidation {
     entryPrice: number;
     stopLoss: number;
     maxDrawdown: number;
+    /**
+     * MAE / MFE over the LIVE position window only, raw price percent.
+     * NOT the same thing as `maxDrawdown`, which the shared scan keeps
+     * accumulating after the position has resolved.
+     */
+    maePercent?: number;
+    mfePercent?: number;
     timeToOutcome?: string;
     pnlPercent?: number;
     rrRatio?: number;
@@ -1252,6 +1259,24 @@ export const validateTradeOutcome = async (
             timeToOutcome = formatDuration(exitCandle.time - klines[entryTriggeredAtIndex].time);
         }
 
+        // === LIVE-WINDOW EXCURSIONS ===
+        // Only a resolved exit defines a holding window. For OPEN/INVALID there
+        // is no exit candle, so the pair stays undefined rather than reporting
+        // an excursion measured over an arbitrarily long still-open tape — and
+        // `maxDrawdown` above is NOT a substitute for either, since the scan
+        // continues past the stop by design.
+        let maePercent: number | undefined;
+        let mfePercent: number | undefined;
+        if (exitCandleIndex !== undefined) {
+            const excursions = computeTradeExcursions(
+                klines, entryTriggeredAtIndex, exitCandleIndex, entryPrice, isLong,
+            );
+            if (excursions) {
+                maePercent = excursions.maePercent;
+                mfePercent = excursions.mfePercent;
+            }
+        }
+
         // === CALCULATE INDICATORS AT EXIT TIME ===
         let indicatorsAtExit: IndicatorsAtExit | undefined;
 
@@ -1373,6 +1398,8 @@ export const validateTradeOutcome = async (
             entryPrice,
             stopLoss,
             maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+            maePercent: maePercent !== undefined ? Math.round(maePercent * 100) / 100 : undefined,
+            mfePercent: mfePercent !== undefined ? Math.round(mfePercent * 100) / 100 : undefined,
             timeToOutcome,
             pnlPercent: pnlPercent !== undefined ? Math.round(pnlPercent * 100) / 100 : undefined,
             rrRatio: rrRatio !== undefined ? Math.round(rrRatio * 100) / 100 : undefined,

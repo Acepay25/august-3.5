@@ -18,8 +18,8 @@
  * Presentation only — no order execution.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { GripVertical } from 'lucide-react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { GripVertical, TrendingDown, TrendingUp } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
@@ -45,6 +45,7 @@ import TradeChatPanel from './TradeChatPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
+import StatusPill from '../ui/StatusPill';
 import type { AgentBot } from '../../services/agents/agentRoster';
 
 const FALLBACK_SYMBOLS: SymbolMeta[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT']
@@ -205,9 +206,17 @@ const writeTradeMode = (m: TradeMode): void => {
 
 /** Prototype hero-row sparkline: the last ~48 closes of the chart's OWN
  *  timeframe, from one small fetch (KlineService's 30 s cache covers a coin
- *  round-trip). Null while loading/failed — the row never shows a fake line. */
+ *  round-trip). Null while loading/failed — the row never shows a fake line.
+ *  The area under the curve carries a fading gradient and the newest close
+ *  gets a dot, so the line reads as "where price is NOW" instead of a
+ *  decoration; hovering it reports the window's real range. */
+const SPARK_W = 120;
+const SPARK_H = 30;
 const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symbol, interval }) => {
     const [closes, setCloses] = useState<number[] | null>(null);
+    // useId gives `:r3:`-style ids; colons are legal in an SVG IRI but this
+    // strips them so the reference stays unambiguous everywhere.
+    const gradientId = `hero-spark-fill-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
     useEffect(() => {
         let cancelled = false;
         setCloses(null);
@@ -221,17 +230,52 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     const max = Math.max(...closes);
     const span = max - min || 1;
     const up = closes[closes.length - 1] >= closes[0];
-    const pts = closes.map((c, i) =>
-        `${((i / (closes.length - 1)) * 118 + 1).toFixed(1)},${(29 - ((c - min) / span) * 28).toFixed(1)}`,
-    ).join(' ');
+    const stroke = up
+        ? chartColor('--color-emerald-500', '#07b56a')
+        : chartColor('--color-rose-500', '#f75d5f');
+    const xAt = (i: number): number => (i / (closes.length - 1)) * (SPARK_W - 3) + 1;
+    const yAt = (c: number): number => (SPARK_H - 2) - ((c - min) / span) * (SPARK_H - 6);
+    const pts = closes.map((c, i) => `${xAt(i).toFixed(1)},${yAt(c).toFixed(1)}`).join(' ');
+    const lastX = xAt(closes.length - 1);
+    const lastY = yAt(closes[closes.length - 1]);
     return (
-        <svg width="120" height="30" aria-hidden="true" className="hidden shrink-0 sm:block" data-testid="hero-spark">
-            <polyline fill="none"
-                stroke={up ? chartColor('--color-emerald-500', '#07b56a') : chartColor('--color-rose-500', '#f75d5f')}
-                strokeWidth="1.5" points={pts} />
-        </svg>
+        <span className="tip tip-below hidden shrink-0 sm:block">
+            <svg width={SPARK_W} height={SPARK_H} aria-hidden="true" data-testid="hero-spark">
+                <defs>
+                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={stroke} stopOpacity="0.26" />
+                        <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+                    </linearGradient>
+                </defs>
+                <polygon fill={`url(#${gradientId})`} points={`1,${SPARK_H} ${pts} ${(SPARK_W - 2).toFixed(1)},${SPARK_H}`} />
+                <polyline fill="none" stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} />
+                <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r="1.9" fill={stroke} />
+            </svg>
+            <span className="tip-label">
+                {fmtPrice(min)} – {fmtPrice(max)}
+                <span className="text-zinc-500">· {closes.length} × {interval}</span>
+            </span>
+        </span>
     );
 };
+
+/** Hero-price tick flash: a print above the last one flashes emerald, below
+ *  flashes rose. `seq` bumps on every direction change so the caller can key
+ *  the element — re-applying an already-running animation class does nothing,
+ *  and a remount restarts it cleanly. */
+const useTickFlash = (price: number | undefined): { cls: string; seq: number } => {
+    const prevRef = useRef<number | undefined>(undefined);
+    const [flash, setFlash] = useState<{ cls: string; seq: number }>({ cls: '', seq: 0 });
+    useEffect(() => {
+        if (typeof price !== 'number' || !Number.isFinite(price)) return;
+        const prev = prevRef.current;
+        prevRef.current = price;
+        if (prev === undefined || prev === price) return;
+        setFlash(f => ({ cls: price > prev ? 'tick-up' : 'tick-down', seq: f.seq + 1 }));
+    }, [price]);
+    return flash;
+};
+
 
 const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
@@ -266,6 +310,31 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         writeTradeMode(m);
         onTradeModeChange?.(m);
     }, [onTradeModeChange]);
+    // Segmented-control thumb: the pill is ONE surface that slides between
+    // tabs, so the active read is motion rather than three backgrounds
+    // swapping color. Measured from real geometry (labels differ in width) and
+    // re-measured on resize; width stays 0 until measured, which simply hides
+    // the thumb — the active label's color already carries the state.
+    const switcherRef = useRef<HTMLDivElement>(null);
+    const modeTabRefs = useRef<Partial<Record<TradeMode, HTMLButtonElement | null>>>({});
+    const [thumb, setThumb] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
+    useLayoutEffect(() => {
+        if (!isBelowLg) return;
+        const measure = (): void => {
+            const tab = modeTabRefs.current[mode];
+            const box = switcherRef.current;
+            if (!tab || !box) return;
+            const a = tab.getBoundingClientRect();
+            const b = box.getBoundingClientRect();
+            // `left` on an absolutely-positioned child measures from the
+            // PADDING box, but getBoundingClientRect reports the BORDER box —
+            // without subtracting clientLeft the thumb sits 1px right.
+            setThumb({ left: a.left - b.left - box.clientLeft, width: a.width });
+        };
+        measure();
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, [mode, isBelowLg]);
     // App's activity-bar toggle below lg: apply each new nonce exactly once.
     const lastModeReqNRef = useRef<number | undefined>(undefined);
     useEffect(() => {
@@ -526,6 +595,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         const v = changePct ?? 0;
         return v > 0 ? 'text-emerald-400' : v < 0 ? 'text-rose-400' : 'text-zinc-300';
     }, [changePct]);
+    const tickFlash = useTickFlash(markPrice);
 
     // ── Dock drag-resize (pointer capture, persists on release) ────────────
     // While the dock is EXPANDED the width comes from the flex layout, so a
@@ -651,27 +721,34 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     >
                         Screener
                     </button>
-                    <span
+                    <StatusPill
                         data-testid="feed-status"
+                        kicker
                         title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 15s'}
-                        className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
-                            feed.status === 'live' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                                : feed.status === 'connecting' ? 'border-white/10 bg-zinc-800 text-zinc-400'
-                                    : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                        }`}
+                        tone={feed.status === 'live' ? 'up' : feed.status === 'connecting' ? 'neutral' : 'warn'}
+                        icon={<span aria-hidden="true" className={`beacon ${feed.status === 'live' ? '' : 'is-quiet'}`.trim()} />}
                     >
-                        {feed.status === 'live' ? '● live' : feed.status === 'connecting' ? 'connecting' : 'polling'}
-                    </span>
+                        {feed.status === 'live' ? 'live' : feed.status === 'connecting' ? 'connecting' : 'polling'}
+                    </StatusPill>
                 </div>
                 <div className="shrink-0 text-right leading-none">
-                    <div data-testid="hero-price" className={`font-mono text-[22px] font-semibold tabular-nums ${changeTone}`}>
+                    <div
+                        key={tickFlash.seq}
+                        data-testid="hero-price"
+                        className={`-mx-1 rounded px-1 font-mono text-[22px] font-semibold tabular-nums ${changeTone} ${tickFlash.cls}`.trim()}
+                    >
                         {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
                     </div>
-                    <div className="mt-1 text-[10px] text-zinc-500">
+                    <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-zinc-500">
                         {Number.isFinite(changePct) && (
-                            <span className={changeTone}>{changePct! >= 0 ? '▲' : '▼'} {changePct! >= 0 ? '+' : ''}{changePct!.toFixed(2)}%</span>
+                            <span className={`inline-flex items-center gap-0.5 font-medium ${changeTone}`}>
+                                {changePct! >= 0
+                                    ? <TrendingUp className="h-3 w-3" aria-hidden="true" />
+                                    : <TrendingDown className="h-3 w-3" aria-hidden="true" />}
+                                {changePct! >= 0 ? '+' : ''}{changePct!.toFixed(2)}%
+                            </span>
                         )}
-                        <span> 24h · MARK</span>
+                        <span>24h · MARK</span>
                     </div>
                 </div>
             </div>
@@ -711,18 +788,31 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 Chart; the choice persists per user. At lg+ this row is not
                 rendered at all. */}
             {isBelowLg && (
-                <div role="tablist" aria-label="Trade surface mode" data-testid="trade-mode-switcher"
-                    className="flex shrink-0 items-center gap-1 border-b border-white/[0.06] bg-zinc-900/60 px-3 py-1">
+                <div
+                    ref={switcherRef}
+                    role="tablist"
+                    aria-label="Trade surface mode"
+                    data-testid="trade-mode-switcher"
+                    className="relative flex shrink-0 items-center self-start rounded-full border border-white/[0.06] bg-zinc-800/60 p-1 ml-3 mb-1"
+                >
+                    {thumb.width > 0 && (
+                        <span
+                            aria-hidden="true"
+                            className="seg-thumb"
+                            style={{ left: thumb.left, width: thumb.width }}
+                        />
+                    )}
                     {TRADE_MODES.map(m => (
                         <button
                             key={m}
+                            ref={el => { modeTabRefs.current[m] = el; }}
                             type="button"
                             role="tab"
                             aria-selected={mode === m}
                             data-testid={`trade-mode-${m}`}
                             onClick={() => pickMode(m)}
-                            className={`rounded-control px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                                mode === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
+                            className={`relative z-10 rounded-full px-4 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] active:scale-[0.97] ${
+                                mode === m ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
                             {m === 'chart' ? 'Chart' : m === 'ai' ? 'AI' : 'Book'}

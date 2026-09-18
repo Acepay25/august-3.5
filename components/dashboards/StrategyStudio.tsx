@@ -21,7 +21,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoggedTrade } from '../../types';
 import { listSkills, titleFromMeta, type SkillMeta } from '../../services/learning/SkillMemoryService';
 import { computeAllSkillLifts, type SkillLiftResult } from '../../services/learning/MemoryProvenanceService';
-import { familyRegimeEdge, matrixSummaryBlock, hydrateStrategyRegimeMatrix } from '../../services/learning/strategyRegimeMatrix';
+import { familyRegimeEdge, matrixSummaryBlock, hydrateStrategyRegimeMatrix, getStrategyRegimeMatrixSnapshot, MATRIX_REGIMES, MATRIX_MIN_SAMPLES, type MatrixCell, type StrategyRegimeMatrix } from '../../services/learning/strategyRegimeMatrix';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { normalizeStrategyFamily, STRATEGY_FAMILIES, type StrategyFamily } from '../../types/strategy';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -35,7 +35,7 @@ import SkillDetail, {
     trySkillInChat, toggleSkillRetire, PIN_STORAGE_KEY,
 } from '../skills/SkillDetail';
 import LearningQueuePanel from '../skills/LearningQueuePanel';
-import { PinIcon } from 'lucide-react';
+import { Grid3x3, Pin, Upload } from 'lucide-react';
 
 interface StrategyStudioProps {
     trades: LoggedTrade[];
@@ -65,6 +65,95 @@ const edgeTone = (edge: { winRate: number; samples: number } | null): string => 
 /** Raw markdown body with the frontmatter fence stripped (the detail pane's
  *  Instructions section renders this). */
 const bodyOf = (content: string): string => content.split(/^---\s*$/m).slice(2).join('---').trim();
+
+/** How full a heatmap cell is: hue from the edge, alpha from the edge AND the
+ *  evidence weight, so a 9-trade 78% stays visibly fainter than a 60-trade
+ *  78%. Both hues come from the theme tokens, never a literal hex. */
+const cellTint = (cell: MatrixCell): React.CSSProperties => {
+    const n = cell.w + cell.l;
+    if (n === 0) return {};
+    const edge = cell.w / n - 0.5;
+    const hue = edge >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)';
+    const strength = Math.min(0.34, Math.abs(edge) * 0.8 + 0.05);
+    const weight = 0.35 + 0.65 * Math.min(1, n / 20);
+    return { background: `color-mix(in srgb, ${hue} ${Math.round(strength * weight * 100)}%, transparent)` };
+};
+
+/** Family × regime win-rate heatmap. The matrix already drives retrieval
+ *  ranking and the moderator's prompt; this is the same data made scannable,
+ *  so the trader can see WHICH playbook the tape currently favors without
+ *  reading a paragraph. The live regime's column is outlined for that reason. */
+export const RegimeMatrixStrip: React.FC<{
+    matrix: StrategyRegimeMatrix;
+    currentRegime?: string;
+}> = ({ matrix, currentRegime }) => {
+    const rows = useMemo(() => {
+        const out: Array<{ family: StrategyFamily; cells: Array<MatrixCell | null>; samples: number }> = [];
+        for (const family of STRATEGY_FAMILIES) {
+            const byRegime = matrix[family];
+            if (!byRegime) continue;
+            const cells = MATRIX_REGIMES.map(r => byRegime[r] ?? null);
+            const samples = cells.reduce((n, c) => n + (c ? c.w + c.l : 0), 0);
+            if (samples > 0) out.push({ family, cells, samples });
+        }
+        return out.sort((a, b) => b.samples - a.samples);
+    }, [matrix]);
+    if (rows.length === 0) return null;
+    return (
+        <div className="border-b border-white/5 px-5 py-2.5" data-testid="regime-matrix">
+            <div className="mb-1.5 flex items-center gap-1.5">
+                <Grid3x3 className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
+                <span className="ui-kicker">Family edge by regime</span>
+                <span className="text-[10px] text-zinc-600">· tint = win rate, opacity = evidence</span>
+            </div>
+            <div
+                className="grid gap-1"
+                style={{ gridTemplateColumns: `minmax(96px, 1.6fr) repeat(${MATRIX_REGIMES.length}, minmax(0, 1fr))` }}
+            >
+                <span aria-hidden="true" />
+                {MATRIX_REGIMES.map(r => (
+                    <span
+                        key={r}
+                        className={`rounded-control px-1 pb-0.5 text-center text-[9px] font-bold uppercase tracking-wider ${
+                            r === currentRegime ? 'text-cyan-400' : 'text-zinc-600'
+                        }`}
+                    >
+                        {r}
+                    </span>
+                ))}
+                {rows.map(row => (
+                    <React.Fragment key={row.family}>
+                        <span className="self-center truncate text-[11px] text-zinc-400">
+                            {row.family.replace(/_/g, ' ')}
+                        </span>
+                        {row.cells.map((cell, i) => {
+                            const regime = MATRIX_REGIMES[i];
+                            const n = cell ? cell.w + cell.l : 0;
+                            const thin = n > 0 && n < MATRIX_MIN_SAMPLES;
+                            const isLive = regime === currentRegime;
+                            return (
+                                <span
+                                    key={regime}
+                                    title={cell
+                                        ? `${row.family} · ${regime}: ${cell.w}W/${cell.l}L (${Math.round((cell.w / n) * 100)}%)${thin ? ' — thin sample' : ''}`
+                                        : `${row.family} · ${regime}: no settled trades`}
+                                    className={`rounded-control px-1 py-1 text-center font-mono text-[11px] tabular-nums ring-1 ring-inset transition-colors ${
+                                        cell
+                                            ? cell.w / n >= 0.5 ? 'text-emerald-400' : 'text-rose-400'
+                                            : 'text-zinc-700'
+                                    } ${isLive ? 'ring-cyan-500/30' : cell ? (thin ? 'ring-white/[0.04]' : 'ring-white/[0.08]') : 'ring-transparent'}`}
+                                    style={cell ? cellTint(cell) : undefined}
+                                >
+                                    {cell ? `${Math.round((cell.w / n) * 100)}%` : '·'}
+                                </span>
+                            );
+                        })}
+                    </React.Fragment>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 const readPins = (): Set<string> => {
     try {
@@ -139,6 +228,12 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         for (const l of lifts) m.set(l.name, l);
         return m;
     }, [lifts]);
+    // Reads the service's module cache; `lifts` re-keys it so the strip
+    // refreshes whenever settled trades change (hydration is async elsewhere).
+    const regimeMatrix = useMemo<StrategyRegimeMatrix>(
+        () => getStrategyRegimeMatrixSnapshot(),
+        [lifts, currentRegime],
+    );
     const matrixLine = useMemo(() => matrixSummaryBlock(currentRegime, 400), [currentRegime]);
 
     const rows = useMemo(() => {
@@ -226,7 +321,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         <div className="flex h-full flex-col bg-zinc-950 text-zinc-100">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
                 <div>
-                    <h2 className="text-sm font-semibold tracking-wide">Strategy Studio</h2>
+                    <h2 className="font-serif text-[17px] tracking-tight text-zinc-100">Strategy Studio</h2>
                     <p className="text-[11px] text-zinc-500">{skills.length} playbooks · browse, filter, prove, and try them in chat</p>
                 </div>
                 {onClose && (
@@ -263,10 +358,12 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                     {STRATEGY_FAMILIES.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
                 </select>
                 <label
-                    className="shrink-0 cursor-pointer rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
                     title="Import skill .md files — they must carry valid skill frontmatter"
                 >
-                    {isImporting ? 'Importing…' : '⬆ Import'}
+                    {isImporting
+                        ? 'Importing…'
+                        : <><Upload className="h-3 w-3" aria-hidden="true" />Import</>}
                     <input
                         type="file"
                         accept=".md,text/markdown,text/plain"
@@ -278,9 +375,11 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 </label>
             </div>
 
-            {/* Regime×family matrix — a quiet context strip, not a table of
-                every cell (the moderator gets the same block). */}
-            {matrixLine && (
+            {/* Regime×family matrix. The heatmap is the primary read once any
+                family has evidence; the moderator's prose block covers the same
+                tally, so it only stands in while the matrix is still empty. */}
+            <RegimeMatrixStrip matrix={regimeMatrix} currentRegime={currentRegime} />
+            {matrixLine && Object.keys(regimeMatrix).length === 0 && (
                 <div className="border-b border-white/5 px-5 py-2 text-[11px] leading-5 text-zinc-500">
                     {matrixLine}
                 </div>
@@ -366,7 +465,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                             onClick={e => { e.stopPropagation(); togglePin(s.fileId); }}
                                             className={`rounded-lg border px-2 py-1.5 ${pinned ? 'border-white/20 bg-zinc-700 text-zinc-100' : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-200'}`}
                                         >
-                                            <PinIcon className="h-3.5 w-3.5" />
+                                            <Pin className="h-3.5 w-3.5" />
                                         </button>
                                         <button
                                             type="button"

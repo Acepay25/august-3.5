@@ -12,7 +12,7 @@
 import { LoggedTrade } from '../../types/trade';
 import { TradeOutcome } from '../../types/enums';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
-import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
+import { buildDisciplineAnalytics, effectiveRMultiple } from '../../utils/disciplineAnalytics';
 import { runWeeklyMetaCalibration, type MetaCalibrationRatios } from './metaCalibration';
 import { runContradictionSweep } from '../../utils/contradictionSweep';
 import { runBeliefChallengePass } from './beliefChallenge';
@@ -60,7 +60,7 @@ export const buildWeekStats = (trades: LoggedTrade[], nowMs: number): WeeklyRevi
     const wins = closed.filter(t => t.outcome === TradeOutcome.WIN);
     const losses = closed.filter(t => t.outcome === TradeOutcome.LOSS);
     const analytics = buildDisciplineAnalytics(closed);
-    const rs = closed.map(t => t.rMultiple).filter((r): r is number => typeof r === 'number');
+    const rs = closed.map(effectiveRMultiple).filter((r): r is number => r !== undefined);
     const followedN = analytics.adherence.followed.n;
     const brokenN = analytics.adherence.broken.n;
     const topCost = analytics.mistakeCost[0];

@@ -137,16 +137,73 @@ export const flagBannedVocabulary = (text: string): string[] => {
 
 // ─── g) FinCom disagree-or-commit markers ──────────────────────────────────
 
-const FINCOM_LINE = /^\s*(COMMIT|DISSENT)\s*:\s*([^—\n]+?)\s*(?:—|-)\s*(.+)$/gm;
+/**
+ * A marker line is `COMMIT: <seat> — <why>` or `DISSENT: <seat> — <why>`.
+ *
+ * The separator is matched two ways on purpose. A spaced dash may be an
+ * em-dash, en-dash or hyphen; an UNSPACED dash only counts when it is an
+ * em/en-dash, because an unspaced ASCII hyphen is overwhelmingly part of the
+ * seat or symbol itself (`Risk-Execution`, `BTC-USDT`) — treating it as the
+ * separator would chop every such name in half.
+ */
+const FINCOM_LINE = /^\s*(commit|dissent)\s*:\s*(\S.*)$/gim;
+const FINCOM_SPACED = /^(.*?\S)\s+[—–-]\s+(\S.*)$/;
+const FINCOM_TIGHT = /^(.*?\S)\s*[—–]\s*(\S.*)$/;
 
-/** Parse COMMIT:/DISSENT: lines out of a turn (case-sensitive marker, lenient dash). */
+const splitFinCom = (rest: string): { seat: string; why: string } => {
+    const spaced = FINCOM_SPACED.exec(rest);
+    if (spaced) return { seat: spaced[1].trim(), why: spaced[2].trim() };
+    const tight = FINCOM_TIGHT.exec(rest);
+    if (tight) return { seat: tight[1].trim(), why: tight[2].trim() };
+    // A marker with no reason is still a stance — dropping it silently was how
+    // the old mandatory-dash regex lost lines the model had genuinely written.
+    return { seat: rest, why: '' };
+};
+
+/**
+ * Parse COMMIT:/DISSENT: lines out of a turn. Marker casing is tolerated and
+ * the reason is optional; a seat repeating the same stance collapses to one
+ * marker so a restated line cannot inflate the tally.
+ */
 export const parseFinComMarkers = (text: string): FinComMarker[] => {
     const markers: FinComMarker[] = [];
+    const seen = new Set<string>();
     for (const m of text.matchAll(FINCOM_LINE)) {
-        const stance = m[1] === 'COMMIT' ? 'commit' : 'dissent';
-        markers.push({ seat: m[2].trim(), stance, why: m[3].trim() });
+        const stance: FinComMarker['stance'] = m[1].toLowerCase() === 'commit' ? 'commit' : 'dissent';
+        const { seat, why } = splitFinCom(m[2].trim());
+        if (!seat) continue;
+        const key = `${stance}|${seat.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        markers.push({ seat, stance, why });
     }
     return markers;
+};
+
+/** Peer disagreement counted across a debate's turns. */
+export interface FinComTally {
+    commits: number;
+    dissents: number;
+    dissenters: string[];
+}
+
+/**
+ * The one consumer of the stored markers: how much of the floor disagreed
+ * before the verdict. Null when no turn carried markers, which is every trade
+ * logged before the marker mandate — an absent reading, never a zero.
+ *
+ * Deliberately a raw count over seats, not a per-lens accuracy rate: a "lens"
+ * is a per-run persona over a swappable provider, so a lens-level win rate
+ * would be precision the sample cannot support.
+ */
+export const tallyFinCom = (turns?: DebateTurn[]): FinComTally | null => {
+    const rows = (turns ?? []).flatMap(t => t.fincom ?? []);
+    if (rows.length === 0) return null;
+    return {
+        commits: rows.filter(r => r.stance === 'commit').length,
+        dissents: rows.filter(r => r.stance === 'dissent').length,
+        dissenters: [...new Set(rows.filter(r => r.stance === 'dissent').map(r => r.seat))],
+    };
 };
 
 /** Attach parsed markers to a turn (mutates a copy in the caller's map). */

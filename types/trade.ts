@@ -121,6 +121,9 @@ export interface LoggedTrade {
     slWasTouched: boolean;             // Did price touch original SL?
     extendedZoneBreached: boolean;     // Exceeded 150% zone?
     missedWinDueToTightSL: boolean;    // Would have won with wider SL?
+    /** Approximate: reconstructed from entry plus the observed hit prices, NOT
+     *  candle extremes. The authoritative figure is the top-level
+     *  `LoggedTrade.maxAdverseExcursion`, measured over the live window. */
     maxAdverseExcursion: number;       // Max price movement against position (%)
     minSlDistanceNeeded?: number;      // If missed win, what SL % would have saved it
     atrMultiplierUsed: number;         // ATR multiplier of original SL
@@ -143,7 +146,16 @@ export interface LoggedTrade {
   planDeviationNote?: string;
   /** Realized R-multiple — computed at log time from entry/SL/pnl (deterministic util). */
   rMultiple?: number;
-  /** Best price the trade offered before exit, as leveraged percent (MFE). With pnlPercent it yields capture efficiency. */
+  /**
+   * R measured from PRICE levels only (raw move / raw stop distance), written
+   * when the post-mortem's candle validation resolves a real exit. Unlike
+   * `rMultiple`, it never divides a leveraged percent by an unleveraged one,
+   * so it is the only R safe to accumulate into the skill ledger.
+   */
+  realizedR?: number;
+  /** Worst move against the position while it was open, as leveraged percent. Candle-exact; distinct from the approximate `slOptimizationData.maxAdverseExcursion`. */
+  maxAdverseExcursion?: number;
+  /** Best price the trade offered before exit, as leveraged percent (MFE). With pnlPercent it yields capture efficiency. Candle-exact over the live window. */
   maxFavorableExcursion?: number;
   /** Why a SKIPPED trade was passed on ("watched, chose not to") — passes become data. */
   skipReason?: string;

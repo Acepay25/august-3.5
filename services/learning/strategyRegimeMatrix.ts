@@ -39,7 +39,9 @@ export interface MatrixCell {
 export type StrategyRegimeMatrix = Partial<Record<StrategyFamily, Partial<Record<LedgerRegime, MatrixCell>>>>;
 
 const KEY_PREFIX = 'strategy_regime_matrix_v1_';
-const REGIMES: LedgerRegime[] = ['trending', 'ranging', 'volatile', 'compression'];
+/** The regime vocabulary the matrix columns follow — exported so the Studio's
+ *  heatmap strip and the accumulator can never drift apart. */
+export const MATRIX_REGIMES: LedgerRegime[] = ['trending', 'ranging', 'volatile', 'compression'];
 
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
@@ -48,7 +50,7 @@ const isFamily = (v: unknown): v is StrategyFamily =>
     typeof v === 'string' && (STRATEGY_FAMILIES as readonly string[]).includes(v);
 
 const isRegime = (v: unknown): v is LedgerRegime =>
-    typeof v === 'string' && (REGIMES as string[]).includes(v);
+    typeof v === 'string' && (MATRIX_REGIMES as string[]).includes(v);
 
 // ── Module cache (sync reads for ranking + prompt assembly) ───────────
 let cache: StrategyRegimeMatrix = {};

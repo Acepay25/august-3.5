@@ -94,6 +94,11 @@ export interface VerdictFinalizerInput {
     effectiveTradingStyle: TradingStyleEffective;
     finalSymbol: string | null | undefined;
     capturedGateResult: { confidenceCap?: number } | null | undefined;
+    /** Ceiling implied by a fired AVOID skill predicate (0-1). Taken as a hard
+     *  minimum alongside the gate's own cap, because `confidenceCap` is built
+     *  by SUBTRACTING penalties from a base and cannot express "no higher
+     *  than 40%". Undefined leaves verdict grading exactly as it was. */
+    predicateCeiling?: number;
 
     /** Roster + assignments. */
     teamSeatFor: (configId: string, model: string) => AgentTeamSeat | undefined;
@@ -408,8 +413,14 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
     const processedAnalysis = processNewAnalysis(finalAnalysis);
     const liveBtResult = input.liveBtResult;
 
-    if (processedAnalysis && capturedGateResult && processedAnalysis.probability != null) {
-        const gateCap = capturedGateResult.confidenceCap ?? 1.0;
+    const predicateCeiling = typeof input.predicateCeiling === 'number' && Number.isFinite(input.predicateCeiling)
+        ? input.predicateCeiling
+        : undefined;
+    if (processedAnalysis && (capturedGateResult || predicateCeiling !== undefined) && processedAnalysis.probability != null) {
+        // Gate cap and predicate ceiling both bind; the tighter one wins. With
+        // no predicate this is byte-identical to the previous `?? 1.0` form, so
+        // the R:R grade clamps keep firing exactly as before.
+        const gateCap = Math.min(capturedGateResult?.confidenceCap ?? 1.0, predicateCeiling ?? 1.0);
         const clampResult = clampProbabilityToGate(
             processedAnalysis.probability,
             gateCap,

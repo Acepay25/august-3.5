@@ -339,3 +339,53 @@ export const resolveOutcomeFromScan = (scan: TradeScanResult): OutcomeResolution
   }
   return { outcome: 'OPEN', hitTarget: 'NONE' };
 };
+
+/** Realized excursion over the live position window, in raw price percent. */
+export interface TradeExcursions {
+  /** Worst move against the position while it was open. 0 = never adverse. */
+  maePercent: number;
+  /** Best move in favor before the exit. 0 = never favorable. */
+  mfePercent: number;
+}
+
+/**
+ * MAE / MFE bounded to the candles the position actually occupied:
+ * `[entryIndex, exitIndex]`, inclusive.
+ *
+ * Deliberately NOT derived from `TradeScanResult.maxDrawdown`. The scan keeps
+ * running past an SL touch on purpose (it must still observe later TP prints
+ * and the 150% zone breach, and `resolveOutcomeFromScan` compares those
+ * indices), so `maxDrawdown` accumulates movement from candles a closed
+ * position never held. Callers that already know the exit pass through here.
+ *
+ * Raw price percent — the trade row applies leverage where it is known.
+ */
+export const computeTradeExcursions = (
+  klines: Kline[],
+  entryIndex: number,
+  exitIndex: number,
+  entryPrice: number,
+  isLong: boolean,
+): TradeExcursions | null => {
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0) return null;
+  if (!Number.isInteger(entryIndex) || !Number.isInteger(exitIndex)) return null;
+  const from = Math.max(0, entryIndex);
+  const to = Math.min(klines.length - 1, Math.max(from, exitIndex));
+  // An empty window means there was no tape to measure, which is not the same
+  // fact as "the position never moved". Report null, never a clean-looking 0.
+  if (to < from) return null;
+
+  let maePercent = 0;
+  let mfePercent = 0;
+  for (let i = from; i <= to; i++) {
+    const { high, low } = klines[i];
+    if (isLong) {
+      maePercent = Math.max(maePercent, ((entryPrice - low) / entryPrice) * 100);
+      mfePercent = Math.max(mfePercent, ((high - entryPrice) / entryPrice) * 100);
+    } else {
+      maePercent = Math.max(maePercent, ((high - entryPrice) / entryPrice) * 100);
+      mfePercent = Math.max(mfePercent, ((entryPrice - low) / entryPrice) * 100);
+    }
+  }
+  return { maePercent, mfePercent };
+};

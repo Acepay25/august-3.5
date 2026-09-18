@@ -345,6 +345,16 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 {discipline.giveback.days} green day{discipline.giveback.days === 1 ? '' : 's'} finished red — overtrading into a lead.
                             </p>
                         )}
+                        {/* Covers only trades whose post-mortem resolved a candle
+                            window, so the sample count rides along — these are not
+                            book-wide averages until coverage grows. */}
+                        {discipline.excursion.n > 0 && (
+                            <p className="text-[10px] text-zinc-500 mt-1" data-testid="discipline-excursion">
+                                Over {discipline.excursion.n} measured trade{discipline.excursion.n === 1 ? '' : 's'}: held through −
+                                {discipline.excursion.meanMaePct ?? '—'}% on average, captured{' '}
+                                {discipline.excursion.meanCapturePct !== null ? `${discipline.excursion.meanCapturePct}%` : '—'} of the best move.
+                            </p>
+                        )}
                     </div>
                     <div>
                         <div className="text-[10px] text-zinc-400 font-bold mb-1">Mistake cost (Σ PnL)</div>

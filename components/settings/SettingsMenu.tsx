@@ -16,7 +16,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { ActivityIcon, AISettingsIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
+import { AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
 import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
@@ -25,12 +25,19 @@ import ProfileMemoryCard from './ProfileMemoryCard';
 import SupervisorCard from './SupervisorCard';
 import AmendmentsInbox from './AmendmentsInbox';
 import ModelPicker from '../shared/ModelPicker';
-import { BookOpen, ArrowUpRight, Sparkles, Bot } from 'lucide-react';
+import {
+    User, Users, Bot, FileText, Brain, Sparkles, BookOpen, Database, HardDrive, ShieldCheck,
+    Wrench, Eye, Activity, ArrowUpRight, Search, X, ChevronDown, ChevronRight, Layers
+} from 'lucide-react';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 
-export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies' | 'skills';
+export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies' | 'skills';
 
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies', 'skills'];
+const SETTINGS_TABS: SettingsTab[] = ['profile', 'general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies', 'skills'];
+
+/** Tabs whose embedded manager owns the whole scroll container (their own
+ *  padding, their own sticky headers) — the workspace adds none. */
+const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'memory', 'instructions', 'strategies', 'skills'];
 
 const isSettingsTab = (value?: string): value is SettingsTab =>
     !!value && SETTINGS_TABS.includes(value as SettingsTab);
@@ -76,10 +83,6 @@ interface SettingsMenuProps {
     lensConfig: AnalystLensConfig;
     onSetLensConfig: (config: AnalystLensConfig) => void;
     // Modals & Navigation triggers from main view
-    onOpenSavedAnalyses?: () => void;
-    onOpenPlaybook?: () => void;
-    onOpenUserProfile?: () => void;
-    onOpenStrategySearch?: () => void;
     /** Opens the Strategy Studio — the browse/annotate playbook library. */
     onOpenStrategyStudio?: () => void;
     onSwitchUser?: () => void;
@@ -155,38 +158,173 @@ interface SettingsMenuProps {
 }
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
+// The reference settings layout is: grouped sidebar → page header → cards of
+// hairline rows, each row an icon tile, a title + description, and the control
+// pushed to the right edge. These four helpers are that shape; every tab here
+// composes them instead of hand-rolling the same row again.
 
 const NavTabButton: React.FC<{
-    id: SettingsTab;
-    activeTab: SettingsTab;
+    active: boolean;
     onClick: () => void;
     icon: React.ReactNode;
     label: string;
     badge?: string;
-    activeWhen?: SettingsTab[];
-}> = ({ activeTab, id, onClick, icon, label, badge, activeWhen }) => {
-    const isActive = activeWhen ? activeWhen.includes(activeTab) : activeTab === id;
-    return (
-        <button
-            onClick={onClick}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors text-sm ${
-                isActive
-                    ? 'bg-zinc-800 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
-            }`}
-        >
-            <div className="flex items-center gap-3 min-w-0">
-                <span className={`shrink-0 ${isActive ? 'text-zinc-100' : 'text-zinc-500'}`}>{icon}</span>
-                <span className="truncate">{label}</span>
+}> = ({ active, onClick, icon, label, badge }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        aria-current={active ? 'page' : undefined}
+        className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+            active
+                ? 'bg-zinc-800 text-zinc-100 shadow-sm ring-1 ring-white/[0.07]'
+                : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100'
+        }`}
+    >
+        <span className="flex min-w-0 items-center gap-2.5">
+            <span className={`shrink-0 ${active ? 'text-zinc-100' : 'text-zinc-500'}`}>{icon}</span>
+            <span className="truncate">{label}</span>
+        </span>
+        {badge && (
+            <span className="shrink-0 rounded-full bg-zinc-700 px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-zinc-200">
+                {badge}
+            </span>
+        )}
+    </button>
+);
+
+const SettingsGroup: React.FC<{
+    title?: string;
+    description?: string;
+    children: React.ReactNode;
+}> = ({ title, description, children }) => (
+    <section className="space-y-1.5">
+        {title && (
+            <div className="px-1">
+                <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">{title}</h4>
+                {description && <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-600">{description}</p>}
             </div>
-            {badge && (
-                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-400">
-                    {badge}
+        )}
+        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl border border-white/[0.07] bg-zinc-900/50">
+            {children}
+        </div>
+    </section>
+);
+
+const SettingsRow: React.FC<{
+    icon?: React.ReactNode;
+    title: string;
+    description?: React.ReactNode;
+    control?: React.ReactNode;
+    /** For a control that needs the row's full width (an editor, not a
+     *  switch) — it drops below the label instead of squeezing the text. */
+    stacked?: boolean;
+}> = ({ icon, title, description, control, stacked = false }) => (
+    <div className={`flex gap-4 p-4 transition-colors hover:bg-white/[0.015] ${
+        stacked ? 'flex-col items-start' : 'items-center justify-between'
+    }`}>
+        <div className="flex min-w-0 flex-1 items-start gap-3.5">
+            {icon && (
+                <span aria-hidden="true" className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.04] text-zinc-400">
+                    {icon}
                 </span>
             )}
-        </button>
-    );
-};
+            <div className="min-w-0">
+                <div className="text-[13px] font-semibold leading-5 text-zinc-200">{title}</div>
+                {description && (
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{description}</div>
+                )}
+            </div>
+        </div>
+        {control && <div className={stacked ? 'w-full' : 'shrink-0'}>{control}</div>}
+    </div>
+);
+
+const SettingsPageHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
+    <header className="border-b border-white/[0.06] pb-3.5">
+        <h3 className="text-lg font-semibold tracking-tight text-zinc-100">{title}</h3>
+        {description && <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>}
+    </header>
+);
+
+/** Two-choice setting that belongs INSIDE a row rather than as two full-width
+ *  cards — the reference keeps the control on the row's right edge. */
+const SegmentedControl: React.FC<{
+    value: string;
+    options: Array<{ id: string; label: string; title?: string }>;
+    onChange: (id: string) => void;
+    ariaLabel: string;
+}> = ({ value, options, onChange, ariaLabel }) => (
+    <div role="radiogroup" aria-label={ariaLabel}
+        className="flex items-center gap-0.5 rounded-full border border-white/[0.07] bg-zinc-800/70 p-0.5">
+        {options.map(o => (
+            <button
+                key={o.id}
+                type="button"
+                role="radio"
+                aria-checked={value === o.id}
+                title={o.title}
+                onClick={() => onChange(o.id)}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+                    value === o.id ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+            >
+                {o.label}
+            </button>
+        ))}
+    </div>
+);
+
+const NAV_ICON = 'h-4 w-4 shrink-0';
+
+interface NavEntry {
+    id: SettingsTab;
+    label: string;
+    icon: React.ReactNode;
+    /** Content words the search box matches beyond the label itself — the
+     *  sidebar says "Playbooks" but a user types "strategy", and both must
+     *  find it. */
+    keywords: string;
+}
+
+interface NavGroup { title: string; entries: NavEntry[] }
+
+/** The sidebar is this list, filtered — not a hand-written button per tab.
+ *  Adding a tab used to mean remembering to also add its group header and its
+ *  own navMatch() clause, which is how 'profile' ended up reachable from the
+ *  account menu but absent from the nav (and never rendered). */
+const NAV_GROUPS: NavGroup[] = [
+    {
+        title: 'Setup',
+        entries: [
+            { id: 'models', label: 'AI setup', icon: <AISettingsIcon className={NAV_ICON} />, keywords: 'provider api key model vision moderator memory ocr connect' },
+        ],
+    },
+    {
+        title: 'Analysis',
+        entries: [
+            { id: 'general', label: 'Analysis', icon: <SettingsIcon className={NAV_ICON} />, keywords: 'accuracy hybrid desk tools idle motion capture pure ai advanced strict protocol' },
+            { id: 'lenses', label: 'Roles', icon: <Eye className={NAV_ICON} />, keywords: 'lens analyst technical risk macro persona' },
+            { id: 'prompts', label: 'Prompts', icon: <CodeIcon className={NAV_ICON} />, keywords: 'template library editing' },
+            { id: 'instructions', label: 'Instructions', icon: <FileText className={NAV_ICON} />, keywords: 'custom system instruction rules' },
+        ],
+    },
+    {
+        title: 'Knowledge',
+        entries: [
+            { id: 'memory', label: 'Memory', icon: <Brain className={NAV_ICON} />, keywords: 'notebook amendment supervisor profile memory files global' },
+            { id: 'skills', label: 'Skills', icon: <Sparkles className={NAV_ICON} />, keywords: 'forged tool approval candidate library learned' },
+            { id: 'strategies', label: 'Playbooks', icon: <BookOpen className={NAV_ICON} />, keywords: 'strategy book pdf upload studio families import' },
+        ],
+    },
+    {
+        title: 'Account',
+        entries: [
+            { id: 'profile', label: 'Profile', icon: <User className={NAV_ICON} />, keywords: 'account trader switch export data version about' },
+            { id: 'journal', label: 'Journal', icon: <HistoryIcon className={NAV_ICON} />, keywords: 'trades log summary insights statistics win rate' },
+            { id: 'actions', label: 'Data', icon: <Database className={NAV_ICON} />, keywords: 'usage backup restore session tokens' },
+        ],
+    },
+];
 
 const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const { confirm, ConfirmDialogComponent } = useConfirmDialog();
@@ -201,10 +339,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setCustomInstructions,
         lensConfig,
         onSetLensConfig,
-        onOpenSavedAnalyses,
-        onOpenPlaybook,
-        onOpenUserProfile,
-        onOpenStrategySearch,
         onOpenStrategyStudio,
         onOpenJournal,
         onSwitchUser,
@@ -293,9 +427,16 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
             window.removeEventListener('august:memory-amendment', sync);
         };
     }, []);
-    const navMatch = (label: string): boolean => {
-        const q = navQuery.trim().toLowerCase();
-        return !q || label.toLowerCase().includes(q);
+    const navQ = navQuery.trim().toLowerCase();
+    const navMatches = (entry: NavEntry): boolean =>
+        !navQ
+        || entry.label.toLowerCase().includes(navQ)
+        || entry.keywords.includes(navQ);
+    const navBadge = (id: SettingsTab): string | undefined => {
+        if (id === 'memory') return pendingAmendments > 0 ? String(pendingAmendments) : undefined;
+        if (id === 'skills') return pendingForged > 0 ? String(pendingForged) : undefined;
+        if (id === 'journal') return props.loggedTrades && props.loggedTrades.length > 0 ? String(props.loggedTrades.length) : undefined;
+        return undefined;
     };
     const dialogRef = useRef<HTMLDivElement>(null);
     const initialTabResolvedRef = useRef(false);
@@ -396,133 +537,41 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/[0.06] bg-black/20 px-3 py-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
                                 <div className="px-1 pb-4">
-                                    <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-zinc-800/80 px-3 py-2">
-                                        <SearchIcon className="h-4 w-4 shrink-0 text-zinc-500" />
+                                    <div className="flex items-center gap-2 rounded-control border border-white/[0.07] bg-zinc-800/80 px-2.5 py-2 transition-colors focus-within:border-white/20">
+                                        <SearchIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
                                         <input
                                             value={navQuery}
                                             onChange={e => setNavQuery(e.target.value)}
-                                            placeholder="Search"
+                                            placeholder="Search settings"
                                             aria-label="Search settings"
-                                            className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-500 outline-none"
+                                            className="w-full bg-transparent text-xs text-zinc-200 placeholder-zinc-500 outline-none"
                                         />
                                     </div>
                                 </div>
                                 <h2 id="settings-title" className="sr-only">Settings</h2>
-                                {navMatch('AI setup') && (
-                                    <>
-                                        <p className="ui-kicker px-3 pt-1 pb-2">
-                                            Get Started
-                                        </p>
-                                        <NavTabButton
-                                            id="models"
-                                            activeTab={activeTab}
-                                            onClick={() => setActiveTab('models')}
-                                            icon={<AISettingsIcon className="w-4 h-4" />}
-                                            label="AI setup"
-                                        />
-                                    </>
-                                )}
-                                {/* Analysis — how analyses behave */}
-                                {(navMatch('Analysis') || navMatch('Roles') || navMatch('Prompts') || navMatch('Instructions')) && (
-                                    <p className="ui-kicker px-3 pt-5 pb-2">
-                                        Analysis
+                                {NAV_GROUPS.map(group => {
+                                    const entries = group.entries.filter(navMatches);
+                                    if (entries.length === 0) return null;
+                                    return (
+                                        <div key={group.title} className="space-y-0.5 pt-5 first:pt-0">
+                                            <p className="ui-kicker px-2.5 pb-1">{group.title}</p>
+                                            {entries.map(entry => (
+                                                <NavTabButton
+                                                    key={entry.id}
+                                                    active={activeTab === entry.id}
+                                                    onClick={() => setActiveTab(entry.id)}
+                                                    icon={entry.icon}
+                                                    label={entry.label}
+                                                    badge={navBadge(entry.id)}
+                                                />
+                                            ))}
+                                        </div>
+                                    );
+                                })}
+                                {navQ && !NAV_GROUPS.some(g => g.entries.some(navMatches)) && (
+                                    <p className="px-2.5 pt-3 text-[11px] leading-relaxed text-zinc-600">
+                                        Nothing matches "{navQuery.trim()}".
                                     </p>
-                                )}
-                                {navMatch('Analysis') && (
-                                    <NavTabButton
-                                        id="general"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('general')}
-                                        icon={<SettingsIcon className="w-4 h-4" />}
-                                        label="Analysis"
-                                    />
-                                )}
-                                {navMatch('Roles') && (
-                                    <NavTabButton
-                                        id="lenses"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('lenses')}
-                                        icon={<SettingsIcon className="w-4 h-4" />}
-                                        label="Roles"
-                                    />
-                                )}
-                                {navMatch('Prompts') && (
-                                    <NavTabButton
-                                        id="prompts"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('prompts')}
-                                        icon={<CodeIcon className="w-4 h-4" />}
-                                        label="Prompts"
-                                    />
-                                )}
-                                {navMatch('Instructions') && (
-                                    <NavTabButton
-                                        id="instructions"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('instructions')}
-                                        icon={<CodeIcon className="w-4 h-4" />}
-                                        label="Instructions"
-                                    />
-                                )}
-                                {/* Knowledge — flat entries, no sub-tabs */}
-                                {(navMatch('Memory') || navMatch('Skills') || navMatch('Playbooks')) && (
-                                    <p className="ui-kicker px-3 pt-5 pb-2">
-                                        Knowledge
-                                    </p>
-                                )}
-                                {navMatch('Memory') && (
-                                    <NavTabButton
-                                        id="memory"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('memory')}
-                                        icon={<ActivityIcon className="w-4 h-4" />}
-                                        label="Memory"
-                                        badge={pendingAmendments > 0 ? `${pendingAmendments}` : undefined}
-                                    />
-                                )}
-                                {navMatch('Skills') && (
-                                    <NavTabButton
-                                        id="skills"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('skills')}
-                                        icon={<ActivityIcon className="w-4 h-4" />}
-                                        label="Skills"
-                                        badge={pendingForged > 0 ? `${pendingForged}` : undefined}
-                                    />
-                                )}
-                                {navMatch('Playbooks') && (
-                                    <NavTabButton
-                                        id="strategies"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('strategies')}
-                                        icon={<HistoryIcon className="w-4 h-4" />}
-                                        label="Playbooks"
-                                    />
-                                )}
-                                {/* Account & Data — journal, profile, backups */}
-                                {(navMatch('Journal') || navMatch('Data')) && (
-                                    <p className="ui-kicker px-3 pt-5 pb-2">
-                                        Account & Data
-                                    </p>
-                                )}
-                                {navMatch('Journal') && (
-                                    <NavTabButton
-                                        id="journal"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('journal')}
-                                        icon={<HistoryIcon className="w-4 h-4" />}
-                                        label="Journal"
-                                        badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
-                                    />
-                                )}
-                                {navMatch('Data') && (
-                                    <NavTabButton
-                                        id="actions"
-                                        activeTab={activeTab}
-                                        onClick={() => setActiveTab('actions')}
-                                        icon={<SwitchUserIcon className="w-4 h-4" />}
-                                        label="Data"
-                                    />
                                 )}
                             </div>
 
@@ -531,10 +580,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 sit on a user-facing screen. */}
                             <div className="pt-4 border-t border-zinc-800/80 space-y-2">
                                 <details className="group">
-                                    <summary className="text-[10px] text-zinc-600 hover:text-zinc-400 cursor-pointer select-none font-mono list-none flex items-center justify-between">
+                                    <summary className="flex cursor-pointer select-none list-none items-center justify-between font-mono text-[10px] text-zinc-600 hover:text-zinc-400">
                                         <span>Developer</span>
-                                        <span className="text-zinc-500 group-open:hidden">▸</span>
-                                        <span className="text-zinc-500 hidden group-open:inline">▾</span>
+                                        <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] group-open:rotate-90" aria-hidden="true" />
                                     </summary>
                                     <div className="mt-2">
                                         <DiagnosticsPanel />
@@ -546,12 +594,15 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             </div>
                         </div>
 
-                        {/* Right Content Workspace */}
+                        {/* Right Content Workspace. Three layout modes: tabs
+                            that own their whole scroll container (the embedded
+                            managers), a wide measure for data-dense pages, and
+                            a reading measure for preference pages. */}
                         <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-900 custom-scrollbar ${
-                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' || activeTab === 'instructions' || activeTab === 'strategies' || activeTab === 'skills'
+                            FULL_BLEED_TABS.includes(activeTab)
                                 ? ''
-                                : activeTab === 'models'
-                                    ? 'px-6 py-8 lg:px-12 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-6xl'
+                                : activeTab === 'models' || activeTab === 'journal'
+                                    ? 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-5xl'
                                     : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
                         }`}>
                             
@@ -566,27 +617,22 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 const winRate = decidedTrades > 0 ? Math.round((winTrades / decidedTrades) * 100) : 0;
 
                                 return (
-                                    <div className="space-y-6 animate-fade-in p-6 lg:p-10 max-w-4xl mx-auto">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
-                                            <div>
-                                                <h2 className="text-xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
-                                                    <BookOpen className="h-5 w-5 text-cyan-400" />
-                                                    Trading Journal Hub
-                                                </h2>
-                                                <p className="mt-1 text-xs text-zinc-400">
-                                                    Review past trades, AI pattern memory, and model performance metrics.
-                                                </p>
-                                            </div>
+                                    <div className="space-y-5 animate-fade-in">
+                                        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                                            <SettingsPageHeader
+                                                title="Journal"
+                                                description="Review past trades, AI pattern memory, and model performance metrics."
+                                            />
                                             <button
                                                 type="button"
                                                 onClick={() => {
                                                     onClose();
                                                     onOpenJournal?.('log');
                                                 }}
-                                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-cyan-950/40 hover:bg-cyan-500 transition-all active:scale-95"
+                                                className="mb-3.5 inline-flex items-center justify-center gap-2 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.98]"
                                             >
                                                 <span>Open Trading Journal</span>
-                                                <ArrowUpRight className="h-3.5 w-3.5" />
+                                                <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
                                             </button>
                                         </div>
 
@@ -663,69 +709,78 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </div>
 
                                         {/* Journal Configuration */}
-                                        <div className="rounded-xl border border-white/[0.06] bg-zinc-800/20 p-5 space-y-4">
-                                            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Journal &amp; Summary Settings</h3>
-
-                                            <div className="flex items-center justify-between py-2 border-b border-white/[0.04]">
-                                                <div>
-                                                    <span className="text-xs font-medium text-zinc-200">Algorithmic Summary</span>
-                                                    <p className="text-[11px] text-zinc-400">Use instant algorithmic calculation instead of calling an AI model for summaries.</p>
-                                                </div>
-                                                <ToggleSwitch
-                                                    checked={props.useAlgorithmicSummary ?? false}
-                                                    onChange={() => props.onToggleAlgorithmicSummary?.(!props.useAlgorithmicSummary)}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between py-2 border-b border-white/[0.04]">
-                                                <div>
-                                                    <span className="text-xs font-medium text-zinc-200">Algorithmic Pattern Insights</span>
-                                                    <p className="text-[11px] text-zinc-400">Extract trade insights using local heuristics alongside AI pattern memory.</p>
-                                                </div>
-                                                <ToggleSwitch
-                                                    checked={props.useAlgorithmicInsights ?? false}
-                                                    onChange={() => props.onToggleAlgorithmicInsights?.(!props.useAlgorithmicInsights)}
-                                                />
-                                            </div>
-
-                                            {props.onUpdateSummaryCharLimit && (
-                                                <div className="flex items-center justify-between py-2">
-                                                    <div>
-                                                        <span className="text-xs font-medium text-zinc-200">Summary Character Limit</span>
-                                                        <p className="text-[11px] text-zinc-400">Maximum length for AI-generated journal review summaries.</p>
-                                                    </div>
-                                                    <input
-                                                        type="number"
-                                                        value={props.summaryCharLimit ?? 1000}
-                                                        onChange={e => props.onUpdateSummaryCharLimit?.(Number(e.target.value))}
-                                                        className="w-24 rounded-lg border border-white/[0.08] bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-200 focus:border-cyan-500 focus:outline-none"
-                                                        min={200}
-                                                        max={5000}
-                                                        step={100}
+                                        <SettingsGroup
+                                            title="Summaries"
+                                            description="How the journal writes its own review text."
+                                        >
+                                            <SettingsRow
+                                                icon={<Activity className="h-4 w-4" />}
+                                                title="Algorithmic summary"
+                                                description="Instant calculation from the trade ledger instead of a model call."
+                                                control={
+                                                    <ToggleSwitch
+                                                        checked={props.useAlgorithmicSummary ?? false}
+                                                        onChange={() => props.onToggleAlgorithmicSummary?.(!props.useAlgorithmicSummary)}
+                                                        label="Toggle algorithmic summary"
                                                     />
-                                                </div>
+                                                }
+                                            />
+                                            <SettingsRow
+                                                icon={<Sparkles className="h-4 w-4" />}
+                                                title="Algorithmic pattern insights"
+                                                description="Extract insights with local heuristics alongside AI pattern memory."
+                                                control={
+                                                    <ToggleSwitch
+                                                        checked={props.useAlgorithmicInsights ?? false}
+                                                        onChange={() => props.onToggleAlgorithmicInsights?.(!props.useAlgorithmicInsights)}
+                                                        label="Toggle algorithmic pattern insights"
+                                                    />
+                                                }
+                                            />
+                                            {props.onUpdateSummaryCharLimit && (
+                                                <SettingsRow
+                                                    icon={<FileText className="h-4 w-4" />}
+                                                    title="Summary character limit"
+                                                    description="Maximum length for AI-generated journal review summaries."
+                                                    control={
+                                                        <input
+                                                            type="number"
+                                                            value={props.summaryCharLimit ?? 1000}
+                                                            onChange={e => props.onUpdateSummaryCharLimit?.(Number(e.target.value))}
+                                                            aria-label="Summary character limit"
+                                                            className="w-24 rounded-control border border-white/[0.08] bg-zinc-900 px-3 py-1.5 text-right font-mono text-xs text-zinc-200 focus:border-cyan-500 focus:outline-none"
+                                                            min={200}
+                                                            max={5000}
+                                                            step={100}
+                                                        />
+                                                    }
+                                                />
                                             )}
-                                        </div>
+                                        </SettingsGroup>
                                     </div>
                                 );
                             })()}
 
                             {/* TAB 1: AI Models & Providers */}
                             {activeTab === 'models' && (
-                                <div className="space-y-6 animate-fade-in min-h-0">
+                                <div className="space-y-5 animate-fade-in min-h-0">
+                                    <SettingsPageHeader
+                                        title="AI setup"
+                                        description="Connect a provider, then choose which model fills each seat on the desk."
+                                    />
                                     {providerConfigsLoaded && readyConfigProviders.length === 0 && (
-                                        <div className="status-surface rounded-2xl border border-zinc-700/60 bg-zinc-900 p-4">
-                                            <h3 className="text-sm font-bold text-zinc-100">Connect an AI service to get started</h3>
+                                        <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-4">
+                                            <h3 className="text-sm font-semibold text-zinc-100">Connect an AI service to get started</h3>
                                             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                                                Add a provider, paste its key, pick a model, then use Test before running your first analysis.
+                                                Add a provider below, paste its key, pick a model, then use Test before running your first analysis.
                                             </p>
                                         </div>
                                     )}
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {readyConfigProviders.length > 0 && (
-                                            <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
-                                                <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
+                                            <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
+                                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
                                                     Vision Model
                                                 </div>
                                                 <ModelPicker
@@ -740,8 +795,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             </div>
                                         )}
 
-                                        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
-                                            <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
+                                        <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
+                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
                                                 Memory Model
                                             </div>
                                             <ModelPicker
@@ -765,8 +820,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             </p>
                                         </div>
 
-                                        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
-                                            <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
+                                        <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
+                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
                                                 Debate Moderator
                                             </div>
                                             <ModelPicker
@@ -811,194 +866,279 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {/* TAB 2: General & Analysis */}
-                            {activeTab === 'general' && (
-                                <div className="space-y-6 max-w-3xl animate-fade-in">
-                                    <div className="border-b border-white/5 pb-3">
-                                        <h3 className="text-lg font-bold text-white">Analysis</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning is under Advanced.</p>
-                                    </div>
+                            {/* TAB 1: Profile — who is signed in and what their
+                                desk holds. The account menu has linked here all
+                                along; the tab itself was never rendered, so
+                                Profile opened an empty pane. */}
+                            {activeTab === 'profile' && (() => {
+                                const trades = props.loggedTrades ?? [];
+                                const wins = trades.filter(t => t.outcome === 'WIN').length;
+                                const losses = trades.filter(t => t.outcome === 'LOSS').length;
+                                const decided = wins + losses;
+                                const readyProviders = (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0).length;
+                                const initial = (username || '?').trim().charAt(0).toUpperCase();
+                                return (
+                                    <div className="space-y-5 animate-fade-in">
+                                        <SettingsPageHeader
+                                            title="Profile"
+                                            description="The active trader profile — its journal, memory and backups are separate from every other profile on this device."
+                                        />
 
-                                    {/* CORE — hairline rows */}
-                                    <div>
-                                        {/* Accuracy Mode */}
-                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
-                                            <div>
-                                                <h4 className="text-sm font-semibold text-zinc-100">Accuracy Mode</h4>
-                                                <p className="text-xs text-zinc-500 mt-1">
-                                                    {isAccuracyModeEnabled
-                                                        ? (accuracySubMode === 'original' ? 'Strict Protocol enabled' : 'Pure AI enabled')
-                                                        : 'Standard speed mode'}
-                                                </p>
-                                            </div>
-                                            <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />
-                                        </div>
-
-                                            {isAccuracyModeEnabled && (
-                                                <div className="grid grid-cols-2 gap-3 border-b border-white/5 py-5">
-                                                    <button
-                                                        onClick={() => setAccuracySubMode?.('original')}
-                                                        className={`p-3 rounded-xl border text-left transition-all ${
-                                                            accuracySubMode === 'original'
-                                                                ? 'bg-zinc-900 border-zinc-500 text-zinc-100'
-                                                                : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                                                        }`}
-                                                    >
-                                                        <div className="text-xs font-bold">Strict Protocol</div>
-                                                        <div className="text-[11px] text-zinc-500 mt-1">Validated multi-step analysis with consensus checks. Slower but more thorough.</div>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setAccuracySubMode?.('pure_ai')}
-                                                        className={`p-3 rounded-xl border text-left transition-all ${
-                                                            accuracySubMode === 'pure_ai'
-                                                                ? 'bg-zinc-900 border-zinc-500 text-zinc-100'
-                                                                : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                                                        }`}
-                                                    >
-                                                        <div className="text-xs font-bold">Pure AI</div>
-                                                        <div className="text-[11px] text-zinc-500 mt-1">Faster, unfiltered reasoning with fewer formatting checks.</div>
-                                                    </button>
+                                        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-5">
+                                            <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-xl font-semibold text-zinc-100">
+                                                {initial}
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="truncate text-base font-semibold text-zinc-100">{username || 'Trader'}</div>
+                                                <div className="mt-0.5 text-[11px] text-zinc-500">
+                                                    {APP_NAME} v{APP_VERSION}
+                                                    {providerConfigsLoaded
+                                                        ? ` · ${readyProviders} ${readyProviders === 1 ? 'provider' : 'providers'} connected`
+                                                        : ' · loading providers…'}
                                                 </div>
+                                            </div>
+                                            {onSwitchUser && (
+                                                <button
+                                                    type="button"
+                                                    onClick={onSwitchUser}
+                                                    className="inline-flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100"
+                                                >
+                                                    <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                                                    Switch profile
+                                                </button>
                                             )}
-
-                                        {/* Hybrid Intelligence */}
-                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
-                                            <div>
-                                                <h4 className="text-sm font-semibold text-zinc-100">Hybrid Intelligence</h4>
-                                                <p className="text-xs text-zinc-500 mt-1">Adds real-time market data (price, RSI, MACD, EMAs) to give the AI live context. Default: off.</p>
-                                            </div>
-                                            <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
-                                                if (onToggleHybridIntelligence) onToggleHybridIntelligence();
-                                                else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
-                                            }} label="Toggle Hybrid Intelligence" />
                                         </div>
 
-                                        {/* Desk Tools */}
-                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
-                                            <div>
-                                                <h4 className="text-sm font-semibold text-zinc-100">Desk Tools</h4>
-                                                <p className="text-xs text-zinc-500 mt-1">Lets analysts and the moderator call live tools anytime — opening, rebuttal, clarification, or verdict: web search, funding/OI, order book, liquidations, BTC context, session timing. Default: on.</p>
-                                            </div>
-                                            <ToggleSwitch
-                                                checked={deskToolsEnabled}
-                                                onChange={() => {
-                                                    const next = !deskToolsEnabled;
-                                                    setDeskToolsEnabled(next);
-                                                    saveHarnessSettings({ deskToolsEnabled: next });
-                                                }}
-                                                label="Toggle Desk Tools"
+                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                            {[
+                                                { label: 'Trades logged', value: String(trades.length), tone: 'text-zinc-100' },
+                                                { label: 'Win rate', value: decided > 0 ? `${Math.round((wins / decided) * 100)}%` : '—', tone: decided > 0 && wins >= losses ? 'text-emerald-400' : decided > 0 ? 'text-rose-400' : 'text-zinc-100' },
+                                                { label: 'Wins / Losses', value: `${wins}/${losses}`, tone: 'text-zinc-100' },
+                                                { label: 'Open / Pending', value: String(trades.length - decided), tone: trades.length - decided > 0 ? 'text-amber-400' : 'text-zinc-100' },
+                                            ].map(stat => (
+                                                <div key={stat.label} className="rounded-xl border border-white/[0.06] bg-zinc-800/40 px-3.5 py-3">
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{stat.label}</div>
+                                                    <div className={`mt-1 font-mono text-xl font-bold tabular-nums ${stat.tone}`}>{stat.value}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <SettingsGroup title="Account">
+                                            <SettingsRow
+                                                icon={<User className="h-4 w-4" />}
+                                                title="Trading journal"
+                                                description="Trade log, pattern memory, model performance and reasoning history."
+                                                control={
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveTab('journal')}
+                                                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                                                    >
+                                                        Open <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                                                    </button>
+                                                }
                                             />
-                                        </div>
-
-                                        {/* Desk idle motion — breath, fidget, blink, sway. */}
-                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
-                                            <div>
-                                                <h4 className="text-sm font-semibold text-zinc-100">Desk idle motion</h4>
-                                                <p className="text-xs text-zinc-500 mt-1">
-                                                    Subtle micro-motion on the pixel seats (breath, cap-tilt, eye-blink while thinking, moderator sway).
-                                                    Disabling this makes the desk perfectly still — useful during high-stakes analysis.
-                                                    Equivalent to the OS-level “reduce motion” but per-user. Default: on.
-                                                </p>
-                                            </div>
-                                            <ToggleSwitch
-                                                checked={idleMotionEnabled}
-                                                onChange={() => setIdleMotionEnabled(!idleMotionEnabled)}
-                                                label="Toggle desk idle motion"
+                                            {onExportData && (
+                                                <SettingsRow
+                                                    icon={<Database className="h-4 w-4" />}
+                                                    title="Export this profile"
+                                                    description="Download trades, analyses and memory as a JSON archive."
+                                                    control={
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void onExportData()}
+                                                            className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                                                        >
+                                                            Export
+                                                        </button>
+                                                    }
+                                                />
+                                            )}
+                                            <SettingsRow
+                                                icon={<HardDrive className="h-4 w-4" />}
+                                                title="Backups & usage"
+                                                description="Auto-backups run every 30 minutes while a profile is open."
+                                                control={
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveTab('actions')}
+                                                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                                                    >
+                                                        Open <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                                                    </button>
+                                                }
                                             />
-                                        </div>
+                                        </SettingsGroup>
+                                    </div>
+                                );
+                            })()}
 
-                                        {/* Desk seat mapping — pin custom actor names
-                                            to a role preset so they land on a colored
-                                            cap in the desk view instead of the wing
-                                            fan-out. */}
-                                        <div className="border-b border-white/5 py-5">
+                            {/* TAB 2: General & Analysis */}                            {activeTab === 'general' && (
+                                <div className="space-y-5 animate-fade-in">
+                                    <SettingsPageHeader
+                                        title="Analysis"
+                                        description="How the harness thinks, what it is allowed to call, and how still the desk sits."
+                                    />
+
+                                    <SettingsGroup title="Analysis modes">
+                                        <SettingsRow
+                                            icon={<ShieldCheck className="h-4 w-4" />}
+                                            title="Accuracy Mode"
+                                            description={isAccuracyModeEnabled
+                                                ? (accuracySubMode === 'original'
+                                                    ? 'On — Strict Protocol: validated multi-step analysis with consensus checks.'
+                                                    : 'On — Pure AI: faster, unfiltered reasoning with fewer formatting checks.')
+                                                : 'Off — standard speed. Debate runs without the strict validation pass.'}
+                                            control={<ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />}
+                                        />
+                                        {isAccuracyModeEnabled && setAccuracySubMode && (
+                                            <SettingsRow
+                                                icon={<Layers className="h-4 w-4" />}
+                                                title="Strictness"
+                                                description="Which protocol runs while Accuracy Mode is on."
+                                                control={
+                                                    <SegmentedControl
+                                                        ariaLabel="Accuracy protocol"
+                                                        value={accuracySubMode}
+                                                        onChange={id => setAccuracySubMode(id as AccuracySubMode)}
+                                                        options={[
+                                                            { id: 'original', label: 'Strict', title: 'Validated multi-step analysis with consensus checks. Slower but more thorough.' },
+                                                            { id: 'pure_ai', label: 'Pure AI', title: 'Faster, unfiltered reasoning with fewer formatting checks.' },
+                                                        ]}
+                                                    />
+                                                }
+                                            />
+                                        )}
+                                        <SettingsRow
+                                            icon={<Activity className="h-4 w-4" />}
+                                            title="Hybrid Intelligence"
+                                            description="Adds real-time market data (price, RSI, MACD, EMAs) so the models reason over live context."
+                                            control={
+                                                <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
+                                                    if (onToggleHybridIntelligence) onToggleHybridIntelligence();
+                                                    else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
+                                                }} label="Toggle Hybrid Intelligence" />
+                                            }
+                                        />
+                                    </SettingsGroup>
+
+                                    <SettingsGroup title="Analyst desk">
+                                        <SettingsRow
+                                            icon={<Wrench className="h-4 w-4" />}
+                                            title="Desk Tools"
+                                            description="Lets analysts and the moderator call live tools anytime — web search, funding/OI, order book, liquidations, BTC context, session timing."
+                                            control={
+                                                <ToggleSwitch
+                                                    checked={deskToolsEnabled}
+                                                    onChange={() => {
+                                                        const next = !deskToolsEnabled;
+                                                        setDeskToolsEnabled(next);
+                                                        saveHarnessSettings({ deskToolsEnabled: next });
+                                                    }}
+                                                    label="Toggle Desk Tools"
+                                                />
+                                            }
+                                        />
+                                        <SettingsRow
+                                            icon={<Sparkles className="h-4 w-4" />}
+                                            title="Desk idle motion"
+                                            description="Subtle micro-motion on the pixel seats (breath, cap-tilt, eye-blink while thinking, moderator sway). Turning this off makes the desk perfectly still."
+                                            control={
+                                                <ToggleSwitch
+                                                    checked={idleMotionEnabled}
+                                                    onChange={() => setIdleMotionEnabled(!idleMotionEnabled)}
+                                                    label="Toggle desk idle motion"
+                                                />
+                                            }
+                                        />
+                                    </SettingsGroup>
+
+                                    {/* The editor brings its own heading and
+                                        explanation — the card frames it, it
+                                        doesn't restate it. */}
+                                    <SettingsGroup>
+                                        <div className="p-4">
                                             <DeskSeatMappingEditor />
                                         </div>
-                                    </div>
+                                    </SettingsGroup>
 
-                                    {/* ADVANCED — fine-tuning; most users never touch these */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAdvancedOpen(p => !p)}
-                                        className="w-full flex items-center justify-between gap-6 py-5 text-left transition-colors hover:bg-zinc-800/30"
-                                        aria-expanded={isAdvancedOpen}
-                                    >
-                                        <div className="text-left">
-                                            <h4 className="text-sm font-bold text-white">Advanced</h4>
-                                            <p className="text-xs text-zinc-500 mt-0.5">Prompt injection and capture behavior — most users can leave these as-is.</p>
-                                        </div>
-                                        <span className={`text-zinc-500 text-sm transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`}>▾</span>
-                                    </button>
-                                    {isAdvancedOpen && (
-                                        <div className="space-y-4 animate-fade-in">
-                                            {/* Pure AI Context — only relevant in Accuracy Mode → Pure AI */}
-                                            {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
-                                                <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4 animate-fade-in">
-                                                    <div>
-                                                        <h4 className="text-sm font-bold text-white">Pure AI Context</h4>
-                                                        <p className="text-xs text-zinc-400 mt-0.5">Choose which structured context is injected during Pure AI analysis. All default: off.</p>
-                                                    </div>
-                                                    <div className="space-y-3">
+                                    {/* ADVANCED — fine-tuning; most users never touch these. */}
+                                    <section>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAdvancedOpen(p => !p)}
+                                            aria-expanded={isAdvancedOpen}
+                                            className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/[0.07] bg-zinc-900/50 px-4 py-3 text-left transition-colors hover:bg-zinc-800/40"
+                                        >
+                                            <span className="min-w-0">
+                                                <span className="block text-[13px] font-semibold text-zinc-200">Advanced</span>
+                                                <span className="mt-0.5 block text-[11px] text-zinc-500">Context injection and capture prompts — most users can leave these as-is.</span>
+                                            </span>
+                                            <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${isAdvancedOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                        </button>
+                                        {isAdvancedOpen && (
+                                            <div className="mt-3 space-y-3 animate-fade-in">
+                                                {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
+                                                    <SettingsGroup title="Pure AI context" description="Structured context injected during Pure AI analysis. All default: off.">
                                                         {setIsPlaybookEnabledInPureAI && (
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs text-zinc-300">Strategy Playbook</span>
-                                                            <ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} label="Toggle Strategy Playbook in Pure AI" />
-                                                            </div>
+                                                            <SettingsRow
+                                                                title="Strategy Playbook"
+                                                                description="The uploaded strategy books."
+                                                                control={<ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} label="Toggle Strategy Playbook in Pure AI" />}
+                                                            />
                                                         )}
                                                         {setIsFamiliesEnabledInPureAI && (
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs text-zinc-300">Pattern Families</span>
-                                                            <ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} label="Toggle Pattern Families in Pure AI" />
-                                                            </div>
+                                                            <SettingsRow
+                                                                title="Pattern Families"
+                                                                description="Learned pattern-family classifications."
+                                                                control={<ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} label="Toggle Pattern Families in Pure AI" />}
+                                                            />
                                                         )}
                                                         {setIsMemoryEnabledInPureAI && (
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs text-zinc-300">Historical Memory</span>
-                                                            <ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} label="Toggle Historical Memory in Pure AI" />
-                                                            </div>
+                                                            <SettingsRow
+                                                                title="Historical Memory"
+                                                                description="Past-trade lessons from the notebook."
+                                                                control={<ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} label="Toggle Historical Memory in Pure AI" />}
+                                                            />
                                                         )}
-                                                    </div>
-                                                </div>
-                                            )}
+                                                    </SettingsGroup>
+                                                )}
 
-                                            {/* Auto-Capture Options */}
-                                            <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-white">Automated Capture Prompts</h4>
-                                                    <p className="text-xs text-zinc-400 mt-0.5">Ask for trade results automatically. All default: off.</p>
-                                                </div>
-                                                <div className="space-y-3">
-                                                    {onToggleAutoCapturing && (
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-zinc-300">Prompt for post-trade result capture</span>
-                                                            <ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} label="Toggle post-trade result capture" />
-                                                        </div>
-                                                    )}
-                                                    {onToggleUpdateAutoCapturing && (
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-zinc-300">Prompt for active trade updates</span>
-                                                            <ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} label="Toggle active trade update capture" />
-                                                        </div>
-                                                    )}
-                                                    {onToggleEntryNotHitCapturing && (
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-zinc-300">Prompt when entry price is not hit</span>
-                                                            <ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} label="Toggle entry not hit capture" />
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                {onToggleAutoCapturing && (
+                                                    <SettingsGroup title="Automated capture prompts" description="When to ask for trade results automatically. All default: off.">
+                                                        <SettingsRow
+                                                            title="Post-trade result capture"
+                                                            description="Ask for the outcome after a trade settles."
+                                                            control={<ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} label="Toggle post-trade result capture" />}
+                                                        />
+                                                        {onToggleUpdateAutoCapturing && (
+                                                            <SettingsRow
+                                                                title="Active trade updates"
+                                                                description="Ask to refresh an open position's status."
+                                                                control={<ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} label="Toggle active trade update capture" />}
+                                                            />
+                                                        )}
+                                                        {onToggleEntryNotHitCapturing && (
+                                                            <SettingsRow
+                                                                title="Entry not hit"
+                                                                description="Ask what happened when price never reached the entry."
+                                                                control={<ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} label="Toggle entry not hit capture" />}
+                                                            />
+                                                        )}
+                                                    </SettingsGroup>
+                                                )}
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </section>
                                 </div>
                             )}
 
                             {activeTab === 'lenses' && (
-                                <div className="space-y-4 animate-fade-in">
-                                    <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-lg font-bold text-white">Analyst roles</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Assign Technical, Risk, and Macro personas to models.</p>
-                                    </div>
+                                <div className="space-y-5 animate-fade-in">
+                                    <SettingsPageHeader
+                                        title="Analyst roles"
+                                        description="Assign Technical, Risk, and Macro personas to models."
+                                    />
                                     <AnalystLensSettings
                                         config={lensConfig}
                                         onChange={onSetLensConfig}
@@ -1107,11 +1247,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                             {/* TAB 6: Data — Backups & Alerts */}
                             {activeTab === 'actions' && (
-                                <div className="space-y-6 max-w-3xl animate-fade-in">
-                                    <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Data</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Usage and backups.</p>
-                                    </div>
+                                <div className="space-y-5 animate-fade-in">
+                                    <SettingsPageHeader
+                                        title="Data"
+                                        description="Session usage and the profile's automatic backups."
+                                    />
 
                                     <SessionUsagePanel />
 

@@ -440,6 +440,16 @@ body {
   border-color: rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
 }
+/* A turn still in flight breathes at its edge. This is the one "it's working"
+   read that survives when the row is collapsed under a tip line, where the
+   caret and the trace body are both hidden. */
+@keyframes reasoning-live-edge {
+  0%, 100% { border-color: rgba(255, 255, 255, 0.06); }
+  50% { border-color: rgba(255, 255, 255, 0.14); }
+}
+.reasoning-row[data-state="running"] {
+  animation: reasoning-live-edge 1.8s ease-in-out infinite;
+}
 .reasoning-row-summary {
   position: relative;
   display: flex;
@@ -1020,6 +1030,145 @@ body.desk-idle-motion-off {
   background: #1f1f1c;
   color: #d6d6d0;
 }
+
+/* ===== HOVER TOOLTIP (.tip) =====
+   A CSS-only hover/focus hint: the host carries `tip` + a `tip-label`
+   child, and the label paints on hover and keyboard focus. No portal, so
+   the host must not sit inside an overflow-hidden ancestor. Delay is
+   deliberate — an instant tooltip on an icon rail flickers while the
+   pointer travels across it. */
+.tip {
+  position: relative;
+}
+.tip-label {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1f1f1c;
+  color: #d6d6d0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s var(--ease-snappy) 0.28s;
+}
+.tip-label kbd {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #8c8c86;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+}
+.tip:hover > .tip-label,
+.tip:focus-visible > .tip-label,
+.tip:focus-within > .tip-label {
+  opacity: 1;
+}
+/* Placement variants. Right is for the 48px activity rail; below is for
+   top-aligned chrome. */
+.tip-right > .tip-label {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+.tip-below > .tip-label {
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* ===== LIVE FEED BEACON =====
+   The websocket state read. A live socket gets a hard dot with one slow
+   expanding ring behind it — the "ticks are arriving" confidence cue. The
+   ring is a child span rather than a box-shadow animation so it stays on
+   the compositor and never repaints the pill. */
+@keyframes beacon-ping {
+  0% { transform: scale(1); opacity: 0.55; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+.beacon {
+  position: relative;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: currentColor;
+}
+.beacon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+  animation: beacon-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.beacon.is-quiet::after {
+  display: none;
+}
+
+/* ===== PRICE TICK FLASH =====
+   A print that arrives higher than the last one tints the hero price
+   green for a beat, lower prints go red. Background-color only — the price
+   must never shift, scale or reflow while the market is moving. */
+@keyframes tick-flash-up {
+  from { background-color: rgba(7, 181, 106, 0.22); }
+  to { background-color: transparent; }
+}
+@keyframes tick-flash-down {
+  from { background-color: rgba(247, 93, 95, 0.22); }
+  to { background-color: transparent; }
+}
+.tick-up { animation: tick-flash-up 0.55s var(--ease-snappy); }
+.tick-down { animation: tick-flash-down 0.55s var(--ease-snappy); }
+
+/* ===== SEGMENTED CONTROL =====
+   The thumb is a sibling that slides to the measured bounds of the active
+   tab (inline left/width + this transition), so the tabs themselves stay
+   plain buttons and the selected read is one moving surface instead of
+   three independently recoloring backgrounds. */
+.seg-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 999px;
+  background: #2f2f2f;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition: left 0.18s var(--ease-snappy), width 0.18s var(--ease-snappy);
+}
+
+/* ===== EFFORT METER =====
+   Signal bars that make a reasoning budget legible at a glance: lit bars
+   scale with the level, so "Max" visibly costs more than "Low" without
+   reading the word. */
+.effort-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 9px;
+  flex-shrink: 0;
+}
+.effort-meter i {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: #2f2f2f;
+}
+.effort-meter i:nth-child(1) { height: 4px; }
+.effort-meter i:nth-child(2) { height: 6px; }
+.effort-meter i:nth-child(3) { height: 7.5px; }
+.effort-meter i:nth-child(4) { height: 9px; }
+.effort-meter i.is-lit { background: currentColor; }
 
 /* Quiet workspace grid for the empty chat canvas. It stays out of the way
    of the composer and chat content; base matches the page color (#0b0b0a). */

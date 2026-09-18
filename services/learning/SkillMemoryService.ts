@@ -45,6 +45,7 @@ import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { familiesRelate } from '../../utils/patternMatch';
 import { recordMemoryInjection, skillAdherenceForRun } from './MemoryInjectionService';
+import { sanitizePredicate } from '../analysis/skillPredicate';
 import { resolveMemoryConfig } from './MemoryModelService';
 import {
     sanitizePrediction,
@@ -86,6 +87,15 @@ export interface SkillMeta {
     regime?: string;
     wins: number;
     losses: number;
+    /** Expectancy in R, summed ONLY from trades whose realized R was measured
+     *  from price levels (`trade.realizedR`). Absent means unmeasured, which is
+     *  NOT break-even — so a zero here must never be read as a score. Missing R
+     *  is never filled with a +/-1 stand-in: that collapses this counter into
+     *  `wins - losses` and reimports the binary grading expectancy exists to
+     *  replace. */
+    netR?: number;
+    /** How many counted outcomes fed `netR`. Gates every expectancy read. */
+    rSampled?: number;
     /** Running count of consecutive LOSS outcomes (reset by any WIN). A
      *  confirmed skill that reaches REFINE_AFTER_CONSECUTIVE_LOSSES gets an
      *  LLM refinement pass instead of silently bleeding. */
@@ -154,6 +164,12 @@ export interface SkillMeta {
     evidenceCount?: number;
     ifCondition?: string;
     thenAction?: string;
+    /** Optional machine-checkable trigger, evaluated against the tape by
+     *  services/analysis/skillPredicate. Prose can be read loosely; a predicate
+     *  either fires on the current bar or it does not. Absent means the skill
+     *  is matched on its prose alone — the common case, and always the safe
+     *  one, because a predicate that fails to parse is never read as a match. */
+    predicate?: string;
     /** ── strategy-template fields (Kakushadze & Serur, "151 Trading
      *  Strategies") ──
      *  The book describes every strategy against one template: data,
@@ -387,6 +403,14 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         regime: pick('regime'),
         wins: num('wins'),
         losses: num('losses'),
+        netR: (() => {
+            const raw = parseFloat(pick('netR') || '');
+            return Number.isFinite(raw) ? raw : undefined;
+        })(),
+        rSampled: (() => {
+            const raw = parseInt(pick('rSampled') || '', 10);
+            return Number.isFinite(raw) && raw > 0 ? raw : undefined;
+        })(),
         consecutiveLosses: num('consecutiveLosses'),
         tradeIds,
         // Total counted evidence. Falls back to the parsed tradeIds
@@ -397,6 +421,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
             return Number.isFinite(raw) && raw > 0 ? raw : undefined;
         })(),
         ifCondition: pick('ifCondition'),
+        predicate: pick('predicate'),
         thenAction: pick('thenAction'),
         strategyFamily: pick('strategyFamily'),
         signals: pick('signals'),
@@ -594,6 +619,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         `sample: ${meta.wins + meta.losses}`,
         ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
+        ...(meta.predicate ? [`predicate: ${meta.predicate.replace(/\n/g, ' ')}`] : []),
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
         ...(meta.strategyFamily ? [`strategyFamily: ${meta.strategyFamily}`] : []),
         ...(meta.signals ? [`signals: ${meta.signals.replace(/\n/g, ' ')}`] : []),
@@ -633,6 +659,12 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         // feeds the "learned from N logged trades" provenance line and the
         // generalization evidence sum, both of which must be honest.
         `evidenceCount: ${Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length)}`,
+        // Expectancy is written only when at least one outcome carried a
+        // measured R. Omitting the pair (rather than emitting `netR: 0`) is
+        // what keeps an unmeasured skill from reading as break-even.
+        ...(meta.rSampled && meta.rSampled > 0
+            ? [`netR: ${(meta.netR ?? 0).toFixed(2)}`, `rSampled: ${meta.rSampled}`]
+            : []),
         '---',
         '',
         `# ${title}`,
@@ -817,8 +849,14 @@ export const appendRecentOutcome = (meta: SkillMeta, win: boolean): void => {
  * counter pinned at 20 (tail) + 1 (this trade) forever.
  * Call BEFORE the trade id is appended to `tradeIds` — the legacy-row
  * floor for the counter is derived from the pre-append length.
+ *
+ * `r` is the trade's price-measured R (`trade.realizedR`), and is OPTIONAL by
+ * design: most rows — every trade logged before the post-mortem began
+ * persisting it, and every one whose validation never resolved an exit — have
+ * no trustworthy R. Those simply do not feed the expectancy ledger, which is
+ * why `rSampled` is tracked separately from `wins + losses`.
  */
-const countTradeOutcome = (meta: SkillMeta, win: boolean): void => {
+export const countTradeOutcome = (meta: SkillMeta, win: boolean, r?: number): void => {
     if (win) {
         meta.wins += 1;
         meta.consecutiveLosses = 0;
@@ -826,8 +864,29 @@ const countTradeOutcome = (meta: SkillMeta, win: boolean): void => {
         meta.losses += 1;
         meta.consecutiveLosses += 1;
     }
+    if (typeof r === 'number' && Number.isFinite(r)) {
+        meta.netR = Math.round(((meta.netR ?? 0) + r) * 100) / 100;
+        meta.rSampled = (meta.rSampled ?? 0) + 1;
+    }
     appendRecentOutcome(meta, win);
     meta.evidenceCount = Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length) + 1;
+};
+
+/** Minimum R-sampled outcomes before expectancy is worth showing. Matches the
+ *  cold-start bar the Wilson promotion gate already uses. */
+export const EXPECTANCY_MIN_R_SAMPLE = 8;
+
+/**
+ * Average R per measured outcome, or undefined when there is nothing honest to
+ * report. Callers must render undefined as "not yet measured" — never as 0R.
+ */
+export const skillExpectancyR = (
+    meta: Pick<SkillMeta, 'netR' | 'rSampled'>,
+    minSample = EXPECTANCY_MIN_R_SAMPLE,
+): number | undefined => {
+    const n = meta.rSampled ?? 0;
+    if (n < minSample || typeof meta.netR !== 'number' || !Number.isFinite(meta.netR)) return undefined;
+    return Math.round((meta.netR / n) * 100) / 100;
 };
 
 const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number }): SkillStatus => {
@@ -1031,7 +1090,7 @@ const applySkillEvidenceUnlocked = async (
         // CONDITIONAL, not fading; the per-regime split below routes
         // divergence to a re-scope proposal instead of decay.
         applyEvidenceDecay(meta, trade.marketRegime);
-        countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN);
+        countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
         // Per-regime split, written alongside the global counters —
         // the substrate that lets a conditional pattern be RE-SCOPED instead
         // of decayed into oblivion.
@@ -1261,6 +1320,18 @@ export const halveCounts = (meta: SkillMeta, times: number): void => {
     for (let i = 0; i < times; i++) {
         meta.wins = Math.floor(meta.wins / 2);
         meta.losses = Math.floor(meta.losses / 2);
+        // The expectancy pair decays with the record it belongs to, or a skill
+        // would keep quoting an average earned from evidence that no longer
+        // counts. Halving both keeps netR/rSampled stable while shrinking the
+        // sample; once the sample floors to 0 the pair is dropped entirely
+        // rather than left reporting a lone 0R.
+        if (meta.rSampled) {
+            meta.rSampled = Math.floor(meta.rSampled / 2);
+            meta.netR = meta.rSampled > 0
+                ? Math.round(((meta.netR ?? 0) / 2) * 100) / 100
+                : undefined;
+            if (meta.rSampled === 0) meta.rSampled = undefined;
+        }
     }
 };
 
@@ -1700,12 +1771,15 @@ const ingestCraftedSkillUnlocked = async (
         if (!meta.tradeIds.includes(trade.id)) {
             // Full accounting (decay window + evidence counter included) —
             // the craft path used to bump raw counters only.
-            countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN);
+            countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
             meta.tradeIds = [...meta.tradeIds, trade.id];
         }
         meta.kind = kind;
         meta.ifCondition = crafted.ifCondition;
         meta.thenAction = crafted.thenAction;
+        // Overwritten, never merged: a predicate describes its clause, so
+        // rewriting the clause invalidates any predicate the old one carried.
+        meta.predicate = sanitizePredicate(crafted.predicate);
         // A legacy skill updated through the craft path gains its birth
         // certificate here if it never had one.
         if (!meta.prediction) {
@@ -1736,6 +1810,7 @@ const ingestCraftedSkillUnlocked = async (
         tradeIds: [trade.id],
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
+        predicate: sanitizePredicate(crafted.predicate),
         prediction: crafted.prediction ?? defaultPrediction({
             coin: trade.analysis?.coinName,
             family: trade.analysis?.detectedPatternFamily,
@@ -1788,6 +1863,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         tradeIds: [],
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
+        predicate: sanitizePredicate(crafted.predicate),
         prediction: crafted.prediction ?? defaultPrediction({ coin }),
         body: formatCraftedSkillBody(crafted),
     };
@@ -1828,7 +1904,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
                 // Full accounting: counters, streak, decay window and the
                 // evidence counter (this path bumped W/L + the decay window
                 // but not the streak or the counter).
-                countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN);
+                countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
                 meta.tradeIds = [...meta.tradeIds, trade.id];
             }
             meta.thenAction = clause.thenAction;

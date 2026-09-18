@@ -48,6 +48,7 @@ import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
 import { finalizeVerdict } from './analysisPipeline/verdictFinalizer';
+import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
 
 // ─── Dev-only logging ─────────────────────────────────────────────────────
 // console.log calls are gated behind the Vite dev flag so production builds
@@ -1273,6 +1274,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 botMemoryContext,
                 memoryFilesContext,
                 moderatorMemoryContext,
+                rebuttalMemoryContext,
                 memoryRetrieved,
                 similarSetupsContext,
                 regimeWeightingContext,
@@ -1280,11 +1282,34 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 asOfMs: memoryAsOfMs,
             } = assemblePipelineMemoryContext(effectiveInput, loggedTrades, freshHybridData ?? null, userMessage.id);
 
+            // ── CODE-CHECKED SKILL TRIGGERS ──
+            // Retrieval answers which skills are RELEVANT; a predicate answers
+            // whether a relevant skill's own trigger is TRUE on the current bar.
+            // That second question used to be settled by a seat reading prose,
+            // which is precisely what a deterministic check should replace.
+            // Evaluated over candles KlineService already caches (30s with
+            // in-flight de-dupe), so in the common case this is not an extra
+            // round trip. Best-effort by design: any failure leaves the run
+            // byte-for-byte as it was before predicates existed.
+            let predicateGate: PredicateGateResult | null = null;
+            if (detectedLearningCoin) {
+                const gateSymbol = /USDT?$/i.test(detectedLearningCoin)
+                    ? detectedLearningCoin.toUpperCase()
+                    : `${detectedLearningCoin.toUpperCase()}USDT`;
+                try {
+                    const { evaluateSkillPredicates } = await import('../services/learning/skillPredicateGate');
+                    predicateGate = await evaluateSkillPredicates({ coin: gateSymbol });
+                } catch (err) {
+                    console.warn('[PredicateGate] skipped:', err);
+                    predicateGate = null;
+                }
+            }
+
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
             // chart/pattern block the analysts see + the user strategies.
             const moderatorHybrid = buildHybridEnvelope(freshHybridData, 'moderator') || hybridDataInjection;
-            const moderatorContextBundle = [moderatorMemoryContext, similarSetupsContext, regimeWeightingContext, moderatorHybrid, strategiesBlock].filter(Boolean).join('\n\n');
+            const moderatorContextBundle = [moderatorMemoryContext, similarSetupsContext, regimeWeightingContext, moderatorHybrid, strategiesBlock, predicateGate?.note].filter(Boolean).join('\n\n');
 
             // 'auto' trading style was hardcoded to 'swing' at every call
             // site — the market-data detector (ADX/regime/volume/session)
@@ -1336,11 +1361,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Enhance prompt with memory files, similar setups, hybrid data AND learning context
             let enhancedPrompt = promptToSend;
-            if (memoryFilesContext || similarSetupsContext || learningInjection) {
+            if (memoryFilesContext || similarSetupsContext || learningInjection || predicateGate?.note) {
                 const contextParts: string[] = [];
                 if (memoryFilesContext) contextParts.push(memoryFilesContext);
                 if (similarSetupsContext) contextParts.push(similarSetupsContext);
                 if (learningInjection) contextParts.push(learningInjection);
+                if (predicateGate?.note) contextParts.push(predicateGate.note);
                 enhancedPrompt = `${contextParts.join('\n\n')}\n\n${promptToSend}`;
             }
 
@@ -2600,7 +2626,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             )),
                             // model side-effects — proposals + custom tools
                             // land on the message as ToolAction status rows.
-                            { onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); } },
+                            {
+                                onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); },
+                                // Rebuttal rounds otherwise carry no retrieved
+                                // memory at all. Same runId slice as the openings,
+                                // so the per-run holdout applies here too.
+                                rebuttalMemoryContext,
+                            },
                         );
                     }
 
@@ -2946,6 +2978,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         effectiveTradingStyle,
                         finalSymbol,
                         capturedGateResult,
+                        // A fired AVOID predicate caps the verdict in code, the
+                        // same way the gate does — prose alone left it optional.
+                        predicateCeiling: predicateGate?.ceiling,
                         teamSeatFor,
                         runGroupMemberPersonas,
                         memoryQuery,

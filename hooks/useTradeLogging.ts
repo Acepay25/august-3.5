@@ -281,10 +281,14 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             // Discipline tags (Batch 5): quick-tap at capture time; R-multiple
             // computed deterministically when a leveraged percent exists.
             ...feedback.journalTags,
+            // `feedback.pnlPercent` is the LEVERAGED account percent while the
+            // entry→SL distance is a raw price move, so the leverage the row is
+            // saved with has to divide out or R is inflated by that factor.
             rMultiple: computeRMultiple(
                 message.analysis?.entryPoints?.[0]?.price,
                 message.analysis?.stopLoss,
                 feedback.pnlPercent,
+                activeConversationLeverage || DEFAULT_LEVERAGE,
             ),
         };
 

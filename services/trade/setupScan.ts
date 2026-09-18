@@ -74,8 +74,10 @@ export const rsiSeries = (candles: ScanCandle[], period = 14): number[] => {
     return out;
 };
 
-/** SMA over closes (NaN until the window fills). */
-const smaSeries = (values: number[], period: number): number[] =>
+/** SMA over closes (NaN until the window fills). Exported for
+ *  services/analysis/skillPredicate, which needs an SMA over VOLUME too and
+ *  must not re-derive window math a second time. */
+export const smaSeries = (values: number[], period: number): number[] =>
     values.map((_, i) => {
         if (i < period - 1) return NaN;
         let s = 0;

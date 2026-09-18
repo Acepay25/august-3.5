@@ -44,7 +44,30 @@ export interface DisciplineAnalytics {
     /** Closed trades with a computed R-multiple. */
     rSample: number;
     avgR: number | null;
+    /**
+     * Excursion coverage. `n` counts only trades whose candle validation
+     * measured a live-window MAE/MFE — a different, smaller population than
+     * `rSample`, so the means must never be read as portfolio-wide.
+     */
+    excursion: { n: number; meanMaePct: number | null; meanCapturePct: number | null };
 }
+
+/**
+ * Share of the best move the trade offered that was actually realized, in
+ * percent. Both operands are leveraged account percents, so the ratio is
+ * dimensionless and leverage cancels. Null when either side is unmeasured —
+ * which is every trade logged before the post-mortem began writing excursions.
+ * Floored at 0 (a stopped trade captured nothing) but deliberately not capped
+ * at 100, because a figure above it means the two measurements disagree and
+ * that is worth seeing rather than hiding.
+ */
+export const captureEfficiencyPct = (t: LoggedTrade): number | null => {
+    const best = t.maxFavorableExcursion;
+    const realized = t.pnlPercent;
+    if (typeof best !== 'number' || !Number.isFinite(best) || best <= 0) return null;
+    if (typeof realized !== 'number' || !Number.isFinite(realized)) return null;
+    return Math.round(Math.max(0, (realized / best) * 100) * 10) / 10;
+};
 
 const isClosed = (t: LoggedTrade): boolean =>
     t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
@@ -67,7 +90,7 @@ const buildRow = (label: string, trades: LoggedTrade[]): DisciplineRow => {
     const losses = closed.filter(t => t.outcome === TradeOutcome.LOSS);
     const grossWin = wins.reduce((s, t) => s + pnlUsd(t), 0);
     const grossLoss = Math.abs(losses.reduce((s, t) => s + pnlUsd(t), 0));
-    const rs = closed.map(t => t.rMultiple).filter((r): r is number => typeof r === 'number' && Number.isFinite(r));
+    const rs = closed.map(effectiveRMultiple).filter((r): r is number => r !== undefined);
     return {
         label,
         n: closed.length,
@@ -140,7 +163,13 @@ export const buildDisciplineAnalytics = (trades: LoggedTrade[]): DisciplineAnaly
         if (peaked && running < 0) givebackDays.push(running);
     }
 
-    const rs = trades.filter(isClosed).map(t => t.rMultiple).filter((r): r is number => typeof r === 'number' && Number.isFinite(r));
+    const rs = trades.filter(isClosed).map(effectiveRMultiple).filter((r): r is number => r !== undefined);
+
+    // Excursions exist only where the post-mortem's candle validation resolved
+    // an exit, so this is a subset — averaging it against the whole book would
+    // silently invent the missing rows as zero.
+    const mae = trades.map(t => t.maxAdverseExcursion).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const capture = trades.map(captureEfficiencyPct).filter((v): v is number => v !== null);
 
     return {
         adherence: {
@@ -155,18 +184,33 @@ export const buildDisciplineAnalytics = (trades: LoggedTrade[]): DisciplineAnaly
         giveback: { days: givebackDays.length, dayPnls: givebackDays },
         rSample: rs.length,
         avgR: rs.length > 0 ? rs.reduce((s, r) => s + r, 0) / rs.length : null,
+        excursion: {
+            n: mae.length,
+            meanMaePct: mae.length > 0 ? Math.round((mae.reduce((s, v) => s + v, 0) / mae.length) * 10) / 10 : null,
+            meanCapturePct: capture.length > 0
+                ? Math.round((capture.reduce((s, v) => s + v, 0) / capture.length) * 10) / 10
+                : null,
+        },
     };
 };
 
 /**
- * Realized R-multiple from the leveraged percents: pnlPercent ÷ stop-move
- * percent (entry→SL distance). Deterministic, and undefined when either side
- * is missing — never a fabricated 0R.
+ * Realized R-multiple from a LEVERAGED account percent.
+ *
+ * `pnlPercent` on a trade row is the leveraged figure (see
+ * `LoggedTrade.pnlPercent`, and `OutcomeAutopilotService.computePnLFromPrice`
+ * which derives it through `leveragedMovePercent`), but an entry→SL distance is
+ * inherently a raw price move. Dividing one by the other silently multiplies R
+ * by the leverage — a genuine −1R on a 20× position used to be persisted as
+ * −20R. Supplying the trade's leverage removes that factor; omitting it falls
+ * back to 1×, which is correct for unleveraged rows and keeps pre-existing
+ * callers and fixtures reading the same way they always did.
  */
 export const computeRMultiple = (
     entry: string | undefined,
     stopLoss: string | undefined,
     pnlPercent: number | undefined,
+    leverage?: number,
 ): number | undefined => {
     const num = (v?: string): number | undefined => {
         if (!v) return undefined;
@@ -178,6 +222,22 @@ export const computeRMultiple = (
     if (!e || !s || typeof pnlPercent !== 'number' || !Number.isFinite(pnlPercent)) return undefined;
     const stopMovePct = (Math.abs(e - s) / e) * 100;
     if (stopMovePct <= 0) return undefined;
-    const r = pnlPercent / stopMovePct;
+    const lev = typeof leverage === 'number' && leverage > 0 ? leverage : 1;
+    const r = pnlPercent / (stopMovePct * lev);
     return Number.isFinite(r) ? r : undefined;
+};
+
+/**
+ * The R to aggregate for one trade: the price-measured figure when the
+ * post-mortem's candle validation produced one, otherwise the log-time
+ * `rMultiple`. Deliberately no de-leveraging correction on the fallback —
+ * rows written before `computeRMultiple` learned about leverage would
+ * otherwise be divided twice, and a stale-but-single-counted number beats a
+ * double-corrected one.
+ */
+export const effectiveRMultiple = (t: LoggedTrade): number | undefined => {
+    const r = typeof t.realizedR === 'number' && Number.isFinite(t.realizedR)
+        ? t.realizedR
+        : t.rMultiple;
+    return typeof r === 'number' && Number.isFinite(r) ? r : undefined;
 };
