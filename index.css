@@ -924,6 +924,13 @@ body {
   .is-live:not(.is-speaking):not(.is-thinking) > .pixelArt,
   .is-live { animation: none; }
   .desk-tactile-pulse { animation: none; }
+  /* Added late: the running-turn edge and the live-feed ring are both infinite
+     and were not in the list above, and `animate-pulse` is applied directly in
+     JSX (nav working dot, reasoning row) where no rule of this file could
+     otherwise reach it. */
+  .reasoning-row[data-state="running"] { animation: none; border-color: rgba(255, 255, 255, 0.10); }
+  .beacon::after { display: none; }
+  [class*="animate-pulse"] { animation: none; }
 }
 
 /* User-toggleable equivalent of prefers-reduced-motion. When the
@@ -938,6 +945,13 @@ body.desk-idle-motion-off {
   .is-live:not(.is-speaking):not(.is-thinking) > .pixelArt,
   .is-live { animation: none; }
   .desk-tactile-pulse { animation: none; }
+  /* Added late: the running-turn edge and the live-feed ring are both infinite
+     and were not in the list above, and `animate-pulse` is applied directly in
+     JSX (nav working dot, reasoning row) where no rule of this file could
+     otherwise reach it. */
+  .reasoning-row[data-state="running"] { animation: none; border-color: rgba(255, 255, 255, 0.10); }
+  .beacon::after { display: none; }
+  [class*="animate-pulse"] { animation: none; }
 }
 .debate-seat-modal {
   position: absolute;

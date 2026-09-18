@@ -2103,8 +2103,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             {!isPanel && (
                                 <ModelPicker providers={providers} value={selectedChatModel} onChange={changeSoloModel} mode="provider-model" onRefreshModels={onRefreshModels} compact />
                             )}
-                            <button type="button" onClick={() => setShowEffortMenu(v => !v)} aria-label="Thinking effort"
-                                aria-expanded={showEffortMenu}
+                            <button type="button" onClick={() => setShowEffortMenu(v => !v)}
+                                aria-label={`Thinking effort: ${effortChoiceOf(effort).label}`}
+                                aria-expanded={showEffortMenu} aria-haspopup="menu"
                                 title={`Thinking effort: ${effortChoiceOf(effort).label}`}
                                 className="flex items-center gap-1.5 rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
                                 <Brain className="h-3.5 w-3.5" />
@@ -2113,16 +2114,36 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${showEffortMenu ? 'rotate-180' : ''}`} />
                             </button>
                             {showEffortMenu && (
-                                <div className="absolute bottom-8 right-0 z-30 w-36 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="effort-menu" role="menu" aria-label="Thinking effort">
-                                    {EFFORT_CHOICES.map(c => (
-                                        <button key={c.id} type="button" role="menuitemradio" aria-checked={effort === c.id}
-                                            onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
-                                            className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}>
-                                            {c.label}
-                                            <EffortMeter bars={c.bars} tone={c.tone} />
-                                        </button>
-                                    ))}
-                                </div>
+                                <>
+                                    {/* The invisible-backdrop close the attach menu
+                                        already uses: a popover you can leave only by
+                                        picking an item is a trap. */}
+                                    <div className="fixed inset-0 z-20" aria-hidden onClick={() => setShowEffortMenu(false)} />
+                                    <div
+                                        className="absolute bottom-8 right-0 z-30 w-36 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl"
+                                        data-testid="effort-menu"
+                                        role="menu"
+                                        aria-label="Thinking effort"
+                                        onKeyDown={(e) => { if (e.key === 'Escape') setShowEffortMenu(false); }}
+                                    >
+                                        {EFFORT_CHOICES.map(c => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                role="menuitemradio"
+                                                aria-checked={effort === c.id}
+                                                // Focus lands on the current choice — that
+                                                // is what makes Escape and Tab reach the menu.
+                                                autoFocus={effort === c.id}
+                                                onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
+                                                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
+                                            >
+                                                {c.label}
+                                                <EffortMeter bars={c.bars} tone={c.tone} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
                             )}
                         </div>
                         <button
