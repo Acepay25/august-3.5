@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { AutomationConfig, AutomationInputSource, AutomationMode, AutomationModelPick } from '../../types/automation';
 import { parseCron, nextCronTime, humanizeCron } from '../../services/automation/cronParser';
 import { ProviderConfig } from '../../types/provider';
@@ -262,7 +263,9 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/60">
                     <h3 className="text-sm font-bold text-white tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
-                    <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors text-lg leading-none" aria-label="Close">✕</button>
+                    <button onClick={onClose} className="rounded-lg p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors" aria-label="Close">
+                        <X className="h-4 w-4" />
+                    </button>
                 </div>
 
                 <div className="p-5 space-y-4">

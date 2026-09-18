@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { Trash2, SlidersHorizontal, Bot as BotIcon, Users, Swords, GraduationCap, ChevronDown, Repeat, SearchX, Plus } from 'lucide-react';
+import { AlertTriangle, Trash2, SlidersHorizontal, Bot as BotIcon, Users, Swords, GraduationCap, ChevronDown, Repeat, SearchX, Plus } from 'lucide-react';
 import { BotAvatar, PixelAvatarFigure } from './BotAvatar';
 import { EmptyState } from '../ui/EmptyState';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
@@ -576,9 +576,9 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                                 <span
                                                     data-testid={`roster-attention-${bot.id}`}
                                                     title={attentionMap[bot.id]}
-                                                    className="shrink-0 text-[10px] leading-none text-zinc-400"
+                                                    className="shrink-0 text-amber-400"
                                                 >
-                                                    ⚠
+                                                    <AlertTriangle className="h-3 w-3" />
                                                 </span>
                                             )}
                                         </span>

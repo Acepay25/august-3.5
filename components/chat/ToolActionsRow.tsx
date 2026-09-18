@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Brain, Wrench, FilePlus2, Sparkles, NotebookPen } from 'lucide-react';
+import { AlertTriangle, Brain, Wrench, FilePlus2, Sparkles, NotebookPen } from 'lucide-react';
 import type { ToolAction } from '../../types/message';
 
 export interface ToolActionsRowProps {
@@ -115,7 +115,8 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                     )
                     : (
                         <>
-                            <span className="w-3.5 shrink-0 text-center">⚠</span>
+                            <span className="sr-only">⚠</span>
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
                             <span className="min-w-0 flex-1 truncate">
                                 <span className="font-semibold">Blocked</span>
                                 {' — '}{who ? `${who}: ` : ''}{g.tool} rejected, nothing stored

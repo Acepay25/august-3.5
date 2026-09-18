@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Brain, Camera, Check, ChevronDown, Copy, FileText, Gavel, History, LayoutGrid, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
+import { Brain, Camera, Check, CheckCircle, ChevronDown, Copy, FileText, Gavel, History, LayoutGrid, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
@@ -186,6 +186,8 @@ interface TradeChatPanelProps {
     onToggleDeskScene?: () => void;
     isDeskSceneOpen?: boolean;
     hasDeskSceneMessage?: boolean;
+    /** Triggers a fresh discovery of models from configured providers. */
+    onRefreshModels?: () => Promise<void>;
 }
 
 const TRADE_TOOLS = [
@@ -335,6 +337,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
+    onRefreshModels,
 }) => {
     // Session state lives in the module store (chatStore) so an in-flight
     // answer survives switching to another surface tab and back — the panel
@@ -1348,8 +1351,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             ?? provider;
         if (!config) return;
         // Strip the leading machine-tag ([HARNESS SIGNAL …] / [HARNESS
-        // TRIGGER …]) so the user sees a readable ⚡ line, not the raw envelope.
-        const noticeLine = `⚡ ${signalText.split('\n')[0].replace(/^\[[^\]]*\]\s*/, '').trim()}`;
+        // TRIGGER …]) so the user sees a readable line, not the raw envelope.
+        const noticeLine = signalText.split('\n')[0].replace(/^\[[^\]]*\]\s*/, '').replace(/^⚡\s*/, '').trim();
         const noticeEntry: LiveEntry = { id: newId('n'), role: 'ai', text: '', tools: [noticeLine], notice: true };
         const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true };
         mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: [...s.entries, noticeEntry, aiEntry] }));
@@ -1697,6 +1700,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         {(sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0) < PANEL_MAX_MODELS && (
                             <ModelPicker providers={providers} value="" mode="provider-model" onChange={addPanelSeat} compact
                                 disabledValues={new Set((sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: { providerId: string; modelId: string }) => `${m.providerId}::${m.modelId}`))}
+                                onRefreshModels={onRefreshModels}
                                 placeholder="+ add model" />
                         )}
                         <button type="button" onClick={() => setPanelPickerFor(null)}
@@ -1771,8 +1775,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 )}
                             </div>
                         ) : e.notice ? (
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500" data-testid="chat-notice">
-                                {e.tools[0] ?? 'Harness event'}
+                            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400" data-testid="chat-notice">
+                                <span className="sr-only">⚡ </span>
+                                <Zap className="h-3 w-3 shrink-0" />
+                                <span>{e.tools[0] ?? 'Harness event'}</span>
                             </p>
                         ) : (
                             <div className="group/msg space-y-1">
@@ -1833,7 +1839,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     flush('tools-tail');
                                     return (
                                         <div className="border-l border-white/[0.08] pl-3 ml-1 my-1.5 space-y-1.5">
-                                            {hasWork && <AnalyzedRow running={running}>{nodes}</AnalyzedRow>}
+                                            {hasWork && <AnalyzedRow running={running} toolsCount={e.tools.length}>{nodes}</AnalyzedRow>}
                                             {hasActions && <ToolActionsRow actions={e.actions!} />}
                                         </div>
                                     );
@@ -1897,7 +1903,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     </div>
                                 )}
                                 {e.proposal && proposalStateOf(e.id) === 'logged' && (
-                                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">✓ Logged as an open trade — the harness will score it against the outcome.</p>
+                                    <p className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                                        <CheckCircle className="h-3 w-3 shrink-0" />
+                                        <span>✓ Logged as an open trade — the harness will score it against the outcome.</span>
+                                    </p>
                                 )}
                             </div>
                         )}
@@ -2008,7 +2017,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         )}
                         <div className="relative ml-auto flex items-center gap-1">
                             {!isPanel && (
-                                <ModelPicker providers={providers} value={selectedChatModel} onChange={changeSoloModel} mode="provider-model" compact />
+                                <ModelPicker providers={providers} value={selectedChatModel} onChange={changeSoloModel} mode="provider-model" onRefreshModels={onRefreshModels} compact />
                             )}
                             <button type="button" onClick={() => setShowEffortMenu(v => !v)} aria-label="Thinking effort"
                                 className="flex items-center gap-1 rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">

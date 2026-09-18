@@ -1,4 +1,5 @@
 import React from 'react';
+import { X } from 'lucide-react';
 import { Message } from '../../types';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -71,7 +72,9 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
             <div className="text-xs font-medium text-zinc-200">Compare runs</div>
             <div className="text-[10px] text-zinc-500">This run vs the previous analysis in the thread</div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">✕</button>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-white/10 bg-zinc-950/60 px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500">

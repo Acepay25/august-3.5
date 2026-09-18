@@ -66,6 +66,33 @@ describe('useModelCatalogRefresh (background model refresh)', () => {
         );
     });
 
+    it('prunes obsolete models omitted by the provider and updates selectedModel if removed', async () => {
+        discover.mockResolvedValue(['new-model', 'still-supported']);
+        const onUpdateProvider = vi.fn(async () => {});
+        const configs = [
+            provider({
+                id: 'p1',
+                models: ['deprecated-model', 'still-supported'],
+                selectedModel: 'deprecated-model',
+            }),
+        ];
+
+        const utils = renderHook(() => useModelCatalogRefresh(configs, onUpdateProvider));
+        await act(async () => {
+            await utils.result.current.refreshNow();
+        });
+        await waitForHook(() => {
+            expect(onUpdateProvider).toHaveBeenCalled();
+        });
+        expect(onUpdateProvider).toHaveBeenCalledWith(
+            'p1',
+            {
+                models: ['new-model', 'still-supported'],
+                selectedModel: 'new-model',
+            },
+        );
+    });
+
     it('does not call update when the catalog is unchanged', async () => {
         discover.mockResolvedValue(['model-a']);
         const onUpdateProvider = vi.fn(async () => {});

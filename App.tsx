@@ -251,7 +251,7 @@ const App: React.FC = () => {
     // Background model-catalog refresh: every dropdown (composer, bots,
     // team seats, automations) stays on the provider's CURRENT model list —
     // a quiet boot + 6h sweep merges freshly discovered ids per provider.
-    useModelCatalogRefresh(providerConfigs, handleUpdateProvider);
+    const { refreshNow: refreshModelCatalog } = useModelCatalogRefresh(providerConfigs, handleUpdateProvider);
 
     // Dynamic model display map built from configured providers.
     // Replaces the legacy static modelIdToName / ocrModelIdToName constants —
@@ -3003,6 +3003,7 @@ const App: React.FC = () => {
                                     providers={providerConfigs}
                                     selectedChatModel={selectedChatModel}
                                     onSelectChatModel={setSelectedChatModel}
+                                    onRefreshModels={refreshModelCatalog}
                                     sidebarOpen={surface === 'trade' && tradeSidebarOpen}
                                     modeRequest={tradeModeRequest ?? undefined}
                                     activeUsername={activeUsername ?? undefined}

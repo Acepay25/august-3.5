@@ -95,25 +95,60 @@ function devProviderProxy() {
           if (request.discover) {
             const isGemini = usesGoogleGeminiDiscovery(baseUrl, config.apiFormat);
             const isAnthropic = config.apiFormat === 'messages' && !isGemini;
-            const discoverUrl = isGemini
-              ? googleModelsUrl(baseUrl, apiKey)
-              : `${baseUrl}/models`;
-            const discoverHeaders: Record<string, string> = {};
+            const discoverHeaders: Record<string, string> = {
+              Accept: 'application/json',
+            };
             if (isAnthropic) {
               discoverHeaders['x-api-key'] = apiKey;
               discoverHeaders['anthropic-version'] = '2023-06-01';
             } else if (!isGemini && apiKey && apiKey !== 'not-needed') {
               discoverHeaders.Authorization = `Bearer ${apiKey}`;
             }
-            const upstream = await fetch(discoverUrl, {
-              method: 'GET',
-              headers: discoverHeaders,
-              signal: AbortSignal.timeout(15000),
-            });
-            const text = await upstream.text();
+
+            const candidateUrls: string[] = [];
+            if (isGemini) {
+              candidateUrls.push(googleModelsUrl(baseUrl, apiKey));
+            } else {
+              candidateUrls.push(`${baseUrl}/models`);
+              if (baseUrl.endsWith('/v1')) {
+                const withoutV1 = baseUrl.slice(0, -3);
+                if (withoutV1) candidateUrls.push(`${withoutV1}/models`);
+              } else {
+                candidateUrls.push(`${baseUrl}/v1/models`);
+              }
+              if (isPrivateOrLoopbackHost(parsed.hostname)) {
+                candidateUrls.push(`${baseUrl.replace(/\/v1$/, '')}/api/tags`);
+              }
+            }
+
+            let lastStatus = 0;
+            let lastBody = '';
+            let lastOk = false;
+
+            for (const discoverUrl of [...new Set(candidateUrls)]) {
+              try {
+                const upstream = await fetch(discoverUrl, {
+                  method: 'GET',
+                  headers: discoverHeaders,
+                  signal: AbortSignal.timeout(15000),
+                });
+                const text = await upstream.text();
+                lastStatus = upstream.status;
+                lastBody = text;
+                lastOk = upstream.ok;
+                if (upstream.ok || upstream.status !== 404) {
+                  break;
+                }
+              } catch (err: any) {
+                lastStatus = 500;
+                lastBody = err?.message || 'Discovery request failed';
+                lastOk = false;
+              }
+            }
+
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ ok: upstream.ok, status: upstream.status, body: text }));
+            res.end(JSON.stringify({ ok: lastOk, status: lastStatus, body: lastBody }));
             return;
           }
           const headers: Record<string, string> = { 'Content-Type': 'application/json' };

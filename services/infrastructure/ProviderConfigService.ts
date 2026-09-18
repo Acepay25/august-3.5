@@ -318,27 +318,79 @@ function parseDiscoverErrorBody(raw: string): string {
     }
 }
 
-function parseDiscoveredModelIds(body: unknown): string[] {
-    const ids: string[] = [];
-    const data = (body as { data?: unknown[] })?.data;
-    if (Array.isArray(data)) {
-        for (const m of data) {
-            if (m && typeof (m as { id?: unknown }).id === 'string' && (m as { id: string }).id.trim()) {
-                ids.push((m as { id: string }).id.trim());
-            }
+function extractModelId(item: unknown): string | null {
+    if (typeof item === 'string') {
+        const trimmed = item.trim();
+        return trimmed ? trimmed.replace(/^models\//, '') : null;
+    }
+    if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
+        const candidate = obj.id ?? obj.name ?? obj.model ?? obj.model_name ?? obj.value;
+        if (typeof candidate === 'string') {
+            const trimmed = candidate.trim();
+            return trimmed ? trimmed.replace(/^models\//, '') : null;
         }
-    } else {
-        const models = (body as { models?: unknown[] })?.models;
-        if (Array.isArray(models)) {
-            for (const m of models) {
-                const name = (m as { name?: unknown })?.name;
-                if (typeof name === 'string' && name.trim()) {
-                    ids.push(name.trim().replace(/^models\//, ''));
+    }
+    return null;
+}
+
+export function parseDiscoveredModelIds(body: unknown): string[] {
+    const ids: string[] = [];
+
+    // 1. Direct top-level array: ["model1", "model2"] or [{ id: "model1" }, ...]
+    if (Array.isArray(body)) {
+        for (const item of body) {
+            const id = extractModelId(item);
+            if (id) ids.push(id);
+        }
+        return [...new Set(ids)];
+    }
+
+    if (body && typeof body === 'object') {
+        const dict = body as Record<string, unknown>;
+
+        // 2. Standard wrapper properties: data (OpenAI/Anthropic), models (Gemini/Ollama), result, model_list, items, list
+        const candidateArrays = [
+            dict.data,
+            dict.models,
+            dict.result,
+            dict.model_list,
+            dict.items,
+            dict.list,
+        ];
+
+        for (const arr of candidateArrays) {
+            if (Array.isArray(arr)) {
+                for (const item of arr) {
+                    const id = extractModelId(item);
+                    if (id) ids.push(id);
+                }
+                if (ids.length > 0) {
+                    return [...new Set(ids)];
                 }
             }
         }
     }
+
     return [...new Set(ids)];
+}
+
+export function normalizeBaseUrlForModels(rawUrl: string): string {
+    const base = assertValidProviderUrl(rawUrl);
+    let parsed: URL;
+    try {
+        parsed = new URL(base);
+    } catch {
+        return base.replace(/\/+$/, '');
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    for (const suffix of ['/chat/completions', '/messages', '/responses', '/models', '/chat', '/completions']) {
+        if (parsed.pathname.endsWith(suffix)) {
+            parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
+            break;
+        }
+    }
+    return parsed.toString().replace(/\/$/, '');
 }
 
 function throwDiscoverHttpError(status: number, rawBody: string): never {
@@ -348,6 +400,25 @@ function throwDiscoverHttpError(status: number, rawBody: string): never {
             ? `Discovery failed (HTTP ${status}): ${detail}`
             : `Discovery failed (HTTP ${status}) — check the API key and base URL.`
     );
+}
+
+export function getDiscoveryCandidateUrls(baseUrl: string, isGemini: boolean, apiKey: string): string[] {
+    if (isGemini) {
+        return [googleModelsUrl(baseUrl, apiKey)];
+    }
+    const urls: string[] = [];
+    urls.push(`${baseUrl}/models`);
+    if (baseUrl.endsWith('/v1')) {
+        const withoutV1 = baseUrl.slice(0, -3);
+        if (withoutV1) urls.push(`${withoutV1}/models`);
+    } else {
+        urls.push(`${baseUrl}/v1/models`);
+    }
+    if (isLocalBaseUrl(baseUrl)) {
+        const root = baseUrl.replace(/\/v1$/, '');
+        urls.push(`${root}/api/tags`);
+    }
+    return [...new Set(urls)];
 }
 
 /**
@@ -387,12 +458,13 @@ async function fetchDiscoverPayload(config: {
         throw new Error(result.message || 'Could not reach the provider — check the base URL and your network.');
     }
 
-    const base = assertValidProviderUrl(config.baseUrl);
+    const base = normalizeBaseUrlForModels(config.baseUrl);
     const key = (config.apiKey || '').trim();
     const isGemini = usesGoogleGeminiDiscovery(base, config.apiFormat);
     const isAnthropic = config.apiFormat === 'messages' && !isGemini;
-    const url = isGemini ? googleModelsUrl(base, key) : `${base}/models`;
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+        Accept: 'application/json',
+    };
     if (isAnthropic) {
         headers['x-api-key'] = key;
         headers['anthropic-version'] = '2023-06-01';
@@ -400,20 +472,35 @@ async function fetchDiscoverPayload(config: {
         headers.Authorization = `Bearer ${key}`;
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    try {
-        const res = await fetch(url, { headers, signal: controller.signal });
-        const body = await res.text();
-        return { status: res.status, body };
-    } catch (e) {
-        if ((e as Error)?.name === 'AbortError') {
-            throw new Error('Model discovery timed out — check the base URL.', { cause: e });
+    const candidateUrls = getDiscoveryCandidateUrls(base, isGemini, key);
+    let lastResult = { status: 0, body: '' };
+
+    for (const candidateUrl of candidateUrls) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+            const res = await fetch(candidateUrl, { headers, signal: controller.signal });
+            const body = await res.text();
+            lastResult = { status: res.status, body };
+            // Success or explicit auth/validation error: stop and return.
+            // Only retry candidate URLs if the endpoint was Not Found (404).
+            if ((res.status >= 200 && res.status < 300) || res.status !== 404) {
+                return lastResult;
+            }
+        } catch (e) {
+            if ((e as Error)?.name === 'AbortError') {
+                throw new Error('Model discovery timed out — check the base URL.', { cause: e });
+            }
+            lastResult = { status: 0, body: (e as Error)?.message || '' };
+        } finally {
+            clearTimeout(timer);
         }
-        throw new Error('Could not reach the provider — check the base URL and your network.', { cause: e });
-    } finally {
-        clearTimeout(timer);
     }
+
+    if (lastResult.status === 0 && !lastResult.body) {
+        throw new Error('Could not reach the provider — check the base URL and your network.');
+    }
+    return lastResult;
 }
 
 export async function discoverProviderModels(config: {

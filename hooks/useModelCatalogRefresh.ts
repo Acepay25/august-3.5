@@ -14,20 +14,19 @@
  * succeeds.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProviderConfig } from '../types/provider';
 import { discoverProviderModels } from '../services/infrastructure/ProviderConfigService';
 import { getPreferenceObject, setPreferenceObject } from '../services/infrastructure/PreferencesService';
-import { mergeDiscoveredModels } from '../utils/providerUtils';
+import { mergeDiscoveredModels, sortModelsFreeFirst } from '../utils/providerUtils';
+import { isLocalBaseUrl } from '../shared/providerRequestPolicy.cjs';
 
 const LAST_SWEEP_KEY = 'model_catalog_sweep_v1';
-/** Minimum gap between background sweeps (6h). */
+/** Minimum gap between periodic background sweeps (6h) while app stays open. */
 const SWEEP_INTERVAL_MS = 6 * 3_600_000;
 /** After a sweep where EVERY provider failed (e.g. the app booted
  *  offline), retry sooner instead of waiting out the full 6h. */
 const FAILURE_RETRY_MS = 15 * 60_000;
-/** Stagger between providers — stay under per-key rate limits. */
-const PROVIDER_STAGGER_MS = 1_500;
 
 interface SweepState {
     lastSweepAt: number;
@@ -42,6 +41,8 @@ const readSweepState = async (): Promise<SweepState> =>
 export interface UseModelCatalogRefreshResult {
     /** Force a sweep now (also resets the interval timer). */
     refreshNow: () => Promise<void>;
+    /** True while a model discovery sweep is currently in progress. */
+    isSweeping: boolean;
 }
 
 export const useModelCatalogRefresh = (
@@ -55,38 +56,56 @@ export const useModelCatalogRefresh = (
     const updateRef = useRef(onUpdateProvider);
     updateRef.current = onUpdateProvider;
     const sweepingRef = useRef(false);
+    const [isSweeping, setIsSweeping] = useState(false);
 
     const sweep = useCallback(async (): Promise<void> => {
         if (sweepingRef.current) return;
         sweepingRef.current = true;
+        setIsSweeping(true);
+        window.dispatchEvent(new CustomEvent('august:model-refresh-start'));
+
+        let successes = 0;
+        let freshCount = 0;
         try {
             const targets = configsRef.current.filter(
-                p => p.isEnabled && (p.apiKey || '').trim().length > 0 && (p.baseUrl || '').trim().length > 0,
+                p => p.isEnabled && (p.baseUrl || '').trim().length > 0 && ((p.apiKey || '').trim().length > 0 || isLocalBaseUrl(p.baseUrl)),
             );
-            let successes = 0;
-            for (const provider of targets) {
-                try {
+
+            // Query enabled providers concurrently for fast, responsive discovery
+            const results = await Promise.allSettled(
+                targets.map(async provider => {
                     const discovered = await discoverProviderModels({
                         baseUrl: provider.baseUrl,
                         apiKey: provider.apiKey,
                         apiFormat: provider.apiFormat,
                     });
-                    successes += 1;
+                    const freshModels = sortModelsFreeFirst(discovered);
+                    const isUnchanged = provider.models.length === freshModels.length && provider.models.every((m, idx) => m === freshModels[idx]);
                     const existing = new Set(provider.models);
                     const fresh = discovered.filter(m => !existing.has(m));
-                    if (fresh.length > 0) {
-                        // Merge-only: manual models and ordering survive;
-                        // every dropdown re-derives from configs on update.
-                        await updateRef.current(provider.id, { models: mergeDiscoveredModels(provider.models, discovered) });
+                    if (!isUnchanged && freshModels.length > 0) {
+                        // The discovered models from <base url>/models are authoritative:
+                        // fresh models are added and dropped/deprecated models are pruned.
+                        const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = { models: freshModels };
+                        if (provider.selectedModel && !freshModels.includes(provider.selectedModel)) {
+                            updates.selectedModel = freshModels[0] || '';
+                        }
+                        await updateRef.current(provider.id, updates);
                     }
-                } catch {
-                    // Silent per provider: offline, unsupported /models, rate
-                    // limit — the stored list stays authoritative until a
-                    // sweep succeeds. A total failure only shortens the NEXT
-                    // retry window (below), never surfaces in the UI.
+                    return { providerId: provider.id, freshCount: fresh.length };
+                }),
+            );
+
+            for (let i = 0; i < results.length; i++) {
+                const r = results[i];
+                if (r.status === 'fulfilled') {
+                    successes += 1;
+                    freshCount += r.value.freshCount;
+                } else {
+                    console.warn(`[useModelCatalogRefresh] Discovery failed for ${targets[i]?.name || targets[i]?.id}:`, r.reason);
                 }
-                await new Promise<void>(resolve => setTimeout(resolve, PROVIDER_STAGGER_MS));
             }
+
             // Every provider failed → record it so the next window retries
             // in 15min instead of waiting out the full 6h (booting offline
             // should not pin stale dropdowns for six hours).
@@ -94,26 +113,45 @@ export const useModelCatalogRefresh = (
             await setPreferenceObject<SweepState>(LAST_SWEEP_KEY, { lastSweepAt: Date.now(), lastSweepFailed: totalFailure });
         } finally {
             sweepingRef.current = false;
+            setIsSweeping(false);
+            window.dispatchEvent(new CustomEvent('august:model-refresh-end', { detail: { successes, freshCount } }));
         }
     }, []);
 
     useEffect(() => {
         let cancelled = false;
-        const maybeSweep = async (): Promise<void> => {
+
+        // Requirement: execute automatically every time the user opens the app
+        // Small boot delay (3s) so the first paint never competes with the sweep.
+        const boot = setTimeout(() => {
+            if (!cancelled) {
+                void sweep();
+            }
+        }, 3_000);
+
+        // While the app remains open continuously, sweep periodically every 6h
+        const interval = setInterval(async () => {
             const state = await readSweepState();
             const minGap = state.lastSweepFailed ? FAILURE_RETRY_MS : SWEEP_INTERVAL_MS;
             if (cancelled || Date.now() - state.lastSweepAt < minGap) return;
             await sweep();
+        }, 60_000);
+
+        // Event listener for manual refresh requests from model dropdowns
+        const handleRefreshEvent = () => {
+            if (!cancelled) {
+                void sweep();
+            }
         };
-        // Small boot delay so the first paint never competes with the sweep.
-        const boot = setTimeout(() => { void maybeSweep(); }, 4_000);
-        const interval = setInterval(() => { void maybeSweep(); }, SWEEP_INTERVAL_MS);
+        window.addEventListener('august:refresh-models', handleRefreshEvent);
+
         return () => {
             cancelled = true;
             clearTimeout(boot);
             clearInterval(interval);
+            window.removeEventListener('august:refresh-models', handleRefreshEvent);
         };
     }, [sweep]);
 
-    return { refreshNow: sweep };
+    return { refreshNow: sweep, isSweeping };
 };

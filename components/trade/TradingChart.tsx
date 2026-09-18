@@ -24,6 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, Settings } from 'lucide-react';
 import {
     createChart,
     CandlestickSeries,
@@ -1007,10 +1008,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     timeframes the bar shows (the active one is locked in). */}
                 <button type="button" onClick={() => setTfPickerOpen(v => !v)} aria-label="Customize timeframes" aria-expanded={tfPickerOpen}
                     title="Choose which timeframes show in this bar"
-                    className={`ml-0.5 h-6 w-6 rounded-control text-[12px] leading-none transition-colors ${
+                    className={`ml-0.5 h-6 w-6 flex items-center justify-center rounded-control transition-colors ${
                         tfPickerOpen ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                     }`}>
-                    ⚙
+                    <Settings className="h-3.5 w-3.5" />
                 </button>
                 {tfPickerOpen && (
                     <>
@@ -1027,7 +1028,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                                                 shown ? 'text-zinc-100' : 'text-zinc-500'
                                             }`}>
                                             {tf}
-                                            <span aria-hidden>{shown ? '✓' : ''}</span>
+                                            <span aria-hidden>{shown ? <Check className="h-3 w-3 text-cyan-400" /> : null}</span>
                                         </button>
                                     );
                                 })}

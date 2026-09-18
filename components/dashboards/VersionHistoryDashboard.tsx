@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { APP_VERSION } from '../../constants/version';
@@ -300,17 +301,19 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         <div className="flex gap-1">
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, true)}
-                                                className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                className="p-1 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
                                                 title="Mark helpful"
+                                                aria-label="Mark helpful"
                                             >
-                                                👍
+                                                <ThumbsUp className="h-3 w-3" />
                                             </button>
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, false)}
-                                                className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                className="p-1 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
                                                 title="Mark not helpful"
+                                                aria-label="Mark not helpful"
                                             >
-                                                👎
+                                                <ThumbsDown className="h-3 w-3" />
                                             </button>
                                         </div>
                                     </div>

@@ -307,5 +307,96 @@ describe('ProviderConfigService', () => {
         (window as unknown as { electronAPI?: unknown }).electronAPI = previous;
       }
     });
+
+    it('cleanses baseUrl ending in /models or /chat/completions so it calls <base url>/models', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        okResponse({ data: [{ id: 'model-clean-1' }] })
+      );
+      const models1 = await discoverProviderModels({
+        baseUrl: 'https://api.openai.com/v1/models',
+        apiKey: 'sk-test',
+        apiFormat: 'chat_completions',
+      });
+      expect(models1).toEqual(['model-clean-1']);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/models');
+
+      const models2 = await discoverProviderModels({
+        baseUrl: 'https://api.openai.com/v1/chat/completions',
+        apiKey: 'sk-test',
+        apiFormat: 'chat_completions',
+      });
+      expect(models2).toEqual(['model-clean-1']);
+      expect(fetchMock.mock.calls[1][0]).toBe('https://api.openai.com/v1/models');
+    });
+
+    it('parses top-level arrays of strings or objects from <base url>/models', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        okResponse(['model-alpha', 'model-beta'])
+      );
+      const stringArrModels = await discoverProviderModels({
+        baseUrl: 'https://api.local.ai/v1',
+        apiKey: 'sk-test',
+        apiFormat: 'chat_completions',
+      });
+      expect(stringArrModels).toEqual(['model-alpha', 'model-beta']);
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        okResponse([{ id: 'obj-alpha' }, { name: 'obj-beta' }])
+      );
+      const objArrModels = await discoverProviderModels({
+        baseUrl: 'https://api.local.ai/v1',
+        apiKey: 'sk-test',
+        apiFormat: 'chat_completions',
+      });
+      expect(objArrModels).toEqual(['obj-alpha', 'obj-beta']);
+    });
+
+    it('falls back to candidate endpoints when the primary /models returns 404', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          text: async () => 'Not Found',
+        } as Response)
+        .mockResolvedValueOnce(
+          okResponse({ data: [{ id: 'fallback-model-1' }] })
+        );
+
+      const models = await discoverProviderModels({
+        baseUrl: 'https://api.openai.com',
+        apiKey: 'sk-test',
+        apiFormat: 'chat_completions',
+      });
+      expect(models).toEqual(['fallback-model-1']);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/models');
+      expect(fetchMock.mock.calls[1][0]).toBe('https://api.openai.com/v1/models');
+    });
+
+    it('falls back to /api/tags for local endpoints when /models returns 404', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          text: async () => 'Not Found',
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          text: async () => 'Not Found',
+        } as Response)
+        .mockResolvedValueOnce(
+          okResponse({ models: [{ name: 'llama3:latest' }] })
+        );
+
+      const models = await discoverProviderModels({
+        baseUrl: 'http://localhost:11434',
+        apiKey: '',
+        apiFormat: 'chat_completions',
+      });
+      expect(models).toEqual(['llama3:latest']);
+      expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:11434/models');
+      expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:11434/v1/models');
+      expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:11434/api/tags');
+    });
   });
 });

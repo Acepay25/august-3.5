@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CheckCircle } from 'lucide-react';
 import { clearThinkingLeakBin, loadThinkingLeakBin, ThinkingLeakEntry } from '../../utils/thinkingLeakBin';
 
 interface ErrorLog {
@@ -100,7 +101,10 @@ export const DiagnosticsPanel: React.FC = () => {
                     {globalError && renderError(globalError, 'Uncaught Error')}
                 </div>
             ) : (
-                <p className="text-xs text-zinc-500">No runtime errors recorded. ✓</p>
+                <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>No runtime errors recorded.</span>
+                </p>
             )}
 
             <div className="flex items-center justify-between pt-2">

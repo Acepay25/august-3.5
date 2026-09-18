@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import { Check, X } from 'lucide-react';
 import { BotAvatar } from './BotAvatar';
 import { SelectMenu } from '../shared/SelectMenu';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -119,9 +120,9 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         type="button"
                         onClick={onClose}
                         aria-label="Close new group dialog"
-                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
                     >
-                        ✕
+                        <X className="h-4 w-4" />
                     </button>
                 </div>
 
@@ -144,7 +145,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                                 checked ? 'border-zinc-200 bg-zinc-200' : 'border-zinc-600'
                                             }`}
                                         >
-                                            {checked && <span className="text-[9px] font-bold leading-none text-zinc-900">✓</span>}
+                                            {checked && <Check className="h-3 w-3 text-zinc-900 stroke-[3]" />}
                                         </span>
                                         <BotAvatar bot={bot} size={30} />
                                         <span className="min-w-0 flex-1">

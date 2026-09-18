@@ -17,6 +17,7 @@ import {
     writeFreeOnlyPref,
 } from '../../utils/providerUtils';
 import { ChevronRightIcon, ChevronDownIcon, CheckIcon } from './Icons';
+import { RotateCw, Check } from 'lucide-react';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
  *  re-positioned with the flyout's real size before the first paint). */
@@ -85,6 +86,8 @@ interface ModelPickerProps {
     disabledValues?: Set<string>;
     /** Show "Manage models" link at bottom. */
     onManageModels?: () => void;
+    /** Triggers a fresh discovery of models from configured providers. */
+    onRefreshModels?: () => Promise<void>;
     /** Trigger button label. If omitted, shows current selection text. */
     placeholder?: string;
     /** Extra CSS classes for the trigger button. */
@@ -106,6 +109,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     mode = 'provider-model',
     disabledValues,
     onManageModels,
+    onRefreshModels,
     placeholder = 'Select model',
     className = '',
     compact = false,
@@ -115,8 +119,49 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     const [hoveredProvider, setHoveredProvider] = useState<string | null>(null);
     const [anchor, setAnchor] = useState<AnchorRect | null>(null);
     const [flyoutPos, setFlyoutPos] = useState<FlyoutPos | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [justRefreshed, setJustRefreshed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const flyoutRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleStart = () => {
+            setIsRefreshing(true);
+            setJustRefreshed(false);
+        };
+        const handleEnd = () => {
+            setIsRefreshing(false);
+            setJustRefreshed(true);
+            const timer = setTimeout(() => setJustRefreshed(false), 2000);
+            return () => clearTimeout(timer);
+        };
+        window.addEventListener('august:model-refresh-start', handleStart);
+        window.addEventListener('august:model-refresh-end', handleEnd);
+        return () => {
+            window.removeEventListener('august:model-refresh-start', handleStart);
+            window.removeEventListener('august:model-refresh-end', handleEnd);
+        };
+    }, []);
+
+    const handleRefresh = useCallback(async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        setJustRefreshed(false);
+        try {
+            if (onRefreshModels) {
+                await onRefreshModels();
+                setIsRefreshing(false);
+                setJustRefreshed(true);
+                setTimeout(() => setJustRefreshed(false), 2000);
+            } else {
+                window.dispatchEvent(new CustomEvent('august:refresh-models'));
+            }
+        } catch {
+            setIsRefreshing(false);
+        }
+    }, [isRefreshing, onRefreshModels]);
 
     const readyProviders = providers.filter(isProviderReady);
 
@@ -288,11 +333,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     const catalogModels = mode !== 'provider-only' && freeOnly
         ? hoveredModels.filter(isFreeModelId)
         : hoveredModels;
-    const visibleModels = sortModelsFreeFirst(
-        hoveredProvider === currentProviderId && currentModelId && !catalogModels.includes(currentModelId)
-            ? [currentModelId, ...catalogModels]
-            : catalogModels,
-    );
+    const visibleModels = sortModelsFreeFirst(catalogModels);
 
     const handleFreeOnlyToggle = useCallback((next: boolean) => {
         setFreeOnly(next);
@@ -307,12 +348,11 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             const a = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
             setAnchor(a);
             setFlyoutPos(computeFlyoutPosition(a, 320, 360));
-            // Providers-first: no provider pre-hovered, so the flyout opens as
-            // a single provider column and models appear only on hover.
-            setHoveredProvider(null);
+            // Default hovered provider to currently selected provider or first ready
+            setHoveredProvider(currentProviderId || readyProviders[0]?.id || null);
         }
         setIsOpen(!isOpen);
-    }, [isOpen]);
+    }, [isOpen, currentProviderId, readyProviders]);
 
     return (
         <div ref={containerRef} className={`relative inline-block ${className}`}>
@@ -347,20 +387,41 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     }`}
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
                 >
-                    {mode !== 'provider-only' && (
-                        <label className="flex shrink-0 cursor-pointer items-center gap-2 border-b border-zinc-800 px-3 py-1.5 text-[11px] text-zinc-400 hover:text-zinc-200">
-                            <input
-                                type="checkbox"
-                                checked={freeOnly}
-                                onChange={(e) => handleFreeOnlyToggle(e.target.checked)}
-                                className="rounded border-zinc-600 bg-zinc-800 text-zinc-200 focus:ring-zinc-500/40"
-                            />
-                            Free models only
-                        </label>
-                    )}
+                    <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-1.5 text-[11px] text-zinc-400">
+                        {mode !== 'provider-only' ? (
+                            <label className="flex cursor-pointer items-center gap-2 hover:text-zinc-200 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={freeOnly}
+                                    onChange={(e) => handleFreeOnlyToggle(e.target.checked)}
+                                    className="rounded border-zinc-600 bg-zinc-800 text-zinc-200 focus:ring-zinc-500/40"
+                                />
+                                Free models only
+                            </label>
+                        ) : (
+                            <span className="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Providers</span>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-cyan-300 disabled:opacity-50 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 cursor-pointer"
+                            title="Refresh models from provider APIs"
+                            aria-label="Refresh models"
+                        >
+                            {justRefreshed ? (
+                                <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                            ) : (
+                                <RotateCw className={`h-3 w-3 shrink-0 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+                            )}
+                            <span className={`text-[10px] font-medium ${justRefreshed ? 'text-emerald-400' : ''}`}>
+                                {isRefreshing ? 'Refreshing…' : justRefreshed ? 'Updated!' : 'Refresh'}
+                            </span>
+                        </button>
+                    </div>
                     <div
                         className="flex min-h-0 flex-1 overflow-hidden"
-                        style={{ maxHeight: Math.max(FLYOUT_MIN_H, flyoutPos.maxHeight - (mode !== 'provider-only' ? 34 : 0)) }}
+                        style={{ maxHeight: Math.max(FLYOUT_MIN_H, flyoutPos.maxHeight - 34) }}
                     >
                     {/* Provider list */}
                     <div

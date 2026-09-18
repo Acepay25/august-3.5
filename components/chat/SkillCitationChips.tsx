@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check, Flag } from 'lucide-react';
 
 // Skill-citation chips (Batch 13, — with a premise correction).
 //
@@ -134,7 +135,7 @@ export const SkillCitationChips: React.FC<SkillCitationChipsProps> = ({
                         title="This skill was wrong here — record negative evidence"
                         aria-label={`Flag ${c.slug} as wrong in this run`}
                     >
-                        {flagged.has(c.slug) ? '✓' : '⚑'}
+                        {flagged.has(c.slug) ? <Check className="h-3 w-3 text-emerald-400" /> : <Flag className="h-3 w-3" />}
                     </button>
                 </span>
             ))}
