@@ -150,6 +150,20 @@ describe('skill expectancy ledger', () => {
         expect(skillExpectancyR(m)).toBeUndefined();
     });
 
+    it('keeps the quoted average put when an ODD sample halves', () => {
+        // The even case above hides this: flooring `rSampled` while dividing
+        // `netR` by 2 shifts the ratio, so an odd record would decay INTO a
+        // better-looking number just as its authority was cut in half.
+        // 19 → 9 stays above the cold-start bar, so the getter is comparable.
+        const m = meta({ wins: 16, losses: 16, netR: 8, rSampled: 19 });
+        const earned = skillExpectancyR(m)!;
+        expect(earned).toBeCloseTo(8 / 19, 2);
+        halveCounts(m, 1);
+        expect(m.rSampled).toBe(9);
+        // Pre-fix this read 0.44 — the decay invented two tenths of an R.
+        expect(skillExpectancyR(m)).toBe(earned);
+    });
+
     it('drops the pair outright rather than leaving a lone zero', () => {
         const m = meta({ wins: 2, losses: 1, netR: 1, rSampled: 1 });
         halveCounts(m, 1);

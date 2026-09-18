@@ -19,6 +19,10 @@ import {
     STRESS_TEST_PROTOCOL,
     PROBABILITY_ESTIMATION_PROMPT,
 } from './prompts/analysisPrompts';
+// The predicate grammar lives with its evaluator (skillPredicate's field
+// whitelist), not with the prompt text, so an override can never ask for a
+// clause the parser would reject. Leaf import — no cycle back here.
+import { PREDICATE_GRAMMAR_HINT } from '../services/analysis/skillPredicate';
 import {
     MODERATOR_SYSTEM_PROMPT_V2,
     PURE_AI_MODERATOR_PROMPT,
@@ -320,7 +324,9 @@ A skill is a procedure, not a diary sentence.
 6. what requires human approval
 
 KIND: avoid if LOSS or "do not take"; repeat if WIN and the IF is a keep-doing rule.
-IF/THEN must be mechanical. Output ONLY JSON with name, kind, when, inputs, steps, validate, output, approval, ifCondition, thenAction.`,
+IF/THEN must be mechanical. Output ONLY JSON with name, kind, when, inputs, steps, validate, output, approval, ifCondition, thenAction, predicate.
+
+PREDICATE BRIEF: ${PREDICATE_GRAMMAR_HINT}`,
     },
     {
         id: 'learning.chart_scan',
@@ -335,6 +341,7 @@ Rules:
 - kind "repeat" = a setup the tape shows working; kind "avoid" = a trap the tape shows losing (fading a band walk, chasing a failed break, and similar).
 - Name each skill specifically (coin + timeframe + pattern), never generically.
 - Inventing a pattern the digest does not support is worse than drafting none. If nothing qualifies, return an empty array.
-- Keep "description" as the activation key: what the skill does and WHEN to reach for it.`,
+- Keep "description" as the activation key: what the skill does and WHEN to reach for it.
+- The digest is built from CLOSED candles, so also author a "predicate" where the IF clause reduces to candle math: ${PREDICATE_GRAMMAR_HINT} A predicate is what lets the desk re-check the trigger in code on every later run instead of trusting a seat to read prose; omit it when the clause cannot be reduced.`,
     },
 ];

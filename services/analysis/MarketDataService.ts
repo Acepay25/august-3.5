@@ -15,6 +15,14 @@ const CACHE_TTL = 30000; // 30 seconds
 // the painted chart — the gap read as a fresh price move ("discrepancy
 // flagged"). Keep it near-stream-fresh; the endpoint is one cheap symbol call.
 const LIVE_MARK_TTL = 2000;
+// The other single-symbol point-in-time reads. They sat on the generic 30s
+// TTL, which stacked with the packet's own cache and the desk-tool cache to
+// put 40-60s between the tape and what the model called "current" — and then
+// a confirming tool call replayed the same 30s snapshot, so the model could
+// not tell a quiet market from a cached one. These endpoints are one cheap
+// symbol call each; the 30s default stays on kline SERIES, where the weight
+// is real and a 15m indicator genuinely does not care about 30s.
+const POINT_IN_TIME_TTL = 5000;
 
 // In-flight dedupe for fetchOHLCVFromTime — concurrent identical requests
 // share one promise instead of fanning out N identical Binance calls.
@@ -480,7 +488,7 @@ export const fetchFuturesTicker24h = async (symbol: string): Promise<MarketData>
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `futmarket_${normalizedSymbol}`;
 
-    const cached = getCached<MarketData>(cacheKey);
+    const cached = getCached<MarketData>(cacheKey, POINT_IN_TIME_TTL);
     if (cached) return cached;
 
     try {
@@ -676,7 +684,7 @@ export const fetchFundingRate = async (symbol: string): Promise<number> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `funding_${normalizedSymbol}`;
 
-    const cached = getCached<number>(cacheKey);
+    const cached = getCached<number>(cacheKey, POINT_IN_TIME_TTL);
     if (cached !== null) return cached;
 
     try {
@@ -1188,7 +1196,7 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `orderbook_${normalizedSymbol}`;
 
-    const cached = getCached<OrderBookData>(cacheKey);
+    const cached = getCached<OrderBookData>(cacheKey, POINT_IN_TIME_TTL);
     if (cached) return cached;
 
     try {

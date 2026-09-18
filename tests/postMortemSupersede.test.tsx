@@ -17,6 +17,7 @@ import type { Message, LoggedTrade } from '../types';
 import { TradeOutcome } from '../types';
 import type { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import type { ProviderConfig } from '../types/provider';
+import type { TradeOutcomeValidation } from '../services/backtesting/BacktestingService';
 
 const conductPostMortemMock = vi.hoisted(() => vi.fn());
 // Notebook/learning-write spies for the supersede-WRITES tests.
@@ -263,5 +264,84 @@ describe('post-mortem supersession — notebook/learning WRITES', () => {
         expect(pmMocks.gateEvidenceBackedDraft).not.toHaveBeenCalled();
         expect(pmMocks.writeNotebookNoteFromPostMortem).not.toHaveBeenCalled();
         expect(pmMocks.writeModelNote).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * The skill ledger scores each closed trade with its price-measured R
+ * (`countTradeOutcome(meta, win, trade.realizedR)`). `realizedR` is produced
+ * HERE and nowhere else, so the post-mortem is the only thing that can feed
+ * expectancy — and it wrote it through `setLoggedTrades`, then read the row
+ * back off `loggedTradesRef`, which only refreshes on the render that
+ * setState scheduled. Same tick ⇒ pre-write row ⇒ `r` undefined forever,
+ * `rSampled` never reaching the 8 samples a skill needs to report an R.
+ */
+describe('post-mortem → skill ledger R hand-off', () => {
+    const report = '## Final Report\nThe stop sat above structure; the reclaim never printed.';
+
+    /** A freshly logged row: outcome known, no measured R yet. */
+    const awaitingR = (id: string): LoggedTrade => ({
+        id,
+        outcome: TradeOutcome.LOSS,
+        timestamp: new Date().toISOString(),
+        leverage: 10,
+    } as unknown as LoggedTrade);
+
+    /** `analysis` is what turns the price-validation pre-pass on. */
+    const candidateWithAnalysis = (id: string): PostMortemCandidate => ({
+        message: {
+            id,
+            role: 'ai' as Message['role'],
+            text: 'BTC long, stop under the swing low',
+            createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+            analysis: { coinName: 'BTCUSDT', direction: 'LONG' },
+        } as unknown as Message,
+        outcome: TradeOutcome.LOSS,
+    });
+
+    const validation = {
+        isMismatch: false,
+        outcome: 'LOSS',
+        hitTarget: false,
+        validationSummary: 'SL touched on bar 4.',
+        dataRange: '2026-09-17 → 2026-09-18',
+        candlesEvaluated: 20,
+        rrRatio: 2.5,
+        maePercent: 1.25,
+        mfePercent: 2.1,
+    };
+
+    it('carries realizedR and excursions to the ledger instead of re-reading the row', async () => {
+        const ref = { current: [awaitingR('msg-r')] } as MutableRefObject<LoggedTrade[]>;
+        const { result } = renderHook(() => usePostMortem({
+            ...baseParams(),
+            loggedTradesRef: ref,
+        }));
+        conductPostMortemMock.mockResolvedValue(report);
+        pmMocks.updateGlobalMemory.mockResolvedValue({} as never);
+        // The supersede tests leave a hand-released sync implementation behind
+        // (mockClear keeps implementations) — settle it or this run hangs.
+        pmMocks.syncClosedTradeToNotebook.mockResolvedValue(undefined as never);
+        pmMocks.craftSkillFromPostMortem.mockResolvedValue(null);
+
+        await act(async () => {
+            await result.current.startPostMortemAnalysis(
+                candidateWithAnalysis('msg-r'),
+                undefined,
+                undefined,
+                validation as unknown as TradeOutcomeValidation,
+            );
+            await tick(20);
+        });
+
+        expect(pmMocks.syncClosedTradeToNotebook).toHaveBeenCalledTimes(1);
+        const closed = pmMocks.syncClosedTradeToNotebook.mock.calls[0][0] as LoggedTrade;
+        expect(closed.realizedR).toBe(2.5);
+        // Excursions ride in LEVERAGED %, the basis the row's pnlPercent uses.
+        expect(closed.maxAdverseExcursion).toBe(12.5);
+        expect(closed.maxFavorableExcursion).toBe(21);
+        // Proof the merge is what carries R: the ref row this hook was handed
+        // is still the pre-write copy, so a read-back sees nothing.
+        expect(ref.current[0].realizedR).toBeUndefined();
     });
 });

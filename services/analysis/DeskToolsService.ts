@@ -31,6 +31,7 @@ import type { LoggedTrade } from '../../types';
 import type { ToolAction } from '../../types/message';
 import type { ChartDrawing } from '../trade/chartDrawings';
 import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
+import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
 
 /**
  * Classify a desk-tool result into a persisted model side-effect:
@@ -155,8 +156,15 @@ const dataUnavailable = (tool: string, reason: string): string =>
     `${DATA_UNAVAILABLE_PREFIX} ${tool} — ${reason}. The source FAILED; treat this as UNKNOWN, not as absence of evidence.`;
 export const isDataUnavailable = (content: string): boolean => content.startsWith(DATA_UNAVAILABLE_PREFIX);
 
-const toolCacheKey = (call: DeskToolCall): string =>
-    `${call.name}:${JSON.stringify(call.arguments ?? {}, Object.keys(call.arguments ?? {}).sort())}`;
+const toolCacheKey = (call: DeskToolCall, scope?: string): string =>
+    `${call.name}@${scope || 'anysymbol'}:${JSON.stringify(call.arguments ?? {}, Object.keys(call.arguments ?? {}).sort())}`;
+
+/** Prepended to a cached payload so a replay can never read as a fresh read.
+ *  Without it the model has no way to tell "the market has not moved" from
+ *  "the desk refused to look" — and a confirming tool call that returns the
+ *  same numbers is the difference between evidence and an echo. */
+const cacheAgeNote = (ageMs: number): string =>
+    `[DESK CACHE — this payload was fetched ${Math.round(ageMs / 1000)}s ago and is being replayed for the ${TOOL_CACHE_TTL_MS / 1000}s window; the price stamp below (when present) is live.]`;
 
 /** CACHE POLICY (2026-09-14 inverted): ONLY the pure network market reads
  *  cache — the whole reason the cache exists is sparing the exchange from N
@@ -174,8 +182,10 @@ const CACHEABLE_TOOLS = new Set([
     'get_derivatives',
     'get_order_book',
     'get_liquidations',
-    'get_btc_context',
-    'get_price_snapshot',
+    // get_price_snapshot deliberately does NOT cache: its whole job is the
+    // "did price actually move?" check the chat prompt asks the model to run
+    // before narrating one, so replaying a 30s-old read would make the
+    // verification step actively misleading. One cheap ticker call per ask.
     'get_session_context',
     'get_setup_history_stats',
     'project_future_price',
@@ -183,6 +193,10 @@ const CACHEABLE_TOOLS = new Set([
     'scan_setups',
     'web_search',
 ]);
+/** Tools whose cached body is stored PRE-STAMP and re-stamped on every call,
+ *  so a hit replays the numbers but never a previous call's "this is now". */
+const STAMPED_TOOLS = new Set(['get_market_packet', 'get_all_timeframes']);
+
 const cacheableResult = (name: string): boolean =>
     CACHEABLE_TOOLS.has(name) || name.startsWith('custom_');
 
@@ -515,6 +529,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     if_condition: { type: 'string', description: 'The IF clause (one sentence, measurable)' },
                     then_action: { type: 'string', description: 'The THEN clause (one sentence, actionable)' },
                     reason: { type: 'string', description: 'Evidence from THIS session that motivates the skill' },
+                    predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Author one whenever the IF clause reduces to candle math — it is what lets the desk check the trigger in code instead of trusting a seat to read the prose. Omit it when the condition is not reducible; a fabricated clause is worse than none.' },
                 },
                 required: ['name', 'kind', 'when', 'steps', 'if_condition', 'then_action', 'reason'],
                 additionalProperties: false,
@@ -1199,7 +1214,7 @@ const compactCandleRow = (k: { time: number; open: number; high: number; low: nu
  * global microstructure layer (order book + spread, funding, OI,
  * liquidations). This is "everything the user can see and more" in one read.
  */
-async function runAllTimeframes(symbol: string): Promise<string> {
+async function runAllTimeframes(symbol: string, liveMark?: number | null): Promise<string> {
     const { fetchKlines } = await import('./KlineService');
     const { calculateIndicators } = await import('./TechnicalAnalysisService');
     const { detectCandleFormations, describeMarketStructure } = await import('../trade/candleFormations');
@@ -1212,9 +1227,19 @@ async function runAllTimeframes(symbol: string): Promise<string> {
         fetchRecentLiquidations(symbol).catch(() => null),
     ]);
 
+    // Same precedence get_chart_view uses: the chart's websocket mark beats a
+    // REST premiumIndex read, because the mark is what the user is watching and
+    // the REST value carries the whole snapshot lag.
+    const restMark = mi && mi.available && Number.isFinite(mi.markPrice) && mi.markPrice > 0
+        ? mi.markPrice : null;
+    const canvasMark = typeof liveMark === 'number' && Number.isFinite(liveMark) && liveMark > 0
+        ? liveMark : null;
+    const markNow = canvasMark ?? restMark;
     const head: string[] = [
         `ALL-TIMEFRAME COMPENDIUM — ${symbol} · fetched ${new Date().toISOString().slice(11, 19)} UTC`,
-        mi && mi.available ? `Mark ${mi.markPrice} · Index ${mi.indexPrice} · Funding ${(mi.lastFundingRate * 100).toFixed(4)}%` : 'Mark/Index unavailable',
+        markNow !== null
+            ? `Mark ${markNow}${canvasMark !== null ? ' (live from the chart feed)' : ' (REST)'} · Index ${mi?.indexPrice ?? '—'} · Funding ${mi ? `${(mi.lastFundingRate * 100).toFixed(4)}%` : '—'}`
+            : 'Mark/Index unavailable',
         deriv ? `Open interest $${Math.round((deriv.openInterestValue ?? 0) / 1e6)}M` : 'OI unavailable',
         liq && Array.isArray(liq.recentEvents) && liq.recentEvents.length > 0
             ? `Liquidations (${Math.min(liq.recentEvents.length, 5)} recent): ${(liq.recentEvents as Array<{ side?: string; price?: number; usdValue?: number }>).slice(0, 5).map(e => `${e.side ?? '?'} ${e.price ?? '?'}${
@@ -1282,6 +1307,13 @@ export interface DeskToolContext {
      *  stamped onto get_market_packet so its snapshot candle rows can't
      *  contradict the painted chart. */
     formingCandle?: FormingCandle | null;
+    /** Call-time readers for the same two facts. The static fields above are
+     *  frozen when a SEAT TURN starts, so on a three-round turn the third round
+     *  still stamps the price from before the first answer — which is exactly
+     *  a "live" claim going stale inside one message. A surface that can read
+     *  the feed on demand passes these; the rest keep the frozen value. */
+    getLiveMarkPrice?: () => number | null;
+    getFormingCandle?: () => FormingCandle | null;
     /** The seat's tool allow-list (chat-panel TRADE_TOOLS, arbiter
      *  ARBITER_ALLOWED_TOOLS, bot presets…). When non-empty it is enforced
      *  HERE, in the executor — not just in what gets OFFERED: on
@@ -1330,6 +1362,15 @@ const rejectedResult = (call: DeskToolCall, reason: string): DeskToolResult => (
     content: reason,
 });
 
+/** Fresh read when the surface offers one, frozen turn-start value otherwise.
+ *  Falls back instead of failing: a surface with no getter keeps behaving
+ *  exactly as it did before these existed. */
+const liveMarkOf = (context: DeskToolContext): number | null =>
+    context.getLiveMarkPrice?.() ?? context.liveMarkPrice ?? null;
+
+const liveFormingCandleOf = (context: DeskToolContext): FormingCandle | null =>
+    context.getFormingCandle?.() ?? context.formingCandle ?? null;
+
 /** The get_market_packet "this is now" tail: the live websocket mark and the
  *  forming candle, plus the foreign-symbol note. Built from the CALLER's
  *  context at call time — the result cache deliberately stores the packet
@@ -1340,12 +1381,13 @@ const packetStamps = (call: DeskToolCall, context: DeskToolContext): string => {
     const fallback = context.defaultSymbol || 'BTCUSDT';
     const sym = asSymbol(call.arguments?.symbol, fallback);
     let stamps = '';
-    const mark = context.liveMarkPrice;
+    const mark = liveMarkOf(context);
     if (typeof mark === 'number' && Number.isFinite(mark) && mark > 0) {
         stamps += `\n\n${formatLiveMarkStamp(mark)}`;
     }
-    if (context.formingCandle) {
-        stamps += `\n\n${formatFormingCandleLine(context.formingCandle, context.chartInterval)}`;
+    const forming = liveFormingCandleOf(context);
+    if (forming) {
+        stamps += `\n\n${formatFormingCandleLine(forming, context.chartInterval)}`;
     }
     if (!stamps) return '';
     return stamps + (sym !== fallback
@@ -1371,17 +1413,22 @@ export async function executeDeskTool(
     // Repeat calls within the TTL (every seat asks the same desk) are served
     // from cache — identical market data, zero extra network round-trips.
     // Only the whitelisted network readers take part (see CACHEABLE_TOOLS).
-    const cacheKey = toolCacheKey(call);
+    // Scoped by the chart the call came from: an argument-less
+    // `get_market_packet` issued on the BTC dock and on the ETH dock used to
+    // collide as `get_market_packet:{}` and hand one symbol's tape to the
+    // other for the whole TTL — wrong data, not merely stale data.
+    const cacheKey = toolCacheKey(call, context.defaultSymbol || undefined);
     const cacheable = cacheableResult(call.name);
     const cached = cacheable ? toolCache.get(cacheKey) : undefined;
     if (cached && Date.now() - cached.at < TOOL_CACHE_TTL_MS) {
         // The cached packet body is PRE-STAMP: re-stamp with THIS call's
         // live mark / forming candle so a cache hit can never replay the
         // previous call's "this is now".
-        const hitContent = call.name === 'get_market_packet'
+        const hitContent = STAMPED_TOOLS.has(call.name)
             ? cached.content + packetStamps(call, context)
             : cached.content;
-        return { toolCallId: call.id, name: call.name, ok: true, content: hitContent, ...resolvedSymbolField(call, fallback) };
+        return { toolCallId: call.id, name: call.name, ok: true, content: `${cacheAgeNote(Date.now() - cached.at)}
+${hitContent}`, ...resolvedSymbolField(call, fallback) };
     }
     try {
         let content: string;
@@ -1540,6 +1587,7 @@ export async function executeDeskTool(
                         approval: asString(call.arguments.approval, 'A human approves this draft in the Coach inbox before it is ever applied.'),
                         ifCondition: asString(call.arguments.if_condition),
                         thenAction: asString(call.arguments.then_action),
+                        predicate: asString(call.arguments.predicate) || undefined,
                     });
                     if (!crafted) {
                         return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).');
@@ -1684,10 +1732,11 @@ export async function executeDeskTool(
                 // it sees right here, so it can tell a fresh level from one
                 // price has moved away from. Prefer the same mark the price
                 // line above reports.
-                const canvasMark = typeof context.liveMarkPrice === 'number'
-                    && Number.isFinite(context.liveMarkPrice)
-                    && context.liveMarkPrice > 0
-                    ? context.liveMarkPrice
+                const freshMark = liveMarkOf(context);
+                const canvasMark = typeof freshMark === 'number'
+                    && Number.isFinite(freshMark)
+                    && freshMark > 0
+                    ? freshMark
                     : null;
                 const restMark = mi.available
                     && Number.isFinite(mi.markPrice)
@@ -1708,7 +1757,7 @@ export async function executeDeskTool(
                 break;
             }
             case 'get_all_timeframes': {
-                content = await runAllTimeframes(asSymbol(call.arguments.symbol, fallback));
+                content = await runAllTimeframes(asSymbol(call.arguments.symbol, fallback), liveMarkOf(context));
                 break;
             }
             case 'get_session_context':
@@ -1961,7 +2010,7 @@ export async function executeDeskTool(
         // them off — and the cache keeps the pre-stamp base, so hits
         // re-stamp with the CURRENT call's mark/candle (cacheTool below
         // stores `budgeted`, never `withTail`).
-        const withTail = call.name === 'get_market_packet';
+        const withTail = STAMPED_TOOLS.has(call.name);
         const tail = withTail ? packetStamps(call, context) : '';
         const budgeted = budgetToolContent(call.name, content, tail.length);
         // A failure sentinel must not be cached — that would freeze an
@@ -2206,6 +2255,9 @@ export async function runDeskToolLoop(params: {
     liveMarkPrice?: number | null;
     /** Chart's forming candle (stamps get_market_packet). */
     formingCandle?: FormingCandle | null;
+    /** Call-time readers so a multi-round turn stops stamping one frozen "now". */
+    getLiveMarkPrice?: () => number | null;
+    getFormingCandle?: () => FormingCandle | null;
     onToolEvent?: (line: string) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
@@ -2243,6 +2295,8 @@ export async function runDeskToolLoop(params: {
         chartDrawings,
         liveMarkPrice,
         formingCandle,
+        getLiveMarkPrice,
+        getFormingCandle,
         onToolEvent,
         onToolAction,
         speaker = '',
@@ -2414,6 +2468,8 @@ export async function runDeskToolLoop(params: {
                 chartDrawings,
                 liveMarkPrice,
                 formingCandle,
+                getLiveMarkPrice,
+                getFormingCandle,
                 // Enforce the seat's allow-list in the EXECUTOR, not just in
                 // what's offered: text-protocol seats can emit a tag for any
                 // tool, and these calls bypass the offer-time filter.
@@ -2488,6 +2544,9 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     liveMarkPrice?: number | null;
     /** Chart's forming candle (kline websocket) at call time — same stamp. */
     formingCandle?: FormingCandle | null;
+    /** Call-time readers so a multi-round turn stops stamping one frozen "now". */
+    getLiveMarkPrice?: () => number | null;
+    getFormingCandle?: () => FormingCandle | null;
     /** Override harness setting. Default: follow Settings → Desk Tools. */
     enabled?: boolean;
     /** Final-turn nudge after tools ran. */
@@ -2573,6 +2632,8 @@ export async function* streamChatWithDeskTools(
         chartDrawings,
         liveMarkPrice,
         formingCandle,
+        getLiveMarkPrice,
+        getFormingCandle,
         onToolEvent,
         onToolAction,
         onStreamReset,
@@ -2670,6 +2731,8 @@ export async function* streamChatWithDeskTools(
         chartDrawings,
         liveMarkPrice,
         formingCandle,
+        getLiveMarkPrice,
+        getFormingCandle,
         nativeTools,
         allowedTools: mergedAllowed,
         trades,

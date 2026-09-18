@@ -933,6 +933,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             chartDrawings: allDrawings,
             liveMarkPrice: sendSnap?.markPrice ?? null,
             formingCandle: sendCandles.length > 0 ? sendCandles[sendCandles.length - 1] : null,
+            // ...and re-read the canvas on every desk call. The two above are
+            // frozen when the turn starts; a three-round turn can spend a
+            // minute in tool calls, and a "live mark" stamped with the opening
+            // tick is the same misreport the stamp exists to prevent.
+            getLiveMarkPrice: () => getChartSnapshot?.()?.markPrice ?? null,
+            getFormingCandle: () => {
+                const cs = getChartSnapshot?.()?.candles ?? [];
+                return cs.length > 0 ? cs[cs.length - 1] : null;
+            },
             executePanelTool: call => executePanelTool(call, turnCtx),
             trades,
             mailbox,

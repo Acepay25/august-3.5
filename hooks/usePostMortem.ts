@@ -596,30 +596,32 @@ Please investigate this discrepancy in your analysis.
             // past the stop by design), and validation reports excursions in
             // RAW price % while `pnlPercent` on this row is LEVERAGED % — so
             // they are scaled here to keep capture efficiency dimensionless.
-            const realizedR = priceValidation?.rrRatio;
             const toLeveragedPct = (raw: number | undefined, leverage: number | undefined): number | undefined =>
                 raw !== undefined
                     ? Math.round(raw * (leverage && leverage > 0 ? leverage : 1) * 10) / 10
                     : undefined;
-            setLoggedTrades(prev => prev.map(t => {
-                if (t.id !== candidate.message.id) return t;
+            // Spread-conditional, not `key: undefined` — a re-run whose
+            // validation was skipped or never resolved an exit must leave the
+            // numbers an earlier run earned in place.
+            const learnedOnThisRun = (t: LoggedTrade): Partial<LoggedTrade> => {
                 const mae = toLeveragedPct(priceValidation?.maePercent, t.leverage);
                 const mfe = toLeveragedPct(priceValidation?.mfePercent, t.leverage);
+                const r = priceValidation?.rrRatio;
                 return {
-                    ...t,
-                    postMortem: finalPostMortemReport,
-                    postMortemCreatedAt: new Date().toISOString(),
-                    postMortemImages: imageUrls,
-                    postMortemByProvider: postMortemContributions,
-                    rootCauseClass: classifyRootCause(finalPostMortemReport, t.outcome),
-                    // Spread-conditional, not `key: undefined` — a re-run whose
-                    // validation was skipped or never resolved an exit must
-                    // leave the numbers an earlier run earned in place.
                     ...(mae !== undefined ? { maxAdverseExcursion: mae } : {}),
                     ...(mfe !== undefined ? { maxFavorableExcursion: mfe } : {}),
-                    ...(typeof realizedR === 'number' && Number.isFinite(realizedR) ? { realizedR } : {}),
+                    ...(typeof r === 'number' && Number.isFinite(r) ? { realizedR: r } : {}),
                 };
-            }));
+            };
+            setLoggedTrades(prev => prev.map(t => (t.id === candidate.message.id ? {
+                ...t,
+                ...learnedOnThisRun(t),
+                postMortem: finalPostMortemReport,
+                postMortemCreatedAt: new Date().toISOString(),
+                postMortemImages: imageUrls,
+                postMortemByProvider: postMortemContributions,
+                rootCauseClass: classifyRootCause(finalPostMortemReport, t.outcome),
+            } : t)));
 
             // The trade was logged in the same tick that started this
             // post-mortem (capture flows: logTradeWithFeedback → setLoggedTrades
@@ -699,8 +701,14 @@ Please investigate this discrepancy in your analysis.
                 // fail the post-mortem.
                 try {
                     const notebookUser = getActiveUsername();
-                    const closed = {
+                    const closed: LoggedTrade = {
                         ...tradeToUpdate,
+                        // Carried from this run's validation, NOT re-read off the
+                        // row: setLoggedTrades above only scheduled a render, so
+                        // tradeToUpdate is still the pre-write copy. Without this
+                        // merge the skill ledger scores every trade as
+                        // R-unmeasured and netR never accrues.
+                        ...learnedOnThisRun(tradeToUpdate),
                         postMortem: finalPostMortemReport,
                         rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };

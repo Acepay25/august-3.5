@@ -46,6 +46,10 @@ describe('Desk tool cache + result budget', () => {
     vi.useRealTimers();
     orderBookMock.mockReset();
     liquidationsMock.mockReset();
+    // These two were never reset, so an implementation set by one test leaked
+    // into the next — the packet tests only passed while they ran first.
+    hybridMock.mockReset();
+    injectionMock.mockReset();
     clearDeskToolCache();
   });
 
@@ -55,7 +59,11 @@ describe('Desk tool cache + result budget', () => {
     const second = await executeDeskTool({ id: 'c2', name: 'get_order_book', arguments: { symbol: 'BTCUSDT' } });
     expect(orderBookMock).toHaveBeenCalledTimes(1);
     expect(first.ok).toBe(true);
-    expect(second.content).toBe(first.content);
+    // Same payload — but marked as a replay. A cache hit that is
+    // byte-identical to a fresh read is how a model ends up "confirming" a
+    // price move with the very snapshot it was trying to confirm.
+    expect(second.content.startsWith('[DESK CACHE')).toBe(true);
+    expect(second.content.endsWith(first.content)).toBe(true);
   });
 
   it('keys the cache by name + arguments', async () => {
@@ -63,6 +71,44 @@ describe('Desk tool cache + result budget', () => {
     await executeDeskTool({ id: 'c1', name: 'get_order_book', arguments: { symbol: 'BTCUSDT' } });
     await executeDeskTool({ id: 'c2', name: 'get_order_book', arguments: { symbol: 'ETHUSDT' } });
     expect(orderBookMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not serve one chart packet to another chart', async () => {
+    // Argument-less calls used to collide as `get_market_packet:{}`, so an ETH
+    // dock asking the same question within the TTL got BTC's tape — wrong
+    // symbol, not merely stale, and no stamp on the payload gives it away.
+    const asked: string[] = [];
+    hybridMock.mockImplementation(async (sym: string) => {
+      asked.push(sym);
+      return { symbol: sym };
+    });
+    injectionMock.mockImplementation((packet: { symbol?: string }) => `PACKET ${packet?.symbol}`);
+    const onBtc = await executeDeskTool(
+      { id: 's1', name: 'get_market_packet', arguments: {} },
+      { defaultSymbol: 'BTCUSDT' },
+    );
+    const onEth = await executeDeskTool(
+      { id: 's2', name: 'get_market_packet', arguments: {} },
+      { defaultSymbol: 'ETHUSDT' },
+    );
+    expect(asked).toEqual(['BTCUSDT', 'ETHUSDT']);
+    expect(onBtc.content).toBe('PACKET BTCUSDT');
+    // Pre-fix this read 'PACKET BTCUSDT' — the ETH dock served BTC's tape.
+    expect(onEth.content).toBe('PACKET ETHUSDT');
+  });
+
+  it('stamps a packet with the CURRENT mark when the surface offers a reader', async () => {
+    // The frozen `liveMarkPrice` is captured when a seat TURN starts. On the
+    // third desk round of a long turn that value is the opening tick — so a
+    // surface that can read the feed passes a getter, and it must win.
+    hybridMock.mockResolvedValue({} as never);
+    injectionMock.mockReturnValue('PACKET BODY');
+    const res = await executeDeskTool(
+      { id: 'g1', name: 'get_market_packet', arguments: { symbol: 'BTCUSDT' } },
+      { defaultSymbol: 'BTCUSDT', liveMarkPrice: 100, getLiveMarkPrice: () => 250 },
+    );
+    expect(res.content).toContain('$250.00');
+    expect(res.content).not.toContain('$100.00');
   });
 
   it('re-fetches after the TTL expires', async () => {

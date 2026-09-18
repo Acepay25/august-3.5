@@ -26,6 +26,27 @@ import { rsiSeries, bollinger, smaSeries, type ScanCandle } from '../trade/setup
 
 /** Maximum source length — a predicate is a clause, not an essay. */
 export const PREDICATE_MAX_LENGTH = 240;
+
+/**
+ * The one-line grammar brief every AUTHOR of a predicate gets: the desk tools
+ * (`propose_skill`/`revise_skill`), the craft prompts and the skill editor all
+ * quote this constant, so a model can never be asked for a clause the
+ * evaluator would reject for syntax it was never told about.
+ *
+ * Field list mirrors FIELD_ALIASES below — candles-derived only, deliberately
+ * no funding/OI/book term, because a condition with no historical series
+ * cannot be back-tested and so cannot earn authority.
+ */
+export const PREDICATE_GRAMMAR_HINT =
+    'Machine-checkable trigger, evaluated on the LAST CLOSED candle of the '
+    + `timeframe the skill was earned on. Max ${PREDICATE_MAX_LENGTH} chars. `
+    + 'Comparisons use > >= < <=, joined with and / or / not, grouped with ( ). '
+    + 'Fields: close, open, high, low, volume, rsi14, ema20, ema50, sma20, '
+    + 'volumeSma20, atr14, bbUpper, bbMiddle, bbLower, bodyPct, rangePct, '
+    + 'volumeRatio (numbers are absolute prices/units, not percentages). '
+    + 'Example: "rsi14 > 70 and close > bbUpper". '
+    + 'A clause that fails to parse is stored as nothing — it never reads as a match.';
+
 /** Bounds both recursion depth and the work an adversarial string can demand. */
 const MAX_DEPTH = 12;
 const MAX_TERMS = 64;
@@ -138,7 +159,12 @@ const tokenize = (src: string): Token[] | string => {
             i += m[0].length;
             continue;
         }
-        const id = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));
+        // Hyphens belong inside a field name: `rsi-14` must land on `rsi14` the
+        // same way `rsi_14` does, exactly as FIELD_ALIASES promises above.
+        // Safe because this grammar has no subtraction and no negative literal
+        // (numbers never start with a sign), so `-` can only ever be noise in
+        // a name — and a stray one is still a hard error below.
+        const id = /^[A-Za-z_][A-Za-z0-9_-]*/.exec(src.slice(i));
         if (id) {
             const word = id[0].toLowerCase();
             if (word === 'and') out.push({ t: 'and' });

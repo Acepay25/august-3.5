@@ -6,6 +6,7 @@ import { CraftedSkill, parseCraftedSkill } from '../../schemas/learning';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { parseIfThenClauses } from '../../utils/ifThenSkill';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
+import { PREDICATE_GRAMMAR_HINT } from '../analysis/skillPredicate';
 
 export const SKILL_CRAFT_FALLBACK = `You turn a closed-trade post-mortem into ONE reusable trading skill.
 
@@ -34,7 +35,8 @@ Output ONLY JSON:
   "output": "what the next ticket should do",
   "approval": "when a human must confirm (size, new coin, conflicting skill)",
   "ifCondition": "IF clause without the word IF",
-  "thenAction": "THEN clause without the word THEN"
+  "thenAction": "THEN clause without the word THEN",
+  "predicate": ${JSON.stringify(PREDICATE_GRAMMAR_HINT)}
 }`;
 
 export const formatCraftedSkillBody = (skill: CraftedSkill): string => [
@@ -98,7 +100,8 @@ Output ONLY JSON with the same shape:
   "output": "what the next ticket should do",
   "approval": "when a human must confirm",
   "ifCondition": "tightened IF clause without the word IF",
-  "thenAction": "corrected THEN clause without the word THEN"
+  "thenAction": "corrected THEN clause without the word THEN",
+  "predicate": ${JSON.stringify(PREDICATE_GRAMMAR_HINT)}
 }`;
 
 /**
