@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useCallback, useReducer } from 'react';
-import { BrainCircuit, ChevronDownIcon } from 'lucide-react';
+import { AlertTriangle, BookOpen, Brain, BrainCircuit, CheckCircle, ChevronDownIcon, Scale } from 'lucide-react';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
 import { initMemoryFiles, getMemoryFiles, computeTopLessons } from '../../services/learning/MemoryFilesService';
@@ -453,8 +453,8 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
 
     const notebookSection = (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">
-                📓 Trader Notebook — what the model reads
+            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5 text-cyan-400" /> Trader Notebook — what the model reads
             </h4>
             {notebook.files.length === 0 ? (
                 <p className="text-xs text-zinc-600 italic">
@@ -508,7 +508,11 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                             <div key={i} className="rounded-lg border border-white/5 bg-zinc-950/40 px-2.5 py-2">
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5">
-                                        <span className={l.kind === 'loss' ? 'text-rose-400' : 'text-emerald-400'}>{l.kind === 'loss' ? '⚠️' : '✅'}</span>
+                                        {l.kind === 'loss' ? (
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                                        ) : (
+                                            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                                        )}
                                         {l.label}
                                         <span className="text-[10px] text-zinc-500">×{l.count}</span>
                                     </span>
@@ -591,7 +595,9 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const memoryGraphSection = (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">🧠 Memory Graph</h4>
+                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Brain className="h-3.5 w-3.5 text-cyan-400" /> Memory Graph
+                </h4>
                 <div className="flex items-center gap-1">
                     {(['all', 'used', 'learned'] as const).map(t => (
                         <button key={t} onClick={() => setGraphTab(t)}
@@ -771,7 +777,9 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         r.recommendation === 'promote' || r.recommendation === 'demote' || r.recommendation === 'retire' || r.recommendation === 'refine');
     const reviewActionsSection = (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">⚖️ Skill Review — Apply</h4>
+            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Scale className="h-3.5 w-3.5 text-cyan-400" /> Skill Review — Apply
+            </h4>
             <p className="text-[10px] text-zinc-600 mb-2">
                 Causal verdicts (A/B eval + lift) outrank outcome correlation. Evidence still has the final say on the next closed trade.
             </p>

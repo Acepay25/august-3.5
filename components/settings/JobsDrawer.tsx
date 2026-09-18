@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Inbox } from 'lucide-react';
+import { Inbox, X } from 'lucide-react';
 import { jobQueue, Job } from '../../services/infrastructure/JobQueueService';
 import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryService';
 import { EmptyState } from '../ui/EmptyState';
@@ -67,7 +67,9 @@ const JobsDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
         <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 animate-fade-in">
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Background jobs</p>
-                <button type="button" onClick={onClose} className="text-xs text-zinc-500 hover:text-zinc-200" aria-label="Close background jobs">✕</button>
+                <button type="button" onClick={onClose} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors" aria-label="Close background jobs">
+                    <X className="h-3.5 w-3.5" />
+                </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-4 py-3">
                 {!hasContent && (

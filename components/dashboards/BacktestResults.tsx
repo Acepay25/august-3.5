@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+import { Check, X } from 'lucide-react';
 import { SectionCard, StatPill, ProgressBar, LiveBacktestResult } from './analyticsShared';
 
 interface BacktestResultsProps {
@@ -80,10 +81,14 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
 
                     {/* Win Rate Visual */}
                     <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
-                        <div className="flex justify-between text-[10px] mb-2">
-                            <span className="text-emerald-400 font-medium">✓ Wins</span>
+                        <div className="flex justify-between items-center text-[10px] mb-2">
+                            <span className="text-emerald-400 font-medium flex items-center gap-1">
+                                <Check className="h-3 w-3" /> Wins
+                            </span>
                             <span className="text-zinc-500">{backtestResult!.winRate.toFixed(0)}% / {(100 - backtestResult!.winRate).toFixed(0)}%</span>
-                            <span className="text-rose-400 font-medium">✗ Losses</span>
+                            <span className="text-rose-400 font-medium flex items-center gap-1">
+                                <X className="h-3 w-3" /> Losses
+                            </span>
                         </div>
                         <ProgressBar value={backtestResult!.winRate} />
                     </div>

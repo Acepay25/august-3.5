@@ -7,6 +7,7 @@
  */
 
 import React from 'react';
+import { X } from 'lucide-react';
 import { BotFace, BUILTIN_FACES, UPLOADABLE_FACES, randomFace, type BotFaceSpec, type FaceShape } from './BotFace';
 import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';
@@ -115,9 +116,9 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         type="button"
                         onClick={onClose}
                         aria-label="Close new bot dialog"
-                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
                     >
-                        ✕
+                        <X className="h-4 w-4" />
                     </button>
                 </div>
 

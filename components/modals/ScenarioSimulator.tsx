@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Check, X } from 'lucide-react';
 import { Message, LoggedTrade, TradeOutcome } from '../../types';
 import { CloseIcon } from '../shared/Icons';
 import {
@@ -567,8 +568,8 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     }`}
                                             >
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-bold">
-                                                        {match.trade.outcome === TradeOutcome.WIN ? '✓' : '✗'}
+                                                    <span className="font-bold flex items-center">
+                                                        {match.trade.outcome === TradeOutcome.WIN ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                                                     </span>
                                                     <span className="font-mono">{match.trade.analysis.coinName}</span>
                                                 </div>

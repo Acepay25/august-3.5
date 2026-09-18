@@ -85,6 +85,8 @@ interface TradeViewProps {
      *  App's "Jump to latest analysis" + gallery Locate route their scroll
      *  through the function the dock registers (null on unmount). */
     registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
+    /** Triggers a fresh discovery of models from configured providers. */
+    onRefreshModels?: () => Promise<void>;
     /** The Antigravity-style left sidebar (the order book) — toggled by
      *  clicking the active Trade icon in the activity bar. Below lg the icon
      *  instead sends a mode request (below), since there is no sidebar. */
@@ -231,7 +233,7 @@ const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     );
 };
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -627,6 +629,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         onToggleDeskScene,
         isDeskSceneOpen,
         hasDeskSceneMessage,
+        onRefreshModels,
         registerScrollToMessage,
     };
 

@@ -4,6 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -126,11 +127,18 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
         info: 'bg-cyan-900 border-cyan-500/50 text-cyan-100',
     };
 
-    const iconStyles = {
-        success: '✓',
-        error: '✕',
-        warning: '!',
-        info: 'ℹ',
+    const renderIcon = (type: ToastType) => {
+        switch (type) {
+            case 'success':
+                return <CheckCircle className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" />;
+            case 'error':
+                return <AlertCircle className="h-5 w-5 text-rose-300 shrink-0 mt-0.5" />;
+            case 'warning':
+                return <AlertTriangle className="h-5 w-5 text-amber-300 shrink-0 mt-0.5" />;
+            case 'info':
+            default:
+                return <Info className="h-5 w-5 text-cyan-300 shrink-0 mt-0.5" />;
+        }
     };
 
     return (
@@ -142,7 +150,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
             aria-live="polite"
         >
             <div className="flex items-start gap-3">
-                <span className="text-lg flex-shrink-0">{iconStyles[toast.type]}</span>
+                {renderIcon(toast.type)}
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm">{toast.title}</p>
                     {toast.message && (
@@ -162,10 +170,10 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                 </div>
                 <button
                     onClick={onDismiss}
-                    className="p-1.5 rounded-lg hover:bg-zinc-700 transition-colors flex-shrink-0"
+                    className="p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors flex-shrink-0"
                     aria-label="Dismiss"
                 >
-                    ✕
+                    <X className="h-4 w-4" />
                 </button>
             </div>
         </div>

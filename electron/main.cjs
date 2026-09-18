@@ -177,6 +177,23 @@ function normalizeProviderUrl(url) {
     return parsed.toString().replace(/\/$/, '');
 }
 
+function getDiscoveryCandidateUrls(baseUrl, isGemini, apiKey) {
+    if (isGemini) {
+        return [`${baseUrl.replace(/\/+$/, '')}/models?key=${encodeURIComponent(apiKey)}`];
+    }
+    const urls = [`${baseUrl}/models`];
+    if (baseUrl.endsWith('/v1')) {
+        const withoutV1 = baseUrl.slice(0, -3);
+        if (withoutV1) urls.push(`${withoutV1}/models`);
+    } else {
+        urls.push(`${baseUrl}/v1/models`);
+    }
+    if (policy.isLocalBaseUrl(baseUrl)) {
+        urls.push(`${baseUrl.replace(/\/v1$/, '')}/api/tags`);
+    }
+    return [...new Set(urls)];
+}
+
 function discoverProviderDetails(config) {
     const baseUrl = normalizeProviderUrl(config?.baseUrl);
     const apiKey = String(config?.apiKey || '').trim();
@@ -188,17 +205,17 @@ function discoverProviderDetails(config) {
     }
     const isGemini = config?.apiFormat === 'google' || /generativelanguage/i.test(baseUrl);
     const isAnthropic = config?.apiFormat === 'messages' && !isGemini;
-    const url = isGemini
-        ? `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`
-        : `${baseUrl}/models`;
-    const headers = {};
+    const urls = getDiscoveryCandidateUrls(baseUrl, isGemini, apiKey);
+    const headers = {
+        Accept: 'application/json',
+    };
     if (isAnthropic) {
         headers['x-api-key'] = apiKey;
         headers['anthropic-version'] = '2023-06-01';
     } else if (!isGemini && apiKey && apiKey !== 'not-needed') {
         headers.Authorization = `Bearer ${apiKey}`;
     }
-    return { url, headers };
+    return { urls, headers };
 }
 
 // Wall-clock budget for one main-process provider request (headers OR body
@@ -254,25 +271,33 @@ async function fetchUpstream(url, init) {
 }
 
 async function sendDiscoverRequest(config) {
-    const { url, headers } = discoverProviderDetails(config);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    try {
-        const response = await fetchUpstream(url, {
-            method: 'GET',
-            headers,
-            signal: controller.signal,
-        });
-        const body = await response.text();
-        return { ok: response.ok, status: response.status, body };
-    } catch (error) {
-        if (error?.name === 'AbortError') {
-            throw new Error('Model discovery timed out — check the base URL.', { cause: error });
+    const { urls, headers } = discoverProviderDetails(config);
+    let lastResult = { ok: false, status: 0, body: '' };
+
+    for (const url of urls) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+            const response = await fetchUpstream(url, {
+                method: 'GET',
+                headers,
+                signal: controller.signal,
+            });
+            const body = await response.text();
+            lastResult = { ok: response.ok, status: response.status, body };
+            if (response.ok || response.status !== 404) {
+                return lastResult;
+            }
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                throw new Error('Model discovery timed out — check the base URL.', { cause: error });
+            }
+            lastResult = { ok: false, status: 0, body: error instanceof Error ? error.message : String(error) };
+        } finally {
+            clearTimeout(timeout);
         }
-        throw new Error('Could not reach the provider — check the base URL and your network.', { cause: error });
-    } finally {
-        clearTimeout(timeout);
     }
+    return lastResult;
 }
 
 // Streaming parity for the desktop chat dock: the renderer opts in per call

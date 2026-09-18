@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Check, X } from 'lucide-react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { GOOGLE_GEMINI_DEFAULT_BASE } from '../../utils/googleGeminiFormat';
 import { testConnection } from '../../services/providers/GenericProviderService';
@@ -440,13 +441,23 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 apiKey: draftKey || selected.apiKey,
                 apiFormat: draftFormat || selected.apiFormat,
             });
-            const existing = new Set(selected.models);
-            const fresh = discovered.filter(m => !existing.has(m));
-            if (fresh.length === 0) {
-                toast.success('Models up to date', 'All models from this provider are already in the list.');
+            const freshModels = sortModelsFreeFirst(discovered);
+            const isUnchanged = selected.models.length === freshModels.length && selected.models.every((m, idx) => m === freshModels[idx]);
+            if (isUnchanged) {
+                toast.success('Models up to date', 'All models from this provider are already up to date.');
             } else {
-                await onUpdateProvider(selected.id, { models: mergeDiscoveredModels(selected.models, discovered) });
-                toast.success('Models discovered', `Added ${fresh.length} model${fresh.length === 1 ? '' : 's'} from /models.`);
+                const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = { models: freshModels };
+                if (selected.selectedModel && !freshModels.includes(selected.selectedModel)) {
+                    updates.selectedModel = freshModels[0] || '';
+                }
+                await onUpdateProvider(selected.id, updates);
+                const added = freshModels.filter(m => !selected.models.includes(m)).length;
+                const removed = selected.models.filter(m => !freshModels.includes(m)).length;
+                const details: string[] = [];
+                if (added > 0) details.push(`+${added} new`);
+                if (removed > 0) details.push(`-${removed} removed`);
+                const summary = details.length > 0 ? ` (${details.join(', ')})` : '';
+                toast.success('Models updated', `Catalog updated: ${freshModels.length} models active${summary}.`);
             }
         } catch (e) {
             console.error('[ProviderManager] Model discovery failed:', e);
@@ -518,13 +529,13 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 apiKey: cfg.apiKey,
                 apiFormat: cfg.apiFormat,
             });
-            const models = mergeDiscoveredModels(cfg.models, discovered);
-            const selectedModel = models.includes(cfg.selectedModel) ? cfg.selectedModel : (models[0] || cfg.selectedModel);
+            const freshModels = sortModelsFreeFirst(discovered);
+            const selectedModel = freshModels.includes(cfg.selectedModel) ? cfg.selectedModel : (freshModels[0] || cfg.selectedModel);
             catalogRefreshed.current[cfg.id] = Date.now();
-            if (models.join('\0') !== cfg.models.join('\0') || selectedModel !== cfg.selectedModel) {
-                await onUpdateProvider(cfg.id, { models, selectedModel });
+            if (freshModels.join('\0') !== cfg.models.join('\0') || selectedModel !== cfg.selectedModel) {
+                await onUpdateProvider(cfg.id, { models: freshModels, selectedModel });
             }
-            if (!silent) setCatalogStatus(`Updated ${cfg.name} · ${models.length} models`);
+            if (!silent) setCatalogStatus(`Updated ${cfg.name} · ${freshModels.length} models`);
         } catch {
             if (!silent) setCatalogStatus(`Could not update ${cfg.name} — keeping the saved list.`);
         } finally {
@@ -786,8 +797,8 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 {isEditingThis ? (
                                                     <div className="flex min-w-0 flex-1 items-center gap-2" onClick={e => e.stopPropagation()}>
                                                         <input type="text" value={editModelInput} onChange={(e) => setEditModelInput(e.target.value)} className="w-full rounded-lg border border-zinc-600 bg-zinc-950 px-2 py-1 font-mono text-sm text-zinc-100 focus:outline-none" autoFocus />
-                                                        <button onClick={() => handleUpdateModelSubmit(m)} aria-label={`Confirm rename of model ${m}`} className="text-xs text-zinc-300">✓</button>
-                                                        <button onClick={() => setEditingModelId(null)} aria-label="Cancel rename" className="text-xs text-zinc-500">✕</button>
+                                                        <button onClick={() => handleUpdateModelSubmit(m)} aria-label={`Confirm rename of model ${m}`} className="p-1 text-zinc-300 hover:text-white transition-colors"><Check className="h-3.5 w-3.5" /></button>
+                                                        <button onClick={() => setEditingModelId(null)} aria-label="Cancel rename" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X className="h-3.5 w-3.5" /></button>
                                                     </div>
                                                 ) : (
                                                     <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{m}</span>

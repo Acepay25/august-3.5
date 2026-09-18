@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { Bookmark } from 'lucide-react';
+import { AlertTriangle, Bookmark, ShieldAlert, X, Zap } from 'lucide-react';
 import { AIProvider, LoggedTrade, TradeOutcome, TradeSummary } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon, RefreshIcon } from '../shared/Icons';
@@ -340,8 +340,23 @@ const TradeDetailView: React.FC<{
                                     <div className={`col-span-2 rounded-lg border px-3 py-2 ${trade.patternMemoryGate.gateResult === 'HALT'
                                         ? 'status-surface border-rose-500/40 bg-rose-500/10'
                                         : 'status-surface border-amber-500/40 bg-amber-500/10'}`}>
-                                        <span className={`text-[9px] font-black uppercase tracking-widest ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
-                                            {trade.patternMemoryGate.gateResult === 'HALT' ? '⛔ Memory gate: halted' : trade.patternMemoryGate.gateResult === 'REDUCE_SIZE' ? '⚠️ Memory gate: reduce size' : '⚡ Memory gate: warning'}
+                                        <span className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
+                                            {trade.patternMemoryGate.gateResult === 'HALT' ? (
+                                                <>
+                                                    <ShieldAlert className="h-3 w-3 shrink-0" />
+                                                    <span>Memory gate: halted</span>
+                                                </>
+                                            ) : trade.patternMemoryGate.gateResult === 'REDUCE_SIZE' ? (
+                                                <>
+                                                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                                                    <span>Memory gate: reduce size</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Zap className="h-3 w-3 shrink-0" />
+                                                    <span>Memory gate: warning</span>
+                                                </>
+                                            )}
                                         </span>
                                         <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{trade.patternMemoryGate.reason}</p>
                                         {trade.patternMemoryGate.historicalFailures.length > 0 && (
@@ -674,10 +689,10 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     {outcomeFilter !== 'all' && (
                         <button
                             onClick={() => setOutcomeFilter('all')}
-                            className="text-[9px] text-zinc-500 hover:text-zinc-300 px-1"
+                            className="p-1 text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors"
                             aria-label="Clear outcome filter"
                         >
-                            ✕
+                            <X className="h-3 w-3" />
                         </button>
                     )}
                 </div>

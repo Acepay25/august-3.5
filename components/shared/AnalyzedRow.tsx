@@ -6,6 +6,7 @@ export interface AnalyzedRowProps {
      *  timeline stays OPEN live and the duration ticks. */
     running?: boolean;
     className?: string;
+    toolsCount?: number;
     children: React.ReactNode;
 }
 
@@ -17,7 +18,7 @@ export interface AnalyzedRowProps {
  * covers the pre-answer work phase only — it starts at turn start and
  * freezes when the answer text begins.
  */
-const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', children }) => {
+const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', toolsCount, children }) => {
     const [open, setOpen] = useState(running);
     const wasRunningRef = useRef(running);
     const startedAtRef = useRef<number | null>(running ? Date.now() : null);
@@ -68,6 +69,11 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
                 <Brain className="reasoning-row-glyph" aria-hidden="true" />
                 <span className="reasoning-row-label">
                     {label}{seconds !== null ? ` for ${seconds}s` : ''}
+                    {toolsCount !== undefined && toolsCount > 0 && (
+                        <span className="font-normal opacity-75">
+                            {' · '}{toolsCount} {toolsCount === 1 ? 'tool' : 'tools'}
+                        </span>
+                    )}
                 </span>
             </summary>
             <div className="reasoning-row-body analyzed-row-body">

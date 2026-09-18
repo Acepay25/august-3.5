@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Settings, Trash2, Square, Copy, Check, Activity as ActivityIcon } from 'lucide-react';
+import { Settings, Trash2, Square, Copy, Check, Activity as ActivityIcon, ChevronDown, Loader2, MessageSquare, Minus } from 'lucide-react';
 import { BotAvatar } from './BotAvatar';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { findBotById, groupDisplayName } from '../../services/agents/agentRoster';
@@ -67,11 +67,11 @@ const relTime = (iso: string | number): string => {
     return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-const ACTIVITY_ICON: Record<GroupActivityEntry['kind'], string> = {
-    sent: '🗨',
-    working: '↻',
-    replied: '✓',
-    passed: '○',
+const ACTIVITY_ICON: Record<GroupActivityEntry['kind'], React.ReactNode> = {
+    sent: <MessageSquare className="h-3 w-3" />,
+    working: <Loader2 className="h-3 w-3 animate-spin" />,
+    replied: <Check className="h-3 w-3 text-emerald-400" />,
+    passed: <Minus className="h-3 w-3 text-zinc-500" />,
 };
 
 const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
@@ -216,7 +216,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                     aria-expanded={activityOpen}
                     className="flex w-full items-center gap-2 py-1 text-left"
                 >
-                    <span className="text-[11px] text-zinc-500">{activityOpen ? '▾' : '▸'}</span>
+                    <ChevronDown className={`h-3 w-3 text-zinc-500 transition-transform ${activityOpen ? '' : '-rotate-90'}`} />
                     <span className="text-[11px] font-semibold text-zinc-400">Activity</span>
                     {isRunning && workingBotId && (
                         <span className="text-[11px] text-zinc-500">

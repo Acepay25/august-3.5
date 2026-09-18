@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { TrendingUp, TrendingDown, Clock } from 'lucide-react';
+import { CheckSquare, Clock, Square, TrendingDown, TrendingUp } from 'lucide-react';
 import { Message, TradeOutcome } from '../../types';
 import { CaptureJournalTags } from '../../types/trade';
 import { loadChecklistConfig, summarizeChecklist } from '../../utils/checklist';
@@ -416,7 +416,9 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                                     : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
                                             }`}
                                         >
-                                            <span aria-hidden>{checklistChecked.has(item.id) ? '☑' : '☐'}</span>
+                                            <span aria-hidden className="flex items-center">
+                                                {checklistChecked.has(item.id) ? <CheckSquare className="h-3.5 w-3.5 text-cyan-400 shrink-0" /> : <Square className="h-3.5 w-3.5 text-zinc-500 shrink-0" />}
+                                            </span>
                                             {item.label}
                                         </button>
                                     ))}

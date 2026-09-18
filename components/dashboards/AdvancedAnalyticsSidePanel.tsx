@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { BarChart2, CheckCircle, Sparkles, TrendingUp } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AIProvider, LevelProbabilities } from '../../types';
@@ -145,7 +146,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
-                                    <span className="text-xl"></span>
+                                    <BarChart2 className="h-5 w-5 text-cyan-400" />
                                 </div>
                                 <div>
                                     <h2 className="text-base font-semibold text-white tracking-tight">Analytics</h2>
@@ -215,7 +216,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2 text-[12px] text-emerald-400/80 bg-emerald-500/[0.05] rounded-xl p-3 border border-emerald-500/10">
-                                    <span>✓</span>
+                                    <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
                                     <span>All models performing optimally</span>
                                 </div>
                             )}
@@ -254,14 +255,17 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                         />
                                         <StatPill
                                             label="Quality"
-                                            value={entryTimingScore.score >= 70 ? '✓ Good' : entryTimingScore.score >= 50 ? ' Fair' : ' Poor'}
+                                            value={entryTimingScore.score >= 70 ? 'Good' : entryTimingScore.score >= 50 ? 'Fair' : 'Poor'}
                                             variant={entryTimingScore.score >= 70 ? 'success' : entryTimingScore.score >= 50 ? 'warning' : 'danger'}
                                         />
                                     </div>
 
                                     {entryTimingScore.suggestedEntry && (
                                         <div className="p-3 rounded-xl bg-cyan-500/[0.08] border border-cyan-500/20">
-                                            <div className="text-[10px] text-cyan-400 mb-1.5 font-medium"> Better Entry Available</div>
+                                            <div className="text-[10px] text-cyan-400 mb-1.5 font-medium flex items-center gap-1">
+                                                <TrendingUp className="h-3.5 w-3.5" />
+                                                <span>Better Entry Available</span>
+                                            </div>
                                             <div className="text-lg text-cyan-100 font-mono font-bold">
                                                 ${entryTimingScore.suggestedEntry.price.toLocaleString()}
                                             </div>
@@ -327,8 +331,9 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
 
                         {/* Footer Tip */}
                         <div className="text-center py-3">
-                            <div className="text-[10px] text-zinc-600">
-                                 Enable Hybrid Intelligence to see live results
+                            <div className="text-[10px] text-zinc-600 flex items-center justify-center gap-1.5">
+                                <Sparkles className="h-3 w-3 text-cyan-400" />
+                                <span>Enable Hybrid Intelligence to see live results</span>
                             </div>
                         </div>
                     </div>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { SavedAnalysis } from '../../types';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -66,7 +67,9 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
             <div className="text-xs font-black uppercase tracking-widest text-cyan-300">Saved analyses</div>
             <div className="text-[10px] text-zinc-500">{savedAnalyses.length} saved · click a row to expand</div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">✕</button>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2">
