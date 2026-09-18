@@ -164,6 +164,14 @@ describe('geminiThinkingParams', () => {
         expect(geminiThinkingParams(false, 'gpt-4o')).toBeUndefined();
         expect(geminiThinkingParams(false, '')).toBeDefined(); // empty id still counts gemini-ish (renderer rule)
     });
+
+    it('scales thinkingBudget based on effort and disables on off', () => {
+        expect(geminiThinkingParams(false, 'gemini-2.5-pro', 'off')).toBeUndefined();
+        expect(geminiThinkingParams(false, 'gemini-2.5-pro', 'low')).toEqual({ includeThoughts: true, thinkingBudget: 2048 });
+        expect(geminiThinkingParams(false, 'gemini-2.5-pro', 'medium')).toEqual({ includeThoughts: true, thinkingBudget: 4096 });
+        expect(geminiThinkingParams(false, 'gemini-2.5-pro', 'high')).toEqual({ includeThoughts: true, thinkingBudget: 8192 });
+        expect(geminiThinkingParams(false, 'gemini-2.5-pro', 'max')).toEqual({ includeThoughts: true, thinkingBudget: 16384 });
+    });
 });
 
 describe('host policy — loopback/private LAN vs public', () => {

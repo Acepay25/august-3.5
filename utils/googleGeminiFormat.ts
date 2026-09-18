@@ -92,7 +92,7 @@ const toGeminiRole = (role: string): GeminiRole =>
 
 export const chatMessagesToGemini = (
     messages: Array<{ role: string; content: unknown }>,
-    options?: { maxTokens?: number; temperature?: number; jsonMode?: boolean; model?: string },
+    options?: { maxTokens?: number; temperature?: number; jsonMode?: boolean; model?: string; reasoningEffort?: string },
 ): GeminiGenerateBody => {
     const systemBits: string[] = [];
     const contents: GeminiContent[] = [];
@@ -120,7 +120,7 @@ export const chatMessagesToGemini = (
     }
 
     const model = (options?.model || '').toLowerCase();
-    const wantsThoughts = !options?.jsonMode && /gemini|thinking/i.test(model || 'gemini');
+    const wantsThoughts = !options?.jsonMode && options?.reasoningEffort !== 'off' && /gemini|thinking/i.test(model || 'gemini');
     const body: GeminiGenerateBody = {
         contents,
         generationConfig: {
@@ -135,7 +135,11 @@ export const chatMessagesToGemini = (
         body.generationConfig.responseMimeType = 'application/json';
     }
     if (wantsThoughts) {
-        body.generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: 8192 };
+        const budget = options?.reasoningEffort === 'low' ? 2048
+            : options?.reasoningEffort === 'medium' ? 4096
+            : options?.reasoningEffort === 'max' ? 16384
+            : 8192;
+        body.generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: budget };
     }
     return body;
 };

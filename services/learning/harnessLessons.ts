@@ -272,7 +272,7 @@ export const probeWireSupport = async (
         }
     } catch (error: any) {
         const message = String(error?.message || error);
-        const knobField = audit.route === 'xai-effort' ? 'reasoning_effort'
+        const knobField = audit.route === 'xai-effort' || audit.route === 'openai-effort' ? 'reasoning_effort'
             : audit.route === 'glm-thinking' || audit.route === 'deepseek-thinking' ? 'thinking'
                 : audit.route === 'responses-effort' ? 'reasoning'
                     : 'thinking';

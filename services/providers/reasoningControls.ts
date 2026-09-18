@@ -102,6 +102,8 @@ export const effortForTask = (
 export interface WireCapabilities {
     /** xAI reasoning_effort route (low/medium/high/xhigh). */
     xaiEffort: boolean;
+    /** OpenAI chat_completions reasoning_effort route (low/medium/high for o1/o3-mini). */
+    openaiEffort: boolean;
     /** GLM/z-ai thinking object (enabled/disabled) + literal effort values. */
     glmThinking: boolean;
     /** DeepSeek top-level thinking + reasoning_effort. */
@@ -133,6 +135,7 @@ export const detectWireCapabilities = (
         // grok-4-fast rejects reasoning_effort; the rest of the family honors it.
         // Match both "xai" and the literal host "x.ai" spellings.
         xaiEffort: isChat && /x\.?ai|grok/.test(host + model) && !/fast/.test(model),
+        openaiEffort: isChat && /(?:^|\b|\/)(?:o1|o3|o4)(?:-mini|-preview)?(?::|\b|$)/i.test(model),
         glmThinking: isChat && /z-ai|zhipu|bigmodel|glm/.test(host + model),
         deepseekThinking: isChat && /deepseek/.test(host + model),
         anthropicThinking: config.apiFormat === 'messages',
@@ -151,7 +154,7 @@ export const detectWireCapabilities = (
 /** One audit line per call — what the wire actually received and why. */
 export interface WireAuditEntry {
     /** Which capability route was applied ('none' = fail-closed no-op). */
-    route: 'xai-effort' | 'glm-thinking' | 'deepseek-thinking' | 'anthropic-thinking' | 'responses-effort' | 'none';
+    route: 'xai-effort' | 'openai-effort' | 'glm-thinking' | 'deepseek-thinking' | 'anthropic-thinking' | 'responses-effort' | 'gemini-thinking' | 'none';
     /** The harness effort tier that drove the translation. */
     effort: ReasoningEffort;
     /** Machine-readable outcome — the runStats / known-answer-probe substrate. */
@@ -191,6 +194,16 @@ const XAI_EFFORT_MAP: Record<ReasoningEffort, 'low' | 'medium' | 'high' | 'xhigh
     high: 'high',
     max: 'xhigh',
     // 'auto' sends nothing — preserve the provider default.
+    auto: null,
+};
+
+/** Map harness tiers onto OpenAI's 3-level scale (o1 / o3-mini). */
+const OPENAI_EFFORT_MAP: Record<ReasoningEffort, 'low' | 'medium' | 'high' | null> = {
+    off: 'low',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    max: 'high',
     auto: null,
 };
 
@@ -238,6 +251,19 @@ export const buildReasoningPatch = (
             };
         }
         return { patch: {}, audit: { route: 'none', effort, applied: false, reason: 'xai route: effort=auto sends no knob' } };
+    }
+    if (caps.openaiEffort) {
+        if (isRoutePinned('openai-effort', config.id)) {
+            return { patch: {}, audit: { route: 'none', effort, applied: false, reason: 'openai route pinned off by a harness wire lesson (re-probe to clear)' } };
+        }
+        const value = OPENAI_EFFORT_MAP[effort];
+        if (value) {
+            return {
+                patch: { reasoning_effort: value },
+                audit: { route: 'openai-effort', effort, applied: true, reason: `reasoning_effort=${value}` },
+            };
+        }
+        return { patch: {}, audit: { route: 'none', effort, applied: false, reason: 'openai route: effort=auto sends no knob' } };
     }
     if (caps.glmThinking) {
         if (isRoutePinned('glm-thinking', config.id)) {
