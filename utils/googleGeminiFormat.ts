@@ -6,6 +6,7 @@
  */
 
 import { TokenUsage } from './tokenUsage';
+import { geminiThinkingParams } from '../shared/providerRequestPolicy.cjs';
 
 export const GOOGLE_GEMINI_DEFAULT_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -120,12 +121,12 @@ export const chatMessagesToGemini = (
     }
 
     const model = (options?.model || '').toLowerCase();
-    const wantsThoughts = !options?.jsonMode && options?.reasoningEffort !== 'off' && /gemini|thinking/i.test(model || 'gemini');
+    const maxOutputTokens = options?.maxTokens ?? 4096;
     const body: GeminiGenerateBody = {
         contents,
         generationConfig: {
             temperature: options?.temperature ?? 0.7,
-            maxOutputTokens: options?.maxTokens ?? 4096,
+            maxOutputTokens,
         },
     };
     if (systemBits.length > 0) {
@@ -134,13 +135,11 @@ export const chatMessagesToGemini = (
     if (options?.jsonMode) {
         body.generationConfig.responseMimeType = 'application/json';
     }
-    if (wantsThoughts) {
-        const budget = options?.reasoningEffort === 'low' ? 2048
-            : options?.reasoningEffort === 'medium' ? 4096
-            : options?.reasoningEffort === 'max' ? 16384
-            : 8192;
-        body.generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: budget };
-    }
+    // The transport applies the SAME function on the canonical path; a second
+    // hand-written budget ladder here is how the two drift apart, and it also
+    // let a 16384 thinking budget onto a call allowed 4096 output tokens.
+    const thinking = geminiThinkingParams(options?.jsonMode, model, options?.reasoningEffort, maxOutputTokens);
+    if (thinking) body.generationConfig.thinkingConfig = thinking;
     return body;
 };
 

@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProviderConfig } from '../types/provider';
 import { discoverProviderModels } from '../services/infrastructure/ProviderConfigService';
 import { getPreferenceObject, setPreferenceObject } from '../services/infrastructure/PreferencesService';
-import { mergeDiscoveredModels, sortModelsFreeFirst } from '../utils/providerUtils';
+import { sortModelsFreeFirst } from '../utils/providerUtils';
 import { isLocalBaseUrl } from '../shared/providerRequestPolicy.cjs';
 
 const LAST_SWEEP_KEY = 'model_catalog_sweep_v1';

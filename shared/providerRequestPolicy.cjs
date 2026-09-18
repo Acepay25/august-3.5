@@ -195,18 +195,42 @@ const GEMINI_THINKING_BUDGETS = {
  *   - 'high' / default → 8192
  *   - 'max'            → 16384
  *
+ * The budget is clamped to the call's own output limit — see
+ * geminiThinkingBudget — so a max-effort request on a short answer cannot ask
+ * for more thinking tokens than the response is allowed to spend in total.
+ *
  * @param {boolean} [jsonMode]
  * @param {string} [model]
  * @param {string} [effort]
+ * @param {number} [maxOutputTokens]
  * @returns {{ includeThoughts: boolean, thinkingBudget: number } | undefined}
  */
-function geminiThinkingParams(jsonMode, model, effort) {
+function geminiThinkingParams(jsonMode, model, effort, maxOutputTokens) {
     if (jsonMode) return undefined;
     if (effort === 'off') return undefined;
     const id = String(model || '').toLowerCase();
     if (!/gemini|thinking/i.test(id || 'gemini')) return undefined;
-    const budget = (effort && GEMINI_THINKING_BUDGETS[effort]) || 8192;
-    return { includeThoughts: true, thinkingBudget: budget };
+    const budget = geminiThinkingBudget(effort, maxOutputTokens);
+    return budget === undefined ? undefined : { includeThoughts: true, thinkingBudget: budget };
+}
+
+/**
+ * thinkingBudget for an effort tier, clamped to the output budget the call
+ * actually has. Gemini bills thinking tokens INSIDE maxOutputTokens, so a
+ * budget at or above the cap is a 400 — and the flat 8192 this replaced
+ * already outran the 4096 a plain chat call asks for. Mirrors the Anthropic
+ * path: under MIN_EFFECTIVE_THINKING_TOKENS there is nothing worth thinking
+ * with, so no thinkingConfig is requested at all.
+ *
+ * @param {string} [effort]
+ * @param {number} [maxOutputTokens]
+ * @returns {number | undefined} undefined ⇒ send no thinkingConfig
+ */
+function geminiThinkingBudget(effort, maxOutputTokens) {
+    const requested = (effort && GEMINI_THINKING_BUDGETS[effort]) || 8192;
+    if (!Number.isFinite(maxOutputTokens) || maxOutputTokens <= 0) return requested;
+    if (maxOutputTokens <= MIN_EFFECTIVE_THINKING_TOKENS) return undefined;
+    return Math.min(requested, maxOutputTokens - 1);
 }
 
 // ─── Provider URL host policy ───────────────────────────────────────────────
@@ -300,6 +324,7 @@ const PROVIDER_REQUEST_POLICY = {
     anthropicShouldSendThinking,
     anthropicThinkingFields,
     geminiThinkingParams,
+    geminiThinkingBudget,
     isPrivateOrLoopbackHost,
     httpAllowedForHost,
     isSafeProviderTargetUrl,

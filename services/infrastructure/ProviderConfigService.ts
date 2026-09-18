@@ -474,6 +474,7 @@ async function fetchDiscoverPayload(config: {
 
     const candidateUrls = getDiscoveryCandidateUrls(base, isGemini, key);
     let lastResult = { status: 0, body: '' };
+    let timedOut = false;
 
     for (const candidateUrl of candidateUrls) {
         const controller = new AbortController();
@@ -488,15 +489,20 @@ async function fetchDiscoverPayload(config: {
                 return lastResult;
             }
         } catch (e) {
-            if ((e as Error)?.name === 'AbortError') {
-                throw new Error('Model discovery timed out — check the base URL.', { cause: e });
-            }
+            // A timeout on ONE endpoint must not cancel the fallback chain —
+            // reaching the next candidate is the entire reason it exists. One
+            // hanging /v1/models used to abort the whole sweep, so a provider
+            // that answered fine on /v1/… was never given the chance.
+            if ((e as Error)?.name === 'AbortError') timedOut = true;
             lastResult = { status: 0, body: (e as Error)?.message || '' };
         } finally {
             clearTimeout(timer);
         }
     }
 
+    if (timedOut) {
+        throw new Error('Model discovery timed out — check the base URL.');
+    }
     if (lastResult.status === 0 && !lastResult.body) {
         throw new Error('Could not reach the provider — check the base URL and your network.');
     }

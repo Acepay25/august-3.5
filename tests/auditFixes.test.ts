@@ -102,7 +102,7 @@ describe('wire audit on every transport', () => {
         expect(audits[0].reason).toContain('1024 thinking floor');
     });
 
-    it('google format → explicit fail-closed audit line', async () => {
+    it('google format reports the thinkingConfig it actually sent', async () => {
         fetchMock.mockResolvedValue({
             ok: true, status: 200,
             json: async () => ({ candidates: [{ content: { parts: [{ text: 'hi' }] } }] }),
@@ -111,11 +111,40 @@ describe('wire audit on every transport', () => {
         await sendChatRequest(baseConfig({
             apiFormat: 'google', baseUrl: 'https://generativelanguage.googleapis.com', selectedModel: 'gemini-x',
         }), [{ role: 'user', content: 'x' }], {
-            reasoningEffort: 'high', onWireAudit: e => audits.push(e),
+            reasoningEffort: 'high', maxTokens: 4096, onWireAudit: e => audits.push(e),
         });
         expect(audits).toHaveLength(1);
-        expect(audits[0].route).toBe('none');
-        expect(audits[0].reason).toContain('fail closed');
+        // Effort scales thinkingBudget, so the unconditional
+        // route:'none'/applied:false line described a request that was not the
+        // one on the wire — and route pinning, calibration and the known-answer
+        // probes all read this to decide whether a route works.
+        expect(audits[0].route).toBe('gemini-thinking');
+        expect(audits[0].applied).toBe(true);
+        // Clamped to the call's own output budget, never above it.
+        expect(audits[0].reason).toContain('thinkingBudget=4095');
+        const raw = (fetchMock.mock.calls.at(-1)?.[1] as RequestInit | undefined)?.body;
+        const sent = typeof raw === 'string' ? JSON.parse(raw) : undefined;
+        expect(sent?.generationConfig?.thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 4095 });
+    });
+
+    it('google format fails closed when effort is off or JSON mode is on', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true, status: 200,
+            json: async () => ({ candidates: [{ content: { parts: [{ text: 'hi' }] } }] }),
+        });
+        for (const opts of [{ reasoningEffort: 'off' as const }, { jsonMode: true }]) {
+            const audits: any[] = [];
+            await sendChatRequest(baseConfig({
+                apiFormat: 'google', baseUrl: 'https://generativelanguage.googleapis.com', selectedModel: 'gemini-x',
+            }), [{ role: 'user', content: 'x' }], {
+                ...opts, maxTokens: 4096, onWireAudit: e => audits.push(e),
+            });
+            expect(audits[0].route).toBe('none');
+            expect(audits[0].applied).toBe(false);
+            const raw = (fetchMock.mock.calls.at(-1)?.[1] as RequestInit | undefined)?.body;
+            const sent = typeof raw === 'string' ? JSON.parse(raw) : undefined;
+            expect(sent?.generationConfig?.thinkingConfig).toBeUndefined();
+        }
     });
 });
 
