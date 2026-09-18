@@ -167,6 +167,10 @@ interface TradeChatPanelProps {
      *  only shows the slot). Absent ⇒ those session options are hidden. */
     renderCoachSurface?: () => React.ReactNode;
     renderGroupSurface?: (groupId: string) => React.ReactNode;
+    /** Drafts + proposals waiting on a human decision. Rides the Chat | Coach
+     *  switch as a count so the switch also says whether a visit is due.
+     *  App owns the number (the roster rail shows the same one). */
+    coachPending?: number;
     /** Group rooms available to open as a session (title for the tab). */
     groups?: Array<{ id: string; name: string }>;
     /** Imperative scroll-to-entry bridge for App-level affordances ("Jump to
@@ -360,7 +364,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
     onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
-    renderCoachSurface, renderGroupSurface, groups = [],
+    renderCoachSurface, renderGroupSurface, groups = [], coachPending = 0,
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
@@ -815,14 +819,23 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.addSession({ kind: 'group', title: name, groupId: groupSessionRequest.groupId });
     }, [groupSessionRequest, groups, sessions]);
 
+    // ── Coach surface ──────────────────────────────────────────────────────
+    // One find-or-create for the coach session, shared by the roster rail's
+    // deep link (below) and the dock's Chat | Coach switch — the two used to
+    // carry byte-identical copies that could drift.
+    const isCoachSurface = activeSession.kind === 'coach';
+    const openCoachSurface = useCallback((): void => {
+        const existing = sessions.find(s => s.kind === 'coach');
+        if (existing) { chatStore.setActiveId(existing.id); return; }
+        chatStore.addSession({ kind: 'coach', title: 'Coach inbox' });
+    }, [sessions]);
+
     const lastCoachRequestRef = useRef(0);
     useEffect(() => {
         if (!coachSessionRequest || coachSessionRequest === lastCoachRequestRef.current) return;
         lastCoachRequestRef.current = coachSessionRequest;
-        const existing = sessions.find(s => s.kind === 'coach');
-        if (existing) { chatStore.setActiveId(existing.id); return; }
-        chatStore.addSession({ kind: 'coach', title: 'Coach inbox' });
-    }, [coachSessionRequest, sessions]);
+        openCoachSurface();
+    }, [coachSessionRequest, openCoachSurface]);
 
     const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
         chatStore.mutate(id, fn);
@@ -1467,6 +1480,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.removeSession(id);
     }, []);
 
+    // Switching back to Chat has to resolve a real conversation rather than
+    // assume one exists — a profile can reach the Coach surface with every
+    // chat since deleted. (openCoachSurface lives with the deep-link effect.)
+    const openChatSurface = useCallback((): void => {
+        const conversations = sessions.filter(s => s.kind === 'solo' || s.kind === 'panel');
+        if (conversations.length === 0) { addSession('solo'); return; }
+        chatStore.setActiveId(conversations.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a)).id);
+    }, [sessions, addSession]);
+
     /** Panel seat management: add (max 5) / remove a model. */
     const setPanelModels = useCallback((sid: string, models: Array<{ providerId: string; modelId: string }>): void => {
         mutate(sid, s => ({ ...s, panelModels: models.slice(0, PANEL_MAX_MODELS) }));
@@ -1537,7 +1559,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     className="rounded-control p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100">
                     <PanelRightOpen className="h-4 w-4" />
                 </button>
-                <span className="select-none text-[10px] font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
+                <span className="select-none text-[10px] font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">{isCoachSurface ? 'Coach' : 'Chart AI'}</span>
                 <span className={`h-2 w-2 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
                 <SupervisorIndicator compact onOpen={() => setSupervisorOpen(true)} />
             </div>
@@ -1546,13 +1568,44 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
     return (
         <div className="relative flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40" data-testid="trade-chat-panel">
-            {/* Header — the reference's Agent-panel cluster: identity left,
-                + / history / ⋯ / × right, nothing else. Sessions are reached
-                through the Past Conversations palette, not a tab strip. */}
+            {/* Header — the reference's Agent-panel cluster: surface switch
+                left, + / history / ⋯ / × right, nothing else. Conversations
+                are reached through the Past Conversations palette, not a tab
+                strip; the Coach inbox is a first-class surface, not a menu
+                item. */}
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
-                <span className="text-[13px] font-semibold text-zinc-100">Chart AI</span>
-                <span className="truncate text-[11px] text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
+                {/* The dock's wordmark doubles as the surface switch where a
+                    Coach inbox is reachable — the label already named the
+                    surface, so promoting it to a control costs no width. */}
+                {renderCoachSurface ? (
+                    <div role="tablist" aria-label="Dock surface" data-testid="dock-surface-switch"
+                        className="flex shrink-0 items-center gap-0.5 rounded-full border border-white/[0.07] bg-zinc-800/70 p-0.5">
+                        <button type="button" role="tab" aria-selected={!isCoachSurface} onClick={openChatSurface}
+                            className={`rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+                                !isCoachSurface ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
+                            }`}>
+                            Chat
+                        </button>
+                        <button type="button" role="tab" aria-selected={isCoachSurface} onClick={openCoachSurface}
+                            title={coachPending > 0 ? `${coachPending} awaiting your decision` : 'Coach inbox — nothing waiting'}
+                            className={`flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+                                isCoachSurface ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
+                            }`}>
+                            Coach
+                            {coachPending > 0 && (
+                                <span className="rounded-full bg-amber-500 px-1 font-mono text-[9px] font-bold leading-[13px] text-zinc-950">
+                                    {coachPending > 99 ? '99+' : coachPending}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                ) : (
+                    <span className="text-[13px] font-semibold text-zinc-100">Chart AI</span>
+                )}
+                {!isCoachSurface && (
+                    <span className="truncate text-[11px] text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
+                )}
                 {(() => {
                     // The prototype's "Analyzed 2m ago" meta, told honestly:
                     // the session's last real activity, and only once a settled
@@ -1629,12 +1682,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
                                         New agent <span className="text-zinc-600">· create a roster bot</span>
                                     </button>
-                                    {renderCoachSurface && (
-                                        <button type="button" onClick={() => { setShowNewMenu(false); const existing = sessions.find(s => s.kind === 'coach'); if (existing) { chatStore.setActiveId(existing.id); return; } chatStore.addSession({ kind: 'coach', title: 'Coach inbox' }); }}
-                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
-                                            Coach inbox <span className="text-zinc-600">· approvals</span>
-                                        </button>
-                                    )}
                                     {renderGroupSurface && groups.length > 0 && groups.slice(0, 6).map(g => (
                                         <button key={g.id} type="button"
                                             onClick={() => { setShowNewMenu(false); const existing = sessions.find(s => s.groupId === g.id); if (existing) { chatStore.setActiveId(existing.id); return; } chatStore.addSession({ kind: 'group', title: g.name, groupId: g.id }); }}
