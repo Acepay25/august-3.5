@@ -25,7 +25,7 @@ import ProfileMemoryCard from './ProfileMemoryCard';
 import SupervisorCard from './SupervisorCard';
 import AmendmentsInbox from './AmendmentsInbox';
 import ModelPicker from '../shared/ModelPicker';
-import { Journal } from '../journal/Journal';
+import { BookOpen, ArrowUpRight, Sparkles, Bot } from 'lucide-react';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies' | 'skills';
@@ -555,51 +555,160 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
                         }`}>
                             
-                            {/* TAB 0: Trading Journal — embedded inside Settings */}
-                            {activeTab === 'journal' && (
-                                <div className="h-full animate-fade-in">
-                                    <Journal
-                                        isVisible={true}
-                                        onClose={() => {}}
-                                        initialTab="log"
-                                        isEmbedded={true}
-                                        username={username}
-                                        trades={props.loggedTrades ?? []}
-                                        onDeleteTrades={props.onDeleteTrades ?? (() => {})}
-                                        onClearAllTrades={props.onClearAllTrades ?? (() => {})}
-                                        modelIdToName={props.modelIdToName ?? {}}
-                                        onUpdateInsights={props.onUpdateInsights ?? (() => {})}
-                                        isSummarizing={props.isSummarizing}
-                                        currentInsightIds={props.currentInsightIds ?? []}
-                                        onUpdateTradeLeverage={props.onUpdateTradeLeverage ?? (() => {})}
-                                        onUpdateOutcome={props.onUpdateOutcome}
-                                        onUpdatePnL={props.onUpdatePnL}
-                                        finalSummary={props.finalSummary ?? null}
-                                        individualSummaries={props.individualSummaries ?? []}
-                                        isLoading={props.isLoading ?? false}
-                                        isInsightGenerating={props.isInsightGenerating}
-                                        insightProgress={props.insightProgress}
-                                        newlyAddedInsightIds={props.newlyAddedInsightIds}
-                                        summarizationProvider={props.summarizationProvider ?? ''}
-                                        summarizationModel={props.summarizationModel ?? ''}
-                                        onSetSummarizationProvider={props.onSetSummarizationProvider ?? (() => {})}
-                                        onSetSummarizationModel={props.onSetSummarizationModel ?? (() => {})}
-                                        providers={props.providerConfigs}
-                                        summaryCharLimit={props.summaryCharLimit ?? 1000}
-                                        onUpdateSummaryCharLimit={props.onUpdateSummaryCharLimit ?? (() => {})}
-                                        onRegenerateSummary={props.onRegenerateSummary ?? (() => {})}
-                                        onDeleteInsight={props.onDeleteInsight}
-                                        useAlgorithmicSummary={props.useAlgorithmicSummary ?? false}
-                                        onToggleAlgorithmicSummary={props.onToggleAlgorithmicSummary ?? (() => {})}
-                                        useAlgorithmicInsights={props.useAlgorithmicInsights}
-                                        onToggleAlgorithmicInsights={props.onToggleAlgorithmicInsights}
-                                        onRewriteInsightsWithAI={props.onRewriteInsightsWithAI}
-                                        familyWinRates={props.familyWinRates ?? {}}
-                                        enabledProviders={props.enabledProviders}
-                                        selectedModels={props.selectedModels}
-                                    />
-                                </div>
-                            )}
+                            {/* TAB 0: Trading Journal — Hub & Quick Launcher */}
+                            {activeTab === 'journal' && (() => {
+                                const trades = props.loggedTrades ?? [];
+                                const totalTrades = trades.length;
+                                const winTrades = trades.filter(t => t.outcome === 'WIN').length;
+                                const lossTrades = trades.filter(t => t.outcome === 'LOSS').length;
+                                const pendingTrades = trades.filter(t => !t.outcome || t.outcome === 'PENDING' || t.outcome === 'ENTRY_NOT_HIT').length;
+                                const decidedTrades = winTrades + lossTrades;
+                                const winRate = decidedTrades > 0 ? Math.round((winTrades / decidedTrades) * 100) : 0;
+
+                                return (
+                                    <div className="space-y-6 animate-fade-in p-6 lg:p-10 max-w-4xl mx-auto">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+                                            <div>
+                                                <h2 className="text-xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
+                                                    <BookOpen className="h-5 w-5 text-cyan-400" />
+                                                    Trading Journal Hub
+                                                </h2>
+                                                <p className="mt-1 text-xs text-zinc-400">
+                                                    Review past trades, AI pattern memory, and model performance metrics.
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onClose();
+                                                    onOpenJournal?.('log');
+                                                }}
+                                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-cyan-950/40 hover:bg-cyan-500 transition-all active:scale-95"
+                                            >
+                                                <span>Open Trading Journal</span>
+                                                <ArrowUpRight className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+
+                                        {/* Stats grid */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Total Logged</span>
+                                                <p className="mt-1 font-mono text-xl font-bold text-zinc-100">{totalTrades}</p>
+                                            </div>
+                                            <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Win Rate</span>
+                                                <p className="mt-1 font-mono text-xl font-bold text-emerald-400">{decidedTrades > 0 ? `${winRate}%` : '—'}</p>
+                                            </div>
+                                            <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Wins / Losses</span>
+                                                <p className="mt-1 font-mono text-xl font-bold text-zinc-200">
+                                                    <span className="text-emerald-400">{winTrades}</span>
+                                                    <span className="text-zinc-600 mx-1">/</span>
+                                                    <span className="text-rose-400">{lossTrades}</span>
+                                                </p>
+                                            </div>
+                                            <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Open / Pending</span>
+                                                <p className="mt-1 font-mono text-xl font-bold text-amber-400">{pendingTrades}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Quick navigation cards */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onClose();
+                                                    onOpenJournal?.('log');
+                                                }}
+                                                className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                                            >
+                                                <div className="flex items-center justify-between w-full">
+                                                    <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Trade Log</span>
+                                                    <ArrowUpRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                                                </div>
+                                                <p className="mt-1.5 text-[11px] text-zinc-400">View and manage all recorded trades, outcomes, and screenshots.</p>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onClose();
+                                                    onOpenJournal?.('learning');
+                                                }}
+                                                className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                                            >
+                                                <div className="flex items-center justify-between w-full">
+                                                    <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>
+                                                    <Sparkles className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                                                </div>
+                                                <p className="mt-1.5 text-[11px] text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onClose();
+                                                    onOpenJournal?.('models');
+                                                }}
+                                                className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                                            >
+                                                <div className="flex items-center justify-between w-full">
+                                                    <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Model Performance</span>
+                                                    <Bot className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                                                </div>
+                                                <p className="mt-1.5 text-[11px] text-zinc-400">Compare win rates and accuracy across different AI providers and models.</p>
+                                            </button>
+                                        </div>
+
+                                        {/* Journal Configuration */}
+                                        <div className="rounded-xl border border-white/[0.06] bg-zinc-800/20 p-5 space-y-4">
+                                            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Journal &amp; Summary Settings</h3>
+
+                                            <div className="flex items-center justify-between py-2 border-b border-white/[0.04]">
+                                                <div>
+                                                    <span className="text-xs font-medium text-zinc-200">Algorithmic Summary</span>
+                                                    <p className="text-[11px] text-zinc-400">Use instant algorithmic calculation instead of calling an AI model for summaries.</p>
+                                                </div>
+                                                <ToggleSwitch
+                                                    checked={props.useAlgorithmicSummary ?? false}
+                                                    onChange={() => props.onToggleAlgorithmicSummary?.(!props.useAlgorithmicSummary)}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between py-2 border-b border-white/[0.04]">
+                                                <div>
+                                                    <span className="text-xs font-medium text-zinc-200">Algorithmic Pattern Insights</span>
+                                                    <p className="text-[11px] text-zinc-400">Extract trade insights using local heuristics alongside AI pattern memory.</p>
+                                                </div>
+                                                <ToggleSwitch
+                                                    checked={props.useAlgorithmicInsights ?? false}
+                                                    onChange={() => props.onToggleAlgorithmicInsights?.(!props.useAlgorithmicInsights)}
+                                                />
+                                            </div>
+
+                                            {props.onUpdateSummaryCharLimit && (
+                                                <div className="flex items-center justify-between py-2">
+                                                    <div>
+                                                        <span className="text-xs font-medium text-zinc-200">Summary Character Limit</span>
+                                                        <p className="text-[11px] text-zinc-400">Maximum length for AI-generated journal review summaries.</p>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        value={props.summaryCharLimit ?? 1000}
+                                                        onChange={e => props.onUpdateSummaryCharLimit?.(Number(e.target.value))}
+                                                        className="w-24 rounded-lg border border-white/[0.08] bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-200 focus:border-cyan-500 focus:outline-none"
+                                                        min={200}
+                                                        max={5000}
+                                                        step={100}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             {/* TAB 1: AI Models & Providers */}
                             {activeTab === 'models' && (

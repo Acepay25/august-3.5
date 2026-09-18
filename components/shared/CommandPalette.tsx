@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
@@ -54,7 +55,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-sm">
+    <div className="fixed inset-0 z-[120] flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-sm animate-fade-in">
       <div
         ref={dialogRef}
         role="dialog"
@@ -62,8 +63,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
         aria-label="Command palette"
         className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
       >
-        <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5">
-          <span className="text-zinc-500 text-sm">⌘K</span>
+        <div className="flex items-center gap-2.5 border-b border-white/10 px-3.5 py-2.5">
+          <Search className="h-4 w-4 text-zinc-400 shrink-0" />
           <input
             ref={inputRef}
             value={query}
@@ -76,6 +77,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
             placeholder="Type a command…"
             className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
           />
+          <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">ESC</kbd>
         </div>
 
         <div className="max-h-72 overflow-y-auto p-1.5 custom-scrollbar">
@@ -91,12 +93,20 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
               type="button"
               onClick={() => run(action)}
               onMouseEnter={() => setHighlighted(index)}
-              className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${index === highlighted ? 'bg-zinc-700/70 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+              className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${index === highlighted ? 'bg-zinc-800 text-white' : 'text-zinc-300 hover:bg-zinc-800/60'}`}
             >
-              <span className="min-w-0 truncate">{action.label}</span>
-              {action.hint && <span className="shrink-0 text-[10px] text-zinc-500">{action.hint}</span>}
+              <span className="min-w-0 truncate text-xs font-medium">{action.label}</span>
+              {action.hint && <span className="shrink-0 font-mono text-[10px] text-zinc-500">{action.hint}</span>}
             </button>
           ))}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-white/[0.06] bg-zinc-950/60 px-3 py-2 text-[10px] text-zinc-500 font-mono">
+          <div className="flex items-center gap-2">
+            <span><kbd className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">↑↓</kbd> navigate</span>
+            <span><kbd className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">↵</kbd> select</span>
+          </div>
+          <span>August Trading</span>
         </div>
       </div>
     </div>

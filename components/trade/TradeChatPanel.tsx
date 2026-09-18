@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Brain, Camera, Check, ChevronDown, Copy, FileText, Gavel, History, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
+import { Brain, Camera, Check, ChevronDown, Copy, FileText, Gavel, History, LayoutGrid, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
@@ -182,6 +182,10 @@ interface TradeChatPanelProps {
     onToggleCollapsed?: () => void;
     expanded?: boolean;
     onToggleExpanded?: () => void;
+    /** Toggles the 2D debate desk floor projection modal. */
+    onToggleDeskScene?: () => void;
+    isDeskSceneOpen?: boolean;
+    hasDeskSceneMessage?: boolean;
 }
 
 const TRADE_TOOLS = [
@@ -330,6 +334,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     renderCoachSurface, renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
+    onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
 }) => {
     // Session state lives in the module store (chatStore) so an in-flight
     // answer survives switching to another surface tab and back — the panel
@@ -1519,6 +1524,22 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 })()}
                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} />
+                    {onToggleDeskScene && (
+                        <button
+                            type="button"
+                            onClick={onToggleDeskScene}
+                            aria-label={isDeskSceneOpen ? 'Close desk view' : 'Open 2D desk view'}
+                            title={isDeskSceneOpen ? 'Close 2D debate floor' : 'Open 2D debate floor'}
+                            className={`relative rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
+                                isDeskSceneOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-zinc-500'
+                            }`}
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                            {hasDeskSceneMessage && !isDeskSceneOpen && (
+                                <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-cyan-400 ring-2 ring-zinc-900 animate-pulse" />
+                            )}
+                        </button>
+                    )}
                     {(() => {
                         // ⟳ Re-run the last question with FRESH live context —
                         // the prototype's Refresh-analysis button, on real rails.
@@ -1762,7 +1783,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     const reasoning = e.reasoning ?? '';
                                     const running = !!e.streaming && !e.text;
                                     const hasWork = reasoning.trim().length > 0 || e.tools.length > 0;
-                                    if (!hasWork) {
+                                    const hasActions = !!(e.actions && e.actions.length > 0);
+                                    if (!hasWork && !hasActions) {
                                         // Nothing yet: the MiniMax waiting tip covers
                                         // the silent first moments of a turn.
                                         return running ? (
@@ -1809,9 +1831,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     // outside the desk loop) — leftovers render at the end.
                                     buf.push(...e.tools.slice(markerCount));
                                     flush('tools-tail');
-                                    return <AnalyzedRow running={running}>{nodes}</AnalyzedRow>;
+                                    return (
+                                        <div className="border-l border-white/[0.08] pl-3 ml-1 my-1.5 space-y-1.5">
+                                            {hasWork && <AnalyzedRow running={running}>{nodes}</AnalyzedRow>}
+                                            {hasActions && <ToolActionsRow actions={e.actions!} />}
+                                        </div>
+                                    );
                                 })()}
-                                {e.actions && e.actions.length > 0 && <ToolActionsRow actions={e.actions} />}
                                 <div className="text-[12px] leading-5 text-zinc-200">
                                     {shownText
                                         ? <FadingText text={shownText} streaming={!!e.streaming} />

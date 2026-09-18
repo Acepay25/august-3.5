@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Sparkles } from 'lucide-react';
+import { CheckCircle, Sparkles, Wrench, Zap } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 /**
@@ -49,6 +49,33 @@ const notesToPlainLines = (raw: string): string[] => raw
         .trimEnd())
     .filter(l => l.trim().length > 0)
     .slice(0, 24);
+
+const renderNoteLine = (line: string, i: number): React.ReactNode => {
+    const isBullet = line.startsWith('•');
+    const content = isBullet ? line.slice(1).trim() : line;
+    const lower = content.toLowerCase();
+
+    if (!isBullet) {
+        return <p key={i} className="font-semibold text-zinc-300 mt-2 first:mt-0">{line}</p>;
+    }
+
+    let Icon = Sparkles;
+    let iconTone = 'text-cyan-400';
+    if (lower.startsWith('fix') || lower.includes('bug') || lower.includes('patch')) {
+        Icon = Wrench;
+        iconTone = 'text-amber-400';
+    } else if (lower.startsWith('perf') || lower.includes('speed') || lower.includes('optim')) {
+        Icon = Zap;
+        iconTone = 'text-emerald-400';
+    }
+
+    return (
+        <div key={i} className="flex items-start gap-2 py-0.5">
+            <Icon className={`mt-0.5 h-3 w-3 shrink-0 ${iconTone}`} />
+            <span className="text-zinc-300">{content}</span>
+        </div>
+    );
+};
 
 const UpdateOverlay: React.FC = () => {
     const { isElectron, updateStatus, installUpdate, quitNow } = useAutoUpdate();
@@ -172,9 +199,7 @@ const UpdateOverlay: React.FC = () => {
                                         What's new in v{version}
                                     </summary>
                                     <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-white/[0.06] bg-zinc-950/60 p-3 text-[11px] leading-5 text-zinc-400 custom-scrollbar">
-                                        {notes.map((line, i) => (
-                                            <p key={i} className={line.startsWith('•') ? 'pl-3' : 'font-semibold text-zinc-300'}>{line}</p>
-                                        ))}
+                                        {notes.map(renderNoteLine)}
                                     </div>
                                 </details>
                             )}

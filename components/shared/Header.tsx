@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
@@ -26,7 +26,7 @@ interface HeaderProps {
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
     onOpenLiveMarket: () => void;
-    onOpenVersionHistory: () => void; // Opens System Intelligence
+    onOpenVersionHistory: () => void; // New prop for Changelog
     // Network status
     isOnline?: boolean;
     pendingQueueCount?: number;
@@ -55,6 +55,8 @@ interface HeaderProps {
     approvalCount?: number;
     /** Open the background-jobs drawer. */
     onOpenJobs?: () => void;
+    /** Open the command palette. */
+    onOpenCommandPalette?: () => void;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -94,6 +96,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenApprovals,
     approvalCount = 0,
     onOpenJobs,
+    onOpenCommandPalette,
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -254,7 +257,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                     {allSessions.map(session => (
                                                         <div key={session.id} className="flex items-center justify-between text-xs py-0.5">
                                                             <div className="flex items-center gap-2 min-w-0">
-                                                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(176, 176, 182,0.5)]' : 'bg-zinc-700'}`} />
+                                                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(7,181,106,0.6)]' : 'bg-zinc-700'}`} />
                                                                 <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -321,48 +324,68 @@ export const Header: React.FC<HeaderProps> = memo(({
                         <UpdateButton />
                     </div>
 
-                    {onOpenApprovals && (
-                        <button
-                            type="button"
-                            onClick={onOpenApprovals}
-                            className="relative hidden sm:inline-flex items-center gap-1.5 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
-                            title="Approvals"
-                            aria-label={`Approvals, ${approvalCount} waiting`}
-                        >
-                            <span className="text-[11px] font-semibold">Inbox</span>
-                            {approvalCount > 0 && (
-                                <span className="absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-bold leading-4 text-zinc-900">
-                                    {approvalCount > 99 ? '99+' : approvalCount}
-                                </span>
+                    {/* Desktop: Segmented Quick Action Tray */}
+                    {(onOpenApprovals || onOpenJobs || onOpenWatchList) && (
+                        <div className="hidden sm:inline-flex items-center rounded-xl border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
+                            {onOpenApprovals && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenApprovals}
+                                    className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                    title="Approvals"
+                                    aria-label={`Approvals, ${approvalCount} waiting`}
+                                >
+                                    <span>Inbox</span>
+                                    {approvalCount > 0 && (
+                                        <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-mono font-bold leading-4 text-zinc-900">
+                                            {approvalCount > 99 ? '99+' : approvalCount}
+                                        </span>
+                                    )}
+                                </button>
                             )}
-                        </button>
-                    )}
-                    {/* Background jobs — the autonomy trust surface. */}
-                    {onOpenJobs && (
-                        <button
-                            type="button"
-                            onClick={onOpenJobs}
-                            className="hidden sm:inline-flex items-center rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
-                            title="Background jobs — evals & learning passes"
-                            aria-label="Background jobs"
-                        >
-                            <span className="text-[11px] font-semibold">Jobs</span>
-                        </button>
-                    )}
-                    {onOpenWatchList && (
-                        <button
-                            type="button"
-                            onClick={onOpenWatchList}
-                            className="relative hidden sm:inline-flex items-center gap-1.5 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
-                            title={watchOpenR ? `Watch · ${watchOpenR}` : 'Watch list'}
-                            aria-label={`Watch list, ${watchOpenCount} open`}
-                        >
-                            <EyeIcon className="h-5 w-5" />
-                            {watchOpenCount > 0 && (
-                                <span className="absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-bold leading-4 text-zinc-900">
-                                    {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
-                                </span>
+                            {onOpenJobs && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenJobs}
+                                    className="inline-flex items-center rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                    title="Background jobs — evals & learning passes"
+                                    aria-label="Background jobs"
+                                >
+                                    <span>Jobs</span>
+                                </button>
                             )}
+                            {onOpenWatchList && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenWatchList}
+                                    className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                    title={watchOpenR ? `Watch · ${watchOpenR}` : 'Watch list'}
+                                    aria-label={`Watch list, ${watchOpenCount} open`}
+                                >
+                                    <EyeIcon className="h-3.5 w-3.5" />
+                                    <span>Watch</span>
+                                    {watchOpenCount > 0 && (
+                                        <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-mono font-bold leading-4 text-zinc-900">
+                                            {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Desktop: Command Palette Trigger */}
+                    {onOpenCommandPalette && (
+                        <button
+                            type="button"
+                            onClick={onOpenCommandPalette}
+                            className="hidden md:inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-zinc-800/40 px-2.5 py-1 text-xs text-zinc-400 hover:border-white/15 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                            title="Command palette (Ctrl+K / Cmd+K)"
+                            aria-label="Command palette"
+                        >
+                            <SearchIcon className="h-3.5 w-3.5 text-zinc-500" />
+                            <span className="text-[11px]">Search</span>
+                            <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.2 font-mono text-[9px] text-zinc-400">⌘K</kbd>
                         </button>
                     )}
 
