@@ -49,7 +49,16 @@ export interface DisciplineAnalytics {
      * measured a live-window MAE/MFE — a different, smaller population than
      * `rSample`, so the means must never be read as portfolio-wide.
      */
-    excursion: { n: number; meanMaePct: number | null; meanCapturePct: number | null };
+    /** `n` counts rows with an MAE measured; capture needs BOTH a best move
+     *  and a settled percent, so it is a strictly smaller subset — one shared
+     *  `n` over both means reads as "12 trades averaged +38%" when only 4
+     *  contributed the second number. */
+    excursion: {
+        n: number;
+        meanMaePct: number | null;
+        captureN: number;
+        meanCapturePct: number | null;
+    };
 }
 
 /**
@@ -187,6 +196,7 @@ export const buildDisciplineAnalytics = (trades: LoggedTrade[]): DisciplineAnaly
         excursion: {
             n: mae.length,
             meanMaePct: mae.length > 0 ? Math.round((mae.reduce((s, v) => s + v, 0) / mae.length) * 10) / 10 : null,
+            captureN: capture.length,
             meanCapturePct: capture.length > 0
                 ? Math.round((capture.reduce((s, v) => s + v, 0) / capture.length) * 10) / 10
                 : null,
@@ -228,16 +238,27 @@ export const computeRMultiple = (
 };
 
 /**
- * The R to aggregate for one trade: the price-measured figure when the
- * post-mortem's candle validation produced one, otherwise the log-time
- * `rMultiple`. Deliberately no de-leveraging correction on the fallback —
- * rows written before `computeRMultiple` learned about leverage would
- * otherwise be divided twice, and a stale-but-single-counted number beats a
- * double-corrected one.
+ * The R to aggregate for one trade: the candle-measured figure when the
+ * post-mortem resolved one, otherwise R re-derived from the row's own entry,
+ * stop and leveraged percent.
+ *
+ * Re-derived rather than trusting the stored `rMultiple` because rows logged
+ * before `computeRMultiple` learned about leverage carry a figure up to
+ * DEFAULT_LEVERAGE (100×) too large — `pnlPercent` is leveraged while the
+ * entry→stop distance is not. Nothing on the row marks which era it came from,
+ * so there is no safe version fence; deriving from the same inputs answers both
+ * correctly. Only where the inputs are missing (a hand-entered R) does the
+ * stored figure survive, and then it survives uncorrected — an unknown
+ * leverage cannot be divided out.
  */
 export const effectiveRMultiple = (t: LoggedTrade): number | undefined => {
-    const r = typeof t.realizedR === 'number' && Number.isFinite(t.realizedR)
-        ? t.realizedR
-        : t.rMultiple;
-    return typeof r === 'number' && Number.isFinite(r) ? r : undefined;
+    if (typeof t.realizedR === 'number' && Number.isFinite(t.realizedR)) return t.realizedR;
+    const derived = computeRMultiple(
+        t.analysis?.entryPoints?.[0]?.price,
+        t.analysis?.stopLoss,
+        t.pnlPercent,
+        t.leverage,
+    );
+    if (derived !== undefined) return derived;
+    return typeof t.rMultiple === 'number' && Number.isFinite(t.rMultiple) ? t.rMultiple : undefined;
 };

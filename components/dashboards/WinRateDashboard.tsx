@@ -351,8 +351,10 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         {discipline.excursion.n > 0 && (
                             <p className="text-[10px] text-zinc-500 mt-1" data-testid="discipline-excursion">
                                 Over {discipline.excursion.n} measured trade{discipline.excursion.n === 1 ? '' : 's'}: held through −
-                                {discipline.excursion.meanMaePct ?? '—'}% on average, captured{' '}
-                                {discipline.excursion.meanCapturePct !== null ? `${discipline.excursion.meanCapturePct}%` : '—'} of the best move.
+                                {discipline.excursion.meanMaePct ?? '—'}% on average,
+                                {discipline.excursion.captureN > 0
+                                    ? ` captured ${discipline.excursion.meanCapturePct ?? '—'}% of the best move — ${discipline.excursion.captureN} of those had both sides measured.`
+                                    : ' capture efficiency needs a best move and a settled percent, and none had both.'}
                             </p>
                         )}
                     </div>

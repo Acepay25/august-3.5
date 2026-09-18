@@ -74,6 +74,19 @@ describe('computeTradeExcursions', () => {
         });
     });
 
+    it('skips a malformed bar instead of poisoning the whole pair', () => {
+        // Math.max(0, NaN) is NaN, so one corrupt candle stuck for every later
+        // bar and the trade card printed "worst −NaN%" for the whole window.
+        const poisoned = [
+            bar({ low: 98, high: 102 }),       // 0 measured
+            bar({ low: Number.NaN, high: 105 }), // 1 corrupt feed row
+            bar({ low: 95, high: 105 }),       // 2 measured
+        ];
+        expect(computeTradeExcursions(poisoned, 0, 2, 100, true)).toEqual({
+            maePercent: 5, mfePercent: 5,
+        });
+    });
+
     it('floors at zero when the position never went adverse or favorable', () => {
         const flat = [bar({ low: 100, high: 100 })];
         expect(computeTradeExcursions(flat, 0, 0, 100, true)).toEqual({

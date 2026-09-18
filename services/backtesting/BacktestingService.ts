@@ -1268,8 +1268,21 @@ export const validateTradeOutcome = async (
         let maePercent: number | undefined;
         let mfePercent: number | undefined;
         if (exitCandleIndex !== undefined) {
+            // The fill candle counts only when it OPENED executable. A bar can
+            // wick through the level before trading into the limit, and
+            // counting that pre-fill move overstates how badly the position was
+            // ever pressed — the same reasoning that gates TP crediting on this
+            // candle (outcomeEngine.ts:184-188). When the exit lands on an
+            // ambiguous fill candle there is no measurable window, so the pair
+            // stays undefined rather than reporting a number.
+            const fill = klines[entryTriggeredAtIndex];
+            const openedExecutable = isLong ? fill.open <= entryPrice : fill.open >= entryPrice;
             const excursions = computeTradeExcursions(
-                klines, entryTriggeredAtIndex, exitCandleIndex, entryPrice, isLong,
+                klines,
+                openedExecutable ? entryTriggeredAtIndex : entryTriggeredAtIndex + 1,
+                exitCandleIndex,
+                entryPrice,
+                isLong,
             );
             if (excursions) {
                 maePercent = excursions.maePercent;

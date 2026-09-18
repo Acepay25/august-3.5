@@ -132,6 +132,39 @@ describe('effectiveRMultiple', () => {
         expect(effectiveRMultiple(trade({ outcome: TradeOutcome.WIN }))).toBeUndefined();
         expect(effectiveRMultiple(trade({ outcome: TradeOutcome.WIN, realizedR: NaN, rMultiple: 2 }))).toBe(2);
     });
+
+    it('re-derives R from the row rather than trusting a pre-leverage-fix figure', () => {
+        // Legacy rows carry rMultiple as pnlPercent / RAW stop move — a
+        // leveraged percent over an unleveraged distance, so up to
+        // DEFAULT_LEVERAGE (100×) too large. The inputs survive on the row, so
+        // R is recomputed instead of averaged in inflated.
+        const legacy = trade({
+            outcome: TradeOutcome.WIN,
+            pnlPercent: 20,          // +20% account move at 100×
+            leverage: 100,
+            rMultiple: 10,           // the stale, inflated stored figure
+            analysis: {
+                entryPoints: [{ price: '100' }],
+                stopLoss: '98',      // 2% raw distance to the stop
+            } as unknown as TradeAnalysis,
+        });
+        expect(effectiveRMultiple(legacy)).toBeCloseTo(20 / (2 * 100), 12);
+    });
+
+    it('cannot divide out a leverage the row never recorded', () => {
+        // lev defaults to 1, so the derived figure matches the stored one: the
+        // correction is unavailable, and guessing a leverage would invent data.
+        const noLev = trade({
+            outcome: TradeOutcome.WIN,
+            pnlPercent: 20,
+            rMultiple: 10,
+            analysis: {
+                entryPoints: [{ price: '100' }],
+                stopLoss: '98',
+            } as unknown as TradeAnalysis,
+        });
+        expect(effectiveRMultiple(noLev)).toBeCloseTo(10, 12);
+    });
 });
 
 describe('captureEfficiencyPct', () => {
@@ -166,7 +199,7 @@ describe('excursion aggregate coverage', () => {
         const a = buildDisciplineAnalytics([
             trade({ outcome: TradeOutcome.WIN, pnlAmount: 100, rMultiple: 2 }),
         ]);
-        expect(a.excursion).toEqual({ n: 0, meanMaePct: null, meanCapturePct: null });
+        expect(a.excursion).toEqual({ n: 0, meanMaePct: null, captureN: 0, meanCapturePct: null });
     });
 
     it('averages only the measured subset and counts it honestly', () => {
@@ -179,5 +212,19 @@ describe('excursion aggregate coverage', () => {
         expect(a.excursion.meanMaePct).toBe(20);
         // 60% and 0% (the loser captured nothing) average to 30.
         expect(a.excursion.meanCapturePct).toBe(30);
+        expect(a.excursion.captureN).toBe(2);
+    });
+
+    it('does not claim one sample size for two different subsets', () => {
+        // MAE only needs the adverse leg; capture needs a best move AND a
+        // settled percent. Reporting a single n over both means reads as
+        // "both numbers come from these 2 trades" when the second has one.
+        const a = buildDisciplineAnalytics([
+            trade({ outcome: TradeOutcome.WIN, pnlAmount: 100, pnlPercent: 60, maxAdverseExcursion: 10, maxFavorableExcursion: 100 }),
+            trade({ outcome: TradeOutcome.LOSS, pnlAmount: -50, pnlPercent: -40, maxAdverseExcursion: 30 }),
+        ]);
+        expect(a.excursion.n).toBe(2);
+        expect(a.excursion.captureN).toBe(1);
+        expect(a.excursion.meanCapturePct).toBe(60);
     });
 });
