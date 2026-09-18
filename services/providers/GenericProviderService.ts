@@ -857,9 +857,7 @@ async function googleCall(
     const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
     const key = (config.apiKey || '').trim();
     const url = googleGenerateUrl(base, config.selectedModel, key, false);
-    // Wire audit: Google generateContent has no verified effort
-    // knob — record the fail-closed no-op so the run log says so explicitly
-    // instead of staying silent for Gemini seats.
+    const geminiThinking = geminiThinkingParams(options?.jsonMode, config.selectedModel, options?.reasoningEffort);
     options?.onWireAudit?.({
         route: 'none',
         effort: options?.reasoningEffort ?? 'auto',
@@ -871,11 +869,11 @@ async function googleCall(
         temperature: options?.temperature,
         jsonMode: options?.jsonMode,
         model: config.selectedModel,
+        reasoningEffort: options?.reasoningEffort,
     });
     // Canonical thinking decision from the shared policy module (the codec's
     // inline copy is behaviorally identical; applying the policy here means
     // every transport's Gemini thinkingConfig provably comes from one source).
-    const geminiThinking = geminiThinkingParams(options?.jsonMode, config.selectedModel);
     if (geminiThinking) body.generationConfig.thinkingConfig = geminiThinking;
     else delete body.generationConfig.thinkingConfig;
     const response = await fetch(url, {

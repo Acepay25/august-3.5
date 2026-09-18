@@ -437,7 +437,7 @@ function providerRequestDetails(request) {
         if (request.jsonMode) body.generationConfig.responseMimeType = 'application/json';
         // Canonical Gemini thinking decision (includeThoughts + 8192 budget,
         // never under JSON mode) from the shared policy module.
-        const geminiThinking = policy.geminiThinkingParams(request.jsonMode, geminiModel);
+        const geminiThinking = policy.geminiThinkingParams(request.jsonMode, geminiModel, request.reasoningEffort);
         if (geminiThinking) body.generationConfig.thinkingConfig = geminiThinking;
         else delete body.generationConfig.thinkingConfig;
     } else {

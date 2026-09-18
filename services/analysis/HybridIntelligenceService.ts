@@ -886,8 +886,8 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
                 : `ADX ${data.regime.adx} weak — require extra confluence.`;
 
     const sections: string[] = [
-        `## Hybrid market packet — VERIFIED SOURCE OF TRUTH`,
-        `Before stating ANY price or indicator value, check it against this packet. If your own chart reading contradicts a cell below, NAME the discrepancy in your report — never invent a number that "reconciles" the two.`,
+        `## Hybrid market packet — REST snapshot (cross-check against the live chart mark)`,
+        `This packet is calculated from REST ticker/kline data and can lag the chart by seconds. The chart's websocket mark (when supplied in the live price stamp or get_chart_view) is current and wins; treat any gap as snapshot age or perp basis, never as a fresh move. Before stating ANY price or indicator value, check it against the live mark first, then this packet.`,
         mdTable(
             ['Symbol', 'Price', '24h', 'High', 'Low', 'Vol 24h', 'Funding', 'Age', 'Quality'],
             [[

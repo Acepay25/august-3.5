@@ -1654,7 +1654,7 @@ export async function executeDeskTool(
                 const ivl = String(call.arguments.interval || context.chartInterval || '15m');
                 const { fetchKlines } = await import('./KlineService');
                 const [klines, mi, book] = await Promise.all([
-                    fetchKlines(sym, ivl, 60),
+                    fetchKlines(sym, ivl, 60, { noCache: true }),
                     fetchMarkIndex(sym),
                     fetchOrderBookDepth(sym).catch(() => null),
                 ]);
@@ -1684,10 +1684,20 @@ export async function executeDeskTool(
                 // it sees right here, so it can tell a fresh level from one
                 // price has moved away from. Prefer the same mark the price
                 // line above reports.
-                const markNow = mi.available ? mi.markPrice : (context.liveMarkPrice ?? null);
+                const canvasMark = typeof context.liveMarkPrice === 'number'
+                    && Number.isFinite(context.liveMarkPrice)
+                    && context.liveMarkPrice > 0
+                    ? context.liveMarkPrice
+                    : null;
+                const restMark = mi.available
+                    && Number.isFinite(mi.markPrice)
+                    && mi.markPrice > 0
+                    ? mi.markPrice
+                    : null;
+                const markNow = canvasMark ?? restMark;
                 content = [
                     `CHART VIEW — ${sym} · ${ivl} · last ${klines.length} candles (oldest→newest)`,
-                    `Live mark price: ${mi.available ? mi.markPrice : 'unavailable'}`,
+                    `Live mark price: ${markNow ?? 'unavailable'}`,
                     context.chartLevels && context.chartLevels.length > 0
                         ? `Levels drawn on the chart: ${context.chartLevels.map(l => `${l.label} ${l.price}`).join(' · ')}`
                         : 'No verdict levels are drawn on the chart right now.',

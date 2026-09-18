@@ -178,22 +178,35 @@ function anthropicThinkingFields(input) {
 
 // ─── Gemini thinking ────────────────────────────────────────────────────────
 
+const GEMINI_THINKING_BUDGETS = {
+    low: 2048,
+    medium: 4096,
+    high: 8192,
+    max: 16384,
+};
+
 /**
  * generationConfig.thinkingConfig for Google generateContent: chain of
- * thought is requested for gemini-ish models unless JSON mode is on (the
- * 8192 budget is the long-standing value; this encodes the renderer's rule
- * that an empty/unknown model still counts as "gemini-ish").
+ * thought is requested for gemini-ish models unless JSON mode is on.
+ * Scales thinkingBudget based on the requested effort tier:
+ *   - 'off'            → undefined (disabled)
+ *   - 'low'            → 2048
+ *   - 'medium'         → 4096
+ *   - 'high' / default → 8192
+ *   - 'max'            → 16384
  *
  * @param {boolean} [jsonMode]
  * @param {string} [model]
+ * @param {string} [effort]
  * @returns {{ includeThoughts: boolean, thinkingBudget: number } | undefined}
  */
-function geminiThinkingParams(jsonMode, model) {
+function geminiThinkingParams(jsonMode, model, effort) {
     if (jsonMode) return undefined;
+    if (effort === 'off') return undefined;
     const id = String(model || '').toLowerCase();
-    return /gemini|thinking/i.test(id || 'gemini')
-        ? { includeThoughts: true, thinkingBudget: 8192 }
-        : undefined;
+    if (!/gemini|thinking/i.test(id || 'gemini')) return undefined;
+    const budget = (effort && GEMINI_THINKING_BUDGETS[effort]) || 8192;
+    return { includeThoughts: true, thinkingBudget: budget };
 }
 
 // ─── Provider URL host policy ───────────────────────────────────────────────
@@ -295,6 +308,7 @@ const PROVIDER_REQUEST_POLICY = {
     MIN_EFFECTIVE_THINKING_TOKENS,
     ANTHROPIC_DEFAULT_TEMPERATURE,
     THINKING_BUDGET_FRACTIONS,
+    GEMINI_THINKING_BUDGETS,
 };
 
 // CommonJS export guarded so the SAME file also loads in the browser once

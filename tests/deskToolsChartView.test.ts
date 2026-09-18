@@ -44,6 +44,7 @@ vi.mock('../services/analysis/HybridIntelligenceService', async (importOriginal)
 
 import { executeDeskTool, clearDeskToolCache } from '../services/analysis/DeskToolsService';
 import { fetchKlines } from '../services/analysis/KlineService';
+import { fetchMarkIndex } from '../services/analysis/MarketDataService';
 import { fetchHybridData } from '../services/analysis/HybridIntelligenceService';
 
 const candles = [
@@ -68,7 +69,7 @@ describe('desk tools — chart awareness', () => {
         expect(result.content).toContain('Live mark price: 104.7');
         expect(result.content).toContain('Levels drawn on the chart: Entry 101.5 · Stop 98');
         expect(result.content).toContain('O100 H105 L99 C104 V10');
-        expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '4h', 60);
+        expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '4h', 60, { noCache: true });
     });
 
     it('get_chart_view falls back to the context interval when the model omits one', async () => {
@@ -78,7 +79,7 @@ describe('desk tools — chart awareness', () => {
             { defaultSymbol: 'ETHUSDT', chartInterval: '1h' },
         );
         expect(result.content).toContain('CHART VIEW — ETHUSDT · 1h');
-        expect(fetchKlines).toHaveBeenCalledWith('ETHUSDT', '1h', 60);
+        expect(fetchKlines).toHaveBeenCalledWith('ETHUSDT', '1h', 60, { noCache: true });
     });
 
     it('get_chart_view NEVER lowercases the monthly interval (1M ≠ 1m)', async () => {
@@ -91,7 +92,7 @@ describe('desk tools — chart awareness', () => {
             { id: 'cM', name: 'get_chart_view', arguments: { symbol: 'BTCUSDT', interval: '1M' } },
             { chartInterval: '1M' },
         );
-        expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '1M', 60);
+        expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '1M', 60, { noCache: true });
         expect(result.content).toContain('· 1M ·');
         expect(vi.mocked(fetchKlines).mock.calls.some(c => c[1] === '1m')).toBe(false);
     });

@@ -94,10 +94,19 @@ describe('detectWireCapabilities (capability classes, not provider identity)', (
     it('an unverified chat_completions shape gets NO capability (fail closed)', () => {
         const caps = detectWireCapabilities(makeConfig({ baseUrl: 'https://api.example.com/v1', selectedModel: 'm' }));
         expect(caps.xaiEffort).toBe(false);
+        expect(caps.openaiEffort).toBe(false);
         expect(caps.glmThinking).toBe(false);
         expect(caps.deepseekThinking).toBe(false);
         expect(caps.anthropicThinking).toBe(false);
         expect(caps.responsesEffort).toBe(false);
+    });
+
+    it('flags OpenAI reasoning effort for o1 / o3 models in chat_completions', () => {
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'o1' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'o1-mini' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'o3-mini' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'openai/o3-mini' })).openaiEffort).toBe(true);
+        expect(detectWireCapabilities(makeConfig({ selectedModel: 'gpt-4o' })).openaiEffort).toBe(false);
     });
 });
 
@@ -106,6 +115,16 @@ describe('buildReasoningPatch translation', () => {
         const cfg = makeConfig({ baseUrl: 'https://api.x.ai/v1' });
         expect(buildReasoningPatch(cfg, 'high').patch).toEqual({ reasoning_effort: 'high' });
         expect(buildReasoningPatch(cfg, 'max').patch).toEqual({ reasoning_effort: 'xhigh' });
+    });
+
+    it('OpenAI: maps effort to low/medium/high, off -> low, max -> high', () => {
+        const cfg = makeConfig({ selectedModel: 'o3-mini' });
+        expect(buildReasoningPatch(cfg, 'low').patch).toEqual({ reasoning_effort: 'low' });
+        expect(buildReasoningPatch(cfg, 'medium').patch).toEqual({ reasoning_effort: 'medium' });
+        expect(buildReasoningPatch(cfg, 'high').patch).toEqual({ reasoning_effort: 'high' });
+        expect(buildReasoningPatch(cfg, 'max').patch).toEqual({ reasoning_effort: 'high' });
+        expect(buildReasoningPatch(cfg, 'off').patch).toEqual({ reasoning_effort: 'low' });
+        expect(buildReasoningPatch(cfg, 'auto').patch).toEqual({});
     });
 
     it('xAI: effort=auto sends no knob', () => {

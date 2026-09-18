@@ -40,6 +40,7 @@ const SHARED_POLICY_EXPORTS = [
   'MIN_EFFECTIVE_THINKING_TOKENS',
   'ANTHROPIC_DEFAULT_TEMPERATURE',
   'THINKING_BUDGET_FRACTIONS',
+  'GEMINI_THINKING_BUDGETS',
 ];
 
 function sharedProviderPolicyEsmInterop(): any {
@@ -233,7 +234,7 @@ function devProviderProxy() {
             {
               const geminiConfig = body.generationConfig as Record<string, unknown> | undefined;
               if (geminiConfig) {
-                const geminiThinking = geminiThinkingParams(request.jsonMode, String(config.selectedModel || ''));
+                const geminiThinking = geminiThinkingParams(request.jsonMode, String(config.selectedModel || ''), request.reasoningEffort);
                 if (geminiThinking) geminiConfig.thinkingConfig = geminiThinking;
                 else delete geminiConfig.thinkingConfig;
               }
