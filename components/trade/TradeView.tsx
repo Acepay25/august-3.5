@@ -80,6 +80,9 @@ interface TradeViewProps {
     /** Roster surfaces the Chart AI dock embeds (Coach inbox + group rooms). */
     renderCoachSurface?: () => React.ReactNode;
     renderGroupSurface?: (groupId: string) => React.ReactNode;
+    /** Drafts + proposals awaiting a decision — rides the dock's Chat | Coach
+     *  switch. App computes it; the roster rail shows the same number. */
+    coachPending?: number;
     /** Group rooms offered in the dock's New-session menu (name for tabs). */
     groups?: Array<{ id: string; name: string }>;
     /** Imperative scroll-to-entry bridge forwarded to the Chart AI dock:
@@ -277,7 +280,7 @@ const useTickFlash = (price: number | undefined): { cls: string; seq: number } =
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, coachPending = 0, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -695,6 +698,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         onChatLevelsChange: handleChatLevels,
         renderCoachSurface,
         renderGroupSurface,
+        coachPending,
         groups,
         onToggleDeskScene,
         isDeskSceneOpen,

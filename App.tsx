@@ -3058,6 +3058,7 @@ const App: React.FC = () => {
                                     botSessionRequest={tradeBotRequest ?? undefined}
                                     groupSessionRequest={tradeGroupRequest ?? undefined}
                                     coachSessionRequest={tradeCoachRequest || undefined}
+                                    coachPending={coachCount}
                                     onRunAnalysis={handleRunAnalysisFromChat}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
