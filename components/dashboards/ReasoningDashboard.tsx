@@ -286,7 +286,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
                         </span>
                       </span>
                       {group.outcome && (
-                        <span className={`status-surface px-2 py-0.5 rounded-full text-[10px] border shrink-0 ${
+                        <span className={` px-2 py-0.5 rounded-full text-[10px] border shrink-0 ${
                           group.outcome === 'WIN' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                           : group.outcome === 'LOSS' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                           : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'

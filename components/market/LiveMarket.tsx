@@ -359,7 +359,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
         // Initial UI Reset
         if (priceDisplayRef.current) {
             priceDisplayRef.current.textContent = 'Loading...';
-            priceDisplayRef.current.className = "font-mono text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300";
+            priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300";
         }
         lastPriceRef.current = null;
 
@@ -380,9 +380,9 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                     priceDisplayRef.current.textContent = `$${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
                     if (price > prev) {
-                        priceDisplayRef.current.className = "font-mono text-sm sm:text-base font-bold transition-colors duration-300 text-emerald-400";
+                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 text-emerald-400";
                     } else if (price < prev) {
-                        priceDisplayRef.current.className = "font-mono text-sm sm:text-base font-bold transition-colors duration-300 text-rose-400";
+                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 text-rose-400";
                     }
                     lastPriceRef.current = price;
                 });
@@ -674,7 +674,7 @@ ${JSON.stringify(marketData, null, 2)}
     if (!isVisible) return null;
 
     return (
-        <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={`status-surface flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-50 animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
+        <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={` flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-50 animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
             {/* Header - 2 rows on mobile for spacious feel */}
             <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}

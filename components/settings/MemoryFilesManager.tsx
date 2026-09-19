@@ -361,7 +361,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             </button>
                             <button
                                 onClick={() => { void handleDeleteFile(selectedFile); }}
-                                className="status-surface px-3 py-1.5 rounded-lg text-sm text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                className=" px-3 py-1.5 rounded-lg text-sm text-rose-400 hover:bg-rose-500/10 transition-colors"
                             >
                                 Delete
                             </button>

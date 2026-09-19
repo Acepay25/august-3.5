@@ -94,7 +94,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                         const priced = symbol ? PriceAlertService.getCurrentPrice(symbol.includes('USDT') ? symbol : `${symbol}USDT`) : undefined;
                         const paper = paperPnlR(analysis, priced);
                         return (
-                            <div key={signal.messageId} className="status-surface rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+                            <div key={signal.messageId} className=" rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                                 <div className="flex flex-wrap items-baseline gap-2">
                                     <span className="text-xs font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
                                     <span className="text-[11px] font-medium text-zinc-300">{dir}</span>

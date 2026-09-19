@@ -77,7 +77,7 @@ class ErrorBoundary extends Component<Props, State> {
             if (this.props.compact) {
                 // Inline fallback — one bad message must not take down the app.
                 return (
-                    <div className="status-surface rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                    <div className=" rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
                         <div className="font-bold uppercase tracking-widest text-[9px] mb-1">This message failed to render</div>
                         <div className="text-rose-300/70 truncate">{this.state.error?.message || 'Unknown error'}</div>
                         <button
@@ -90,7 +90,7 @@ class ErrorBoundary extends Component<Props, State> {
                 );
             }
             return (
-                <div className="status-surface fixed inset-0 bg-zinc-900 flex flex-col items-center justify-center p-6 text-white">
+                <div className=" fixed inset-0 bg-zinc-900 flex flex-col items-center justify-center p-6 text-white">
                     <div className="max-w-md w-full text-center space-y-6">
                         {/* Error Icon */}
                         <div className="text-6xl mb-4"></div>

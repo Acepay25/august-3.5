@@ -357,7 +357,7 @@ const JournalInner: React.FC<JournalProps> = ({
             />
 
             {/* Main Panel - Full screen on mobile, side panel on desktop */}
-            <aside role="dialog" aria-modal="true" aria-label="Trading Journal" className="status-surface fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[560px] lg:w-[640px] bg-zinc-950 z-50 flex flex-col border-l border-zinc-800 animate-slide-up sm:animate-slide-left">
+            <aside role="dialog" aria-modal="true" aria-label="Trading Journal" className=" fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[560px] lg:w-[640px] bg-zinc-950 z-50 flex flex-col border-l border-zinc-800 animate-slide-up sm:animate-slide-left">
 
                 {/* Modern Header */}
                 <header className="shrink-0 px-6 pt-6 pb-2">

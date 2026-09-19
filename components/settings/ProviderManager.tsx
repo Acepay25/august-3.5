@@ -151,7 +151,7 @@ const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) =
         return `${Math.round(mins / 60)}h ago`;
     };
     return (
-        <div className="status-surface rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+        <div className=" rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
             <div className="flex items-center justify-between">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Live health (this session)</p>
                 {cooldownMs > 0 && (
@@ -613,7 +613,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                     </span>
                                                     <span className="truncate text-[13px] font-medium">{c.name}</span>
                                                 </span>
-                                                <span className={`status-surface h-1.5 w-1.5 shrink-0 rounded-full ${isReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                                <span className={` h-1.5 w-1.5 shrink-0 rounded-full ${isReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                             </button>
                                         );
                                     })}
@@ -692,7 +692,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                             </button>
                                         </>
                                     )}
-                                    <div className="status-surface ml-1 flex items-center gap-1">
+                                    <div className=" ml-1 flex items-center gap-1">
                                         <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${selected.isEnabled ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                                             {selected.isEnabled ? 'Enabled' : 'Disabled'}
                                         </span>
@@ -832,10 +832,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 <p className="px-3.5 text-[11px] text-zinc-500">Testing…</p>
                                             )}
                                             {modelTest && !isTestingThis && modelTest.ok && (
-                                                <p className="status-surface px-3.5 text-[11px] font-medium text-emerald-400">Connected!</p>
+                                                <p className=" px-3.5 text-[11px] font-medium text-emerald-400">Connected!</p>
                                             )}
                                             {modelTest && !isTestingThis && !modelTest.ok && (
-                                                <p className="status-surface px-3.5 text-[11px] leading-relaxed text-rose-400">{modelTest.message}</p>
+                                                <p className=" px-3.5 text-[11px] leading-relaxed text-rose-400">{modelTest.message}</p>
                                             )}
                                             </div>
                                         );

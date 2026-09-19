@@ -302,7 +302,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     </div>
                 </div>
                 {/* Right Side: Minimal Actions */}
-                <div className="status-surface flex items-center gap-2">
+                <div className=" flex items-center gap-2">
                     {saveStatus === 'SAVING' && (
                         <span role="status" aria-label="Saving">
                             <LoadingIcon className="h-4 w-4 text-zinc-500" />

@@ -3316,7 +3316,7 @@ const App: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={handleCancelAnalysis}
-                                        className="status-surface mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+                                        className=" mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
                                     >
                                         Stop generating
                                     </button>

@@ -222,7 +222,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                     <button
                         type="button"
                         onClick={handleResetAll}
-                        className="status-surface shrink-0 px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-medium transition-colors"
+                        className=" shrink-0 px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-medium transition-colors"
                     >
                         Reset all ({modifiedCount})
                     </button>

@@ -24,7 +24,7 @@ const STATE_MARK: Record<RunContractStageState, { glyph: string; cls: string }> 
     running: { glyph: '◐', cls: 'text-cyan-300 animate-pulse' },
     done: { glyph: '●', cls: 'text-zinc-200' },
     skipped: { glyph: '○', cls: 'text-zinc-500' },
-    failed: { glyph: '×', cls: 'text-rose-400 status-surface' },
+    failed: { glyph: '×', cls: 'text-rose-400' },
 };
 
 /**
