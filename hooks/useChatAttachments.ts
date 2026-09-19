@@ -36,8 +36,9 @@ export const useChatAttachments = (): {
     attachments: Attachment[];
     fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
     attachFiles: (files: FileList | null) => void;
+    add: (entry: { kind: 'image' | 'file'; name: string; payload: string }) => void;
     remove: (id: string) => void;
-    clear: () => Attachment[];
+    clear: () => void;
     openPicker: () => void;
     images: () => PipelineImage[];
 } => {
@@ -65,16 +66,23 @@ export const useChatAttachments = (): {
         });
     }, [attachments.length]);
 
+    /** A file read elsewhere — the chart-snapshot button hands in a PNG the
+     *  picker never saw. */
+    const add = useCallback((entry: { kind: 'image' | 'file'; name: string; payload: string }): void => {
+        if (!entry.payload) return;
+        setAttachments(prev => (prev.length >= MAX_ATTACHMENTS
+            ? prev
+            : [...prev, { id: newId(entry.kind === 'image' ? 'shot' : 'at'), ...entry }]));
+    }, []);
+
     const remove = useCallback((id: string): void => {
         setAttachments(prev => prev.filter(a => a.id !== id));
     }, []);
 
-    /** Empties the tray and returns what was in it — a send takes the
-     *  attachments with it, so the caller needs the list it just removed. */
-    const clear = useCallback((): Attachment[] => {
-        let sent: Attachment[] = [];
-        setAttachments(prev => { sent = prev; return []; });
-        return sent;
+    /** Empty the tray. A send reads `attachments` first and carries it with
+     *  the message, so nothing needs to come back out of here. */
+    const clear = useCallback((): void => {
+        setAttachments([]);
     }, []);
 
     const openPicker = useCallback((): void => {
@@ -85,5 +93,5 @@ export const useChatAttachments = (): {
         .filter(a => a.kind === 'image')
         .map(a => ({ name: a.name, dataURL: a.payload })), [attachments]);
 
-    return { attachments, fileInputRef, attachFiles, remove, clear, openPicker, images };
+    return { attachments, fileInputRef, attachFiles, add, remove, clear, openPicker, images };
 };

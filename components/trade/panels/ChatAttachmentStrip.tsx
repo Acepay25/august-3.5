@@ -9,15 +9,7 @@
 
 import React from 'react';
 import { FileText, X } from 'lucide-react';
-
-/** One pending composer attachment. */
-export interface Attachment {
-    id: string;
-    kind: 'image' | 'file';
-    name: string;
-    /** data URL for images, text content for files. */
-    payload: string;
-}
+import type { Attachment } from '../../../hooks/useChatAttachments';
 
 export interface ChatAttachmentStripProps {
     attachments: Attachment[];

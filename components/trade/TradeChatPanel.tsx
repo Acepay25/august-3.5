@@ -59,7 +59,8 @@ import {
 } from '../../services/learning/skillSupervisor';
 import SupervisorPanel from './SupervisorPanel';
 import SupervisorIndicator from './panels/SupervisorIndicator';
-import ChatAttachmentStrip, { type Attachment } from './panels/ChatAttachmentStrip';
+import ChatAttachmentStrip from './panels/ChatAttachmentStrip';
+import { useChatAttachments, type Attachment } from '../../hooks/useChatAttachments';
 import ChatHistoryPalette, { relTime } from './panels/ChatHistoryPalette';
 import ChatWorkTimeline from './panels/ChatWorkTimeline';
 import ComposerWorkspaceRow from './panels/ComposerWorkspaceRow';
@@ -292,8 +293,7 @@ const EffortMeter: React.FC<{ bars: number | 'auto'; tone: string }> = ({ bars, 
 const effortChoiceOf = (id: ReasoningEffort | 'auto'): typeof EFFORT_CHOICES[number] =>
     EFFORT_CHOICES.find(c => c.id === id) ?? EFFORT_CHOICES[1];
 
-/** Per-send cap on attached files (keeps prompts sane). */
-const MAX_ATTACHMENTS = 4;
+/** Cap on attached text file bulk handed to the prompt. */
 const MAX_FILE_CHARS = 200_000;
 
 /** Short-TTL cache of the slow hybrid-packet pull, keyed by symbol — lets a
@@ -325,7 +325,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const activeId = snap.activeId;
     const [draft, setDraft] = useState('');
     const [contextAt, setContextAt] = useState<number | null>(null);
-    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    // The same reader the Agents composer uses (hooks/useChatAttachments was
+    // lifted out of this file so the second surface could reuse it verbatim).
+    const {
+        attachments, fileInputRef, attachFiles, add: addAttachment,
+        remove: removeAttachment, clear: clearAttachments, images: attachedImages,
+    } = useChatAttachments();
     const [effort, setEffort] = useState<ReasoningEffort | 'auto'>('auto');
     const [showEffortMenu, setShowEffortMenu] = useState(false);
     const [showNewMenu, setShowNewMenu] = useState(false);
@@ -352,7 +357,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const [analysisMessageIds, setAnalysisMessageIds] = useState<Record<string, string>>({});
     const [panelPickerFor, setPanelPickerFor] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
     /** Which Key Levels card currently owns the shared chart-levels channel
      *  (message id of the card that last PUSHED). Its unmount may clear the
      *  layer; any other card's clear is dropped — see handleCardLevels. */
@@ -1056,7 +1060,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             });
         } else {
             setDraft('');
-            setAttachments([]);
+            clearAttachments();
         }
         const session = session0;
         // WHO SUPERVISES: this session's model — a panel's FIRST seat when
@@ -1290,8 +1294,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (!text || !onRunAnalysis || chatStore.getSnapshot().running[activeId]) return;
         setDraft('');
         const sentAttachments = attachments;
-        setAttachments([]);
-        const images = sentAttachments.filter(a => a.kind === 'image').map(a => ({ name: a.name, dataURL: a.payload }));
+        const images = attachedImages();
+        clearAttachments();
         const fileNote = sentAttachments.filter(a => a.kind === 'file')
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
             .join('');
@@ -1456,29 +1460,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, [panelPickerFor, provider, sessions, setPanelModels]);
 
     // ── Attachments ─────────────────────────────────────────────────────────
-    const attachFiles = (files: FileList | null): void => {
-        if (!files) return;
-        Array.from(files).slice(0, MAX_ATTACHMENTS - attachments.length).forEach(file => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const payload = String(reader.result ?? '');
-                if (!payload) return;
-                setAttachments(prev => prev.length >= MAX_ATTACHMENTS ? prev : [...prev, {
-                    id: newId('at'),
-                    kind: file.type.startsWith('image/') ? 'image' : 'file',
-                    name: file.name,
-                    payload,
-                }]);
-            };
-            if (file.type.startsWith('image/')) reader.readAsDataURL(file);
-            else reader.readAsText(file);
-        });
-    };
+    // Reading files in is the shared hook's job (see useChatAttachments); the
+    // chart snapshot is the one image that never came off the picker.
 
     const captureChart = (): void => {
         const png = onCaptureChart?.() ?? null;
         if (!png) return;
-        setAttachments(prev => [...prev, { id: newId('shot'), kind: 'image', name: 'chart.png', payload: png }]);
+        addAttachment({ kind: 'image', name: 'chart.png', payload: png });
     };
 
     const ready = !!provider && (activeSession.kind !== 'panel' || (activeSession.panelModels?.length ?? 0) >= 2);
@@ -1865,7 +1853,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 {attachments.length > 0 && (
                     <ChatAttachmentStrip
                         attachments={attachments}
-                        onRemove={id => setAttachments(prev => prev.filter(x => x.id !== id))}
+                        onRemove={removeAttachment}
                     />
                 )}
                 <div className="rounded-2xl border border-white/10 bg-zinc-800/70 px-3 py-2.5 shadow-lg">
