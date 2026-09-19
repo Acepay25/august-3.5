@@ -3241,6 +3241,12 @@ const App: React.FC = () => {
                                     providerReady={readyProviders.length > 0}
                                     onRunRoutine={runRoutineFromRail}
                                     onDeleteBot={deleteBot}
+                                    onRenameBot={(botId, name) => updateBot(botId, { name })}
+                                    renderCoach={() => (
+                                        <React.Suspense fallback={null}>
+                                            <CoachThreadPanel onAllowDraft={coachAllowDraft} onDenyDraft={coachDenyDraft} />
+                                        </React.Suspense>
+                                    )}
                                     onDeleteGroup={deleteGroup}
                                     onEditGroup={groupId => {
                                         const target = groups.find(g => g.id === groupId);

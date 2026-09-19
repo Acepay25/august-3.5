@@ -208,6 +208,63 @@ describe('WS-3.4 per-bot learning stats', () => {
     });
 });
 
+describe('WS-6 rail completeness', () => {
+    it('lists the desk’s own conversation as a row that selects it', () => {
+        const onSelect = vi.fn();
+        const messages = [msg({ role: MessageRole.USER, text: 'is BTC heavy here' })];
+        render(<AgentsView {...base} messages={messages} onSelect={onSelect} />);
+        const row = screen.getByTestId('chart-ai-row');
+        expect(row.textContent).toContain('Chart AI');
+        expect(row.textContent).toContain('is BTC heavy here');
+        fireEvent.click(row);
+        expect(onSelect).toHaveBeenCalledWith({ kind: 'team' });
+    });
+
+    it('the Chart AI pane shows the shared messages, not an empty launcher', () => {
+        const messages = [msg({ role: MessageRole.AI, text: 'Verdict: skip the short.', modelsUsed: { p1: 'm1' } })];
+        render(<AgentsView {...base} messages={messages} selection={{ kind: 'team' }} />);
+        expect(screen.getByTestId('agents-view').textContent).toContain('skip the short');
+    });
+
+    it('renders the coach pane for the coach shortcut instead of a blank desk', () => {
+        render(<AgentsView {...base} selection={{ kind: 'coach' }}
+            renderCoach={() => <div data-testid="coach-pane">the coach</div>} />);
+        expect(screen.getByTestId('coach-pane')).toBeTruthy();
+    });
+
+    it('renames a bot from its own row', () => {
+        const onRenameBot = vi.fn();
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Macro' })]} onRenameBot={onRenameBot} />);
+        fireEvent.click(screen.getByTestId('rail-rename'));
+        fireEvent.change(screen.getByTestId('bot-rename-input'), { target: { value: '  Sweeper  ' } });
+        fireEvent.click(screen.getByText('Save'));
+        expect(onRenameBot).toHaveBeenCalledWith('b1', 'Sweeper');
+    });
+
+    it('sorts by name and back to recency', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Alpha' }), bot({ id: 'b2', name: 'Zeta' })]}
+            messages={[
+                msg({ role: MessageRole.AI, text: 'a', createdAt: '2026-01-01T00:00:00.000Z', modelsUsed: { 'p-b1': 'm1' } }),
+                msg({ role: MessageRole.AI, text: 'z', createdAt: '2026-09-01T00:00:00.000Z', modelsUsed: { 'p-b2': 'm1' } }),
+            ]} />);
+        const first = () => screen.getAllByTestId('agent-row')[0].textContent ?? '';
+        // Default is recency: Zeta's September reply beats Alpha's January one.
+        expect(first()).toContain('Zeta');
+        fireEvent.click(screen.getByTestId('rail-sort'));
+        expect(first()).toContain('Alpha');
+        fireEvent.click(screen.getByTestId('rail-sort'));
+        expect(first()).toContain('Zeta');
+    });
+
+    it('collapses the rail at md+ and brings it back', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        fireEvent.click(screen.getByTestId('rail-collapse'));
+        expect(screen.getByTestId('agents-rail').className).toContain('md:hidden');
+        fireEvent.click(screen.getByTestId('rail-expand'));
+        expect(screen.getByTestId('agents-rail').className).not.toContain('md:hidden');
+    });
+});
+
 describe('WS-6 focus and mobile drawer', () => {
     it("'/` opens the rail and focuses the search", () => {
         render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
