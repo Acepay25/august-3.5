@@ -21,8 +21,10 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
+import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
@@ -124,6 +126,9 @@ const Row: React.FC<{
     /** Hover actions: edit / delete — the roster affordances the old rail
      *  owned, kept reachable now that this surface replaced its row model. */
     manage?: React.ReactNode;
+    /** WS-6 §5's context menu. The same handlers the hover icons carry, plus
+     *  pin and routines, so right-clicking a row is not a second-class path. */
+    actions?: RowMenuItem[];
     /** Tiny mono count after the name — skills this bot authored. */
     stat?: number;
     /** Row identity for tests — the desk's own row needs its own. */
@@ -133,56 +138,81 @@ const Row: React.FC<{
     children?: React.ReactNode;
     Icon: React.FC<{ className?: string }>;
     onClick: () => void;
-}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, stat, testId = 'agent-row', routinesToggle, children, Icon, onClick }) => (
-    <div className={`group relative ${active ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'} rounded-control`}>
-        <div className="flex items-start gap-2 px-2 py-1.5">
-            <button type="button" onClick={onClick} data-testid={testId} className="flex min-w-0 flex-1 items-start gap-2 text-left">
-                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                    working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
-                }`}>
-                    <Icon className="h-3 w-3" />
-                </span>
-                <span className="min-w-0 flex-1">
+}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, actions, stat, testId = 'agent-row', routinesToggle, children, Icon, onClick }) => {
+    const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+    const hasActions = !!actions && actions.length > 0;
+    return (
+        <div className={`group relative ${active ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'} rounded-control`}
+            onContextMenu={e => {
+                // No actions for this row → leave the native menu alone.
+                if (!hasActions) return;
+                e.preventDefault();
+                setMenuAt({ x: e.clientX, y: e.clientY });
+            }}>
+            <div className="flex items-start gap-2 px-2 py-1.5">
+                <button type="button" onClick={onClick} data-testid={testId} className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                        working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
+                    }`}>
+                        <Icon className="h-3 w-3" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1">
+                            <span className="truncate text-[12px] font-semibold text-zinc-200">{title}</span>
+                            {attention && (
+                                <span title={attention} data-testid="row-attention"
+                                    className="shrink-0 text-[9px] font-bold text-amber-400">⚠</span>
+                            )}
+                            {!!stat && (
+                                <span title={`${stat} skills authored`} data-testid="row-skills"
+                                    className="shrink-0 rounded-full border border-zinc-800 px-1 font-mono text-[9px] tabular-nums text-zinc-500">
+                                    {stat}
+                                </span>
+                            )}
+                        </span>
+                        <span className="block truncate text-[11px] text-zinc-500">{preview || 'No messages yet'}</span>
+                    </span>
+                </button>
+                <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
                     <span className="flex items-center gap-1">
-                        <span className="truncate text-[12px] font-semibold text-zinc-200">{title}</span>
-                        {attention && (
-                            <span title={attention} data-testid="row-attention"
-                                className="shrink-0 text-[9px] font-bold text-amber-400">⚠</span>
-                        )}
-                        {!!stat && (
-                            <span title={`${stat} skills authored`} data-testid="row-skills"
-                                className="shrink-0 rounded-full border border-zinc-800 px-1 font-mono text-[9px] tabular-nums text-zinc-500">
-                                {stat}
+                        {time && <span className="font-mono text-[9px] text-zinc-600">{time}</span>}
+                        {!!unread && (
+                            <span className="rounded-full bg-zinc-700 px-1.5 font-mono text-[9px] tabular-nums text-zinc-200">
+                                {unread > 9 ? '9+' : unread}
                             </span>
                         )}
+                        {onPin && (
+                            <button type="button" onClick={onPin} aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
+                                className={`rounded p-0.5 transition-opacity ${
+                                    pinned ? 'text-zinc-400 opacity-100' : 'text-zinc-600 opacity-0 group-hover:opacity-100'
+                                }`}>
+                                <Pin className="h-3 w-3" />
+                            </button>
+                        )}
+                        <span className="opacity-0 transition-opacity group-hover:opacity-100">{manage}</span>
+                        {hasActions && (
+                            <button type="button" aria-label={`${title} options`} data-testid="row-menu"
+                                onPointerDown={e => e.stopPropagation()}
+                                onClick={e => {
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setMenuAt(m => m ? null : { x: r.right - MENU_W, y: r.bottom + 4 });
+                                }}
+                                className="rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                <Ellipsis className="h-3 w-3" />
+                            </button>
+                        )}
                     </span>
-                    <span className="block truncate text-[11px] text-zinc-500">{preview || 'No messages yet'}</span>
+                    {routinesToggle}
                 </span>
-            </button>
-            <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
-                <span className="flex items-center gap-1">
-                    {time && <span className="font-mono text-[9px] text-zinc-600">{time}</span>}
-                    {!!unread && (
-                        <span className="rounded-full bg-zinc-700 px-1.5 font-mono text-[9px] tabular-nums text-zinc-200">
-                            {unread > 9 ? '9+' : unread}
-                        </span>
-                    )}
-                    {onPin && (
-                        <button type="button" onClick={onPin} aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
-                            className={`rounded p-0.5 transition-opacity ${
-                                pinned ? 'text-zinc-400 opacity-100' : 'text-zinc-600 opacity-0 group-hover:opacity-100'
-                            }`}>
-                            <Pin className="h-3 w-3" />
-                        </button>
-                    )}
-                    <span className="opacity-0 transition-opacity group-hover:opacity-100">{manage}</span>
-                </span>
-                {routinesToggle}
-            </span>
+            </div>
+            {children}
+            {menuAt && actions && actions.length > 0 && createPortal(
+                <RowMenu x={menuAt.x} y={menuAt.y} items={actions} onClose={() => setMenuAt(null)} />,
+                document.body,
+            )}
         </div>
-        {children}
-    </div>
-);
+    );
+};
 
 // ─── Verdict card, inline ───────────────────────────────────────────────────
 
@@ -362,6 +392,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         try { await onSendBotTurn(activeBot, prompt); } finally { setBusy(false); }
     }, [text, busy, mode, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
 
+    /** The ⋯/right-click list for a room: pin plus the two roster handlers App
+     *  hands in. Pinned rooms gain edit/delete here that the hover icons never
+     *  showed them. */
+    const groupActions = (g: AgentGroup): RowMenuItem[] => [
+        { label: pinnedIds.has(g.id) ? 'Unpin' : 'Pin', onSelect: () => togglePin(g.id) },
+        ...(onEditGroup ? [{ label: 'Edit room', onSelect: () => onEditGroup(g.id) }] : []),
+        ...(onDeleteGroup ? [{ label: 'Delete room', onSelect: () => onDeleteGroup(g.id), danger: true }] : []),
+    ];
+
     /** A bot row with everything the standalone roster rail used to own:
      *  pin, the ⚠ fix hint, the routines disclosure, rename, delete. */
     const renderBotRow = (r: BotRow): React.ReactNode => {
@@ -377,6 +416,20 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 Icon={Bot}
                 onPin={() => togglePin(r.bot.id)}
                 onClick={() => selectThread({ kind: 'bot', botId: r.bot.id })}
+                actions={[
+                    { label: pins.includes(r.bot.id) ? 'Unpin' : 'Pin', onSelect: () => togglePin(r.bot.id) },
+                    ...(onRenameBot ? [{
+                        label: 'Rename',
+                        onSelect: () => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); },
+                    }] : []),
+                    ...(routines.length > 0 ? [{
+                        label: `Routines (${routines.length})`,
+                        onSelect: () => setOpenRoutines(open ? null : r.bot.id),
+                    }] : []),
+                    ...(onDeleteBot ? [{
+                        label: 'Delete bot', onSelect: () => onDeleteBot(r.bot.id), danger: true,
+                    }] : []),
+                ]}
                 manage={(onRenameBot || onDeleteBot) && (
                     <>
                         {onRenameBot && (
@@ -526,6 +579,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
                                 title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
                                 pinned onPin={() => togglePin(g.id)}
+                                actions={groupActions(g)}
                                 onClick={() => selectThread({ kind: 'group', groupId: g.id })} />
                         ))}
                     </section>
@@ -555,6 +609,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
                                 title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
                                 pinned={pinnedIds.has(g.id)} onPin={() => togglePin(g.id)}
+                                actions={groupActions(g)}
                                 onClick={() => selectThread({ kind: 'group', groupId: g.id })}
                                 manage={(onEditGroup || onDeleteGroup) && (
                                     <>

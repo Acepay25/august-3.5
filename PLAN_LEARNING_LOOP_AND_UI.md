@@ -587,8 +587,14 @@ held. Each entry: what was claimed, what the code actually did.
   while looking tuned; both reference the token now. `LiveStreamView`'s card used
   `transition-all` while its text grows a chunk at a time, the exact layout
   shift this section forbids; it is colour-scoped now.
-- **No right-click context menu** on rail rows: pin, rename, routines and delete
-  are hover icons, which is what the rail this surface replaced always did.
+- **Row context menu is in.** WS-6 §5 asked for one on rail rows. Right-click
+  opens it at the cursor and a hover ⋯ opens the same list (a right-click-only
+  action is unreachable by keyboard and touch), portalled to `document.body`
+  because the rail clips anything that overhangs its last row. Bot rows list
+  pin, rename, routines and delete; rooms list pin, edit and delete — which
+  also gave pinned rooms the two roster actions their hover icons never showed.
+  A row with nothing to do (Chart AI) keeps the browser's own menu. Pinned by
+  four cases in `tests/agentsSurface.test.tsx`.
 - **Density.** `ModelPerformanceDashboard`'s model cards and the stat tiles in
   `ProbabilityPanel`/`ScenarioSimulator` are still tiles for tabular data. The
   skill library is a table now.
