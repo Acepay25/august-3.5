@@ -3,8 +3,9 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 // The Coach thread: the learning loop's inbox as a conversation
-// surface. The roster row carries the waiting-count badge; the panel lists
-// pending skill drafts + queue proposals as cards with real actions.
+// surface. The panel lists pending skill drafts + queue proposals as cards
+// with real actions. (The rail's Coach shortcut and its waiting-count badge
+// are covered in tests/agentsSurface.test.tsx.)
 
 const mockIngest = vi.hoisted(() => vi.fn());
 const mockIngestDraft = vi.hoisted(() => vi.fn());
@@ -17,7 +18,6 @@ vi.mock('../services/learning/SkillMemoryService', () => ({
     applyDemoteProposal: vi.fn(async () => true),
 }));
 
-import { AgentRosterRail } from '../components/chat/AgentRosterRail';
 import CoachThreadPanel from '../components/chat/CoachThreadPanel';
 import { queueSkillDraft } from '../utils/skillDrafts';
 import { queueLearningProposal } from '../utils/learningQueue';
@@ -42,42 +42,6 @@ const crafted = (over: Partial<CraftedSkill> = {}): CraftedSkill => ({
     thenAction: 'skip the short',
     ...over,
 } as CraftedSkill);
-
-const railBase = {
-    messages: [],
-    bots: [],
-    groups: [],
-    selection: { kind: 'coach' } as const,
-    onSelectBot: () => {},
-    onSelectGroup: () => {},
-    onNewBot: () => {},
-    onNewGroup: () => {},
-};
-
-describe('Coach roster row', () => {
-    it('renders only when the coach callback exists; badge counts drafts + proposals', () => {
-        const { rerender } = render(<AgentRosterRail {...railBase} />);
-        expect(screen.queryByTestId('roster-coach')).toBeNull();
-
-        queueSkillDraft({ tradeId: 't1', coin: 'BTCUSDT', crafted: crafted() });
-        queueLearningProposal({ kind: 'demote', text: 't', fingerprint: 'f1' });
-
-        rerender(<AgentRosterRail {...railBase} onSelectCoach={() => {}} coachCount={2} />);
-        const row = screen.getByTestId('roster-coach');
-        expect(row.textContent).toContain('Coach');
-        expect(row.textContent).toContain('2 items need your call');
-        expect(row.querySelector('[data-testid="roster-unread-badge"]')?.textContent).toBe('2');
-    });
-
-    it('clicking selects the coach thread', () => {
-        const onSelectCoach = vi.fn();
-        render(<AgentRosterRail {...railBase} onSelectCoach={onSelectCoach} coachCount={0} />);
-        fireEvent.click(screen.getByTestId('roster-coach'));
-        expect(onSelectCoach).toHaveBeenCalledTimes(1);
-        // Zero count reads "Idle", no badge.
-        expect(screen.getByTestId('roster-coach').textContent).toContain('Idle');
-    });
-});
 
 describe('CoachThreadPanel', () => {
     let draft: { id: string };

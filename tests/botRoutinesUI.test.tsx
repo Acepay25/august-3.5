@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
-import { AgentRosterRail } from '../components/chat/AgentRosterRail';
 import AutomationEditorModal from '../components/automation/AutomationEditorModal';
 import AutomationRunCard from '../components/automation/AutomationRunCard';
 import type { AgentBot } from '../services/agents/agentRoster';
@@ -10,8 +9,10 @@ import type { AutomationConfig, AutomationRun } from '../types/automation';
 import { MessageRole } from '../types/enums';
 import type { Message } from '../types/message';
 
-// the Routines disclosure on the roster
-// rail + the "Run as bot" selector in the automation editor.
+// The two automation surfaces: the "Run as bot" selector in the automation
+// editor, and how a run renders in the card feed. The per-bot Routines
+// disclosure lives on the Agents surface and is covered in
+// tests/agentsSurface.test.tsx.
 
 afterEach(() => { cleanup(); window.localStorage.clear(); });
 
@@ -32,57 +33,6 @@ const routine = (over: Partial<AutomationConfig>): AutomationConfig => ({
     promptTemplate: 'brief me', mode: 'standard', useLenses: false,
     analystModels: [], moderatorModel: { providerId: '', modelId: '' },
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
-});
-
-const railBase = {
-    messages: [],
-    bots: [],
-    groups: [],
-    selection: { kind: 'coach' } as const,
-    onSelectBot: () => {},
-    onSelectGroup: () => {},
-    onNewBot: () => {},
-    onNewGroup: () => {},
-};
-
-describe('AgentRosterRail — Routines disclosure', () => {
-    it('shows no disclosure for bots without routines', () => {
-        render(<AgentRosterRail {...railBase} bots={[bot({ id: 'b1' })]} />);
-        expect(screen.queryByTestId('routine-disclosure')).toBeNull();
-    });
-
-    it('discloses a bot\u2019s routines: toggle, next-fire line, and Run now', () => {
-        const onRunRoutine = vi.fn();
-        const r = routine({ id: 'r1', botId: 'b1' });
-        render(
-            <AgentRosterRail
-                {...railBase}
-                bots={[bot({ id: 'b1', name: 'Macro' })]}
-                botRoutines={{ b1: [r] }}
-                onRunRoutine={onRunRoutine}
-            />,
-        );
-        expect(screen.getByTestId('routine-disclosure').textContent).toContain('Routines (1)');
-        // Collapsed by default — no Run button visible yet.
-        expect(screen.queryByTestId('routine-run-r1')).toBeNull();
-        fireEvent.click(screen.getByTestId('routine-disclosure-toggle'));
-        expect(screen.getByTestId('routine-run-r1')).toBeTruthy();
-        expect(screen.getByTestId('routine-disclosure').textContent).toContain('Morning brief');
-        expect(screen.getByTestId('routine-disclosure').textContent).toContain('next');
-        fireEvent.click(screen.getByTestId('routine-run-r1'));
-        expect(onRunRoutine).toHaveBeenCalledWith(r);
-    });
-
-    it('no disclosure without the onRunRoutine handler (embedders opt in)', () => {
-        render(
-            <AgentRosterRail
-                {...railBase}
-                bots={[bot({ id: 'b1' })]}
-                botRoutines={{ b1: [routine({ botId: 'b1' })] }}
-            />,
-        );
-        expect(screen.queryByTestId('routine-disclosure')).toBeNull();
-    });
 });
 
 describe('AutomationEditorModal — Run as bot', () => {

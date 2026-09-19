@@ -105,17 +105,18 @@ interface SidebarContentProps {
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
     onOpenBotManager?: () => void;
-    // Unified-pane props (desktop sidebar only). When `sidebarPane` is
-    // provided the sidebar renders the SESSIONS | BOTS | TERMINAL tab bar
-    // and swaps its body by pane — BOTS embeds the full agent roster rail
-    // (variant="embedded"), TERMINAL the background-jobs pane. The mobile
-    // drawer omits these and keeps the classic sessions-only body.
+    // Unified-pane props (desktop sidebar only). Given `sidebarPane` plus a
+    // `rosterSlot`, the sidebar renders the pane tab bar and swaps its body for
+    // that slot; without them it keeps the classic sessions-only body — which
+    // is what every caller passes today (the SESSIONS and TERMINAL tabs are
+    // gone; only Bots remains, and only while a slot is supplied).
     sidebarPane?: SidebarPane;
     onSetSidebarPane?: (pane: SidebarPane) => void;
-    /** Bots-pane content: the <AgentRosterRail variant="embedded" .../>
-     *  element, built by App (which owns roster state). Optional — omit in
-     *  the mobile drawer; the pane bar hides BOTS/TERMINAL without these
-     *  props so no dead tab can render. */
+    /** Bots-pane body: an opaque element the caller builds and this component
+     *  only mounts (it owns no roster state). Nothing passes it today — the
+     *  agent roster is the Agents surface's conversation rail
+     *  (components/agents/AgentsView.tsx) — so the sidebar renders its
+     *  sessions body. */
     rosterSlot?: React.ReactNode;
     // Automations — scheduled analyses. The section lists them inline; a
     // click opens the automation's own card feed.
@@ -268,13 +269,13 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
     const isSearchingQuery = searchOpen && searchQuery.trim().length > 0;
 
-    // Unified panes: the desktop sidebar IS the BOTS roster. The SESSIONS
-    // list was removed (conversation access lives in the header's history
-    // affordances); `sidebarPane`/`onSetSidebarPane` remain for prop
-    // compatibility, and the rosterSlot falls back to the sessions body
-    // when absent (floor mode) so a pane never renders an empty column.
-    // A collapsed rail (w-16) has no room for tabs or roster rows — the
-    // compact fallback body shows instead.
+    // Unified panes: a caller that supplies `sidebarPane`/`onSetSidebarPane`
+    // gets the pane tab bar, and a `rosterSlot` is the only pane body — the
+    // SESSIONS tab is gone (conversation access lives in the header's history
+    // affordances), so `rosterSlot` falls back to the sessions body when absent
+    // (floor mode) and a pane never renders an empty column. No caller passes a
+    // slot today, so the sidebar is that fallback body. A collapsed rail (w-16)
+    // has no room for tabs or roster rows — the compact body shows instead.
     const showUnified = Boolean(sidebarPane && onSetSidebarPane) && !collapsed;
     const showBotsBody = showUnified && Boolean(rosterSlot);
     const showSessionsBody = !showUnified || !showBotsBody;
@@ -580,8 +581,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             </div>
             </>)}
 
-            {/* BOTS pane — the full agent roster rail, embedded. App builds
-                the element (it owns the roster state); here it just mounts. */}
+            {/* BOTS pane body — the caller's rosterSlot, mounted verbatim.
+                This component builds none of it; see the prop doc. */}
             {/* Quick actions — OUTSIDE the sessions-only fragment: journal,
                 live market, and watch list must stay reachable from the
                 unified BOTS pane too, or they vanish exactly when the
