@@ -3,6 +3,7 @@ import { Conversation, MessageRole } from '../../types';
 import { AutomationConfig } from '../../types/automation';
 import { humanizeCron } from '../../services/automation/cronParser';
 import { searchChatHistory, ChatSearchHit } from '../../services/infrastructure/sessionSearch';
+import { EmptyState } from '../ui/EmptyState';
 import type { SidebarPane } from '../../hooks/useSidebarPane';
 import {
     ActivityIcon,
@@ -448,9 +449,22 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             />
                         )
                     ) : automations.length === 0 ? (
-                        <p className="px-3 py-1.5 text-[10px] text-zinc-600">
-                            No automations — <button type="button" onClick={act(onCreateAutomation ?? (() => {}))} className="text-zinc-300 hover:text-zinc-100 underline underline-offset-2">create one</button> to schedule analyses.
-                        </p>
+                        <EmptyState
+                            compact
+                            iconVariant="subtle"
+                            align="start"
+                            title="No automations"
+                            description="Create one to schedule analyses."
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={act(onCreateAutomation ?? (() => {}))}
+                                    className="text-[10px] text-zinc-300 hover:text-zinc-100 underline underline-offset-2"
+                                >
+                                    create one
+                                </button>
+                            }
+                        />
                     ) : (
                         automations.map(a => (
                             <button
@@ -509,7 +523,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                     isSearching ? (
                         <div className="px-3 py-2 text-xs text-zinc-500">Searching your history…</div>
                     ) : searchHits.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-zinc-400">No matches in your history</div>
+                        <EmptyState
+                            compact
+                            iconVariant="subtle"
+                            align="start"
+                            title="No matches in your history"
+                        />
                     ) : (
                         searchHits.map(hit => (
                             <button
@@ -533,7 +552,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         ))
                     )
                 ) : groupedConversations.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-zinc-400">No conversations yet</div>
+                    <EmptyState
+                        compact
+                        iconVariant="subtle"
+                        align="start"
+                        title="No conversations yet"
+                    />
                 ) : (
                     groupedConversations.map(group => (
                         <div key={group.label} className="pt-1">

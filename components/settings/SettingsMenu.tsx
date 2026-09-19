@@ -16,6 +16,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { EmptyState } from '../ui/EmptyState';
 import { AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
 import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
 import PromptManager from './PromptManager';
@@ -584,9 +585,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     );
                                 })}
                                 {navQ && !NAV_GROUPS.some(g => g.entries.some(navMatches)) && (
-                                    <p className="px-2.5 pt-3 text-[11px] leading-relaxed text-zinc-600">
-                                        Nothing matches "{navQuery.trim()}".
-                                    </p>
+                                    <EmptyState
+                                        compact
+                                        iconVariant="subtle"
+                                        align="start"
+                                        icon={<Search className="h-5 w-5" />}
+                                        title={`Nothing matches "${navQuery.trim()}"`}
+                                    />
                                 )}
                             </div>
 

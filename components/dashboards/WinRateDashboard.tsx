@@ -446,7 +446,12 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         </ResponsiveContainer>
                     </div>
                 ) : (
-                    <div className="h-24 flex items-center justify-center text-zinc-600 text-sm">No data available</div>
+                    <EmptyState
+                        compact
+                        iconVariant="subtle"
+                        title="No data available"
+                        className="h-24 justify-center"
+                    />
                 )}
                 {/* Legend */}
                 <div className="flex flex-wrap justify-center gap-4 mt-2 pt-2 border-t border-white/5">
@@ -519,7 +524,11 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center text-zinc-600 text-sm py-4">No coin data yet</div>
+                        <EmptyState
+                            compact
+                            iconVariant="subtle"
+                            title="No coin data yet"
+                        />
                     )}
                 </div>
 

@@ -23,6 +23,7 @@ import React from 'react';
 import { clamp01 } from '../../utils/math';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import { EmptyState } from '../ui/EmptyState';
 import type {
     DebateStageActor,
     DebateExchange,
@@ -592,9 +593,12 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
 
                     {seats.length === 0 ? (
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="rounded-md border border-dashed border-white/10 p-3 text-[11px] text-zinc-500">
-                                No analyst seats yet.
-                            </div>
+                            <EmptyState
+                                compact
+                                iconVariant="subtle"
+                                title="No analyst seats yet"
+                                className="rounded-md border border-dashed border-white/10"
+                            />
                         </div>
                     ) : (
                         seats.map(seat => {
