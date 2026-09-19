@@ -426,17 +426,18 @@ Deliberately left, each with the reason:
 - **WS-5.1, second half — closed 2026-09-20** (see below). Settings no longer
   mounts the notebook browser or the amendments inbox; it keeps the switches and
   deep-links into Learn.
-- **WS-5.3, breadth.** The sweep did the parts with signal: 40 dead
-  `.status-surface`/`.analysis-card` tokens across 30 files (they matched no CSS
-  rule, and two comments cited them as if they still colored anything),
-  TradeLog's outcome/verdict chips now go through `StatusPill`, streaming price
-  readouts got `tabular-nums`, and LiveMarket's connection badge (a
-  three-deep nested ternary over border/bg/text) is now one `StatusPill`.
-  Still hand-rolled, and these ARE status chips rather than dots:
-  `ModelPerformanceDashboard.tsx:114-130` (red/yellow/green tiers),
-  `Header.tsx:240,264` (volatility), `ProviderManager.tsx:158`,
-  `ProfileMemoryCard.tsx:75`, `MemoryProvenanceStrip.tsx:137`. Converting them
-  is churn that needs a visible browser to check.
+- **WS-5.3, breadth — mostly closed by the 2026-09-20 audit.** The sweep did the
+  parts with signal: 40 dead `.status-surface`/`.analysis-card` tokens across 30
+  files (they matched no CSS rule, and two comments cited them as if they still
+  colored anything), TradeLog's outcome/verdict chips through `StatusPill`,
+  LiveMarket's connection badge (a three-deep nested ternary), the remaining
+  ~14 genuinely hand-rolled status chips across the dashboards, automation, desk
+  and settings surfaces, seven hand-rolled empty states through `EmptyState`,
+  and `tabular-nums` on the numeric readouts that were missing it.
+  Deliberately NOT converted, with the reason: kind chips that need hues the
+  five tones cannot express (sky/violet), one solid-fill badge, and every
+  clickable control wearing semantic color — `StatusPill` renders a span, so
+  converting a button would drop its click.
 - **WS-4.1 follow-through — done, with two corrections.** Removed after
   verifying zero callers: `GenericAnalysisService.updateGlobalMemory` (+ its
   private schema), `memoryUtils.prepareTradeSummariesForGlobalMemory`,
@@ -498,6 +499,93 @@ Browser verification ran in a backgrounded tab, so computed styles and the
 CSSOM were measured (including that `.md\:visible` sorts after `.invisible`,
 which keeps the desktop column unaffected) but no screenshot was possible. The
 live-provider end-to-end run remains the only unverified claim in this plan.
+
+## Audit 2026-09-20 — every claim re-checked against code
+
+The checkmarks above were verified against the code instead of trusted. Twelve
+of them were wrong, thinner than stated, or resting on a premise that no longer
+held. Each entry: what was claimed, what the code actually did.
+
+1. **WS-1.1** the loop test's demotion step hand-fed `recordEvalVerdict` a
+   verdict string. The producer — `evaluateSkill` — was never exercised by the
+   suite that exists to prove the loop closes. It runs the real eval now, with
+   only the analysis runner mocked.
+2. **WS-2.2** this file says `SupervisorVerdictSchema` was extended for
+   rescope/contradiction. It was not (checked against the commit); actuation
+   reuses `enhance` plus a rewritten clause through the same `validateIfThen`
+   and prediction gates. Behaviourally what was asked for, so the claim is
+   corrected here rather than the schema churned for a name.
+3. **WS-2.4** the budget was per-PASS only: 12 calls every 10-second debounce is
+   not a budget. `MAX_ITEMS_PER_SESSION` (40) bounds the session now and
+   announces itself when it stops a sweep; a human's Run bypasses it.
+4. **WS-2.3** `whyAccepted` was persisted and rendered by zero components, so the
+   audit trail still evaporated on reload — and nothing recorded WHO approved.
+   `SkillMeta.approvedBy` is written per caller and shown on the skill with a
+   two-step Undo approval.
+5. **WS-3.1** bots retrieved on a forked coin regex (a strictly weaker query than
+   the analyst seat beside them); `memoryScope` was hardcoded `'global'` at both
+   turn sites because `AgentBot` had no such field; and retrieval recorded with
+   `runId: undefined` while a second, uncapped source list logged files the
+   budget had already dropped. All fixed, and bot reply rows now carry
+   `runStats.runId` — the key `trade.sourceRunId` copies from — without which no
+   bot trade could ever credit a skill. Side effect, stated plainly: bot turns
+   are now subject to the ε-holdout.
+6. **WS-3.2** a scheduled routine turn wrote nothing, and a trade logged from a
+   bot's reply reached the notebook with no author. Both wired.
+7. **WS-3.3** the `from @BotName` label was in the retrieval text but no test
+   asserted it reached a prompt. One does.
+8. **WS-3.4** the "synced with notebook" affordance existed in no form. There is
+   a pill reading the bot's scope and newest lesson, the scope is settable in the
+   bot dialog, and the empty state no longer tells an isolated bot it reads the
+   shared book.
+9. **WS-4** no graveyard sweep existed; the contradiction sweep reported to
+   `console.log` so its outcome never reached the health log; two of the health
+   selector's five signals were missing (a days-since-EDIT proxy stood in for
+   days-since-HIT, and a standing-but-challenged belief was invisible). Closed,
+   with one honest non-fix: consolidation stays per-write because the prune and
+   aggregate provably run there.
+10. **WS-5.1** Learn was not the one surface — the Journal still carried a tab
+    labelled "Learn" rendering `LearningDashboard`, and the graveyard view named
+    in the plan was a number. Both closed; `#/journal/learning` redirects.
+11. **WS-5.2** one of four promised panel extractions existed; five more blocks
+    are now modules and the file is 2,206 → 2,051 lines. The "autopilot banner"
+    the plan names is not in that file at all (it lives in App +
+    `OutcomeMismatchModal`); the proposal card that feeds the autopilot was
+    treated as the intended target. "auto-approved by supervisor — undo" existed
+    nowhere; the honest version sits on the skill, since the approvals drawer by
+    design shows only what the model did NOT decide.
+12. **WS-6** the rail spec was largely unimplemented: no collapse handle, no sort
+    control, no Chart AI row — and that pane rendered a hard-coded empty array,
+    so the plan's stated hard requirement that both surfaces show the same
+    conversation was false — the Coach shortcut selected a thread the surface had
+    no pane for, bots could not be renamed, the status dot was the string
+    "desk online", and rooms could not be pinned. All closed; the composer's
+    model chip now hosts the real picker instead of navigating to Settings.
+
+13. **WS-2 acceptance was tested through the wrong door.** Every supervisor test
+    called `runSupervisorPass(user, { manual: true })` — that is the "Run now"
+    button, so the suite proved the mechanism while the plan's actual claim
+    ("zero REQUIRED human actions") rode on triggers nothing exercised: the
+    queue-event debounce and the boot sweep. `tests/supervisorAutonomy.test.tsx`
+    now proves the drain with no hand on the button, and proves the other half
+    of the acceptance line too — auto paused leaves everything queued *and*
+    human-reachable.
+
+## Still open after the audit
+
+- **Agents composer has no attach-image `+`.** The dock's attachment pipeline is
+  interleaved with `composerRef`/`fileInputRef` and two open menus inside
+  TradeChatPanel's composer card; extracting it is a ref-forwarding redesign, not
+  the pure split WS-5.2 allows. Deferred with the reason rather than done badly.
+- **No right-click context menu** on rail rows: pin, rename, routines and delete
+  are hover icons, which is what the rail this surface replaced always did.
+- **Density.** `ModelPerformanceDashboard`'s model cards and the stat tiles in
+  `ProbabilityPanel`/`ScenarioSimulator` are still tiles for tabular data. The
+  skill library is a table now.
+- **File locations.** `MemoryFilesManager.tsx` and `AmendmentsInbox.tsx` still
+  live under `components/settings/` although only Learn mounts them.
+- **Unverified:** a live run against a configured provider — the only claim in
+  this plan that jsdom cannot settle.
 
 ## Status (2026-09-19)
 
