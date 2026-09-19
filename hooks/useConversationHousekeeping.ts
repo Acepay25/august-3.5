@@ -15,7 +15,6 @@ export interface UseConversationHousekeepingArgs {
     invalidatePostMortemRuns: () => void;
     confirmDialog: (opts: ConfirmOptions) => Promise<boolean>;
     toast: { success: (title: string, message?: string) => void };
-    isCommandPaletteOpen: boolean;
 }
 
 export interface UseConversationHousekeepingResult {
@@ -30,16 +29,15 @@ export interface UseConversationHousekeepingResult {
 
 /**
  * Conversation housekeeping: create / reuse / load / delete sessions and
- * edit a sent user message. Also owns the keyboard shortcuts that drive
- * session flow — Ctrl/Cmd+N for a new conversation and "/" to focus the
- * composer (unless the user is typing or the command palette is open).
+ * edit a sent user message. Also owns Ctrl/Cmd+N, the one shortcut here that
+ * still points at something that exists.
  */
 export const useConversationHousekeeping = (args: UseConversationHousekeepingArgs): UseConversationHousekeepingResult => {
     const {
         conversationHistory, setConversationHistory,
         activeConversation, activeConversationId, setActiveConversationId,
         updateMessages, handleCancelAnalysis, invalidatePostMortemRuns,
-        confirmDialog, toast, isCommandPaletteOpen,
+        confirmDialog, toast,
     } = args;
 
     const handleClearAllConversations = async () => {
@@ -96,26 +94,20 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
         setActiveConversationId(newConv.id);
     }, [handleCancelAnalysis, invalidatePostMortemRuns, conversationHistory, activeConversationId, activeConversation, setConversationHistory, setActiveConversationId]);
 
-    // F3: Ctrl/Cmd+N = new conversation; "/" focuses the composer (unless
-    // already typing or an overlay is open).
+    // F3: Ctrl/Cmd+N = new conversation. ("/" used to focus the composer; the
+    // #chat-composer element it looked up was deleted in 78bc027, so the branch
+    // had been a permanent no-op and is gone. AgentsView now owns "/" for the
+    // rail search.)
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
                 e.preventDefault();
                 handleNewConversation();
-                return;
-            }
-            if (e.key === '/' && !isCommandPaletteOpen) {
-                const target = e.target as HTMLElement | null;
-                const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
-                if (isTyping) return;
-                const composer = document.getElementById('chat-composer') as HTMLTextAreaElement | null;
-                composer?.focus();
             }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [handleNewConversation, isCommandPaletteOpen]);
+    }, [handleNewConversation]);
 
     const handleLoadConversation = useCallback((id: string) => {
         if (id !== activeConversationId) {

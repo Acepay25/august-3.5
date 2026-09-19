@@ -25,7 +25,6 @@ const createArgs = (overrides: Partial<UseConversationHousekeepingArgs> = {}): U
     invalidatePostMortemRuns: vi.fn(),
     confirmDialog: vi.fn().mockResolvedValue(true),
     toast: { success: vi.fn() },
-    isCommandPaletteOpen: false,
     ...overrides,
 });
 
