@@ -16,7 +16,7 @@ import {
     BotIcon,
     SettingsIcon,
 } from '../shared/Icons';
-import { User, Settings, History, LogOut, GraduationCap } from 'lucide-react';
+import { User, Settings, History, LogOut, GraduationCap, Inbox } from 'lucide-react';
 import Tip from '../ui/Tip';
 import type { AppSurface } from '../../hooks/useSurface';
 
@@ -38,6 +38,10 @@ interface NavRailProps {
     onToggleSidebar: () => void;
     onOpenSettings: (tab?: string) => void;
     onOpenVersionHistory?: () => void;
+    /** WS-5.2: the approvals items are ONE drawer, and the plan puts its entry
+     *  point on this rail rather than only in the header's tray. */
+    onOpenApprovals?: () => void;
+    approvalsCount?: number;
     onSwitchUser?: () => void;
     username?: string;
     badges?: Partial<Record<AppSurface, NavBadge>>;
@@ -68,6 +72,8 @@ const NavRail: React.FC<NavRailProps> = ({
     onToggleSidebar,
     onOpenSettings,
     onOpenVersionHistory,
+    onOpenApprovals,
+    approvalsCount,
     onSwitchUser,
     username,
     badges,
@@ -154,6 +160,26 @@ const NavRail: React.FC<NavRailProps> = ({
                 );
             })}
             <div className="mt-auto flex flex-col items-center gap-2 relative">
+                {onOpenApprovals && (
+                    <Tip side="right"
+                        label={approvalsCount ? `Approvals — ${approvalsCount} waiting for you` : 'Approvals'}>
+                        <button
+                            type="button"
+                            onClick={onOpenApprovals}
+                            data-testid="nav-approvals"
+                            aria-label={approvalsCount ? `Approvals, ${approvalsCount} waiting` : 'Approvals'}
+                            className="relative flex h-10 w-10 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-200"
+                        >
+                            <Inbox className="h-[18px] w-[18px]" />
+                            {!!approvalsCount && (
+                                <span aria-hidden
+                                    className="absolute right-0.5 top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-amber-500 px-1 font-mono text-[9px] font-bold leading-none text-zinc-950 ring-2 ring-zinc-900">
+                                    {approvalsCount > 99 ? '99+' : approvalsCount}
+                                </span>
+                            )}
+                        </button>
+                    </Tip>
+                )}
                 <Tip side="right" label="Settings" shortcut="Ctrl+,">
                     <button
                         type="button"

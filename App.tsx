@@ -3093,6 +3093,8 @@ const App: React.FC = () => {
                         setIsSettingsMenuVisible(true);
                     }}
                     onOpenVersionHistory={handleOpenVersionHistory}
+                    onOpenApprovals={() => setIsApprovalInboxVisible(true)}
+                    approvalsCount={approvalItems.length}
                     onSwitchUser={handleSwitchUser}
                     username={activeUsername || undefined}
                     badges={navBadges}
