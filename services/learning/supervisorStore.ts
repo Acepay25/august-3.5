@@ -46,6 +46,9 @@ export interface SupervisorEvent {
     /** Snapshot of a skill draft kept so the user can override the verdict
      *  after the fact (approve a rejected draft / reject an approved one). */
     draftSnapshot?: unknown;
+    /** The queued item itself, for kinds whose reversal means "put it back"
+     *  (a dropped lifecycle proposal) rather than "apply the other way". */
+    itemSnapshot?: unknown;
     /** Live streamed text of the supervising model for THIS item. */
     streamText?: string;
     streaming?: boolean;

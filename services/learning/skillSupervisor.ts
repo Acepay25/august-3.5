@@ -33,7 +33,7 @@ import {
     listSkillDrafts, takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey,
     type SkillDraft,
 } from '../../utils/skillDrafts';
-import { listLearningProposals, dismissLearningProposal } from '../../utils/learningQueue';
+import { listLearningProposals, dismissLearningProposal, queueLearningProposal, type LearningProposal } from '../../utils/learningQueue';
 import { loadForgedTools, approveForgedTool, retireForgedTool } from '../tools/toolForge';
 import { listAmendments, approveAmendment, rejectAmendment } from './memoryAmendments';
 import { getMemoryFiles, updateMemoryFile, deleteMemoryFile } from './MemoryFilesService';
@@ -375,6 +375,10 @@ const superviseLearningProposal = async (
         itemKind: 'proposal',
         itemTitle: `${proposal.kind}${proposal.skillSlug ? ` → ${proposal.skillSlug}` : ''}`,
         itemId: proposal.id,
+        // Kept so a human can put a DROPPED proposal back into the queue;
+        // dismissLearningProposal removes it from a store the panel cannot
+        // otherwise reconstruct.
+        itemSnapshot: proposal,
         text: `Reviewing ${proposal.kind} proposal`,
     });
     store.setPhase('verifying', `Verifying ${proposal.kind} proposal`);
@@ -596,6 +600,42 @@ export const runSupervisorNow = (): Promise<number> => runSupervisorPass(getActi
 /** The panel's Stop button: aborts the in-flight call; remaining items stay
  *  queued for the next pass. */
 export const abortSupervisorRun = (): void => store.abortRun();
+
+/**
+ * Reverse a NON-skill supervision verdict (WS-2.3: "override any verdict", not
+ * only a skill draft's). Each kind goes back through the same status writer a
+ * human button uses, so an override lands where the panel would have put it.
+ *
+ * Boundary worth stating: a PROPOSAL is only reversible when the model DROPPED
+ * it. An applied re-scope already rewrote a skill file, and that edit has its
+ * own undo on the skill (retire / delete / un-approve) — re-queueing the
+ * proposal would not roll the clause back, so it refuses rather than pretending.
+ */
+export const overrideVerdict = async (
+    eventId: string,
+    username = getActiveUsername(),
+): Promise<boolean> => {
+    const ev = store.getSnapshot().events.find(e => e.id === eventId);
+    const decision = ev?.decision;
+    if (!ev || !decision || !ev.itemId || decision.overriddenByUser) return false;
+    const accepted = decision.verdict === 'approved' || decision.verdict === 'enhanced';
+    if (ev.itemKind === 'tool') {
+        if (accepted) retireForgedTool(ev.itemId);
+        else approveForgedTool(ev.itemId);
+    } else if (ev.itemKind === 'amendment') {
+        if (accepted) rejectAmendment(ev.itemId);
+        else approveAmendment(ev.itemId);
+    } else if (ev.itemKind === 'proposal') {
+        if (accepted) return false;
+        const queued = ev.itemSnapshot as LearningProposal | undefined;
+        if (!queued) return false;
+        queueLearningProposal(queued, username);
+    } else {
+        return false;
+    }
+    store.markOverridden(eventId, accepted ? 'rejected' : 'approved');
+    return true;
+};
 
 // ─── Overrides (the panel's intervention buttons) ───────────────────────────
 
