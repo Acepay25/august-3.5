@@ -36,7 +36,8 @@ import {
     serializeSkill, titleFromMeta,
 } from '../services/learning/SkillMemoryService';
 import { queueSkillDraft } from '../utils/skillDrafts';
-import { listLearningProposals } from '../utils/learningQueue';
+import { listLearningProposals, queueLearningProposal } from '../utils/learningQueue';
+import { upsertSettledBelief } from '../services/learning/settledBeliefs';
 import { recordBotTurnOutcome, loadBotLearningStats } from '../services/agents/botLearning';
 import { saveBot, getBots } from '../services/agents/agentRoster';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
@@ -117,6 +118,67 @@ describe('runMemoryHygiene', () => {
         expect(await isHygieneDue(USER)).toBe(false);
         expect(await runMemoryHygieneIfDue(USER, [])).toBeNull();
     });
+
+    it('reports the contradiction sweep into the health log, beside queueing it', async () => {
+        // WS-4.1: the sweep used to run from the weekly block and reach a
+        // console.log only — the proposal existed, the report never mentioned
+        // it. Both halves are asserted here.
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, 'btc-sweep-repeat.md', `---
+status: confirmed
+kind: repeat
+coin: BTCUSDT
+direction: Short
+wins: 3
+losses: 1
+ifCondition: btc london sweep short reclaim
+thenAction: enter after the reclaim
+tradeIds: a1
+---
+
+# Repeat
+`, USER, true);
+        await createMemoryFile(skills.id, 'btc-sweep-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+wins: 1
+losses: 3
+ifCondition: btc london sweep short
+thenAction: skip the short
+tradeIds: b1
+---
+
+# Avoid
+`, USER, true);
+
+        const res = await runMemoryHygiene(USER, { providerConfigs: [] });
+        expect(res.contradictionsQueued).toBe(1);
+
+        const conflict = listLearningProposals(USER).filter(p => p.kind === 'contradiction');
+        expect(conflict).toHaveLength(1);
+        expect(conflict[0].text).toContain('btc-sweep-repeat');
+        expect(conflict[0].text).toContain('btc-sweep-avoid');
+
+        const logged = await loadHygieneLog(USER);
+        const line = logged.map(l => l.text).find(t => /contradiction sweep/i.test(t));
+        expect(line).toBeDefined();
+        // pairs examined / proposals queued / dismissed-by-dedupe
+        expect(line).toMatch(/examined \d+ live-skill pairs?/i);
+        expect(line).toMatch(/1 proposal queued/i);
+        expect(line).toMatch(/0 already pending/i);
+
+        // Second pass in the same week: the pending fingerprint dismisses the
+        // pair, and the line says so instead of reporting silence.
+        const again = await runMemoryHygiene(USER, { providerConfigs: [] });
+        expect(again.contradictionsQueued).toBe(0);
+        const line2 = (await loadHygieneLog(USER)).map(l => l.text)
+            .find(t => /contradiction sweep/i.test(t))!;
+        expect(line2).toMatch(/0 proposals queued/i);
+        expect(line2).toMatch(/1 already pending/i);
+        expect(listLearningProposals(USER).filter(p => p.kind === 'contradiction')).toHaveLength(1);
+    });
 });
 
 describe('buildMemoryHealthReport', () => {
@@ -169,6 +231,71 @@ tradeIds:
         const report = await buildMemoryHealthReport(USER);
         expect(report.flags).toEqual([]);
         expect(report.queues.supervisorPending).toBe(0);
+    });
+
+    it('separates a file that stopped getting hits from one the log never saw', async () => {
+        // WS-4.3 "stale files (no hits in N days)": the injection log stamps
+        // every run, so a file it CAN place a hit on gets a real last-hit age.
+        // A file it cannot is absence, not staleness, and stays in `unobserved`.
+        const DAY = 86_400_000;
+        const profile = getMemoryFiles().folders.find(f => f.name === 'profile')!;
+        // Padded well past the seeded notebook so both lists (capped at 12
+        // rows, `unobserved` by size) actually have room to show the notes.
+        const note = (title: string): string => `# ${title}\n\n${'holding line '.repeat(400)}`;
+        await createMemoryFile(profile.id, 'gone-quiet.md', note('Gone quiet — served once, long ago.'), USER, true);
+        await createMemoryFile(profile.id, 'still-serving.md', note('Still serving — hit two days ago.'), USER, true);
+        await createMemoryFile(profile.id, 'never-served.md', note('Never served — no hit in the retained window.'), USER, true);
+        store[`memory_injections_v1_${USER}`] = [
+            {
+                ts: new Date(Date.now() - 45 * DAY).toISOString(),
+                stage: 'verdict', audience: 'moderator',
+                sources: [{ path: 'profile/gone-quiet', kind: 'note' }],
+            },
+            {
+                ts: new Date(Date.now() - 2 * DAY).toISOString(),
+                stage: 'verdict', audience: 'moderator',
+                sources: [{ path: 'profile/still-serving.md', kind: 'note' }],
+            },
+        ];
+
+        const report = await buildMemoryHealthReport(USER);
+        expect(report.injectionLogWindowRuns).toBeGreaterThan(0);
+        expect(report.staleFiles.map(f => f.path)).toEqual(['profile/gone-quiet.md']);
+        expect(report.staleFiles[0].daysSinceHit).toBeGreaterThanOrEqual(44);
+        expect(Date.parse(report.staleFiles[0].lastHitAt)).toBeGreaterThan(0);
+        // The two honest non-stale cases: recently hit, and no history at all.
+        expect(report.unobserved.map(u => u.path)).not.toContain('profile/still-serving.md');
+        expect(report.unobserved.map(u => u.path)).toContain('profile/never-served.md');
+        expect(report.flags.join(' ')).toMatch(/last reached a prompt 30\+ days ago/);
+    });
+
+    it('names a settled belief that is standing but contradicted', async () => {
+        // WS-4.3 "contradicted settled beliefs": the challenge pass only FLAGS
+        // (nothing auto-invalidates), so `status` alone cannot express it and
+        // the flag used to be buried in the generic needsRewrite count.
+        await upsertSettledBelief(
+            { slug: 'never-short-premium', body: 'Never short BTC into a premium sweep.', evidenceCount: 9 },
+            USER,
+        );
+        queueLearningProposal({
+            kind: 'contradiction',
+            skillSlug: 'never-short-premium',
+            text: 'Settled belief "never-short-premium" has been contradicted by 3 winning short trades in 30 days.',
+            fingerprint: 'belief|never-short-premium',
+        }, USER);
+        // A skill-pair contradiction shares the proposal KIND but is not a
+        // belief challenge — the named signal must not absorb it.
+        queueLearningProposal({
+            kind: 'contradiction', skillSlug: 'a-skill', relatedSlug: 'b-skill',
+            text: 'Contradicting live skills.', fingerprint: 'contradiction|a-skill|b-skill',
+        }, USER);
+
+        const report = await buildMemoryHealthReport(USER);
+        expect(report.beliefs.settled).toBe(1);
+        expect(report.beliefs.invalidated).toBe(0);
+        expect(report.beliefs.challenged).toBe(1);
+        expect(report.flags.join(' '))
+            .toMatch(/settled belief is contradicted by winning trades and still standing/);
     });
 });
 

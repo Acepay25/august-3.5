@@ -9,7 +9,10 @@
  * | user-veto), feathers a re-entry rule per reason, and dedupes creation
  * against the ARCHIVE so a retired twin raises a REVIVAL review card instead
  * of a fresh skill. The graveyard is injected into the worth gate's context
- * (capped), never into a debate.
+ * (capped), never into a debate. `runGraveyardSweep` is the weekly maintenance
+ * pass over the persisted index: it enforces the retention this module already
+ * declares (`MAX_TOMBSTONES`) and reports the counts; it never revives or
+ * expires by age (see its doc).
  */
 
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
@@ -34,7 +37,10 @@ function parseArchivedSkill(content: string): SkillMeta | null {
 }
 
 const KEY_PREFIX = 'skill_graveyard_v1_';
-const MAX_TOMBSTONES = 40;
+/** The store's declared retention: the NEWEST this many tombstones, kept on
+ *  every write (see `write`). `runGraveyardSweep` enforces exactly this
+ *  against what is already persisted — nothing more, nothing less. */
+export const MAX_TOMBSTONES = 40;
 
 export type RetirementReason =
     | 'insufficient-evidence'
@@ -100,6 +106,100 @@ export async function graveyardBlock(username: string, max = MAX_TOMBSTONES): Pr
         .slice(0, max)
         .map(t => `- ${t.slug}: tried, retired: ${t.reason} after N=${t.sampleN}, lift ${t.liftPts !== null ? `${t.liftPts >= 0 ? '+' : ''}${t.liftPts}pt` : 'unknown'}`)
         .join('\n');
+}
+
+/** The persisted list UNfiltered — a sweep has to see the rows every reader
+ *  already ignores, or it can never clean them out of storage. */
+const readRaw = async (username: string): Promise<unknown[]> => {
+    try {
+        const raw = await getPreferenceObject<unknown[]>(keyFor(username));
+        return Array.isArray(raw) ? raw : [];
+    } catch {
+        return [];
+    }
+};
+
+const isTombstone = (item: unknown): item is SkillTombstone => {
+    const t = item as SkillTombstone | null;
+    return !!t && typeof t === 'object' && typeof t.slug === 'string';
+};
+
+/** `retiredAt` → epoch ms (NaN when absent or unparsable). */
+const tombstoneMs = (t: SkillTombstone): number => {
+    const ms = Date.parse(t.retiredAt ?? '');
+    return Number.isFinite(ms) ? ms : NaN;
+};
+
+export interface GraveyardSweepResult {
+    /** Rows the persisted list held, incl. rows no reader can use. */
+    examined: number;
+    /** Rows `read()` already ignores (no `slug`) — dead weight until now. */
+    malformed: number;
+    /** Same-slug shadows collapsed onto the newest record. */
+    duplicates: number;
+    /** Valid records past the newest-`MAX_TOMBSTONES` boundary. */
+    expired: number;
+    /** What the store holds after the sweep. */
+    retained: number;
+    /** `malformed + duplicates + expired`. */
+    collected: number;
+    /** True when the sweep rewrote the persisted list. */
+    wrote: boolean;
+}
+
+/**
+ * The weekly graveyard sweep.
+ *
+ * It collects ONLY what the store's own declared retention already excludes —
+ * it invents no window:
+ *  1. rows `read()` discards on every call (its slug guard), so they are
+ *     invisible to the worth gate yet sit in the persisted payload forever;
+ *  2. duplicate slugs — `recordTombstone` replaces on write, so an older row
+ *     for a slug that has since been refreshed is a stale shadow;
+ *  3. records past the newest-`MAX_TOMBSTONES` boundary ordered by `retiredAt`
+ *     — the cap `write` applies, so these are rows that predate it or arrived
+ *     through a path that bypassed it.
+ *
+ * What it deliberately does NOT do is revive or expire anything by age. This
+ * store declares no time window (only the count above), and a retirement
+ * record stays useful exactly as long as the archived skill file it mirrors.
+ * Re-entry needs a FRESH evidence cluster, and that test already runs at draft
+ * time: `findArchiveTwin` → `queueRevivalProposal`
+ * (`SkillMemoryService.ts:1697-1699,1795-1797`). A timer over frozen retirement
+ * records has nothing new to compare against — it would only forget lessons on
+ * a schedule.
+ */
+export async function runGraveyardSweep(username: string): Promise<GraveyardSweepResult> {
+    const raw = await readRaw(username);
+    const valid = raw.filter(isTombstone);
+    const malformed = raw.length - valid.length;
+    // Newest-first. Undated rows sort LAST — they fall off the cap before a
+    // dated one does, but they are never deleted merely for being undated.
+    const newestFirst = [...valid].sort((a, b) => {
+        const at = tombstoneMs(a);
+        const bt = tombstoneMs(b);
+        if (!Number.isFinite(at) && !Number.isFinite(bt)) return 0;
+        if (!Number.isFinite(at)) return 1;
+        if (!Number.isFinite(bt)) return -1;
+        return bt - at;
+    });
+    const newestBySlug = new Map<string, SkillTombstone>();
+    for (const t of newestFirst) if (!newestBySlug.has(t.slug)) newestBySlug.set(t.slug, t);
+    const deduped = [...newestBySlug.values()];
+    const duplicates = valid.length - deduped.length;
+    const kept = deduped.slice(0, MAX_TOMBSTONES);
+    const expired = deduped.length - kept.length;
+    const collected = malformed + duplicates + expired;
+    if (collected > 0) await write(username, kept);
+    return {
+        examined: raw.length,
+        malformed,
+        duplicates,
+        expired,
+        retained: kept.length,
+        collected,
+        wrote: collected > 0,
+    };
 }
 
 /** Re-entry rules per reason (table). */

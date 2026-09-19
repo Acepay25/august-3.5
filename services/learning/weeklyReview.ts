@@ -14,7 +14,6 @@ import { TradeOutcome } from '../../types/enums';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { buildDisciplineAnalytics, effectiveRMultiple } from '../../utils/disciplineAnalytics';
 import { runWeeklyMetaCalibration, type MetaCalibrationRatios } from './metaCalibration';
-import { runContradictionSweep } from '../../utils/contradictionSweep';
 import { runBeliefChallengePass } from './beliefChallenge';
 import { runSelfImprovementPass } from './selfImprovement';
 import { sendChatRequest } from '../providers/GenericProviderService';
@@ -152,22 +151,20 @@ export const runWeeklyReviewIfDue = async (
     try {
         if (!(await isWeeklyReviewDue(username))) return null;
         // Deterministic passes beside the weekly rollup (no LLM):
-        // live-skill contradiction detection + settled-belief challenge flags.
+        // settled-belief challenge flags + the scheduled hygiene pass.
         try {
-            // Synchronous sweep; the queued count rides the log like the
-            // other passes so a silent conflict backlog is visible.
-            const conflicts = runContradictionSweep(username);
-            if (conflicts > 0) console.log('[ContradictionSweep] queued', conflicts, 'conflict proposals');
             await runBeliefChallengePass(username, trades);
             // (batch 6): the self-improvement loop — episodes →
             // fingerprints → (judge-gated) distill → measurement. Offline,
             // read-only; fires alongside the weekly review.
             await runSelfImprovementPass(username, trades);
-            // WS-4.2: memory maintenance — stale-skill demotion proposals and
-            // the notebook review. It carries its OWN due-check, because this
-            // block re-runs whenever the digest couldn't be generated (no
-            // provider, too few trades) and hygiene must not ride along on
-            // every one of those retries.
+            // WS-4.2: memory maintenance — stale-skill demotion proposals, the
+            // contradiction sweep, the graveyard retention pass and the
+            // notebook review, each reported into the hygiene log the Health
+            // tab renders. It carries its OWN due-check, because this block
+            // re-runs whenever the digest couldn't be generated (no provider,
+            // too few trades) and hygiene must not ride along on every one of
+            // those retries.
             void import('./memoryHygiene')
                 .then(m => m.runMemoryHygieneIfDue(username))
                 .catch(() => { /* hygiene is best-effort */ });

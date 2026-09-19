@@ -3,23 +3,32 @@
  *
  * Weekly, at boot, through the same due-check discipline
  * `weeklyReview` established (per-user Preferences key, last run stamped in
- * the payload, missing-or-unparsable ⇒ due). It does the two maintenance jobs
- * that nothing else was doing on a schedule, and writes a one-line entry each
+ * the payload, missing-or-unparsable ⇒ due). It runs the maintenance jobs that
+ * nothing else was doing on a schedule, and writes a one-line entry for each
  * so the Learn surface's Health tab can say what memory looks like without
  * the user having to go looking.
  *
  * Deliberately absent, with the reason:
- *  - consolidation — `pruneOutdatedInsights` + `aggregateSimilarInsights`
- *    already run live on every global-memory write
- *    (`AlgorithmicMemoryService.ts:149-150`). `consolidateMemory` is a pure
- *    wrapper over exactly those two, so calling it here would do the same
- *    work twice. See docs/learning-loop-map.md.
- *  - the contradiction sweep — already fires in the weekly block beside this
- *    (`weeklyReview.ts:159`).
- *  - a graveyard sweep — revival needs a FRESH evidence cluster to justify
- *    re-creating a retired skill, and that test already runs at draft time via
- *    `findArchiveTwin`. A scheduled pass over frozen retirement records has
- *    nothing new to compare against.
+ *  - consolidation — the insight store needs no scheduled pass here because
+ *    its ONLY writer already consolidates on every write:
+ *    `AlgorithmicMemoryService.updateGlobalMemoryAlgorithmically` pushes the
+ *    batch's new insights and then calls `pruneOutdatedInsights` +
+ *    `aggregateSimilarInsights` in the same block
+ *    (`AlgorithmicMemoryService.ts:146-149`; the `if (newInsights.length > 0)`
+ *    guard at :135 is the only code in the repo that mutates
+ *    `GlobalMemory.insightKnowledgeBase.insights`). A store that cannot grow
+ *    without being pruned would just be walked twice. See
+ *    docs/learning-loop-map.md.
+ *
+ * What this pass DOES run, and reports one line each:
+ *  - stale-skill demotion proposals (below);
+ *  - the contradiction sweep (`utils/contradictionSweep.runContradictionSweep`)
+ *    — it used to fire unreported from the weekly review block;
+ *  - the graveyard retention sweep
+ *    (`skillGraveyard.runGraveyardSweep`) — it enforces the store's declared
+ *    newest-`MAX_TOMBSTONES` boundary and clears rows no reader can use. It
+ *    revives nothing on a timer: revival needs a FRESH evidence cluster, and
+ *    that test already runs at draft time via `findArchiveTwin`.
  *
  * Nothing here deletes a belief. The destructive moves go through the
  * proposal queue, where the supervisor (or the human) judges them — and every
@@ -34,7 +43,8 @@ import type { ProviderConfig } from '../../types/provider';
 import { listSkills, EVIDENCE_STALE_DAYS } from './SkillMemoryService';
 import { runNotebookReview } from './MemoryReviewService';
 import { queueLearningProposal } from '../../utils/learningQueue';
-import { listTombstones } from './skillGraveyard';
+import { runContradictionSweep } from '../../utils/contradictionSweep';
+import { runGraveyardSweep, MAX_TOMBSTONES } from './skillGraveyard';
 
 const KEY_PREFIX = 'memory_hygiene_v1_';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -51,6 +61,10 @@ export interface HygieneLine {
 export interface HygieneResult {
     atMs: number;
     demotionsQueued: number;
+    /** New merge/priority proposals from the contradiction sweep. */
+    contradictionsQueued: number;
+    /** Graveyard records the retention sweep collected (0 = nothing to do). */
+    graveyardCollected: number;
     reviewWritten: boolean;
     lines: string[];
 }
@@ -97,7 +111,10 @@ export const runMemoryHygiene = async (
 ): Promise<HygieneResult> => {
     const now = opts.now ?? Date.now();
     const lines: string[] = [];
-    const result: HygieneResult = { atMs: now, demotionsQueued: 0, reviewWritten: false, lines };
+    const result: HygieneResult = {
+        atMs: now, demotionsQueued: 0, contradictionsQueued: 0,
+        graveyardCollected: 0, reviewWritten: false, lines,
+    };
     try {
         // 1. Confirmed skills that have gone quiet: propose demotion. The
         //    supervisor's verdict decides — "hurts ⇒ demote" is its call, not
@@ -126,7 +143,20 @@ export const runMemoryHygiene = async (
             ? `Queued ${stale.length} stale-skill demotion proposal${stale.length === 1 ? '' : 's'}.`
             : 'No skill has gone quiet — every confirmed rule is still earning evidence.');
 
-        // 2. The notebook review (LLM): merges into profile/suggestions.md,
+        // 2. Contradiction sweep — two LIVE skills whose overlapping conditions
+        //    demand opposite actions, queued as a merge/priority proposal. It
+        //    used to run from `weeklyReview`'s block and reach nothing but a
+        //    console.log, so a queue it filled stayed invisible here; the
+        //    counts now ride the log like every other pass.
+        const sweep = runContradictionSweep(username);
+        result.contradictionsQueued = sweep.queued;
+        lines.push(
+            `Contradiction sweep: examined ${sweep.pairsExamined} live-skill pair${sweep.pairsExamined === 1 ? '' : 's'}`
+            + ` — ${sweep.conflicts} contradicting, ${sweep.queued} proposal${sweep.queued === 1 ? '' : 's'} queued,`
+            + ` ${sweep.dismissed} already pending.`,
+        );
+
+        // 3. The notebook review (LLM): merges into profile/suggestions.md,
         //    which the Health tab links to. Skipped offline rather than
         //    written as a failure.
         const configs = opts.providerConfigs ?? await loadProviderConfigs();
@@ -140,11 +170,18 @@ export const runMemoryHygiene = async (
             lines.push('Skipped the notebook review — no ready provider.');
         }
 
-        // 3. Bookkeeping the user can see but that takes no action.
-        const tombstones = await listTombstones(username);
-        if (tombstones.length > 0) {
-            lines.push(`${tombstones.length} retired skill${tombstones.length === 1 ? '' : 's'} in the graveyard — a revival needs new evidence, not a timer.`);
-        }
+        // 4. Graveyard retention: enforce the newest-MAX_TOMBSTONES boundary the
+        //    store itself declares over what is already persisted, and collect
+        //    the rows every reader ignores. It revives nothing — that needs a
+        //    fresh evidence cluster and is tested at draft time.
+        const graveyard = await runGraveyardSweep(username);
+        result.graveyardCollected = graveyard.collected;
+        lines.push(graveyard.collected > 0
+            ? `Graveyard: collected ${graveyard.collected} record${graveyard.collected === 1 ? '' : 's'}`
+                + ` (${graveyard.expired} past the ${MAX_TOMBSTONES}-record retention, ${graveyard.duplicates} duplicate,`
+                + ` ${graveyard.malformed} unreadable) — ${graveyard.retained} kept.`
+            : `Graveyard: ${graveyard.retained} tombstone${graveyard.retained === 1 ? '' : 's'}, inside its retention`
+                + ` (${MAX_TOMBSTONES} newest). Revival needs new evidence, not a timer.`);
         await appendLog(username, now, lines);
         return result;
     } catch (e) {

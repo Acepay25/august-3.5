@@ -4,7 +4,10 @@
 
 import { GlobalMemory, LoggedTrade, TradeOutcome, TradeInsight } from '../../types';
 import { detectRecurringMistakes } from './MistakePatternService';
-import { consolidateMemory, pruneOutdatedInsights, aggregateSimilarInsights } from './MemoryConsolidationService';
+// The two consolidation steps, called per write below. `consolidateMemory` is
+// NOT imported here: it is the wrapper over exactly these two calls and has no
+// runtime caller (only the ad-hoc `tests/test-memory-consolidation.ts` script).
+import { pruneOutdatedInsights, aggregateSimilarInsights } from './MemoryConsolidationService';
 
 /**
  * Updates Global Memory algorithmically without AI.
@@ -115,7 +118,7 @@ export const updateGlobalMemoryAlgorithmically = (
     const uniquePatterns = new Set([...newPatterns, ...memory.aiPatternMemory]);
     memory.aiPatternMemory = Array.from(uniquePatterns).slice(0, 10);
 
-    // 4b. NEW: Integrate Structured Insights (MemoryConsolidationService)
+    // 4b. Structured insights (MemoryConsolidationService).
     // Convert recurring mistakes to Structured Insights
     const newInsights: TradeInsight[] = recurringMistakes.map(m => ({
         id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -130,21 +133,17 @@ export const updateGlobalMemoryAlgorithmically = (
 
     // Add to Knowledge Base
     if (newInsights.length > 0) {
+        // THIS `if` is the only code in the repo that grows
+        // `GlobalMemory.insightKnowledgeBase.insights`, and the two lines below
+        // are the only consolidation the store ever needs: every write is
+        // immediately pruned (`pruneOutdatedInsights`: age > 90d and
+        // useCount < 3) and merged (`aggregateSimilarInsights`: ≥0.85
+        // similarity). That is why the scheduled hygiene pass
+        // (`memoryHygiene.runMemoryHygiene`) deliberately does NOT schedule
+        // consolidation — the store cannot grow without being maintained.
+        // (`consolidateMemory` is the async wrapper over these same two calls;
+        // nothing on the runtime path invokes it — see docs/learning-loop-map.md.)
         memory.insightKnowledgeBase.insights.push(...newInsights);
-
-        // Run Consolidation (Pruning + Aggregation)
-        // Note: We use a non-async wrapper or just await it if we could.
-        // Since updateGlobalMemoryAlgorithmically is synchronous in current signature,
-        // we might need to rely on the async nature being handled by the caller or
-        // accept that we call the logic synchronously if possible.
-        // Checking MemoryConsolidationService... consolidateMemory is async.
-        // We cannot await here without changing signature.
-        // BUT, consolidateMemory logic (prune/aggregate) is actually synchronous array ops.
-        // ONLY the wrapper was async for potential future expansion.
-        // For now, to keep signature compatible, I will invoke the synchronized logic if possible
-        // OR changing the signature is better effectively.
-        // Looking at MemoryConsolidationService.ts, the helper functions `pruneOutdatedInsights` and `aggregateSimilarInsights` ARE synchronous.
-        // So I can call them directly!
 
         const pruned = pruneOutdatedInsights(memory.insightKnowledgeBase);
         const aggregated = aggregateSimilarInsights(pruned);
