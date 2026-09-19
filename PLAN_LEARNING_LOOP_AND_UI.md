@@ -592,14 +592,20 @@ held. Each entry: what was claimed, what the code actually did.
 - **Density.** `ModelPerformanceDashboard`'s model cards and the stat tiles in
   `ProbabilityPanel`/`ScenarioSimulator` are still tiles for tabular data. The
   skill library is a table now.
-- **`LearningDashboard` was consolidated, not decomposed.** WS-5.1 said
-  "LearningDashboard (67 KB — split into cards)"; it now mounts inside Learn →
-  Health, so there is one surface, and `tests/learningDashboard.test.tsx` covers
-  the merge (the five sections mounting on an empty profile — it also proved the
-  component needs a ToastProvider, which App supplies). But the file is still one
-  1,140-line component whose sections are local variables rather than modules.
-  That split is internal code organization with no behavior at the end of it, so
-  it is left standing rather than done blind.
+- **`LearningDashboard` is decomposed.** WS-5.1 said "LearningDashboard (67 KB —
+  split into cards)". It now lives in `components/dashboards/learning/` as eleven
+  modules: the five sections (Memory Graph, Harness, Notebook, Lessons, Skill
+  Review), the profile branch's three blocks (header + meta-calibration, the
+  13-card grid, setups + calibration), and `StatCard` / `CalibrationBar` /
+  `shared.ts` (the regime list and the win-rate ramp). `LearningDashboard.tsx`
+  is 208 lines of loading and derivation; each card owns its own filters and
+  took the memos only it consumed. Rendering identity was proven, not assumed: a
+  scratch A/B test mounted HEAD's monolith beside the split over a seeded
+  notebook and six trades, and compared `container.innerHTML` for the default
+  view, an expanded lesson, all three memory-graph tabs and a switched time
+  window — equal in every case; renaming one card title made all three cases
+  fail, so the check has teeth. The scratch pair is not committed;
+  `tests/learningDashboard.test.tsx` remains the permanent smoke test.
 - **File locations.** `MemoryFilesManager.tsx` and `AmendmentsInbox.tsx` still
   live under `components/settings/` although only Learn mounts them.
 - **Unverified:** a live run against a configured provider — the only claim in
