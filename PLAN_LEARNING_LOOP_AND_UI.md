@@ -640,8 +640,12 @@ held. Each entry: what was claimed, what the code actually did.
   window — equal in every case; renaming one card title made all three cases
   fail, so the check has teeth. The scratch pair is not committed;
   `tests/learningDashboard.test.tsx` remains the permanent smoke test.
-- **File locations.** `MemoryFilesManager.tsx` and `AmendmentsInbox.tsx` still
-  live under `components/settings/` although only Learn mounts them.
+- **File locations — closed, one deliberate exception.** `MemoryFilesManager`
+  and `AmendmentsInbox` now live under `components/learn/`, which is the only
+  surface that mounts them. `HarnessLessonsBrowser` stays in
+  `components/settings/` after checking: it is mounted by `SessionUsagePanel`
+  as well as Learn, so "only Learn mounts it" was not true of it and moving it
+  would have made Settings reach into Learn's directory for a shared component.
 - **Unverified:** a live run against a configured provider — the only claim in
   this plan that jsdom cannot settle.
 

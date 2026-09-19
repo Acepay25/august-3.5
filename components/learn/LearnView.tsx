@@ -25,11 +25,11 @@ import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import SupervisorStream from './SupervisorStream';
 import LearningQueuePanel from '../skills/LearningQueuePanel';
-import AmendmentsInbox from '../settings/AmendmentsInbox';
+import AmendmentsInbox from './AmendmentsInbox';
 import MemoryHealthCard from './MemoryHealthCard';
 
 const StrategyStudio = lazy(() => import('../dashboards/StrategyStudio'));
-const MemoryFilesManager = lazy(() => import('../settings/MemoryFilesManager'));
+const MemoryFilesManager = lazy(() => import('./MemoryFilesManager'));
 const HarnessLessonsBrowser = lazy(() =>
     import('../settings/HarnessLessonsBrowser').then(m => ({ default: m.HarnessLessonsBrowser })));
 const LearningDashboard = lazy(() => import('../dashboards/LearningDashboard'));
