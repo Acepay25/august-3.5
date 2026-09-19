@@ -7,6 +7,7 @@
  */
 
 import React from 'react';
+import StatusPill from '../ui/StatusPill';
 
 export interface VerdictSeat {
     name: string;
@@ -67,8 +68,9 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence,
                     </span>
                 )}
                 {review && (
-                    <span
-                        className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-300"
+                    <StatusPill
+                        tone="warn"
+                        kicker
                         title={
                             review.from
                                 ? `Quarantined ${review.reason} override — moderator originally called ${review.from}`
@@ -76,7 +78,7 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence,
                         }
                     >
                         Review
-                    </span>
+                    </StatusPill>
                 )}
             </div>
             {values.length > 0 && (

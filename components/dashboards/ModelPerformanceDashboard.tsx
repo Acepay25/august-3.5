@@ -8,6 +8,7 @@ import { clamp100 } from '../../utils/math';
 import { Cpu } from 'lucide-react';
 import { AIProvider, LoggedTrade } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
+import StatusPill from '../ui/StatusPill';
 import {
     getRollingWindowStats,
     getSituationalExpertise,
@@ -102,7 +103,7 @@ const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }
                 />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-lg font-bold text-white">{Math.round(percentage)}%</span>
+                <span className="text-lg font-bold tabular-nums text-white">{Math.round(percentage)}%</span>
             </div>
         </div>
     );
@@ -110,34 +111,18 @@ const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }
 
 const StatusBadge: React.FC<{ stats: RollingWindowStats }> = ({ stats }) => {
     if (stats.isDemoted) {
-        return (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/50">
-                <span className="text-red-400 text-xs font-medium">DEMOTED</span>
-            </div>
-        );
+        return <StatusPill tone="down" kicker>DEMOTED</StatusPill>;
     }
 
     if (stats.coldStreakCount >= 2) {
-        return (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/50">
-                <span className="text-yellow-400 text-xs font-medium">COOLING</span>
-            </div>
-        );
+        return <StatusPill tone="warn" kicker>COOLING</StatusPill>;
     }
 
     if (stats.hotStreakCount >= 3) {
-        return (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/50">
-                <span className="text-green-400 text-xs font-medium">HOT</span>
-            </div>
-        );
+        return <StatusPill tone="up" kicker>HOT</StatusPill>;
     }
 
-    return (
-        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-700 border border-zinc-600/50">
-            <span className="text-zinc-400 text-xs font-medium">STABLE</span>
-        </div>
-    );
+    return <StatusPill tone="neutral" kicker>STABLE</StatusPill>;
 };
 
 const ExpertiseBar: React.FC<{ expertise: SituationalExpertise }> = ({ expertise }) => {
@@ -150,7 +135,7 @@ const ExpertiseBar: React.FC<{ expertise: SituationalExpertise }> = ({ expertise
 
     return (
         <div className="space-y-1">
-            <div className="flex justify-between text-[10px] text-zinc-500">
+            <div className="flex justify-between text-[10px] tabular-nums text-zinc-500">
                 <span>REV {reversalPct}%</span>
                 <span>CONT {continuationPct}%</span>
             </div>
@@ -199,7 +184,7 @@ const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
                 <p className="text-xs text-zinc-400">
                     Last {stats.last20Total} trades
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-zinc-500 tabular-nums">
                     {stats.last20Wins}W / {stats.last20Total - stats.last20Wins}L
                 </p>
             </div>
@@ -208,12 +193,12 @@ const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
             {(stats.coldStreakCount > 0 || stats.hotStreakCount > 0) && (
                 <div className="text-center mb-2">
                     {stats.coldStreakCount > 0 && (
-                        <span className="text-xs text-red-400">
+                        <span className="text-xs text-red-400 tabular-nums">
                             {stats.coldStreakCount} consecutive losses
                         </span>
                     )}
                     {stats.hotStreakCount > 0 && (
-                        <span className="text-xs text-green-400">
+                        <span className="text-xs text-green-400 tabular-nums">
                             {stats.hotStreakCount} consecutive wins
                         </span>
                     )}
@@ -261,7 +246,7 @@ const WeightsChart: React.FC<{ weights: DynamicWeights; enabledProviders: AIProv
                             }}
                         />
                     </div>
-                    <span className="text-xs text-zinc-300 w-10 text-right">{weight}%</span>
+                    <span className="text-xs text-zinc-300 w-10 text-right tabular-nums">{weight}%</span>
                 </div>
             ))}
         </div>
@@ -284,7 +269,7 @@ const ColdStreakAlerts: React.FC<{ modelData: ModelCardData[] }> = ({ modelData 
                 {demotedModels.map(m => (
                     <div key={m.provider} className="flex items-center justify-between">
                         <span className="text-xs text-zinc-300">{m.name}</span>
-                        <span className="text-xs text-red-400">
+                        <span className="text-xs text-red-400 tabular-nums">
                             {m.stats.coldStreakCount} losses • weight -50%
                         </span>
                     </div>

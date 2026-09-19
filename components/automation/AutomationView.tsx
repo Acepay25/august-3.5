@@ -2,6 +2,7 @@ import React from 'react';
 import { AutomationConfig, AutomationRun } from '../../types/automation';
 import { ChevronLeftIcon, TrashIcon, EditIcon, LoadingIcon, RefreshIcon } from '../shared/Icons';
 import { EmptyState } from '../ui/EmptyState';
+import StatusPill from '../ui/StatusPill';
 import AutomationRunCard, { RunOutcomeConfirm } from './AutomationRunCard';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { getNextRunAt } from '../../services/automation/AutomationService';
@@ -54,9 +55,9 @@ const AutomationView: React.FC<{
                             </span>
                         ) : null;
                     })()}
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${config.enabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800 border-white/10 text-zinc-500'}`}>
+                    <StatusPill tone={config.enabled ? 'up' : 'neutral'} kicker>
                         {config.enabled ? 'On' : 'Off'}
-                    </span>
+                    </StatusPill>
                 </div>
             </div>
 
