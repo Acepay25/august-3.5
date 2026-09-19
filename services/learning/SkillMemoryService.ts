@@ -225,6 +225,11 @@ export interface SkillMeta {
      *  session-scoped, so without this the audit trail for an auto-approved
      *  skill evaporates on reload. One line, capped. */
     whyAccepted?: string;
+    /** Who said yes to this draft: the LLM supervisor or the human. The
+     *  supervisor approves on the user's behalf, so "the user can still delete"
+     *  (WS-2.3) needs a durable record of which approvals ARE the model's —
+     *  the session event log that carried that fact is gone after a reload. */
+    approvedBy?: 'supervisor' | 'human';
     /** ── WS-3.3 provenance ── the agent bot whose learning created this skill.
      *  Retrieval and the skills table label it so a reader knows whether a
      *  rule came from the chart AI or from a bot's own thread. The name is
@@ -417,6 +422,8 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         timeframe: pick('timeframe'),
         source: pick('source'),
         whyAccepted: pick('whyAccepted')?.slice(0, 400),
+        approvedBy: pick('approvedBy') === 'supervisor'
+            ? 'supervisor' : pick('approvedBy') === 'human' ? 'human' : undefined,
         originBotId: pick('originBotId')?.slice(0, 40),
         originBotName: pick('originBotName')?.slice(0, 40),
         direction: pick('direction'),
@@ -634,6 +641,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.timeframe ? [`timeframe: ${meta.timeframe}`] : []),
         ...(meta.source ? [`source: ${meta.source}`] : []),
         ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
+        ...(meta.approvedBy ? [`approvedBy: ${meta.approvedBy}`] : []),
         ...(meta.originBotId ? [`originBotId: ${meta.originBotId}`] : []),
         ...(meta.originBotName ? [`originBotName: ${meta.originBotName.replace(/\n/g, ' ')}`] : []),
         ...(meta.direction ? [`direction: ${meta.direction}`] : []),
@@ -1877,6 +1885,8 @@ const ingestCraftedSkillFromDraftUnlocked = async (
     /** The approver's one-line reason (the supervisor's verdict). Persisted
      *  onto the skill — see SkillMeta.whyAccepted. */
     whyAccepted?: string,
+    /** Who approved it — see SkillMeta.approvedBy. */
+    approvedBy?: 'supervisor' | 'human',
 ): Promise<void> => {
     await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
@@ -1906,6 +1916,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         // evidence ⇒ no injection.
         prior: 'gated',
         ...(whyAccepted?.trim() ? { whyAccepted: whyAccepted.trim().slice(0, 400) } : {}),
+        ...(approvedBy ? { approvedBy } : {}),
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
         predicate: sanitizePredicate(crafted.predicate),
@@ -1922,8 +1933,9 @@ export const ingestCraftedSkillFromDraft = (
     coin: string | undefined,
     username: string,
     whyAccepted?: string,
+    approvedBy?: 'supervisor' | 'human',
 ): Promise<void> =>
-    withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username, whyAccepted));
+    withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username, whyAccepted, approvedBy));
 
 /** Record which agent bot a skill came from (WS-3.3). Callers must invoke this
  *  only for files a bot's own write-back newly created — a chart-AI skill that

@@ -106,6 +106,7 @@ const SkillDetail: React.FC<{
     // Two-step confirm rather than a dialog: this pane is rendered by three
     // surfaces and none of them owns a confirm context.
     const [armed, setArmed] = useState(false);
+    const [undoArmed, setUndoArmed] = useState(false);
     const retired = meta?.status === 'retired';
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
@@ -218,6 +219,27 @@ const SkillDetail: React.FC<{
                         {retired ? 'Retired' : 'Active'}
                     </span>
                     <ToggleSwitch checked={!retired} onChange={onToggleRetire} label={`Toggle ${skill.name} active`} />
+                    {/* WS-5.2's "auto-approved by the supervisor — undo", on the
+                        skill itself rather than only in a session log that does
+                        not survive a reload. Retiring is the durable undo:
+                        setSkillStatus stamps the transition as user-veto. */}
+                    {meta?.approvedBy === 'supervisor' && !retired && (
+                        <>
+                            <span data-testid="skill-auto-approved"
+                                title={meta.whyAccepted
+                                    ? `The supervisor accepted this: ${meta.whyAccepted}`
+                                    : 'Accepted by the LLM supervisor, not by you.'}
+                                className="shrink-0 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-cyan-400">
+                                auto-approved
+                            </span>
+                            <button type="button" data-testid="skill-undo" aria-pressed={undoArmed}
+                                onClick={() => { if (undoArmed) { setUndoArmed(false); onToggleRetire(); return; } setUndoArmed(true); }}
+                                onBlur={() => setUndoArmed(false)}
+                                className="rounded-control border border-rose-500/40 px-2 py-1 text-[11px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/10">
+                                {undoArmed ? 'Confirm undo' : 'Undo approval'}
+                            </button>
+                        </>
+                    )}
                     {onDelete && (
                         <button type="button" data-testid="skill-delete" aria-pressed={armed}
                             onClick={() => { if (armed) { onDelete(); return; } setArmed(true); }}

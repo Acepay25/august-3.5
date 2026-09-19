@@ -206,7 +206,7 @@ const applySkillDecision = async (
     // The verdict reason rides INTO the skill file: the event log is
     // session-scoped, so this is the only thing that will still say WHY the
     // model accepted this rule after a reload.
-    await ingestCraftedSkillFromDraft(finalCrafted, draft.coin, username, verdict.reason);
+    await ingestCraftedSkillFromDraft(finalCrafted, draft.coin, username, verdict.reason, 'supervisor');
     // Record WHICH file the ingest created/updated so the panel's
     // override-reject can remove it.
     const created = getMemoryFiles().files.filter(isSkillFile).find(f => {
@@ -436,6 +436,25 @@ let passInFlight = false;
  *  stalled queue with better optics. */
 export const MAX_ITEMS_PER_PASS = 12;
 
+/** The session ceiling the plan asked for (WS-2.4), mirroring
+ *  MAX_AUTO_EVALS_PER_SESSION: a pass cap alone is not a budget, because the
+ *  debounce + chat nudges can start a fresh 12-call pass indefinitely. A
+ *  HUMAN pressing Run bypasses this ceiling — that is an instruction, not the
+ *  model spending itself into a corner. */
+export const MAX_ITEMS_PER_SESSION = 40;
+let sessionHandled = 0;
+
+/** What the UI shows so the ceiling is a visible state, not a silent stall. */
+export const getSupervisionSpend = (): { spent: number; sessionCap: number; exhausted: boolean } => ({
+    spent: sessionHandled,
+    sessionCap: MAX_ITEMS_PER_SESSION,
+    exhausted: sessionHandled >= MAX_ITEMS_PER_SESSION,
+});
+
+/** Test seam: the counter is module state on purpose — it spans every pass in
+ *  one app lifetime — so a suite that needs a deterministic number sets it. */
+export const __setSupervisionSpendForTests = (n: number): void => { sessionHandled = n; };
+
 /** How many items the supervisor would take if it were unbounded. The four
  *  queues, counted exactly the way the pass walks them — so the UI's "N items
  *  waiting" and the boot sweep answer the same question the pass asks. */
@@ -464,37 +483,47 @@ export const runSupervisorPass = async (username = getActiveUsername(), opts: { 
         store.setModelName(formatModelDisplayName(config.selectedModel));
         let handled = 0;
         let capped = false;
-        /** Stop taking new items once the call budget is spent. An item
-         *  already in flight still finishes. */
+        let sessionCapped = false;
+        /** Stop taking new items once a call budget is spent. An item already
+         *  in flight still finishes. */
         const spent = (): boolean => {
-            if (handled < MAX_ITEMS_PER_PASS) return false;
-            capped = true;
-            return true;
+            if (handled >= MAX_ITEMS_PER_PASS) { capped = true; return true; }
+            if (!opts.manual && sessionHandled >= MAX_ITEMS_PER_SESSION) { sessionCapped = true; return true; }
+            return false;
         };
         for (const draft of listSkillDrafts(username)) {
             if (controller.signal.aborted || spent()) break;
             await superviseSkillDraft(draft, config, username);
             handled += 1;
+            sessionHandled += 1;
         }
         for (const tool of loadForgedTools().filter(t => t.status === 'candidate')) {
             if (controller.signal.aborted || spent()) break;
             await superviseToolCandidate(tool, config);
             handled += 1;
+            sessionHandled += 1;
         }
         for (const amendment of listAmendments('pending')) {
             if (controller.signal.aborted || spent()) break;
             await superviseAmendment(amendment, config, username);
             handled += 1;
+            sessionHandled += 1;
         }
         for (const proposal of listLearningProposals(username).filter(p => APPLYABLE_PROPOSALS.has(p.kind))) {
             if (controller.signal.aborted || spent()) break;
             await superviseLearningProposal(proposal, config, username);
             handled += 1;
+            sessionHandled += 1;
         }
         const stillWaiting = countPendingSupervision(username);
         store.setPending(stillWaiting);
         if (controller.signal.aborted) {
             store.pushEvent({ phase: 'deciding', text: 'Supervision stopped — remaining items stay for the human.' });
+        } else if (sessionCapped) {
+            store.pushEvent({
+                phase: 'deciding',
+                text: `Session budget spent (${MAX_ITEMS_PER_SESSION} supervised items) — ${stillWaiting} still queued. Press Run to take more now.`,
+            });
         } else if (capped) {
             store.pushEvent({
                 phase: 'deciding',
@@ -587,6 +616,6 @@ export const overrideApproveSkill = async (eventId: string, username = getActive
     const draft = ev?.draftSnapshot as SkillDraft | undefined;
     if (!draft) return;
     const modelReason = ev?.decision?.reason ? ` The model had said: ${ev.decision.reason}` : '';
-    await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username, `Approved by you over the supervisor's verdict.${modelReason}`);
+    await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username, `Approved by you over the supervisor's verdict.${modelReason}`, 'human');
     store.markOverridden(eventId, 'approved');
 };

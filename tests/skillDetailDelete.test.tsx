@@ -27,6 +27,7 @@ vi.mock('../services/learning/MemoryModelService', () => ({
 
 import SkillDetail, { deleteSkillFile, type SkillCardData } from '../components/skills/SkillDetail';
 import type { SkillMeta } from '../services/learning/SkillMemoryService';
+import { ingestCraftedSkillFromDraft, listSkills } from '../services/learning/SkillMemoryService';
 import { initMemoryFiles, getMemoryFiles, createMemoryFile } from '../services/learning/MemoryFilesService';
 
 const USER = 'skill-detail-user';
@@ -40,6 +41,7 @@ const card = (over: Partial<SkillCardData> = {}): SkillCardData => ({
         wins: 0,
         losses: 0,
         whyAccepted: 'Five closed trades share the shape and nothing contradicts it.',
+        approvedBy: 'supervisor',
     } as SkillMeta,
     body: '# Avoid BTC short\n\n**When:** sweep reclaimed\n**What I do:** skip.',
     ...over,
@@ -80,6 +82,43 @@ describe('SkillDetail — the human keeps the hard move', () => {
         render(<SkillDetail skill={card({ meta: { status: 'candidate', kind: 'avoid', wins: 0, losses: 0 } as SkillMeta })}
             onBack={() => {}} onToggleRetire={() => {}} onDelete={() => {}} />);
         expect(screen.queryByText('Why it was accepted')).toBeNull();
+    });
+});
+
+describe('SkillDetail — an approval the model made is undoable after a reload', () => {
+    it('marks a supervisor-approved skill and asks twice to undo it', () => {
+        const onToggleRetire = vi.fn();
+        render(<SkillDetail skill={card()} onBack={() => {}} onToggleRetire={onToggleRetire} onDelete={() => {}} />);
+        expect(screen.getByTestId('skill-auto-approved').textContent).toBe('auto-approved');
+        expect(screen.getByTestId('skill-auto-approved').getAttribute('title'))
+            .toContain('Five closed trades');
+        const undo = screen.getByTestId('skill-undo');
+        fireEvent.click(undo);
+        expect(onToggleRetire).not.toHaveBeenCalled();
+        fireEvent.click(undo);
+        expect(onToggleRetire).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows nothing of the kind for a skill the human saved', () => {
+        render(<SkillDetail skill={card({ meta: {
+            status: 'candidate', kind: 'avoid', wins: 0, losses: 0, approvedBy: 'human',
+        } as SkillMeta })} onBack={() => {}} onToggleRetire={() => {}} onDelete={() => {}} />);
+        expect(screen.queryByTestId('skill-auto-approved')).toBeNull();
+        expect(screen.queryByTestId('skill-undo')).toBeNull();
+    });
+
+    it('persists who approved across the file round trip', async () => {
+        await ingestCraftedSkillFromDraft({
+            name: 'Skip the reclaimed sweep', kind: 'avoid', when: 'BTC 15m',
+            inputs: ['price'], steps: ['wait for the close'], validate: 'closed above',
+            output: 'skip', approval: 'size unchanged',
+            ifCondition: 'BTC sweeps the prior low but the 15m candle closes back above it',
+            thenAction: 'Do not short — the failed sweep removes the downside edge',
+        } as never, 'BTCUSDT', USER, 'Three clusters agree it is the wrong side.', 'supervisor');
+        const landed = listSkills().find(s => s.meta.ifCondition?.includes('closes back above it'));
+        expect(landed).toBeTruthy();
+        expect(landed!.meta.approvedBy).toBe('supervisor');
+        expect(landed!.meta.whyAccepted).toContain('Three clusters agree');
     });
 });
 

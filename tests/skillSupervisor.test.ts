@@ -19,7 +19,8 @@ import { streamChatRequest } from '../services/providers/GenericProviderService'
 import * as store from '../services/learning/supervisorStore';
 import {
     runSupervisorPass, setSessionModel, overrideApproveSkill, overrideRejectSkill,
-    MAX_ITEMS_PER_PASS, countPendingSupervision,
+    MAX_ITEMS_PER_PASS, MAX_ITEMS_PER_SESSION, countPendingSupervision,
+    getSupervisionSpend, __setSupervisionSpendForTests,
 } from '../services/learning/skillSupervisor';
 import { queueSkillDraft, listSkillDrafts, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
 import { queueLearningProposal, listLearningProposals } from '../utils/learningQueue';
@@ -382,5 +383,32 @@ describe('per-pass call budget', () => {
         expect(await runSupervisorPass(USER, { manual: true })).toBe(3);
         expect(listSkillDrafts(USER)).toHaveLength(0);
         expect(store.getSnapshot().pendingCount).toBe(0);
+    });
+});
+
+// A per-pass cap is not a budget: the debounce and every chat nudge can start
+// another 12 calls, so the model could spend indefinitely across passes. The
+// session ceiling is what the plan asked for, and a human pressing Run is an
+// instruction rather than more autonomous spend — so it overrides.
+describe('per-session budget (WS-2.4)', () => {
+    it('refuses automatic passes once the session ceiling is spent, but honours a human Run', async () => {
+        queueSkillDraft({
+            tradeId: 's-1', coin: 'BTCUSDT',
+            crafted: {
+                ...crafted(), name: 'Rule past the ceiling',
+                ifCondition: 'BTC sweeps the prior low on the ceiling probe and the candle closes back above it',
+                thenAction: 'Do not short the ceiling probe — the failed sweep removes downside conviction',
+            },
+        }, USER);
+        verdictJson({ action: 'approve', reason: 'mechanical trigger, falsifiable, not covered' });
+        __setSupervisionSpendForTests(MAX_ITEMS_PER_SESSION);
+
+        expect(getSupervisionSpend().exhausted).toBe(true);
+        expect(await runSupervisorPass(USER)).toBe(0);
+        expect(listSkillDrafts(USER)).toHaveLength(1);
+        expect(store.getSnapshot().events.some(e => e.text.includes('Session budget spent'))).toBe(true);
+
+        expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
+        expect(listSkillDrafts(USER)).toHaveLength(0);
     });
 });

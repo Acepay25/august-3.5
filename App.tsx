@@ -2565,7 +2565,7 @@ const App: React.FC = () => {
         if (trade) {
             void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
         } else {
-            void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default');
+            void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default', undefined, 'human');
         }
         toast.success('Skill saved', draft.crafted.name);
     }, [activeUsername]);
@@ -2668,7 +2668,7 @@ const App: React.FC = () => {
                     toast.success('Skill saved', draft.crafted.name);
                 } else if (draft) {
                     // Verdict-sourced draft — no closed trade behind it.
-                    void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default');
+                    void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default', undefined, 'human');
                     toast.success('Skill saved', draft.crafted.name);
                 }
                 return;
