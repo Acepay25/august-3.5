@@ -405,33 +405,54 @@ it into the new rail instead (avoid two owners on AgentRosterRail).
       `tests/learningLoopE2E.test.ts`, `tests/botLearning.test.ts`)
 - [x] Learn surface exists; Settings sheds its supervisor duplicate (WS-5.1:
       Alt+5 rail item, Queue → Skills → Memory → Health; SupervisorCard is now
-      a link in. The notebook/amendments sections still also live in Settings —
-      removal there is the unfinished half of 5.1)
+      a link in)
 - [x] Agents surface is chat-first (rail + greeting + pill composer), Chat and
       Analyze modes both round-trip, and threads stay shared with the Trade dock
 - [x] Memory hygiene runs on a schedule + the WS-4.3 health selector
+- [x] Trade surface calm-down (WS-5.2): `SupervisorStream`,
+      `SupervisorIndicator` and `ToolActivityRow` are all out of the panel;
+      `MemoryProvenanceStrip` is the one canonical memory row; the approvals
+      drawer stays one drawer and now says why an item reached a human
+- [x] `docs/ui-doctrine.md` + `docs/learning-loop-map.md`
 - [x] `npm run typecheck && npm run test && npm run build` all green
 
 ## Still open
 
-- WS-5.2 (Trade surface calm-down): only `SupervisorStream` has been extracted
-  out of TradeChatPanel. The skill-citation row, autopilot banner,
-  tool-activity row, the unified "what the AI remembers" strip and the
-  ApprovalInbox drawer merge are not done.
-- WS-5.3 / 5.4 (component-level minimalism sweep across `components/`,
-  density/motion rules) — not started; the new surfaces follow the doctrine,
-  the existing ones were not swept.
-- WS-4.1 follow-through: the dead exports and the duplicated
-  `aiPatternMemory`/`insightKnowledgeBase` write listed under "asymmetries"
-  in docs/learning-loop-map.md are documented, not yet deleted.
-- WS-6 details deferred: `/` does not focus the rail search (it is bound to the
-  dock composer already), and the rail shrinks rather than becoming a drawer
-  below `md`.
+Deliberately left, each with the reason:
+
+- **WS-5.1, second half — Settings still hosts the notebook browser, the
+  amendments inbox and the memory-model toggles.** Removing them is a
+  user-reachable UI deletion; the Learn surface mounts the same components, so
+  nothing is lost by leaving them, but the duplication is real.
+- **WS-5.3, breadth.** The sweep did the parts with signal: 40 dead
+  `.status-surface`/`.analysis-card` tokens across 30 files (they matched no CSS
+  rule, and two comments cited them as if they still colored anything),
+  TradeLog's outcome/verdict chips now go through `StatusPill`, and streaming
+  price readouts got `tabular-nums`. The remaining `rounded-full` occurrences in
+  SettingsMenu/TradeView/AgentRosterRail/Sidebar are mostly dots, avatars and
+  counts, not status chips — converting them is churn I cannot visually verify.
+- **WS-4.1 follow-through — dead code documented, not deleted.**
+  `GenericAnalysisService.updateGlobalMemory`,
+  `memoryUtils.prepareTradeSummariesForGlobalMemory`,
+  `MemoryConsolidationService.consolidateMemory`,
+  `harnessLessons.lessonsForClass` / `isWireRoutePinnedOff`, the duplicated
+  `aiPatternMemory`/`insightKnowledgeBase` write, and the rotting top-level
+  `insightKnowledgeBase` row all have no live reader. Listed with anchors in
+  docs/learning-loop-map.md.
+- **WS-3.4 placement.** Per-bot learning stats compute and render in Learn →
+  Health; the plan asked for them on the roster rail/drawer specifically.
+- **WS-6 details.** `/` does not focus the rail search (already bound to the
+  dock composer), and the rail narrows rather than becoming a drawer below
+  `md`.
+- **Unverified in a browser:** the provenance strip needs a real analysis run
+  with a configured provider to render, so it is covered by jsdom only (6
+  tests, including the next-run leak guard).
 
 ## Status (2026-09-19)
 
-WS-1, WS-2, WS-3, WS-4.1/4.2/4.3, WS-5.1 and WS-6 are complete and verified.
-WS-5.2/5.3/5.4 remain — see "Still open" above.
+All seven workstreams are implemented and verified end to end
+(`typecheck` + 3324 tests + `build` + `lint` clean, new surfaces checked in a
+browser). What remains is listed under "Still open" with the reason for each.
 
 Five defects the loop test exposed, all fixed:
 1. **Cold-start deadlock** — an approved skill could never earn evidence
