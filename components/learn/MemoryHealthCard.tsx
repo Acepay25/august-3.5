@@ -92,7 +92,9 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                 <Row label="confirmed / candidate / retired"
                     value={`${s.confirmed} / ${s.candidate} / ${s.retired}`} />
                 <Row label="approved, still untested" value={s.unproven}
-                    title="Injected as a labeled hypothesis until evidence lands." />
+                    title="Learned skills injected as a labeled hypothesis until evidence lands. Book seeds are excluded — they are 0W/0L by design." />
+                <Row label="book seeds (curated priors)" value={s.bookSeeds}
+                    title="Seeded from literature, not this trader's record. They inject from birth and are not counted as untested." />
                 <Row label="no counted evidence in 30+ days" value={s.staleEvidence} />
                 <Row label="latest eval verdict “hurts”" value={s.hurtsVerdict} />
                 <Row label="authored by a bot" value={s.fromBots} />

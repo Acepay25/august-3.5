@@ -109,19 +109,21 @@ therefore does change the next index's Family-A line.
    from `detectRecurringMistakes` (`AlgorithmicMemoryService.ts:109-116` and
    `:120-133`) and both reach the same index — the same content twice in one
    prompt.
-3. **Dead code on the memory path.** `GenericAnalysisService.ts:1568
-   updateGlobalMemory` (the old AI-summarizer variant, zero callers);
-   `memoryUtils.ts:98 prepareTradeSummariesForGlobalMemory`;
-   `MemoryConsolidationService.ts:137 consolidateMemory` (tests only — the
-   live halves are `pruneOutdatedInsights`/`aggregateSimilarInsights`, called
-   from `AlgorithmicMemoryService.ts:149-150`); `harnessLessons.ts:91
-   lessonsForClass` and `:140 isWireRoutePinnedOff`; `App.tsx:134` imports
-   `listHarnessLessons` unused.
+3. **Dead code on the memory path — three removed, two kept.** Removed after
+   verifying zero callers: `GenericAnalysisService.updateGlobalMemory` (the old
+   AI-summarizer variant, plus the private `GLOBAL_MEMORY_JSON_SCHEMA` only it
+   used), `memoryUtils.prepareTradeSummariesForGlobalMemory`,
+   `harnessLessons.isWireRoutePinnedOff`, and an unused `listHarnessLessons`
+   import in `App.tsx`. Kept, because an earlier pass wrongly called them dead:
+   `MemoryConsolidationService.consolidateMemory` IS imported by
+   `AlgorithmicMemoryService.ts:7`, and `harnessLessons.lessonsForClass` is a
+   tested capability-class accessor.
 4. **Top-level `insightKnowledgeBase` state is rotting.** Persisted
    (`useProfilePersistence.ts:98`) and loaded (:432) and threaded into the
    pipeline (`useAnalysisPipeline.ts:3583`), but `setInsightKnowledgeBase` is
    never called — `App.tsx:2419` passes the setter and nothing writes it. The
-   live copy is `GlobalMemory.insightKnowledgeBase`.
+   live copy is `GlobalMemory.insightKnowledgeBase`. Not removed: unwinding it
+   touches four files of state plumbing for no user-visible gain.
 5. **`profile/suggestions.md` is write-only by construction.** Forced
    `enabled:false` (`MemoryReviewService.ts:60,64`), excluded from the index
    dump, the graph and note search; only `MemoryFilesManager.tsx:85` reads it.

@@ -133,7 +133,6 @@ import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { saveLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { isProviderOnCooldown, providerCooldownRemainingMs, getProviderHealth } from './services/infrastructure/ProviderHealthService';
-import { listHarnessLessons } from './services/learning/harnessLessons';
 import { assessSession } from './services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
 import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
