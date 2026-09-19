@@ -4,6 +4,8 @@ import {
     dismissLearningProposal,
     type LearningProposal,
 } from '../../utils/learningQueue';
+import * as supervisorStore from '../../services/learning/supervisorStore';
+import StatusPill from '../ui/StatusPill';
 import {
     applyDisplacementProposal,
     applyRevivalProposal,
@@ -55,6 +57,12 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
     const [open, setOpen] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [errorId, setErrorId] = useState<string | null>(null);
+    // Which review state to label each row with: auto decides them, paused does
+    // not — the difference the user needs before deciding to act at all.
+    const [auto, setAuto] = useState(() => supervisorStore.getSnapshot().autoEnabled);
+    useEffect(() => supervisorStore.subscribe(() => {
+        setAuto(supervisorStore.getSnapshot().autoEnabled);
+    }), []);
 
     const refresh = (): void => {
         setProposals([...listLearningProposals(getActiveUsername())].reverse());
@@ -117,8 +125,8 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
             </button>
             {open && (
                 <p className="px-3 pt-2 text-[10px] leading-relaxed text-zinc-600">
-                    The supervisor reviews these automatically — Apply and Dismiss are your overrides, not the required path.
-                    Anything it can&apos;t act on safely stays here.
+                    The supervisor decides these: each one is pending review until it does, and only what it
+                    cannot act on safely stays here. Apply and Dismiss are overrides, not the required path.
                 </p>
             )}
             {open && (
@@ -130,6 +138,13 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                     {KIND_LABEL[p.kind] ?? p.kind}
                                 </span>
                                 <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-zinc-300">{p.text}</p>
+                                <StatusPill tone={auto ? 'info' : 'warn'} kicker
+                                    data-testid="proposal-review-state"
+                                    title={auto
+                                        ? 'The supervisor reviews this automatically — Apply and Dismiss are your overrides.'
+                                        : 'Auto-review is paused: nothing moves here unless you act.'}>
+                                    {auto ? 'pending review' : 'needs you'}
+                                </StatusPill>
                             </div>
                             <div className="mt-2 flex items-center gap-2 pl-1">
                                 <span className="mr-auto text-[10px] text-zinc-600">
