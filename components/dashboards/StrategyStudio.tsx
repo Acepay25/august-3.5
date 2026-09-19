@@ -32,7 +32,7 @@ import { useToastActions } from '../shared/Toast';
 import type { ProviderConfig } from '../../types/provider';
 import SkillDetail, {
     type SkillCardData, monogramOf, descriptionOf, STATUS_BADGE, KIND_BADGE,
-    trySkillInChat, toggleSkillRetire, PIN_STORAGE_KEY,
+    trySkillInChat, toggleSkillRetire, deleteSkillFile, PIN_STORAGE_KEY,
 } from '../skills/SkillDetail';
 import LearningQueuePanel from '../skills/LearningQueuePanel';
 import { Grid3x3, Pin, Upload } from 'lucide-react';
@@ -267,6 +267,11 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
     const toggleRetire = (s: SkillCardData): void => {
         void toggleSkillRetire(s).then(refresh);
     };
+    // WS-2.3: the supervisor approves, the human can still erase. Back out of
+    // the detail pane first — the file it described no longer exists.
+    const removeSkill = (s: SkillCardData): void => {
+        void deleteSkillFile(s).then(() => { setSelectedId(null); refresh(); });
+    };
     const togglePin = (fileId: string): void => {
         setPinnedIds(prev => {
             const next = new Set(prev);
@@ -309,6 +314,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                         backLabel="Library"
                         onBack={() => setSelectedId(null)}
                         onToggleRetire={() => toggleRetire(selected)}
+                        onDelete={() => removeSkill(selected)}
                         memoryConfig={memoryConfig}
                         loggedTrades={trades}
                     />

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { setSkillStatus, skillExpectancyR, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
+import { deleteMemoryFile } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import type { SkillProofResult } from '../../services/learning/skillProof';
 import { parsePredicate } from '../../services/analysis/skillPredicate';
@@ -71,6 +72,13 @@ export const toggleSkillRetire = async (s: SkillCardData): Promise<void> => {
     await setSkillStatus(s.fileId, next);
 };
 
+/** Remove the skill file outright. Retiring is the soft move; WS-2.3's point is
+ *  that the human keeps the hard one even though the supervisor now does the
+ *  approving, so it has to be reachable where the skill is actually read. */
+export const deleteSkillFile = async (s: SkillCardData): Promise<void> => {
+    await deleteMemoryFile(s.fileId, getActiveUsername());
+};
+
 const MetaField: React.FC<{ label: string; value: string; wide?: boolean }> = ({ label, value, wide }) => (
     <div className={wide ? 'col-span-2' : ''}>
         <p className="text-[10px] uppercase tracking-widest text-zinc-600">{label}</p>
@@ -86,12 +94,18 @@ const SkillDetail: React.FC<{
     skill: SkillCardData;
     onBack: () => void;
     onToggleRetire: () => void;
+    /** Deletes the skill file for good (the caller refreshes + backs out).
+     *  Absent ⇒ no delete affordance. */
+    onDelete?: () => void;
     memoryConfig?: ProviderConfig | null;
     loggedTrades?: LoggedTrade[];
     /** Label for the back affordance (the surface it was opened from). */
     backLabel?: string;
-}> = ({ skill, onBack, onToggleRetire, memoryConfig, loggedTrades, backLabel = 'Library' }) => {
+}> = ({ skill, onBack, onToggleRetire, onDelete, memoryConfig, loggedTrades, backLabel = 'Library' }) => {
     const meta = skill.meta;
+    // Two-step confirm rather than a dialog: this pane is rendered by three
+    // surfaces and none of them owns a confirm context.
+    const [armed, setArmed] = useState(false);
     const retired = meta?.status === 'retired';
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
@@ -204,6 +218,18 @@ const SkillDetail: React.FC<{
                         {retired ? 'Retired' : 'Active'}
                     </span>
                     <ToggleSwitch checked={!retired} onChange={onToggleRetire} label={`Toggle ${skill.name} active`} />
+                    {onDelete && (
+                        <button type="button" data-testid="skill-delete" aria-pressed={armed}
+                            onClick={() => { if (armed) { onDelete(); return; } setArmed(true); }}
+                            onBlur={() => setArmed(false)}
+                            className={`rounded-control border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                                armed
+                                    ? 'border-rose-500/50 bg-rose-500/10 text-rose-300'
+                                    : 'border-zinc-700 text-zinc-400 hover:border-rose-500/40 hover:text-rose-300'
+                            }`}>
+                            {armed ? 'Confirm delete' : 'Delete'}
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -212,6 +238,12 @@ const SkillDetail: React.FC<{
                 <MetaField label="Kind" value={meta?.kind ?? '—'} />
                 <MetaField label="Setup" value={[meta?.coin, meta?.direction].filter(Boolean).join(' ') || '—'} />
                 <MetaField label="Evidence" value={`${wins}W / ${losses}L`} />
+                {meta?.whyAccepted && (
+                    // WS-2.3: the supervisor's reason rides the file, so "why is
+                    // this approved?" survives a reload instead of living only in
+                    // the session's event stream.
+                    <MetaField wide label="Why it was accepted" value={meta.whyAccepted} />
+                )}
                 <MetaField
                     label="Expectancy"
                     value={expectancy === undefined
