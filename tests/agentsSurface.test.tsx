@@ -76,12 +76,32 @@ describe('AgentsView layout', () => {
 
     it('opens the routines disclosure and runs one', () => {
         const onRunRoutine = vi.fn();
+        const routine = { id: 'r1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * 1-5' } } as never;
         render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
-            botRoutines={{ b1: [{ id: 'r1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * 1-5' } } as never] }}
-            onRunRoutine={onRunRoutine} />);
-        fireEvent.click(screen.getByTestId('row-routines'));
+            botRoutines={{ b1: [routine] }} onRunRoutine={onRunRoutine} />);
+        // Collapsed by default: the count sits on the row, the schedule list does not.
+        const toggle = screen.getByTestId('row-routines');
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.queryByText('Morning brief')).toBeNull();
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(screen.getByText('Morning brief')).toBeTruthy();
+        expect(screen.getByText('0 9 * * 1-5')).toBeTruthy();
         fireEvent.click(screen.getByText('Run'));
-        expect(onRunRoutine).toHaveBeenCalledOnce();
+        expect(onRunRoutine).toHaveBeenCalledWith(routine);
+    });
+
+    it('has no disclosure at all for a bot with no routines', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} botRoutines={{ b1: [] }} />);
+        expect(screen.queryByTestId('row-routines')).toBeNull();
+    });
+
+    it('lists the schedule but offers no Run without the run handler', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+            botRoutines={{ b1: [{ id: 'r1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * 1-5' } } as never] }} />);
+        fireEvent.click(screen.getByTestId('row-routines'));
+        expect(screen.getByText('Morning brief')).toBeTruthy();
+        expect(screen.queryByText('Run')).toBeNull();
     });
 
     it('keeps group edit and delete reachable from the room row', () => {
@@ -326,5 +346,119 @@ describe('WS-6 focus and mobile drawer', () => {
 
         fireEvent.click(screen.getByTestId('rail-open'));
         expect(tokens()).not.toContain('invisible');
+    });
+});
+
+/**
+ * Ported from the deleted components/chat/AgentRosterRail.tsx suite: coverage
+ * of live row behaviour (identity, active state, name filter, per-bot thread
+ * scoping, the working ring, creation, emptiness, delete affordances, the
+ * Coach count) that nothing else asserted. What was NOT ported was either
+ * already covered above (row click selects, room edit, bot delete, pin,
+ * rename, routines) or was chrome of the deleted rail itself (its embedded
+ * variant, its “+” menu popover, the Team row it carried before rooms subsumed
+ * it, and the room's last-message preview — this surface hands a room's
+ * transcript to GroupChatView instead of painting one in the row).
+ */
+describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
+    it('lists one row per bot and one per room, naming an unnamed room by its members', () => {
+        const unnamed: AgentGroup = { id: 'g1', memberIds: ['b1', 'b2'], createdAt: new Date().toISOString() };
+        render(<AgentsView {...base}
+            bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
+            groups={[unnamed]} />);
+        expect(screen.getAllByTestId('agent-row')).toHaveLength(3);
+        expect(screen.getByText('Scout, Ledger')).toBeTruthy();
+    });
+
+    it('marks the open thread and leaves the others idle', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Scout' })]}
+            groups={[group('g1', ['b1'], 'War room')]} selection={{ kind: 'group', groupId: 'g1' }} />);
+        const [botRow, roomRow] = screen.getAllByTestId('agent-row');
+        // The active fill is on the row shell, two levels above the button.
+        const shellOf = (row: HTMLElement): string => row.parentElement?.parentElement?.className ?? '';
+        expect(shellOf(roomRow)).toContain('bg-zinc-800/70');
+        expect(shellOf(botRow)).not.toContain('bg-zinc-800/70');
+    });
+
+    it('filters the bot and room rows by name from the rail search', () => {
+        render(<AgentsView {...base}
+            bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
+            groups={[group('g1', ['b1', 'b2'], 'Alpha Desk')]} />);
+        fireEvent.change(screen.getByTestId('rail-search'), { target: { value: 'ledger' } });
+        expect(screen.queryByText('Scout')).toBeNull();
+        expect(screen.getByText('Ledger')).toBeTruthy();
+        expect(screen.queryByText('Alpha Desk')).toBeNull();
+    });
+
+    it('scopes a row to its bot’s provider + model: two bots on one provider keep separate threads', () => {
+        render(<AgentsView {...base}
+            bots={[
+                bot({ id: 'b1', name: 'Scout', providerId: 'p1', modelId: 'model-a' }),
+                bot({ id: 'b2', name: 'Ledger', providerId: 'p1', modelId: 'model-b' }),
+            ]}
+            messages={[
+                msg({ role: MessageRole.USER, text: 'watch BTC order flow' }),
+                msg({ role: MessageRole.AI, text: 'Buy wall holding at 94.8k.', modelsUsed: { p1: 'model-a' } }),
+                msg({ role: MessageRole.USER, text: 'check ETH funding' }),
+                msg({ role: MessageRole.AI, text: 'Funding is cooling off.', modelsUsed: { p1: 'model-b' } }),
+            ]} />);
+        const rowOf = (name: string): string =>
+            (screen.getByText(name).closest('button') as HTMLElement).textContent ?? '';
+        expect(rowOf('Scout')).toContain('Buy wall holding at 94.8k.');
+        expect(rowOf('Scout')).not.toContain('Funding is cooling');
+        expect(rowOf('Ledger')).toContain('Funding is cooling off.');
+        expect(rowOf('Ledger')).not.toContain('Buy wall');
+    });
+
+    it('rings the row of the bot that is working', () => {
+        render(<AgentsView {...base}
+            bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
+            workingBotId="b1" />);
+        const discOf = (name: string): string =>
+            (screen.getByText(name).closest('button')?.querySelector('span') as HTMLElement).className;
+        expect(discOf('Scout')).toContain('border-amber-500/40');
+        expect(discOf('Ledger')).not.toContain('border-amber-500/40');
+    });
+
+    it('creates both kinds of thread from the rail header', () => {
+        const onNewBot = vi.fn();
+        const onNewGroup = vi.fn();
+        render(<AgentsView {...base} onNewBot={onNewBot} onNewGroup={onNewGroup} />);
+        fireEvent.click(screen.getByTestId('rail-new'));
+        expect(onNewBot).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', { name: /Rooms/ }));
+        expect(onNewGroup).toHaveBeenCalledTimes(1);
+    });
+
+    it('says what will appear on an empty desk', () => {
+        render(<AgentsView {...base} />);
+        expect(screen.getByText(/No agents yet/)).toBeTruthy();
+    });
+
+    it('deletes a room without selecting it', () => {
+        const onDeleteGroup = vi.fn();
+        const onSelect = vi.fn();
+        render(<AgentsView {...base} groups={[group('g1', ['b1'], 'War room')]}
+            onDeleteGroup={onDeleteGroup} onSelect={onSelect} />);
+        fireEvent.click(screen.getByLabelText('Delete War room'));
+        expect(onDeleteGroup).toHaveBeenCalledWith('g1');
+        expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('shows no trash the surface was not given a handler for', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Scout' })]}
+            groups={[group('g1', [], 'War room')]} />);
+        expect(screen.queryByLabelText('Delete Scout')).toBeNull();
+        expect(screen.queryByLabelText('Delete War room')).toBeNull();
+    });
+
+    it('counts what the Coach shortcut is waiting on, and opens that thread', () => {
+        const onSelect = vi.fn();
+        const { rerender } = render(<AgentsView {...base} onSelect={onSelect} />);
+        expect(screen.getByTestId('rail-coach').textContent?.trim()).toBe('Coach');
+        rerender(<AgentsView {...base} coachCount={2} onSelect={onSelect} />);
+        expect(screen.getByTestId('rail-coach').textContent?.trim()).toBe('Coach · 2');
+        fireEvent.click(screen.getByTestId('rail-coach'));
+        expect(onSelect).toHaveBeenCalledWith({ kind: 'coach' });
     });
 });

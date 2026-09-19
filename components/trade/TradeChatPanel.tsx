@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, Gavel, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
+import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';

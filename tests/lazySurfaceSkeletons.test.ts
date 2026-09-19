@@ -1,8 +1,9 @@
 /**
  * UI-wave regressions (audit 2026-09-15):
- *  • Surface-level lazy screens (TradeView / StrategyStudio / AgentRosterRail)
- *    used fallback={null} → the whole surface went blank while the chunk
- *    loaded. They now render the App-local SurfaceSkeleton.
+ *  • Surface-level lazy screens (TradeView / StrategyStudio) used
+ *    fallback={null} → the whole surface went blank while the chunk loaded.
+ *    They now render the App-local SurfaceSkeleton. (AgentRosterRail was the
+ *    third one; it is deleted — see the 'AgentRosterRail' case below.)
  *  • The full-analysis progress card + Stop is `hidden … md:block` now —
  *    the Electron window floor is 800px, and at lg (1024px) the card was
  *    invisible for the entire 800-1023px desktop band.
@@ -17,7 +18,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { ProbabilityEngineService } from '../services/analysis/ProbabilityEngineService';
 
 const appSrc = readFileSync('App.tsx', 'utf8');
@@ -26,11 +27,18 @@ describe('lazy surface skeletons (fix 3)', () => {
     it('the surface-level Suspense boundaries render SurfaceSkeleton, not null', () => {
         expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<TradeView/);
         expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<StrategyStudio/);
-        // AgentRosterRail no longer backs a surface: the Agents surface is
-        // AgentsView and learning has its own LearnView. Both lazy, both with
-        // the visible skeleton.
+        // The Agents surface is AgentsView and learning has its own LearnView.
+        // Both lazy, both with the visible skeleton.
         expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<AgentsView/);
         expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<LearnView/);
+    });
+
+    it('AgentRosterRail is gone — deleted, not left backing no surface', () => {
+        // AgentsView replaced its row model and the sidebar stopped embedding
+        // it, so the file was deleted outright (no re-export, no shim). This
+        // asserts the deletion rather than the old "unreferenced" state.
+        expect(existsSync('components/chat/AgentRosterRail.tsx')).toBe(false);
+        expect(appSrc).not.toMatch(/AgentRosterRail/);
     });
 
     it('SurfaceSkeleton is a pulsing zinc panel (no new deps, dark chrome)', () => {
