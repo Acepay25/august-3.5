@@ -499,3 +499,57 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         expect(onSelect).toHaveBeenCalledWith({ kind: 'coach' });
     });
 });
+
+describe('WS-6 §5 row context menu', () => {
+    const routine = { id: 'r1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * 1-5' } } as never;
+
+    it('right-clicking a bot row lists pin, rename, routines and delete', () => {
+        const onDeleteBot = vi.fn();
+        const onRenameBot = vi.fn();
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
+            onDeleteBot={onDeleteBot} onRenameBot={onRenameBot}
+            botRoutines={{ b1: [routine] }} />);
+        expect(screen.queryByTestId('row-menu-popover')).toBeNull();
+        fireEvent.contextMenu(screen.getByTestId('agent-row'));
+        const menu = screen.getByTestId('row-menu-popover');
+        expect(menu.getAttribute('role')).toBe('menu');
+        expect([...menu.querySelectorAll('[role="menuitem"]')].map(b => b.textContent)).toEqual(
+            ['Pin', 'Rename', 'Routines (1)', 'Delete bot'],
+        );
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bot' }));
+        expect(onDeleteBot).toHaveBeenCalledWith('b1');
+        // Choosing an item is also a dismissal — a menu that stays after the
+        // action is a menu the user has to close by hand.
+        expect(screen.queryByTestId('row-menu-popover')).toBeNull();
+    });
+
+    it('the ⋯ trigger reaches the same actions, and Rename opens the inline form', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
+            onRenameBot={vi.fn()} />);
+        fireEvent.click(screen.getByTestId('row-menu'));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+        expect(screen.getByTestId('bot-rename-input').getAttribute('value')).toBe('Sweeper');
+    });
+
+    it('Escape closes it, and a row with no actions gets no trigger', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        fireEvent.contextMenu(screen.getByTestId('agent-row'));
+        expect(screen.getByTestId('row-menu-popover')).toBeTruthy();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByTestId('row-menu-popover')).toBeNull();
+        // The desk's own thread has nothing to rename or delete — right-click
+        // there must stay the browser's.
+        expect(screen.queryByLabelText('Chart AI options')).toBeNull();
+    });
+
+    it('rooms list edit and delete from the menu, pinned ones too', () => {
+        const onDeleteGroup = vi.fn();
+        localStorage.setItem('agent_pins_v1_rober', JSON.stringify(['g1']));
+        render(<AgentsView {...base} groups={[group('g1', [], 'War room')]} onDeleteGroup={onDeleteGroup} />);
+        expect(screen.getByTestId('rail-pinned').textContent).toContain('War room');
+        fireEvent.contextMenu(screen.getByTestId('agent-row'));
+        expect(screen.getByRole('menuitem', { name: 'Unpin' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete room' }));
+        expect(onDeleteGroup).toHaveBeenCalledWith('g1');
+    });
+});
