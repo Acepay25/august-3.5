@@ -402,7 +402,10 @@ it into the new rail instead (avoid two owners on AgentRosterRail).
       (`docs/learning-loop-map.md`; the diary is write-only BY DESIGN and now
       says so instead of claiming readers it doesn't have)
 - [x] Bot turns read shared retrieval and write lessons back (test-proven:
-      `tests/learningLoopE2E.test.ts`, `tests/botLearning.test.ts`)
+      `tests/learningLoopE2E.test.ts`, `tests/botLearning.test.ts`,
+      `tests/botWorthGateContext.test.ts`, `tests/botCraftLeg.test.ts`) —
+      including the full draft chain, judged against the acting bot's own
+      memory and crafted on its own model
 - [x] Learn surface exists; Settings sheds its supervisor duplicate (WS-5.1:
       Alt+5 rail item, Queue → Skills → Memory → Health; SupervisorCard is now
       a link in)
@@ -442,10 +445,11 @@ Deliberately left, each with the reason:
   `aiPatternMemory`/`insightKnowledgeBase` write are documented, not removed:
   the first is four files of state plumbing for no visible gain, the second is
   a retrieval-quality decision, not a deletion.
-- **Health-tab false alarm, fixed.** The selector counted the curated book-seed
-  corpus (12 skills, 0W/0L by design) as "untested" and "stale", so a healthy
-  default workspace rendered an amber "13 skills with no counted evidence"
-  flag. Seeds now have their own bucket and cannot raise a flag.
+- **Health-tab false alarm — fixed, nothing left.** The selector had counted the
+  curated book-seed corpus (12 skills, 0W/0L by design) as "untested" and
+  "stale", so a healthy default workspace rendered an amber "13 skills with no
+  counted evidence" flag. Seeds now have their own bucket and cannot raise a
+  flag.
 - **WS-3.4 placement.** Per-bot learning stats compute and render in Learn →
   Health; the plan asked for them on the roster rail/drawer specifically.
 - **WS-6 details.** `/` does not focus the rail search (already bound to the

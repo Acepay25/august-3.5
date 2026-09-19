@@ -12,9 +12,10 @@
  *    bot's call can credit the skills the bot was shown. Isolated-scope bots
  *    skip shared retrieval entirely.
  *  - recordBotTurnOutcome: writes the turn's lesson into the bot's own
- *    memory.md and folds closed bot-authored trades into the shared evidence
- *    path (syncClosedTradeToNotebook — the same write-back the chart AI's
- *    post-mortems get, worth gate included).
+ *    memory.md, runs the bot's closed trades through the SAME draft chain the
+ *    chart AI's post-mortems use (craftSkillFromPostMortem → the evidence-
+ *    backed draft gate, with that bot's memory as the gate's context), and
+ *    folds them into the shared evidence path via syncClosedTradeToNotebook.
  *
  * Everything here is fire-and-forget safe: a failure logs and returns, never
  * breaks the turn.
@@ -23,7 +24,7 @@
 import type { LoggedTrade } from '../../types';
 import { getMemoryFilesContext, listRetrievedMemorySources, type MemoryRetrievalQuery } from '../learning/MemoryRetrievalService';
 import { recordMemoryInjection } from '../learning/MemoryInjectionService';
-import { readBotMemoryMarkdown, botMemoryFolderName } from '../bots/BotMemoryService';
+import { readBotMemoryMarkdown, botMemoryFolderName, getBotMemoryContext } from '../bots/BotMemoryService';
 import {
     createMemoryFile,
     createMemoryFolder,
@@ -33,6 +34,13 @@ import {
     extractLessonFromPostMortem,
 } from '../learning/MemoryFilesService';
 import { syncClosedTradeToNotebook, listSkills, stampSkillOrigin } from '../learning/SkillMemoryService';
+import { craftSkillFromPostMortem } from '../learning/SkillCraftService';
+import { gateEvidenceBackedDraft } from '../learning/draftGates';
+import type { CraftedSkill } from '../../schemas/learning';
+import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
+import { isProviderReady } from '../../utils/providerUtils';
+import { TradeOutcome } from '../../types/enums';
+import type { ProviderConfig } from '../../types/provider';
 import { getBots } from './agentRoster';
 import { COMMON_WORDS } from '../../constants/commonWords';
 
@@ -128,6 +136,89 @@ export const lessonFromBotTurn = (reply: string): string => {
     return lesson.length >= BOT_LESSON_MIN_CHARS ? lesson : '';
 };
 
+/** What this module needs to know about the acting bot. `modelId` lets a bot
+ *  craft with the model it thinks with rather than the provider's default. */
+export interface BotIdentity {
+    id: string;
+    name: string;
+    providerId: string;
+    modelId?: string;
+}
+
+/** The bot's own provider, bound to its own model — the same seat resolution
+ *  the Chart AI dock uses, so a bot crafts with the model it thinks with. */
+const configForBot = async (bot: BotIdentity): Promise<ProviderConfig | null> => {
+    try {
+        const configs = await loadProviderConfigs();
+        const base = configs.find(c => c.id === bot.providerId && isProviderReady(c))
+            ?? configs.find(c => c.id === bot.providerId && c.isEnabled);
+        if (!base) return null;
+        return bot.modelId ? { ...base, selectedModel: bot.modelId } : base;
+    } catch {
+        return null;
+    }
+};
+
+/** Mirrors SkillMemoryService's internal cluster key: the closed-trade cluster
+ *  a draft's evidence claim is measured against. */
+const setupKey = (t: LoggedTrade): string => [
+    (t.analysis?.coinName || 'GEN').toUpperCase().replace(/USDT?$/, ''),
+    t.analysis?.direction === 'Long' || t.analysis?.direction === 'Short' ? t.analysis.direction : 'Neutral',
+    t.analysis?.detectedPatternFamily || t.analysis?.marketConditions?.pattern || 'any',
+].join('|');
+
+/**
+ * WS-3.2's craft leg: a bot's closed trade goes through the SAME draft chain
+ * the chart AI's post-mortems do — craft a procedure from the post-mortem,
+ * then the evidence-backed draft gate (tombstone, duplicate-draft and worth
+ * checks, prediction required) — with THAT bot's own memory as the gate's
+ * context, so the judgement is made against what this bot already believes.
+ *
+ * Returns the queued draft, or null when anything declined it: no ready
+ * provider, a post-mortem too thin to craft from, a duplicate already pending,
+ * or a gate refusal. Fail-safe by construction — the deterministic tier inside
+ * the gate still queues offline, and a throw here never reaches the turn.
+ */
+export const craftAndGateBotTrade = async (
+    bot: BotIdentity,
+    trade: LoggedTrade,
+    allTrades: LoggedTrade[],
+    username: string,
+): Promise<CraftedSkill | null> => {
+    try {
+        const config = await configForBot(bot);
+        if (!config) return null;
+        const crafted = await craftSkillFromPostMortem(trade, config);
+        if (!crafted) return null;
+        const setup = {
+            coin: trade.analysis?.coinName,
+            direction: trade.analysis?.direction,
+            family: trade.analysis?.detectedPatternFamily,
+            regime: trade.marketRegime,
+        };
+        const cluster = allTrades.filter(t =>
+            (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS)
+            && setupKey(t) === setupKey(trade));
+        const gate = await gateEvidenceBackedDraft({
+            crafted,
+            tradeId: trade.id,
+            cluster: cluster.length > 0 ? cluster : [trade],
+            username,
+            config,
+            allTrades,
+            coin: trade.analysis?.coinName,
+            direction: trade.analysis?.direction,
+            family: trade.analysis?.detectedPatternFamily,
+            // The acting bot's persona + notes, not the roster head's.
+            botContext: getBotMemoryContext(bot.id, setup, 'global') || trade.postMortem || '',
+        });
+        return gate.action === 'queued' ? gate.crafted : null;
+    } catch (e) {
+        console.warn('[BotLearning] craft/gate failed (non-fatal):', e instanceof Error ? e.message : e);
+        return null;
+    }
+};
+
 /**
  * Persist what a bot turn learned. Two writes:
  *  1. A one-line lesson appended to the bot's own memory.md (capped so the
@@ -138,7 +229,7 @@ export const lessonFromBotTurn = (reply: string): string => {
  *     syncClosedTradeToNotebook write-back a chart-AI trade gets.
  */
 export const recordBotTurnOutcome = async (
-    bot: { id: string; name: string; providerId: string },
+    bot: BotIdentity,
     prompt: string,
     reply: string,
     opts: { username: string; trades: LoggedTrade[] },
@@ -178,6 +269,9 @@ export const recordBotTurnOutcome = async (
             // turn re-fold it.
             seen.add(trade.id);
             foldedTrades.set(bot.id, seen);
+            // The draft chain first (craft → worth gate → queue, where the
+            // supervisor or the human approves it), then the evidence fold.
+            await craftAndGateBotTrade(bot, trade, opts.trades, opts.username);
             await syncClosedTradeToNotebook(trade, opts.trades, opts.username, { botId: bot.id, botName: bot.name });
         }
         for (const { file } of listSkills()) {
