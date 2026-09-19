@@ -21,7 +21,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, Bot, ChevronDown, Pencil, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Pencil, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
@@ -65,6 +65,11 @@ interface AgentsViewProps {
     botStats?: BotLearningStat[];
     /** Any ready provider at all — the desk's status dot, not a decoration. */
     providerReady?: boolean;
+    /** Rename a bot in place (WS-6's row affordances). */
+    onRenameBot?: (botId: string, name: string) => void;
+    /** The Coach thread. Without it the Coach shortcut selected a thread this
+     *  surface had no pane for — a dead end wearing a badge. */
+    renderCoach?: () => React.ReactNode;
     /** Current provider/model chip in the composer. */
     modelLabel?: string;
     onOpenModels?: () => void;
@@ -118,15 +123,17 @@ const Row: React.FC<{
     manage?: React.ReactNode;
     /** Tiny mono count after the name — skills this bot authored. */
     stat?: number;
+    /** Row identity for tests — the desk's own row needs its own. */
+    testId?: string;
     /** Routines disclosure trigger, rendered when the bot has schedules. */
     routinesToggle?: React.ReactNode;
     children?: React.ReactNode;
     Icon: React.FC<{ className?: string }>;
     onClick: () => void;
-}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, stat, routinesToggle, children, Icon, onClick }) => (
+}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, stat, testId = 'agent-row', routinesToggle, children, Icon, onClick }) => (
     <div className={`group relative ${active ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'} rounded-control`}>
         <div className="flex items-start gap-2 px-2 py-1.5">
-            <button type="button" onClick={onClick} data-testid="agent-row" className="flex min-w-0 flex-1 items-start gap-2 text-left">
+            <button type="button" onClick={onClick} data-testid={testId} className="flex min-w-0 flex-1 items-start gap-2 text-left">
                 <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
                     working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
                 }`}>
@@ -222,6 +229,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
+    onRenameBot,
+    renderCoach,
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
@@ -232,6 +241,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // Below md the rail is an overlay, not a column — at 320px a permanent
     // 42vw list left no readable transcript.
     const [railOpen, setRailOpen] = useState(false);
+    // At md+ the rail is a column you can put away to give the thread the
+    // width — persisted per profile, like the pins.
+    const [collapsed, setCollapsed] = useState<boolean>(() => {
+        try { return localStorage.getItem(`agents_rail_collapsed_v1_${username}`) === '1'; } catch { return false; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(`agents_rail_collapsed_v1_${username}`, collapsed ? '1' : '0'); } catch { /* private mode */ }
+    }, [collapsed, username]);
+    const [sortByName, setSortByName] = useState(false);
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [renameDraft, setRenameDraft] = useState('');
     const scroller = useRef<HTMLDivElement | null>(null);
     const searchRef = useRef<HTMLInputElement | null>(null);
     const [searchFocusNonce, setSearchFocusNonce] = useState(0);
@@ -295,15 +315,27 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     const pinnedBots = botRows.filter(r => pins.includes(r.bot.id));
     const otherBots = botRows.filter(r => !pins.includes(r.bot.id));
+    const listedBots = sortByName
+        ? [...otherBots].sort((a, b) => a.bot.name.localeCompare(b.bot.name)) : otherBots;
+    const listedGroups = sortByName
+        ? [...groupRows].sort((a, b) => groupDisplayName(a, bots).localeCompare(groupDisplayName(b, bots)))
+        : groupRows;
+    const lastChartMessage = messages[messages.length - 1];
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
     const activeGroup = selection.kind === 'group' ? groups.find(g => g.id === selection.groupId) ?? null : null;
     const activeStat = activeBot ? statFor(activeBot.id) : undefined;
     // WS-3.1's scope contract, read off the bot rather than assumed.
     const botIsolated = !!activeBot && (activeBot.memoryScope ?? 'global') !== 'global';
+    // The Chart AI pane IS the dock's conversation — the same array, not a
+    // copy (WS-6's hard requirement). It used to be [], which made "opening it
+    // here and on the Trade surface shows the same conversation" false: the
+    // pane was a launcher wearing a transcript.
+    const isChartPane = selection.kind === 'team';
     const thread = useMemo(
-        () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId) : []),
-        [activeBot, messages],
+        () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId)
+            : isChartPane ? messages : []),
+        [activeBot, isChartPane, messages],
     );
 
     useEffect(() => {
@@ -322,7 +354,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     }, [text, busy, mode, onAnalyze, activeBot, onSendBotTurn]);
 
     /** A bot row with everything the standalone roster rail used to own:
-     *  pin, the ⚠ fix hint, the routines disclosure, delete. */
+     *  pin, the ⚠ fix hint, the routines disclosure, rename, delete. */
     const renderBotRow = (r: BotRow): React.ReactNode => {
         const routines = botRoutines?.[r.bot.id] ?? [];
         const open = openRoutines === r.bot.id;
@@ -336,12 +368,23 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 Icon={Bot}
                 onPin={() => togglePin(r.bot.id)}
                 onClick={() => selectThread({ kind: 'bot', botId: r.bot.id })}
-                manage={onDeleteBot && (
-                    <button type="button" aria-label={`Delete ${r.bot.name}`}
-                        onClick={() => onDeleteBot(r.bot.id)}
-                        className="rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
-                        <Trash2 className="h-3 w-3" />
-                    </button>
+                manage={(onRenameBot || onDeleteBot) && (
+                    <>
+                        {onRenameBot && (
+                            <button type="button" aria-label={`Rename ${r.bot.name}`} data-testid="rail-rename"
+                                onClick={() => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); }}
+                                className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                <Pencil className="h-3 w-3" />
+                            </button>
+                        )}
+                        {onDeleteBot && (
+                            <button type="button" aria-label={`Delete ${r.bot.name}`}
+                                onClick={() => onDeleteBot(r.bot.id)}
+                                className="rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
+                                <Trash2 className="h-3 w-3" />
+                            </button>
+                        )}
+                    </>
                 )}
                 routinesToggle={routines.length > 0 ? (
                     <button type="button" onClick={() => setOpenRoutines(open ? null : r.bot.id)}
@@ -351,6 +394,23 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </button>
                 ) : undefined}>
+                {renamingId === r.bot.id && onRenameBot && (
+                    <form className="flex items-center gap-1 px-2 pb-1.5 pl-9"
+                        onSubmit={e => {
+                            e.preventDefault();
+                            const next = renameDraft.trim();
+                            if (next) onRenameBot(r.bot.id, next);
+                            setRenamingId(null);
+                        }}>
+                        <input value={renameDraft} onChange={e => setRenameDraft(e.target.value)}
+                            aria-label={`Rename ${r.bot.name}`} data-testid="bot-rename-input" autoFocus
+                            className="min-w-0 flex-1 rounded-control border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-zinc-600" />
+                        <button type="submit"
+                            className="shrink-0 rounded-control border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-800">
+                            Save
+                        </button>
+                    </form>
+                )}
                 {open && (
                     <ul className="space-y-1 px-2 pb-2 pl-9">
                         {routines.map(cfg => (
@@ -401,9 +461,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 leaves a closed drawer tabbable for 150ms and makes the flip
                 unmeasurable. The slide-in still animates (visible instantly,
                 transform after); the slide-out is not seen. */}
-            <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 transform flex-col border-r border-zinc-800/80 bg-zinc-900 transition-transform duration-[150ms] ease-[cubic-bezier(0.2,0,0,1)] ${
+            <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 transform flex-col border-r border-zinc-800/80 bg-zinc-900 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${
                 railOpen ? 'translate-x-0' : 'invisible -translate-x-full md:visible'
-            } md:static md:z-auto md:h-full md:min-h-0 md:w-[min(20rem,42vw)] md:translate-x-0`}
+            } md:static md:z-auto md:h-full md:min-h-0 md:w-[min(20rem,42vw)] md:translate-x-0 ${
+                collapsed ? 'md:hidden' : ''
+            }`}
                 data-testid="agents-rail">
                 <div className="flex shrink-0 items-center gap-1.5 p-2">
                     <button type="button" onClick={onNewBot} data-testid="rail-new"
@@ -416,6 +478,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             aria-label="Search conversations" data-testid="rail-search"
                             className="w-full rounded-control border border-zinc-800 bg-zinc-950 py-1 pl-7 pr-2 text-[11px] text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-zinc-600" />
                     </div>
+                    <button type="button" onClick={() => setCollapsed(true)} data-testid="rail-collapse"
+                        aria-label="Collapse conversations" title="Collapse the conversation rail"
+                        className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
+                        <PanelLeftClose className="h-3 w-3" />
+                    </button>
                 </div>
 
                 <div className="flex shrink-0 gap-1 px-2 pb-2">
@@ -437,24 +504,39 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 </div>
 
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
-                    {pinnedBots.length > 0 && (
-                        <section>
-                            <h4 className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">Pinned</h4>
-                            {pinnedBots.map(renderBotRow)}
-                        </section>
-                    )}
+                    <section>
+                        <h4 className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">Pinned</h4>
+                        {/* WS-6: the desk's own conversation is a first-class row,
+                            not only the pane you fall back into. */}
+                        <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
+                            preview={lastChartMessage ? previewTextFor(lastChartMessage) : 'Ask the desk, or run Analyze for the full pipeline'}
+                            time={relTime(lastChartMessage?.createdAt ?? null)} Icon={Sparkles}
+                            onClick={() => selectThread({ kind: 'team' })} />
+                        {pinnedBots.map(renderBotRow)}
+                    </section>
 
                     <section>
-                        <h4 className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">
-                            Chats and tasks
-                        </h4>
-                        {otherBots.length === 0 && groupRows.length === 0 && (
+                        <div className="flex items-center gap-1 px-1 pb-1">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                                Chats and tasks
+                            </h4>
+                            {(listedBots.length > 1 || listedGroups.length > 1) && (
+                                <button type="button" data-testid="rail-sort"
+                                    onClick={() => setSortByName(v => !v)}
+                                    title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
+                                    aria-label="Sort conversations"
+                                    className="ml-auto rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                    <ArrowUpDown className="h-3 w-3" />
+                                </button>
+                            )}
+                        </div>
+                        {listedBots.length === 0 && listedGroups.length === 0 && (
                             <p className="px-1 py-3 text-[11px] leading-5 text-zinc-600">
                                 No agents yet. Create one and it appears here with its own thread.
                             </p>
                         )}
-                        {otherBots.map(renderBotRow)}
-                        {groupRows.map(g => (
+                        {listedBots.map(renderBotRow)}
+                        {listedGroups.map(g => (
                             <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
                                 title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
                                 onClick={() => selectThread({ kind: 'group', groupId: g.id })}
@@ -492,7 +574,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
             {/* ── Main pane ── */}
             <section className="flex min-w-0 flex-1 flex-col bg-[#0b0b0a]">
-                {activeGroup && renderGroup ? (
+                {selection.kind === 'coach' && renderCoach ? (
+                    <div className="flex min-h-0 flex-1 flex-col">{renderCoach()}</div>
+                ) : activeGroup && renderGroup ? (
                     <div className="flex min-h-0 flex-1 flex-col">{renderGroup(activeGroup)}</div>
                 ) : (
                     <>
@@ -502,6 +586,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 className="shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:hidden">
                                 <Users className="h-3.5 w-3.5" />
                             </button>
+                            {collapsed && (
+                                <button type="button" onClick={() => setCollapsed(false)} data-testid="rail-expand"
+                                    aria-label="Show conversations" title="Show the conversation rail"
+                                    className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
+                                    <PanelLeftOpen className="h-3.5 w-3.5" />
+                                </button>
+                            )}
                             <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-zinc-200">
                                 {activeBot ? `@${activeBot.name}` : 'Chart AI'}
                             </span>
