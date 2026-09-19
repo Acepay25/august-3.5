@@ -1,0 +1,176 @@
+/**
+ * MemoryHealthCard — one look at whether memory is actually healthy (WS-4.3).
+ *
+ * The pieces of the learning loop each had their own surface: the queue in the
+ * Studio, the notebook in Settings, the supervisor in the dock, the graveyard
+ * nowhere you could reach. This renders the single pure read over all of them
+ * (`buildMemoryHealthReport`) as dense one-line rows — counts first, problems
+ * only when there are problems, and no card nested inside a card.
+ */
+
+import React, { useCallback, useEffect, useState } from 'react';
+import { Activity, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { buildMemoryHealthReport, type MemoryHealthReport } from '../../services/learning/memoryHealth';
+import { isHygieneDue, runMemoryHygiene } from '../../services/learning/memoryHygiene';
+import { loadProviderConfigs } from '../../services/infrastructure/ProviderConfigService';
+import StatusPill from '../ui/StatusPill';
+
+interface MemoryHealthCardProps {
+    username: string;
+    /** Bumped after a manual pass to re-read the report. */
+    refreshKey?: number;
+}
+
+const Row: React.FC<{ label: string; value: React.ReactNode; title?: string }> = ({ label, value, title }) => (
+    <div className="flex items-baseline justify-between gap-3 py-1" title={title}>
+        <span className="min-w-0 truncate text-[11px] text-zinc-500">{label}</span>
+        <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-200">{value}</span>
+    </div>
+);
+
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+    <div className="border-t border-zinc-800/80 px-3 py-2 first:border-t-0">
+        <h4 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">{title}</h4>
+        {children}
+    </div>
+);
+
+const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKey = 0 }) => {
+    const [report, setReport] = useState<MemoryHealthReport | null>(null);
+    const [due, setDue] = useState(false);
+    const [running, setRunning] = useState(false);
+
+    const load = useCallback(async (): Promise<void> => {
+        try {
+            setReport(await buildMemoryHealthReport(username));
+            setDue(await isHygieneDue(username));
+        } catch { setReport(null); }
+    }, [username]);
+
+    useEffect(() => { void load(); }, [load, refreshKey]);
+
+    const runNow = async (): Promise<void> => {
+        setRunning(true);
+        try {
+            await runMemoryHygiene(username, { providerConfigs: await loadProviderConfigs() });
+            await load();
+        } finally { setRunning(false); }
+    };
+
+    if (!report) {
+        return (
+            <div className="flex items-center gap-2 p-4 text-[11px] text-zinc-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading memory…
+            </div>
+        );
+    }
+
+    const q = report.queues;
+    const s = report.skills;
+    return (
+        <div className="overflow-hidden rounded-control border border-zinc-800/80 bg-zinc-900" data-testid="memory-health-card">
+            <div className="flex items-center gap-2 px-3 py-2">
+                <Activity className="h-3.5 w-3.5 text-cyan-300" />
+                <span className="text-[12px] font-semibold text-zinc-100">Memory health</span>
+                {report.flags.length === 0
+                    ? <StatusPill tone="up" kicker className="ml-auto">clean</StatusPill>
+                    : <StatusPill tone="warn" kicker className="ml-auto">{report.flags.length} to look at</StatusPill>}
+            </div>
+
+            {report.flags.length > 0 && (
+                <ul className="space-y-1 border-t border-zinc-800/80 px-3 py-2">
+                    {report.flags.map(f => (
+                        <li key={f} className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-300/90">
+                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span>{f}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            <Section title="Skills">
+                <Row label="confirmed / candidate / retired"
+                    value={`${s.confirmed} / ${s.candidate} / ${s.retired}`} />
+                <Row label="approved, still untested" value={s.unproven}
+                    title="Injected as a labeled hypothesis until evidence lands." />
+                <Row label="no counted evidence in 30+ days" value={s.staleEvidence} />
+                <Row label="latest eval verdict “hurts”" value={s.hurtsVerdict} />
+                <Row label="authored by a bot" value={s.fromBots} />
+            </Section>
+
+            <Section title="Queues">
+                <Row label="skill drafts" value={q.drafts} />
+                <Row label="lifecycle proposals" value={`${q.proposals}${q.needsRewrite ? ` (${q.needsRewrite} need a rewrite)` : ''}`} />
+                <Row label="memory amendments" value={q.amendments} />
+                <Row label="forged tool candidates" value={q.forgedTools} />
+                <Row label="graveyard" value={q.graveyard} />
+            </Section>
+
+            <Section title="Notebook">
+                <Row label="files enabled / total" value={`${report.notebook.enabled} / ${report.notebook.files}`} />
+                <Row label="stored characters" value={report.notebook.chars.toLocaleString()} />
+                <Row label="worst-case prompt cost" value={`~${report.notebook.promptTokensWorstCase} tok`}
+                    title="Doctrine slot + skill body + rules + mistake line + verdict extras. Display-only." />
+                <Row label="diary entries (never injected)" value={`${report.diary.entries} in ${report.diary.files} files`}
+                    title="Raw storage: the model reads conclusions, not the journal." />
+            </Section>
+
+            {report.folders.length > 0 && (
+                <Section title="By folder">
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {report.folders.map(f => (
+                            <span key={f.name} className="rounded-full border border-zinc-800 px-2 py-0.5 font-mono text-[10px] tabular-nums text-zinc-400">
+                                {f.name} {f.enabled}/{f.files}
+                            </span>
+                        ))}
+                    </div>
+                </Section>
+            )}
+
+            {report.unobserved.length > 0 && (
+                <Section title="Outside the injection window">
+                    <p className="mb-1 text-[10px] leading-4 text-zinc-600">
+                        Not served into a prompt within the retained injection log — for a skill this usually means its
+                        setup stopped matching, not that it is broken.
+                    </p>
+                    {report.unobserved.map(u => (
+                        <Row key={u.path} label={u.path} value={`${u.chars}c · ${u.daysSinceEdit}d`} />
+                    ))}
+                </Section>
+            )}
+
+            {report.bots.length > 0 && (
+                <Section title="Bots">
+                    {report.bots.map(b => (
+                        <Row key={b.id} label={`@${b.name}`}
+                            value={`${b.lessons} lessons · ${b.skillsAuthored} skills${b.lastLessonAt ? ` · ${b.lastLessonAt}` : ''}`} />
+                    ))}
+                </Section>
+            )}
+
+            <Section title="Hygiene">
+                <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 text-[11px] leading-4 text-zinc-500">
+                        {report.hygiene[0]?.text ?? 'No maintenance pass has run yet.'}
+                    </p>
+                    <button type="button" onClick={() => void runNow()} disabled={running}
+                        className="shrink-0 rounded-control border border-zinc-700 px-2 py-1 text-[10px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-40">
+                        {running ? 'Running…' : due ? 'Run now' : 'Run again'}
+                    </button>
+                </div>
+                {report.hygiene.length > 1 && (
+                    <ul className="mt-1.5 space-y-0.5 border-t border-zinc-800/80 pt-1.5">
+                        {report.hygiene.slice(1, 6).map(l => (
+                            <li key={`${l.atMs}-${l.text}`} className="flex items-start gap-1.5 text-[10px] leading-4 text-zinc-600">
+                                <Check className="mt-0.5 h-2.5 w-2.5 shrink-0 text-emerald-500/70" />
+                                <span>{l.text}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Section>
+        </div>
+    );
+};
+
+export default React.memo(MemoryHealthCard);

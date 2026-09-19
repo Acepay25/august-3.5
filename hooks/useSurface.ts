@@ -9,10 +9,10 @@
 
 import { useEffect, useState } from 'react';
 
-export type AppSurface = 'chat' | 'trade' | 'journal' | 'studio' | 'agents';
+export type AppSurface = 'chat' | 'trade' | 'journal' | 'studio' | 'agents' | 'learn';
 
 const KEY = 'august_surface_v1';
-const VALID: readonly string[] = ['trade', 'journal', 'studio', 'agents'];
+const VALID: readonly string[] = ['trade', 'journal', 'studio', 'agents', 'learn'];
 
 export const useSurface = (): { surface: AppSurface; setSurface: (s: AppSurface) => void } => {
     const [surface, setSurface] = useState<AppSurface>(() => {

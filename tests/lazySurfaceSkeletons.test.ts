@@ -23,10 +23,14 @@ import { ProbabilityEngineService } from '../services/analysis/ProbabilityEngine
 const appSrc = readFileSync('App.tsx', 'utf8');
 
 describe('lazy surface skeletons (fix 3)', () => {
-    it('the three surface-level Suspense boundaries render SurfaceSkeleton, not null', () => {
+    it('the surface-level Suspense boundaries render SurfaceSkeleton, not null', () => {
         expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<TradeView/);
         expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<StrategyStudio/);
-        expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<AgentRosterRail/);
+        // AgentRosterRail no longer backs a surface: the Agents surface is
+        // AgentsView and learning has its own LearnView. Both lazy, both with
+        // the visible skeleton.
+        expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<AgentsView/);
+        expect(appSrc).toMatch(/fallback=\{<SurfaceSkeleton \/>\}>\s*<LearnView/);
     });
 
     it('SurfaceSkeleton is a pulsing zinc panel (no new deps, dark chrome)', () => {

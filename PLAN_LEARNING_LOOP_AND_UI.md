@@ -403,16 +403,35 @@ it into the new rail instead (avoid two owners on AgentRosterRail).
       says so instead of claiming readers it doesn't have)
 - [x] Bot turns read shared retrieval and write lessons back (test-proven:
       `tests/learningLoopE2E.test.ts`, `tests/botLearning.test.ts`)
-- [ ] Learn surface exists; Settings/Trade shed their learning clutter (WS-5.1/5.2)
-- [ ] Agents surface is chat-first (rail + greeting + pill composer), Chat and
-      Analyze modes both round-trip, and threads stay shared with the Trade dock (WS-6)
-- [ ] Memory hygiene runs on a schedule; WS-4.3 health selector (WS-4.2/4.3)
+- [x] Learn surface exists; Settings sheds its supervisor duplicate (WS-5.1:
+      Alt+5 rail item, Queue → Skills → Memory → Health; SupervisorCard is now
+      a link in. The notebook/amendments sections still also live in Settings —
+      removal there is the unfinished half of 5.1)
+- [x] Agents surface is chat-first (rail + greeting + pill composer), Chat and
+      Analyze modes both round-trip, and threads stay shared with the Trade dock
+- [x] Memory hygiene runs on a schedule + the WS-4.3 health selector
 - [x] `npm run typecheck && npm run test && npm run build` all green
 
-## Status after this pass (2026-09-19)
+## Still open
 
-WS-1, WS-2 and WS-3 are complete and verified. WS-4.1 landed as the map + the
-comment corrections it forced; WS-4.2/4.3, WS-5 and WS-6 are not started.
+- WS-5.2 (Trade surface calm-down): only `SupervisorStream` has been extracted
+  out of TradeChatPanel. The skill-citation row, autopilot banner,
+  tool-activity row, the unified "what the AI remembers" strip and the
+  ApprovalInbox drawer merge are not done.
+- WS-5.3 / 5.4 (component-level minimalism sweep across `components/`,
+  density/motion rules) — not started; the new surfaces follow the doctrine,
+  the existing ones were not swept.
+- WS-4.1 follow-through: the dead exports and the duplicated
+  `aiPatternMemory`/`insightKnowledgeBase` write listed under "asymmetries"
+  in docs/learning-loop-map.md are documented, not yet deleted.
+- WS-6 details deferred: `/` does not focus the rail search (it is bound to the
+  dock composer already), and the rail shrinks rather than becoming a drawer
+  below `md`.
+
+## Status (2026-09-19)
+
+WS-1, WS-2, WS-3, WS-4.1/4.2/4.3, WS-5.1 and WS-6 are complete and verified.
+WS-5.2/5.3/5.4 remain — see "Still open" above.
 
 Five defects the loop test exposed, all fixed:
 1. **Cold-start deadlock** — an approved skill could never earn evidence

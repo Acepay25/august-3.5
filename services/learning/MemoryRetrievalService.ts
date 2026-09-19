@@ -307,7 +307,7 @@ const skillIndexLine = (name: string, meta: SkillMeta, status?: SkillMeta['statu
     const evidence = (meta.wins + meta.losses) === 0 && unprovenLabel
         ? unprovenLabel
         : evidenceFreshness(meta);
-    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${status ?? meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidence}] ${rule}`;
+    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${status ?? meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidence}${meta.originBotName ? ` · from @${meta.originBotName}` : ''}] ${rule}`;
 };
 
 /**
@@ -323,7 +323,7 @@ const matchedSkillBlock = (
 ): { text: string; meta: SkillMeta | null; name: string } => {
     const match = bestMatchedSkill(query, audience, activeLens, asOfMs);
     if (!match) return { text: '', meta: null, name: '' };
-    const header = `[skills/${match.file.name} · ${match.status} · ${Math.round(match.meta.wins)}W/${Math.round(match.meta.losses)}L]`;
+    const header = `[skills/${match.file.name} · ${match.status} · ${Math.round(match.meta.wins)}W/${Math.round(match.meta.losses)}L${match.meta.originBotName ? ` · from @${match.meta.originBotName}` : ''}]`;
     if (stage !== 'verdict') {
         return { text: `${header}\n${skillIndexLine(match.file.name, match.meta)}`, meta: match.meta, name: match.file.name };
     }

@@ -31,6 +31,7 @@ import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineS
 import { useToastActions } from './components/shared/Toast';
 import { FORGED_PROPOSAL_EVENT } from './services/tools/toolForge';
 import { AMENDMENT_EVENT } from './services/learning/memoryAmendments';
+import { countPendingEverything } from './services/learning/memoryHealth';
 import { useConfirmDialog } from './components/shared/ConfirmDialog';
 import { Header } from './components/shared/Header';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
@@ -77,11 +78,12 @@ const StrategyStudio = React.lazy(() => import('./components/dashboards/Strategy
 const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
-const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
+const LearnView = React.lazy(() => import('./components/learn/LearnView'));
+const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -1345,6 +1347,37 @@ const App: React.FC = () => {
         const group = groups.find(g => g.id === activeThread.groupId);
         if (group) void runGroupThread(group, prompt, bots);
     }, [activeThread, groups, bots, runGroupThread]);
+    /** The room view, hoisted so both the Chart AI dock and the Agents surface
+     *  render the SAME room from the SAME runners instead of two copies that
+     *  can drift. */
+    const renderGroupSurface = useCallback((groupId: string): React.ReactNode => {
+        const group = groups.find(g => g.id === groupId);
+        if (!group) return <p className="p-4 text-[11px] leading-5 text-zinc-500">This room was deleted.</p>;
+        return (
+            <React.Suspense fallback={null}>
+                <GroupChatView
+                    group={group}
+                    bots={bots}
+                    messages={messages}
+                    activity={activity}
+                    workingBotId={workingBotId}
+                    isRunning={groupRunning}
+                    onSendThread={sendGroupThread}
+                    onReplyInThread={sendGroupReply}
+                    onCancelRun={cancelGroupRun}
+                    hybridEnabled={isHybridIntelligenceEnabled}
+                    onToggleHybrid={toggleGroupHybrid}
+                    onEditGroup={() => {
+                        setGroupEditTarget(group);
+                        setIsNewGroupOpen(true);
+                    }}
+                    onDeleteGroup={() => deleteGroup(group.id)}
+                />
+            </React.Suspense>
+        );
+    }, [groups, bots, messages, activity, workingBotId, groupRunning, sendGroupThread,
+        sendGroupReply, cancelGroupRun, isHybridIntelligenceEnabled, toggleGroupHybrid,
+        setIsNewGroupOpen, deleteGroup]);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -1500,10 +1533,10 @@ const App: React.FC = () => {
                 e.preventDefault();
                 setIsSettingsMenuVisible(true);
             }
-            // Alt+1..4 jumps the icon-rail surfaces (Minara nav; Alt keeps
+            // Alt+1..5 jumps the icon-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
-                '1': 'trade', '2': 'journal', '3': 'studio', '4': 'agents',
+                '1': 'trade', '2': 'journal', '3': 'studio', '4': 'agents', '5': 'learn',
             };
             if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
                 e.preventDefault();
@@ -2497,8 +2530,16 @@ const App: React.FC = () => {
                     : 'generating insights',
             };
         }
+        // The Learn rail badge counts what is still UNDECIDED across every
+        // queue that surface hosts — drafts, proposals and amendments. The
+        // supervisor may already be working through them, but a decision the
+        // model has not recorded yet is something the user can still lose.
+        const learnPending = countPendingEverything(activeUsername || 'default');
+        if (learnPending > 0) {
+            next.learn = { count: learnPending, detail: `${learnPending} awaiting review` };
+        }
         return next;
-    }, [workingBotId, dmWorkingBotId, coachCount, isInsightGenerating, insightProgress]);
+    }, [workingBotId, dmWorkingBotId, coachCount, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce]);
     const selectCoachThread = useCallback(() => setActiveThread({ kind: 'coach' }), []);
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
@@ -2739,6 +2780,7 @@ const App: React.FC = () => {
                 onClose={() => setIsSettingsMenuVisible(false)}
                 isLoading={isLoading}
                 onOpenStrategyStudio={() => { setSurface('studio'); setIsSettingsMenuVisible(false); }}
+                onOpenLearn={() => { setSurface('learn'); setIsSettingsMenuVisible(false); }}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}
                 onSetSummarizationProvider={handleSetSummarizationProvider}
@@ -3081,32 +3123,7 @@ const App: React.FC = () => {
                                             />
                                         </React.Suspense>
                                     )}
-                                    renderGroupSurface={(groupId) => {
-                                        const group = groups.find(g => g.id === groupId);
-                                        if (!group) return <p className="p-4 text-[11px] leading-5 text-zinc-500">This room was deleted.</p>;
-                                        return (
-                                            <React.Suspense fallback={null}>
-                                                <GroupChatView
-                                                    group={group}
-                                                    bots={bots}
-                                                    messages={messages}
-                                                    activity={activity}
-                                                    workingBotId={workingBotId}
-                                                    isRunning={groupRunning}
-                                                    onSendThread={sendGroupThread}
-                                                    onReplyInThread={sendGroupReply}
-                                                    onCancelRun={cancelGroupRun}
-                                                    hybridEnabled={isHybridIntelligenceEnabled}
-                                                    onToggleHybrid={toggleGroupHybrid}
-                                                    onEditGroup={() => {
-                                                        setGroupEditTarget(group);
-                                                        setIsNewGroupOpen(true);
-                                                    }}
-                                                    onDeleteGroup={() => deleteGroup(group.id)}
-                                                />
-                                            </React.Suspense>
-                                        );
-                                    }}
+                                    renderGroupSurface={renderGroupSurface}
                                 />
                             </React.Suspense>
                         )}
@@ -3166,45 +3183,59 @@ const App: React.FC = () => {
                                 />
                             </React.Suspense>
                         )}
+                        {surface === 'learn' && (
+                            <React.Suspense fallback={<SurfaceSkeleton />}>
+                                <LearnView
+                                    username={activeUsername || 'default'}
+                                    trades={loggedTrades}
+                                    memoryConfig={memoryConfig}
+                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
+                                />
+                            </React.Suspense>
+                        )}
                         {surface === 'agents' && (
-                            <div className="flex h-full min-h-0">
-                                <div className="flex w-80 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50">
-                                    <React.Suspense fallback={<SurfaceSkeleton />}>
-                                        <AgentRosterRail
-                                            variant="embedded"
-                                            bots={bots}
-                                            groups={groups}
-                                            messages={messages}
-                                            selection={activeThread}
-                                            onSelectBot={openBotInTrade}
-                                            onSelectGroup={openGroupInTrade}
-                                            onDeleteBot={deleteBot}
-                                            onDeleteGroup={deleteGroup}
-                                            onEditGroup={groupId => {
-                                                const target = groups.find(g => g.id === groupId);
-                                                if (!target) return;
-                                                setGroupEditTarget(target);
-                                                setIsNewGroupOpen(true);
-                                            }}
-                                            onNewBot={() => setIsNewBotOpen(true)}
-                                            onNewGroup={() => setIsNewGroupOpen(true)}
-                                            onSelectCoach={openCoachInTrade}
-                                            onSelectTeam={openCoachInTrade}
-                                            coachCount={coachCount}
-                                            workingBotId={workingBotId ?? dmWorkingBotId}
-                                            lastOpenedMap={threadOpenedMap}
-                                            attentionMap={attentionMap}
-                                            botRoutines={botRoutinesMap}
-                                            onRunRoutine={runRoutineFromRail}
-                                        />
-                                    </React.Suspense>
-                                </div>
-                                <div className="hidden flex-1 items-center justify-center md:flex">
-                                    <p className="max-w-sm text-center text-sm leading-6 text-zinc-600">
-                                        Pick an agent to open it as a Chart AI session on the trade surface, or start a new one from the rail.
-                                    </p>
-                                </div>
-                            </div>
+                            <React.Suspense fallback={<SurfaceSkeleton />}>
+                                <AgentsView
+                                    username={activeUsername || ''}
+                                    bots={bots}
+                                    groups={groups}
+                                    messages={messages}
+                                    selection={activeThread}
+                                    onSelect={t => {
+                                        if (t.kind === 'bot') selectBotThread(t.botId);
+                                        else if (t.kind === 'group') selectGroupThread(t.groupId);
+                                        else if (t.kind === 'coach') selectCoachThread();
+                                        else selectTeamThread();
+                                    }}
+                                    onNewBot={() => setIsNewBotOpen(true)}
+                                    onNewGroup={() => setIsNewGroupOpen(true)}
+                                    onSendBotTurn={async (bot, prompt) =>
+                                        (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
+                                    onAnalyze={prompt => { void handleSendMessage(prompt); }}
+                                    renderGroup={g => renderGroupSurface(g.id)}
+                                    coachCount={coachCount}
+                                    workingBotId={workingBotId ?? dmWorkingBotId}
+                                    lastOpenedMap={threadOpenedMap}
+                                    attentionMap={attentionMap}
+                                    botRoutines={botRoutinesMap}
+                                    onRunRoutine={runRoutineFromRail}
+                                    onDeleteBot={deleteBot}
+                                    onDeleteGroup={deleteGroup}
+                                    onEditGroup={groupId => {
+                                        const target = groups.find(g => g.id === groupId);
+                                        if (!target) return;
+                                        setGroupEditTarget(target);
+                                        setIsNewGroupOpen(true);
+                                    }}
+                                    modelLabel={formatModelDisplayName(selectedChatModel)}
+                                    onOpenModels={() => setIsSettingsMenuVisible(true)}
+                                    onOpenInDock={() => {
+                                        if (activeThread.kind === 'bot') openBotInTrade(activeThread.botId);
+                                        else if (activeThread.kind === 'group') openGroupInTrade(activeThread.groupId);
+                                        else openCoachInTrade();
+                                    }}
+                                />
+                            </React.Suspense>
                         )}
                     </main>
 
