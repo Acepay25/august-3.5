@@ -61,7 +61,7 @@ import { initMemoryFiles, getMemoryFiles, createMemoryFile } from '../services/l
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { getRecentMemoryInjections } from '../services/learning/MemoryInjectionService';
 import { shouldSkillHoldout } from '../utils/skillHoldout';
-import { buildBotSharedMemoryContext, recordBotTurnOutcome, mineBotTurnQuery } from '../services/agents/botLearning';
+import { buildBotSharedMemoryContext, recordBotTurnOutcome, mineBotTurnQuery, botOriginForMessage } from '../services/agents/botLearning';
 import { assemblePipelineMemoryContext } from '../hooks/analysisPipeline/memoryContext';
 import { listSkillDrafts } from '../utils/skillDrafts';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
@@ -277,5 +277,59 @@ tradeIds: a,b,c
     it('mineBotTurnQuery extracts the setup the same way the pipeline does', () => {
         expect(mineBotTurnQuery('BTC long here?')).toMatchObject({ coin: 'BTC', direction: 'Long' });
         expect(mineBotTurnQuery('thoughts on the market')).toMatchObject({ direction: 'Neutral' });
+        // The fork used to stop at coin+direction, so a bot asking about a
+        // fakeout retrieved on a weaker query than the analyst seat beside it.
+        expect(mineBotTurnQuery('BTC fakeout short here'))
+            .toMatchObject({ coin: 'BTC', direction: 'Short', family: 'Family A', pattern: 'Family A' });
+    });
+
+    it('the bot turn records what the budget REALLY injected, under its own run id', async () => {
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, 'btc-sweep-reclaim.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+wins: 3
+losses: 1
+ifCondition: BTC short into a reclaimed sweep on the 15m
+thenAction: skip the short
+tradeIds: a,b,c,d,e
+originBotId: bot-1
+originBotName: Macro
+---
+
+# Avoid BTC short after a reclaimed sweep
+
+**When:** BTC short into a reclaimed sweep
+**What I do:** skip.
+`, USER, true);
+
+        const ctx = buildBotSharedMemoryContext('BTC fakeout short here', {
+            botId: 'bot-1', memoryScope: 'global', runId: RUN,
+        });
+        expect(ctx).toContain('btc-sweep-reclaim');
+        // WS-3.3: the block says WHO taught it, so a bot's rule does not
+        // arrive at the next reader looking like an anonymous house rule.
+        expect(ctx).toContain('from @Macro');
+
+        // The recorder is fire-and-forget behind two dynamic imports, so give
+        // it a tick — the same way the turn itself never waits on telemetry.
+        await vi.waitFor(async () => {
+            const recs = await getRecentMemoryInjections(USER);
+            expect(recs.find(r => r.runId === RUN)?.sources.some(s => s.path.includes('btc-sweep-reclaim'))).toBe(true);
+        });
+    });
+
+    it('a one-pair reply resolves to that bot as the trade author; a verdict does not', () => {
+        localStorage.setItem(`agents_bots_v1_${USER}`, JSON.stringify([
+            { id: 'bot-1', name: 'Macro', providerId: 'prov-e2e', modelId: 'm-1' },
+        ]));
+        expect(botOriginForMessage({ 'prov-e2e': 'm-1' })).toEqual({ botId: 'bot-1', botName: 'Macro' });
+        // An ensemble verdict answers with several providers at once — there is
+        // no single authoring bot, so it must stay on the chart-AI path.
+        expect(botOriginForMessage({ 'prov-e2e': 'm-1', other: 'm-2' })).toBeNull();
+        expect(botOriginForMessage(undefined)).toBeNull();
+        expect(botOriginForMessage({ nobody: 'not-a-model' })).toBeNull();
     });
 });

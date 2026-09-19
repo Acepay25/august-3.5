@@ -37,7 +37,8 @@ import {
     runBotRoutineTurn,
 } from '../services/agents/botRoutine';
 import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
-import { buildBotSharedMemoryContext } from '../services/agents/botLearning';
+import { buildBotSharedMemoryContext, recordBotTurnOutcome } from '../services/agents/botLearning';
+import type { LoggedTrade } from '../types';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
@@ -91,6 +92,11 @@ export interface UseAutomationsParams {
      * skip (never a silent no-show).
      */
     bots?: AgentBot[] | (() => AgentBot[]);
+    /** Live journal snapshot for the bot's write-back (WS-3.2): a scheduled
+     *  turn folds the closed trades its bot authored through the same draft
+     *  chain a DM turn runs. Optional — absent, the routine still runs and
+     *  still reads the shared notebook. */
+    trades?: () => LoggedTrade[];
     /** Live message array ref — the bot turn's history is its own thread. */
     messagesRef?: React.MutableRefObject<Message[]>;
     /** Deliver the reply's [[dm:@…]] markers (useBotMailbox.dispatchFromBotReply shape). */
@@ -182,6 +188,8 @@ export function useAutomations(params: UseAutomationsParams) {
     messagesRefRef.current = params.messagesRef;
     const dmsRef = useRef<((envelopes: DMEnvelope[]) => void) | undefined>(params.onBotRoutineDMs);
     dmsRef.current = params.onBotRoutineDMs;
+    const tradesRef = useRef<(() => LoggedTrade[]) | undefined>(params.trades);
+    tradesRef.current = params.trades;
     const botsNow = (): AgentBot[] => {
         const src = botsSourceRef.current;
         return typeof src === 'function' ? src() : (src ?? []);
@@ -285,8 +293,14 @@ export function useAutomations(params: UseAutomationsParams) {
                 notes: readBotMemoryMarkdown(config.botId!),
                 stream: (provider, p, history, system) => streamQuickResponse(provider, p, history, system),
                 // WS-3: a scheduled bot reads the shared notebook too — same
-                // budgeted retrieval slice a DM turn gets.
-                sharedMemory: (p, bot) => buildBotSharedMemoryContext(p, { botId: bot.id, memoryScope: 'global' }),
+                // budgeted retrieval slice a DM turn gets, same scope contract,
+                // recorded under this run's reply id so a trade logged from it
+                // credits what the bot was actually shown.
+                sharedMemory: (p, bot) => buildBotSharedMemoryContext(p, {
+                    botId: bot.id,
+                    memoryScope: bot.memoryScope ?? 'global',
+                    runId: `botrun-${runId}`,
+                }),
             });
             if (outcome.status === 'skipped') {
                 appendRun(config.id, {
@@ -296,11 +310,27 @@ export function useAutomations(params: UseAutomationsParams) {
                 toast.warning(isCatchUp ? 'Routine skipped (catch-up)' : 'Routine skipped',
                     `"${config.name}" — ${outcome.skipReason}`);
             } else {
-                const row = botRoutineMessageRow(outcome.bot, outcome.reply, `botrun-${runId}`);
+                const replyId = `botrun-${runId}`;
+                const row = botRoutineMessageRow(outcome.bot, outcome.reply, replyId, {
+                    runId: replyId,
+                    startedAt,
+                    durationMs: Date.now() - new Date(startedAt).getTime(),
+                });
                 messagesSource.current = [...messagesSource.current, row];
                 appendMessageRef.current?.(row);
                 if (outcome.dmEnvelopes.length > 0) deliverDMs(outcome.dmEnvelopes);
                 appendRun(config.id, botRoutineRunRow(config, prompt, runId, startedAt, row));
+                // WS-3.2: a scheduled turn teaches the bot too — lesson into its
+                // own memory.md and its closed trades through the same draft
+                // chain a DM turn runs. Fire-and-forget: a learning failure
+                // never marks a delivered run as failed.
+                const runUser = usernameRef.current;
+                if (runUser) {
+                    void recordBotTurnOutcome(outcome.bot, prompt, outcome.reply, {
+                        username: runUser,
+                        trades: tradesRef.current?.() ?? [],
+                    }).catch(err => console.warn('[Automations] bot turn learning failed:', err));
+                }
                 toast.success(isCatchUp ? 'Routine caught up' : 'Routine complete',
                     `"${config.name}" — ${outcome.bot.name} replied.`);
             }

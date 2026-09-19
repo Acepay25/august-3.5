@@ -154,16 +154,15 @@ export const useBotMailbox = ({
         }
         const replyId = `dmr-${Date.now()}-${bot.id}`;
         // WS-3: the bot reads the shared notebook too — a budgeted retrieval
-        // slice keyed on the prompt's setup, attributed under this turn's id
-        // so a trade that follows the bot's call credits what it was shown.
-        // AgentBot carries no memoryScope (that's the legacy HermesBot field —
-        // BotMemoryService already defaults AgentBot bots to 'global'), so the
-        // shared notebook slice always applies here.
-        const memoryScope: 'global' | 'isolated' = 'global';
+        // slice keyed on the prompt's setup, recorded under this turn's id so a
+        // trade that follows the bot's call credits what it was ACTUALLY shown.
+        // The scope comes off the bot now: an isolated bot gets no shared slice
+        // at all (it did not used to, either — the field did not exist).
+        const memoryScope = bot.memoryScope ?? 'global';
         let sharedMemory = '';
         if (username) {
-            sharedMemory = buildBotSharedMemoryContext(prompt, { botId: bot.id, memoryScope });
-            recordBotTurnInjection({ botId: bot.id, username, runId: replyId, prompt, memoryScope });
+            sharedMemory = buildBotSharedMemoryContext(prompt, { botId: bot.id, memoryScope, runId: replyId });
+            recordBotTurnInjection({ botId: bot.id, username, runId: replyId });
         }
         const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current })
             + (sharedMemory ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${sharedMemory}` : '')
@@ -193,6 +192,7 @@ export const useBotMailbox = ({
             isStreaming: true,
         });
         try {
+            const replyStartedAt = Date.now();
             const raw = await streamQuickResponse(
                 { ...provider, selectedModel: bot.modelId },
                 prompt,
@@ -202,7 +202,20 @@ export const useBotMailbox = ({
             // The bubble must carry the reply (markers included for now —
             // dispatch strips them when present). Without this the DM
             // answer renders as an empty row.
-            patchMessage(replyId, { text: raw, isStreaming: false });
+            // runStats.runId is what makes the attribution above usable: a
+            // trade logged from this reply carries sourceRunId = replyId, so
+            // applySkillEvidence can credit the skills the bot was actually
+            // shown. Before this, no bot reply joined to any injection record.
+            patchMessage(replyId, {
+                text: raw,
+                isStreaming: false,
+                runStats: {
+                    runId: replyId,
+                    startedAt: new Date(replyStartedAt).toISOString(),
+                    finishedAt: new Date().toISOString(),
+                    durationMs: Date.now() - replyStartedAt,
+                },
+            });
             // Chain depth: a DM-triggered turn's own DMs are one hop deeper
             // than the envelope that woke it.
             const nextHop = opts.triggeredBy ? opts.triggeredBy.envelope.hop + 1 : 0;

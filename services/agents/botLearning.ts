@@ -22,7 +22,7 @@
  */
 
 import type { LoggedTrade } from '../../types';
-import { getMemoryFilesContext, listRetrievedMemorySources, type MemoryRetrievalQuery } from '../learning/MemoryRetrievalService';
+import { getMemoryFilesContext, type MemoryRetrievalQuery } from '../learning/MemoryRetrievalService';
 import { recordMemoryInjection } from '../learning/MemoryInjectionService';
 import { readBotMemoryMarkdown, botMemoryFolderName, getBotMemoryContext } from '../bots/BotMemoryService';
 import {
@@ -42,7 +42,8 @@ import { isProviderReady } from '../../utils/providerUtils';
 import { TradeOutcome } from '../../types/enums';
 import type { ProviderConfig } from '../../types/provider';
 import { getBots } from './agentRoster';
-import { COMMON_WORDS } from '../../constants/commonWords';
+import { mineCoinFromPrompt, mineDirectionFromPrompt, minePatternFromPrompt } from '../../utils/patternMining';
+import type { BotMemoryScope } from '../../types/bot';
 
 /** Bots get the smallest honest slice — their persona/notes already ride the
  *  system prompt; the shared slice is evidence, not a second personality. */
@@ -53,15 +54,17 @@ const BOT_LESSON_MAX_CHARS = 280;
 const BOT_LESSON_MIN_CHARS = 20;
 const BOT_MEMORY_FILE_MAX_CHARS = 4000;
 
-/** Mine the setup query from a bot turn's prompt — the same coin/direction
- *  discipline as hooks/analysisPipeline/memoryContext.ts, kept local so the
- *  agents layer never imports a hook. */
+/** Mine the setup query from a bot turn's prompt. The SAME mining the analyst
+ *  seats use (utils/patternMining), so a bot asking about a "BTC fakeout"
+ *  retrieves the Family-A skills an analyst would see — when this was forked
+ *  locally the bots matched a strictly weaker query than the humans' debate. */
 export const mineBotTurnQuery = (prompt: string): MemoryRetrievalQuery => {
-    const coinRaw = prompt.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
-    const lower = prompt.toLowerCase();
+    const pattern = minePatternFromPrompt(prompt);
     return {
-        coin: coinRaw && !COMMON_WORDS.includes(coinRaw) ? coinRaw : undefined,
-        direction: lower.includes('long') ? 'Long' : lower.includes('short') ? 'Short' : 'Neutral',
+        coin: mineCoinFromPrompt(prompt),
+        direction: mineDirectionFromPrompt(prompt),
+        family: pattern,
+        pattern,
     };
 };
 
@@ -71,15 +74,25 @@ export const mineBotTurnQuery = (prompt: string): MemoryRetrievalQuery => {
  */
 export const buildBotSharedMemoryContext = (
     prompt: string,
-    opts: { botId: string; memoryScope: 'global' | 'isolated' },
+    opts: { botId: string; memoryScope?: BotMemoryScope; runId?: string },
 ): string => {
-    if (opts.memoryScope === 'isolated') return '';
+    // WS-3.1's scope contract: only a 'global' bot reads the shared book. An
+    // 'isolated' bot keeps its own notes out of it and it out of them;
+    // 'personal' has no separate store to read, so it behaves as isolated here.
+    if (opts.memoryScope && opts.memoryScope !== 'global') return '';
     try {
-        // No runId: the ε-holdout exists for debate runs that produce trades;
-        // withholding skills from a bot's chat turn would grow no control
-        // group (bot turns rarely log trades) — attribution rides
-        // recordBotTurnInjection instead.
-        const ctx = getMemoryFilesContext(mineBotTurnQuery(prompt), undefined, 'analyst', 'opening');
+        // recordInjections under THIS turn's id is what makes attribution real:
+        // the retrieval records only the files that survived the budget, and a
+        // trade logged from the reply joins back on the same id via
+        // message.runStats.runId. Forking the source list afterwards logged
+        // files the budget had already dropped.
+        const ctx = getMemoryFilesContext(
+            mineBotTurnQuery(prompt),
+            undefined,
+            'analyst',
+            'opening',
+            { runId: opts.runId, recordInjections: true },
+        );
         if (!ctx.trim()) return '';
         return ctx.length > BOT_SHARED_MEMORY_CAP ? `${ctx.slice(0, BOT_SHARED_MEMORY_CAP).trimEnd()}\n…` : ctx;
     } catch {
@@ -87,26 +100,40 @@ export const buildBotSharedMemoryContext = (
     }
 };
 
-/** Attribution record for the bot's turn: which memory sources (plus the
- *  bot's own notes) shaped the reply. Fire-and-forget. */
+/** Attribution for the half the notebook pass cannot see: the bot's OWN
+ *  memory.md, which rides the system prompt rather than coming out of
+ *  retrieval. Shared-book sources are recorded by getMemoryFilesContext itself
+ *  under the same runId — see buildBotSharedMemoryContext. */
 export const recordBotTurnInjection = (
-    opts: { botId: string; username: string; runId: string; prompt: string; memoryScope: 'global' | 'isolated' },
+    opts: { botId: string; username: string; runId: string },
 ): void => {
     try {
-        const sources: Array<{ path: string; kind: string }> = [];
-        if (readBotMemoryMarkdown(opts.botId)) sources.push({ path: `${botMemoryFolderName(opts.botId)}/memory.md`, kind: 'bot' });
-        if (opts.memoryScope !== 'isolated') {
-            for (const s of listRetrievedMemorySources(mineBotTurnQuery(opts.prompt), undefined, 'analyst')) {
-                sources.push({ path: s.path, kind: s.kind });
-            }
-        }
+        if (!readBotMemoryMarkdown(opts.botId)) return;
         void recordMemoryInjection(opts.username, {
             stage: 'opening',
             audience: `bot:${opts.botId}`,
             runId: opts.runId,
-            sources,
+            sources: [{ path: `${botMemoryFolderName(opts.botId)}/memory.md`, kind: 'bot' }],
         });
     } catch { /* telemetry must never break a turn */ }
+};
+
+/** Which agent bot, if any, answered a message — the join the trade logger
+ *  needs to credit a bot-authored trade (WS-3.2/3.3). A chart-AI verdict
+ *  carries one modelUsed pair per provider; a bot DM or routine run carries
+ *  exactly one pair, and that pair IS the bot's identity — the same rule
+ *  threadForProvider uses to thread the reply into the bot's own conversation.
+ *  Returns null when the pair is absent, ambiguous, or matches no roster bot,
+ *  which is the chart-AI path: no single authoring bot exists there.
+ */
+export const botOriginForMessage = (
+    modelsUsed?: Record<string, string>,
+): { botId: string; botName?: string } | null => {
+    const pairs = Object.entries(modelsUsed ?? {});
+    if (pairs.length !== 1) return null;
+    const [providerId, modelId] = pairs[0];
+    const bot = getBots().find(b => b.providerId === providerId && b.modelId === modelId);
+    return bot ? { botId: bot.id, botName: bot.name } : null;
 };
 
 /**
