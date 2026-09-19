@@ -573,10 +573,20 @@ held. Each entry: what was claimed, what the code actually did.
 
 ## Still open after the audit
 
-- **Agents composer has no attach-image `+`.** The dock's attachment pipeline is
-  interleaved with `composerRef`/`fileInputRef` and two open menus inside
-  TradeChatPanel's composer card; extracting it is a ref-forwarding redesign, not
-  the pure split WS-5.2 allows. Deferred with the reason rather than done badly.
+- **Attach-image in the Agents composer — closed.** The dock's reader was lifted
+  out of `TradeChatPanel` into `hooks/useChatAttachments` and both composers use
+  it; the paperclip is enabled in Analyze mode only, because a bot DM turn has
+  no image transport and offering it there would drop the file silently.
+- **WS-5.4 motion — closed.** Nine literal copies of `--ease-snappy` now
+  reference the token, and 36 out-of-range durations came into 0.12–0.18s.
+  Left alone deliberately: data-bar and progress fills and LiveMarket's 300ms
+  price tick (three of which are strings assigned from the WebSocket handler and
+  must stay byte-identical to the JSX default), and every keyframe. Two drawers
+  (VisionDataViewer, StrategySearch) carried a bare `cubic-bezier(…)` inside
+  `className` — never a utility, so they had been sliding on the default ease
+  while looking tuned; both reference the token now. `LiveStreamView`'s card used
+  `transition-all` while its text grows a chunk at a time, the exact layout
+  shift this section forbids; it is colour-scoped now.
 - **No right-click context menu** on rail rows: pin, rename, routines and delete
   are hover icons, which is what the rail this surface replaced always did.
 - **Density.** `ModelPerformanceDashboard`'s model cards and the stat tiles in
@@ -587,12 +597,18 @@ held. Each entry: what was claimed, what the code actually did.
 - **Unverified:** a live run against a configured provider — the only claim in
   this plan that jsdom cannot settle.
 
-## Status (2026-09-19)
+## Status (2026-09-20, post-audit)
 
-All seven workstreams are implemented and verified end to end
-(`typecheck` + 3340 tests + `build` + `lint` clean as of 2026-09-20, new
-surfaces checked in a browser). What remains is listed under "Still open" with
-the reason for each.
+All seven workstreams are implemented. `typecheck` clean, **3384 tests** green
+(361 files), `lint` 0 errors, `build` clean. The Learn surface, the Agents rail
+(collapse, sort, Chart AI row, rooms pinning, composer attach), the graveyard
+view and the skills table were checked in a real browser; the skills TABLE itself
+is covered by the Strategy Studio suites, not by eye, because the profile loaded
+in that browser session had no playbooks to row.
+
+What is left is listed under "Still open after the audit" and
+"Still open", each with its reason. The only claim this plan cannot settle in
+jsdom is the live provider run.
 
 Five defects the loop test exposed, all fixed:
 1. **Cold-start deadlock** — an approved skill could never earn evidence
