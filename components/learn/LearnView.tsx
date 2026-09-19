@@ -32,6 +32,7 @@ const StrategyStudio = lazy(() => import('../dashboards/StrategyStudio'));
 const MemoryFilesManager = lazy(() => import('../settings/MemoryFilesManager'));
 const HarnessLessonsBrowser = lazy(() =>
     import('../settings/HarnessLessonsBrowser').then(m => ({ default: m.HarnessLessonsBrowser })));
+const LearningDashboard = lazy(() => import('../dashboards/LearningDashboard'));
 
 type LearnTab = 'queue' | 'skills' | 'memory' | 'health';
 
@@ -129,6 +130,14 @@ const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = 
                 {tab === 'health' && (
                     <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-3">
                         <MemoryHealthCard username={username} />
+                        {/* WS-5.1: this is the learning analytics that used to
+                            live on a SECOND surface also called "Learn", tucked
+                            into the Journal. One surface now. */}
+                        <div data-testid="learn-signals">
+                            <Suspense fallback={<Fallback />}>
+                                <LearningDashboard trades={trades} username={username} />
+                            </Suspense>
+                        </div>
                         <Suspense fallback={<Fallback />}>
                             <HarnessLessonsBrowser />
                         </Suspense>

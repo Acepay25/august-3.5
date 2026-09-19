@@ -3,12 +3,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import TradeLogContent from './TradeLog';
 import WinRateDashboard from '../dashboards/WinRateDashboard';
 import EquityCurveDashboard from '../dashboards/EquityCurveDashboard';
-import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, SparklesIcon, BotIcon } from '../shared/Icons';
+import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, BotIcon } from '../shared/Icons';
 import { FileSpreadsheet, FileText } from 'lucide-react';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
@@ -103,7 +102,6 @@ const resolveTab = (tab: TabId): TabId => (tab === 'performance' ? 'log' : tab);
 const TABS: TabConfig[] = [
     { id: 'log', label: 'History', shortLabel: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'learning', label: 'Learning', shortLabel: 'Learn', icon: <SparklesIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'models', label: 'Models', shortLabel: 'AI', icon: <BotIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
 ];
@@ -268,10 +266,6 @@ const JournalInner: React.FC<JournalProps> = ({
                     <EquityCurveDashboard trades={trades} />
                     <WinRateDashboard trades={trades} />
                 </div>
-            </div>
-        ) : activeTab === 'learning' ? (
-            <div className="h-full overflow-y-auto">
-                <LearningDashboard trades={trades} username={activeUsername} />
             </div>
         ) : activeTab === 'models' ? (
             <div className="p-8 sm:p-8">
