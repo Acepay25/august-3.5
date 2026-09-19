@@ -2353,7 +2353,12 @@ export const applyDemoteProposal = async (
 export const syncClosedTradeToNotebook = async (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
-    username: string
+    username: string,
+    /** ── WS-3.2 ── which agent bot's learning produced this trade. The worth
+     *  gate reads the authoring bot's own memory as context for its judgement,
+     *  so a skill earned by one bot is not judged against another bot's notes.
+     *  Omitted on the chart-AI path, which has no single authoring bot. */
+    origin?: { botId: string; botName?: string },
 ): Promise<void> => {
     await appendDiaryEntry(trade, username);
     await syncRecurringMistakes(allTrades, username);
@@ -2394,14 +2399,19 @@ export const syncClosedTradeToNotebook = async (
                 const config = await resolveMemoryConfig(username);
                 if (config) {
                     const { getBotMemoryContext } = await import('../bots/BotMemoryService');
-                    const firstBotId = (() => {
+                    // The ACTING bot's memory when a bot authored this trade.
+                    // The bots[0] fallback below is a guess and only stands for
+                    // the chart-AI path, where no single bot owns the trade —
+                    // reading the first roster entry's notes for a skill that
+                    // another bot earned judged it against the wrong teammate.
+                    const ctxBotId = origin?.botId || (() => {
                         try {
                             const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${username}`) : null;
                             const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string }> } : null;
                             return data?.bots?.[0]?.id || trade.id;
                         } catch { return trade.id; }
                     })();
-                    const botCtx = getBotMemoryContext(firstBotId, setup, 'global');
+                    const botCtx = getBotMemoryContext(ctxBotId, setup, 'global');
                     const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
                     if (decision) {
                         const judgedClause = {

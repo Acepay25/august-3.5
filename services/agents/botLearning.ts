@@ -178,7 +178,7 @@ export const recordBotTurnOutcome = async (
             // turn re-fold it.
             seen.add(trade.id);
             foldedTrades.set(bot.id, seen);
-            await syncClosedTradeToNotebook(trade, opts.trades, opts.username);
+            await syncClosedTradeToNotebook(trade, opts.trades, opts.username, { botId: bot.id, botName: bot.name });
         }
         for (const { file } of listSkills()) {
             if (!before.has(file.id)) await stampSkillOrigin(file.id, bot, opts.username);

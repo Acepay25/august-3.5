@@ -69,13 +69,20 @@ beforeEach(async () => {
 });
 
 describe('recordBotTurnOutcome', () => {
-    it('folds each closed bot trade once, not on every turn', async () => {
+    it('folds each closed bot trade once, and names the acting bot to the worth gate', async () => {
         const trades = [botTrade('bt-1'), botTrade('bt-2')];
         await turn(trades);
         await turn(trades);
         await turn(trades);
         expect(syncSpy).toHaveBeenCalledTimes(2); // two trades, each folded once
         expect(syncSpy.mock.calls.map(c => (c[0] as LoggedTrade).id).sort()).toEqual(['bt-1', 'bt-2']);
+        // WS-3.2: the gate must judge a bot's skill against THAT bot's memory.
+        // Before this, syncClosedTradeToNotebook read bots[0] off the roster,
+        // so a skill earned by the third teammate was judged against the first
+        // one's notes.
+        for (const call of syncSpy.mock.calls) {
+            expect(call[3]).toMatchObject({ botId: BOT.id, botName: BOT.name });
+        }
     });
 
     it('ignores trades the bot did not author', async () => {
