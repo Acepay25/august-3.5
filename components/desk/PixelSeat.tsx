@@ -140,10 +140,15 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
     const avatarW = PIXEL_GRID_W * cellW;
     const avatarH = PIXEL_GRID_H * cellH;
     const isLive = live || speaking || thinking;
+    // Status pip = UI chrome, so it uses the theme's semantic families: amber
+    // while speaking, cyan while thinking (the same "info/working" hue the
+    // monitor overlay in index.css flicks to), emerald when live, zinc when
+    // idle. The avatar itself is exempt — its colors are the hand-authored
+    // sprite palette in pixelAvatars.ts, keyed per pixel, not UI chrome.
     const pipColor = speaking
         ? 'bg-amber-400'
         : thinking
-            ? 'bg-sky-400'
+            ? 'bg-cyan-400'
             : live
                 ? 'bg-emerald-400'
                 : 'bg-zinc-600';

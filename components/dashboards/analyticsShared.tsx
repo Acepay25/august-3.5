@@ -74,7 +74,10 @@ export const SectionCard: React.FC<{
     status?: 'active' | 'calculating' | 'waiting' | 'warning' | 'success';
     statusLabel?: string;
     children: React.ReactNode;
-    accentColor?: 'cyan' | 'amber' | 'red' | 'emerald' | 'purple';
+    /** Restricted to the semantic ramp (see docs/ui-doctrine.md): the retired
+     *  `purple` accent was decorative; a frame that names no state now asks for
+     *  `neutral` instead of borrowing a warning or a verdict color. */
+    accentColor?: 'cyan' | 'amber' | 'red' | 'emerald' | 'neutral';
     action?: React.ReactNode;
 }> = ({ title, subtitle, icon, status, statusLabel, children, accentColor = 'cyan', action }) => {
     const accentStyles = {
@@ -82,7 +85,7 @@ export const SectionCard: React.FC<{
         amber: 'from-amber-500/10 to-transparent border-amber-500/20 hover:border-amber-500/40',
         red: 'from-rose-500/10 to-transparent border-rose-500/20 hover:border-rose-500/40',
         emerald: 'from-emerald-500/10 to-transparent border-emerald-500/20 hover:border-emerald-500/40',
-        purple: 'from-purple-500/10 to-transparent border-purple-500/20 hover:border-purple-500/40',
+        neutral: 'from-zinc-500/[0.07] to-transparent border-zinc-700/50 hover:border-zinc-600',
     };
 
     const iconBgStyles = {
@@ -90,7 +93,7 @@ export const SectionCard: React.FC<{
         amber: 'bg-amber-500/10 text-amber-400',
         red: 'bg-rose-500/10 text-rose-400',
         emerald: 'bg-emerald-500/10 text-emerald-400',
-        purple: 'bg-purple-500/10 text-purple-400',
+        neutral: 'bg-zinc-800 text-zinc-400',
     };
 
     const statusStyles = {
@@ -102,10 +105,10 @@ export const SectionCard: React.FC<{
     };
 
     return (
-        <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border transition-all duration-[150ms]`}>
+        <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border transition-colors duration-[150ms] ease-[var(--ease-snappy)]`}>
             {/* Header */}
             <div className="flex items-center gap-3 p-4 pb-3">
-                <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-base transition-transform duration-[150ms] group-hover:scale-110`}>
+                <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-base transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-hover:scale-110`}>
                     {icon}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -171,11 +174,11 @@ export const ProgressBar: React.FC<{
     return (
         <div className="relative h-2 rounded-full overflow-hidden bg-zinc-800">
             <div
-                className={`absolute left-0 top-0 h-full bg-gradient-to-r ${successColor} transition-all duration-700 ease-out`}
+                className={`absolute left-0 top-0 h-full bg-gradient-to-r ${successColor} transition-[width] duration-[150ms] ease-[var(--ease-snappy)]`}
                 style={{ width: `${value}%` }}
             />
             <div
-                className={`absolute right-0 top-0 h-full bg-gradient-to-r ${dangerColor} transition-all duration-700 ease-out`}
+                className={`absolute right-0 top-0 h-full bg-gradient-to-r ${dangerColor} transition-[width] duration-[150ms] ease-[var(--ease-snappy)]`}
                 style={{ width: `${100 - value}%` }}
             />
         </div>

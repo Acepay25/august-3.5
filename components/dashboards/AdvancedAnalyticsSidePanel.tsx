@@ -130,14 +130,14 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                 aria-label="Advanced analytics"
                 aria-hidden={!isOpen}
                 inert={!isOpen}
-                className={` fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-all duration-[150ms] ease-out z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
+                className={` fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
                     } ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
             >
                 {/* Glassmorphic Background */}
                 <div className="absolute inset-0 bg-zinc-900 border-l border-white/[0.08]" />
 
                 {/* Subtle gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-purple-500/[0.02] via-transparent to-cyan-500/[0.02]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-zinc-500/[0.03] via-transparent to-zinc-500/[0.02]" />
 
                 {/* Content Container */}
                 <div className="relative h-full flex flex-col">
@@ -145,7 +145,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                     <div className="flex-shrink-0 p-5 pb-4 border-b border-white/[0.06]">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-zinc-800 flex items-center justify-center">
                                     <BarChart2 className="h-5 w-5 text-cyan-400" />
                                 </div>
                                 <div>
@@ -184,7 +184,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                             <button
                                                 onClick={() => togglePromptView(index)}
                                                 aria-expanded={item.showPrompt}
-                                                className="w-full p-3 flex items-center justify-between hover:bg-rose-500/10 transition-all duration-[150ms]"
+                                                className="w-full p-3 flex items-center justify-between hover:bg-rose-500/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                             >
                                                 <div className="flex items-center gap-2.5">
                                                     <span className="text-[11px] font-bold text-white bg-rose-500/30 px-2 py-0.5 rounded-lg">

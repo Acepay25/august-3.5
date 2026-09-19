@@ -797,7 +797,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                     <span className="font-mono text-[11px] tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
                                 </span>
                                 <span className="mt-1 block h-[3px] overflow-hidden rounded-full bg-zinc-800" aria-hidden="true" data-testid="funding-bar">
-                                    <span className={`block h-full rounded-full transition-all duration-300 ${soon ? 'animate-pulse bg-amber-400 shadow-[0_0_6px_rgba(240,136,0,0.5)]' : 'bg-cyan-400/80'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
+                                    {/* duration-300 is deliberate: the bar's width is a data value
+                                        (funding countdown), not chrome. ui-doctrine motion exception. */}
+                                    <span className={`block h-full rounded-full transition-[width,background-color] duration-300 ease-[var(--ease-snappy)] ${soon ? 'animate-pulse bg-amber-400 shadow-[0_0_6px_rgba(240,136,0,0.5)]' : 'bg-cyan-400/80'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
                                 </span>
                             </>
                         );

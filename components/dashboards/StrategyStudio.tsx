@@ -102,7 +102,7 @@ const fmtDay = (iso: string | undefined): string => {
 /** Shared cell chrome: one line of data, hairline-separated, no card inside. */
 const TH = 'whitespace-nowrap px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-zinc-600';
 const TD = 'whitespace-nowrap px-3 py-2 align-middle';
-const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-1.5 py-1 text-[11px] transition-colors duration-[120ms] hover:bg-white/[0.06] focus:outline-none';
+const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-1.5 py-1 text-[11px] transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] focus:outline-none';
 
 /** How full a heatmap cell is: hue from the edge, alpha from the edge AND the
  *  evidence weight, so a 9-trade 78% stays visibly fainter than a 60-trade
@@ -537,7 +537,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                                 if (e.key === 'Enter' && e.target === e.currentTarget) setSelectedId(s.fileId);
                                             }}
                                             tabIndex={0}
-                                            className={`cursor-pointer border-b border-zinc-800/80 transition-[background-color,opacity] duration-[120ms] last:border-b-0 hover:bg-white/[0.04] focus:outline-none focus-visible:bg-white/[0.06] ${retired ? 'opacity-60 hover:opacity-100' : ''}`}
+                                            className={`cursor-pointer border-b border-zinc-800/80 transition-[background-color,opacity] duration-[120ms] ease-[var(--ease-snappy)] last:border-b-0 hover:bg-white/[0.04] focus:outline-none focus-visible:bg-white/[0.06] ${retired ? 'opacity-60 hover:opacity-100' : ''}`}
                                         >
                                             {/* Name + the claim it makes. */}
                                             <td className={`${TD} max-w-[260px]`}>

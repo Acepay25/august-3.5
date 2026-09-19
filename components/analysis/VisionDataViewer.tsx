@@ -13,7 +13,7 @@ const VisionDataViewer: React.FC<VisionDataViewerProps> = ({ isVisible, onClose,
 
   return (
     <>
-      <div className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-[150ms] ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}></div>
+      <div className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-[150ms] ease-[var(--ease-snappy)] ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}></div>
       <aside className={`fixed top-0 right-0 h-full w-full sm:max-w-xl bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
         <header className="flex items-center justify-between p-5 border-b border-white/5 bg-zinc-800">
           <div className="flex items-center gap-3 text-cyan-400">

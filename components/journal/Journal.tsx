@@ -364,7 +364,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             <ExportTray trades={trades} />
                             <button
                                 onClick={onClose}
-                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"
+                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                 aria-label="Close journal"
                             >
                                 <CloseIcon />
@@ -386,7 +386,7 @@ const JournalInner: React.FC<JournalProps> = ({
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl transition-all min-w-[56px] ${isActive
+                                    className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl transition-[background-color,box-shadow] duration-[150ms] ease-[var(--ease-snappy)] min-w-[56px] ${isActive
                                         ? 'bg-zinc-800 ring-1 ring-zinc-600'
                                         : 'hover:bg-zinc-900'
                                         }`}

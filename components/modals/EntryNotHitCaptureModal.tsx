@@ -77,7 +77,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                     <button
                         onClick={onAutoCapture}
                         disabled={isCapturing}
-                        className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
+                        className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
                     >
                         {isCapturing && (
                             <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
@@ -107,7 +107,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                     <button
                         onClick={onUploadScreenshot}
                         disabled={isCapturing}
-                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex items-start gap-4">
                             <div className="text-3xl"></div>
@@ -126,7 +126,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                     <button
                         onClick={onSkip}
                         disabled={isCapturing}
-                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <span className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors">
                             Skip data capture →

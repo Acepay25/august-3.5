@@ -34,7 +34,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
 
     return (
         <div ref={dialogRef} className=" fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
-            <div className="bg-zinc-900 border border-yellow-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+            <div className="bg-zinc-900 border border-yellow-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-colors duration-[150ms] ease-[var(--ease-snappy)] scale-100 max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}
                 <div className="bg-yellow-500/10 p-5 border-b border-yellow-500/20 flex items-start gap-4">
@@ -97,13 +97,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                         <button
                             onClick={() => onResolve('WIN')}
-                            className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 font-bold transition-all active:scale-95"
+                            className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
                         >
                             Select WIN
                         </button>
                         <button
                             onClick={() => onResolve('LOSS')}
-                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/50 hover:bg-red-500/20 text-red-400 font-bold transition-all active:scale-95"
+                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/50 hover:bg-red-500/20 text-red-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
                         >
                             Select LOSS
                         </button>

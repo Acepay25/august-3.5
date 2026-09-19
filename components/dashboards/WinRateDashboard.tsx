@@ -185,7 +185,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             <button
                                 key={preset.days}
                                 onClick={() => handlePresetClick(preset.days)}
-                                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${!isCustomRange && selectedPreset === preset.days
+                                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-md transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${!isCustomRange && selectedPreset === preset.days
                                     ? 'bg-cyan-500 text-white shadow-md'
                                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
                                     }`}
@@ -472,7 +472,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         return (
                             <div
                                 key={family.family}
-                                className="p-2 sm:p-3 rounded-xl border text-center transition-all"
+                                className="p-2 sm:p-3 rounded-xl border text-center transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                 style={{
                                     borderColor: `${color}30`,
                                     backgroundColor: `${color}10`

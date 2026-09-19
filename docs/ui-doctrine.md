@@ -14,6 +14,10 @@ When a change violates two rules, the theme wins over the component.
 - [ ] Semantic hues come from `index.css @theme` and mean one thing everywhere:
       **emerald** = gain/up, **rose/red** = loss/down, **amber/yellow** =
       warning, **cyan** = info. Never introduce a new hue for a new state.
+      Enforced: `tests/themeContrast.test.ts` scans every file under
+      `components/` for a hue outside that ramp, so a new one fails CI rather
+      than surviving review. An exception needs a reason the file is not UI
+      chrome, added to that test's allowlist.
 - [ ] Exactly **one cyan accent per view**. If you're adding a second cyan,
       something else in that view should stop being cyan.
 - [ ] The brand gradient (`--color-brand-start → mid → end`) is on the wordmark
@@ -64,6 +68,12 @@ ancestor and inflates to fill the surface.
 ## Motion and density
 
 - [ ] Transitions only via `--ease-snappy` at 0.12–0.18s.
+- [ ] No `transition-all` — it animates geometry as well as paint, which is how
+      a disclosure or a growing stream chunk slides the layout. Name the
+      property: `transition-colors`, `transition-transform`,
+      `transition-[width]`. Enforced repo-wide by `tests/themeContrast.test.ts`.
+      A duration longer than 180ms is allowed only where it animates a data
+      value (a progress bar's width, the tick-flash read), and it says so.
 - [ ] No new `@keyframes`. The existing tick-flash and beacon patterns are the
     sanctioned exceptions.
 - [ ] **No layout shift on stream chunks.** Text grows in place; nothing below

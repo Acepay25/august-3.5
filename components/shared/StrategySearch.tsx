@@ -146,12 +146,15 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     }
   };
 
+  // Family frames are CATEGORICAL markers (which family this card is), never a
+  // gain/loss/warning read — the win-rate badge inside each card is the only
+  // semantic color in this list.
   const getFamilyColorClasses = (color: string) => {
       switch(color) {
           case 'red': return 'bg-red-500/10 border-red-500/30 text-red-400';
           case 'emerald': return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
-          case 'blue': return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
-          case 'purple': return 'bg-purple-500/10 border-purple-500/30 text-purple-400';
+          case 'blue': return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
+          case 'purple': return 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300';
           default: return 'bg-zinc-800 border-zinc-600 text-zinc-300';
       }
   };
@@ -194,7 +197,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search..."
-                        className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-4 sm:pl-5 pr-10 sm:pr-12 py-3 sm:py-4 text-sm sm:text-base text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                        className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-4 sm:pl-5 pr-10 sm:pr-12 py-3 sm:py-4 text-sm sm:text-base text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-[border-color,box-shadow] duration-[150ms] ease-[var(--ease-snappy)]"
                     />
                     <button
                         type="submit"
@@ -209,7 +212,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
              <button
                 onClick={handleDiscover}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 font-bold py-3 sm:py-4 px-4 sm:px-5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-base"
+                className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 font-bold py-3 sm:py-4 px-4 sm:px-5 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-base"
              >
                 <BotIcon /> Auto-Discover Strategies
              </button>
@@ -328,7 +331,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                             const isViewing = viewingFramework === framework;
                             
                             return (
-                                <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-all duration-[150ms] ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-800 border-white/5 hover:border-white/10'}`}>
+                                <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-[border-color,box-shadow] duration-[150ms] ease-[var(--ease-snappy)] ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-800 border-white/5 hover:border-white/10'}`}>
                                     <div 
                                         className="p-3 sm:p-5 flex items-center justify-between cursor-pointer"
                                         role="button"

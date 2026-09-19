@@ -426,18 +426,28 @@ Deliberately left, each with the reason:
 - **WS-5.1, second half — closed 2026-09-20** (see below). Settings no longer
   mounts the notebook browser or the amendments inbox; it keeps the switches and
   deep-links into Learn.
-- **WS-5.3, breadth — mostly closed by the 2026-09-20 audit.** The sweep did the
-  parts with signal: 40 dead `.status-surface`/`.analysis-card` tokens across 30
-  files (they matched no CSS rule, and two comments cited them as if they still
-  colored anything), TradeLog's outcome/verdict chips through `StatusPill`,
-  LiveMarket's connection badge (a three-deep nested ternary), the remaining
-  ~14 genuinely hand-rolled status chips across the dashboards, automation, desk
-  and settings surfaces, seven hand-rolled empty states through `EmptyState`,
-  and `tabular-nums` on the numeric readouts that were missing it.
-  Deliberately NOT converted, with the reason: kind chips that need hues the
-  five tones cannot express (sky/violet), one solid-fill badge, and every
-  clickable control wearing semantic color — `StatusPill` renders a span, so
-  converting a button would drop its click.
+- **WS-5.3, breadth — closed.** The 2026-09-20 pass did the parts with signal:
+  40 dead `.status-surface`/`.analysis-card` tokens across 30 files (they matched
+  no CSS rule, and two comments cited them as if they still colored anything),
+  TradeLog's outcome/verdict chips through `StatusPill`, LiveMarket's connection
+  badge (a three-deep nested ternary), ~14 genuinely hand-rolled status chips,
+  seven hand-rolled empty states through `EmptyState`, and `tabular-nums` on the
+  numeric readouts missing it. What it recorded as "deliberately NOT converted —
+  kind chips that need hues the five tones cannot express (sky/violet)" was a gap
+  wearing a reason: WS-5.3 says *every* component under `components/`, and 92
+  class sites in 16 files still carried a hue outside the ramp, plus 62
+  `transition-all` uses and chrome easing off the token. All of it is now done.
+  Where a color was categorical rather than decorative the answer was to stop
+  borrowing a verdict, not to find a spare hue: provider identity in
+  `ThinkingRecordCard` is neutral chrome (every hue that card can reach already
+  means WIN, LOSS, SKIPPED or PENDING), the VWAP legend in `KeyLevelsCard` paints
+  its border from `KEY_LEVEL_COLORS` — the same map the canvas draws from, so a
+  legend cannot drift from the line it names — and `SectionCard` gained a
+  `neutral` accent so a decorative frame no longer has to claim amber.
+  Enforced by two whole-tree guards in `tests/themeContrast.test.ts`: a hue
+  outside the ramp or a `transition-all` fails the suite, with an EMPTY allowlist.
+  Durations are deliberately not pinned — 3 sites animate a data value at 300ms
+  (the tick-flash read, two progress bars) and each carries a comment saying so.
 - **WS-4.1 follow-through — done, with two corrections.** Removed after
   verifying zero callers: `GenericAnalysisService.updateGlobalMemory` (+ its
   private schema), `memoryUtils.prepareTradeSummariesForGlobalMemory`,
@@ -595,9 +605,27 @@ held. Each entry: what was claimed, what the code actually did.
   also gave pinned rooms the two roster actions their hover icons never showed.
   A row with nothing to do (Chart AI) keeps the browser's own menu. Pinned by
   four cases in `tests/agentsSurface.test.tsx`.
-- **Density.** `ModelPerformanceDashboard`'s model cards and the stat tiles in
-  `ProbabilityPanel`/`ScenarioSimulator` are still tiles for tabular data. The
-  skill library is a table now.
+- **Density — the three named tabular surfaces are tables.** WS-5.4 lists "win
+  rates, skills, trade log". Skills is the Strategy Studio table; win rates are
+  now two (`ModelPerformanceDashboard`'s 2/3/4-column card grid became one
+  hairline-divided row per model with a disclosure — Detail · Model · Win rate ·
+  Last 20 · Status — pinned by `tests/modelPerformanceTable.test.tsx`, which
+  exists because nothing had ever rendered that dashboard; and the
+  LearningDashboard harness leaderboard). The trade log is a virtualized
+  one-line-row list with disclosure, which is the shape the rule asks for —
+  react-virtuoso owns the scroll, so making it a `<table>` element would buy
+  markup and lose the windowing. `ProbabilityPanel` and `ScenarioSimulator`
+  deliberately keep their stat tiles: they show one setup's numbers, not a set
+  of records, so "tables over tiles where data is tabular" does not reach them.
+- **Motion is true by construction now.** Tailwind's
+  `--default-transition-timing-function` — the curve every bare `transition-*`
+  utility falls back to — is pointed at `--ease-snappy` in `index.css`. Before
+  this, ~300 elements that named a property but not an ease ran on Tailwind's
+  default Material curve while the ones that spelled out the token ran on
+  Minara's, so the doctrine held only where someone remembered. Verified in a
+  real browser: 30 of 30 bare-transition elements on screen compute to
+  `cubic-bezier(0.2, 0, 0, 1)`; previously all 30 computed to
+  `cubic-bezier(0.4, 0, 0.2, 1)`.
 - **`LearningDashboard` is decomposed.** WS-5.1 said "LearningDashboard (67 KB —
   split into cards)". It now lives in `components/dashboards/learning/` as eleven
   modules: the five sections (Memory Graph, Harness, Notebook, Lessons, Skill
@@ -619,12 +647,20 @@ held. Each entry: what was claimed, what the code actually did.
 
 ## Status (2026-09-20, post-audit)
 
-All seven workstreams are implemented. `typecheck` clean, **3385 tests** green
-(362 files), `lint` 0 errors, `build` clean. The Learn surface, the Agents rail
-(collapse, sort, Chart AI row, rooms pinning, composer attach), the graveyard
-view and the skills table were checked in a real browser; the skills TABLE itself
-is covered by the Strategy Studio suites, not by eye, because the profile loaded
-for that session had no playbooks to row.
+All seven workstreams are implemented, and the two things this plan had hedged
+as "left standing" — the LearningDashboard split and the WS-5.3/5.4 sweep across
+every component — are done. `typecheck` clean, **3393 tests** green (363 files),
+`lint` 0 errors, `build` clean.
+
+Browser-verified on an isolated origin (not the user's, so no configured
+provider could spend anything): the Learn surface, the Agents rail (collapse,
+sort, Chart AI row, rooms pinning, composer attach), the row context menu
+(portalled, cursor-anchored, hit-tests on top, stays inside the 288px drawer,
+destructive item in rose), the graveyard view, the skills table, and the
+transition-curve fix on 30/30 bare-transition elements. NOT verified by eye
+because a keyless profile cannot reach them: `ProbabilityPanel` and the
+`ScenarioSimulator` internals (both need a live analysis), which are covered by
+the class-level guards and their suites rather than by sight.
 
 What is left is listed under "Still open after the audit" and
 "Still open", each with its reason. The only claim this plan cannot settle in

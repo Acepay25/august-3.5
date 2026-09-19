@@ -99,7 +99,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                   </button>
               )}
               <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-xl shadow-black/20 flex items-center justify-center text-zinc-200 transform rotate-3 hover:rotate-0 transition-transform duration-[150ms]">
+                  <div className="w-20 h-20 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-xl shadow-black/20 flex items-center justify-center text-zinc-200 transform rotate-3 hover:rotate-0 transition-transform duration-[150ms] ease-[var(--ease-snappy)]">
                       <BotIcon />
                   </div>
               </div>
@@ -155,7 +155,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                         value={newUsername} 
                         onChange={(e) => { setNewUsername(e.target.value); setFormError(''); }} 
                         placeholder="Create New Workspace" 
-                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
+                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-colors duration-[150ms] ease-[var(--ease-snappy)] font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
                         autoFocus
                         aria-invalid={!!formError}
                         aria-describedby={formError ? 'username-error' : undefined}
@@ -164,7 +164,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                     <button 
                         type="submit" 
                         disabled={isBusy || !newUsername.trim()}
-                        className="absolute right-2 top-2 bottom-2 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg disabled:opacity-0 disabled:translate-x-4 transition-all duration-[150ms]"
+                        className="absolute right-2 top-2 bottom-2 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg disabled:opacity-0 disabled:translate-x-4 transition-[background-color,opacity,transform] duration-[150ms] ease-[var(--ease-snappy)]"
                     >
                         Enter
                     </button>

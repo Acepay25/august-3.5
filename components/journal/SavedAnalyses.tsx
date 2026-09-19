@@ -50,7 +50,7 @@ const SavedAnalysisRowImpl: React.FC<{
           <p className="text-sm text-zinc-300 mt-1 truncate">Prompt: "{userPrompt}"</p>
           <p className="text-xs text-zinc-500 mt-1">{new Date(timestamp).toLocaleString()}</p>
         </div>
-        <ChevronDownIcon className={`w-5 h-5 text-zinc-400 transform transition-transform duration-[150ms] ${isExpanded ? 'rotate-180' : ''}`} />
+        <ChevronDownIcon className={`w-5 h-5 text-zinc-400 transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${isExpanded ? 'rotate-180' : ''}`} />
       </div>
       {isExpanded && (
         <div className="px-4 pb-4 border-t border-white/10 animate-fade-in">
@@ -141,7 +141,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisi
   return (
     <>
       <div className="fixed inset-0 bg-black/70 z-40" onClick={onClose}></div>
-      <aside className="fixed top-0 right-0 h-full w-full sm:max-w-2xl bg-zinc-900 shadow-2xl z-50 transform transition-transform duration-[150ms] ease-in-out flex flex-col">
+      <aside className="fixed top-0 right-0 h-full w-full sm:max-w-2xl bg-zinc-900 shadow-2xl z-50 transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] flex flex-col">
         <header className="flex items-center justify-between p-4 border-b border-white/10">
           <h2 className="text-lg font-bold text-cyan-400">Saved Analyses for Review</h2>
           <button onClick={onClose} className="p-1 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="Close saved analyses">

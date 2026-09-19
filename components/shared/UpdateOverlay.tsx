@@ -205,7 +205,7 @@ const UpdateOverlay: React.FC = () => {
                             )}
                             <button
                                 onClick={installUpdate}
-                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-95"
+                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)] hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-95"
                                 aria-label={`Install update version ${version}`}
                             >
                                 <Sparkles className="h-4 w-4" />

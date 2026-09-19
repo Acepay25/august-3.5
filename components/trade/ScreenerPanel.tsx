@@ -204,7 +204,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                                 window.dispatchEvent(new CustomEvent('august:prefill-chat', { detail: { token: 'scan-chart-skills' } }));
                                                 onClose();
                                             }}
-                                            className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-violet-300"
+                                            className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-cyan-300"
                                         >
                                             <BrainCircuit className="h-3.5 w-3.5" />
                                         </button>

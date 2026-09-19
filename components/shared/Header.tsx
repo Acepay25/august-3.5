@@ -208,7 +208,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 <div className="static sm:relative" ref={sessionModalRef}>
                                     <button
                                         onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
-                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-zinc-500"
+                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-colors duration-[150ms] ease-[var(--ease-snappy)] focus-visible:ring-2 focus-visible:ring-zinc-500"
                                         aria-expanded={isSessionModalOpen}
                                         aria-haspopup="dialog"
                                     >

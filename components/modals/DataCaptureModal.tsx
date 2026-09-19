@@ -193,7 +193,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     value={pnl}
                                     onChange={e => setPnl(e.target.value)}
                                     placeholder="250"
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-white font-mono text-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-white font-mono text-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                     autoFocus
                                 />
                             </div>
@@ -287,7 +287,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <button
                         onClick={handleAutoCapture}
                         disabled={isCapturing || !isPnlValid}
-                        className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
+                        className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
                     >
                         {isCapturing && (
                             <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
@@ -317,7 +317,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <button
                         onClick={handleUpload}
                         disabled={isCapturing || !isPnlValid}
-                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex items-start gap-4">
                             <div className="text-3xl"></div>
@@ -336,7 +336,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <button
                         onClick={handleSkip}
                         disabled={isCapturing || !isPnlValid}
-                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <span className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors">
                             Log without data capture →

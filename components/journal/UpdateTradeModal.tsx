@@ -93,7 +93,7 @@ export const UpdateTradeModal: React.FC<{
                         <button
                             onClick={onAutoCapture}
                             disabled={isCapturing || isProcessing}
-                            className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
+                            className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
                         >
                             {isCapturing && (
                                 <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
