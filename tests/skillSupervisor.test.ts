@@ -20,7 +20,7 @@ import * as store from '../services/learning/supervisorStore';
 import {
     runSupervisorPass, setSessionModel, overrideApproveSkill, overrideRejectSkill,
     MAX_ITEMS_PER_PASS, MAX_ITEMS_PER_SESSION, countPendingSupervision,
-    getSupervisionSpend, __setSupervisionSpendForTests,
+    getSupervisionSpend, __setSupervisionSpendForTests, overrideVerdict,
 } from '../services/learning/skillSupervisor';
 import { queueSkillDraft, listSkillDrafts, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
 import { queueLearningProposal, listLearningProposals } from '../utils/learningQueue';
@@ -410,5 +410,42 @@ describe('per-session budget (WS-2.4)', () => {
 
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
         expect(listSkillDrafts(USER)).toHaveLength(0);
+    });
+});
+
+// WS-2.3: the human keeps an override on EVERY verdict, not only on skill
+// drafts. Each kind goes back through the same status writer a human button
+// would have used — and a proposal the model APPLIED is deliberately excluded,
+// because that rewrite landed on a file that has its own undo.
+describe('overrideVerdict — per-kind override', () => {
+    it('walks a confirmed forged tool back to retired, once only', async () => {
+        proposeForgedTool({
+            name: 'fear-greed', description: 'Crypto fear & greed index.',
+            urlTemplate: 'https://api.alternative.me/fng/', parameters: {},
+        }, 'test');
+        verdictJson({ action: 'approve', reason: 'read-only, https, sensible params' });
+        await runSupervisorPass(USER, { manual: true });
+        const ev = store.getSnapshot().events.find(e => e.itemKind === 'tool' && e.decision)!;
+        expect(loadForgedTools().find(t => t.id === ev.itemId)?.status).toBe('confirmed');
+
+        expect(await overrideVerdict(ev.id, USER)).toBe(true);
+        expect(loadForgedTools().find(t => t.id === ev.itemId)?.status).toBe('retired');
+        expect(store.getSnapshot().events.find(e => e.id === ev.id)!.decision?.overriddenByUser).toBe(true);
+        // Reversing an override would flip the tool back without being asked.
+        expect(await overrideVerdict(ev.id, USER)).toBe(false);
+    });
+
+    it('puts a lifecycle proposal the model dropped back into the queue', async () => {
+        queueLearningProposal({
+            kind: 'contradiction', skillSlug: 'btc-range', fingerprint: 'ov-1',
+            text: 'Two enabled skills disagree about range-low breaks — settle which trigger holds.',
+        }, USER);
+        verdictJson({ action: 'reject', reason: 'the two rules cover different regimes' });
+        await runSupervisorPass(USER, { manual: true });
+        expect(listLearningProposals(USER)).toHaveLength(0);
+        const ev = store.getSnapshot().events.find(e => e.itemKind === 'proposal' && e.decision)!;
+
+        expect(await overrideVerdict(ev.id, USER)).toBe(true);
+        expect(listLearningProposals(USER).map(p => p.fingerprint)).toContain('ov-1');
     });
 });

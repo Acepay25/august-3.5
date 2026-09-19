@@ -21,6 +21,7 @@ import {
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import {
     runSupervisorNow, overrideApproveSkill, overrideRejectSkill, abortSupervisorRun,
+    overrideVerdict,
     getSupervisionSpend,
 } from '../../services/learning/skillSupervisor';
 import type { SupervisorEvent, SupervisorPhase } from '../../services/learning/supervisorStore';
@@ -46,6 +47,23 @@ const KIND_LABEL: Record<string, string> = {
     skill: 'skill draft', tool: 'tool candidate', amendment: 'memory amendment', proposal: 'ladder proposal',
 };
 
+/** What walking a verdict back means in each kind's own store — the model
+ *  decided, and the human is reversing exactly that (WS-2.3's "override any
+ *  verdict", which used to be a skill-only affordance). */
+const undoLabel = (kind: string | undefined, verdict: string): string => {
+    const accepted = verdict === 'approved' || verdict === 'enhanced';
+    if (kind === 'tool') return accepted ? 'Retire the tool' : 'Approve it yourself';
+    if (kind === 'amendment') return accepted ? 'Reject the change' : 'Apply it yourself';
+    return 'Put it back in the queue';
+};
+
+/** A proposal the model APPLIED cannot be reversed here: the rewrite already
+ *  landed on a skill file, which has its own undo. Only a dropped one can come
+ *  back, so offering a button for the other case would be a lie. */
+const undoable = (kind: string | undefined, verdict: string): boolean =>
+    kind === 'tool' || kind === 'amendment'
+    || (kind === 'proposal' && (verdict === 'rejected' || verdict === 'skipped'));
+
 const relTime = (atMs: number): string => {
     const s = Math.max(0, Math.round((Date.now() - atMs) / 1000));
     if (s < 60) return `${s}s ago`;
@@ -55,8 +73,8 @@ const relTime = (atMs: number): string => {
 const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
     const [busy, setBusy] = React.useState(false);
     const decision = ev.decision;
-    const overridable = !!decision && !decision.overriddenByUser && (ev.itemKind === 'skill' || !!ev.draftSnapshot);
-    const override = async (fn: (eventId: string, user: string) => Promise<void>): Promise<void> => {
+    const overridable = !!decision && !decision.overriddenByUser && (!!ev.draftSnapshot || !!ev.itemId);
+    const override = async (fn: (eventId: string, user: string) => Promise<unknown>): Promise<void> => {
         setBusy(true);
         try { await fn(ev.id, getActiveUsername()); } finally { setBusy(false); }
     };
@@ -98,6 +116,14 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                                     Reject — undo this
                                 </button>
                             )}
+                        </div>
+                    )}
+                    {overridable && ev.itemKind !== 'skill' && undoable(ev.itemKind, decision.verdict) && (
+                        <div className="mt-1.5 flex gap-1.5" data-testid={`supervisor-undo-${ev.id}`}>
+                            <button type="button" disabled={busy} onClick={() => void override(overrideVerdict)}
+                                className="rounded-control border border-zinc-600 px-2 py-0.5 text-[10px] font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-40">
+                                {undoLabel(ev.itemKind, decision.verdict)}
+                            </button>
                         </div>
                     )}
                 </div>
