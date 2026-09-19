@@ -17,7 +17,7 @@ export const CalibrationBar: React.FC<{ label: string; actual: number; expected:
             </div>
             <div className="relative h-2 bg-zinc-800 rounded-full overflow-hidden">
                 <div
-                    className={`absolute h-full ${color} rounded-full transition-all duration-500`}
+                    className={`absolute h-full ${color} rounded-full transition-[width] duration-[150ms] ease-[var(--ease-snappy)]`}
                     style={{ width: `${Math.min(100, actual)}%` }}
                 />
                 {/* Expected marker */}
