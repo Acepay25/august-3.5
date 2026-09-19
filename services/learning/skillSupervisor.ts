@@ -203,7 +203,10 @@ const applySkillDecision = async (
         ...(enhanced?.prediction ? { prediction: sanitizePrediction(enhanced.prediction) ?? draft.crafted.prediction } : {}),
     };
     takeSkillDraft(draft.id, username);
-    await ingestCraftedSkillFromDraft(finalCrafted, draft.coin, username);
+    // The verdict reason rides INTO the skill file: the event log is
+    // session-scoped, so this is the only thing that will still say WHY the
+    // model accepted this rule after a reload.
+    await ingestCraftedSkillFromDraft(finalCrafted, draft.coin, username, verdict.reason);
     // Record WHICH file the ingest created/updated so the panel's
     // override-reject can remove it.
     const created = getMemoryFiles().files.filter(isSkillFile).find(f => {
@@ -319,7 +322,48 @@ const superviseAmendment = async (
     });
 };
 
-const APPLYABLE_PROPOSALS = new Set(['displacement', 'revival', 'demote']);
+const APPLYABLE_PROPOSALS = new Set(['displacement', 'revival', 'demote', 'rescope', 'contradiction']);
+
+/** Deterministic applyability — displacement/revival/demote have exact
+ *  actuation paths; rescope/contradiction need a model-authored rewrite. */
+const MECHANICAL_PROPOSALS = new Set(['displacement', 'revival', 'demote']);
+
+/**
+ * Apply a model-authored rescope/contradiction rewrite to the affected skill.
+ * Fail-closed: the enhanced clause must survive the same IF/THEN bar as a
+ * fresh draft (validateIfThen discipline — min lengths, non-generic). Returns
+ * false when anything is missing so the proposal STAYS queued for the human.
+ */
+const applyProposalRewrite = async (
+    proposal: ReturnType<typeof listLearningProposals>[number],
+    verdict: SupervisorVerdict,
+    username: string,
+): Promise<boolean> => {
+    const slug = proposal.skillSlug || '';
+    if (!slug) return false;
+    const target = listSkills().find(({ file }) => file.name.replace(/\.md$/i, '') === slug);
+    if (!target) return false;
+    const enhanced = verdict.enhanced;
+    if (!enhanced?.ifCondition || !enhanced?.thenAction) return false;
+    // The same bar a draft must clear: vague rewrites never auto-apply.
+    const { validateIfThen } = await import('./draftGates');
+    const fail = validateIfThen({ ifCondition: enhanced.ifCondition, thenAction: enhanced.thenAction });
+    if (fail) return false;
+    const meta = { ...target.meta, ifCondition: enhanced.ifCondition, thenAction: enhanced.thenAction };
+    if (enhanced.description) meta.description = enhanced.description;
+    if (enhanced.prediction) {
+        const p = sanitizePrediction(enhanced.prediction);
+        if (p) meta.prediction = p;
+    }
+    meta.modifiedAt = new Date().toISOString();
+    const { serializeSkill, titleFromMeta, setSkillStatus } = await import('./SkillMemoryService');
+    const content = serializeSkill(meta, titleFromMeta(meta));
+    await updateMemoryFile(target.file.id, { content }, username);
+    // A rewrite re-opens the question: a confirmed skill whose trigger moved
+    // drops back to candidate so the evidence ladder re-proves the new claim.
+    if (target.meta.status === 'confirmed') await setSkillStatus(target.file.id, 'candidate', username);
+    return true;
+};
 
 const superviseLearningProposal = async (
     proposal: ReturnType<typeof listLearningProposals>[number],
@@ -337,12 +381,16 @@ const superviseLearningProposal = async (
     const affected = proposal.skillSlug
         ? listSkills().find(({ file }) => file.name.replace(/\.md$/i, '') === proposal.skillSlug)
         : undefined;
+    const needsRewrite = !MECHANICAL_PROPOSALS.has(proposal.kind);
     const verdict = await streamVerdict(eventId, verdictPrompt(
         JSON.stringify({ kind: proposal.kind, text: proposal.text, skill: proposal.skillSlug, payload: proposal.payload }, null, 1),
         {
             graveyard: '(n/a — judge whether the proposed ladder move is justified by the evidence quoted in the proposal)',
             memory: buildProfileMemoryIndex(username) || '(none)',
-            extra: affected ? `AFFECTED SKILL: ${affected.file.name} · ${affected.meta.status} · ${affected.meta.wins}W/${affected.meta.losses}L — IF ${(affected.meta.ifCondition || '').slice(0, 120)}` : '(affected skill not found)',
+            extra: (affected ? `AFFECTED SKILL: ${affected.file.name} · ${affected.meta.status} · ${affected.meta.wins}W/${affected.meta.losses}L — IF ${(affected.meta.ifCondition || '').slice(0, 120)}` : '(affected skill not found)')
+                + (needsRewrite
+                    ? '\nThis proposal asks to RE-SCOPE or RESOLVE the affected skill. "approve" does nothing here: either "enhance" with the corrected ifCondition + thenAction (mechanical, specific — the rewrite applies verbatim), or "reject" if the claim is not justified.'
+                    : ''),
         },
     ), config);
     store.setPhase('deciding', `Applying the verdict on the ${proposal.kind} proposal`);
@@ -352,30 +400,54 @@ const superviseLearningProposal = async (
     }
     if (verdict.action === 'reject') {
         dismissLearningProposal(proposal.id, username);
-    } else {
-        const payload = (proposal.payload ?? {}) as Record<string, unknown>;
+        store.setDecision(eventId, { verdict: 'rejected', reason: verdict.reason, atMs: Date.now() });
+        return;
+    }
+    const payload = (proposal.payload ?? {}) as Record<string, unknown>;
+    let ok = false;
+    if (MECHANICAL_PROPOSALS.has(proposal.kind)) {
         const { applyDisplacementProposal, applyRevivalProposal, applyDemoteProposal } = await import('./SkillMemoryService');
-        let ok = false;
         if (proposal.kind === 'displacement') ok = await applyDisplacementProposal(String(payload.displacedSlug || proposal.skillSlug || ''), username);
         else if (proposal.kind === 'revival') ok = await applyRevivalProposal(proposal.skillSlug || '', username);
         else if (proposal.kind === 'demote') ok = await applyDemoteProposal(proposal.skillSlug || '', username);
-        if (ok) dismissLearningProposal(proposal.id, username);
-        store.setDecision(eventId, {
-            verdict: ok ? (verdict.action === 'enhance' ? 'enhanced' : 'approved') : 'skipped',
-            reason: ok ? verdict.reason : 'The ladder move could not be applied — the proposal stays for the human.',
-            atMs: Date.now(),
-        });
-        return;
+    } else {
+        // rescope / contradiction: only an "enhance" verdict carries the
+        // rewritten clause these kinds need; a bare approve is meaningless
+        // (nothing to apply), so it stays queued for the human.
+        ok = verdict.action === 'enhance' && await applyProposalRewrite(proposal, verdict, username);
     }
-    store.setDecision(eventId, { verdict: 'rejected', reason: verdict.reason, atMs: Date.now() });
+    if (ok) dismissLearningProposal(proposal.id, username);
+    store.setDecision(eventId, {
+        verdict: ok ? (verdict.action === 'enhance' ? 'enhanced' : 'approved') : 'skipped',
+        reason: ok ? verdict.reason : 'The change could not be applied — the proposal stays for the human.',
+        atMs: Date.now(),
+    });
 };
 
 // ─── The pass ───────────────────────────────────────────────────────────────
 
 let passInFlight = false;
 
-/** One supervision pass over every pending queue item. Never throws, never
- *  overlaps itself, respects the pause toggle unless `manual`. */
+/** Provider calls one pass may spend. Each item is exactly one streamed call,
+ *  so this is the pass's cost ceiling — the same discipline
+ *  MAX_AUTO_EVALS_PER_SESSION puts on evals. A backlog is NOT dropped: the
+ *  remainder stays queued, is counted, and the next trigger (queue event,
+ *  chat nudge, or the boot sweep) resumes it. Deferred quietly would be a
+ *  stalled queue with better optics. */
+export const MAX_ITEMS_PER_PASS = 12;
+
+/** How many items the supervisor would take if it were unbounded. The four
+ *  queues, counted exactly the way the pass walks them — so the UI's "N items
+ *  waiting" and the boot sweep answer the same question the pass asks. */
+export const countPendingSupervision = (username: string): number =>
+    listSkillDrafts(username).length
+    + loadForgedTools().filter(t => t.status === 'candidate').length
+    + listAmendments('pending').length
+    + listLearningProposals(username).filter(p => APPLYABLE_PROPOSALS.has(p.kind)).length;
+
+/** One supervision pass over pending queue items, capped at
+ *  {@link MAX_ITEMS_PER_PASS} calls. Never throws, never overlaps itself,
+ *  respects the pause toggle unless `manual`. */
 export const runSupervisorPass = async (username = getActiveUsername(), opts: { manual?: boolean } = {}): Promise<number> => {
     try {
         if (passInFlight || store.getSnapshot().running) return 0;
@@ -391,33 +463,51 @@ export const runSupervisorPass = async (username = getActiveUsername(), opts: { 
         store.setRunning(true);
         store.setModelName(formatModelDisplayName(config.selectedModel));
         let handled = 0;
+        let capped = false;
+        /** Stop taking new items once the call budget is spent. An item
+         *  already in flight still finishes. */
+        const spent = (): boolean => {
+            if (handled < MAX_ITEMS_PER_PASS) return false;
+            capped = true;
+            return true;
+        };
         for (const draft of listSkillDrafts(username)) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted || spent()) break;
             await superviseSkillDraft(draft, config, username);
             handled += 1;
         }
         for (const tool of loadForgedTools().filter(t => t.status === 'candidate')) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted || spent()) break;
             await superviseToolCandidate(tool, config);
             handled += 1;
         }
         for (const amendment of listAmendments('pending')) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted || spent()) break;
             await superviseAmendment(amendment, config, username);
             handled += 1;
         }
         for (const proposal of listLearningProposals(username).filter(p => APPLYABLE_PROPOSALS.has(p.kind))) {
-            if (controller.signal.aborted) break;
+            if (controller.signal.aborted || spent()) break;
             await superviseLearningProposal(proposal, config, username);
             handled += 1;
         }
-        if (controller.signal.aborted) store.pushEvent({ phase: 'deciding', text: 'Supervision stopped — remaining items stay for the human.' });
+        const stillWaiting = countPendingSupervision(username);
+        store.setPending(stillWaiting);
+        if (controller.signal.aborted) {
+            store.pushEvent({ phase: 'deciding', text: 'Supervision stopped — remaining items stay for the human.' });
+        } else if (capped) {
+            store.pushEvent({
+                phase: 'deciding',
+                text: `Call budget spent — ${stillWaiting} item(s) still waiting for the next sweep.`,
+            });
+        }
         store.setRunning(false);
         passInFlight = false;
         return handled;
     } catch (e) {
         console.warn('[SkillSupervisor] pass failed:', e);
         store.setRunning(false);
+        store.setPending(countPendingSupervision(username));
         passInFlight = false;
         return 0;
     }
@@ -496,6 +586,7 @@ export const overrideApproveSkill = async (eventId: string, username = getActive
     const ev = store.getSnapshot().events.find(e => e.id === eventId);
     const draft = ev?.draftSnapshot as SkillDraft | undefined;
     if (!draft) return;
-    await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username);
+    const modelReason = ev?.decision?.reason ? ` The model had said: ${ev.decision.reason}` : '';
+    await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username, `Approved by you over the supervisor's verdict.${modelReason}`);
     store.markOverridden(eventId, 'approved');
 };

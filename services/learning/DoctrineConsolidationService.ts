@@ -2,9 +2,11 @@
  * DoctrineConsolidationService — distills the closed-trade log into a short,
  * stable "trading doctrine" the model receives as its own settled beliefs.
  *
- * Raw diary entries are records; the doctrine is conclusions. Every N newly
- * closed trades an LLM pass rewrites profile/doctrine.md in first person:
- * only durable, evidence-backed stances survive ("In compression regimes I
+ * Closed trades are records; the doctrine is conclusions. Every N newly
+ * closed trades an LLM pass rewrites profile/doctrine.md in first person,
+ * reading from the TRADE LOG (the last DOCTRINE_WINDOW_TRADES closes) — not
+ * from the trader-diary notebook files, which nothing here consumes. Only
+ * durable, evidence-backed stances survive ("In compression regimes I
  * wait for the break — front-running cost me 4 of my last 5"). Recent
  * exceptions stay attached so the doctrine never goes stale.
  *

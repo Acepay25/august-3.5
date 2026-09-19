@@ -48,6 +48,14 @@ const SupervisorCard: React.FC = () => {
                 supervising model: {snap.modelName || 'the active session\'s model (or the memory provider)'}
                 {snap.running ? ' · working now' : ''}
             </p>
+            {/* The pass spends a bounded number of calls, so a backlog can
+                legitimately survive a sweep. Say so — "no recent verdicts" must
+                not read as "nothing is waiting". */}
+            <p className={`mb-3 font-mono text-[10px] ${snap.pendingCount > 0 ? 'text-amber-400/90' : 'text-zinc-600'}`} data-testid="supervisor-pending">
+                {snap.pendingCount > 0
+                    ? `${snap.pendingCount} item${snap.pendingCount === 1 ? '' : 's'} waiting for review`
+                    : 'queues clear'}
+            </p>
             {decisions.length > 0 && (
                 <ul className="space-y-1.5">
                     {decisions.map(e => (

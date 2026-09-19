@@ -39,7 +39,11 @@ export const listSkillDrafts = (username?: string): SkillDraft[] =>
 export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>, username?: string): SkillDraft => {
     const next: SkillDraft = {
         ...draft,
-        id: `sk-${Date.now()}`,
+        // A millisecond timestamp alone is NOT unique: several trades closing
+        // in the same ms produced identical ids, and takeSkillDraft filters by
+        // id — so supervising one silently deleted its twins from the queue
+        // without ever ingesting them. Same suffix discipline as learningQueue.
+        id: `sk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: new Date().toISOString(),
     };
     const rest = listSkillDrafts(username).filter(d => d.tradeId !== draft.tradeId);

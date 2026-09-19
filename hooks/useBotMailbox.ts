@@ -24,6 +24,12 @@ import {
 } from '../services/bots/BotMemoryService';
 import { threadForProvider } from '../utils/agentThreads';
 import {
+    buildBotSharedMemoryContext,
+    recordBotTurnInjection,
+    recordBotTurnOutcome,
+} from '../services/agents/botLearning';
+import type { LoggedTrade } from '../types';
+import {
     DM_ENVELOPE_TTL_MS,
     DM_MAX_FANOUT,
     DM_RATE_LIMIT,
@@ -52,6 +58,10 @@ export interface UseBotMailboxArgs {
      *  prompt names. Without it a DM'd bot reasons blind while the rest
      *  of the harness sees live prices. */
     hybridEnabled?: boolean;
+    /** Trade log (WS-3): closed bot-authored trades fold back into the shared
+     *  evidence path after a turn. Optional — absent, the bot still learns
+     *  into its own memory.md but no skill evidence is written. */
+    loggedTradesRef?: React.MutableRefObject<LoggedTrade[]>;
 }
 
 export interface UseBotMailboxResult {
@@ -88,7 +98,7 @@ const isProviderReadyFor = (configs: ProviderConfig[], providerId: string, model
 
 export const useBotMailbox = ({
     bots, providerConfigs, username, messagesRef, appendMessage, patchMessage,
-    hybridEnabled = false,
+    hybridEnabled = false, loggedTradesRef,
 }: UseBotMailboxArgs): UseBotMailboxResult => {
     // Per-target serial queues (Hermes's per-profile lock, in-memory).
     const queues = useRef<Map<string, DMEnvelope[]>>(new Map());
@@ -142,11 +152,23 @@ export const useBotMailbox = ({
                 if (hybridResult) hybridInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
             } catch { /* offline / no symbol — the turn runs without live data */ }
         }
+        const replyId = `dmr-${Date.now()}-${bot.id}`;
+        // WS-3: the bot reads the shared notebook too — a budgeted retrieval
+        // slice keyed on the prompt's setup, attributed under this turn's id
+        // so a trade that follows the bot's call credits what it was shown.
+        // AgentBot carries no memoryScope (that's the legacy HermesBot field —
+        // BotMemoryService already defaults AgentBot bots to 'global'), so the
+        // shared notebook slice always applies here.
+        const memoryScope: 'global' | 'isolated' = 'global';
+        let sharedMemory = '';
+        if (username) {
+            sharedMemory = buildBotSharedMemoryContext(prompt, { botId: bot.id, memoryScope });
+            recordBotTurnInjection({ botId: bot.id, username, runId: replyId, prompt, memoryScope });
+        }
         const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current })
+            + (sharedMemory ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${sharedMemory}` : '')
             + (hybridInjection ? `\n\n${hybridInjection}` : '');
         const history = threadForProvider(messagesRef.current, bot.providerId, bot.modelId);
-
-        const replyId = `dmr-${Date.now()}-${bot.id}`;
         // The incoming DM itself must be VISIBLE in the target's thread
         // (the texting metaphor): a user-role dmFrom row that the reply
         // below claims via threadForProvider's pending-user rule.
@@ -185,6 +207,15 @@ export const useBotMailbox = ({
             // than the envelope that woke it.
             const nextHop = opts.triggeredBy ? opts.triggeredBy.envelope.hop + 1 : 0;
             dispatchRef.current(bot, replyId, raw, nextHop);
+            // WS-3: the turn teaches the bot. Lesson → its memory.md; closed
+            // bot-authored trades → the shared evidence path (skills, worth
+            // gate) exactly like a chart-AI trade close. Fire-and-forget.
+            if (username) {
+                void recordBotTurnOutcome(bot, prompt, raw, {
+                    username,
+                    trades: loggedTradesRef?.current ?? [],
+                });
+            }
             if (opts.triggeredBy) {
                 // The reply IS the answer to the DM — wake the sender with a
                 // notice in THEIR thread (never auto-run the sender: that is
@@ -208,7 +239,7 @@ export const useBotMailbox = ({
                 isStreaming: false,
             });
         }
-    }, [appendMessage, patchMessage, messagesRef, notice, username, hybridEnabled]);
+    }, [appendMessage, patchMessage, messagesRef, notice, username, hybridEnabled, loggedTradesRef]);
 
     const drain = useCallback(async (botId: string): Promise<void> => {
         if (busy.current.has(botId)) return; // serial per target
