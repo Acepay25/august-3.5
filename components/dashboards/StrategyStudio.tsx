@@ -27,7 +27,7 @@ import { normalizeStrategyFamily, STRATEGY_FAMILIES, type StrategyFamily } from 
 import { getActiveUsername } from '../../utils/activeUser';
 import { importSkillFiles, readSkillFiles } from '../../services/learning/SkillImportService';
 import { subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
-import { consumePendingSkillOpen } from '../chat/SkillCitationChips';
+import { consumePendingSkillOpen } from '../chat/skillDeepLink';
 import { useToastActions } from '../shared/Toast';
 import type { ProviderConfig } from '../../types/provider';
 import SkillDetail, {

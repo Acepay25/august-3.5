@@ -5,6 +5,7 @@ import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { CloseIcon } from '../shared/Icons';
 import { EmptyState } from '../ui/EmptyState';
+import * as supervisorStore from '../../services/learning/supervisorStore';
 
 interface ApprovalInboxProps {
     isVisible: boolean;
@@ -41,7 +42,7 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                             compact
                             icon={<Inbox className="h-5 w-5" />}
                             title="Nothing needs you"
-                            description="Outcomes, ungrounded tickets, dropped seats, and skill drafts land here."
+                            description="The supervisor works the skill drafts on its own. What lands here is autopilot gating, ungrounded tickets, dropped seats, and anything it could not decide."
                         />
                     ) : items.map(item => (
                         <div key={item.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
@@ -63,6 +64,17 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                                 )}
                                 {item.kind === 'skill' && (
                                     <>
+                                        {/* A skill draft only reaches a human when the
+                                            supervisor did NOT decide it — paused, no
+                                            ready provider, or a verdict it couldn't
+                                            parse. Saying so keeps this an override
+                                            surface instead of reading as the normal
+                                            path the model was built to walk. */}
+                                        <p className="mb-1.5 w-full text-[10px] leading-4 text-zinc-600">
+                                            {supervisorStore.isAutoEnabled()
+                                                ? 'The supervisor could not decide this one — it is yours to judge.'
+                                                : 'Automatic supervision is paused, so drafts wait for you here.'}
+                                        </p>
                                         <button type="button" onClick={() => onAllow(item)} className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-zinc-200">Save skill</button>
                                         <button type="button" onClick={() => onDeny(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500">Discard</button>
                                     </>
