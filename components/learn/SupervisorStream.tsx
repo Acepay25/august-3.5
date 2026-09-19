@@ -21,6 +21,7 @@ import {
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import {
     runSupervisorNow, overrideApproveSkill, overrideRejectSkill, abortSupervisorRun,
+    getSupervisionSpend,
 } from '../../services/learning/skillSupervisor';
 import type { SupervisorEvent, SupervisorPhase } from '../../services/learning/supervisorStore';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -112,6 +113,9 @@ interface SupervisorStreamProps {
 
 const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
     const snap = useSyncExternalStore(supervisorStore.subscribe, supervisorStore.getSnapshot, supervisorStore.getSnapshot);
+    // Read through the same subscription: the spend only changes when a pass
+    // runs, and every pass notifies this store.
+    const spend = getSupervisionSpend();
     const newestFirst = [...snap.events].reverse();
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="supervisor-stream">
@@ -152,13 +156,16 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                 )}
                 {/* A per-pass call budget means a backlog can legitimately
                     survive a sweep — so the count rides the bar, not a tooltip. */}
-                <span className="ml-auto truncate font-mono text-[9px] text-zinc-600" title={snap.activity}
+                <span className="ml-auto truncate font-mono text-[9px] text-zinc-600"
+                    title={`${spend.spent}/${spend.sessionCap} supervised this session`}
                     data-testid="supervisor-status">
                     {snap.running
                         ? snap.activity || 'supervising…'
-                        : snap.pendingCount > 0
-                            ? `${snap.pendingCount} waiting`
-                            : snap.autoEnabled ? 'watching the queues' : 'paused'}
+                        : snap.pendingCount > 0 && spend.exhausted
+                            ? `${snap.pendingCount} waiting · session budget spent`
+                            : snap.pendingCount > 0
+                                ? `${snap.pendingCount} waiting`
+                                : snap.autoEnabled ? 'watching the queues' : 'paused'}
                 </span>
             </div>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 custom-scrollbar" data-testid="supervisor-log">
