@@ -316,8 +316,8 @@ const TradeDetailView: React.FC<{
                                 {(trade.maxAdverseExcursion !== undefined || trade.maxFavorableExcursion !== undefined) && (
                                     <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800" data-testid="trade-excursions">
                                         <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Held Through</span>
-                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-                                            <span className="text-zinc-300">
+                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm tabular-nums">
+                                            <span className="text-zinc-300 tabular-nums">
                                                 worst −{trade.maxAdverseExcursion !== undefined ? `${trade.maxAdverseExcursion.toFixed(1)}%` : '—'}
                                                 <span className="text-[9px] uppercase tracking-wider text-zinc-600"> against</span>
                                             </span>
@@ -502,7 +502,7 @@ const TradeLogRowImpl: React.FC<{
                         )}
                         {isInsight && <span className="text-[10px] uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
-                    <p className="text-xs text-zinc-500 mt-1 truncate">
+                    <p className="text-xs text-zinc-500 mt-1 truncate tabular-nums">
                         {direction}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
                         {alphaLabel ? ` · ${alphaLabel}` : ''}

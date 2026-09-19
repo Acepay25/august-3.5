@@ -423,17 +423,20 @@ it into the new rail instead (avoid two owners on AgentRosterRail).
 
 Deliberately left, each with the reason:
 
-- **WS-5.1, second half — Settings still hosts the notebook browser, the
-  amendments inbox and the memory-model toggles.** Removing them is a
-  user-reachable UI deletion; the Learn surface mounts the same components, so
-  nothing is lost by leaving them, but the duplication is real.
+- **WS-5.1, second half — closed 2026-09-20** (see below). Settings no longer
+  mounts the notebook browser or the amendments inbox; it keeps the switches and
+  deep-links into Learn.
 - **WS-5.3, breadth.** The sweep did the parts with signal: 40 dead
   `.status-surface`/`.analysis-card` tokens across 30 files (they matched no CSS
   rule, and two comments cited them as if they still colored anything),
-  TradeLog's outcome/verdict chips now go through `StatusPill`, and streaming
-  price readouts got `tabular-nums`. The remaining `rounded-full` occurrences in
-  SettingsMenu/TradeView/AgentRosterRail/Sidebar are mostly dots, avatars and
-  counts, not status chips — converting them is churn I cannot visually verify.
+  TradeLog's outcome/verdict chips now go through `StatusPill`, streaming price
+  readouts got `tabular-nums`, and LiveMarket's connection badge (a
+  three-deep nested ternary over border/bg/text) is now one `StatusPill`.
+  Still hand-rolled, and these ARE status chips rather than dots:
+  `ModelPerformanceDashboard.tsx:114-130` (red/yellow/green tiers),
+  `Header.tsx:240,264` (volatility), `ProviderManager.tsx:158`,
+  `ProfileMemoryCard.tsx:75`, `MemoryProvenanceStrip.tsx:137`. Converting them
+  is churn that needs a visible browser to check.
 - **WS-4.1 follow-through — done, with two corrections.** Removed after
   verifying zero callers: `GenericAnalysisService.updateGlobalMemory` (+ its
   private schema), `memoryUtils.prepareTradeSummariesForGlobalMemory`,
@@ -450,20 +453,58 @@ Deliberately left, each with the reason:
   "stale", so a healthy default workspace rendered an amber "13 skills with no
   counted evidence" flag. Seeds now have their own bucket and cannot raise a
   flag.
-- **WS-3.4 placement.** Per-bot learning stats compute and render in Learn →
-  Health; the plan asked for them on the roster rail/drawer specifically.
-- **WS-6 details.** `/` does not focus the rail search (already bound to the
-  dock composer), and the rail narrows rather than becoming a drawer below
-  `md`.
+- **WS-3.4 placement — closed 2026-09-20** (see below). Stats render on the
+  roster rail and the active bot's header.
+- **WS-6 details — closed 2026-09-20** (see below). `/` focuses the rail search
+  and the rail became a real drawer below `md`.
 - **Unverified in a browser:** the provenance strip needs a real analysis run
   with a configured provider to render, so it is covered by jsdom only (6
   tests, including the next-run leak guard).
 
+## Closed 2026-09-20
+
+Three items the previous pass listed as deliberately left are now done. The
+pass found real defects in the work — a stale premise, a broken mobile layout,
+a deep link that overreached — all fixed here and recorded below.
+
+- **WS-3.4 — per-bot learning stats on the rail.** `loadBotLearningStats()`
+  (already committed) is now wired: App memoizes it on `[bots, memoryNonce]`,
+  where `memoryNonce` bumps on any notebook write, so it reads the notebook on
+  writes rather than once a price tick. A mono skills count badges each row; the
+  active bot's header shows `lessons · skills · evidence` with the newest lesson
+  date in its title. Learn → Health keeps the table version.
+- **WS-6 — `/` focuses the rail search, and the rail is a drawer below `md`.**
+  The plan's reason for skipping this was wrong: it said `/` was "already bound
+  to the dock composer". It isn't — `id="chat-composer"` was deleted in 78bc027
+  and the lookup in `useConversationHousekeeping.ts:112` has been a permanent
+  no-op since, so the key was free. Focus lands from an effect after the open
+  commits; `rAF` and `flushSync` were both tried and both measured (at 531px)
+  calling `focus()` while the subtree was still `visibility: hidden`, which
+  silently drops it. A closed drawer is `invisible`, not merely off-canvas, so
+  it stays out of the tab order.
+- **WS-5.1 — Settings keeps only the switches.** `MemoryFilesManager` and
+  `AmendmentsInbox` are no longer mounted in Settings (Learn owns both), and
+  Settings deep-links to a chosen Learn tab. `initialTab` follows the contract
+  the Journal already uses: the caller clears it via
+  `onInitialTabConsumed`, because a sticky prop re-applied on every remount and
+  quietly overrode the tab the user last chose.
+- **Defect: the rail was not a flex container below `md`.** The rewrite left
+  `flex-col` with only `md:flex`, so on mobile the aside computed
+  `display: block` and the list's `flex-1 min-h-0` was inert — the roster
+  overflowed the viewport instead of scrolling. Verified fixed in the browser:
+  the scroll pane now resolves `flex: 1 1 0%` inside a 550px panel.
+
+Browser verification ran in a backgrounded tab, so computed styles and the
+CSSOM were measured (including that `.md\:visible` sorts after `.invisible`,
+which keeps the desktop column unaffected) but no screenshot was possible. The
+live-provider end-to-end run remains the only unverified claim in this plan.
+
 ## Status (2026-09-19)
 
 All seven workstreams are implemented and verified end to end
-(`typecheck` + 3324 tests + `build` + `lint` clean, new surfaces checked in a
-browser). What remains is listed under "Still open" with the reason for each.
+(`typecheck` + 3340 tests + `build` + `lint` clean as of 2026-09-20, new
+surfaces checked in a browser). What remains is listed under "Still open" with
+the reason for each.
 
 Five defects the loop test exposed, all fixed:
 1. **Cold-start deadlock** — an approved skill could never earn evidence

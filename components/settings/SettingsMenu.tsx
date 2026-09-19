@@ -20,10 +20,9 @@ import { AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseI
 import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
-import MemoryFilesManager from './MemoryFilesManager';
 import ProfileMemoryCard from './ProfileMemoryCard';
 import SupervisorCard from './SupervisorCard';
-import AmendmentsInbox from './AmendmentsInbox';
+import type { LearnTab } from '../learn/LearnView';
 import ModelPicker from '../shared/ModelPicker';
 import {
     User, Users, Bot, FileText, Brain, Sparkles, BookOpen, Database, HardDrive, ShieldCheck,
@@ -86,8 +85,9 @@ interface SettingsMenuProps {
     /** Opens the Strategy Studio — the browse/annotate playbook library. */
     onOpenStrategyStudio?: () => void;
     /** Opens the Learn surface — the one home for the queues, the notebook and
-     *  memory health. Settings keeps the provider/model switches and links here. */
-    onOpenLearn?: () => void;
+     *  memory health. Settings keeps the provider/model switches and links here.
+     *  Pass a tab to land somewhere specific. */
+    onOpenLearn?: (tab?: LearnTab) => void;
     onSwitchUser?: () => void;
     onExportData?: () => Promise<void> | void;
     /** Active profile — enables the backup management section. */
@@ -401,6 +401,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
         return hasReadyProvider ? 'general' : 'models';
     });
+    // Bound once so the narrowing survives into the callback the children get.
+    const openLearnQueue = onOpenLearn ? () => onOpenLearn('queue') : undefined;
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
     // Idle motion (breath / fidget / blink / sway). Default ON. The
@@ -1181,20 +1183,48 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                             {activeTab === 'memory' && (
                                 <div className="h-full min-h-0 animate-fade-in flex flex-col gap-4">
-                                    <MemoryFilesManager
-                                        username={username}
-                                        isGlobalMemoryEnabled={isGlobalMemoryEnabled}
-                                        setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
-                                        memoryConfig={memoryConfig ?? null}
-                                    />
-                                    <div className="px-4 pb-4">
-                                        <h3 className="text-[13px] font-bold text-zinc-100">Model correction proposals</h3>
-                                        <p className="mt-0.5 text-[11px] text-zinc-500 mb-3">
-                                            Notebook amendments proposed by the models (amend_memory). Nothing changes until you approve.
+                                    {/* Settings owns the SWITCHES; the notebook
+                                        itself, the amendment inbox and the
+                                        supervisor's decision stream all live on
+                                        the Learn surface now. Mounting them in
+                                        both places meant two ways to reach the
+                                        same file and neither was obviously
+                                        canonical. */}
+                                    <div className="px-4 pt-4">
+                                        <h3 className="text-[13px] font-bold text-zinc-100">Memory</h3>
+                                        <p className="mt-0.5 mb-3 text-[11px] text-zinc-500">
+                                            The notebook, the skill library, the approval queues and memory
+                                            health all live on the Learn surface. Settings keeps the switches.
                                         </p>
-                                        <AmendmentsInbox />
+                                        <div className="flex flex-wrap items-center gap-3 rounded-control border border-zinc-800 bg-zinc-950/40 p-2.5">
+                                            {memoryConfig && (
+                                                <span className="text-[11px] text-zinc-400">
+                                                    <span className="text-[10px] uppercase tracking-widest text-zinc-600">Managed by </span>
+                                                    {memoryConfig.selectedModel || memoryConfig.name || 'memory model'}
+                                                </span>
+                                            )}
+                                            {setIsGlobalMemoryEnabled && (
+                                                <label className="flex cursor-pointer items-center gap-2" data-testid="global-memory-setting">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!isGlobalMemoryEnabled}
+                                                        onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)}
+                                                        className="h-3.5 w-3.5 accent-cyan-400"
+                                                    />
+                                                    <span className="text-[11px] text-zinc-300">Global memory</span>
+                                                </label>
+                                            )}
+                                            {onOpenLearn && (
+                                                <button type="button" onClick={() => onOpenLearn('memory')}
+                                                    data-testid="open-learn-memory"
+                                                    className="ml-auto rounded-control border border-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
+                                                    Open the notebook
+                                                    <span className="ml-1 font-mono text-[10px] text-zinc-600">Alt+5</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <SupervisorCard onOpenLearn={onOpenLearn} />
+                                    <SupervisorCard onOpenLearn={openLearnQueue} />
                                     <ProfileMemoryCard />
                                 </div>
                             )}

@@ -32,6 +32,7 @@ import { useToastActions } from './components/shared/Toast';
 import { FORGED_PROPOSAL_EVENT } from './services/tools/toolForge';
 import { AMENDMENT_EVENT } from './services/learning/memoryAmendments';
 import { countPendingEverything } from './services/learning/memoryHealth';
+import { loadBotLearningStats } from './services/agents/botLearning';
 import { useConfirmDialog } from './components/shared/ConfirmDialog';
 import { Header } from './components/shared/Header';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
@@ -83,6 +84,7 @@ const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
 const LearnView = React.lazy(() => import('./components/learn/LearnView'));
+import type { LearnTab } from './components/learn/LearnView';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
@@ -377,6 +379,7 @@ const App: React.FC = () => {
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
         const unsubscribe = subscribeMemoryFilesChanged((username) => {
+            setMemoryNonce(n => n + 1);
             if (timer) clearTimeout(timer);
             timer = setTimeout(() => {
                 const config = memoryConfigRef.current || readyProvidersRef.current[0] || null;
@@ -413,6 +416,12 @@ const App: React.FC = () => {
     // Minara arrangement: top-level surfaces chosen from the activity bar
     // (hooks/useSurface.ts). The trade surface is home.
     const { surface, setSurface } = useSurface();
+    /** Set when another surface asks to open Learn on a SPECIFIC tab
+     *  (Settings → "Open the notebook"). LearnView reports it consumed
+     *  (onInitialTabConsumed), so it navigates exactly once and the user's own
+     *  last tab survives the next mount — same contract as journalTab. */
+    const [learnTab, setLearnTab] = useState<LearnTab | null>(null);
+    const learnTabConsumed = useCallback(() => setLearnTab(null), []);
     // Antigravity-style left panel: the activity bar is always visible and
     // the active surface's icon toggles its sidebar (on Trade: the order
     // book). Persisted so the layout survives reloads like the dock width.
@@ -2483,6 +2492,9 @@ const App: React.FC = () => {
     resetAppStateRef.current = userProfileResetAppState;
 
     const [skillDraftNonce, setSkillDraftNonce] = useState(0);
+    /** Bumped on any notebook write — the Agents rail's per-bot learning stats
+     *  read the notebook, so they refresh with it rather than every price tick. */
+    const [memoryNonce, setMemoryNonce] = useState(0);
     useEffect(() => {
         const bump = (): void => setSkillDraftNonce(n => n + 1);
         window.addEventListener('august-skill-drafts', bump);
@@ -2507,6 +2519,9 @@ const App: React.FC = () => {
             + listLearningProposals(activeUsername || undefined).length,
         [approvalItems, learningQueueNonce, activeUsername],
     );
+    // Per-bot learning stats for the Agents rail (WS-3.4). Walks the notebook,
+    // so it is keyed to notebook writes and the roster — not to price ticks.
+    const botStats = useMemo(() => loadBotLearningStats(), [bots, memoryNonce]);
     // Activity-rail badges. Memoized because App re-renders on every price
     // tick and NavRail is React.memo'd — a fresh object literal would
     // invalidate the memo once a second for nothing.
@@ -2779,7 +2794,7 @@ const App: React.FC = () => {
                 onClose={() => setIsSettingsMenuVisible(false)}
                 isLoading={isLoading}
                 onOpenStrategyStudio={() => { setSurface('studio'); setIsSettingsMenuVisible(false); }}
-                onOpenLearn={() => { setSurface('learn'); setIsSettingsMenuVisible(false); }}
+                onOpenLearn={(tab) => { setLearnTab(tab ?? null); setSurface('learn'); setIsSettingsMenuVisible(false); }}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}
                 onSetSummarizationProvider={handleSetSummarizationProvider}
@@ -3188,6 +3203,8 @@ const App: React.FC = () => {
                                     username={activeUsername || 'default'}
                                     trades={loggedTrades}
                                     memoryConfig={memoryConfig}
+                                    initialTab={learnTab}
+                                    onInitialTabConsumed={learnTabConsumed}
                                     currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
                                 />
                             </React.Suspense>
@@ -3217,6 +3234,7 @@ const App: React.FC = () => {
                                     lastOpenedMap={threadOpenedMap}
                                     attentionMap={attentionMap}
                                     botRoutines={botRoutinesMap}
+                                    botStats={botStats}
                                     onRunRoutine={runRoutineFromRail}
                                     onDeleteBot={deleteBot}
                                     onDeleteGroup={deleteGroup}
