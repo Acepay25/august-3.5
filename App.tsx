@@ -1132,6 +1132,9 @@ const App: React.FC = () => {
         // live roster snapshot getter — App's bot state is declared
         // below this hook, and a cron fire must see the CURRENT roster.
         bots: () => getBots(),
+        // WS-3.2: a scheduled bot turn folds its bot's closed trades into the
+        // notebook, so it needs the live journal.
+        trades: () => loggedTradesRef.current,
         messagesRef,
         // Routine replies may carry [[dm:@…]] markers (pre-validated by the
         // pure half) — deliver them through the mailbox like any turn.

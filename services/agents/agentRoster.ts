@@ -12,6 +12,7 @@
 
 import type { RolePreset } from '../../components/desk/pixelAvatars';
 import type { BotFaceSpec } from '../../components/chat/BotFace';
+import type { BotMemoryScope } from '../../types/bot';
 import { AnalystRole } from '../../types/enums';
 import { getActiveUsername } from '../../utils/activeUser';
 
@@ -24,6 +25,12 @@ export interface AgentBot {
     providerId: string;
     /** The model this bot thinks with (within providerId). */
     modelId: string;
+    /** Whose notebook this bot thinks with (WS-3.1). Absent/'global' reads the
+     *  shared book; 'isolated' keeps to its own notes, and nothing it learns
+     *  is retrieved by others. Carried over from the legacy HermesBot field —
+     *  without it the roster's scope contract was unimplementable, since the
+     *  turn sites had no field to read and hardcoded 'global'. */
+    memoryScope?: BotMemoryScope;
     /** Debate persona: a built-in AnalystRole inherits that role's curated
      *  prompt (optionally refined by customPrompt); omitted = the
      *  general-analyst default. Formerly a TEAM-seat field — groups'

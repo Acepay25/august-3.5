@@ -15,6 +15,7 @@ import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/an
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
+import { botOriginForMessage } from '../services/agents/botLearning';
 import { appendWatchEpisode } from '../utils/watchList';
 import { getActiveUsername } from '../utils/activeUser';
 import * as chatStore from '../services/trade/chatStore';
@@ -336,7 +337,17 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         }
 
         const notebookUser = getActiveUsername();
-        void syncClosedTradeToNotebook(loggedTrade, [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)], notebookUser)
+        // WS-3.2/3.3: a trade logged from a bot's reply is authored by THAT
+        // bot, so the worth gate judges the resulting skill against its own
+        // memory and the skill carries originBotId. A chart-AI verdict answers
+        // with several providers at once and has no single authoring bot.
+        const tradeOrigin = botOriginForMessage(message.modelsUsed);
+        void syncClosedTradeToNotebook(
+            loggedTrade,
+            [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)],
+            notebookUser,
+            tradeOrigin ?? undefined,
+        )
             .catch(err => console.warn('[TraderNotebook] Closed-trade sync failed:', err));
 
         // === ThinkingStore: Update outcome for all thinking records of this trade ===

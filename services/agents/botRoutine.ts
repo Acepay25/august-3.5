@@ -131,13 +131,29 @@ export const botRoutineSkipReason = (
 };
 
 /** The persisted AI message row for a completed bot run — attributed to the
- *  bot's identity pair so the reply lands in the bot's own thread. */
-export const botRoutineMessageRow = (bot: AgentBot, reply: string, id: string): Message => ({
+ *  bot's identity pair so the reply lands in the bot's own thread.
+ *  `attribution` carries the run's own id + timing so the row can seed
+ *  trade.sourceRunId, which is the key the shared-notebook injection recorded
+ *  under (WS-3.1). Without it a routine's trades credit nothing. */
+export const botRoutineMessageRow = (
+    bot: AgentBot,
+    reply: string,
+    id: string,
+    attribution?: { runId: string; startedAt: string; durationMs: number },
+): Message => ({
     id,
     role: MessageRole.AI,
     text: reply,
     createdAt: new Date().toISOString(),
     modelsUsed: { [bot.providerId]: bot.modelId },
+    ...(attribution ? {
+        runStats: {
+            runId: attribution.runId,
+            startedAt: attribution.startedAt,
+            finishedAt: new Date().toISOString(),
+            durationMs: Math.max(0, attribution.durationMs),
+        },
+    } : {}),
 });
 
 /** The stored AutomationRun for a completed bot run (no analysis card —

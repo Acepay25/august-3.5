@@ -8,8 +8,8 @@
  * is unit-testable without mounting the hook.
  */
 
-import { COMMON_WORDS } from '../../constants/commonWords';
 import { extractLessonFromPostMortem } from '../../services/learning/MemoryFilesService';
+import { mineCoinFromPrompt, mineDirectionFromPrompt, minePatternFromPrompt } from '../../utils/patternMining';
 import { getMemoryFilesContext } from '../../services/learning/MemoryRetrievalService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { listRetrievedMemorySources, type MemoryRetrievalQuery, type RetrievedMemorySource } from '../../services/learning/MemoryRetrievalService';
@@ -24,17 +24,11 @@ import type { LoggedTrade } from '../../types';
 // opening budget is 900 chars; bot memory should not dwarf it.
 const BOT_MEMORY_TOTAL_CAP = 1800;
 
-// Pattern-family keyword mining — runs at SEND time so retrieval has a family
-// before the AI analysis completes (there is no analysis yet at send time).
-// Falls back to undefined when no keyword matches.
-export const minePatternFromPrompt = (prompt: string): string | undefined => {
-    const p = prompt.toUpperCase();
-    if (p.includes('FAMILY A') || p.includes('EXHAUSTION') || p.includes('TRAP') || p.includes('FAKEOUT')) return 'Family A';
-    if (p.includes('FAMILY B') || p.includes('REVERSAL')) return 'Family B';
-    if (p.includes('FAMILY C') || p.includes('CONTINUATION')) return 'Family C';
-    if (p.includes('OMEGA') || p.includes('MOMENTUM')) return 'Family Omega';
-    return undefined;
-};
+// Pattern-family + coin + direction mining lives in utils/patternMining.ts so
+// the bots (services/agents/botLearning.ts) mine the SAME query — this is a
+// hook module the agents layer must not import. Re-exported here because that
+// is where its tests and prompt-side callers look.
+export { minePatternFromPrompt };
 
 export interface PipelineMemoryContext {
     /** Setup query that drove retrieval (also reused by verdict-stage calls). */
@@ -76,10 +70,8 @@ export const assemblePipelineMemoryContext = (
      *  what was KNOWN by that moment. Omitted ⇒ live behavior, unchanged. */
     asOfMs?: number,
 ): PipelineMemoryContext => {
-    const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
-    const detectedLearningCoin = detectedCoinRaw && !COMMON_WORDS.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
-    const pendingDirection = effectiveInput.toLowerCase().includes('long') ? 'Long' :
-        effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral';
+    const detectedLearningCoin = mineCoinFromPrompt(effectiveInput);
+    const pendingDirection = mineDirectionFromPrompt(effectiveInput);
     const pendingPattern = minePatternFromPrompt(effectiveInput);
 
     // TRADER NOTEBOOK: retrieve matching files, skills, similar trades
