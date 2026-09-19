@@ -117,7 +117,8 @@ therefore does change the next index's Family-A line.
    `DOCTRINE_WINDOW_TRADES = 60`), never the diary files; `kindForHit` labels
    diary hits yet no block is ever pushed; `searchNotebookNotes` skips the
    folder (`MemoryFilesService.ts:1153`); the only consumer is an entry count
-   in `LearningDashboard.tsx:473`. Either delete the write or fix the two
+   in `components/dashboards/learning/NotebookSection.tsx` (the `entries`
+   count, from each diary file's `## ` headings). Either delete the write or fix the two
    comments — a journal the user reads is a legitimate reason to keep it, but
    it must be stated, not implied. Not deleted here: it is user-facing history.
 2. **`aiPatternMemory` duplicates `insightKnowledgeBase.insights`.** Both come
@@ -171,7 +172,7 @@ therefore does change the next index's Family-A line.
 7. **`SelfLearningService.generateLearningContext` is already gone** — only
    the guard test remains (`tests/selfLearningServiceDeadExport.test.ts`).
    `computeLearningProfile` survives with one dashboard reader
-   (`LearningDashboard.tsx:89`), so it is UI-only, not prompt-visible.
+   (`components/dashboards/LearningDashboard.tsx`, its `profile` memo), so it is UI-only, not prompt-visible.
 8. **Scheduled hygiene exists (WS-4.2).** `services/learning/memoryHygiene.ts`
    reuses the `weeklyReview` discipline — per-user preference key
    (`memory_hygiene_v1_`, :49), last run stamped in the payload, 7-day window,
