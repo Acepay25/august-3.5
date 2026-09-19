@@ -1,0 +1,89 @@
+/**
+ * useChatAttachments — the image/file picker both chat surfaces use.
+ *
+ * Extracted from TradeChatPanel (WS-6 asked the Agents surface to REUSE the
+ * dock's image pipeline rather than fork a second one). The dock reads images
+ * into data URLs and hands `{ name, dataURL }[]` to the analysis pipeline; that
+ * shape is the contract, so it lives here with the reading, not in a panel.
+ *
+ * The caller owns rendering: `attachFiles` takes a FileList, `remove` drops one
+ * chip, and `openPicker` fires the hidden input the caller renders.
+ */
+
+import { useCallback, useRef, useState } from 'react';
+
+export interface Attachment {
+    id: string;
+    kind: 'image' | 'file';
+    name: string;
+    /** data URL for images, text for everything else — same as the dock. */
+    payload: string;
+}
+
+/** What the analysis pipeline takes for a vision run. */
+export interface PipelineImage {
+    name: string;
+    dataURL: string;
+}
+
+/** Four is the dock's ceiling; two surfaces, one limit. */
+export const MAX_ATTACHMENTS = 4;
+
+const newId = (prefix: string): string =>
+    `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+export const useChatAttachments = (): {
+    attachments: Attachment[];
+    fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
+    attachFiles: (files: FileList | null) => void;
+    remove: (id: string) => void;
+    clear: () => Attachment[];
+    openPicker: () => void;
+    images: () => PipelineImage[];
+} => {
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const attachFiles = useCallback((files: FileList | null): void => {
+        if (!files) return;
+        Array.from(files).slice(0, MAX_ATTACHMENTS - attachments.length).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const payload = String(reader.result ?? '');
+                if (!payload) return;
+                setAttachments(prev => (prev.length >= MAX_ATTACHMENTS
+                    ? prev
+                    : [...prev, {
+                        id: newId('at'),
+                        kind: file.type.startsWith('image/') ? 'image' : 'file',
+                        name: file.name,
+                        payload,
+                    }]));
+            };
+            if (file.type.startsWith('image/')) reader.readAsDataURL(file);
+            else reader.readAsText(file);
+        });
+    }, [attachments.length]);
+
+    const remove = useCallback((id: string): void => {
+        setAttachments(prev => prev.filter(a => a.id !== id));
+    }, []);
+
+    /** Empties the tray and returns what was in it — a send takes the
+     *  attachments with it, so the caller needs the list it just removed. */
+    const clear = useCallback((): Attachment[] => {
+        let sent: Attachment[] = [];
+        setAttachments(prev => { sent = prev; return []; });
+        return sent;
+    }, []);
+
+    const openPicker = useCallback((): void => {
+        fileInputRef.current?.click();
+    }, []);
+
+    const images = useCallback((): PipelineImage[] => attachments
+        .filter(a => a.kind === 'image')
+        .map(a => ({ name: a.name, dataURL: a.payload })), [attachments]);
+
+    return { attachments, fileInputRef, attachFiles, remove, clear, openPicker, images };
+};

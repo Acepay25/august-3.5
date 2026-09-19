@@ -21,7 +21,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Pencil, PanelLeftClose, PanelLeftOpen, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
+import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
@@ -46,7 +47,7 @@ interface AgentsViewProps {
     /** Chat mode: the bot's own DM transport (App's mailbox). */
     onSendBotTurn: (bot: AgentBot, prompt: string) => Promise<boolean>;
     /** Analyze mode: the real Chart AI pipeline (App's handleSendMessage). */
-    onAnalyze: (prompt: string) => void;
+    onAnalyze: (prompt: string, images: PipelineImage[]) => void;
     /** App renders the existing room view; this surface only hosts it. */
     renderGroup?: (group: AgentGroup) => React.ReactNode;
     coachCount: number;
@@ -252,6 +253,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         try { localStorage.setItem(`agents_rail_collapsed_v1_${username}`, collapsed ? '1' : '0'); } catch { /* private mode */ }
     }, [collapsed, username]);
     const [sortByName, setSortByName] = useState(false);
+    // WS-6: the composer attaches images through the SAME reader the Trade dock
+    // uses (hooks/useChatAttachments was lifted out of TradeChatPanel for this).
+    const { attachments, fileInputRef, attachFiles, remove: removeAttachment, clear: clearAttachments, openPicker, images: attachedImages } = useChatAttachments();
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameDraft, setRenameDraft] = useState('');
     const scroller = useRef<HTMLDivElement | null>(null);
@@ -352,11 +356,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         const prompt = text.trim();
         if (!prompt || busy) return;
         setText('');
-        if (mode === 'analyze') { onAnalyze(prompt); return; }
-        if (!activeBot) { onAnalyze(prompt); return; }
+        if (mode === 'analyze') { onAnalyze(prompt, attachedImages()); clearAttachments(); return; }
+        if (!activeBot) { onAnalyze(prompt, []); return; }
         setBusy(true);
         try { await onSendBotTurn(activeBot, prompt); } finally { setBusy(false); }
-    }, [text, busy, mode, onAnalyze, activeBot, onSendBotTurn]);
+    }, [text, busy, mode, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
 
     /** A bot row with everything the standalone roster rail used to own:
      *  pin, the ⚠ fix hint, the routines disclosure, rename, delete. */
@@ -675,6 +679,25 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {/* ── Composer pill ── */}
                         <div className="shrink-0 px-4 pb-4">
                             <div className="chat-column rounded-2xl border border-zinc-800 bg-zinc-900 p-2 focus-within:border-zinc-600">
+                                <input type="file" multiple accept="image/*" className="hidden"
+                                    ref={fileInputRef} data-testid="composer-file"
+                                    onChange={e => { attachFiles(e.target.files); e.target.value = ''; }} />
+                                {attachments.length > 0 && (
+                                    <div className="mb-1 flex flex-wrap gap-1 px-1.5" data-testid="composer-attachments">
+                                        {attachments.map(a => (
+                                            <span key={a.id}
+                                                className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1 pr-0.5 text-[10px] text-zinc-300">
+                                                {a.kind === 'image' && (
+                                                    <img src={a.payload} alt="" className="h-5 w-5 rounded object-cover" />
+                                                )}
+                                                <span className="max-w-[9rem] truncate">{a.name}</span>
+                                                <button type="button" aria-label={`Remove ${a.name}`}
+                                                    onClick={() => removeAttachment(a.id)}
+                                                    className="text-zinc-500 transition-colors hover:text-rose-400">×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                                 <textarea value={text}
                                     onChange={e => setText(e.target.value)}
                                     onKeyDown={e => {
@@ -683,6 +706,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     rows={2} placeholder={placeholder} aria-label="Message"
                                     className="w-full resize-none bg-transparent px-1.5 py-1 text-[13px] leading-5 text-zinc-100 outline-none placeholder:text-zinc-600" />
                                 <div className="mt-1 flex items-center gap-2 px-1">
+                                    <button type="button" onClick={openPicker} data-testid="composer-attach"
+                                        aria-label="Attach image" disabled={mode !== 'analyze'}
+                                        title={mode === 'analyze'
+                                            ? 'Attach an image for this analysis'
+                                            : 'Attach works in Analyze mode — a bot answers from text'}
+                                        className="rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-40 disabled:hover:text-zinc-500">
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                    </button>
                                     {/* Deliberately NOT .seg-thumb: that class
                                         is an absolutely-positioned sliding
                                         sibling, and on a container it resolves

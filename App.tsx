@@ -3242,7 +3242,15 @@ const App: React.FC = () => {
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
-                                    onAnalyze={prompt => { void handleSendMessage(prompt); }}
+                                    onAnalyze={(prompt, images) => {
+                                        void handleSendMessage(prompt, images.length
+                                            ? images.map(i => ({
+                                                file: new File([], i.name, { type: 'image/png' }),
+                                                dataURL: i.dataURL,
+                                                isLoading: false,
+                                            }))
+                                            : undefined);
+                                    }}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
                                     workingBotId={workingBotId ?? dmWorkingBotId}

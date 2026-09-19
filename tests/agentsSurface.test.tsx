@@ -140,7 +140,7 @@ describe('AgentsView composer', () => {
         fireEvent.click(screen.getByTestId('mode-analyze'));
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'BTC setup' } });
         fireEvent.click(screen.getByTestId('composer-send'));
-        expect(onAnalyze).toHaveBeenCalledWith('BTC setup');
+        expect(onAnalyze).toHaveBeenCalledWith('BTC setup', []);
     });
 
     it('renders an inline verdict from the thread — no second renderer', () => {
@@ -299,6 +299,43 @@ describe('WS-6 rail completeness', () => {
         expect(screen.getByTestId('agents-rail').className).toContain('md:hidden');
         fireEvent.click(screen.getByTestId('rail-expand'));
         expect(screen.getByTestId('agents-rail').className).not.toContain('md:hidden');
+    });
+});
+
+describe('composer attachments (WS-6)', () => {
+    const png = (): File => new File(['pretend-bytes'], 'chart.png', { type: 'image/png' });
+
+    it('offers attach only in Analyze mode', () => {
+        render(<AgentsView {...base} />);
+        expect(screen.getByTestId('composer-attach').hasAttribute('disabled')).toBe(true);
+        expect(screen.getByTestId('composer-attach').getAttribute('title')).toContain('Analyze mode');
+        fireEvent.click(screen.getByTestId('mode-analyze'));
+        expect(screen.getByTestId('composer-attach').hasAttribute('disabled')).toBe(false);
+    });
+
+    it('reads a picked image into a chip and sends it with the prompt, then clears', async () => {
+        const onAnalyze = vi.fn();
+        render(<AgentsView {...base} onAnalyze={onAnalyze} />);
+        fireEvent.click(screen.getByTestId('mode-analyze'));
+        fireEvent.change(screen.getByTestId('composer-file'), { target: { files: [png()] } });
+        await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy());
+
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'look at this tape' } });
+        fireEvent.click(screen.getByTestId('composer-send'));
+        await waitFor(() => expect(onAnalyze).toHaveBeenCalledWith(
+            'look at this tape',
+            [{ name: 'chart.png', dataURL: expect.stringMatching(/^data:image\/png/) }],
+        ));
+        await waitFor(() => expect(screen.queryByTestId('composer-attachments')).toBeNull());
+    });
+
+    it('drops one chip without touching the others', async () => {
+        render(<AgentsView {...base} />);
+        fireEvent.click(screen.getByTestId('mode-analyze'));
+        fireEvent.change(screen.getByTestId('composer-file'), { target: { files: [png()] } });
+        await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy());
+        fireEvent.click(screen.getByLabelText('Remove chart.png'));
+        expect(screen.queryByTestId('composer-attachments')).toBeNull();
     });
 });
 
