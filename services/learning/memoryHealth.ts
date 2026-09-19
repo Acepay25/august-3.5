@@ -42,11 +42,16 @@ export interface HealthSkillBucket {
     candidate: number;
     confirmed: number;
     retired: number;
-    /** Approved but still untested — injected as a labeled hypothesis. */
+    /** ── LEARNED skills still untested: approved drafts injected as a labeled
+     *  hypothesis. Book seeds are excluded — they carry external evidence by
+     *  design and stay 0W/0L forever, so counting them made a healthy default
+     *  workspace read as a stalled loop. */
     unproven: number;
+    /** Curated literature corpus (seeded, 0W/0L by design). */
+    bookSeeds: number;
     /** Latest causal eval said it hurts. */
     hurtsVerdict: number;
-    /** No counted evidence inside the decay window. */
+    /** LEARNED skills with no counted evidence inside the decay window. */
     staleEvidence: number;
     /** Auto-authored by a bot rather than the chart AI. */
     fromBots: number;
@@ -92,17 +97,25 @@ const bucketSkills = (metas: SkillMeta[]): HealthSkillBucket => {
     const staleCutoff = Date.now() - EVIDENCE_STALE_DAYS * DAY_MS;
     const out: HealthSkillBucket = {
         total: metas.length, candidate: 0, confirmed: 0, retired: 0,
-        unproven: 0, hurtsVerdict: 0, staleEvidence: 0, fromBots: 0,
+        unproven: 0, bookSeeds: 0, hurtsVerdict: 0, staleEvidence: 0, fromBots: 0,
     };
     for (const m of metas) {
+        // A book seed is a curated prior, not a belief this trader is still
+        // testing. It is exempt from the zero-evidence injection ban by
+        // design and never accrues a record of its own unless it proves out,
+        // so it must not be counted as unproven or stale.
+        const learned = m.prior !== 'book';
+        if (!learned) out.bookSeeds += 1;
+        if (m.originBotId) out.fromBots += 1;
         if (m.status === 'confirmed') out.confirmed += 1;
         else if (m.status === 'retired') out.retired += 1;
         else out.candidate += 1;
-        if ((m.wins + m.losses) === 0 && m.status !== 'retired') out.unproven += 1;
         if (m.evalVerdict === 'hurts') out.hurtsVerdict += 1;
+        if (!learned || m.status === 'retired') continue;
+        const evidenced = (m.wins + m.losses) > 0;
+        if (!evidenced) out.unproven += 1;
         const evid = m.lastEvidenceAt ? Date.parse(m.lastEvidenceAt) : NaN;
-        if (m.status !== 'retired' && (Number.isFinite(evid) ? evid < staleCutoff : true)) out.staleEvidence += 1;
-        if (m.originBotId) out.fromBots += 1;
+        if (Number.isFinite(evid) ? evid < staleCutoff : true) out.staleEvidence += 1;
     }
     return out;
 };
@@ -168,7 +181,7 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
         flags.push(`${skills.hurtsVerdict} skill${skills.hurtsVerdict === 1 ? '' : 's'} with a "hurts" eval verdict still enabled.`);
     }
     if (skills.staleEvidence > 0) {
-        flags.push(`${skills.staleEvidence} skill${skills.staleEvidence === 1 ? '' : 's'} with no counted evidence in ${EVIDENCE_STALE_DAYS}+ days.`);
+        flags.push(`${skills.staleEvidence} learned skill${skills.staleEvidence === 1 ? '' : 's'} with no counted evidence in ${EVIDENCE_STALE_DAYS}+ days.`);
     }
     if (queues.needsRewrite > 0) {
         flags.push(`${queues.needsRewrite} proposal${queues.needsRewrite === 1 ? '' : 's'} need a rewritten clause before anything can act on them.`);

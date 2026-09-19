@@ -95,23 +95,3 @@ export const constructOptimizedContext = (
     return context;
 };
 
-export const prepareTradeSummariesForGlobalMemory = (trades: LoggedTrade[]): string => {
-    // Convert logged trades to the specific format for the Global Memory Manager
-    return trades.map(t => {
-        return JSON.stringify({
-            tradeId: t.id,
-            asset: t.analysis.coinName,
-            direction: t.analysis.direction,
-            outcome: t.outcome,
-            leverage: t.leverage,
-            family: t.analysis.detectedPatternFamily || t.analysis.marketConditions.pattern,
-            postMortemReason: t.postMortem ? t.postMortem.substring(0, 100) + "..." : "N/A",
-            timestamp: t.timestamp,
-            // 150% Extended SL Zone tracking for Pattern Memory reference
-            extendedSLZoneBreach: t.extendedSLZoneBreach || false,
-            slZoneAlert: t.extendedSLZoneBreach
-                ? "⚠️ HIT 150% EXTENDED SL ZONE - REAL LOSS IN LIVE TRADING"
-                : null
-        });
-    }).join('\n');
-};

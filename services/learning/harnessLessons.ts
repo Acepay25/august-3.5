@@ -133,21 +133,6 @@ export const clearHarnessLesson = (id: string): void => {
 // ─── Wire-lesson read path (consumed by reasoningControls callers) ───────────
 
 /**
- * A pinned thinking-off class: a recorded wire lesson says this class rejects
- * or ignores the reasoning knob, so effort translation must fail closed until
- * a successful re-probe clears the lesson.
- */
-export const isWireRoutePinnedOff = (
-    scope: CapabilityClass,
-    patternNeedle: string,
-): boolean =>
-    load().some(l =>
-        l.kind === 'wire'
-        && l.scope === scope
-        && l.pattern.toLowerCase().includes(patternNeedle.toLowerCase())
-    );
-
-/**
  * Harness-lesson read path into reasoningControls: a provider whose probe FAILED while a
  * knob was sent gets its route pinned off (the store keeps the lesson until
  * a re-probe clears it). The provider id here narrows a CAPABILITY-CLASS

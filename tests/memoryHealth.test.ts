@@ -30,7 +30,7 @@ import {
     runMemoryHygiene, runMemoryHygieneIfDue, isHygieneDue, loadHygieneLog,
 } from '../services/learning/memoryHygiene';
 import { buildMemoryHealthReport } from '../services/learning/memoryHealth';
-import { initMemoryFiles, updateMemoryFile, getMemoryFiles } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, updateMemoryFile, getMemoryFiles, createMemoryFile } from '../services/learning/MemoryFilesService';
 import {
     ingestCraftedSkillFromDraft, listSkills, setSkillStatus, parseSkillMarkdown,
     serializeSkill, titleFromMeta,
@@ -131,6 +131,32 @@ describe('buildMemoryHealthReport', () => {
         expect(report.notebook.files).toBeGreaterThan(0);
         expect(report.folders.some(f => f.name === 'skills')).toBe(true);
         expect(report.generatedAt).toBeGreaterThan(0);
+    });
+
+    it('does not report curated book seeds as untested or stale', async () => {
+        // The seed corpus is 0W/0L by design and stays that way unless it
+        // proves out. Counting it made a healthy default workspace read as a
+        // stalled learning loop.
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, 'book-trend-pullback.md', `---
+status: candidate
+kind: repeat
+prior: book
+wins: 0
+losses: 0
+ifCondition: trending regime with a clean pullback into dynamic support
+thenAction: enter with the trend once the pullback low holds on a close
+tradeIds:
+---
+
+# Repeat: trend-following pullback entry
+`, USER, true);
+
+        const report = await buildMemoryHealthReport(USER);
+        expect(report.skills.bookSeeds).toBe(1);
+        expect(report.skills.unproven).toBe(0);
+        expect(report.skills.staleEvidence).toBe(0);
+        expect(report.flags).toEqual([]);
     });
 
     it('raises a flag when something is actually waiting', async () => {

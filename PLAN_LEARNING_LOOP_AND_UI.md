@@ -431,14 +431,21 @@ Deliberately left, each with the reason:
   price readouts got `tabular-nums`. The remaining `rounded-full` occurrences in
   SettingsMenu/TradeView/AgentRosterRail/Sidebar are mostly dots, avatars and
   counts, not status chips — converting them is churn I cannot visually verify.
-- **WS-4.1 follow-through — dead code documented, not deleted.**
-  `GenericAnalysisService.updateGlobalMemory`,
-  `memoryUtils.prepareTradeSummariesForGlobalMemory`,
-  `MemoryConsolidationService.consolidateMemory`,
-  `harnessLessons.lessonsForClass` / `isWireRoutePinnedOff`, the duplicated
-  `aiPatternMemory`/`insightKnowledgeBase` write, and the rotting top-level
-  `insightKnowledgeBase` row all have no live reader. Listed with anchors in
-  docs/learning-loop-map.md.
+- **WS-4.1 follow-through — done, with two corrections.** Removed after
+  verifying zero callers: `GenericAnalysisService.updateGlobalMemory` (+ its
+  private schema), `memoryUtils.prepareTradeSummariesForGlobalMemory`,
+  `harnessLessons.isWireRoutePinnedOff`, an unused `listHarnessLessons` import.
+  Two items the audit had flagged as dead were **not** dead —
+  `consolidateMemory` is imported by `AlgorithmicMemoryService`, and
+  `lessonsForClass` is a tested accessor — so both were kept. The rotting
+  top-level `insightKnowledgeBase` row and the duplicated
+  `aiPatternMemory`/`insightKnowledgeBase` write are documented, not removed:
+  the first is four files of state plumbing for no visible gain, the second is
+  a retrieval-quality decision, not a deletion.
+- **Health-tab false alarm, fixed.** The selector counted the curated book-seed
+  corpus (12 skills, 0W/0L by design) as "untested" and "stale", so a healthy
+  default workspace rendered an amber "13 skills with no counted evidence"
+  flag. Seeds now have their own bucket and cannot raise a flag.
 - **WS-3.4 placement.** Per-bot learning stats compute and render in Learn →
   Health; the plan asked for them on the roster rail/drawer specifically.
 - **WS-6 details.** `/` does not focus the rail search (already bound to the
