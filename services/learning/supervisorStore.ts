@@ -61,6 +61,11 @@ export interface SupervisorSnapshot {
     running: boolean;
     /** Automation toggle (persisted). When off, only an explicit "Run now" works. */
     autoEnabled: boolean;
+    /** Queue items the supervisor has NOT acted on. Surfaced rather than
+     *  left implicit: a per-pass call budget means a backlog can legitimately
+     *  survive a sweep, and "nothing happened" must never read as "nothing is
+     *  waiting". */
+    pendingCount: number;
     events: SupervisorEvent[];
 }
 
@@ -74,15 +79,16 @@ let activity = '';
 let modelName = '';
 let running = false;
 let autoEnabled = true;
+let pendingCount = 0;
 let events: SupervisorEvent[] = [];
 const listeners = new Set<() => void>();
 let controller: AbortController | null = null;
 let autoLoadedFor = '';
 
-let snapshot: SupervisorSnapshot = { phase, activity, modelName, running, autoEnabled, events };
+let snapshot: SupervisorSnapshot = { phase, activity, modelName, running, autoEnabled, pendingCount, events };
 
 const rebuild = (): void => {
-    snapshot = { phase, activity, modelName, running, autoEnabled, events };
+    snapshot = { phase, activity, modelName, running, autoEnabled, pendingCount, events };
 };
 
 const emit = (): void => {
@@ -166,6 +172,15 @@ export const setController = (c: AbortController | null): void => { controller =
 export const getController = (): AbortController | null => controller;
 export const abortRun = (): void => { controller?.abort(); };
 
+/** Recount the un-acted-on backlog. No-op on an unchanged value so a pass
+ *  that touches every queue doesn't re-render the indicator. */
+export const setPending = (next: number): void => {
+    const v = Number.isFinite(next) && next > 0 ? Math.floor(next) : 0;
+    if (v === pendingCount) return;
+    pendingCount = v;
+    emit();
+};
+
 export const isAutoEnabled = (): boolean => {
     ensureAutoLoaded();
     return autoEnabled;
@@ -184,6 +199,7 @@ export const __resetForTests = (): void => {
     modelName = '';
     running = false;
     autoEnabled = true;
+    pendingCount = 0;
     events = [];
     controller = null;
     autoLoadedFor = '';

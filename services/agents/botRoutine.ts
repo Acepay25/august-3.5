@@ -45,6 +45,10 @@ export interface BotRoutineTurnDeps {
     notes: string | null;
     /** Injected transport (production passes streamQuickResponse). */
     stream: (config: ProviderConfig, prompt: string, history: Message[], system: string) => Promise<string>;
+    /** WS-3: shared-notebook retrieval slice for the run's prompt (production
+     *  passes buildBotSharedMemoryContext). Omitted ⇒ the routine runs on
+     *  persona+notes only, exactly as before. */
+    sharedMemory?: (prompt: string, bot: AgentBot) => string;
 }
 
 /** A teammate's reply is one hop below the routine (DM_MAX_HOPS still bounds the chain). */
@@ -82,12 +86,13 @@ export const runBotRoutineTurn = async (
             : { status: 'skipped', skipReason: 'The bot this routine runs as is no longer on the roster.' };
     }
     const { bot, provider } = resolved;
+    const shared = deps.sharedMemory?.(prompt, bot) ?? '';
 
     const system = buildBotSystemPrompt(bot, {
         persona: deps.persona,
         notes: deps.notes,
         teammates: deps.bots,
-    });
+    }) + (shared ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${shared}` : '');
     const history = threadForProvider(deps.messages, bot.providerId, bot.modelId);
     const reply = (await deps.stream(provider, prompt, history, system)).trim();
 

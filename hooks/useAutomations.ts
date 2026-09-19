@@ -37,6 +37,7 @@ import {
     runBotRoutineTurn,
 } from '../services/agents/botRoutine';
 import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
+import { buildBotSharedMemoryContext } from '../services/agents/botLearning';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
@@ -283,6 +284,9 @@ export function useAutomations(params: UseAutomationsParams) {
                 persona: readBotSystemMarkdown(config.botId!),
                 notes: readBotMemoryMarkdown(config.botId!),
                 stream: (provider, p, history, system) => streamQuickResponse(provider, p, history, system),
+                // WS-3: a scheduled bot reads the shared notebook too — same
+                // budgeted retrieval slice a DM turn gets.
+                sharedMemory: (p, bot) => buildBotSharedMemoryContext(p, { botId: bot.id, memoryScope: 'global' }),
             });
             if (outcome.status === 'skipped') {
                 appendRun(config.id, {

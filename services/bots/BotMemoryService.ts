@@ -4,8 +4,13 @@ import { MemoryFile } from '../../types';
 
 const shortBotId = (botId: string): string => slugifyName(botId).slice(0, 24) || botId.slice(0, 8);
 
+/** The notebook folder holding this bot's system.md + memory.md. Exported so
+ *  every WRITER names it exactly like this service READS it — a lesson written
+ *  under a differently-derived name is invisible to the bot forever. */
+export const botMemoryFolderName = (botId: string): string => `bots-${shortBotId(botId)}`;
+
 const findBotFile = (botId: string, name: string): MemoryFile | undefined => {
-    const childName = `bots-${shortBotId(botId)}`;
+    const childName = botMemoryFolderName(botId);
     const folder = getMemoryFiles().folders.find(f => f.name === childName);
     if (!folder) return undefined;
     return getMemoryFiles().files.find(f => f.folderId === folder.id && f.name === name);

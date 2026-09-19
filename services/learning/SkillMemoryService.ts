@@ -188,11 +188,16 @@ export interface SkillMeta {
     horizon?: 'scalp' | 'intraday' | 'swing' | 'position';
     /** Position sizing / risk guidance the strategy carries, if any. */
     sizing?: string;
-    /** Provenance marker for curated book-prior skills (seed corpus):
-     *  'book' means the procedure comes from external literature, not this
-     *  trader's evidence — exempt from the zero-evidence injection ban,
-     *  clearly labeled as a prior so the model can weigh it as such. */
-    prior?: 'book';
+    /** Provenance marker for skills that carry evidence the *counters* don't
+     *  show, and are therefore exempt from the zero-evidence injection ban:
+     *  - 'book': the procedure comes from external literature (seed corpus),
+     *    not this trader's record — labeled as a prior so the model weighs it.
+     *  - 'gated': a drafted skill that cleared the evidence-backed draft gate
+     *    and the worth gate, then was approved (by the supervisor or the
+     *    human). Its W/L record is empty only because nothing unproven is
+     *    ever counted — injection is how it earns its first sample. Without
+     *    this the loop deadlocks: no injection ⇒ no evidence ⇒ no injection. */
+    prior?: 'book' | 'gated';
     /** ── alpha-decay window ──
      *  The last N counted outcomes as a 'W'/'L' string (oldest first,
      *  tail-capped at RECENT_WINDOW). Lifetime counters hide DECAY — a
@@ -215,6 +220,11 @@ export interface SkillMeta {
     /** Which learner minted this skill (provenance line on the card): 'scan'
      *  (chart-history scan), 'post-mortem', 'book', 'chat', etc. */
     source?: string;
+    /** Why an approver accepted this draft, in their words — the supervisor's
+     *  verdict reason, or the human's Save click. The supervision event log is
+     *  session-scoped, so without this the audit trail for an auto-approved
+     *  skill evaporates on reload. One line, capped. */
+    whyAccepted?: string;
     /** Invocation control (Agent Skills frontmatter port): which debate
      *  audience may load this skill. Default 'all'. */
     audience?: 'analyst' | 'moderator' | 'all';
@@ -398,6 +408,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         coin: pick('coin'),
         timeframe: pick('timeframe'),
         source: pick('source'),
+        whyAccepted: pick('whyAccepted')?.slice(0, 400),
         direction: pick('direction'),
         family: pick('family'),
         regime: pick('regime'),
@@ -431,7 +442,8 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
             return h === 'scalp' || h === 'intraday' || h === 'swing' || h === 'position' ? h : undefined;
         })(),
         sizing: pick('sizing'),
-        prior: pick('prior') === 'book' ? 'book' as const : undefined,
+        prior: pick('prior') === 'book' ? 'book' as const
+            : pick('prior') === 'gated' ? 'gated' as const : undefined,
         recentOutcomes: (() => {
             const r = (pick('recentOutcomes') || '').toUpperCase().replace(/[^WL]/g, '');
             return r ? r.slice(-RECENT_WINDOW) : undefined;
@@ -611,6 +623,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.coin ? [`coin: ${meta.coin}`] : []),
         ...(meta.timeframe ? [`timeframe: ${meta.timeframe}`] : []),
         ...(meta.source ? [`source: ${meta.source}`] : []),
+        ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
         ...(meta.direction ? [`direction: ${meta.direction}`] : []),
         ...(meta.family ? [`family: ${meta.family}`] : []),
         ...(meta.regime ? [`regime: ${meta.regime}`] : []),
@@ -1843,11 +1856,15 @@ export const ingestCraftedSkill = (
  * Ingest a user-approved skill draft that has NO closed trade behind it
  * (verdict-sourced drafts). Starts as a zero-evidence candidate — it must
  * earn wins/losses through applySkillEvidence before it can confirm.
+ * `prior: 'gated'` is what lets it into the prompt at all: see the field doc.
  */
 const ingestCraftedSkillFromDraftUnlocked = async (
     crafted: CraftedSkill,
     coin: string | undefined,
     username: string,
+    /** The approver's one-line reason (the supervisor's verdict). Persisted
+     *  onto the skill — see SkillMeta.whyAccepted. */
+    whyAccepted?: string,
 ): Promise<void> => {
     await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
@@ -1869,6 +1886,14 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         losses: 0,
         consecutiveLosses: 0,
         tradeIds: [],
+        // Every caller of this path is an APPROVED draft (human Save or
+        // supervisor verdict) that already cleared the draft gates — so it
+        // is exempt from the zero-evidence injection ban and can earn its
+        // first counted sample. Without this a new skill is invisible to
+        // retrieval forever: no injection ⇒ CONTROL-only outcomes ⇒ no
+        // evidence ⇒ no injection.
+        prior: 'gated',
+        ...(whyAccepted?.trim() ? { whyAccepted: whyAccepted.trim().slice(0, 400) } : {}),
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
         predicate: sanitizePredicate(crafted.predicate),
@@ -1884,8 +1909,9 @@ export const ingestCraftedSkillFromDraft = (
     crafted: CraftedSkill,
     coin: string | undefined,
     username: string,
+    whyAccepted?: string,
 ): Promise<void> =>
-    withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username));
+    withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username, whyAccepted));
 
 const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;

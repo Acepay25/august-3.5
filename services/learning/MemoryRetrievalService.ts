@@ -4,8 +4,11 @@
  * Design:
  *  - ONE narrative voice: doctrine rides every stage; everything else is
  *    ranked data under a hard per-stage budget.
- *  - Diary is RAW STORAGE — never injected. It feeds doctrine rewrites and
- *    skill gates; the model sees its conclusions, not its journal.
+ *  - Diary is RAW STORAGE — never injected, deliberately. The model sees the
+ *    conclusions (doctrine, settled beliefs, skills), never the journal. Note
+ *    that nothing else reads it either: the doctrine rewriter works from the
+ *    closed-trade log, not these files, so the diary currently survives only
+ *    as the human-facing record. See docs/learning-loop-map.md.
  *  - Recurring-mistakes lines escalate into skills: once a skill owns a
  *    coin+direction cluster, the raw warning line goes quiet.
  *  - IF/THEN rules live INSIDE skills (candidate → confirmed by evidence);
@@ -155,11 +158,17 @@ const rankedMatchedSkills = (
         // Zero-evidence skills stay OUT of prompt injection.
         // A 0W/0L draft is an unproven hunch; injecting it gave the model no
         // basis to weigh it against — and contradicted the dashboard's own
-        // "stays unenforced until it earns a record" message. The recall tool
-        // still serves the full body when a model asks explicitly.
-        // EXCEPTION: `prior: book` skills (the seed corpus) carry external
-        // evidence — curated literature, not a hunch — so they inject from
-        // birth, visibly labeled 0W/0L so the model weighs them as priors.
+        // "stays unenforced until it earns a record" message.
+        // EXCEPTIONS — skills whose warrant does not come from this trader's
+        // own counted record (see SkillMeta.prior):
+        //   'book'  — curated literature (the seed corpus), injects from birth.
+        //   'gated' — a draft that cleared the draft gates + worth gate and
+        //     was approved. It must be injected to earn its FIRST counted
+        //     sample: evidence only accrues on the FOLLOWED branch of
+        //     applySkillEvidence, so excluding an approved-but-unproven skill
+        //     deadlocks the loop (no injection ⇒ CONTROL ⇒ no evidence ⇒ no
+        //     injection). Labeled 0W/0L so the model weighs it as a
+        //     hypothesis, not a settled rule.
         if ((meta.wins + meta.losses) === 0 && !meta.prior) continue;
         // Graph score: status weight (confirmed 2 / candidate 1)
         // × dimension overlap count × evidence-freshness decay. Mirrors the
@@ -290,8 +299,13 @@ const skillIndexLine = (name: string, meta: SkillMeta, status?: SkillMeta['statu
         : meta.ifCondition
             ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
             : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
-    const evidence = meta.prior === 'book' && (meta.wins + meta.losses) === 0
+    const unprovenLabel = meta.prior === 'book'
         ? 'book prior — no local record yet'
+        : meta.prior === 'gated'
+            ? 'approved draft, untested — weigh it as a hypothesis'
+            : '';
+    const evidence = (meta.wins + meta.losses) === 0 && unprovenLabel
+        ? unprovenLabel
         : evidenceFreshness(meta);
     return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${status ?? meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidence}] ${rule}`;
 };

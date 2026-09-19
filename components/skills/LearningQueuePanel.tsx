@@ -25,10 +25,12 @@ const trySkillInChat = (slug: string): void => {
  * challenge) queue proposals; mounted as the top strip of the Strategy
  * Studio. Without it the queue is write-only and every proposal is lost.
  *
- * Apply exists where a deterministic actuation path exists (displacement,
- * revival, demote). Re-scope and contradiction proposals are HUMAN EDIT
- * prompts — the honest actions are "open the skill" or "dismiss", never an
- * automatic rewrite of a belief's text.
+ * Nobody HAS to act here. The skill supervisor reviews every one of these
+ * automatically: displacement/revival/demote through their deterministic
+ * apply paths, re-scope/contradiction only when the model supplies a
+ * rewritten clause that clears the same IF/THEN bar a fresh draft must clear.
+ * Anything it can't apply stays queued — so these buttons are overrides and
+ * a second pair of hands, not the required path.
  */
 
 const KIND_LABEL: Record<string, string> = {
@@ -39,6 +41,8 @@ const KIND_LABEL: Record<string, string> = {
     contradiction: 'conflict',
 };
 
+/** Kinds with a deterministic actuation path. The others need a rewrite the
+ *  model authors — matching the supervisor's own split in skillSupervisor. */
 const APPLYABLE = new Set(['displacement', 'revival', 'demote']);
 
 interface LearningQueuePanelProps {
@@ -111,6 +115,12 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                 </span>
                 <span className="text-[10px] text-zinc-600">{open ? 'hide' : 'show'}</span>
             </button>
+            {open && (
+                <p className="px-3 pt-2 text-[10px] leading-relaxed text-zinc-600">
+                    The supervisor reviews these automatically — Apply and Dismiss are your overrides, not the required path.
+                    Anything it can&apos;t act on safely stays here.
+                </p>
+            )}
             {open && (
                 <ul className="max-h-64 space-y-2 overflow-y-auto custom-scrollbar border-t border-zinc-800/80 px-3 py-3">
                     {proposals.map(p => (

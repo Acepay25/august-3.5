@@ -113,6 +113,7 @@ import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
 import useNetworkStatus from './hooks/useNetworkStatus';
+import { useSupervisorBootstrap } from './hooks/useSupervisorBootstrap';
 import { useUIState } from './hooks/useUIState';
 import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
@@ -1289,6 +1290,9 @@ const App: React.FC = () => {
         // Same live-data gate the rooms use: with Hybrid Intelligence ON,
         // a bot in its own thread reasons over live prices too.
         hybridEnabled: isHybridIntelligenceEnabled,
+        // WS-3: bot turns fold closed bot-authored trades back into the
+        // shared learning loop (skills + evidence), same as chart AI closes.
+        loggedTradesRef,
     });
     mailboxRef.current = mailbox;
     botThreadStateRef.current = { thread: activeThread, bots };
@@ -2565,6 +2569,10 @@ const App: React.FC = () => {
         confirmAutopilot: confirmAutopilotRef,
         activeUsername,
     });
+
+    // WS-2.1: the supervisor's listeners + startup sweep live at App level —
+    // a session that never opens the Trade dock still self-governs its queues.
+    useSupervisorBootstrap(activeUsername);
 
 
     // F6: best-effort backup when the desktop app closes — the unload flush
