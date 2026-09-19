@@ -13,6 +13,7 @@ import { Activity, AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { buildMemoryHealthReport, type MemoryHealthReport } from '../../services/learning/memoryHealth';
 import { isHygieneDue, runMemoryHygiene } from '../../services/learning/memoryHygiene';
 import { loadProviderConfigs } from '../../services/infrastructure/ProviderConfigService';
+import { listTombstones, type SkillTombstone } from '../../services/learning/skillGraveyard';
 import StatusPill from '../ui/StatusPill';
 
 interface MemoryHealthCardProps {
@@ -39,11 +40,15 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
     const [report, setReport] = useState<MemoryHealthReport | null>(null);
     const [due, setDue] = useState(false);
     const [running, setRunning] = useState(false);
+    // The plan asked for a graveyard VIEW; until now the whole store showed up
+    // as one number in the queues section.
+    const [tombstones, setTombstones] = useState<SkillTombstone[]>([]);
 
     const load = useCallback(async (): Promise<void> => {
         try {
             setReport(await buildMemoryHealthReport(username));
             setDue(await isHygieneDue(username));
+            setTombstones(await listTombstones(username));
         } catch { setReport(null); }
     }, [username]);
 
@@ -140,6 +145,44 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                     ))}
                 </Section>
             )}
+
+            {report.staleFiles.length > 0 && (
+                <Section title="No hit in 30+ days">
+                    <p className="mb-1 text-[10px] leading-4 text-zinc-600">
+                        The injection log places a real hit on each of these, and its newest one is older than the
+                        evidence-decay window the loop already uses.
+                    </p>
+                    {report.staleFiles.map(f => (
+                        <Row key={f.path} label={f.path} value={`${f.chars}c · ${f.daysSinceHit}d`}
+                            title={`last served ${f.lastHitAt.slice(0, 10)}`} />
+                    ))}
+                </Section>
+            )}
+
+            <Section title="Settled beliefs">
+                <Row label="settled / invalidated"
+                    value={`${report.beliefs.settled} / ${report.beliefs.invalidated}`} />
+                <Row label="standing but contradicted" value={report.beliefs.challenged}
+                    title="A challenge flag is queued against these; nothing auto-invalidates a settled belief." />
+            </Section>
+
+            <Section title={`Graveyard (${tombstones.length})`}>
+                {tombstones.length === 0 ? (
+                    <p className="py-1 text-[11px] text-zinc-600">Nothing has been retired and recorded.</p>
+                ) : (
+                    <>
+                        <p className="mb-1 text-[10px] leading-4 text-zinc-600">
+                            Why each rule stopped, and what it stopped on. Re-entry needs a fresh evidence cluster —
+                            the next matching draft is what asks for it, not a timer.
+                        </p>
+                        {tombstones.map(t => (
+                            <Row key={`${t.slug}-${t.retiredAt}`} label={t.slug}
+                                title={`sample ${t.sampleN}${t.liftPts === null ? '' : ` · lift ${t.liftPts}pts`}`}
+                                value={`${t.reason} · ${t.retiredAt.slice(0, 10)}`} />
+                        ))}
+                    </>
+                )}
+            </Section>
 
             {report.bots.length > 0 && (
                 <Section title="Bots">
