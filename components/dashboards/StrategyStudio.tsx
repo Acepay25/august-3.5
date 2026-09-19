@@ -12,9 +12,9 @@
  *   - familyRegimeEdge()       → the family × regime win-rate matrix cell
  *   - classifyStrategyFamily() → the controlled family a skill trades
  *
- * Monochrome theme (AGENTS.md): zinc surfaces throughout; the only semantic
- * color is the status-surface family used for edge verdicts and the
- * candidate/confirmed/retired badges, matching the rest of the app.
+ * Theme (AGENTS.md): zinc surfaces throughout; semantic color is limited to
+ * the emerald/rose/amber edge verdicts and the candidate/confirmed/retired
+ * badges, which is what the global dark theme already means by those hues.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -422,7 +422,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                         <h3 className="min-w-0 flex-1 truncate pt-1 text-[13px] font-semibold text-zinc-100" title={titleFromMeta(meta)}>
                                             {titleFromMeta(meta)}
                                         </h3>
-                                        <span className={`status-surface shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusBadge.className}`}>
+                                        <span className={` shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusBadge.className}`}>
                                             {meta.status}
                                         </span>
                                     </div>

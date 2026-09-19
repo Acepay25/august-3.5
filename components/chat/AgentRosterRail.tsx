@@ -392,7 +392,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
 
             {/* Active now strip */}
             {workingBotId && (
-                <div className="status-surface px-3 pb-2" data-testid="active-now">
+                <div className=" px-3 pb-2" data-testid="active-now">
                     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-200">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
                         {findBotById(bots, workingBotId)?.name ?? 'Bot'} is working

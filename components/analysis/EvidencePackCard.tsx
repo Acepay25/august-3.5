@@ -50,7 +50,7 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                         <p className="text-[11px] leading-relaxed text-zinc-300">{stripMd(statsLine)}</p>
                     )}
                     {causePattern && (
-                        <p className="status-surface text-[11px] leading-relaxed font-medium">{stripMd(causePattern)}</p>
+                        <p className=" text-[11px] leading-relaxed font-medium">{stripMd(causePattern)}</p>
                     )}
                     {similar.length > 0 && (
                         <div>

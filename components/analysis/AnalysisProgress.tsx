@@ -185,7 +185,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   const visibleSteps = steps.filter((s) => s.status !== 'pending');
   const surfaceClass = embedded
     ? 'animate-fade-in'
-    : 'ui-panel status-surface p-4 animate-fade-in';
+    : 'ui-panel p-4 animate-fade-in';
 
   const taskBlocks = (
     <div className="space-y-1">

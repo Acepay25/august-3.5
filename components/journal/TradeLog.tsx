@@ -7,6 +7,7 @@ import { ProviderConfig } from '../../types/provider';
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon, RefreshIcon } from '../shared/Icons';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
+import StatusPill, { type PillTone } from '../ui/StatusPill';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
@@ -56,11 +57,11 @@ interface TradeLogContentProps {
 }
 
 const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
-    const styles: { [key in TradeOutcome]?: string } = {
-        [TradeOutcome.WIN]: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-        [TradeOutcome.LOSS]: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
-        [TradeOutcome.ENTRY_NOT_HIT]: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
-        [TradeOutcome.SKIPPED]: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
+    const tone: { [key in TradeOutcome]?: PillTone } = {
+        [TradeOutcome.WIN]: 'up',
+        [TradeOutcome.LOSS]: 'down',
+        [TradeOutcome.ENTRY_NOT_HIT]: 'neutral',
+        [TradeOutcome.SKIPPED]: 'neutral',
     };
     const text: { [key in TradeOutcome]?: string } = {
         [TradeOutcome.WIN]: 'WIN',
@@ -68,12 +69,8 @@ const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
         [TradeOutcome.ENTRY_NOT_HIT]: 'NO ENTRY',
         [TradeOutcome.SKIPPED]: 'SKIPPED',
     };
-    if (!styles[outcome]) return null;
-    return (
-        <span className={`status-surface px-2.5 py-1 text-[11px] font-semibold tracking-widest rounded-md uppercase ${styles[outcome]}`}>
-            {text[outcome]}
-        </span>
-    );
+    if (!tone[outcome]) return null;
+    return <StatusPill tone={tone[outcome]} kicker>{text[outcome]}</StatusPill>;
 };
 
 /**
@@ -190,7 +187,7 @@ const TradeDetailView: React.FC<{
                         <div className={`mt-6 rounded-xl overflow-hidden ${containerClass}`}>
                         <div className="px-5 py-6 space-y-5">
                             <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact />
-                            <div className="grid grid-cols-2 gap-4 text-sm pt-2 font-mono">
+                            <div className="grid grid-cols-2 gap-4 text-sm pt-2 font-mono tabular-nums">
 
                                 {/* Trade Settings Row */}
                                 <div className="col-span-2 flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-1 flex-wrap gap-3">
@@ -393,8 +390,8 @@ const TradeDetailView: React.FC<{
                                     memory halted / downsized / warned this trade. */}
                                 {trade.patternMemoryGate && trade.patternMemoryGate.gateResult !== 'PASS' && (
                                     <div className={`col-span-2 rounded-lg border px-3 py-2 ${trade.patternMemoryGate.gateResult === 'HALT'
-                                        ? 'status-surface border-rose-500/40 bg-rose-500/10'
-                                        : 'status-surface border-amber-500/40 bg-amber-500/10'}`}>
+                                        ? ' border-rose-500/40 bg-rose-500/10'
+                                        : ' border-amber-500/40 bg-amber-500/10'}`}>
                                         <span className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
                                             {trade.patternMemoryGate.gateResult === 'HALT' ? (
                                                 <>
@@ -495,12 +492,13 @@ const TradeLogRowImpl: React.FC<{
                         <span className="text-sm font-medium text-zinc-100 truncate">{coinName}.md</span>
                         <OutcomeBadge outcome={outcome} />
                         {analysis?.verdictReview && (
-                            <span
-                                className="status-surface px-2 py-0.5 text-[10px] font-semibold tracking-widest rounded-md uppercase border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                            <StatusPill
+                                tone="warn"
+                                kicker
                                 title={`Quarantined verdict (${analysis.verdictReview.reason}) — a parse/integrity failure, not a neutral opinion`}
                             >
                                 Review
-                            </span>
+                            </StatusPill>
                         )}
                         {isInsight && <span className="text-[10px] uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
@@ -806,7 +804,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                                 }
                             </div>
                         )}
-                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className="status-surface w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50">
+                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50">
                             <TrashIcon /> Delete Selected ({selectedIds.length})
                         </button>
                     </div>

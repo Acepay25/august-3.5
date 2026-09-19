@@ -85,8 +85,8 @@ const AutomationRunCard: React.FC<{
     }, [isBotReply, run.status, run.error, run.message?.text, analysis, snapshot]);
 
     const outcomeActions: { key: RunOutcomeConfirm; label: string; className: string }[] = [
-        { key: 'win', label: 'Win', className: 'status-surface rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
-        { key: 'loss', label: 'Loss', className: 'status-surface rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25' },
+        { key: 'win', label: 'Win', className: ' rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
+        { key: 'loss', label: 'Loss', className: ' rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25' },
         { key: 'entry_not_hit', label: 'Entry not hit', className: 'rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-200 transition-colors hover:bg-zinc-700' },
     ];
 

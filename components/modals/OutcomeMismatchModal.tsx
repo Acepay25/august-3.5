@@ -33,7 +33,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
     const tpHitFirst = !!tpFirstTime && (!slTouchTime || tpFirstTime < slTouchTime);
 
     return (
-        <div ref={dialogRef} className="status-surface fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
+        <div ref={dialogRef} className=" fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
             <div className="bg-zinc-900 border border-yellow-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}

@@ -6,8 +6,9 @@
  * without a percent (manual dollar-only wins) are excluded from the curve —
  * they still count toward win rate and streaks elsewhere.
  *
- * Status surface: P&L meaning would be lost in the monochrome remap, so the
- * root opts into .status-surface (emerald = net positive, rose = net negative).
+ * P&L meaning is carried by the curve's own emerald/rose stroke, not by any
+ * surface class — the old `.status-surface` opt-in was a no-op (no rule in
+ * index.css since the theme went semantic globally) and has been removed.
  */
 
 import React, { useMemo } from 'react';
@@ -46,7 +47,7 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
     const accent = pnlPositive ? '#34d399' : '#fb7185';
 
     return (
-        <div className="status-surface glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
+        <div className=" glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2 sm:mb-3">
                 <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Equity Curve (cumulative P&L %)</div>
                 <div className="flex items-center gap-3 text-[10px] font-mono">

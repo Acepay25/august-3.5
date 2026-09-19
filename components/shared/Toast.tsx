@@ -143,7 +143,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
 
     return (
         <div
-            className={`pointer-events-auto status-surface p-4 rounded-xl border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
+            className={`pointer-events-auto p-4 rounded-xl border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
             // Errors announce assertively; everything else announces politely
             // so a burst of toasts doesn't shout over the screen reader.
             role={toast.type === 'error' ? 'alert' : 'status'}

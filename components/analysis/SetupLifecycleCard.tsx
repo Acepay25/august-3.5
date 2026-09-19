@@ -30,7 +30,7 @@ export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis
     const isTerminalException = lifecycle.stage === 'expired' || lifecycle.stage === 'skipped';
 
     return (
-        <section className={`${embedded ? 'border-t border-white/5' : 'rounded-2xl border'} status-surface ${isTerminalException && !embedded ? 'border-amber-500/25 bg-amber-950/15' : embedded ? '' : 'border-white/10 bg-zinc-900/70'} ${compact ? 'px-4 py-3' : 'mb-4 px-4 py-4'}`} aria-label="Setup lifecycle">
+        <section className={`${embedded ? 'border-t border-white/5' : 'rounded-2xl border'} ${isTerminalException && !embedded ? 'border-amber-500/25 bg-amber-950/15' : embedded ? '' : 'border-white/10 bg-zinc-900/70'} ${compact ? 'px-4 py-3' : 'mb-4 px-4 py-4'}`} aria-label="Setup lifecycle">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">

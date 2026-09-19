@@ -179,8 +179,10 @@ Optional build-time variables:
 - **Brand gradient**: `--color-brand-start #eb53ff → --color-brand-mid #ff538e →
   --color-brand-end #ff9a32` is reserved for the wordmark and the active-nav
   indicator only — never hero/body text, tables, or chart fills.
-- `.status-surface` / `.analysis-card` classes remain in JSX for compatibility but
-  no longer remap colors (the global theme IS semantic now).
+- `.status-surface` / `.analysis-card` were deleted from the JSX (2026-09-19).
+  They matched no rule in `index.css` once the global theme became semantic, so
+  they were dead tokens that made two component comments claim a behavior that
+  no longer existed. Do not re-add them.
 - Typography: **Geist Variable** for UI (`--font-sans`), **DM Serif Text** for
   display/serif (`--font-serif` — hero headings, brand moments), JetBrains Mono
   for data. All self-hosted via @fontsource.
