@@ -70,9 +70,11 @@ interface AgentsViewProps {
     /** The Coach thread. Without it the Coach shortcut selected a thread this
      *  surface had no pane for — a dead end wearing a badge. */
     renderCoach?: () => React.ReactNode;
-    /** Current provider/model chip in the composer. */
-    modelLabel?: string;
-    onOpenModels?: () => void;
+    /** Current provider/model chip in the composer. WS-6 asks that it open the
+     *  model picker, so App hands in a mounted ModelPicker (which renders its
+     *  own trigger labelled with the current selection) rather than a button
+     *  that leaves the surface to reach Settings. */
+    modelPicker?: React.ReactNode;
     /** Focus this same thread in the Chart AI dock — the two surfaces show
      *  one conversation, and this is how you hop between them. */
     onOpenInDock?: () => void;
@@ -225,7 +227,7 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelLabel, onOpenModels, onOpenInDock,
+    lastOpenedMap = {}, modelPicker, onOpenInDock,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
@@ -313,13 +315,16 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const groupRows = useMemo(() => groups
         .filter(g => matches(groupDisplayName(g, bots))), [groups, bots, matches]);
 
-    const pinnedBots = botRows.filter(r => pins.includes(r.bot.id));
-    const otherBots = botRows.filter(r => !pins.includes(r.bot.id));
+    const pinnedIds = new Set(pins);
+    const pinnedBots = botRows.filter(r => pinnedIds.has(r.bot.id));
+    const otherBots = botRows.filter(r => !pinnedIds.has(r.bot.id));
+    const pinnedGroups = groupRows.filter(g => pinnedIds.has(g.id));
+    const unpinnedGroups = groupRows.filter(g => !pinnedIds.has(g.id));
     const listedBots = sortByName
         ? [...otherBots].sort((a, b) => a.bot.name.localeCompare(b.bot.name)) : otherBots;
     const listedGroups = sortByName
-        ? [...groupRows].sort((a, b) => groupDisplayName(a, bots).localeCompare(groupDisplayName(b, bots)))
-        : groupRows;
+        ? [...unpinnedGroups].sort((a, b) => groupDisplayName(a, bots).localeCompare(groupDisplayName(b, bots)))
+        : unpinnedGroups;
     const lastChartMessage = messages[messages.length - 1];
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
@@ -504,7 +509,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 </div>
 
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
-                    <section>
+                    <section data-testid="rail-pinned">
                         <h4 className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
@@ -513,6 +518,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             time={relTime(lastChartMessage?.createdAt ?? null)} Icon={Sparkles}
                             onClick={() => selectThread({ kind: 'team' })} />
                         {pinnedBots.map(renderBotRow)}
+                        {pinnedGroups.map(g => (
+                            <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
+                                title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
+                                pinned onPin={() => togglePin(g.id)}
+                                onClick={() => selectThread({ kind: 'group', groupId: g.id })} />
+                        ))}
                     </section>
 
                     <section>
@@ -539,6 +550,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {listedGroups.map(g => (
                             <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
                                 title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
+                                pinned={pinnedIds.has(g.id)} onPin={() => togglePin(g.id)}
                                 onClick={() => selectThread({ kind: 'group', groupId: g.id })}
                                 manage={(onEditGroup || onDeleteGroup) && (
                                     <>
@@ -688,13 +700,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             </button>
                                         ))}
                                     </div>
-                                    {modelLabel && (
-                                        <button type="button" onClick={onOpenModels} data-testid="composer-model"
-                                            className="flex min-w-0 items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200">
-                                            <span className="truncate">{modelLabel}</span>
-                                            <ChevronDown className="h-3 w-3 shrink-0" />
-                                        </button>
-                                    )}
+                                    {modelPicker}
                                     <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
                                         aria-label="Send" data-testid="composer-send"
                                         className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-opacity hover:opacity-90 disabled:opacity-30">
