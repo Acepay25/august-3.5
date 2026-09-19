@@ -86,6 +86,7 @@ const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadP
 const LearnView = React.lazy(() => import('./components/learn/LearnView'));
 import type { LearnTab } from './components/learn/LearnView';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
+import ModelPicker from './components/shared/ModelPicker';
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -3263,8 +3264,10 @@ const App: React.FC = () => {
                                         setGroupEditTarget(target);
                                         setIsNewGroupOpen(true);
                                     }}
-                                    modelLabel={formatModelDisplayName(selectedChatModel)}
-                                    onOpenModels={() => setIsSettingsMenuVisible(true)}
+                                    modelPicker={(
+                                        <ModelPicker providers={providerConfigs} value={selectedChatModel}
+                                            onChange={setSelectedChatModel} onRefreshModels={refreshModelCatalog} compact />
+                                    )}
                                     onOpenInDock={() => {
                                         if (activeThread.kind === 'bot') openBotInTrade(activeThread.botId);
                                         else if (activeThread.kind === 'group') openGroupInTrade(activeThread.groupId);

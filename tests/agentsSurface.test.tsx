@@ -256,6 +256,23 @@ describe('WS-6 rail completeness', () => {
         expect(first()).toContain('Zeta');
     });
 
+    it('pins a room up into the Pinned section, next to the desk row', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} groups={[group('g1', ['b1'], 'Team')]} />);
+        const sectionText = () => screen.getByTestId('rail-pinned').textContent ?? '';
+        expect(sectionText()).toContain('Chart AI');
+        expect(sectionText()).not.toContain('Team');
+        fireEvent.click(screen.getByLabelText('Pin Team'));
+        expect(sectionText()).toContain('Team');
+        fireEvent.click(screen.getByLabelText('Unpin Team'));
+        expect(sectionText()).not.toContain('Team');
+    });
+
+    it('mounts the model picker App hands in, instead of a chip that leaves the surface', () => {
+        render(<AgentsView {...base} modelPicker={<button data-testid="model-picker">Gemini · flash</button>} />);
+        expect(screen.getByTestId('model-picker')).toBeTruthy();
+        expect(screen.queryByTestId('composer-model')).toBeNull();
+    });
+
     it('collapses the rail at md+ and brings it back', () => {
         render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
         fireEvent.click(screen.getByTestId('rail-collapse'));
