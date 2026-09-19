@@ -23,7 +23,7 @@ vi.mock('../services/learning/MemoryModelService', () => ({
     resolveMemoryConfig: vi.fn(async () => null),
 }));
 
-import LearnView from '../components/learn/LearnView';
+import LearnView, { type LearnTab } from '../components/learn/LearnView';
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { queueSkillDraft } from '../utils/skillDrafts';
 import * as supervisorStore from '../services/learning/supervisorStore';
@@ -88,5 +88,55 @@ describe('Learn surface', () => {
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-memory'));
         await waitFor(() => expect(localStorage.getItem('learn_tab_v1')).toBe('memory'));
+    });
+});
+
+/** Mirrors App's contract for the Settings → "open the notebook" link: the
+ *  requested tab lives in caller state and LearnView clears it once applied. */
+const DeepLinkHarness: React.FC = () => {
+    const [nav, setNav] = React.useState<LearnTab | null>(null);
+    const [on, setOn] = React.useState(true);
+    return (
+        <>
+            <button data-testid="link-health" onClick={() => setNav('health')} />
+            <button data-testid="toggle-mount" onClick={() => setOn(v => !v)} />
+            {on && (
+                <LearnView username={USER} trades={[]} memoryConfig={null}
+                    initialTab={nav} onInitialTabConsumed={() => setNav(null)} />
+            )}
+        </>
+    );
+};
+
+const currentTab = (): string =>
+    ['queue', 'skills', 'memory', 'health']
+        .find(t => screen.getByTestId(`learn-tab-${t}`).getAttribute('aria-current') === 'true') ?? 'none';
+
+describe('Learn deep link', () => {
+    beforeEach(() => { localStorage.setItem('learn_tab_v1', 'queue'); });
+
+    it('applies the link, and applies it again on a second click for the same tab', async () => {
+        render(<DeepLinkHarness />);
+        fireEvent.click(screen.getByTestId('link-health'));
+        await waitFor(() => expect(currentTab()).toBe('health'));
+
+        fireEvent.click(screen.getByTestId('learn-tab-queue'));
+        await waitFor(() => expect(currentTab()).toBe('queue'));
+
+        // The tab value never changed between the two clicks, so an effect that
+        // value-diffs its prop stays put here.
+        fireEvent.click(screen.getByTestId('link-health'));
+        await waitFor(() => expect(currentTab()).toBe('health'));
+        // Let the lazily-loaded pane settle before the test unmounts it.
+        await waitFor(() => expect(screen.getByTestId('memory-health-card')).toBeTruthy());
+    });
+
+    it('does not re-apply a consumed link when Learn is opened again', () => {
+        render(<DeepLinkHarness />);
+        fireEvent.click(screen.getByTestId('link-health'));
+        fireEvent.click(screen.getByTestId('learn-tab-queue'));
+        fireEvent.click(screen.getByTestId('toggle-mount'));  // leave the surface
+        fireEvent.click(screen.getByTestId('toggle-mount'));  // come back
+        expect(currentTab()).toBe('queue');
     });
 });

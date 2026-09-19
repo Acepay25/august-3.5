@@ -156,3 +156,75 @@ describe('AgentsView composer', () => {
         expect(renderGroup).toHaveBeenCalledWith(g);
     });
 });
+
+describe('WS-3.4 per-bot learning stats', () => {
+    const stats = [{ id: 'b1', name: 'Sweeper', lessons: 4, skillsAuthored: 2, evidence: 9, lastLessonAt: '2026-09-18' }];
+
+    it('shows what the active bot has learned in its header', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
+            selection={{ kind: 'bot', botId: 'b1' }} botStats={stats} />);
+        const line = screen.getByTestId('bot-learning-stats');
+        expect(line.textContent).toContain('4 lessons');
+        expect(line.textContent).toContain('2 skills');
+        expect(line.textContent).toContain('9 evidence');
+        expect(line.getAttribute('title')).toContain('2026-09-18');
+    });
+
+    it('badges the rail row with the skills that bot authored', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} botStats={stats} />);
+        expect(screen.getByTestId('row-skills').textContent).toBe('2');
+    });
+
+    it('shows no badge for a bot that has authored nothing', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+            botStats={[{ ...stats[0], skillsAuthored: 0 }]} />);
+        expect(screen.queryByTestId('row-skills')).toBeNull();
+    });
+});
+
+describe('WS-6 focus and mobile drawer', () => {
+    it("'/` opens the rail and focuses the search", () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        fireEvent.keyDown(document, { key: '/' });
+        // Focus lands from an effect after the open commits: below md the
+        // closed rail is visibility:hidden and a hidden subtree refuses focus.
+        expect(screen.getByTestId('rail-search')).toBe(document.activeElement);
+    });
+
+    it("'/` is left alone while the user is typing somewhere", () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        const composer = screen.getByLabelText('Message');
+        composer.focus();
+        fireEvent.keyDown(composer, { key: '/' });
+        expect(screen.getByTestId('rail-search')).not.toBe(document.activeElement);
+        expect(composer).toBe(document.activeElement);
+    });
+
+    it('picking a thread closes the drawer, and the backdrop closes it too', () => {
+        const onSelect = vi.fn();
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]} onSelect={onSelect} />);
+        fireEvent.click(screen.getByTestId('rail-open'));
+        expect(screen.getByTestId('rail-backdrop')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('rail-backdrop'));
+        expect(screen.queryByTestId('rail-backdrop')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('rail-open'));
+        fireEvent.click(screen.getByTestId('agent-row'));
+        expect(onSelect).toHaveBeenCalledWith({ kind: 'bot', botId: 'b1' });
+        expect(screen.queryByTestId('rail-backdrop')).toBeNull();
+    });
+
+    // jsdom lays nothing out, so the off-canvas contract can only be pinned on
+    // the class list: the rail's children need a flex container (the scroll
+    // pane is flex-1/min-h-0) and a closed drawer must not stay tabbable.
+    it('stays a flex column, and is hidden from the tab order while closed', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        const tokens = (): string[] => screen.getByTestId('agents-rail').className.split(/\s+/);
+        expect(tokens()).toContain('flex');
+        expect(tokens()).toContain('flex-col');
+        expect(tokens()).toContain('invisible');
+
+        fireEvent.click(screen.getByTestId('rail-open'));
+        expect(tokens()).not.toContain('invisible');
+    });
+});

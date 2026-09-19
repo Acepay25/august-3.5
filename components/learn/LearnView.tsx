@@ -35,6 +35,8 @@ const HarnessLessonsBrowser = lazy(() =>
 
 type LearnTab = 'queue' | 'skills' | 'memory' | 'health';
 
+export type { LearnTab };
+
 const TAB_KEY = 'learn_tab_v1';
 
 const TABS: Array<{ id: LearnTab; label: string; Icon: React.FC<{ className?: string }> }> = [
@@ -52,15 +54,27 @@ interface LearnViewProps {
     username: string;
     trades: LoggedTrade[];
     memoryConfig?: ProviderConfig | null;
-    /** Current market regime from hybrid intelligence — the Studio's tilt. */
+    /** Current market regime (from hybrid) — the Studio's tilt. */
     currentRegime?: string;
+    /** Set by a caller that wants a SPECIFIC tab (Settings → "open the
+     *  notebook"). Cleared by onInitialTabConsumed once applied — same contract
+     *  the Journal uses for its deep link — so a later mount honours the user's
+     *  own last tab instead of re-firing a stale link. */
+    initialTab?: LearnTab | null;
+    onInitialTabConsumed?: () => void;
 }
 
-const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = null, currentRegime }) => {
+const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = null, currentRegime, initialTab, onInitialTabConsumed }) => {
     const [tab, setTab] = useState<LearnTab>(() => {
         const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(TAB_KEY) : null;
         return TABS.some(t => t.id === saved) ? (saved as LearnTab) : 'queue';
     });
+
+    useEffect(() => {
+        if (!initialTab) return;
+        setTab(initialTab);
+        onInitialTabConsumed?.();
+    }, [initialTab, onInitialTabConsumed]);
 
     useEffect(() => {
         try { localStorage.setItem(TAB_KEY, tab); } catch { /* private mode */ }

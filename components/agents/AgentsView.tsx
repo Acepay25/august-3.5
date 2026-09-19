@@ -25,6 +25,7 @@ import { ArrowUp, Bot, ChevronDown, Pencil, Pin, Plus, Search, Sparkles, Timer, 
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
+import type { BotLearningStat } from '../../services/agents/botLearning';
 import {
     markThreadOpened, previewTextFor, threadForProvider, unreadCount,
     type AgentThreadOpenedMap, type ThreadSelection,
@@ -59,6 +60,9 @@ interface AgentsViewProps {
     onDeleteBot?: (botId: string) => void;
     onDeleteGroup?: (groupId: string) => void;
     onEditGroup?: (groupId: string) => void;
+    /** WS-3.4: what each bot has learned — lessons, skills authored, evidence.
+     *  Shown on the active bot's header and as a row badge. */
+    botStats?: BotLearningStat[];
     /** Current provider/model chip in the composer. */
     modelLabel?: string;
     onOpenModels?: () => void;
@@ -110,12 +114,14 @@ const Row: React.FC<{
     /** Hover actions: edit / delete — the roster affordances the old rail
      *  owned, kept reachable now that this surface replaced its row model. */
     manage?: React.ReactNode;
+    /** Tiny mono count after the name — skills this bot authored. */
+    stat?: number;
     /** Routines disclosure trigger, rendered when the bot has schedules. */
     routinesToggle?: React.ReactNode;
     children?: React.ReactNode;
     Icon: React.FC<{ className?: string }>;
     onClick: () => void;
-}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, routinesToggle, children, Icon, onClick }) => (
+}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, stat, routinesToggle, children, Icon, onClick }) => (
     <div className={`group relative ${active ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'} rounded-control`}>
         <div className="flex items-start gap-2 px-2 py-1.5">
             <button type="button" onClick={onClick} data-testid="agent-row" className="flex min-w-0 flex-1 items-start gap-2 text-left">
@@ -130,6 +136,12 @@ const Row: React.FC<{
                         {attention && (
                             <span title={attention} data-testid="row-attention"
                                 className="shrink-0 text-[9px] font-bold text-amber-400">⚠</span>
+                        )}
+                        {!!stat && (
+                            <span title={`${stat} skills authored`} data-testid="row-skills"
+                                className="shrink-0 rounded-full border border-zinc-800 px-1 font-mono text-[9px] tabular-nums text-zinc-500">
+                                {stat}
+                            </span>
                         )}
                     </span>
                     <span className="block truncate text-[11px] text-zinc-500">{preview || 'No messages yet'}</span>
@@ -206,6 +218,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelLabel, onOpenModels, onOpenInDock,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
+    botStats,
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
@@ -213,7 +226,42 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const [mode, setMode] = useState<'chat' | 'analyze'>('chat');
     const [busy, setBusy] = useState(false);
     const [openRoutines, setOpenRoutines] = useState<string | null>(null);
+    // Below md the rail is an overlay, not a column — at 320px a permanent
+    // 42vw list left no readable transcript.
+    const [railOpen, setRailOpen] = useState(false);
     const scroller = useRef<HTMLDivElement | null>(null);
+    const searchRef = useRef<HTMLInputElement | null>(null);
+    const [searchFocusNonce, setSearchFocusNonce] = useState(0);
+
+    // `/` focuses the rail search. Nothing else claims the key: the app-wide
+    // handler in useConversationHousekeeping looks up #chat-composer, an id
+    // removed by the trade-surface rewrite (78bc027), so it has been a no-op
+    // ever since.
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+            const t = e.target as HTMLElement | null;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            e.preventDefault();
+            setRailOpen(true);
+            // Focus lands in an effect, not here: below md the closed rail is
+            // visibility:hidden, and a hidden subtree refuses focus. Both
+            // flushSync and a rAF were measured in a real browser at 531px and
+            // still ran before the commit — a bumped nonce guarantees a render
+            // (even when railOpen was already true) and effects run after the
+            // DOM is updated.
+            setSearchFocusNonce(n => n + 1);
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+    useEffect(() => {
+        if (searchFocusNonce) searchRef.current?.focus();
+    }, [searchFocusNonce]);
+
+    const statFor = useCallback((botId: string): BotLearningStat | undefined =>
+        botStats?.find(s => s.id === botId), [botStats]);
 
     useEffect(() => {
         try { localStorage.setItem(PIN_KEY(username), JSON.stringify(pins)); } catch { /* private mode */ }
@@ -249,6 +297,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
     const activeGroup = selection.kind === 'group' ? groups.find(g => g.id === selection.groupId) ?? null : null;
+    const activeStat = activeBot ? statFor(activeBot.id) : undefined;
     const thread = useMemo(
         () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId) : []),
         [activeBot, messages],
@@ -279,7 +328,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 active={selection.kind === 'bot' && selection.botId === r.bot.id}
                 title={r.bot.name} preview={r.preview} time={relTime(r.time)} unread={r.unread}
                 working={workingBotId === r.bot.id} pinned={pins.includes(r.bot.id)}
-                attention={attentionMap?.[r.bot.id]} Icon={Bot}
+                attention={attentionMap?.[r.bot.id]}
+                stat={statFor(r.bot.id)?.skillsAuthored}
+                Icon={Bot}
                 onPin={() => togglePin(r.bot.id)}
                 onClick={() => selectThread({ kind: 'bot', botId: r.bot.id })}
                 manage={onDeleteBot && (
@@ -327,6 +378,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     const selectThread = useCallback((t: ThreadSelection): void => {
         onSelect(t);
+        setRailOpen(false); // on mobile the drawer was the point of the tap
         if (t.kind === 'bot') {
             const b = bots.find(x => x.id === t.botId);
             if (b) markThreadOpened(lastOpenedMap, b.providerId);
@@ -335,8 +387,20 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     return (
         <div className="flex h-full min-h-0" data-testid="agents-view">
-            {/* ── Rail ── */}
-            <aside className="flex w-[min(20rem,42vw)] shrink-0 flex-col border-r border-zinc-800/80 bg-zinc-900"
+            {/* ── Rail — a column at md+, an overlay drawer below ── */}
+            {railOpen && (
+                <button type="button" aria-label="Close conversations"
+                    onClick={() => setRailOpen(false)}
+                    className="fixed inset-0 z-30 bg-black/60 md:hidden" data-testid="rail-backdrop" />
+            )}
+            {/* Deliberately NOT transitioning `visibility`: interpolating it
+                delays the hidden state by the transition duration, which both
+                leaves a closed drawer tabbable for 150ms and makes the flip
+                unmeasurable. The slide-in still animates (visible instantly,
+                transform after); the slide-out is not seen. */}
+            <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 transform flex-col border-r border-zinc-800/80 bg-zinc-900 transition-transform duration-[150ms] ease-[cubic-bezier(0.2,0,0,1)] ${
+                railOpen ? 'translate-x-0' : 'invisible -translate-x-full md:visible'
+            } md:static md:z-auto md:h-full md:min-h-0 md:w-[min(20rem,42vw)] md:translate-x-0`}
                 data-testid="agents-rail">
                 <div className="flex shrink-0 items-center gap-1.5 p-2">
                     <button type="button" onClick={onNewBot} data-testid="rail-new"
@@ -345,7 +409,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </button>
                     <div className="relative ml-auto min-w-0 flex-1">
                         <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-600" />
-                        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search"
+                        <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search"
                             aria-label="Search conversations" data-testid="rail-search"
                             className="w-full rounded-control border border-zinc-800 bg-zinc-950 py-1 pl-7 pr-2 text-[11px] text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-zinc-600" />
                     </div>
@@ -428,19 +492,31 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <div className="flex min-h-0 flex-1 flex-col">{renderGroup(activeGroup)}</div>
                 ) : (
                     <>
-                        {(activeBot || onOpenInDock) && (
-                            <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 py-2">
-                                <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-zinc-200">
-                                    {activeBot ? `@${activeBot.name}` : 'Chart AI'}
+                        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 py-2">
+                            <button type="button" onClick={() => setRailOpen(true)}
+                                aria-label="Open conversations" data-testid="rail-open"
+                                className="shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:hidden">
+                                <Users className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-zinc-200">
+                                {activeBot ? `@${activeBot.name}` : 'Chart AI'}
+                            </span>
+                            {/* WS-3.4: what this bot has actually learned, where
+                                you are about to ask it something. */}
+                            {activeStat && (
+                                <span className="hidden shrink-0 font-mono text-[10px] tabular-nums text-zinc-600 sm:inline"
+                                    data-testid="bot-learning-stats"
+                                    title={activeStat.lastLessonAt ? `newest lesson ${activeStat.lastLessonAt}` : 'no dated lessons'}>
+                                    {activeStat.lessons} lessons · {activeStat.skillsAuthored} skills · {activeStat.evidence} evidence
                                 </span>
-                                {onOpenInDock && (
-                                    <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
-                                        className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
-                                        Open in Chart AI
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                            )}
+                            {onOpenInDock && (
+                                <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
+                                    className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
+                                    Open in Chart AI
+                                </button>
+                            )}
+                        </div>
                         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
                             {thread.length === 0 ? (
                                 <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">

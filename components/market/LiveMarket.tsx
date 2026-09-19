@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, ActivityIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
 import { Spinner } from '../ui/Spinner';
+import StatusPill from '../ui/StatusPill';
 import { Kline } from '../../types';
 import { ChartCandle } from '../../types/chart';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
@@ -685,22 +686,30 @@ ${JSON.stringify(marketData, null, 2)}
                             <h2 className="font-bold text-base sm:text-lg tracking-tight">Live Market</h2>
                         </div>
 
-                        {/* Connection Status Badge */}
-                        <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors ${connectionState.status === 'connected'
-                            ? (connectionState.source === 'socket' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400')
-                            : connectionState.status === 'reconnecting' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                                : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'
-                            }`}>
-                            <div className={`w-2 h-2 rounded-full ${connectionState.status === 'connected'
-                                ? (connectionState.source === 'socket' ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500 animate-pulse')
-                                : connectionState.status === 'reconnecting' ? 'bg-rose-500 animate-pulse'
-                                    : 'bg-zinc-500'
-                                }`}></div>
-                            <span className="text-[10px] font-bold uppercase tracking-widest">
+                        {/* Connection status — one StatusPill instead of the
+                            hand-rolled triple-nested border/bg/text ternary, so
+                            "degraded transport" reads with the same amber the
+                            rest of the app means by it. */}
+                        <div className="hidden sm:flex">
+                            <StatusPill
+                                tone={connectionState.status === 'connected'
+                                    ? (connectionState.source === 'socket' ? 'up' : 'warn')
+                                    : connectionState.status === 'reconnecting' ? 'down' : 'neutral'}
+                                kicker
+                                title={connectionState.status === 'connected'
+                                    ? (connectionState.source === 'socket' ? 'Streaming from the exchange socket' : 'Polling over HTTP — the socket is unavailable')
+                                    : connectionState.status === 'reconnecting' ? 'Reconnecting…' : 'No feed'}
+                                icon={<span aria-hidden className={`h-2 w-2 rounded-full ${
+                                    connectionState.status === 'connected'
+                                        ? (connectionState.source === 'socket' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse')
+                                        : connectionState.status === 'reconnecting' ? 'bg-rose-500 animate-pulse' : 'bg-zinc-500'
+                                }`} />}
+                                data-testid="market-connection-pill"
+                            >
                                 {connectionState.status === 'connected'
                                     ? (connectionState.source === 'socket' ? 'Live' : 'HTTP')
                                     : connectionState.status === 'reconnecting' ? '...' : 'Off'}
-                            </span>
+                            </StatusPill>
                         </div>
                     </div>
 
