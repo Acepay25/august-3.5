@@ -56,7 +56,7 @@ import {
 } from '../services/learning/SkillMemoryService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
 import { gateEvidenceBackedDraft } from '../services/learning/draftGates';
-import { recordEvalVerdict } from '../services/learning/SkillEvalService';
+import { recordEvalVerdict, evaluateSkill, type SkillAnalysisRunner } from '../services/learning/SkillEvalService';
 import { initMemoryFiles, getMemoryFiles, createMemoryFile } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { getRecentMemoryInjections } from '../services/learning/MemoryInjectionService';
@@ -212,12 +212,23 @@ describe('the loop, end to end', () => {
         const after = metaOf(skill.file.id);
         expect(after.wins + after.losses).toBeGreaterThan(before.wins + before.losses);
 
-        // 6. Once confirmed, the causal eval verdict demotes it without a human.
-        //    (evaluateSkill producing 'hurts' is covered in tests/skillEval;
-        //    recordEvalVerdict is the landing point the scheduler writes to.)
+        // 6. Once confirmed, the CAUSAL eval demotes it without a human: run
+        //    the real evaluateSkill over the trade pair, and land its verdict
+        //    through the same recorder the scheduler uses. Only the runner is
+        //    mocked — with the AVOID rule in the prompt it talks itself into
+        //    HIGHER confidence, which is precisely the misalignment the eval
+        //    exists to catch. (This used to hand-feed recordEvalVerdict a
+        //    verdict string, so the producer was never exercised here.)
         await setSkillStatus(skill.file.id, 'confirmed', USER);
-        await recordEvalVerdict(skill.file.id, { verdict: 'hurts', flips: 3, alignedFlips: 0 }, USER);
-        await recordEvalVerdict(skill.file.id, { verdict: 'hurts', flips: 3, alignedFlips: 0 }, USER);
+        const hurtsRunner: SkillAnalysisRunner = async (_t, { skillEnabled }) => ({
+            confidence: skillEnabled ? 'High' : 'Low',
+            direction: 'Short',
+        });
+        const first = await evaluateSkill(skill.file.id, USER, [trade, t2], cfg, hurtsRunner);
+        expect(first.verdict).toBe('hurts');
+        await recordEvalVerdict(skill.file.id, first, USER);
+        const second = await evaluateSkill(skill.file.id, USER, [trade, t2], cfg, hurtsRunner);
+        await recordEvalVerdict(skill.file.id, second, USER);
         const demoted = metaOf(skill.file.id);
         expect(demoted.status).toBe('candidate');
         expect(demoted.history?.[demoted.history.length - 1].reason).toMatch(/^eval hurts/);
