@@ -20,6 +20,10 @@ import { TradeOutcome } from '../../types/enums';
 const KEY_PREFIX = 'belief_challenge_v1_';
 const WINDOW_DAYS = 30;
 const FLAG_THRESHOLD = 3;
+/** Fingerprint namespace of a belief CHALLENGE flag in the learning queue.
+ *  Exported so `memoryHealth` can count these flags as their own signal
+ *  instead of folding them into the generic contradiction-proposal count. */
+export const BELIEF_FLAG_FINGERPRINT_PREFIX = 'belief|';
 
 export interface BeliefContradictionEvent {
     slug: string;
@@ -82,7 +86,6 @@ const directionOfTrade = (t: LoggedTrade): 'long' | 'short' | null => {
  *  review card (never invalidate). Returns the number of NEW flags. */
 export const runBeliefChallengePass = async (username: string, trades: LoggedTrade[]): Promise<number> => {
     const beliefs = listActiveBeliefs();
-    const bySlug = new Map(beliefs.map(b => [b.slug, b] as const));
     if (beliefs.length === 0) return 0;
     const cutoff = Date.now() - WINDOW_DAYS * 86_400_000;
     let events = (await read(username)).filter(e => Date.parse(e.ts) > cutoff);
@@ -112,7 +115,7 @@ export const runBeliefChallengePass = async (username: string, trades: LoggedTra
                     kind: 'contradiction',
                     skillSlug: belief.slug,
                     text: `Settled belief "${belief.slug}" has been contradicted by ${count} winning ${warned} trades in ${WINDOW_DAYS} days (latest: ${t.id}) — challenge it in review. NEVER auto-invalidated; a human decides.`,
-                    fingerprint: `belief|${belief.slug}`,
+                    fingerprint: `${BELIEF_FLAG_FINGERPRINT_PREFIX}${belief.slug}`,
                     payload: { slug: belief.slug, contradictions: count },
                 }, username);
                 if (proposal) newFlags += 1;

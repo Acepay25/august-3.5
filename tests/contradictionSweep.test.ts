@@ -21,7 +21,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 }));
 
 import { findContradictingPairs, runContradictionSweep, SkillForSweep } from '../utils/contradictionSweep';
-import { initMemoryFiles, getMemoryFiles, createMemoryFile } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, createMemoryFile, deleteMemoryFile } from '../services/learning/MemoryFilesService';
 
 const USER = 'cs-user';
 const skill = (slug: string, kind: 'avoid' | 'repeat', ifCondition: string, thenAction: string): SkillForSweep =>
@@ -100,14 +100,35 @@ tradeIds: b1
 `, USER, true);
     });
 
-    it('queues one deduped proposal per contradicting pair', () => {
-        const queued = runContradictionSweep(USER);
-        expect(queued).toBe(1);
+    it('reports every count the hygiene line is made of', () => {
+        const first = runContradictionSweep(USER);
+        // Two evidenced live skills ⇒ exactly one pair compared.
+        expect(first.pairsExamined).toBe(1);
+        expect(first.conflicts).toBe(1);
+        expect(first.queued).toBe(1);
+        expect(first.dismissed).toBe(0);
+
         const again = runContradictionSweep(USER);
-        expect(again).toBe(0); // pending fingerprint dedupe
+        // Same pair, still pending ⇒ the fingerprint dedupe dismisses it, and
+        // the pass says so instead of reporting zero work.
+        expect(again).toEqual({ pairsExamined: 1, conflicts: 1, queued: 0, dismissed: 1 });
+
         const stored = JSON.parse(localStorage.getItem('learning_proposals_v1:' + USER) ?? '[]');
         expect(stored).toHaveLength(1);
         expect(stored[0].kind).toBe('contradiction');
         expect(stored[0].text).toContain('btc-sweep-repeat');
+    });
+
+    it('reports the work it examined when there is nothing to queue', async () => {
+        // Leave exactly one evidenced live skill: a pair count of zero is the
+        // honest "looked at everything, found nothing", not a silent no-op.
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const victim = getMemoryFiles().files.find(
+            f => f.folderId === skills.id && f.name === 'btc-sweep-avoid.md',
+        )!;
+        await deleteMemoryFile(victim.id, USER);
+        expect(runContradictionSweep(USER)).toEqual({
+            pairsExamined: 0, conflicts: 0, queued: 0, dismissed: 0,
+        });
     });
 });

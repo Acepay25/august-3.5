@@ -2,6 +2,18 @@
  * One-shot notebook review: after Memory files change, the Memory model
  * reads the index and writes profile/suggestions.md for the user.
  * It does not rewrite other files.
+ *
+ * WHY `profile/suggestions.md` is force-disabled and stays out of retrieval —
+ * it is advice addressed to the HUMAN, not a belief about the market. Nothing
+ * in this module (or anywhere else) judges its claims, so re-enabling it would
+ * feed one model's unsolicited opinion back into the next debate as if it were
+ * evidence, and the loop would compound its own advice. Its reader is a
+ * person: `components/settings/MemoryFilesManager.tsx:85` renders it in the
+ * notebook UI, and it is excluded from the prompt index dump
+ * (`MemoryFilesService.ts:277` `SKIP_INDEX_DUMP`), the memory graph
+ * (`MemoryGraph.ts:57`) and note search by the same reasoning. Write-only with
+ * respect to the model is therefore the design, not an oversight — the file is
+ * a one-way message out of the loop.
  */
 
 import { ProviderConfig } from '../../types/provider';
@@ -57,6 +69,12 @@ export const runNotebookReview = async (
             f => f.folderId === folder.id && f.name === SUGGESTIONS_FILE_NAME,
         );
         await withSilentMemoryPersist(async () => {
+            // `enabled: false` on BOTH branches — including the create, which
+            // would otherwise default to enabled and start injecting. Why: see
+            // the module header (human-facing advice, never a model-facing
+            // belief). The silent persist is the paired half of that: writing
+            // this file must not re-trigger the notebook-change debounce that
+            // schedules another review.
             if (existing) {
                 await updateMemoryFileUnlocked(existing.id, { content, enabled: false }, username);
             } else {

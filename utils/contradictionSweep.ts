@@ -4,10 +4,12 @@
  * Nothing detected two LIVE skills with overlapping IF conditions and
  * conflicting THEN actions: both could inject (ranking independently) and
  * seats would receive incoherent guidance. This is a deterministic periodic
- * pass (weekly, beside the weekly review — no LLM): pairwise condition-token
- * overlap ≥ 2 with a conflicting action (opposite kind, or opposing
- * direction mention) surfaces a merge/priority proposal for the human gate
- * — deduped by fingerprint, so the same pair is not re-queued every week.
+ * pass (weekly, inside the scheduled hygiene pass — no LLM): pairwise
+ * condition-token overlap ≥ 2 with a conflicting action (opposite kind, or
+ * opposing direction mention) surfaces a merge/priority proposal for the
+ * human gate — deduped by fingerprint, so the same pair is not re-queued
+ * every week. The counts come back as a `ContradictionSweepResult` so the
+ * hygiene pass can write them into the health log instead of a console line.
  */
 
 import { listSkills } from '../services/learning/SkillMemoryService';
@@ -67,8 +69,27 @@ export const findContradictingPairs = (skills: SkillForSweep[]): ContradictingPa
     return pairs;
 };
 
-/** The weekly pass: queue one deduped merge/priority proposal per pair. */
-export const runContradictionSweep = (username: string): number => {
+/** What one sweep actually did — every number here is a count of real work,
+ *  so the hygiene pass can report the run instead of logging it to nowhere. */
+export interface ContradictionSweepResult {
+    /** Live-skill pairs compared (n(n-1)/2 over the eligible skills). */
+    pairsExamined: number;
+    /** Pairs that genuinely contradicted (shared tokens + conflicting action). */
+    conflicts: number;
+    /** NEW merge/priority proposals this pass queued. */
+    queued: number;
+    /** Conflict pairs dismissed by the fingerprint dedupe — their proposal is
+     *  still pending in the queue, so there was nothing to re-queue. */
+    dismissed: number;
+}
+
+/**
+ * The weekly pass: queue one deduped merge/priority proposal per pair.
+ * Called by the scheduled hygiene pass (`memoryHygiene.runMemoryHygiene`),
+ * which turns the result into the one-line health entry the Health tab
+ * renders — the counts used to stop at a `console.log` and reached nobody.
+ */
+export const runContradictionSweep = (username: string): ContradictionSweepResult => {
     const skills: SkillForSweep[] = listSkills()
         .filter(({ meta }) => meta.status !== 'retired' && !meta.supersededBy && (meta.wins + meta.losses) > 0)
         .map(({ file, meta }) => ({
@@ -78,7 +99,12 @@ export const runContradictionSweep = (username: string): number => {
             kind: meta.kind,
         }));
     const pairs = findContradictingPairs(skills);
-    let queued = 0;
+    const result: ContradictionSweepResult = {
+        pairsExamined: skills.length * (skills.length - 1) / 2,
+        conflicts: pairs.length,
+        queued: 0,
+        dismissed: 0,
+    };
     for (const p of pairs) {
         const text = `Contradicting live skills: "${p.a.slug}" (${p.a.kind}) vs "${p.b.slug}" (${p.b.kind}) share ${p.overlap} condition tokens (${p.conflict.replace('-', ' ')}) — seats can receive incoherent guidance. Merge or prioritize one.`;
         const proposal = queueLearningProposal({
@@ -89,7 +115,8 @@ export const runContradictionSweep = (username: string): number => {
             fingerprint: `contradiction|${[p.a.slug, p.b.slug].sort().join('|')}`,
             payload: { pair: [p.a.slug, p.b.slug] },
         }, username);
-        if (proposal) queued += 1;
+        if (proposal) result.queued += 1;
+        else result.dismissed += 1;
     }
-    return queued;
+    return result;
 };

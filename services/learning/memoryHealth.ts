@@ -9,18 +9,26 @@
  * to call on every render of the Health tab.
  *
  * Staleness is measured against the ONE signal that exists: the injection log
- * (`MemoryInjectionService`, newest-first, capped at 400 runs). A file absent
- * from it was not injected *recently*, which is not the same as never — so the
- * report says "outside the retained window" rather than pretending to know.
+ * (`MemoryInjectionService`, newest-first, capped at `MAX_INJECTION_RECORDS`
+ * runs). Two different facts come out of it and they are kept apart on
+ * purpose:
+ *  - `staleFiles` — a file the log DOES place a hit on, whose newest hit is
+ *    older than `STALE_FILE_DAYS`. That is the real "no hits in N days".
+ *  - `unobserved` — a file with no hit inside the retained window. Absence
+ *    from a run-capped log is not the same as never being served (the hit may
+ *    simply have aged out, and most notebook folders are never named in a
+ *    source record at all), so these are reported as unobserved — with their
+ *    days-since-edit — and never folded into the stale count.
  */
 
 import { getMemoryFiles } from './MemoryFilesService';
 import {
-    listSkills, isSkillFile, parseSkillMarkdown, EVIDENCE_STALE_DAYS, type SkillMeta,
+    isSkillFile, parseSkillMarkdown, EVIDENCE_STALE_DAYS, type SkillMeta,
 } from './SkillMemoryService';
-import { getRecentMemoryInjections } from './MemoryInjectionService';
+import { getRecentMemoryInjections, MAX_INJECTION_RECORDS } from './MemoryInjectionService';
 import { estimateMemoryTokensPerRun } from './MemoryRetrievalService';
 import { readSettledBeliefs } from './settledBeliefs';
+import { BELIEF_FLAG_FINGERPRINT_PREFIX } from './beliefChallenge';
 import { listTombstones } from './skillGraveyard';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { listLearningProposals } from '../../utils/learningQueue';
@@ -79,9 +87,23 @@ export interface MemoryHealthReport {
         /** Worst-case prompt cost of memory injection, in tokens. */
         promptTokensWorstCase: number;
     };
-    /** Enabled files with no injection inside the retained log window. */
+    /** Enabled files with NO hit inside the retained injection window — an
+     *  absence, not a staleness claim (see the module header). */
     unobserved: Array<{ path: string; chars: number; daysSinceEdit: number }>;
-    beliefs: { settled: number; invalidated: number };
+    /** Enabled files the injection log DOES place a hit on, whose newest hit
+     *  is older than `STALE_FILE_DAYS` — the real "no hits in N days". */
+    staleFiles: Array<{ path: string; chars: number; daysSinceHit: number; lastHitAt: string }>;
+    /** How many runs the injection log retains — the width of the window the
+     *  two signals above are measured against. */
+    injectionLogWindowRuns: number;
+    beliefs: {
+        settled: number;
+        invalidated: number;
+        /** Still `settled`, but carrying a pending challenge flag from the
+         *  belief-challenge pass — standing AND contradicted, which the
+         *  status field alone cannot express. */
+        challenged: number;
+    };
     queues: HealthQueue;
     diary: { files: number; entries: number };
     bots: BotLearningStat[];
@@ -92,6 +114,16 @@ export interface MemoryHealthReport {
 }
 
 const DAY_MS = 86_400_000;
+/** A file the injection log places a hit on, but not within this many days,
+ *  is stale. The threshold is the loop's own evidence-decay window rather than
+ *  a new number invented here: `EVIDENCE_STALE_DAYS` (30) is what the hygiene
+ *  pass already treats as "this rule has stopped earning anything". */
+const STALE_FILE_DAYS = EVIDENCE_STALE_DAYS;
+
+/** Retrieval records source paths as `folder/name` (skills as
+ *  `skills/<file>.md`); notebook files carry the extension in their own name.
+ *  Normalizing both to one key is what makes a hit joinable at all. */
+const hitKey = (path: string): string => path.replace(/\.md$/i, '').toLowerCase();
 
 const bucketSkills = (metas: SkillMeta[]): HealthSkillBucket => {
     const staleCutoff = Date.now() - EVIDENCE_STALE_DAYS * DAY_MS;
@@ -139,18 +171,50 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
         byFolder.set(name, row);
     }
 
-    // What retrieval ACTUALLY served, inside the retained log window.
-    const injected = new Set<string>();
+    // What retrieval ACTUALLY served, inside the retained log window — keyed by
+    // `folder/name` (extension stripped, lowercased) to the NEWEST hit only,
+    // so `lastHitMs` is a real last-seen time and not a presence flag.
+    const lastHitMs = new Map<string, number>();
     try {
         for (const rec of await getRecentMemoryInjections(username)) {
-            for (const s of rec.sources) injected.add(s.path);
+            const ts = Date.parse(rec.ts);
+            if (!Number.isFinite(ts)) continue;
+            for (const s of rec.sources) {
+                const key = hitKey(s.path);
+                const prev = lastHitMs.get(key);
+                if (prev === undefined || ts > prev) lastHitMs.set(key, ts);
+            }
         }
-    } catch { /* no telemetry — treat every file as unobserved below */ }
+    } catch { /* no telemetry — every file reads as unobserved below */ }
 
+    const pathOf = (f: { folderId: string; name: string }): string =>
+        `${folderName.get(f.folderId) ?? f.folderId}/${f.name}`;
+
+    const staleCutoffMs = Date.now() - STALE_FILE_DAYS * DAY_MS;
+    // A newest-hit older than the threshold: the file is still in the corpus
+    // and still enabled, but retrieval has not carried it into a prompt in
+    // `STALE_FILE_DAYS` days — measurable because the log stamps every run.
+    const staleFiles = files
+        .filter(f => f.enabled)
+        .map(f => {
+            const hit = lastHitMs.get(hitKey(pathOf(f)));
+            return hit === undefined || hit >= staleCutoffMs ? null : {
+                path: pathOf(f),
+                chars: f.content.length,
+                daysSinceHit: Math.floor((Date.now() - hit) / DAY_MS),
+                lastHitAt: new Date(hit).toISOString(),
+            };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+        .sort((a, b) => b.daysSinceHit - a.daysSinceHit)
+        .slice(0, 12);
+
+    // No hit inside the retained window at all. NOT folded into `staleFiles`:
+    // the log is run-capped, so absence only proves "not served recently".
     const unobserved = files
-        .filter(f => f.enabled && !injected.has(`${folderName.get(f.folderId)}/${f.name}`) && !injected.has(`${folderName.get(f.folderId)}/${f.name}.md`))
+        .filter(f => f.enabled && !lastHitMs.has(hitKey(pathOf(f))))
         .map(f => ({
-            path: `${folderName.get(f.folderId)}/${f.name}`,
+            path: pathOf(f),
             chars: f.content.length,
             daysSinceEdit: Math.max(0, Math.floor((Date.now() - (f.updatedAt || Date.now())) / DAY_MS)),
         }))
@@ -159,6 +223,17 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
 
     const proposals = listLearningProposals(username);
     const beliefs = readSettledBeliefs();
+    // Challenge flags the belief-challenge pass already queued. A flagged
+    // belief is still `settled` by design (nothing auto-invalidates), so
+    // without this the standing-but-challenged case was invisible: the old
+    // count folded them into `needsRewrite` generically.
+    const challengedSlugs = new Set(
+        proposals
+            .filter(p => p.kind === 'contradiction' && p.fingerprint.startsWith(BELIEF_FLAG_FINGERPRINT_PREFIX))
+            .map(p => p.fingerprint.slice(BELIEF_FLAG_FINGERPRINT_PREFIX.length) || p.skillSlug || ''),
+    );
+    const challengedBeliefs = beliefs
+        .filter(b => b.status === 'settled' && challengedSlugs.has(b.slug));
     const tombstones = await listTombstones(username);
     const queues: HealthQueue = {
         drafts: listSkillDrafts(username).length,
@@ -186,6 +261,12 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
     if (queues.needsRewrite > 0) {
         flags.push(`${queues.needsRewrite} proposal${queues.needsRewrite === 1 ? '' : 's'} need a rewritten clause before anything can act on them.`);
     }
+    if (staleFiles.length > 0) {
+        flags.push(`${staleFiles.length} enabled file${staleFiles.length === 1 ? '' : 's'} last reached a prompt ${STALE_FILE_DAYS}+ days ago.`);
+    }
+    if (challengedBeliefs.length > 0) {
+        flags.push(`${challengedBeliefs.length} settled belief${challengedBeliefs.length === 1 ? '' : 's'} ${challengedBeliefs.length === 1 ? 'is' : 'are'} contradicted by winning trades and still standing — the challenge is waiting in the queue.`);
+    }
 
     return {
         generatedAt: Date.now(),
@@ -198,9 +279,12 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
             promptTokensWorstCase: estimateMemoryTokensPerRun().worstCase,
         },
         unobserved,
+        staleFiles,
+        injectionLogWindowRuns: MAX_INJECTION_RECORDS,
         beliefs: {
             settled: beliefs.filter(b => b.status === 'settled').length,
             invalidated: beliefs.filter(b => b.status === 'invalidated').length,
+            challenged: challengedBeliefs.length,
         },
         queues,
         diary: {

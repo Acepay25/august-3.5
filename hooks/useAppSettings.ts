@@ -52,7 +52,21 @@ export function useAppSettings() {
     // Confidence Calibration
     const [confidenceCalibration, setConfidenceCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
 
-    // AI Learning - Knowledge base
+    // AI Learning - Knowledge base.
+    // WRITE-ONLY BY CONSTRUCTION, and it is the SECOND copy of that name:
+    // the store this state mirrors (`UserSettings.insightKnowledgeBase`) is
+    // loaded once per profile (`useUserProfileLoader.ts:432`) and persisted
+    // right back (`useProfilePersistence.ts:98`), so the round trip can only
+    // ever re-write what it read. Nothing at runtime feeds it — the real store
+    // is `GlobalMemory.insightKnowledgeBase`, maintained per write by
+    // `AlgorithmicMemoryService.ts:135-149` and read into prompts by
+    // `utils/memoryUtils.buildGlobalMemoryIndex:52`. Its single consumer
+    // (`useAnalysisPipeline.ts:162,316`) destructures it and lists it in a
+    // dependency array without ever reading the value, so the only honest
+    // description of this state is "carried, not used". Deleting it means
+    // unwinding App.tsx:304,823,1568,2463 plus the four hook call sites, so it
+    // stays documented rather than quietly half-removed. See
+    // docs/learning-loop-map.md.
     const [insightKnowledgeBase, setInsightKnowledgeBase] = useState<InsightKnowledgeBase | undefined>(undefined);
 
     // Summarization settings

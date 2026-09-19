@@ -46,8 +46,10 @@ export interface MemoryInjectionRecord {
 }
 
 const KEY_PREFIX = 'memory_injections_v1_';
-/** Newest-first; oldest records fall off. A few hundred runs is plenty for attribution. */
-const MAX_RECORDS = 400;
+/** Newest-first; oldest records fall off. A few hundred runs is plenty for attribution.
+ *  Exported because `memoryHealth` has to say exactly how wide the window is that
+ *  its "no hit recorded" signal is measured against. */
+export const MAX_INJECTION_RECORDS = 400;
 
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
@@ -77,7 +79,7 @@ export const recordMemoryInjection = async (
             const next = [
                 { ...record, ts: new Date().toISOString() },
                 ...prev,
-            ].slice(0, MAX_RECORDS);
+            ].slice(0, MAX_INJECTION_RECORDS);
             await setPreferenceObject(key, next);
         });
     } catch {
@@ -208,7 +210,7 @@ export const annotateVerdictCitations = async (
                 }
             }
             if (!changed) return;
-            await setPreferenceObject(key, current.slice(0, MAX_RECORDS));
+            await setPreferenceObject(key, current.slice(0, MAX_INJECTION_RECORDS));
         });
     } catch {
         // Telemetry must never break the verdict commit.
