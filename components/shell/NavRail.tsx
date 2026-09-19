@@ -59,6 +59,9 @@ const ITEMS: Array<{
     { id: 'learn', label: 'Learn', shortcut: 'Alt+5', Icon: GraduationCap },
 ];
 
+/** Surfaces with a collapsible sidebar of their own. */
+const HAS_PANEL: ReadonlySet<AppSurface> = new Set(['trade']);
+
 const NavRail: React.FC<NavRailProps> = ({
     surface,
     onSelect,
@@ -106,6 +109,10 @@ const NavRail: React.FC<NavRailProps> = ({
         >
             {ITEMS.map(({ id, label, shortcut, Icon }) => {
                 const active = surface === id;
+                // Only Trade has a sidebar to collapse. Advertising "toggle
+                // panel" on the others was a lie — the click flipped the trade
+                // sidebar state behind a surface that could not show it.
+                const toggleable = active && HAS_PANEL.has(id);
                 const badge = badges?.[id];
                 const badgeCount = badge?.count && badge.count > 0 ? badge.count : 0;
                 const showBadge = !!badge && (badgeCount > 0 || !!badge.active);
@@ -113,14 +120,14 @@ const NavRail: React.FC<NavRailProps> = ({
                     <Tip
                         key={id}
                         side="right"
-                        label={active ? `${label} — toggle panel` : badge ? `${label} · ${badge.detail}` : label}
+                        label={toggleable ? `${label} — toggle panel` : badge ? `${label} · ${badge.detail}` : label}
                         shortcut={shortcut}
                     >
                         <button
                             type="button"
-                            aria-label={`${badge ? `${label}. ${badge.detail}` : label}${active ? ' — toggle panel' : ''}${shortcut ? `, shortcut ${shortcut}` : ''}`}
+                            aria-label={`${badge ? `${label}. ${badge.detail}` : label}${toggleable ? ' — toggle panel' : ''}${shortcut ? `, shortcut ${shortcut}` : ''}`}
                             aria-current={active ? 'page' : undefined}
-                            onClick={() => (active ? onToggleSidebar() : onSelect(id))}
+                            onClick={() => (toggleable ? onToggleSidebar() : onSelect(id))}
                             className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-100 ease-[cubic-bezier(0.2,0,0,1)] focus-visible:outline-none ${
                                 active ? 'text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                             }`}

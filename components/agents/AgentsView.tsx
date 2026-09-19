@@ -485,7 +485,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     rows={2} placeholder={placeholder} aria-label="Message"
                                     className="w-full resize-none bg-transparent px-1.5 py-1 text-[13px] leading-5 text-zinc-100 outline-none placeholder:text-zinc-600" />
                                 <div className="mt-1 flex items-center gap-2 px-1">
-                                    <div className="seg-thumb flex items-center rounded-control border border-zinc-800 p-0.5"
+                                    {/* Deliberately NOT .seg-thumb: that class
+                                        is an absolutely-positioned sliding
+                                        sibling, and on a container it resolves
+                                        against the nearest positioned ancestor
+                                        and stretches to fill the surface. */}
+                                    <div className="flex items-center gap-0.5 rounded-control border border-zinc-800 bg-zinc-950 p-0.5"
                                         role="group" aria-label="Send mode">
                                         {(['chat', 'analyze'] as const).map(m => (
                                             <button key={m} type="button" onClick={() => setMode(m)}
