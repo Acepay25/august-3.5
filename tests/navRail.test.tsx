@@ -1,8 +1,8 @@
 /**
  * NavRail — Antigravity's activity bar: a thin always-visible icon column of
  * the surfaces. Clicking an inactive surface selects it; clicking the ACTIVE
- * one toggles that surface's sidebar panel (Trade's order book) instead of
- * re-selecting. Account + settings stay pinned at the bottom.
+ * one toggles that surface's sidebar — but only on a surface that HAS a
+ * sidebar (Trade). Account + settings stay pinned at the bottom.
  */
 
 import React from 'react';
@@ -34,6 +34,20 @@ describe('NavRail activity bar', () => {
         expect(onToggle).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: /^Trade/ }));
         expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('only Trade advertises a panel toggle — Learn/Agents re-select instead', () => {
+        const onToggle = vi.fn();
+        const onSelect = vi.fn();
+        render(<NavRail surface="learn" onSelect={onSelect} onToggleSidebar={onToggle} onOpenSettings={() => {}} username="Rober" />);
+        const learn = screen.getByRole('button', { name: /^Learn/ });
+        expect(learn.getAttribute('aria-label')).not.toMatch(/toggle panel/);
+        fireEvent.click(learn);
+        expect(onToggle).not.toHaveBeenCalled();
+        expect(onSelect).toHaveBeenCalledWith('learn');
+        // And Learn is a real surface with its shortcut advertised.
+        expect(learn.getAttribute('aria-label')).toContain('Alt+5');
+        expect(learn.getAttribute('aria-current')).toBe('page');
     });
 
     it('settings + account stay pinned', () => {
