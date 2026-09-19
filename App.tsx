@@ -539,7 +539,16 @@ const App: React.FC = () => {
         const apply = (): void => {
             const route = parseAppHash(window.location.hash);
             applyingHashRef.current = true;
-            if (route.view === 'journal') {
+            if (route.view === 'journal' && route.tab === 'learning') {
+                // WS-5.1: the Journal's old "Learn" tab moved onto the Learn
+                // surface, so a bookmarked #/journal/learning lands where the
+                // content actually lives now rather than a deleted tab.
+                setLearnTab('health');
+                setSurface('learn');
+                setIsSettingsMenuVisible(false);
+                setIsLiveMarketVisible(false);
+                setIsWatchListVisible(false);
+            } else if (route.view === 'journal') {
                 setJournalTab(route.tab || 'log');
                 setSurface('journal');
                 setIsSettingsMenuVisible(false);

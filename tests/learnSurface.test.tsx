@@ -142,6 +142,14 @@ describe('Learn deep link', () => {
     });
 });
 
+describe('One learning surface (WS-5.1)', () => {
+    it('Health carries the learning analytics that used to live in the Journal', async () => {
+        mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
+        await waitFor(() => expect(screen.getByTestId('learn-signals')).toBeTruthy());
+    });
+});
+
 describe('Graveyard view (WS-5.1)', () => {
     it('Health lists what was retired and why, instead of only counting it', async () => {
         await recordTombstone(USER, {

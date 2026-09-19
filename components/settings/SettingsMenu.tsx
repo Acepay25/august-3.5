@@ -701,7 +701,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 type="button"
                                                 onClick={() => {
                                                     onClose();
-                                                    onOpenJournal?.('learning');
+                                                    onOpenLearn?.('health');
                                                 }}
                                                 className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
                                             >
