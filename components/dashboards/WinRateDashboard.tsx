@@ -11,6 +11,7 @@ import {
 import { BarChart3 } from 'lucide-react';
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
+import StatusPill from '../ui/StatusPill';
 import { buildCalibrationLedger, ledgerFramingLine, brierQuality } from '../../services/validation/CalibrationLedgerService';
 import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
 import {
@@ -171,7 +172,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#399ef7]"></div>
                         <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
-                    <span className="text-[10px] text-zinc-500 font-mono">
+                    <span className="text-[10px] text-zinc-500 font-mono tabular-nums">
                         {filteredTrades.length} trades
                     </span>
                 </div>
@@ -244,18 +245,18 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     )}
                     <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Net PnL</div>
                     {overallStats.totalPnL !== 0 ? (
-                        <div className={`text-lg sm:text-2xl font-mono font-black ${overallStats.totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <div className={`text-lg sm:text-2xl font-mono font-black tabular-nums ${overallStats.totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {overallStats.totalPnL >= 0 ? '+' : ''}{overallStats.totalPnL.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                         </div>
                     ) : overallStats.totalPnLPercent !== 0 ? (
-                        <div className={`text-lg sm:text-2xl font-mono font-black ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <div className={`text-lg sm:text-2xl font-mono font-black tabular-nums ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
                         </div>
                     ) : (
-                        <div className="text-lg sm:text-2xl font-mono font-black text-zinc-500">$0</div>
+                        <div className="text-lg sm:text-2xl font-mono font-black text-zinc-500 tabular-nums">$0</div>
                     )}
                     {overallStats.totalPnL !== 0 && overallStats.totalPnLPercent !== 0 && (
-                        <div className={`text-[10px] font-mono mt-0.5 ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
+                        <div className={`text-[10px] font-mono tabular-nums mt-0.5 ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
                             {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
                         </div>
                     )}
@@ -497,22 +498,22 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             {topCoins.map((coin, idx) => (
                                 <div key={coin.coin} className="flex items-center justify-between p-2 bg-zinc-800 rounded-lg">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-zinc-600 font-mono w-4">#{idx + 1}</span>
+                                        <span className="text-[10px] text-zinc-600 font-mono tabular-nums w-4">#{idx + 1}</span>
                                         <span className="font-bold text-sm text-white">{coin.coin}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         {coin.pnl !== 0 ? (
-                                            <span className={`text-xs font-mono ${coin.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <span className={`text-xs font-mono tabular-nums ${coin.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {coin.pnl >= 0 ? '+' : ''}{coin.pnl.toFixed(0)}
                                             </span>
                                         ) : coin.pnlPercent !== 0 ? (
-                                            <span className={`text-xs font-mono ${coin.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <span className={`text-xs font-mono tabular-nums ${coin.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {coin.pnlPercent >= 0 ? '+' : ''}{coin.pnlPercent.toFixed(1)}%
                                             </span>
                                         ) : null}
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${coin.winRate >= 50 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                                        <StatusPill tone={coin.winRate >= 50 ? 'up' : 'down'} className="tabular-nums">
                                             {coin.winRate}%
-                                        </span>
+                                        </StatusPill>
                                     </div>
                                 </div>
                             ))}

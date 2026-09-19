@@ -27,6 +27,7 @@ import { getRecentMemoryInjections, type MemoryInjectionRecord } from '../../ser
 import { recordHarnessLesson } from '../../services/learning/harnessLessons';
 import { getActiveUsername } from '../../utils/activeUser';
 import { openSkillCard } from './skillDeepLink';
+import StatusPill from '../ui/StatusPill';
 
 interface MemoryProvenanceStripProps {
     /** Epoch-ms the answer's entry was created — the window's lower bound. */
@@ -134,10 +135,12 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                 <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-zinc-600">memory</span>
                 <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-500">{parts.join(' · ')}</span>
                 {grouped.heldOut && (
-                    <span className="shrink-0 rounded-full border border-amber-500/30 px-1.5 text-[9px] text-amber-300/90"
-                        title="This run was in the ε-holdout: skills were withheld to keep the control group honest.">
+                    <StatusPill
+                        tone="warn"
+                        title="This run was in the ε-holdout: skills were withheld to keep the control group honest."
+                    >
                         held out
-                    </span>
+                    </StatusPill>
                 )}
                 <ChevronDown className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform duration-[120ms] ${open ? 'rotate-180' : ''}`} />
             </button>

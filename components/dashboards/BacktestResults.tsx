@@ -11,6 +11,7 @@
 import React from 'react';
 import { Check, X } from 'lucide-react';
 import { SectionCard, StatPill, ProgressBar, LiveBacktestResult } from './analyticsShared';
+import StatusPill from '../ui/StatusPill';
 
 interface BacktestResultsProps {
     backtestResult?: LiveBacktestResult | null;
@@ -147,9 +148,9 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium"> Session Performance</span>
                                 {backtestResult!.bestSession && (
-                                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
+                                    <StatusPill tone="up">
                                         Best: {backtestResult!.bestSession}
-                                    </span>
+                                    </StatusPill>
                                 )}
                             </div>
                             <div className="grid grid-cols-2 gap-1.5">

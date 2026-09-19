@@ -17,6 +17,7 @@ import {
 import {
     isTraderLearningEnabled, setTraderLearningEnabled,
 } from '../../services/learning/traderLearner';
+import StatusPill from '../ui/StatusPill';
 
 const KIND_STYLE: Record<ProfileMemoryKind, string> = {
     user: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
@@ -72,9 +73,14 @@ const ProfileMemoryCard: React.FC = () => {
                                     {e.kind}
                                 </span>
                                 {e.source === 'auto' && (
-                                    <span className="mt-0.5 shrink-0 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyan-300" title="Learned automatically from your sessions">
+                                    <StatusPill
+                                        tone="info"
+                                        kicker
+                                        className="mt-0.5"
+                                        title="Learned automatically from your sessions"
+                                    >
                                         auto
-                                    </span>
+                                    </StatusPill>
                                 )}
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[11px] font-semibold leading-snug text-zinc-200">{e.description}</p>

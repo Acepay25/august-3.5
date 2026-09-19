@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AutomationRun } from '../../types/automation';
 import { ChevronDownIcon, LoadingIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
+import StatusPill from '../ui/StatusPill';
 
 /** Minimal view of the stored hybrid snapshot (HybridDataPacket). */
 interface HybridSnapshot {
@@ -39,20 +40,13 @@ const AutomationRunCard: React.FC<{
     const isBotReply = !analysis && !!run.message?.text?.trim();
 
     const statusBadge = run.status === 'complete' ? (
-        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Complete</span>
+        <StatusPill tone="up" kicker>Complete</StatusPill>
     ) : run.status === 'running' ? (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-            <LoadingIcon className="w-2.5 h-2.5 animate-spin" /> Running
-        </span>
+        <StatusPill tone="info" kicker icon={<LoadingIcon className="w-2.5 h-2.5 animate-spin" />}>Running</StatusPill>
     ) : run.status === 'error' ? (
-        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-rose-500/10 text-rose-400 border border-rose-500/20">Failed</span>
+        <StatusPill tone="down" kicker>Failed</StatusPill>
     ) : (
-        <span
-            className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
-            title={run.error ?? undefined}
-        >
-            Skipped
-        </span>
+        <StatusPill tone="neutral" kicker title={run.error ?? undefined}>Skipped</StatusPill>
     );
 
     // A bot-scoped run has no trade analysis — label the card by what it is

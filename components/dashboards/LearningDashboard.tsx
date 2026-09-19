@@ -15,6 +15,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { buildMemoryGraph } from '../../services/learning/MemoryGraph';
 import { EmptyState } from '../ui/EmptyState';
+import StatusPill from '../ui/StatusPill';
 
 interface LearningDashboardProps {
     trades: LoggedTrade[];
@@ -476,10 +477,10 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                                 <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5">
                                                     {f.name}
                                                     {f.autoManaged && (
-                                                        <span className="px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">auto</span>
+                                                        <StatusPill tone="info" kicker>auto</StatusPill>
                                                     )}
                                                 </span>
-                                                <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                                                <span className="text-[10px] font-mono tabular-nums text-zinc-500 shrink-0">
                                                     {entries > 0 ? `${entries} entries` : `${f.content.length.toLocaleString()} chars`}
                                                 </span>
                                             </div>
@@ -566,7 +567,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                             <p className="text-[10px] text-zinc-600 italic">No trades match these filters in the current time window.</p>
                                         ) : (
                                             matches.slice(-8).map(t => (
-                                                <div key={t.id} className="flex items-center justify-between rounded bg-zinc-900/60 border border-white/5 px-2 py-1 text-[10px] font-mono">
+                                                <div key={t.id} className="flex items-center justify-between rounded bg-zinc-900/60 border border-white/5 px-2 py-1 text-[10px] font-mono tabular-nums">
                                                     <span className="text-zinc-400 truncate pr-2">
                                                         {new Date(t.timestamp).toLocaleDateString()} · {t.analysis?.direction}
                                                         <span className="text-zinc-600"> · {t.marketRegime ?? '?'}</span>
@@ -607,7 +608,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     ))}
                 </div>
             </div>
-            <p className="text-[10px] text-zinc-600 mb-2 font-mono">
+            <p className="text-[10px] text-zinc-600 mb-2 font-mono tabular-nums">
                 {memoryGraph.nodes.size} nodes · {memoryGraph.edges.length} edges
                 {' · '}{[...graphKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}
             </p>
@@ -619,7 +620,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                             <div key={kind} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center justify-between gap-2">
                                 <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold shrink-0">{KIND_LABELS[kind] ?? kind}</span>
                                 <span className="text-[10px] text-zinc-600 truncate min-w-0">{samples.map(s => s.label).join(' · ')}</span>
-                                <span className="text-[10px] font-mono text-zinc-400 shrink-0">{count}</span>
+                                <span className="text-[10px] font-mono tabular-nums text-zinc-400 shrink-0">{count}</span>
                             </div>
                         );
                     })}
@@ -720,7 +721,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     <p className="text-xs text-zinc-600 italic">Log ≥3 trades per model to see the leaderboard.</p>
                 ) : (
                     <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left text-[10px] font-mono">
+                        <table className="w-full text-left text-[10px] font-mono tabular-nums">
                             <thead>
                                 <tr className="text-zinc-600 border-b border-white/5">
                                     <th className="py-1.5 pr-3 font-bold">Model</th>

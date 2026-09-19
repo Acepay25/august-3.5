@@ -5,6 +5,7 @@ import { ThinkingRecordStats, ThinkingTradeSummary, ThinkingRecord, AnalystLens 
 import { ThinkingRecordCard } from '../journal/ThinkingRecordCard';
 import { ANALYST_LENS_LABEL, ANALYST_LENS_ORDER, isModeratorThinking, resolveAnalystLens } from '../../utils/thinkingLens';
 import { ChevronRightIcon, ChevronLeftIcon, FolderIcon, FileTextIcon, ExportIcon } from '../shared/Icons';
+import StatusPill from '../ui/StatusPill';
 
 interface ReasoningDashboardProps {
   username: string;
@@ -286,13 +287,12 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({
                         </span>
                       </span>
                       {group.outcome && (
-                        <span className={` px-2 py-0.5 rounded-full text-[10px] border shrink-0 ${
-                          group.outcome === 'WIN' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : group.outcome === 'LOSS' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                          : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-                        }`}>
+                        <StatusPill
+                          tone={group.outcome === 'WIN' ? 'up' : group.outcome === 'LOSS' ? 'down' : 'neutral'}
+                          kicker
+                        >
                           {group.outcome}
-                        </span>
+                        </StatusPill>
                       )}
                       <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
                     </button>

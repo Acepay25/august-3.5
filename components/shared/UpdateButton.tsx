@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshCw, AlertCircle, Download, Loader2, Sparkles } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
+import StatusPill from '../ui/StatusPill';
 
 /**
  * Header-level entry point for the desktop auto-update flow.
@@ -69,11 +70,14 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
     // Downloading state — compact downloading pill with progress
     if (status === 'downloading') {
         return (
-            <div className={`flex items-center gap-1.5 ${className}`}>
-                <span className="flex items-center gap-1.5 rounded-md bg-cyan-500/10 px-2.5 py-1 text-[11px] font-mono font-medium text-cyan-400 border border-cyan-500/20" role="status" aria-live="polite">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>{Number.isFinite(progress) && progress > 0 ? `${progress}%` : 'Downloading…'}</span>
-                </span>
+            <div className={`flex items-center gap-1.5 ${className}`} role="status" aria-live="polite">
+                <StatusPill
+                    tone="info"
+                    className="font-mono tabular-nums"
+                    icon={<Loader2 className="h-3 w-3 animate-spin" />}
+                >
+                    {Number.isFinite(progress) && progress > 0 ? `${progress}%` : 'Downloading…'}
+                </StatusPill>
             </div>
         );
     }

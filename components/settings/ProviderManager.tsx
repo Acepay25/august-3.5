@@ -20,6 +20,7 @@ import { findProviderById, mergeDiscoveredModels, sortModelsFreeFirst } from '..
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { useToastActions } from '../shared/Toast';
 import { LoadingIcon } from '../shared/Icons';
+import StatusPill from '../ui/StatusPill';
 
 interface ProviderManagerProps {
     configs: ProviderConfig[];
@@ -155,9 +156,9 @@ const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) =
             <div className="flex items-center justify-between">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Live health (this session)</p>
                 {cooldownMs > 0 && (
-                    <span className="rounded-full border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-400">
+                    <StatusPill tone="warn" kicker>
                         benched · {Math.ceil(cooldownMs / 60000)}m left
-                    </span>
+                    </StatusPill>
                 )}
             </div>
             <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] tabular-nums text-zinc-400 sm:grid-cols-3">

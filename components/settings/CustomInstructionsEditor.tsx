@@ -14,6 +14,7 @@ import { CustomInstructionsMap, CustomInstruction } from '../../types';
 import { ChevronDownIcon, TrashIcon } from '../shared/Icons';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import StatusPill from '../ui/StatusPill';
 
 // Instruction tabs (Standard / Strict Mode / Pure AI)
 export type InstructionTab = 'general' | 'accuracyOriginal' | 'accuracyPure';
@@ -53,7 +54,7 @@ const InstructionCard: React.FC<{
                         ) : (
                             <div className="flex items-center gap-2">
                                 <span className={`text-xs font-bold truncate ${instruction.isActive ? 'text-cyan-100' : 'text-zinc-400'}`}>{instruction.title || 'Untitled'}</span>
-                                {instruction.isActive && <span className="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/20 uppercase tracking-wider font-bold">Active</span>}
+                                {instruction.isActive && <StatusPill tone="info" kicker>Active</StatusPill>}
                             </div>
                         )}
                     </div>

@@ -16,6 +16,7 @@ import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ChevronDownIcon, LoadingIcon, TrashIcon, UploadIcon, RefreshIcon, BookmarkIcon } from '../shared/Icons';
+import StatusPill from '../ui/StatusPill';
 
 interface StrategiesManagerProps {
     /** Active user — strategy docs are stored per-user. */
@@ -299,9 +300,9 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{doc.sourceName}</span>
-                                        <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold uppercase tracking-widest ${doc.enabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800 border-white/10 text-zinc-500'}`}>
+                                        <StatusPill tone={doc.enabled ? 'up' : 'neutral'} kicker>
                                             {doc.enabled ? 'Enabled' : 'Disabled'}
-                                        </span>
+                                        </StatusPill>
                                     </div>
                                     <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed line-clamp-2">{doc.summary}</p>
                                     <p className="text-[10px] text-zinc-600 mt-1 font-mono">
