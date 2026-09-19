@@ -36,6 +36,14 @@ export interface StoredChatEntry {
     /** Harness row (level-watch price event, panel notices): rendered as a
      *  compact system line, never as a model answer. */
     notice?: boolean;
+    /** Epoch-ms the entry was created. Memory attribution needs it: "which
+     *  injections shaped this answer" is a window join over the injection log,
+     *  and without a per-entry timestamp the window has no lower bound — which
+     *  is why the citation strip could never be mounted. The upper bound comes
+     *  from the NEXT entry's stamp, so a later run's injections cannot leak
+     *  onto this answer. Optional: entries stored before this field existed
+     *  simply show no strip rather than a wrong one. */
+    at?: number;
 }
 
 export type SessionKind = 'solo' | 'panel' | 'coach' | 'group';

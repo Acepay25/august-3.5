@@ -55,13 +55,13 @@ import { ensureNotifyPermission } from '../../services/infrastructure/notify';
 import { recordSessionForReview, runSessionSkillReview, runThesisResolver, type ReviewableSession } from '../../services/learning/sessionSkillReview';
 import { runTraderLearner } from '../../services/learning/traderLearner';
 import { tipForSeed } from '../../utils/tradingTips';
-import * as supervisorStore from '../../services/learning/supervisorStore';
 import {
     ensureSupervisorListeners, nudgeSupervisor, setSessionModel,
 } from '../../services/learning/skillSupervisor';
 import SupervisorPanel from './SupervisorPanel';
+import SupervisorIndicator from './panels/SupervisorIndicator';
+import MemoryProvenanceStrip from '../chat/MemoryProvenanceStrip';
 import KeyLevelsCard from './KeyLevelsCard';
-import type { SupervisorPhase } from '../../services/learning/supervisorStore';
 import { getActiveUsername } from '../../utils/activeUser';
 import { baseOf, quoteOf, display as symbolDisplay } from '../../utils/symbol';
 import { listSkills } from '../../services/learning/SkillMemoryService';
@@ -326,37 +326,6 @@ const relTime = (ts: number): string => {
     const days = Math.round(hours / 24);
     if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
     return `${Math.round(days / 7)} wk ago`;
-};
-
-/** Phase-honest icon for the supervisor indicator — the icon ALWAYS tells
- *  the truth about what the supervising model is doing right now. */
-const SUPERVISOR_PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
-    idle: <Sparkles className="h-4 w-4" />,
-    reviewing: <Search className="h-4 w-4" />,
-    verifying: <ShieldCheck className="h-4 w-4" />,
-    enhancing: <Sparkles className="h-4 w-4" />,
-    deciding: <Gavel className="h-4 w-4" />,
-    learning: <Brain className="h-4 w-4" />,
-};
-
-/** The live supervisor indicator: swaps icon per phase + pulses while a
- *  supervision call is in flight; click opens the live panel. */
-const SupervisorIndicator: React.FC<{ onOpen: () => void; compact?: boolean }> = ({ onOpen, compact = false }) => {
-    const snap = useSyncExternalStore(supervisorStore.subscribe, supervisorStore.getSnapshot, supervisorStore.getSnapshot);
-    const active = snap.running;
-    const Icon = SUPERVISOR_PHASE_ICON[snap.phase] ?? SUPERVISOR_PHASE_ICON.idle;
-    return (
-        <button
-            type="button"
-            onClick={onOpen}
-            data-testid="supervisor-indicator"
-            aria-label="Skill supervisor"
-            title={active ? `${snap.modelName ? `${snap.modelName} — ` : ''}${snap.activity || 'supervising…'}` : 'Skill supervisor — watching the queues (click to open)'}
-            className={`shrink-0 rounded-control transition-colors ${active ? 'animate-pulse text-cyan-300' : 'text-zinc-600 hover:text-zinc-300'} ${compact ? 'p-1' : 'p-1.5'}`}
-        >
-            {Icon}
-        </button>
-    );
 };
 
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
@@ -1129,7 +1098,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const fileBlocks = sentAttachments.filter(a => a.kind === 'file')
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
             .join('');
-        const userEntry: LiveEntry = { id: retryEntry?.id ?? newId('u'), role: 'user', text: text || '(chart screenshot)', tools: [], image: imageAttachment?.payload };
+        const userEntry: LiveEntry = { id: retryEntry?.id ?? newId('u'), role: 'user', text: text || '(chart screenshot)', tools: [], image: imageAttachment?.payload, at: Date.now() };
         // The controller is armed (and registered in the store, keyed by
         // session) BEFORE the context fetch so a stop click during the
         // network-bound packet pull already kills the turn — and so the run
@@ -1142,7 +1111,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // appends its streaming AI entry up front; panel seats stream into
         // their own entries added later in the loop.
         const isSolo = session.kind !== 'panel';
-        const soloAiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true };
+        const soloAiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now() };
         mutate(sid, s => ({
             ...s,
             title: s.entries.some(e => e.role === 'user') ? s.title : titleFromMessage(text),
@@ -1268,6 +1237,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 const aiEntry: LiveEntry = {
                     id: newId('a'), role: 'ai', text: '', tools: [], streaming: true,
                     speaker: seat.id,
+                    at: Date.now(),
                 };
                 mutate(sid, s => ({ ...s, entries: [...s.entries, aiEntry] }));
                 const messages: ChatMessage[] = [
@@ -1348,8 +1318,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
             .join('');
         const sid = activeId;
-        const userEntry: LiveEntry = { id: newId('u'), role: 'user', text: text + fileNote, tools: [], image: images[0]?.dataURL };
-        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: 'Running the full ensemble analysis — hybrid data pull, debate, verdict…', tools: [], streaming: true };
+        const userEntry: LiveEntry = { id: newId('u'), role: 'user', text: text + fileNote, tools: [], image: images[0]?.dataURL, at: Date.now() };
+        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: 'Running the full ensemble analysis — hybrid data pull, debate, verdict…', tools: [], streaming: true, at: Date.now() };
         mutate(sid, s => ({ ...s, title: titleFromMessage(text), updatedAt: Date.now(), entries: [...s.entries, userEntry, aiEntry] }));
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
@@ -1402,8 +1372,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // Strip the leading machine-tag ([HARNESS SIGNAL …] / [HARNESS
         // TRIGGER …]) so the user sees a readable line, not the raw envelope.
         const noticeLine = signalText.split('\n')[0].replace(/^\[[^\]]*\]\s*/, '').replace(/^⚡\s*/, '').trim();
-        const noticeEntry: LiveEntry = { id: newId('n'), role: 'ai', text: '', tools: [noticeLine], notice: true };
-        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true };
+        const noticeEntry: LiveEntry = { id: newId('n'), role: 'ai', text: '', tools: [noticeLine], notice: true, at: Date.now() };
+        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now() };
         mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: [...s.entries, noticeEntry, aiEntry] }));
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
@@ -1937,6 +1907,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     <div className="flex items-center gap-2">
                                         <CopyChip text={shownText} />
                                     </div>
+                                )}
+                                {/* The one "what the AI remembered" row. Once the
+                                    answer has settled — an open stream is still
+                                    pulling injections in, so its window has no
+                                    upper bound yet. */}
+                                {shownText && !e.streaming && !e.notice && (
+                                    <MemoryProvenanceStrip
+                                        startedAt={e.at}
+                                        nextAt={entries[i + 1]?.at}
+                                        messageId={e.id}
+                                    />
                                 )}
                                 {aiLevels && aiLevels.levels.length > 0 && !e.streaming && (
                                     <KeyLevelsCard
