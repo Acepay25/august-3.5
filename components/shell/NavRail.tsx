@@ -16,7 +16,7 @@ import {
     BotIcon,
     SettingsIcon,
 } from '../shared/Icons';
-import { User, Settings, History, LogOut } from 'lucide-react';
+import { User, Settings, History, LogOut, GraduationCap } from 'lucide-react';
 import Tip from '../ui/Tip';
 import type { AppSurface } from '../../hooks/useSurface';
 
@@ -44,7 +44,7 @@ interface NavRailProps {
 }
 
 /** `shortcut` mirrors the real bindings in App.tsx's key handler
- *  (Alt+1..4 for surfaces, Ctrl/Cmd+, for Settings) — Alt rather than Ctrl
+ *  (Alt+1..5 for surfaces, Ctrl/Cmd+, for Settings) — Alt rather than Ctrl
  *  because Ctrl+number is the browser/Electron tab switch. */
 const ITEMS: Array<{
     id: AppSurface;
@@ -56,6 +56,7 @@ const ITEMS: Array<{
     { id: 'journal', label: 'Journal', shortcut: 'Alt+2', Icon: FileTextIcon },
     { id: 'studio', label: 'Studio', shortcut: 'Alt+3', Icon: SparklesIcon },
     { id: 'agents', label: 'Agents', shortcut: 'Alt+4', Icon: BotIcon },
+    { id: 'learn', label: 'Learn', shortcut: 'Alt+5', Icon: GraduationCap },
 ];
 
 const NavRail: React.FC<NavRailProps> = ({

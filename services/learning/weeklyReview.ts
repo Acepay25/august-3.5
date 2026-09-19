@@ -163,6 +163,14 @@ export const runWeeklyReviewIfDue = async (
             // fingerprints → (judge-gated) distill → measurement. Offline,
             // read-only; fires alongside the weekly review.
             await runSelfImprovementPass(username, trades);
+            // WS-4.2: memory maintenance — stale-skill demotion proposals and
+            // the notebook review. It carries its OWN due-check, because this
+            // block re-runs whenever the digest couldn't be generated (no
+            // provider, too few trades) and hygiene must not ride along on
+            // every one of those retries.
+            void import('./memoryHygiene')
+                .then(m => m.runMemoryHygieneIfDue(username))
+                .catch(() => { /* hygiene is best-effort */ });
             // Mine correct passes — resolve recent SKIPPED trades
             // against post-skip klines (≤5 fetches/sweep) and queue
             // avoid-skill drafts for vindicated-pass clusters through the

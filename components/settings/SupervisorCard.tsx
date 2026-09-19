@@ -18,7 +18,7 @@ const VERDICT_PILL: Record<string, string> = {
     skipped: 'text-zinc-500',
 };
 
-const SupervisorCard: React.FC = () => {
+const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn }) => {
     const snap = useSyncExternalStore(supervisorStore.subscribe, supervisorStore.getSnapshot, supervisorStore.getSnapshot);
     const decisions = snap.events.filter(e => e.decision).slice(-4).reverse();
     return (
@@ -27,7 +27,7 @@ const SupervisorCard: React.FC = () => {
             <p className="mt-0.5 mb-3 text-[11px] text-zinc-500">
                 A model reviews the approval queues the way you would — verifying each item against your
                 catalog, graveyard and memory, enhancing the salvageable, approving the solid ones as
-                candidates. Watch it live (and override any decision) from the Chart AI header.
+                candidates. Everything it decides lives on the Learn surface, where each call is yours to undo.
             </p>
             <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5" data-testid="supervisor-auto-setting">
                 <input
@@ -56,6 +56,13 @@ const SupervisorCard: React.FC = () => {
                     ? `${snap.pendingCount} item${snap.pendingCount === 1 ? '' : 's'} waiting for review`
                     : 'queues clear'}
             </p>
+            {onOpenLearn && (
+                <button type="button" onClick={onOpenLearn} data-testid="open-learn-link"
+                    className="mb-3 w-full rounded-control border border-zinc-700 px-2 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
+                    Open the Learn surface
+                    <span className="ml-1 font-mono text-[10px] text-zinc-600">Alt+5</span>
+                </button>
+            )}
             {decisions.length > 0 && (
                 <ul className="space-y-1.5">
                     {decisions.map(e => (

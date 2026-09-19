@@ -32,7 +32,8 @@ import {
     updateMemoryFile,
     extractLessonFromPostMortem,
 } from '../learning/MemoryFilesService';
-import { syncClosedTradeToNotebook } from '../learning/SkillMemoryService';
+import { syncClosedTradeToNotebook, listSkills, stampSkillOrigin } from '../learning/SkillMemoryService';
+import { getBots } from './agentRoster';
 import { COMMON_WORDS } from '../../constants/commonWords';
 
 /** Bots get the smallest honest slice — their persona/notes already ride the
@@ -161,6 +162,10 @@ export const recordBotTurnOutcome = async (
         }
 
         // 2. Closed bot-authored trades fold into the shared evidence path.
+        //    Snapshot the skill set first: provenance belongs only on files
+        //    THIS fold created, never on a chart-AI skill that happened to
+        //    count the same trade.
+        const before = new Set(listSkills().map(({ file }) => file.id));
         const seen = foldedTrades.get(bot.id) ?? new Set<string>();
         const botTrades = opts.trades.filter(t => {
             const keys = Object.keys(t.modelsUsed ?? {});
@@ -175,6 +180,9 @@ export const recordBotTurnOutcome = async (
             foldedTrades.set(bot.id, seen);
             await syncClosedTradeToNotebook(trade, opts.trades, opts.username);
         }
+        for (const { file } of listSkills()) {
+            if (!before.has(file.id)) await stampSkillOrigin(file.id, bot, opts.username);
+        }
     } catch (e) {
         console.warn('[BotLearning] outcome write failed (non-fatal):', e instanceof Error ? e.message : e);
     }
@@ -187,5 +195,36 @@ export const botLessonCount = (botId: string): number => {
     const note = readBotMemoryMarkdown(botId);
     if (!note) return 0;
     return note.split('\n').filter(l => l.trim().startsWith('- [')).length;
+};
+
+export interface BotLearningStat {
+    id: string;
+    name: string;
+    /** Lesson lines in the bot's own memory.md. */
+    lessons: number;
+    /** Skills this bot authored (WS-3.3 provenance). */
+    skillsAuthored: number;
+    /** Counted trades behind those skills. */
+    evidence: number;
+    /** Newest lesson date in the bot's notes, YYYY-MM-DD, or null. */
+    lastLessonAt: string | null;
+}
+
+/** Per-bot learning stats for the roster rail / Learn surface (WS-3.4). */
+export const loadBotLearningStats = (): BotLearningStat[] => {
+    const skills = listSkills();
+    return getBots().map(b => {
+        const own = skills.filter(s => s.meta.originBotId === b.id);
+        const note = readBotMemoryMarkdown(b.id) ?? '';
+        const dates = [...note.matchAll(/-\s+\[(\d{4}-\d{2}-\d{2})\]/g)].map(m => m[1]);
+        return {
+            id: b.id,
+            name: b.name,
+            lessons: botLessonCount(b.id),
+            skillsAuthored: own.length,
+            evidence: own.reduce((n, s) => n + (s.meta.evidenceCount ?? s.meta.tradeIds.length), 0),
+            lastLessonAt: dates.length ? dates.reduce((a, d) => (d > a ? d : a)) : null,
+        };
+    });
 };
 

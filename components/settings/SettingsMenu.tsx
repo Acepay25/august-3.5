@@ -85,6 +85,9 @@ interface SettingsMenuProps {
     // Modals & Navigation triggers from main view
     /** Opens the Strategy Studio — the browse/annotate playbook library. */
     onOpenStrategyStudio?: () => void;
+    /** Opens the Learn surface — the one home for the queues, the notebook and
+     *  memory health. Settings keeps the provider/model switches and links here. */
+    onOpenLearn?: () => void;
     onSwitchUser?: () => void;
     onExportData?: () => Promise<void> | void;
     /** Active profile — enables the backup management section. */
@@ -340,6 +343,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         lensConfig,
         onSetLensConfig,
         onOpenStrategyStudio,
+        onOpenLearn,
         onOpenJournal,
         onSwitchUser,
         onExportData,
@@ -1190,7 +1194,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </p>
                                         <AmendmentsInbox />
                                     </div>
-                                    <SupervisorCard />
+                                    <SupervisorCard onOpenLearn={onOpenLearn} />
                                     <ProfileMemoryCard />
                                 </div>
                             )}

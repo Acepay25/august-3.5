@@ -225,6 +225,14 @@ export interface SkillMeta {
      *  session-scoped, so without this the audit trail for an auto-approved
      *  skill evaporates on reload. One line, capped. */
     whyAccepted?: string;
+    /** ── WS-3.3 provenance ── the agent bot whose learning created this skill.
+     *  Retrieval and the skills table label it so a reader knows whether a
+     *  rule came from the chart AI or from a bot's own thread. The name is
+     *  stored next to the id on purpose: resolving it would mean a roster read
+     *  on the prompt-assembly path, and a deleted bot must not turn into a
+     *  broken label. */
+    originBotId?: string;
+    originBotName?: string;
     /** Invocation control (Agent Skills frontmatter port): which debate
      *  audience may load this skill. Default 'all'. */
     audience?: 'analyst' | 'moderator' | 'all';
@@ -409,6 +417,8 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         timeframe: pick('timeframe'),
         source: pick('source'),
         whyAccepted: pick('whyAccepted')?.slice(0, 400),
+        originBotId: pick('originBotId')?.slice(0, 40),
+        originBotName: pick('originBotName')?.slice(0, 40),
         direction: pick('direction'),
         family: pick('family'),
         regime: pick('regime'),
@@ -624,6 +634,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.timeframe ? [`timeframe: ${meta.timeframe}`] : []),
         ...(meta.source ? [`source: ${meta.source}`] : []),
         ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
+        ...(meta.originBotId ? [`originBotId: ${meta.originBotId}`] : []),
+        ...(meta.originBotName ? [`originBotName: ${meta.originBotName.replace(/\n/g, ' ')}`] : []),
         ...(meta.direction ? [`direction: ${meta.direction}`] : []),
         ...(meta.family ? [`family: ${meta.family}`] : []),
         ...(meta.regime ? [`regime: ${meta.regime}`] : []),
@@ -1912,6 +1924,26 @@ export const ingestCraftedSkillFromDraft = (
     whyAccepted?: string,
 ): Promise<void> =>
     withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username, whyAccepted));
+
+/** Record which agent bot a skill came from (WS-3.3). Callers must invoke this
+ *  only for files a bot's own write-back newly created — a chart-AI skill that
+ *  happened to count a bot's trade must never be relabeled as the bot's. */
+export const stampSkillOrigin = (
+    fileId: string,
+    bot: { id: string; name: string },
+    username: string,
+): Promise<void> => withNotebookWriteLock(async () => {
+    const file = getMemoryFiles().files.find(f => f.id === fileId);
+    if (!file) return;
+    const meta = parseSkillMarkdown(file.content);
+    if (!meta || meta.originBotId) return;
+    meta.originBotId = bot.id.slice(0, 40);
+    meta.originBotName = bot.name.slice(0, 40);
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(fileId, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+    }, username);
+});
 
 const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
