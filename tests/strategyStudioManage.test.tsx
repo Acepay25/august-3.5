@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 let store: Record<string, unknown> = {};
@@ -112,6 +112,30 @@ describe('Strategy Studio — merged management (was Settings → Skills)', () =
         // Back to the library.
         await userEvent.click(screen.getByRole('button', { name: /library/i }));
         expect(screen.getByPlaceholderText(/search playbooks/i)).toBeInTheDocument();
+        expect(screen.getByTestId('studio-wl-repeat-eth-continuation')).toBeInTheDocument();
+    });
+
+    // WS-5.4: the row-level delete the table adds must not be a one-click
+    // erase. SkillDetail's own delete arms-then-confirms; the row copies that
+    // contract exactly (and arms ONE row, not the whole table).
+    it('row delete needs two clicks on that same row, and never fires on one', { timeout: 30_000 }, async () => {
+        await renderStudio();
+        const del = screen.getByTestId('studio-delete-avoid-btc-short-fakeouts');
+
+        await userEvent.click(del);
+        // Armed, not gone: the row is still in the library and says so.
+        expect(screen.getByTestId('studio-wl-avoid-btc-short-fakeouts')).toBeInTheDocument();
+        expect(screen.getByTestId('studio-wl-repeat-eth-continuation')).toBeInTheDocument();
+        expect(del).toHaveAttribute('aria-pressed', 'true');
+        expect(del.textContent).toMatch(/confirm/i);
+        // Arming this row did not arm the other one.
+        expect(screen.getByTestId('studio-delete-repeat-eth-continuation'))
+            .toHaveAttribute('aria-pressed', 'false');
+
+        await userEvent.click(del);
+        await waitFor(() => {
+            expect(screen.queryByTestId('studio-wl-avoid-btc-short-fakeouts')).toBeNull();
+        });
         expect(screen.getByTestId('studio-wl-repeat-eth-continuation')).toBeInTheDocument();
     });
 });
