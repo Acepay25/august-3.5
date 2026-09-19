@@ -8,7 +8,7 @@
  * in this module (or anywhere else) judges its claims, so re-enabling it would
  * feed one model's unsolicited opinion back into the next debate as if it were
  * evidence, and the loop would compound its own advice. Its reader is a
- * person: `components/settings/MemoryFilesManager.tsx:85` renders it in the
+ * person: `components/learn/MemoryFilesManager.tsx:85` renders it in the
  * notebook UI, and it is excluded from the prompt index dump
  * (`MemoryFilesService.ts:277` `SKIP_INDEX_DUMP`), the memory graph
  * (`MemoryGraph.ts:57`) and note search by the same reasoning. Write-only with
