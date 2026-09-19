@@ -592,6 +592,14 @@ held. Each entry: what was claimed, what the code actually did.
 - **Density.** `ModelPerformanceDashboard`'s model cards and the stat tiles in
   `ProbabilityPanel`/`ScenarioSimulator` are still tiles for tabular data. The
   skill library is a table now.
+- **`LearningDashboard` was consolidated, not decomposed.** WS-5.1 said
+  "LearningDashboard (67 KB — split into cards)"; it now mounts inside Learn →
+  Health, so there is one surface, and `tests/learningDashboard.test.tsx` covers
+  the merge (the five sections mounting on an empty profile — it also proved the
+  component needs a ToastProvider, which App supplies). But the file is still one
+  1,140-line component whose sections are local variables rather than modules.
+  That split is internal code organization with no behavior at the end of it, so
+  it is left standing rather than done blind.
 - **File locations.** `MemoryFilesManager.tsx` and `AmendmentsInbox.tsx` still
   live under `components/settings/` although only Learn mounts them.
 - **Unverified:** a live run against a configured provider — the only claim in
@@ -599,12 +607,12 @@ held. Each entry: what was claimed, what the code actually did.
 
 ## Status (2026-09-20, post-audit)
 
-All seven workstreams are implemented. `typecheck` clean, **3384 tests** green
-(361 files), `lint` 0 errors, `build` clean. The Learn surface, the Agents rail
+All seven workstreams are implemented. `typecheck` clean, **3385 tests** green
+(362 files), `lint` 0 errors, `build` clean. The Learn surface, the Agents rail
 (collapse, sort, Chart AI row, rooms pinning, composer attach), the graveyard
 view and the skills table were checked in a real browser; the skills TABLE itself
 is covered by the Strategy Studio suites, not by eye, because the profile loaded
-in that browser session had no playbooks to row.
+for that session had no playbooks to row.
 
 What is left is listed under "Still open after the audit" and
 "Still open", each with its reason. The only claim this plan cannot settle in
