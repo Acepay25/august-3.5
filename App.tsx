@@ -1779,7 +1779,7 @@ const App: React.FC = () => {
         conversationHistory, setConversationHistory,
         activeConversation, activeConversationId, setActiveConversationId,
         updateMessages, handleCancelAnalysis, invalidatePostMortemRuns,
-        confirmDialog, toast, isCommandPaletteOpen,
+        confirmDialog, toast,
     });
 
     // F3: New conversation (Ctrl/Cmd+N shortcut + palette action).

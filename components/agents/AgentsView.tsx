@@ -233,10 +233,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const searchRef = useRef<HTMLInputElement | null>(null);
     const [searchFocusNonce, setSearchFocusNonce] = useState(0);
 
-    // `/` focuses the rail search. Nothing else claims the key: the app-wide
-    // handler in useConversationHousekeeping looks up #chat-composer, an id
-    // removed by the trade-surface rewrite (78bc027), so it has been a no-op
-    // ever since.
+    // `/` focuses the rail search. Nothing else claims it: the app-wide handler
+    // that used to looked up #chat-composer, an id deleted in 78bc027.
     useEffect(() => {
         const onKey = (e: KeyboardEvent): void => {
             if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;

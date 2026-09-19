@@ -474,14 +474,14 @@ a deep link that overreached — all fixed here and recorded below.
   active bot's header shows `lessons · skills · evidence` with the newest lesson
   date in its title. Learn → Health keeps the table version.
 - **WS-6 — `/` focuses the rail search, and the rail is a drawer below `md`.**
-  The plan's reason for skipping this was wrong: it said `/` was "already bound
-  to the dock composer". It isn't — `id="chat-composer"` was deleted in 78bc027
-  and the lookup in `useConversationHousekeeping.ts:112` has been a permanent
-  no-op since, so the key was free. Focus lands from an effect after the open
-  commits; `rAF` and `flushSync` were both tried and both measured (at 531px)
-  calling `focus()` while the subtree was still `visibility: hidden`, which
-  silently drops it. A closed drawer is `invisible`, not merely off-canvas, so
-  it stays out of the tab order.
+  The plan skipped this because `/` was "already bound to the dock composer" —
+  it is not: `id="chat-composer"` was deleted in 78bc027, and the app-wide
+  clause in `useConversationHousekeeping` that looked it up is now deleted (it
+  had been a permanent no-op for ~20 commits). Focus lands
+  from an effect after the open commits; `rAF` and `flushSync` were both tried
+  and both measured (at 531px) calling `focus()` while the subtree was still
+  `visibility: hidden`, which silently drops it. A closed drawer is `invisible`
+  rather than merely off-canvas, so it stays out of the tab order.
 - **WS-5.1 — Settings keeps only the switches.** `MemoryFilesManager` and
   `AmendmentsInbox` are no longer mounted in Settings (Learn owns both), and
   Settings deep-links to a chosen Learn tab. `initialTab` follows the contract
