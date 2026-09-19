@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Brain, Camera, Check, CheckCircle, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, Gavel, History, LayoutGrid, Lightbulb, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Trash2, TriangleAlert, X, Zap } from 'lucide-react';
+import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, Gavel, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Search, ShieldCheck, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
@@ -54,16 +54,20 @@ import { phtClock } from '../../utils/timezone';
 import { ensureNotifyPermission } from '../../services/infrastructure/notify';
 import { recordSessionForReview, runSessionSkillReview, runThesisResolver, type ReviewableSession } from '../../services/learning/sessionSkillReview';
 import { runTraderLearner } from '../../services/learning/traderLearner';
-import { tipForSeed } from '../../utils/tradingTips';
 import {
     ensureSupervisorListeners, nudgeSupervisor, setSessionModel,
 } from '../../services/learning/skillSupervisor';
 import SupervisorPanel from './SupervisorPanel';
 import SupervisorIndicator from './panels/SupervisorIndicator';
+import ChatAttachmentStrip, { type Attachment } from './panels/ChatAttachmentStrip';
+import ChatHistoryPalette, { relTime } from './panels/ChatHistoryPalette';
+import ChatWorkTimeline from './panels/ChatWorkTimeline';
+import ComposerWorkspaceRow from './panels/ComposerWorkspaceRow';
+import TradeProposalCard, { TradeProposalLoggedRow } from './panels/TradeProposalCard';
 import MemoryProvenanceStrip from '../chat/MemoryProvenanceStrip';
 import KeyLevelsCard from './KeyLevelsCard';
 import { getActiveUsername } from '../../utils/activeUser';
-import { baseOf, quoteOf, display as symbolDisplay } from '../../utils/symbol';
+import { baseOf, quoteOf } from '../../utils/symbol';
 import { listSkills } from '../../services/learning/SkillMemoryService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { isPassReply } from '../../services/agents/groupRounds';
@@ -90,11 +94,6 @@ import { TASK_BUDGETS } from '../../services/providers/taskBudgets';
 import { effortForTask, ReasoningEffort } from '../../services/providers/reasoningControls';
 import { useSmoothStreamText } from '../../hooks/useSmoothStreamText';
 import ModelPicker from '../shared/ModelPicker';
-import ReasoningRow from '../shared/ReasoningRow';
-import ToolActivityRow from '../shared/ToolActivityRow';
-import AnalyzedRow from '../shared/AnalyzedRow';
-import { splitReasoningAroundTools } from '../../utils/traceText';
-import ToolActionsRow from '../chat/ToolActionsRow';
 import { SendIcon, StopIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import NewBotDialog from '../chat/NewBotDialog';
@@ -305,28 +304,7 @@ const packetCache = new Map<string, { markdown: string; atMs: number }>();
 /** Test hook: drop cached packets so a test can observe the fetch path. */
 export const __clearPacketCacheForTests = (): void => packetCache.clear();
 
-interface Attachment {
-    id: string;
-    kind: 'image' | 'file';
-    name: string;
-    /** data URL for images, text content for files. */
-    payload: string;
-}
-
 const newId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-/** "2 days ago" style relative time — the Past Conversations palette's right
- *  column, copied from the reference's recency labels. */
-const relTime = (ts: number): string => {
-    const mins = Math.max(0, Math.round((Date.now() - ts) / 60_000));
-    if (mins < 1) return 'now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.round(hours / 24);
-    if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
-    return `${Math.round(days / 7)} wk ago`;
-};
 
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
@@ -1686,55 +1664,20 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 search box, "Recent" rows with relative times, keyboard nav. */}
             {supervisorOpen && <SupervisorPanel onClose={() => setSupervisorOpen(false)} />}
             {historyOpen && (
-                <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/50 px-6 pt-20" data-testid="chat-history-backdrop" onClick={() => setHistoryOpen(false)}>
-                    <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl" data-testid="chat-history" onClick={e => e.stopPropagation()}>
-                        <input
-                            autoFocus
-                            value={historyQuery}
-                            onChange={e => { setHistoryQuery(e.target.value); setHistorySel(0); }}
-                            onKeyDown={e => {
-                                if (e.key === 'Escape') setHistoryOpen(false);
-                                else if (e.key === 'ArrowDown') { e.preventDefault(); setHistorySel(i => Math.min(i + 1, historyRows.length - 1)); }
-                                else if (e.key === 'ArrowUp') { e.preventDefault(); setHistorySel(i => Math.max(i - 1, 0)); }
-                                else if (e.key === 'Enter') { const s = historyRows[historySel]; if (s) { chatStore.setActiveId(s.id); setHistoryOpen(false); } }
-                            }}
-                            placeholder="Search all conversations…"
-                            aria-label="Search all conversations"
-                            className="w-full border-b border-white/[0.06] bg-transparent px-4 py-3 text-[12px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
-                        />
-                        <div className="max-h-72 overflow-y-auto custom-scrollbar px-1 pb-1">
-                            <p className="px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-600">Recent</p>
-                            {historyRows.length === 0 && <p className="px-3 py-2 text-[11px] text-zinc-600">No conversations match.</p>}
-                            {historyRows.map((s, i) => (
-                                <div key={s.id} className={`group flex items-center gap-2 rounded-lg px-3 py-2 ${i === historySel ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
-                                    <button type="button"
-                                        onClick={() => { chatStore.setActiveId(s.id); setHistoryOpen(false); }}
-                                        onMouseEnter={() => setHistorySel(i)}
-                                        className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
-                                        <span className={`truncate text-[12px] ${s.id === activeId ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>{s.kind === 'panel' ? '◆ ' : ''}{s.title}</span>
-                                        <span className="shrink-0 text-[10px] text-zinc-600">{relTime(s.updatedAt)}</span>
-                                    </button>
-                                    {sessions.length > 1 && (
-                                        <button type="button" onClick={() => removeSession(s.id)} aria-label={`Delete session ${s.title}`}
-                                            className="shrink-0 text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-400">
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                            {historyHidden > 0 && (
-                                <button type="button" onClick={() => setHistoryShowAll(true)}
-                                    className="w-full px-3 py-2 text-left text-[11px] text-zinc-500 transition-colors hover:text-zinc-200">
-                                    Show {historyHidden} more…
-                                </button>
-                            )}
-                        </div>
-                        <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2 text-[10px] text-zinc-600">
-                            <span>↑↓ to navigate</span>
-                            <span>↵ to select</span>
-                        </div>
-                    </div>
-                </div>
+                <ChatHistoryPalette
+                    rows={historyRows}
+                    hidden={historyHidden}
+                    sel={historySel}
+                    query={historyQuery}
+                    activeId={activeId}
+                    canDelete={sessions.length > 1}
+                    onQueryChange={v => { setHistoryQuery(v); setHistorySel(0); }}
+                    onSelChange={setHistorySel}
+                    onSelect={id => { chatStore.setActiveId(id); setHistoryOpen(false); }}
+                    onDelete={id => removeSession(id)}
+                    onShowAll={() => setHistoryShowAll(true)}
+                    onClose={() => setHistoryOpen(false)}
+                />
             )}
 
             {/* Panel seat editor (while a panel is still short of 2 seats). */}
@@ -1839,65 +1782,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 {e.speaker && (
                                     <p className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">{formatModelDisplayName(e.speaker.split(':')[1] ?? e.speaker)}</p>
                                 )}
-                                {(() => {
-                                    const reasoning = e.reasoning ?? '';
-                                    const running = !!e.streaming && !e.text;
-                                    const hasWork = reasoning.trim().length > 0 || e.tools.length > 0;
-                                    const hasActions = !!(e.actions && e.actions.length > 0);
-                                    if (!hasWork && !hasActions) {
-                                        // Nothing yet: the MiniMax waiting tip covers
-                                        // the silent first moments of a turn.
-                                        return running ? (
-                                            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-zinc-500" data-testid="thinking-placeholder">
-                                                <Lightbulb className="mt-0.5 h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
-                                                <span className="min-w-0 break-words">Tip: {tipForSeed(e.id)}</span>
-                                            </p>
-                                        ) : null;
-                                    }
-                                    // ZCode-style work timeline: the reasoning stream
-                                    // carries a `[Desk tools] …` mirror for EVERY tool
-                                    // event in order — those markers are the cut
-                                    // points, so Thought segments interleave with the
-                                    // tool rounds that interrupted them. Consecutive
-                                    // tool events group into ONE ToolActivityRow whose
-                                    // rows pair call→result (calling… updates to ok
-                                    // in place, never a second line). The whole
-                                    // timeline folds into a single "Analyzed for Ns"
-                                    // row when the answer lands.
-                                    const segs = splitReasoningAroundTools(reasoning);
-                                    const markerCount = segs.length - 1;
-                                    const nodes: React.ReactNode[] = [];
-                                    let buf: string[] = [];
-                                    const flush = (key: string): void => {
-                                        if (buf.length > 0) {
-                                            nodes.push(<ToolActivityRow key={key} lines={buf} running={running} />);
-                                            buf = [];
-                                        }
-                                    };
-                                    for (let s = 0; s < segs.length; s++) {
-                                        if (s > 0 && s - 1 < e.tools.length) buf.push(e.tools[s - 1]);
-                                        if (segs[s]?.trim()) {
-                                            flush(`tools-${s}`);
-                                            nodes.push(
-                                                <ReasoningRow
-                                                    key={`thought-${s}`}
-                                                    thinking={segs[s]}
-                                                    running={running && s === segs.length - 1}
-                                                />
-                                            );
-                                        }
-                                    }
-                                    // Mirrors can lag the tools array (tool lines pushed
-                                    // outside the desk loop) — leftovers render at the end.
-                                    buf.push(...e.tools.slice(markerCount));
-                                    flush('tools-tail');
-                                    return (
-                                        <div className="border-l border-white/[0.08] pl-3 ml-1 my-1.5 space-y-1.5">
-                                            {hasWork && <AnalyzedRow running={running} toolsCount={e.tools.length}>{nodes}</AnalyzedRow>}
-                                            {hasActions && <ToolActionsRow actions={e.actions!} />}
-                                        </div>
-                                    );
-                                })()}
+                                <ChatWorkTimeline entry={e} />
                                 <div className="text-[12px] leading-5 text-zinc-200">
                                     {shownText
                                         ? <FadingText text={shownText} streaming={!!e.streaming} />
@@ -1929,50 +1814,24 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     />
                                 )}
                                 {e.proposal && !proposalStateOf(e.id) && (
-                                    <div className="mt-1 rounded-xl border border-white/10 bg-zinc-800/70 p-2.5" data-testid="trade-proposal-card">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${e.proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{e.proposal.direction}</span>
-                                            <span className="font-mono text-[12px] font-bold text-zinc-100">{e.proposal.symbol}</span>
-                                            <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-500">{e.proposal.confidence} confidence</span>
-                                        </div>
-                                        <div className="mt-1.5 grid grid-cols-3 gap-1 font-mono text-[11px] tabular-nums">
-                                            <span className="text-zinc-400">Entry <span className="text-zinc-100">{e.proposal.entry}</span></span>
-                                            <span className="text-zinc-400">SL <span className="text-rose-400">{e.proposal.stopLoss}</span></span>
-                                            <span className="text-zinc-400">TP <span className="text-emerald-400">{e.proposal.takeProfits.join(' / ')}</span></span>
-                                        </div>
-                                        {e.proposal.rationale && <p className="mt-1.5 text-[11px] leading-4 text-zinc-400">{e.proposal.rationale}</p>}
-                                        <div className="mt-2 flex items-center gap-1.5">
-                                            {onLogProposedTrade && (
-                                                <button type="button"
-                                                    onClick={() => {
-                                                        // Double-log guard: the disposition lives at module
-                                                        // scope, so it survived even before this fix's second
-                                                        // half — the map lookup makes a re-click after a dock
-                                                        // unmount/remount (fresh component, same store entry)
-                                                        // a NO-OP instead of a second journal row.
-                                                        if (proposalDisposition.get(e.id)) return;
-                                                        onLogProposedTrade(e.proposal!);
-                                                        setProposalDisposition(e.id, 'logged');
-                                                        setProposalTick(t => t + 1);
-                                                    }}
-                                                    className="rounded-control bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-500">
-                                                    Log this trade
-                                                </button>
-                                            )}
-                                            <button type="button"
-                                                onClick={() => { if (proposalDisposition.get(e.id)) return; setProposalDisposition(e.id, 'dismissed'); setProposalTick(t => t + 1); }}
-                                                className="rounded-control border border-white/10 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
+                                    <TradeProposalCard
+                                        proposal={e.proposal}
+                                        canLog={!!onLogProposedTrade}
+                                        onLog={() => {
+                                            // Double-log guard: the disposition lives at module
+                                            // scope, so it survived even before this fix's second
+                                            // half — the map lookup makes a re-click after a dock
+                                            // unmount/remount (fresh component, same store entry)
+                                            // a NO-OP instead of a second journal row.
+                                            if (proposalDisposition.get(e.id)) return;
+                                            onLogProposedTrade?.(e.proposal!);
+                                            setProposalDisposition(e.id, 'logged');
+                                            setProposalTick(t => t + 1);
+                                        }}
+                                        onCancel={() => { if (proposalDisposition.get(e.id)) return; setProposalDisposition(e.id, 'dismissed'); setProposalTick(t => t + 1); }}
+                                    />
                                 )}
-                                {e.proposal && proposalStateOf(e.id) === 'logged' && (
-                                    <p className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                                        <CheckCircle className="h-3 w-3 shrink-0" />
-                                        <span>✓ Logged as an open trade — the harness will score it against the outcome.</span>
-                                    </p>
-                                )}
+                                {e.proposal && proposalStateOf(e.id) === 'logged' && <TradeProposalLoggedRow />}
                             </div>
                         )}
                     </div>
@@ -1993,35 +1852,21 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         </span>
                     </div>
                 )}
-                <div className="flex shrink-0 items-center gap-2 px-1 pb-2 pt-1">
-                    <span className="truncate text-[12px] font-semibold text-zinc-200">{symbolDisplay(symbol)}</span>
-                    {isPanel && (
-                        <button type="button" onClick={() => setPanelPickerFor(panelPickerFor === activeId ? null : activeId)}
-                            aria-expanded={panelPickerFor === activeId} title="Add / remove panel models (up to 5)"
-                            className="rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-100">
-                            panel · {activeSession.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}
-                        </button>
-                    )}
-                    {boundBot && (
-                        <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-400">{boundBot.name}</span>
-                    )}
-                    <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600" title={contextAt ? `Live packet fetched ${new Date(contextAt).toISOString()}` : 'No packet yet'}>
-                        {contextAt ? `ctx ${phtClock(contextAt)} PHT` : `${symbol} · ${interval}`}
-                    </span>
-                </div>
+                <ComposerWorkspaceRow
+                    symbol={symbol}
+                    interval={interval}
+                    isPanel={isPanel}
+                    panelCount={activeSession.panelModels?.length ?? 0}
+                    pickerOpen={panelPickerFor === activeId}
+                    onTogglePicker={() => setPanelPickerFor(panelPickerFor === activeId ? null : activeId)}
+                    botName={boundBot ? boundBot.name : null}
+                    contextAt={contextAt}
+                />
                 {attachments.length > 0 && (
-                    <div className="mb-1.5 flex flex-wrap gap-1.5">
-                        {attachments.map(a => (
-                            <span key={a.id} className="flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-800 py-1 pl-1 pr-1.5 text-[10px] text-zinc-300">
-                                {a.kind === 'image'
-                                    ? <img src={a.payload} alt={a.name} className="h-8 w-12 rounded object-cover" />
-                                    : <FileText className="h-3 w-3 text-zinc-500" />}
-                                <span className="max-w-[120px] truncate">{a.name}</span>
-                                <button type="button" aria-label={`Remove ${a.name}`} onClick={() => setAttachments(prev => prev.filter(x => x.id !== a.id))}
-                                    className="text-zinc-500 hover:text-rose-400"><X className="h-3 w-3" /></button>
-                            </span>
-                        ))}
-                    </div>
+                    <ChatAttachmentStrip
+                        attachments={attachments}
+                        onRemove={id => setAttachments(prev => prev.filter(x => x.id !== id))}
+                    />
                 )}
                 <div className="rounded-2xl border border-white/10 bg-zinc-800/70 px-3 py-2.5 shadow-lg">
                     <textarea
