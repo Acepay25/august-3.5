@@ -27,6 +27,7 @@ import LearnView, { type LearnTab } from '../components/learn/LearnView';
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { queueSkillDraft } from '../utils/skillDrafts';
 import * as supervisorStore from '../services/learning/supervisorStore';
+import { recordTombstone } from '../services/learning/skillGraveyard';
 
 const USER = 'learn-ui-user';
 
@@ -138,5 +139,22 @@ describe('Learn deep link', () => {
         fireEvent.click(screen.getByTestId('toggle-mount'));  // leave the surface
         fireEvent.click(screen.getByTestId('toggle-mount'));  // come back
         expect(currentTab()).toBe('queue');
+    });
+});
+
+describe('Graveyard view (WS-5.1)', () => {
+    it('Health lists what was retired and why, instead of only counting it', async () => {
+        await recordTombstone(USER, {
+            slug: 'btc-old-range-rule', reason: 'eval-hurts', sampleN: 6, liftPts: -12,
+            retiredAt: '2026-09-01T00:00:00.000Z',
+        });
+        mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
+        await waitFor(() => expect(screen.getByTestId('memory-health-card')).toBeTruthy());
+        const text = screen.getByTestId('memory-health-card').textContent ?? '';
+        expect(text).toContain('Graveyard (1)');
+        expect(text).toContain('btc-old-range-rule');
+        expect(text).toContain('eval-hurts');
+        expect(text).toContain('standing but contradicted');
     });
 });
