@@ -162,9 +162,14 @@ const TradeDetailView: React.FC<{
                         {postMortem ? (
                             <MarkdownContent content={postMortem} className="text-[15px] text-zinc-200 leading-8" />
                         ) : (
-                            <p className="text-sm text-zinc-500 leading-7">
-                                No post-mortem report yet. Log a WIN or LOSS with ensemble analysis to generate one.
-                            </p>
+                            <EmptyState
+                                compact
+                                iconVariant="subtle"
+                                align="start"
+                                icon={<FileTextIcon className="h-5 w-5" />}
+                                title="No post-mortem report yet"
+                                description="Log a WIN or LOSS with ensemble analysis to generate one."
+                            />
                         )}
                     </div>
 
