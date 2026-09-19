@@ -68,7 +68,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
             </button>
             <button
               onClick={onConfirm}
-              className={`flex-1 py-3 rounded-xl font-bold text-white transition-all ${isEnabling ? 'bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-900/40' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+              className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${isEnabling ? 'bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-900/40' : 'bg-zinc-700 hover:bg-zinc-600'}`}
             >
               {isEnabling ? 'Enable Mode' : 'Disable Mode'}
             </button>

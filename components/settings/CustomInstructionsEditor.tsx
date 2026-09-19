@@ -32,14 +32,14 @@ const InstructionCard: React.FC<{
     const { confirm: confirmDelete, ConfirmDialogComponent } = useConfirmDialog();
 
     return (
-        <div className={`rounded-2xl border transition-all duration-[150ms] ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
+        <div className={`rounded-2xl border transition-[background-color,border-color,opacity,box-shadow] duration-[150ms] ease-[var(--ease-snappy)] ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
             <div className="p-3 flex items-center justify-between gap-3">
                 <div className="flex-1 flex items-center gap-3 min-w-0">
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
                         className="p-1 rounded hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
                     >
-                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-[150ms] ${isExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
 
                     <div className="flex-1 min-w-0">
@@ -164,19 +164,19 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <div className="flex space-x-1 bg-zinc-900 p-1 rounded-xl border border-white/5">
                 <button
                     onClick={() => onTabChange('general')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Standard
                 </button>
                 <button
                     onClick={() => onTabChange('accuracyOriginal')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Strict Mode
                 </button>
                 <button
                     onClick={() => onTabChange('accuracyPure')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Pure AI
                 </button>
@@ -192,7 +192,9 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
                 </div>
                 <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                     <div
-                        className={`h-full rounded-full transition-all duration-500 ${totalWordCount > MAX_WORD_COUNT ? 'bg-red-500' : 'bg-cyan-600'}`}
+                        // Data-value motion: this animates the token-usage bar's width,
+                        // so the 500ms stays (ui-doctrine "Motion and density" exception).
+                        className={`h-full rounded-full transition-[width,background-color] duration-500 ease-[var(--ease-snappy)] ${totalWordCount > MAX_WORD_COUNT ? 'bg-red-500' : 'bg-cyan-600'}`}
                         style={{ width: `${Math.min(100, (totalWordCount / MAX_WORD_COUNT) * 100)}%` }}
                     ></div>
                 </div>

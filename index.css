@@ -136,6 +136,14 @@
   --radius-bubble: 12px;
   --radius-control: 8px;
   --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+  /* The curve a bare `transition-*` utility falls back to. Tailwind ships
+     cubic-bezier(.4,0,.2,1) here, so every class that names a property but not
+     an ease — the majority in this app — was easing on the Material curve while
+     the ones that spell out the token eased on Minara's. Pointing the default at
+     --ease-snappy makes the doctrine true by construction instead of by ~300
+     call sites remembering to write it. Duration stays Tailwind's .15s, which is
+     already inside the .12–.18s window. */
+  --default-transition-timing-function: var(--ease-snappy);
 }
 
 /* Historical note: the app used to be monochrome, with semantic color opted

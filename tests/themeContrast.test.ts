@@ -14,8 +14,8 @@
  *
  * Pure math + file reads — no DOM required.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const rootCss = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
@@ -80,4 +80,74 @@ describe('theme gray-drift lockout', () => {
             expect(src).not.toMatch(/\b(?:hover:|focus:|sm:|md:)?(?:bg|text|border|ring|ring-offset|divide)-gray-\d{3}\b/);
         });
     }
+});
+
+/**
+ * 3) Hue lockout — WS-5.3's "NEVER introduce new hues", enforced over the whole
+ *    component tree instead of by review. Semantic colors are emerald (gain),
+ *    rose/red (loss), amber/yellow (warning), cyan (info) and zinc (neutral);
+ *    anything else in a class list is a new hue, and every one of the ~90 sites
+ *    that predates this test was decorative — the state it colored was already
+ *    named in words next to it.
+ *
+ * Scans source text rather than computed styles: Tailwind v4 generates the
+ * utility on demand, so a stray class renders a real color and jsdom would
+ * never see it. An exception has to be a fact about the file, not a preference.
+ */
+const FORBIDDEN_HUE = /(?:from|via|to|bg|text|border|ring|shadow|fill|stroke|divide|placeholder|decoration|outline|accent|caret|split|scrollbar-thumb)-(?:purple|violet|indigo|blue|sky|fuchsia|pink|teal|orange|lime|green)-\d{2,3}/;
+
+/** file → why its hue is not UI chrome. Add only with a reason. */
+const HUE_ALLOWLIST: Record<string, string> = {};
+
+const tsxFilesUnder = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) return tsxFilesUnder(full);
+    return entry.name.endsWith('.tsx') || entry.name.endsWith('.ts') ? [full] : [];
+});
+
+describe('theme hue lockout (WS-5.3)', () => {
+    const offenders = tsxFilesUnder(resolve(__dirname, '../components'))
+        .map(file => {
+            const lines = readFileSync(file, 'utf8').split('\n');
+            const hits = lines
+                .map((line, i) => ({ line: i + 1, text: line }))
+                .filter(l => FORBIDDEN_HUE.test(l.text));
+            return { rel: relative(__dirname, file).replace(/\\/g, '/').replace(/^..\//, ''), hits };
+        })
+        .filter(o => o.hits.length > 0 && !HUE_ALLOWLIST[o.rel]);
+
+    it('keeps every hue in components/ inside the semantic ramp', () => {
+        const report = offenders
+            .map(o => `${o.rel}\n${o.hits.map(h => `  ${h.line}: ${h.text.trim().slice(0, 120)}`).join('\n')}`)
+            .join('\n');
+        expect(report, `${offenders.length} file(s) still carry a non-doctrine hue`).toBe('');
+    });
+});
+
+/**
+ * 4) `transition-all` lockout — WS-5.4. `all` animates geometry as well as
+ *    paint, so any state change that resizes a box (text growing a stream
+ *    chunk at a time, a disclosure opening) slides the layout with it. Naming
+ *    the properties is free: `transition-colors`, `transition-transform`,
+ *    `transition-[width]`. Long durations are NOT pinned here on purpose — a
+ *    duration that animates a data value (a progress bar's width, the
+ *    tick-flash read) is correct at 300ms and each one carries a comment.
+ */
+describe('motion lockout (WS-5.4)', () => {
+    const offenders = tsxFilesUnder(resolve(__dirname, '../components'))
+        .map(file => {
+            const lines = readFileSync(file, 'utf8').split('\n');
+            const hits = lines
+                .map((line, i) => ({ line: i + 1, text: line }))
+                .filter(l => /\btransition-all\b/.test(l.text));
+            return { rel: relative(__dirname, file).replace(/\\/g, '/').replace(/^..\//, ''), hits };
+        })
+        .filter(o => o.hits.length > 0);
+
+    it('names every transition property in components/', () => {
+        const report = offenders
+            .map(o => `${o.rel}\n${o.hits.map(h => `  ${h.line}: ${h.text.trim().slice(0, 120)}`).join('\n')}`)
+            .join('\n');
+        expect(report, `${offenders.length} file(s) still use transition-all`).toBe('');
+    });
 });

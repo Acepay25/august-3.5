@@ -16,11 +16,15 @@ import { toKlineInterval, type ChartInterval } from './TradingChart';
  *  price, and the kline cache already absorbs most of this traffic. */
 const REFRESH_MS = 60_000;
 
+/** Chip tones: `bull`/`bear` are semantic (gain-side / loss-side, matching the
+ *  theme's emerald = up and rose = down), while `vwap` is a categorical label
+ *  for the session-VWAP reference line — info, not a verdict. `neutral` is the
+ *  no-direction state. */
 const TONE: Record<BiasChip['tone'], string> = {
     bull: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
     bear: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
     neutral: 'border-white/10 bg-white/[0.04] text-zinc-400',
-    vwap: 'border-violet-400/30 bg-violet-400/10 text-violet-300',
+    vwap: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300',
 };
 
 const BiasChips: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symbol, interval }) => {

@@ -295,7 +295,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={value}
                                         type="button"
                                         onClick={() => setFrequencyMode(value)}
-                                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${frequencyMode === value ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${frequencyMode === value ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                     >
                                         {label}
                                     </button>
@@ -325,7 +325,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={p.label}
                                         type="button"
                                         onClick={() => setScheduleDays(p.days)}
-                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${JSON.stringify([...scheduleDays].sort()) === JSON.stringify([...p.days].sort()) ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${JSON.stringify([...scheduleDays].sort()) === JSON.stringify([...p.days].sort()) ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                     >
                                         {p.label}
                                     </button>
@@ -340,7 +340,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={d.dow}
                                         type="button"
                                         onClick={() => setScheduleDays(prev => on ? prev.filter(x => x !== d.dow) : [...prev, d.dow])}
-                                        className={`w-11 h-9 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${on ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`w-11 h-9 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${on ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                         title={on ? `Remove ${d.label} — this day will not trigger` : `Add ${d.label} — this day triggers the automation`}
                                         aria-pressed={on}
                                     >
@@ -423,7 +423,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             <button
                                 type="button"
                                 onClick={() => setInputSource('template')}
-                                className={`flex-1 px-3 py-2 rounded-lg border text-left transition-all ${inputSource === 'template' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
+                                className={`flex-1 px-3 py-2 rounded-lg border text-left transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${inputSource === 'template' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
                             >
                                 <span className={`text-[10px] font-bold uppercase tracking-widest ${inputSource === 'template' ? 'text-cyan-300' : 'text-zinc-400'}`}>Fixed prompt</span>
                                 <span className="block text-[10px] text-zinc-500 mt-0.5">Every run sends the template below</span>
@@ -431,7 +431,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             <button
                                 type="button"
                                 onClick={() => setInputSource('last_analysis')}
-                                className={`flex-1 px-3 py-2 rounded-lg border text-left transition-all ${inputSource === 'last_analysis' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
+                                className={`flex-1 px-3 py-2 rounded-lg border text-left transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${inputSource === 'last_analysis' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
                             >
                                 <span className={`text-[10px] font-bold uppercase tracking-widest ${inputSource === 'last_analysis' ? 'text-cyan-300' : 'text-zinc-400'}`}>Repeat last</span>
                                 <span className="block text-[10px] text-zinc-500 mt-0.5">Re-analyze your last manual analysis (prompt + chart)</span>
@@ -489,7 +489,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                     key={value}
                                     type="button"
                                     onClick={() => setMode(value)}
-                                    className={`flex-1 px-3 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all ${mode === value ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                    className={`flex-1 px-3 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${mode === value ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                 >
                                     {label}
                                 </button>
@@ -545,7 +545,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={style}
                                         type="button"
                                         onClick={() => setLensTradingStyle(style)}
-                                        className={`flex-1 px-2 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-widest transition-all ${lensTradingStyle === style ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`flex-1 px-2 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${lensTradingStyle === style ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                     >
                                         {style}
                                     </button>

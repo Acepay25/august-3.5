@@ -309,7 +309,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                         {doc.pageCount} pages · {doc.charCount.toLocaleString()} chars · {new Date(doc.updatedAt).toLocaleDateString()}
                                     </p>
                                 </div>
-                                <ChevronDownIcon className={`w-4 h-4 text-zinc-600 shrink-0 transition-transform duration-[150ms] ${isExpanded ? 'rotate-180' : ''}`} />
+                                <ChevronDownIcon className={`w-4 h-4 text-zinc-600 shrink-0 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
 
                             {isExpanded && (

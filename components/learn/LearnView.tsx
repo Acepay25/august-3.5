@@ -89,7 +89,7 @@ const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = 
                     return (
                         <button key={id} type="button" onClick={() => setTab(id)}
                             aria-current={active ? 'true' : undefined} data-testid={`learn-tab-${id}`}
-                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-[12px] font-semibold transition-colors duration-[120ms] ${
+                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-[12px] font-semibold transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                                 active
                                     ? 'border-zinc-100 text-zinc-100'
                                     : 'border-transparent text-zinc-500 hover:text-zinc-300'

@@ -3,7 +3,7 @@
  * Shows win rates, cold streaks, expertise, and dynamic weights
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Fragment } from 'react';
 import { clamp100 } from '../../utils/math';
 import { Cpu } from 'lucide-react';
 import { AIProvider, LoggedTrade } from '../../types';
@@ -49,6 +49,10 @@ const resolveModelDisplay = (provider: AIProvider, index: number): { provider: A
     color: seriesColor(index),
 });
 
+/** A demoted model wears the neutral chrome color instead of its series
+ *  color, so "this line is parked" reads without borrowing the loss hue. */
+const DEMOTED_SERIES_COLOR = '#56564f';
+
 /** Provider ids that contributed to a trade (dynamic first, legacy fallback). */
 const tradeProviderIds = (trade: LoggedTrade): string[] => {
     if (trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0) {
@@ -88,7 +92,9 @@ const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }
                     strokeWidth={strokeWidth}
                     fill="none"
                 />
-                {/* Progress circle */}
+                {/* Progress circle — the inline transition animates a DATA mark
+                    (stroke-dashoffset = the win rate), not UI chrome, so it is the
+                    sanctioned exception to the --ease-snappy/0.12–0.18s rule. */}
                 <circle
                     cx={size / 2}
                     cy={size / 2}
@@ -103,7 +109,7 @@ const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }
                 />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-lg font-bold tabular-nums text-white">{Math.round(percentage)}%</span>
+                <span className="text-sm font-mono font-bold tabular-nums text-white">{Math.round(percentage)}%</span>
             </div>
         </div>
     );
@@ -140,8 +146,12 @@ const ExpertiseBar: React.FC<{ expertise: SituationalExpertise }> = ({ expertise
                 <span>CONT {continuationPct}%</span>
             </div>
             <div className="flex gap-1 h-1.5">
+                {/* The two segments are labelled (REV / CONT) right above them, so
+                    the split reads from position alone: reversal is neutral zinc and
+                    only continuation carries the view's cyan. Violet here was a
+                    forbidden hue with no meaning attached to it. */}
                 <div
-                    className="rounded-full bg-gradient-to-r from-violet-500 to-violet-400"
+                    className="rounded-full bg-gradient-to-r from-zinc-500 to-zinc-400"
                     style={{ width: `${Math.max(10, reversalPct)}%` }}
                 />
                 <div
@@ -153,61 +163,93 @@ const ExpertiseBar: React.FC<{ expertise: SituationalExpertise }> = ({ expertise
     );
 };
 
-const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
+/**
+ * One model = one hairline-divided row. Win rates are tabular data, so they
+ * get a table (UI doctrine / WS-5.4), not a tile: the per-model ring became a
+ * thin bar in the row, which keeps the readout and drops the card-in-a-card.
+ * What genuinely does not fit a row — the streak counts and the reversal /
+ * continuation split — sits behind disclosure, so rows stay one line high.
+ */
+const ModelTableRow: React.FC<{
+    data: ModelCardData;
+    expanded: boolean;
+    onToggle: () => void;
+}> = ({ data, expanded, onToggle }) => {
     const { name, color, stats, expertise, modelName } = data;
+    const modelColor = stats.isDemoted ? DEMOTED_SERIES_COLOR : color;
+    const losses = stats.last20Total - stats.last20Wins;
 
     return (
-        <div className="relative p-4 rounded-xl bg-zinc-800 border border-zinc-700/50 hover:border-zinc-600/70 transition-all">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-3">
-                <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white text-sm">{name}</h3>
+        <Fragment>
+            <tr className="border-b border-white/5 last:border-0">
+                <td className="py-1.5 pr-1 w-6 align-middle">
+                    <button
+                        type="button"
+                        onClick={onToggle}
+                        aria-expanded={expanded}
+                        aria-label={`${expanded ? 'Hide' : 'Show'} detail for ${name}`}
+                        className="text-zinc-600 hover:text-zinc-300 transition-colors"
+                        title="Model detail"
+                    >
+                        <span className={`inline-block text-[8px] transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
+                    </button>
+                </td>
+                <td className="py-1.5 pr-3 text-left">
+                    <p className="text-zinc-200 truncate max-w-[160px]" title={name}>{name}</p>
                     {modelName && (
-                        <p className="text-[10px] text-zinc-500 truncate" title={modelName}>
+                        <p className="text-[9px] text-zinc-600 truncate max-w-[160px]" title={modelName}>
                             {modelName}
                         </p>
                     )}
-                </div>
-                <StatusBadge stats={stats} />
-            </div>
-
-            {/* Win Rate Ring */}
-            <div className="flex justify-center mb-3">
-                <WinRateRing
-                    percentage={stats.last20WinRate}
-                    color={stats.isDemoted ? '#56564f' : color}
-                />
-            </div>
-
-            {/* Stats */}
-            <div className="text-center mb-3">
-                <p className="text-xs text-zinc-400">
-                    Last {stats.last20Total} trades
-                </p>
-                <p className="text-xs text-zinc-500 tabular-nums">
-                    {stats.last20Wins}W / {stats.last20Total - stats.last20Wins}L
-                </p>
-            </div>
-
-            {/* Streak Info */}
-            {(stats.coldStreakCount > 0 || stats.hotStreakCount > 0) && (
-                <div className="text-center mb-2">
-                    {stats.coldStreakCount > 0 && (
-                        <span className="text-xs text-red-400 tabular-nums">
-                            {stats.coldStreakCount} consecutive losses
-                        </span>
-                    )}
-                    {stats.hotStreakCount > 0 && (
-                        <span className="text-xs text-green-400 tabular-nums">
-                            {stats.hotStreakCount} consecutive wins
-                        </span>
-                    )}
-                </div>
+                </td>
+                <td className="py-1.5 px-2">
+                    <div className="flex items-center gap-2 min-w-[150px]">
+                        <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            {/* width is the win rate: a data mark, so this animates
+                                width alone — a blanket geometry transition is what
+                                lets a growing bar shove the layout around. */}
+                            <div
+                                className="h-full rounded-full transition-[width] duration-[150ms] ease-[var(--ease-snappy)]"
+                                style={{ width: `${clamp100(stats.last20WinRate)}%`, backgroundColor: modelColor }}
+                            />
+                        </div>
+                        <span className="w-10 text-right text-zinc-100">{Math.round(stats.last20WinRate)}%</span>
+                    </div>
+                </td>
+                <td className="py-1.5 px-2 text-zinc-300 whitespace-nowrap">
+                    {stats.last20Wins}W / {losses}L
+                </td>
+                <td className="py-1.5 pl-2">
+                    <StatusBadge stats={stats} />
+                </td>
+            </tr>
+            {expanded && (
+                <tr className="border-b border-white/5 last:border-0">
+                    <td className="py-1.5 pr-1" />
+                    <td colSpan={4} className="py-1.5 px-2">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-1">
+                            <WinRateRing percentage={stats.last20WinRate} color={modelColor} size={64} />
+                            <div className="space-y-0.5 text-zinc-400">
+                                <p>Last {stats.last20Total} trades</p>
+                                {stats.coldStreakCount > 0 && (
+                                    <p className="text-red-400">
+                                        {stats.coldStreakCount} consecutive losses
+                                    </p>
+                                )}
+                                {stats.hotStreakCount > 0 && (
+                                    <p className="text-emerald-400">
+                                        {stats.hotStreakCount} consecutive wins
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-[140px]">
+                                <ExpertiseBar expertise={expertise} />
+                            </div>
+                        </div>
+                    </td>
+                </tr>
             )}
-
-            {/* Expertise */}
-            <ExpertiseBar expertise={expertise} />
-        </div>
+        </Fragment>
     );
 };
 
@@ -238,7 +280,7 @@ const WeightsChart: React.FC<{ weights: DynamicWeights; enabledProviders: AIProv
                     <span className="text-xs text-zinc-400 w-20 truncate">{name}</span>
                     <div className="flex-1 h-4 bg-zinc-800 rounded-full overflow-hidden">
                         <div
-                            className="h-full rounded-full transition-all duration-500"
+                            className="h-full rounded-full transition-[width] duration-[150ms] ease-[var(--ease-snappy)]"
                             style={{
                                 width: `${weight}%`,
                                 backgroundColor: color,
@@ -290,6 +332,13 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
     const [weights, setWeights] = useState<DynamicWeights | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     const [isRefreshing, setIsRefreshing] = useState(false);
+    // Which model rows are showing their detail. Keyed by provider id so a
+    // refresh that reorders rows cannot move an open row under the cursor.
+    const [expandedProviders, setExpandedProviders] = useState<string[]>([]);
+    const toggleProvider = (provider: AIProvider): void =>
+        setExpandedProviders(prev =>
+            prev.includes(provider) ? prev.filter(p => p !== provider) : [...prev, provider]
+        );
     // Tracks the pending refresh timer so rapid prop changes (trade log
     // updates, provider toggles) cancel the in-flight scan instead of
     // stacking overlapping 500ms runs; also cleared on unmount.
@@ -362,7 +411,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                 <button
                     onClick={refreshData}
                     disabled={isRefreshing}
-                    className={`px-3 py-1.5 text-xs rounded-lg transition-all flex items-center gap-2 ${isRefreshing
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] flex items-center gap-2 ${isRefreshing
                         ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
                         : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white'
                         }`}
@@ -372,12 +421,37 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                 </button>
             </div>
 
-            {/* Model Cards Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {modelData.map(data => (
-                    <ModelCard key={data.provider} data={data} />
-                ))}
-            </div>
+            {/* Model performance — win rates are tabular, so they get a table
+                (WS-5.4), one hairline-divided row per model. */}
+            {modelData.length > 0 && (
+                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left text-[10px] font-mono tabular-nums">
+                            <thead>
+                                <tr className="text-zinc-600 border-b border-white/5">
+                                    <th className="py-1.5 pr-1 w-6">
+                                        <span className="sr-only">Detail</span>
+                                    </th>
+                                    <th className="py-1.5 pr-3 font-bold">Model</th>
+                                    <th className="py-1.5 px-2 font-bold">Win rate</th>
+                                    <th className="py-1.5 px-2 font-bold">Last 20</th>
+                                    <th className="py-1.5 pl-2 font-bold">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {modelData.map(data => (
+                                    <ModelTableRow
+                                        key={data.provider}
+                                        data={data}
+                                        expanded={expandedProviders.includes(data.provider)}
+                                        onToggle={() => toggleProvider(data.provider)}
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* No Data State */}
             {modelData.length === 0 && (
@@ -399,7 +473,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                     </h3>
                     <WeightsChart weights={weights} enabledProviders={enabledProviders} />
                     {weights.dominantModel && (
-                        <p className="text-xs text-violet-400 mt-3">
+                        <p className="text-xs text-zinc-300 mt-3">
                              Dominant model for current context: {weights.dominantModel.toUpperCase()}
                         </p>
                     )}

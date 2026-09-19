@@ -57,7 +57,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                     {perAIMonteCarloResults.map((labeled, idx) => (
                         <div
                             key={idx}
-                            className={`p-3 rounded-xl border transition-all duration-[150ms] hover:scale-[1.01] ${labeled.isModeratorFinal
+                            className={`p-3 rounded-xl border transition-[transform,border-color] duration-[150ms] ease-[var(--ease-snappy)] hover:scale-[1.01] ${labeled.isModeratorFinal
                                 ? 'bg-gradient-to-br from-amber-500/10 to-amber-500/5 border-amber-500/30'
                                 : 'bg-zinc-800 border-white/[0.06] hover:border-cyan-500/30'
                                 }`}

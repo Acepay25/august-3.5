@@ -29,7 +29,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         return null;
     }
 
-    const baseClasses = 'inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-medium transition-all';
+    const baseClasses = 'inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-medium transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)]';
     const iconButtonClasses = 'inline-flex items-center justify-center h-7 w-7 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500';
 
     // Checking state — show spinner with text

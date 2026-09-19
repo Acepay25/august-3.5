@@ -130,8 +130,8 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
         const accentColors: any = {
             blue: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-300",
             purple: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-300",
-            emerald: "from-emerald-500/20 to-teal-500/5 border-emerald-500/20 text-emerald-400",
-            amber: "from-amber-500/20 to-orange-500/5 border-amber-500/20 text-amber-400",
+            emerald: "from-emerald-500/20 to-emerald-500/5 border-emerald-500/20 text-emerald-400",
+            amber: "from-amber-500/20 to-amber-500/5 border-amber-500/20 text-amber-400",
             yellow: "from-yellow-500/20 to-amber-500/5 border-yellow-500/20 text-yellow-400",
             rose: "from-rose-500/20 to-red-500/5 border-rose-500/20 text-rose-400",
             zinc: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-400"
@@ -144,13 +144,13 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
         relative overflow-hidden
         bg-gradient-to-br ${config.split(' ')[0]} ${config.split(' ')[1]}
         rounded-3xl border border-white/5
-        transition-all duration-[150ms] hover:shadow-2xl hover:border-white/10 hover:-translate-y-1
+        transition-[border-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)] hover:shadow-2xl hover:border-white/10 hover:-translate-y-1
         ${large ? 'col-span-1 md:col-span-2 row-span-2' : 'col-span-1'}
         flex flex-col group
       `}>
                 <div className="p-6 flex-1 flex flex-col relative z-10">
                     <div className="flex items-center justify-between mb-4">
-                        <div className={`p-2 rounded-2xl bg-zinc-800 ${config.split(' ').pop()} group-hover:scale-110 transition-transform`}>
+                        <div className={`p-2 rounded-2xl bg-zinc-800 ${config.split(' ').pop()} group-hover:scale-110 transition-transform duration-[150ms] ease-[var(--ease-snappy)]`}>
                             {icon}
                         </div>
                         {large && <div className="text-xs font-mono text-white/30 uppercase tracking-widest">Live Monitor</div>}
@@ -228,12 +228,12 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             </div>
 
                             {rules.length > 0 ? (
-                                <div className="flex flex-col h-full bg-purple-500/5 rounded-xl border border-purple-500/10 overflow-hidden">
-                                    <div className="p-2 border-b border-purple-500/10">
+                                <div className="flex flex-col h-full">
+                                    <div className="pb-2">
                                         <select
                                             value={selectedRuleIndex}
                                             onChange={(e) => setSelectedRuleIndex(Number(e.target.value))}
-                                            className="w-full bg-transparent text-xs text-purple-300 focus:outline-none cursor-pointer"
+                                            className="w-full bg-transparent text-xs text-zinc-300 focus:outline-none cursor-pointer"
                                         >
                                             {rules.map((s, idx) => (
                                                 <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
@@ -242,9 +242,9 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="p-3 overflow-y-auto max-h-[100px] custom-scrollbar scrollbar-thumb-purple-500/20">
-                                        <p className="text-[10px] text-purple-200/80 font-mono leading-relaxed">
-                                            <span className="text-purple-400 font-bold uppercase">{rules[selectedRuleIndex]?.meta.kind}</span> {' '}
+                                    <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
+                                        <p className="text-[10px] text-zinc-300 font-mono leading-relaxed">
+                                            <span className="text-zinc-400 font-bold uppercase">{rules[selectedRuleIndex]?.meta.kind}</span> {' '}
                                             [{rules[selectedRuleIndex]?.meta.status} · {rules[selectedRuleIndex]?.meta.wins}W/{rules[selectedRuleIndex]?.meta.losses}L]
                                             <br />
                                             {rules[selectedRuleIndex]?.meta.ifCondition
@@ -275,8 +275,8 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             </div>
 
                             {insights.length > 0 ? (
-                                <div className="flex flex-col h-full bg-amber-500/5 rounded-xl border border-amber-500/10 overflow-hidden">
-                                    <div className="p-2 border-b border-amber-500/10">
+                                <div className="flex flex-col h-full">
+                                    <div className="pb-2">
                                         <select
                                             value={selectedInsightIndex}
                                             onChange={(e) => setSelectedInsightIndex(Number(e.target.value))}
@@ -289,12 +289,12 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="p-3 overflow-y-auto max-h-[100px] custom-scrollbar scrollbar-thumb-amber-500/20">
+                                    <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
                                         <p className="text-[10px] text-amber-200/80 font-mono leading-relaxed">
                                             "{insights[selectedInsightIndex]?.insight}"
                                         </p>
                                     </div>
-                                    <div className="flex items-center justify-between px-3 py-1.5 border-t border-amber-500/10">
+                                    <div className="flex items-center justify-between border-t border-zinc-800/80 py-1.5">
                                         <span className="text-[9px] text-amber-200/50 font-mono">
                                             {insights[selectedInsightIndex]?.qualityScore ?? 50}/100 · {insights[selectedInsightIndex]?.timesUsed ?? 0} used · {insights[selectedInsightIndex]?.timesHelpful ?? 0} helpful
                                         </span>
@@ -325,7 +325,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             {/* By-provider breakdown: which AI produced the
                                 lessons and how their quality is tracking. */}
                             {Object.keys(providerStats).length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-amber-500/10">
+                                <div className="mt-2 pt-2 border-t border-zinc-800/80">
                                     <div className="text-[9px] text-amber-200/50 font-mono mb-1">BY PROVIDER</div>
                                     <div className="flex flex-col gap-0.5">
                                         {Object.entries(providerStats)
@@ -362,12 +362,12 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         <ModernCard title="Pattern Class." accent="purple" icon={<Icons.Zap className="w-5 h-5" />}>
                             <div className="flex flex-wrap gap-2 mt-2">
                                 {['Family A', 'Family B', 'Family C', 'Omega'].map(f => (
-                                    <span key={f} className="px-2 py-1 bg-purple-500/20 border border-purple-500/30 rounded-full text-[10px] text-purple-300">
+                                    <span key={f} className="px-2 py-1 bg-zinc-800/60 border border-zinc-700/50 rounded-full text-[10px] text-zinc-300">
                                         {f}
                                     </span>
                                 ))}
                             </div>
-                            <div className="mt-auto text-xs text-purple-400/60 pt-2">Detecting Live Patterns</div>
+                            <div className="mt-auto text-xs text-cyan-400/60 pt-2">Detecting Live Patterns</div>
                         </ModernCard>
 
                         {/* 2.3 Kelly */}
@@ -393,7 +393,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         <option value="postMortem">Post-Mortem</option>
                                     </select>
                                 </div>
-                                <div className="flex-1 bg-zinc-800 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto border border-white/5 custom-scrollbar">
+                                <div className="flex-1 bg-zinc-800/60 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto custom-scrollbar">
                                     <div className="whitespace-pre">
                                         {typeof validationSchemas[selectedSchema] === 'string'
                                             ? validationSchemas[selectedSchema]
@@ -414,7 +414,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         <ModernCard title="Unified Storage" accent="blue" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="mt-1">
                                 <span className="text-3xl font-light text-white">{storageCount}</span>
-                                <span className="text-xs text-blue-400 ml-2">Items</span>
+                                <span className="text-xs text-zinc-400 ml-2">Items</span>
                             </div>
                             <div className="mt-2 text-xs text-white/40">Across IndexedDB & Local</div>
                         </ModernCard>
@@ -464,7 +464,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
                         <button
                             onClick={onClose}
-                            className="p-2 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all duration-[150ms]"
+                            className="p-2 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                         >
                             <Icons.Close className="w-6 h-6" />
                         </button>
@@ -479,7 +479,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)}
                                 className={`
-                       px-6 py-2 rounded-xl text-sm font-medium transition-all duration-[150ms]
+                       px-6 py-2 rounded-xl text-sm font-medium transition-[background-color,color,box-shadow] duration-[150ms] ease-[var(--ease-snappy)]
                        ${activeTab === tab
                                         ? 'bg-zinc-800 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
                                         : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}

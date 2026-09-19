@@ -142,7 +142,7 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                         held out
                     </StatusPill>
                 )}
-                <ChevronDown className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform duration-[120ms] ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform duration-[120ms] ease-[var(--ease-snappy)] ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
                 <div className="mt-0.5 mb-1 space-y-0.5 pl-1">

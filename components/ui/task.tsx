@@ -43,7 +43,7 @@ export const Task = ({
   <Collapsible
     defaultOpen={defaultOpen}
     className={cn(
-      'transition-all duration-[150ms] data-[state=closed]:opacity-90',
+      'transition-opacity duration-[150ms] ease-[var(--ease-snappy)] data-[state=closed]:opacity-90',
       className,
     )}
     {...props}
@@ -65,7 +65,7 @@ export const TaskTrigger = ({
       <div className="flex items-center gap-2 text-zinc-400 cursor-pointer hover:text-zinc-100 transition-colors">
         <SearchIcon className="size-4" />
         <p className="text-sm">{title}</p>
-        <ChevronDownIcon className="size-4 transition-transform duration-[150ms] group-data-[state=open]:rotate-180" />
+        <ChevronDownIcon className="size-4 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]:rotate-180" />
       </div>
     )}
   </CollapsibleTrigger>
@@ -80,7 +80,7 @@ export const TaskContent = ({
 }: TaskContentProps) => (
   <CollapsibleContent
     className={cn(
-      'text-zinc-300 outline-none transition-all duration-[150ms] data-[state=closed]:opacity-0 data-[state=open]:opacity-100',
+      'text-zinc-300 outline-none transition-opacity duration-[150ms] ease-[var(--ease-snappy)] data-[state=closed]:opacity-0 data-[state=open]:opacity-100',
       className,
     )}
     {...props}

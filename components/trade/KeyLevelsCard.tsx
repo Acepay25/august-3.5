@@ -18,7 +18,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { deriveChartLines, formatDist, type MessageLevelLines, type ModelKeyLevel } from '../../services/trade/keyLevels';
+import { deriveChartLines, formatDist, KEY_LEVEL_COLORS, type MessageLevelLines, type ModelKeyLevel } from '../../services/trade/keyLevels';
 
 interface KeyLevelsCardProps {
     levels: ModelKeyLevel[];
@@ -38,18 +38,15 @@ interface KeyLevelsCardProps {
 
 const fmtPx = (p: number): string => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: p >= 1000 ? 2 : 4 });
 
-/** Text tone per kind (matches the line colors on the canvas). */
+/** Text tone per kind — CATEGORICAL markers (which kind of level), never a
+ *  gain/loss read. Each row's left border is painted from KEY_LEVEL_COLORS in
+ *  services/trade/keyLevels.ts — the very map the canvas draws from — so a
+ *  legend swatch can never drift from the line it labels. */
 const KIND_TEXT: Record<ModelKeyLevel['kind'], string> = {
     resistance: 'text-rose-400',
     support: 'text-emerald-400',
-    vwap: 'text-violet-400',
+    vwap: 'text-zinc-300',
     level: 'text-amber-300',
-};
-const KIND_BORDER: Record<ModelKeyLevel['kind'], string> = {
-    resistance: 'border-l-rose-500/70',
-    support: 'border-l-emerald-500/70',
-    vwap: 'border-l-violet-400/70',
-    level: 'border-l-amber-400/70',
 };
 
 const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId, getMark, onChatLevels }) => {
@@ -142,7 +139,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                         data-testid="key-levels-chart-toggle"
                     />
                     <span className={`relative inline-block h-3.5 w-6 rounded-full transition-colors ${allOn ? 'bg-emerald-500/40' : 'bg-zinc-700'}`} aria-hidden="true">
-                        <span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full transition-all ${allOn ? 'translate-x-2.5 bg-emerald-400' : 'bg-zinc-500'}`} />
+                        <span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full transition-[transform,background-color] duration-[150ms] ease-[var(--ease-snappy)] ${allOn ? 'translate-x-2.5 bg-emerald-400' : 'bg-zinc-500'}`} />
                     </span>
                     chart
                 </label>
@@ -166,7 +163,8 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                             data-id={l.id}
                             aria-pressed={pinned.has(l.id)}
                             title={pinned.has(l.id) ? 'Unpin this level' : 'Pin this level — stays drawn with the switch off'}
-                            className={`grid w-full grid-cols-[42px_80px_52px_1fr] items-center gap-x-2 border-l-[3px] px-3 py-1.5 text-left transition-colors hover:bg-white/[0.04] ${KIND_BORDER[l.kind]} ${pinned.has(l.id) ? 'bg-white/[0.05]' : ''}`}
+                            style={{ borderLeftColor: KEY_LEVEL_COLORS[l.kind] }}
+                            className={`grid w-full grid-cols-[42px_80px_52px_1fr] items-center gap-x-2 border-l-[3px] px-3 py-1.5 text-left transition-colors hover:bg-white/[0.04] ${pinned.has(l.id) ? 'bg-white/[0.05]' : ''}`}
                         >
                             <span className={`text-[11.5px] font-bold ${KIND_TEXT[l.kind]}`}>{l.label}{pinned.has(l.id) && <span className="ml-0.5 text-cyan-400" aria-hidden="true">⌖</span>}</span>
                             <span className="font-mono text-[11.5px] tabular-nums text-zinc-200">{fmtPx(l.price)}</span>

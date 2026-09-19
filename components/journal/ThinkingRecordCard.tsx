@@ -9,15 +9,13 @@ interface ThinkingRecordCardProps {
   record: ThinkingRecord;
 }
 
+/** Provider identity is NEUTRAL chrome, deliberately. Every hue this card can
+ *  reach already carries a verdict — emerald = WIN, rose = LOSS, amber/yellow
+ *  = SKIPPED, zinc = PENDING — so tinting a provider borrows a verdict: a
+ *  Gemini card rendered in the loss color reads as one. Categorical per-seat
+ *  color belongs on a real series index, in utils/seriesPalette. */
 const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  gemini: { bg: 'bg-blue-950/20', border: 'border-blue-500/20', text: 'text-blue-400' },
-  deepseek: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  zhipu: { bg: 'bg-orange-950/20', border: 'border-orange-500/20', text: 'text-orange-400' },
-  groq: { bg: 'bg-yellow-950/20', border: 'border-yellow-500/20', text: 'text-yellow-400' },
   moderator: { bg: 'bg-cyan-950/20', border: 'border-cyan-500/20', text: 'text-cyan-400' },
-  openrouter: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  openai: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  grok: { bg: 'bg-zinc-800', border: 'border-zinc-500/20', text: 'text-zinc-300' },
 };
 
 export const getProviderColor = (provider: string) => PROVIDER_COLORS[provider.toLowerCase()] || {

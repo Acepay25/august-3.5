@@ -358,9 +358,11 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
         }
 
         // Initial UI Reset
+        // The price display's 300ms colour fade is the tick-flash read (see the
+        // sanctioned .tick-up/.tick-down pattern); the value animating is data, not chrome.
         if (priceDisplayRef.current) {
             priceDisplayRef.current.textContent = 'Loading...';
-            priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300";
+            priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300 ease-[var(--ease-snappy)]";
         }
         lastPriceRef.current = null;
 
@@ -381,9 +383,9 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                     priceDisplayRef.current.textContent = `$${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
                     if (price > prev) {
-                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 text-emerald-400";
+                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-emerald-400";
                     } else if (price < prev) {
-                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 text-rose-400";
+                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-rose-400";
                     }
                     lastPriceRef.current = price;
                 });
@@ -717,7 +719,8 @@ ${JSON.stringify(marketData, null, 2)}
                     <div className="flex items-center gap-2 sm:gap-4">
                         <div className="text-right">
                             <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">Current</span>
-                            <span ref={priceDisplayRef} className="font-mono text-base sm:text-lg font-bold text-zinc-400 transition-colors duration-300">
+                            {/* duration-300 is the tick-flash read; the class is swapped imperatively in the socket effect. */}
+                            <span ref={priceDisplayRef} className="font-mono text-base sm:text-lg font-bold text-zinc-400 transition-colors duration-300 ease-[var(--ease-snappy)]">
                                 Loading...
                             </span>
                         </div>
@@ -773,7 +776,7 @@ ${JSON.stringify(marketData, null, 2)}
                         <button
                             onClick={handleExtractAndAnalyze}
                             disabled={!!analysisProgress}
-                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
+                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-[--tw-gradient-from,--tw-gradient-to,transform] duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
                         >
                             {analysisProgress ? <LoadingIcon className="w-4 h-4" /> : <CameraIcon className="w-4 h-4" />}
                             <span>{analysisProgress || 'Analyze'}</span>
@@ -863,7 +866,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 </span>
                             )}
                         </div>
-                        <ChevronDownIcon className={`w-5 h-5 text-zinc-400 transition-transform duration-[150ms] ${isInsightsPanelExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDownIcon className={`w-5 h-5 text-zinc-400 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${isInsightsPanelExpanded ? 'rotate-180' : ''}`} />
                     </button>
 
                     {/* Panel Content */}

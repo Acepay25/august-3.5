@@ -30,8 +30,11 @@ const VARIANT_CONFIG = {
   },
 } as const;
 
+/** Positional per-panel colors: they only separate one analyst panel from the
+ *  next (slot idx % 5), so they are categorical, never a verdict — emerald here
+ *  does not mean "this model gained" and rose does not mean "it lost". */
 const COLOR_PALETTE = [
-  { bg: 'bg-blue-950/10', border: 'border-blue-500/20', text: 'text-blue-100/90', title: 'text-blue-400', accent: 'bg-blue-500' },
+  { bg: 'bg-zinc-800/60', border: 'border-zinc-700/50', text: 'text-zinc-100/90', title: 'text-zinc-300', accent: 'bg-zinc-500' },
   { bg: 'bg-cyan-950/10', border: 'border-white/10', text: 'text-zinc-100/90', title: 'text-cyan-300', accent: 'bg-cyan-500' },
   { bg: 'bg-emerald-950/10', border: 'border-emerald-500/20', text: 'text-emerald-100/90', title: 'text-emerald-400', accent: 'bg-emerald-500' },
   { bg: 'bg-amber-950/10', border: 'border-amber-500/20', text: 'text-amber-100/90', title: 'text-amber-400', accent: 'bg-amber-500' },
@@ -70,7 +73,7 @@ const AnalystPanel: React.FC<{
   const showLoadingState = output === null || (output !== null && typedText.length === 0 && !isFinished);
 
   return (
-    <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-colors duration-[150ms] overflow-hidden relative group will-change-transform`}>
+    <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] overflow-hidden relative group will-change-transform`}>
       <div className={`absolute top-0 left-0 w-full h-1 ${colorClasses.accent} opacity-50`}></div>
       <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-zinc-800">
         <div>
@@ -185,7 +188,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
   const gridCols = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
   return (
-      <div role="dialog" aria-modal="true" aria-label={config.title} className="fixed inset-0 bg-zinc-950 z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in" style={{ transition: 'opacity 0.2s ease-in-out' }}>
+      <div role="dialog" aria-modal="true" aria-label={config.title} className="fixed inset-0 bg-zinc-950 z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in" style={{ transition: 'opacity 0.15s var(--ease-snappy)' }}>
       <div className="flex flex-col w-full h-full max-w-7xl mx-auto">
         <header className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
           <div>
@@ -195,7 +198,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
             </h2>
             <p className="text-zinc-500 text-xs sm:text-sm mt-1 font-medium">{config.subtitle}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-white/10 transition-all" aria-label="Close live view">
+          <button onClick={onClose} className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)]" aria-label="Close live view">
             <CloseIcon />
           </button>
         </header>

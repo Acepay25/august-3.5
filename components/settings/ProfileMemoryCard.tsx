@@ -19,10 +19,12 @@ import {
 } from '../../services/learning/traderLearner';
 import StatusPill from '../ui/StatusPill';
 
+/** Per-kind chips: four categorical labels that only say WHICH kind of memory
+ *  an entry is — the hues carry no good/bad verdict (rose would read as one). */
 const KIND_STYLE: Record<ProfileMemoryKind, string> = {
-    user: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
+    user: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
     feedback: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    project: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+    project: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
     reference: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300',
 };
 

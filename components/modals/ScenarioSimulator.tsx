@@ -213,10 +213,10 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     return (
             <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className=" fixed inset-0 z-50 flex items-center justify-center bg-black/90">
             {/* Modal Container */}
-            <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-purple-500/30 shadow-2xl shadow-purple-500/10 overflow-hidden flex flex-col">
+            <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-zinc-800 shadow-2xl shadow-black/60 overflow-hidden flex flex-col">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-950/50 to-zinc-950">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-zinc-900">
                     <div className="flex items-center gap-4">
                         <span className="text-2xl"></span>
                         <div>
@@ -224,7 +224,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                 SCENARIO SIMULATOR
                             </h2>
                             <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-sm font-mono text-purple-300">{originalConfig.coinName}</span>
+                                <span className="text-sm font-mono text-zinc-300">{originalConfig.coinName}</span>
                                 <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded border ${directionBg} ${directionColor}`}>
                                     {originalConfig.direction}
                                 </span>
@@ -282,9 +282,12 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                             Adjust Parameters
                                         </h3>
 
-                                        {/* Entry Price */}
+                                        {/* Entry Price — neutral zinc on purpose: the
+                                            colored parameter labels here are semantic
+                                            (rose = stop, emerald = target, yellow =
+                                            leverage), and entry is none of those. */}
                                         <div className="mb-4">
-                                            <label className="block text-[10px] uppercase font-bold text-blue-400 tracking-wider mb-1.5">
+                                            <label className="block text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
                                                 Entry Price
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -295,7 +298,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     type="number"
                                                     value={entry}
                                                     onChange={(e) => setEntry(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-blue-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-blue-200 focus:outline-none focus:border-blue-500/60"
+                                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-lg px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
                                                     step="any"
                                                 />
                                                 <button onClick={() => adjust(setEntry, entry, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
@@ -388,14 +391,14 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] uppercase font-bold text-purple-400 tracking-wider mb-1.5">
+                                                <label className="block text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
                                                     Position ($)
                                                 </label>
                                                 <input
                                                     type="number"
                                                     value={positionSize}
                                                     onChange={(e) => setPositionSize(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-purple-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-purple-200 focus:outline-none focus:border-purple-500/60"
+                                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-lg px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
                                                     step="100"
                                                 />
                                             </div>
@@ -626,7 +629,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                     </span>
                     <button
                         onClick={onClose}
-                        className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm rounded-lg transition-colors"
+                        className="px-6 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-sm rounded-lg transition-colors"
                     >
                         Close
                     </button>

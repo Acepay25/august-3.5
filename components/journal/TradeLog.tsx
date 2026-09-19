@@ -216,7 +216,7 @@ const TradeDetailView: React.FC<{
                                                 <button
                                                     key={val}
                                                     onClick={(e) => handlePresetClick(e, val)}
-                                                    className={`text-[10px] px-2 py-1 rounded-md border transition-all ${parseInt(localLeverage) === val
+                                                    className={`text-[10px] px-2 py-1 rounded-md border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${parseInt(localLeverage) === val
                                                         ? 'bg-zinc-700 border-zinc-500 text-zinc-100 font-semibold'
                                                         : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
                                                         }`}
@@ -235,7 +235,7 @@ const TradeDetailView: React.FC<{
                                                     <button
                                                         key={o}
                                                         onClick={() => onUpdateOutcome(trade.id, o)}
-                                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${
+                                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
                                                             trade.outcome === o
                                                                 ? o === TradeOutcome.WIN
                                                                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
@@ -789,7 +789,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                         <button
                             onClick={handleUpdateInsights}
                             disabled={isSummarizing || newCount === 0}
-                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
+                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
                                 ? 'bg-zinc-800 border border-zinc-700 text-zinc-500'
                                 : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-600'
                                 }`}
@@ -802,14 +802,14 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                             }
                         </button>
                         {duplicateCount > 0 && (
-                            <div className="text-[10px] text-center text-orange-400/80 uppercase font-bold tracking-wider animate-pulse">
+                            <div className="text-[10px] text-center text-amber-400/80 uppercase font-bold tracking-wider animate-pulse">
                                 {duplicateCount === selectedIds.length
                                     ? 'All selected trades are already in Recent Insights'
                                     : `${duplicateCount} duplicate(s) will be skipped`
                                 }
                             </div>
                         )}
-                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50">
+                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-xs tracking-widest disabled:opacity-50">
                             <TrashIcon /> Delete Selected ({selectedIds.length})
                         </button>
                     </div>
