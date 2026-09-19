@@ -180,6 +180,32 @@ describe('WS-3.4 per-bot learning stats', () => {
             botStats={[{ ...stats[0], skillsAuthored: 0 }]} />);
         expect(screen.queryByTestId('row-skills')).toBeNull();
     });
+
+    it('says whether the bot is synced with the shared notebook', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+            selection={{ kind: 'bot', botId: 'b1' }} botStats={stats} />);
+        const pill = screen.getByTestId('bot-notebook-sync');
+        expect(pill.textContent).toBe('notebook');
+        expect(pill.getAttribute('title')).toContain('Last lesson 2026-09-18');
+    });
+
+    it('an isolated bot reads as isolated — in the pill and in the empty state', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper', memoryScope: 'isolated' })]}
+            selection={{ kind: 'bot', botId: 'b1' }} />);
+        expect(screen.getByTestId('bot-notebook-sync').textContent).toBe('own notes');
+        expect(screen.getByTestId('agents-view').textContent)
+            .toContain('it is isolated from the shared notebook');
+    });
+
+    it('the desk status dot reports provider readiness rather than claiming one', () => {
+        const { unmount } = render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} providerReady={false} />);
+        const off = screen.getByTestId('desk-status');
+        expect(off.className).toContain('bg-zinc-600');
+        expect(off.getAttribute('title')).toContain('No provider ready');
+        unmount();
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} providerReady />);
+        expect(screen.getByTestId('desk-status').className).toContain('bg-emerald-500');
+    });
 });
 
 describe('WS-6 focus and mobile drawer', () => {
