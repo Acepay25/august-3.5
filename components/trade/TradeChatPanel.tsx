@@ -1530,14 +1530,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     <div role="tablist" aria-label="Dock surface" data-testid="dock-surface-switch"
                         className="flex shrink-0 items-center gap-0.5 rounded-full border border-white/[0.07] bg-zinc-800/70 p-0.5">
                         <button type="button" role="tab" aria-selected={!isCoachSurface} onClick={openChatSurface}
-                            className={`rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+                            className={`rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[var(--ease-snappy)] ${
                                 !isCoachSurface ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
                             }`}>
                             Chat
                         </button>
                         <button type="button" role="tab" aria-selected={isCoachSurface} onClick={openCoachSurface}
                             title={coachPending > 0 ? `${coachPending} awaiting your decision` : 'Coach inbox — nothing waiting'}
-                            className={`flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+                            className={`flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[var(--ease-snappy)] ${
                                 isCoachSurface ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
                             }`}>
                             Coach
@@ -1937,7 +1937,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 <Brain className="h-3.5 w-3.5" />
                                 {effortChoiceOf(effort).label}
                                 <EffortMeter bars={effortChoiceOf(effort).bars} tone={effortChoiceOf(effort).tone} />
-                                <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${showEffortMenu ? 'rotate-180' : ''}`} />
+                                <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[var(--ease-snappy)] ${showEffortMenu ? 'rotate-180' : ''}`} />
                             </button>
                             {showEffortMenu && (
                                 <>

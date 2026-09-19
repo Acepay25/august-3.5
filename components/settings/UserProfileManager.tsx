@@ -99,7 +99,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                   </button>
               )}
               <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-xl shadow-black/20 flex items-center justify-center text-zinc-200 transform rotate-3 hover:rotate-0 transition-transform duration-500">
+                  <div className="w-20 h-20 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-xl shadow-black/20 flex items-center justify-center text-zinc-200 transform rotate-3 hover:rotate-0 transition-transform duration-[150ms]">
                       <BotIcon />
                   </div>
               </div>
@@ -164,7 +164,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                     <button 
                         type="submit" 
                         disabled={isBusy || !newUsername.trim()}
-                        className="absolute right-2 top-2 bottom-2 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg disabled:opacity-0 disabled:translate-x-4 transition-all duration-300"
+                        className="absolute right-2 top-2 bottom-2 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg disabled:opacity-0 disabled:translate-x-4 transition-all duration-[150ms]"
                     >
                         Enter
                     </button>

@@ -863,7 +863,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 </span>
                             )}
                         </div>
-                        <ChevronDownIcon className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${isInsightsPanelExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDownIcon className={`w-5 h-5 text-zinc-400 transition-transform duration-[150ms] ${isInsightsPanelExpanded ? 'rotate-180' : ''}`} />
                     </button>
 
                     {/* Panel Content */}

@@ -159,7 +159,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
   return (
     <>
       <div 
-        className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-[150ms] ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
         aria-hidden={!isVisible}
       ></div>
@@ -176,7 +176,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
         aria-hidden={!isVisible}
         inert={!isVisible}
         aria-label="Playbook & Strategy Search"
-        className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="flex flex-col h-full">
           <header className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-zinc-800">
@@ -260,7 +260,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                         <BrainIcon className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-600" />
                         Market Classification Families
                     </h3>
-                    <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-200 ${isFamiliesVisible ? 'rotate-180' : ''}`} />
+                    <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-[150ms] ${isFamiliesVisible ? 'rotate-180' : ''}`} />
                 </button>
                 
                 <div className={`collapsible-content ${isFamiliesVisible ? 'expanded' : ''}`}>
@@ -316,7 +316,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                         className="w-full flex justify-between items-center cursor-pointer py-3 sm:py-4 group text-left"
                     >
                         <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Active Playbook</h3>
-                        <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-200 ${isFrameworksVisible ? 'rotate-180' : ''}`} />
+                        <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-[150ms] ${isFrameworksVisible ? 'rotate-180' : ''}`} />
                     </button>
                 
                 <div className={`collapsible-content ${isFrameworksVisible ? 'expanded' : ''}`}>
@@ -328,7 +328,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                             const isViewing = viewingFramework === framework;
                             
                             return (
-                                <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-all duration-300 ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-800 border-white/5 hover:border-white/10'}`}>
+                                <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-all duration-[150ms] ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-800 border-white/5 hover:border-white/10'}`}>
                                     <div 
                                         className="p-3 sm:p-5 flex items-center justify-between cursor-pointer"
                                         role="button"

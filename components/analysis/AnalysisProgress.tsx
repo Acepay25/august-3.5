@@ -74,7 +74,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
             </span>
           )}
           {hasSubSteps && (
-            <ChevronDownIcon className="size-3.5 text-zinc-600 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180" />
+            <ChevronDownIcon className="size-3.5 text-zinc-600 transition-transform duration-[150ms] group-data-[state=open]/trigger:rotate-180" />
           )}
         </div>
       </TaskTrigger>
@@ -134,7 +134,7 @@ const CompletionSummaryBar: React.FC<{
     <Collapsible defaultOpen={false}>
       <CollapsibleTrigger asChild>
         <button className="group w-full flex items-center gap-2 py-2 px-1 cursor-pointer rounded-lg hover:bg-zinc-800 transition-colors">
-          <ChevronDownIcon className="size-4 text-zinc-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          <ChevronDownIcon className="size-4 text-zinc-500 transition-transform duration-[150ms] group-data-[state=open]:rotate-180" />
           <span className="text-sm font-bold text-zinc-200">
             {isPostMortem ? 'Post-Mortem completed' : 'Task completed'}
           </span>

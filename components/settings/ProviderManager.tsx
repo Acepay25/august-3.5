@@ -104,11 +104,11 @@ const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const inputBase =
     'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 ' +
     'placeholder-zinc-600 font-mono focus:outline-none focus:border-zinc-600 ' +
-    'transition-all duration-200';
+    'transition-all duration-[150ms]';
 
 const selectBase =
     'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 ' +
-    'focus:outline-none focus:border-zinc-600 transition-all duration-200 ' +
+    'focus:outline-none focus:border-zinc-600 transition-all duration-[150ms] ' +
     'appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] ' +
     "bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')]";
 

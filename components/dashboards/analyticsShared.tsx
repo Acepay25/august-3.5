@@ -102,10 +102,10 @@ export const SectionCard: React.FC<{
     };
 
     return (
-        <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border transition-all duration-300`}>
+        <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border transition-all duration-[150ms]`}>
             {/* Header */}
             <div className="flex items-center gap-3 p-4 pb-3">
-                <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-base transition-transform duration-300 group-hover:scale-110`}>
+                <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-base transition-transform duration-[150ms] group-hover:scale-110`}>
                     {icon}
                 </div>
                 <div className="flex-1 min-w-0">
