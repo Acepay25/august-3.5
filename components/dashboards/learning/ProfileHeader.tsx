@@ -70,8 +70,8 @@ export const ProfileHeader: React.FC<{
                         {profile.overallWinRate}%
                     </p>
                 </div>
-                <div className="bg-gradient-to-br from-purple-950/50 to-zinc-900 rounded-xl p-3 sm:p-4 border border-purple-500/20">
-                    <p className="text-[9px] sm:text-xs text-purple-400/70 uppercase tracking-wider mb-1">Trades</p>
+                <div className="bg-zinc-900 rounded-xl p-3 sm:p-4 border border-zinc-800/80">
+                    <p className="text-[9px] sm:text-xs text-zinc-500 uppercase tracking-wider mb-1">Trades</p>
                     <p className="text-2xl sm:text-3xl font-black text-white">
                         {profile.totalAnalyzedTrades}
                     </p>
