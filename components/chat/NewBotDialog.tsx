@@ -56,6 +56,8 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const [providerId, setProviderId] = React.useState<string>(() => firstReadyProviderId(providers));
     const [modelId, setModelId] = React.useState<string>('');
     const [advancedOpen, setAdvancedOpen] = React.useState(false);
+    // WS-3.1: whether this bot thinks with the shared notebook at all.
+    const [isolated, setIsolated] = React.useState(false);
     useEscapeClose(open, onClose);
 
     const provider = findProviderById(providers, providerId) ?? providers[0];
@@ -89,6 +91,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
             description: description.trim() || undefined,
             providerId: provider.id,
             modelId: effectiveModel,
+            memoryScope: isolated ? 'isolated' : 'global',
             role: role !== AnalystRole.UNASSIGNED ? role : undefined,
             customPrompt: customPrompt.trim() || undefined,
             avatar: tab === 'pixel'
@@ -371,6 +374,21 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                     </button>
                     {advancedOpen && (
                         <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
+                            <div>
+                                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Shared notebook</span>
+                                <label className="flex items-start gap-2 text-[12px] text-zinc-300">
+                                    <input type="checkbox" checked={isolated} data-testid="bot-memory-isolated"
+                                        onChange={e => setIsolated(e.target.checked)}
+                                        className="mt-0.5 h-3.5 w-3.5 accent-cyan-400" />
+                                    <span>Isolate this bot from the shared book
+                                        <span className="block text-[11px] text-zinc-500">
+                                            By default a bot reads the notebook the analysts read, and what it
+                                            learns can surface for others. An isolated bot thinks from its own
+                                            notes only.
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
                             <div>
                                 <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Provider</span>
                                 <SelectMenu

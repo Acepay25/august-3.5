@@ -3238,6 +3238,7 @@ const App: React.FC = () => {
                                     attentionMap={attentionMap}
                                     botRoutines={botRoutinesMap}
                                     botStats={botStats}
+                                    providerReady={readyProviders.length > 0}
                                     onRunRoutine={runRoutineFromRail}
                                     onDeleteBot={deleteBot}
                                     onDeleteGroup={deleteGroup}

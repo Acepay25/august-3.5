@@ -63,6 +63,8 @@ interface AgentsViewProps {
     /** WS-3.4: what each bot has learned — lessons, skills authored, evidence.
      *  Shown on the active bot's header and as a row badge. */
     botStats?: BotLearningStat[];
+    /** Any ready provider at all — the desk's status dot, not a decoration. */
+    providerReady?: boolean;
     /** Current provider/model chip in the composer. */
     modelLabel?: string;
     onOpenModels?: () => void;
@@ -219,6 +221,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     lastOpenedMap = {}, modelLabel, onOpenModels, onOpenInDock,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
+    providerReady = false,
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
@@ -296,6 +299,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
     const activeGroup = selection.kind === 'group' ? groups.find(g => g.id === selection.groupId) ?? null : null;
     const activeStat = activeBot ? statFor(activeBot.id) : undefined;
+    // WS-3.1's scope contract, read off the bot rather than assumed.
+    const botIsolated = !!activeBot && (activeBot.memoryScope ?? 'global') !== 'global';
     const thread = useMemo(
         () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId) : []),
         [activeBot, messages],
@@ -480,7 +485,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {username.slice(0, 1) || '·'}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{username}</span>
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="desk online" />
+                    <span data-testid="desk-status" title={providerReady ? 'A provider is configured — the desk can think' : 'No provider ready — configure one in Settings'}
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${providerReady ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
                 </div>
             </aside>
 
@@ -508,6 +514,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     {activeStat.lessons} lessons · {activeStat.skillsAuthored} skills · {activeStat.evidence} evidence
                                 </span>
                             )}
+                            {activeBot && (
+                                <StatusPill
+                                    tone={botIsolated ? 'neutral' : 'info'}
+                                    kicker
+                                    data-testid="bot-notebook-sync"
+                                    title={botIsolated
+                                        ? 'Isolated: thinks from its own notes. The shared notebook never reaches it and nothing it learns surfaces for others.'
+                                        : `Reads the shared notebook every turn and folds its closed trades back in.${activeStat?.lastLessonAt ? ` Last lesson ${activeStat.lastLessonAt}.` : ' No lesson written yet.'}`}
+                                    icon={<span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />}
+                                >
+                                    {botIsolated ? 'own notes' : 'notebook'}
+                                </StatusPill>
+                            )}
                             {onOpenInDock && (
                                 <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
                                     className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
@@ -522,7 +541,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     <h2 className="font-serif text-2xl text-zinc-100">{greeting(username || 'trader')}</h2>
                                     <p className="mt-1 max-w-sm text-[12px] leading-5 text-zinc-500">
                                         {activeBot
-                                            ? `@${activeBot.name} reads its own notes and the shared notebook on every turn.`
+                                            ? botIsolated
+                                                ? `@${activeBot.name} thinks from its own notes only — it is isolated from the shared notebook.`
+                                                : `@${activeBot.name} reads its own notes and the shared notebook on every turn.`
                                             : 'Pick an agent on the left, or ask the desk directly — Analyze runs the full Chart AI pipeline.'}
                                     </p>
                                 </div>
