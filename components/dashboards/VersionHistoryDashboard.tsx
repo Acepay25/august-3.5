@@ -144,7 +144,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
         relative overflow-hidden
         bg-gradient-to-br ${config.split(' ')[0]} ${config.split(' ')[1]}
         rounded-3xl border border-white/5
-        transition-all duration-300 hover:shadow-2xl hover:border-white/10 hover:-translate-y-1
+        transition-all duration-[150ms] hover:shadow-2xl hover:border-white/10 hover:-translate-y-1
         ${large ? 'col-span-1 md:col-span-2 row-span-2' : 'col-span-1'}
         flex flex-col group
       `}>
@@ -169,7 +169,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                 </div>
 
                 {/* Decorative Glow */}
-                <div className={`absolute -right-10 -bottom-10 w-40 h-40 bg-gradient-to-br rounded-full blur-[60px] opacity-0 group-hover:opacity-20 transition-opacity duration-500 ${config.split(' ')[0]}`} />
+                <div className={`absolute -right-10 -bottom-10 w-40 h-40 bg-gradient-to-br rounded-full blur-[60px] opacity-0 group-hover:opacity-20 transition-opacity duration-[150ms] ${config.split(' ')[0]}`} />
             </div>
         );
     };
@@ -464,7 +464,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
                         <button
                             onClick={onClose}
-                            className="p-2 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all duration-200"
+                            className="p-2 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all duration-[150ms]"
                         >
                             <Icons.Close className="w-6 h-6" />
                         </button>
@@ -479,7 +479,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)}
                                 className={`
-                       px-6 py-2 rounded-xl text-sm font-medium transition-all duration-300
+                       px-6 py-2 rounded-xl text-sm font-medium transition-all duration-[150ms]
                        ${activeTab === tab
                                         ? 'bg-zinc-800 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
                                         : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}

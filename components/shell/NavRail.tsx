@@ -134,7 +134,7 @@ const NavRail: React.FC<NavRailProps> = ({
                             aria-label={`${badge ? `${label}. ${badge.detail}` : label}${toggleable ? ' — toggle panel' : ''}${shortcut ? `, shortcut ${shortcut}` : ''}`}
                             aria-current={active ? 'page' : undefined}
                             onClick={() => (toggleable ? onToggleSidebar() : onSelect(id))}
-                            className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-100 ease-[cubic-bezier(0.2,0,0,1)] focus-visible:outline-none ${
+                            className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors duration-[120ms] ease-[var(--ease-snappy)] focus-visible:outline-none ${
                                 active ? 'text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                             }`}
                         >

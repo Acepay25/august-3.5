@@ -833,7 +833,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             aria-selected={mode === m}
                             data-testid={`trade-mode-${m}`}
                             onClick={() => pickMode(m)}
-                            className={`relative z-10 rounded-full px-4 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] active:scale-[0.97] ${
+                            className={`relative z-10 rounded-full px-4 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 ease-[var(--ease-snappy)] active:scale-[0.97] ${
                                 mode === m ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                             }`}
                         >

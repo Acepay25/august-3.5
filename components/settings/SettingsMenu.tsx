@@ -268,7 +268,7 @@ const SegmentedControl: React.FC<{
                 aria-checked={value === o.id}
                 title={o.title}
                 onClick={() => onChange(o.id)}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors duration-150 ease-[var(--ease-snappy)] ${
                     value === o.id ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
             >
@@ -602,7 +602,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <details className="group">
                                     <summary className="flex cursor-pointer select-none list-none items-center justify-between font-mono text-[10px] text-zinc-600 hover:text-zinc-400">
                                         <span>Developer</span>
-                                        <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] group-open:rotate-90" aria-hidden="true" />
+                                        <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500 transition-transform duration-150 ease-[var(--ease-snappy)] group-open:rotate-90" aria-hidden="true" />
                                     </summary>
                                     <div className="mt-2">
                                         <DiagnosticsPanel />
@@ -1094,7 +1094,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <span className="block text-[13px] font-semibold text-zinc-200">Advanced</span>
                                                 <span className="mt-0.5 block text-[11px] text-zinc-500">Context injection and capture prompts — most users can leave these as-is.</span>
                                             </span>
-                                            <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${isAdvancedOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                            <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-150 ease-[var(--ease-snappy)] ${isAdvancedOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                                         </button>
                                         {isAdvancedOpen && (
                                             <div className="mt-3 space-y-3 animate-fade-in">

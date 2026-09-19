@@ -70,7 +70,7 @@ const AnalystPanel: React.FC<{
   const showLoadingState = output === null || (output !== null && typedText.length === 0 && !isFinished);
 
   return (
-    <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-all duration-300 overflow-hidden relative group will-change-transform`}>
+    <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-colors duration-[150ms] overflow-hidden relative group will-change-transform`}>
       <div className={`absolute top-0 left-0 w-full h-1 ${colorClasses.accent} opacity-50`}></div>
       <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-zinc-800">
         <div>

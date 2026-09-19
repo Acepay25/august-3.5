@@ -32,14 +32,14 @@ const InstructionCard: React.FC<{
     const { confirm: confirmDelete, ConfirmDialogComponent } = useConfirmDialog();
 
     return (
-        <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
+        <div className={`rounded-2xl border transition-all duration-[150ms] ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
             <div className="p-3 flex items-center justify-between gap-3">
                 <div className="flex-1 flex items-center gap-3 min-w-0">
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
                         className="p-1 rounded hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
                     >
-                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-[150ms] ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
 
                     <div className="flex-1 min-w-0">

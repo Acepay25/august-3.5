@@ -130,7 +130,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                 aria-label="Advanced analytics"
                 aria-hidden={!isOpen}
                 inert={!isOpen}
-                className={` fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-all duration-500 ease-out z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
+                className={` fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-all duration-[150ms] ease-out z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
                     } ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
             >
                 {/* Glassmorphic Background */}
@@ -184,7 +184,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                             <button
                                                 onClick={() => togglePromptView(index)}
                                                 aria-expanded={item.showPrompt}
-                                                className="w-full p-3 flex items-center justify-between hover:bg-rose-500/10 transition-all duration-200"
+                                                className="w-full p-3 flex items-center justify-between hover:bg-rose-500/10 transition-all duration-[150ms]"
                                             >
                                                 <div className="flex items-center gap-2.5">
                                                     <span className="text-[11px] font-bold text-white bg-rose-500/30 px-2 py-0.5 rounded-lg">
@@ -194,7 +194,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                                         {item.winRate}% win • {item.coldStreak} streak
                                                     </span>
                                                 </div>
-                                                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${item.showPrompt ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform duration-150 ease-[var(--ease-snappy)] ${item.showPrompt ? 'rotate-180' : ''}`} aria-hidden="true" />
                                             </button>
 
                                             {item.showPrompt && (
@@ -342,7 +342,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
             {/* Backdrop for mobile */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/60 z-20 md:hidden transition-opacity duration-300"
+                    className="fixed inset-0 bg-black/60 z-20 md:hidden transition-opacity duration-[150ms]"
                     onClick={handleClose}
                 />
             )}
