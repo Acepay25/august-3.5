@@ -24,6 +24,17 @@ const LIVE_MARK_TTL = 2000;
 // is real and a 15m indicator genuinely does not care about 30s.
 const POINT_IN_TIME_TTL = 5000;
 
+/** Per-attempt give-up budget for the point-in-time reads a SURFACE polls: the
+ *  order-book ladder, mark/index, 24 h ticker. robustFuturesFetch walks the
+ *  three mirror hosts SEQUENTIALLY, so this multiplies by three in the worst
+ *  case -- and on the generic 15 s default a hung primary host put 15-45 s
+ *  inside a single fetch, which chained ahead of the caller's own 5 s wait. The
+ *  order book therefore refreshed every 20 s or worse while its badge said
+ *  "REST poll every 5s". A healthy round trip is under a second, so 4 s absorbs
+ *  a slow network without lying about cadence. Kline series, screeners and
+ *  history keep the 15 s default, where the payload really can be slow. */
+const POINT_IN_TIME_FETCH_MS = 4000;
+
 // In-flight dedupe for fetchOHLCVFromTime — concurrent identical requests
 // share one promise instead of fanning out N identical Binance calls.
 const inFlightOHLCV: Map<string, Promise<Kline[]>> = new Map();
@@ -296,22 +307,43 @@ const robustBinanceFetch = async (apiPath: string, timeoutMs: number = 10000): P
 };
 
 /**
- * Sliding-window rate budget for Binance Futures calls. The autopilot loop
- * (up to 3 kline tiers per minute per unresolved trade) plus repeated
- * analyses can trip 429s; throttle instead. Each futures request acquires a
- * slot and waits (max 5s) when the 60s window is exhausted.
+ * Sliding-window budget for Binance Futures calls, so a runaway loop can't
+ * trip 429s. Binance's real limit is request WEIGHT (2400/min per IP) and these
+ * endpoints cost 1-10 each, so a cap counted in requests only has to catch a
+ * stuck loop -- it must not throttle ordinary traffic.
+ *
+ * Measured in the running app, steady state with one chart open and no
+ * analysis running: ~65 futures calls/min (mark + ticker on the feed cadence,
+ * klines, and the derivatives/ratios block). The old cap of 40 therefore sat
+ * permanently saturated during any burst, and because the wait below booked a
+ * slot after a fixed 5 s whether or not one had freed, every price read --
+ * mark, ticker, depth -- paid 5 s of latency it never needed, while the heavy
+ * kline calls fell through to the CORS-blocked mirror hosts. 120 leaves ~2x
+ * headroom over normal traffic: still low enough to bound request WEIGHT (the
+ * kline calls cost 10 each, so 120/min stays inside Binance's 2400) while no
+ * longer throttling the surface that is just trying to show a price.
  */
-const FUTURES_MAX_REQUESTS_PER_MINUTE = 40;
+const FUTURES_MAX_REQUESTS_PER_MINUTE = 120;
+/** Ceiling on waiting for a slot. Past it the request goes anyway: starving
+ *  the live price strip is the worse failure, and Binance's weight limit is the
+ *  actual authority. */
+const FUTURES_SLOT_MAX_WAIT_MS = 1500;
 const futuresRequestTimes: number[] = [];
 
 const acquireFuturesSlot = async (): Promise<void> => {
-    const now = Date.now();
-    while (futuresRequestTimes.length > 0 && futuresRequestTimes[0] < now - 60_000) futuresRequestTimes.shift();
-    if (futuresRequestTimes.length >= FUTURES_MAX_REQUESTS_PER_MINUTE) {
-        const waitMs = Math.min(futuresRequestTimes[0] + 60_000 - now + 50, 5000);
-        await new Promise<void>(resolve => setTimeout(resolve, waitMs));
+    const deadline = Date.now() + FUTURES_SLOT_MAX_WAIT_MS;
+    for (;;) {
+        const now = Date.now();
+        while (futuresRequestTimes.length > 0 && futuresRequestTimes[0] < now - 60_000) futuresRequestTimes.shift();
+        if (futuresRequestTimes.length < FUTURES_MAX_REQUESTS_PER_MINUTE || now >= deadline) {
+            futuresRequestTimes.push(now);
+            return;
+        }
+        // Re-check until a slot genuinely frees, instead of sleeping a fixed
+        // 5 s and booking regardless -- which grew the window without bound
+        // while making every caller pay the stall.
+        await new Promise<void>(resolve => setTimeout(resolve, Math.min(100, deadline - now)));
     }
-    futuresRequestTimes.push(Date.now());
 };
 
 /**
@@ -484,7 +516,7 @@ export const fetchFuturesOHLCV = async (
  * is filled identically; only the market differs (and the market matters:
  * the chart's mark line, funding and OI are all perp-side).
  */
-export const fetchFuturesTicker24h = async (symbol: string, timeoutMs?: number): Promise<MarketData> => {
+export const fetchFuturesTicker24h = async (symbol: string): Promise<MarketData> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `futmarket_${normalizedSymbol}`;
 
@@ -492,7 +524,7 @@ export const fetchFuturesTicker24h = async (symbol: string, timeoutMs?: number):
     if (cached) return cached;
 
     try {
-        const response = await robustFuturesFetch(`/fapi/v1/ticker/24hr?symbol=${normalizedSymbol}`, timeoutMs);
+        const response = await robustFuturesFetch(`/fapi/v1/ticker/24hr?symbol=${normalizedSymbol}`, POINT_IN_TIME_FETCH_MS);
         const data = await response.json();
 
         const marketData: MarketData = {
@@ -733,14 +765,14 @@ export interface MarkIndexData {
     available: boolean;
 }
 
-export const fetchMarkIndex = async (symbol: string, timeoutMs?: number): Promise<MarkIndexData> => {
+export const fetchMarkIndex = async (symbol: string): Promise<MarkIndexData> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `markindex_${normalizedSymbol}`;
     const cached = getCached<MarkIndexData>(cacheKey, LIVE_MARK_TTL);
     if (cached) return cached;
     const empty: MarkIndexData = { markPrice: 0, indexPrice: 0, lastFundingRate: 0, nextFundingTime: 0, available: false };
     try {
-        const response = await robustFuturesFetch(`/fapi/v1/premiumIndex?symbol=${normalizedSymbol}`, timeoutMs);
+        const response = await robustFuturesFetch(`/fapi/v1/premiumIndex?symbol=${normalizedSymbol}`, POINT_IN_TIME_FETCH_MS);
         const data = await response.json();
         const num = (v: unknown): number => (typeof v === 'string' || typeof v === 'number') ? parseFloat(String(v)) : NaN;
         const markPrice = num(data?.markPrice);
@@ -1201,7 +1233,7 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
 
     try {
         // Fetch futures order book (limit 100 for detailed depth)
-        const response = await robustFuturesFetch(`/fapi/v1/depth?symbol=${normalizedSymbol}&limit=100`);
+        const response = await robustFuturesFetch(`/fapi/v1/depth?symbol=${normalizedSymbol}&limit=100`, POINT_IN_TIME_FETCH_MS);
         // robustFuturesFetch throws on non-ok responses
 
         const data = await response.json();

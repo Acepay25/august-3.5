@@ -52,13 +52,6 @@ const STALL_CHECK_MS = 5000;
  *  stream is caught within ~one tick. */
 const DEPTH_LIVE_FRESH_MS = 4000;
 
-/** Per-attempt budget for the fallback poll. `robustFuturesFetch` walks the
- *  mirror hosts sequentially and its default is 15 s EACH, so one hung primary
- *  host could burn 15-45 s inside a single poll — and `pollInFlight` blocks the
- *  next tick while it does, which is what makes the strip look frozen for the
- *  better part of a minute instead of the 5 s it advertises. */
-const POLL_FETCH_TIMEOUT_MS = 2500;
-
 /** REST polling cadence once the arming threshold has been crossed. 5 s
  *  matches the STALL_CHECK_MS so the strip never goes more than one poll
  *  window without a fresh mark number. */
@@ -308,8 +301,8 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                 // is the broken one). Run them in parallel; either can fail
                 // independently without poisoning the other.
                 const [mi, tk] = await Promise.all([
-                    fetchMarkIndex(symbol, POLL_FETCH_TIMEOUT_MS).catch(() => null),
-                    fetchFuturesTicker24h(symbol, POLL_FETCH_TIMEOUT_MS).catch(() => null),
+                    fetchMarkIndex(symbol).catch(() => null),
+                    fetchFuturesTicker24h(symbol).catch(() => null),
                 ]);
                 if (closed) return;
                 if (mi && (mi.available || mi.markPrice > 0 || mi.indexPrice > 0)) {
