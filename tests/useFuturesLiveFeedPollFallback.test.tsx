@@ -13,6 +13,11 @@
  *     it; it stays at whatever value it last held.
  *   - A single WS frame tears the poll down within one tick.
  *   - The poll is torn down on unmount / symbol change.
+ *   - `depthLive` tracks the depth20 stream on its OWN terms. Gating the order
+ *     book on `status === 'live'` instead meant that on this very network —
+ *     markPrice@1s dropped, depth20@100ms flowing — a live ladder was discarded
+ *     for the 5 s REST snapshot, which is what read as "the book stopped being
+ *     realtime".
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -186,6 +191,38 @@ describe('useFuturesLiveFeed REST polling fallback', () => {
         await act(async () => { vi.advanceTimersByTime(15_000); });
         await flushPromises();
         expect(vi.mocked(fetchMarkIndex).mock.calls.length).toBe(before);
+    });
+
+    it('marks depth live when only the depth20 stream flows', async () => {
+        FakeSocket.prototype.close = function (): void { this.closeCalls += 1; };
+        const { result } = renderHook(() => useFuturesLiveFeed('BTCUSDT', '15m'));
+        const cs = combined();
+
+        // depth20@100ms frames, zero mark/ticker frames — the condition this
+        // file already documents for the user's network.
+        for (let i = 0; i < 3; i += 1) {
+            await act(async () => { cs.emitDepth([['50000', '2']], [['50001', '1']]); });
+            await act(async () => { vi.advanceTimersByTime(1000); });
+        }
+
+        expect(result.current.depth).not.toBeNull();
+        // No mark frame ever landed, so the mark/ticker path is not live...
+        expect(result.current.status).not.toBe('live');
+        // ...but the ladder IS being pushed, and that is its own answer.
+        expect(result.current.depthLive).toBe(true);
+    });
+
+    it('drops depthLive when the depth stream goes quiet', async () => {
+        FakeSocket.prototype.close = function (): void { this.closeCalls += 1; };
+        const { result } = renderHook(() => useFuturesLiveFeed('BTCUSDT', '15m'));
+
+        await act(async () => { combined().emitDepth(); });
+        expect(result.current.depthLive).toBe(true);
+
+        // The freshness check rides the 5 s arming watcher, so one tick past
+        // the 4 s window flips it off and the panel goes back to REST.
+        await act(async () => { vi.advanceTimersByTime(6000); });
+        expect(result.current.depthLive).toBe(false);
     });
 
     it('clears the poll on unmount', async () => {

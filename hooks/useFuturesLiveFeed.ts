@@ -47,6 +47,18 @@ const MAX_BACKOFF_MS = 10000;
 const STALL_MS = 8000;
 const STALL_CHECK_MS = 5000;
 
+/** How recently a depth20 frame must have arrived for the ladder to count as
+ *  pushed rather than polled. Checked on the STALL_CHECK_MS cadence, so a dead
+ *  stream is caught within ~one tick. */
+const DEPTH_LIVE_FRESH_MS = 4000;
+
+/** Per-attempt budget for the fallback poll. `robustFuturesFetch` walks the
+ *  mirror hosts sequentially and its default is 15 s EACH, so one hung primary
+ *  host could burn 15-45 s inside a single poll — and `pollInFlight` blocks the
+ *  next tick while it does, which is what makes the strip look frozen for the
+ *  better part of a minute instead of the 5 s it advertises. */
+const POLL_FETCH_TIMEOUT_MS = 2500;
+
 /** REST polling cadence once the arming threshold has been crossed. 5 s
  *  matches the STALL_CHECK_MS so the strip never goes more than one poll
  *  window without a fresh mark number. */
@@ -80,6 +92,13 @@ export interface FuturesLiveFeed {
      *  endpoint, so the only honest answer is "stale since X" — the surface
      *  can render that or omit the column. Diagnostic-only addition. */
     depthStaleSince: number | null;
+    /** Whether the depth20 push itself is current. Deliberately NOT the same
+     *  question as `status`: on the network this file documents, markPrice@1s
+     *  is dropped while depth20@100ms keeps flowing, so `status` never reaches
+     *  'live' — and gating the order book on it threw away a healthy ladder
+     *  stream in favour of 5 s REST, which read as "the book stopped being
+     *  realtime". */
+    depthLive: boolean;
     /** Diagnostic only — see PollSource. Lets surfaces and the TradingView
      *  mark line distinguish "fresh from REST" from "fresh from WS push"
      *  without parsing `status`. */
@@ -94,6 +113,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
     const [status, setStatus] = useState<FeedStatus>('connecting');
     const [depthStaleSince, setDepthStaleSince] = useState<number | null>(null);
     const [pollSource, setPollSource] = useState<PollSource>('live');
+    const [depthLive, setDepthLive] = useState(false);
 
     useEffect(() => {
         const s = symbol.toLowerCase();
@@ -101,6 +121,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
         setStatus('connecting');
         setDepthStaleSince(null);
         setPollSource('live');
+        setDepthLive(false);
 
         let closed = false;
         const sockets = new Set<WebSocket>();
@@ -246,6 +267,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                 // not keep the REST poll disarmed.
                 depthSeenAt.current = Date.now();
                 setDepthStaleSince(null);
+                setDepthLive(true);
                 return;
             }
         });
@@ -286,8 +308,8 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
                 // is the broken one). Run them in parallel; either can fail
                 // independently without poisoning the other.
                 const [mi, tk] = await Promise.all([
-                    fetchMarkIndex(symbol).catch(() => null),
-                    fetchFuturesTicker24h(symbol).catch(() => null),
+                    fetchMarkIndex(symbol, POLL_FETCH_TIMEOUT_MS).catch(() => null),
+                    fetchFuturesTicker24h(symbol, POLL_FETCH_TIMEOUT_MS).catch(() => null),
                 ]);
                 if (closed) return;
                 if (mi && (mi.available || mi.markPrice > 0 || mi.indexPrice > 0)) {
@@ -328,6 +350,10 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
         // close dead sockets; this one mounts the REST fallback).
         const armTimer = window.setInterval(() => {
             if (closed) return;
+            // Depth liveness is answered here rather than by `status`: this
+            // watcher runs whether or not the mark/ticker path ever goes live.
+            setDepthLive(depthSeenAt.current > 0
+                && Date.now() - depthSeenAt.current < DEPTH_LIVE_FRESH_MS);
             // Already running? Nothing to do — the interval will keep firing.
             if (pollHandle.current) return;
             // WS mark/ticker are alive and recent — no REST fallback needed.
@@ -373,7 +399,7 @@ export const useFuturesLiveFeed = (symbol: string, interval: string): FuturesLiv
         };
     }, [symbol, interval]);
 
-    return { markIndex, ticker, depth, kline, status, depthStaleSince, pollSource };
+    return { markIndex, ticker, depth, kline, status, depthStaleSince, depthLive, pollSource };
 };
 
 const safeParse = (raw: string): unknown => {

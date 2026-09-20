@@ -484,7 +484,7 @@ export const fetchFuturesOHLCV = async (
  * is filled identically; only the market differs (and the market matters:
  * the chart's mark line, funding and OI are all perp-side).
  */
-export const fetchFuturesTicker24h = async (symbol: string): Promise<MarketData> => {
+export const fetchFuturesTicker24h = async (symbol: string, timeoutMs?: number): Promise<MarketData> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `futmarket_${normalizedSymbol}`;
 
@@ -492,7 +492,7 @@ export const fetchFuturesTicker24h = async (symbol: string): Promise<MarketData>
     if (cached) return cached;
 
     try {
-        const response = await robustFuturesFetch(`/fapi/v1/ticker/24hr?symbol=${normalizedSymbol}`);
+        const response = await robustFuturesFetch(`/fapi/v1/ticker/24hr?symbol=${normalizedSymbol}`, timeoutMs);
         const data = await response.json();
 
         const marketData: MarketData = {
@@ -733,14 +733,14 @@ export interface MarkIndexData {
     available: boolean;
 }
 
-export const fetchMarkIndex = async (symbol: string): Promise<MarkIndexData> => {
+export const fetchMarkIndex = async (symbol: string, timeoutMs?: number): Promise<MarkIndexData> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `markindex_${normalizedSymbol}`;
     const cached = getCached<MarkIndexData>(cacheKey, LIVE_MARK_TTL);
     if (cached) return cached;
     const empty: MarkIndexData = { markPrice: 0, indexPrice: 0, lastFundingRate: 0, nextFundingTime: 0, available: false };
     try {
-        const response = await robustFuturesFetch(`/fapi/v1/premiumIndex?symbol=${normalizedSymbol}`);
+        const response = await robustFuturesFetch(`/fapi/v1/premiumIndex?symbol=${normalizedSymbol}`, timeoutMs);
         const data = await response.json();
         const num = (v: unknown): number => (typeof v === 'string' || typeof v === 'number') ? parseFloat(String(v)) : NaN;
         const markPrice = num(data?.markPrice);
