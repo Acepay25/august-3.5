@@ -123,9 +123,11 @@ test('first-run chat explains provider setup when no providers are configured', 
     await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByPlaceholder('Configure a provider in Settings first')).toBeVisible({ timeout: 15_000 });
 
-    // The setup guidance now lives in the Chart AI composer; the surface rail
-    // remains the direct path into provider configuration.
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    // Settings is no longer a rail icon: the rail carried a gear that opened the
+    // same dialog as the account menu's "Settings" row, and that duplicate was
+    // removed. So the direct path is the avatar, then the menu item.
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await page.getByRole('menuitem', { name: /^Settings/ }).click();
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'AI setup', exact: true })).toBeVisible({ timeout: 10_000 });
 });
@@ -152,10 +154,15 @@ test('the surface rail reaches the journal and back to the trade chart', async (
 
     // The Antigravity rail replaced the old header buttons: Journal is a
     // surface now (embedded <Journal/>, no dialog chrome), and Trade
-    // switches back to the chart.
-    await page.getByRole('button', { name: 'Journal', exact: true }).click();
+    // switches back to the chart. Matched by prefix INSIDE the rail because
+    // each button's accessible name now carries its shortcut ("Journal,
+    // shortcut Alt+2"; Trade also carries "— toggle panel"), which an exact
+    // string can no longer hit. Scoping to the Surfaces nav keeps it from
+    // matching any other "Journal"/"Trade" control.
+    const rail = page.getByRole('navigation', { name: 'Surfaces' });
+    await rail.getByRole('button', { name: /^Journal/ }).click();
     await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Trade', exact: true }).click();
+    await rail.getByRole('button', { name: /^Trade/ }).click();
     await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 10_000 });
 });
 
