@@ -2605,6 +2605,15 @@ const App: React.FC = () => {
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
     }, []);
 
+    // "Try in chat" from the Studio or the learning queue: the dock reads the
+    // hand-off itself (see skillDeepLink), but on Learn nothing would show the
+    // result, so App does the travelling.
+    useEffect(() => {
+        const onTrySkill = (): void => setSurface('trade');
+        window.addEventListener('august:try-skill', onTrySkill);
+        return () => window.removeEventListener('august:try-skill', onTrySkill);
+    }, []);
+
     // Allow inner surfaces (Chart AI dock composer empty-state, header
     // updates) to open Settings without prop-drilling through every layer.
     useEffect(() => {

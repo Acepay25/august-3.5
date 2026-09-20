@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeModelUsage, summarizeUsagePeriod } from '../../utils/sessionUsage';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { loadChecklistConfig, saveChecklistConfig } from '../../utils/checklist';
-import { HarnessLessonsBrowser } from './HarnessLessonsBrowser';
 import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 
@@ -249,9 +248,6 @@ const HarnessControls: React.FC = () => {
                 />
                 Pre-trade checklist at capture (off by default)
             </label>
-            {/* Harness wire lessons: browse + clear what the harness
-                believes about provider wires. */}
-            <HarnessLessonsBrowser />
             <label className="block text-[11px] text-zinc-400">
                 Debate cost cap (USD, 0 = off)
                 <input

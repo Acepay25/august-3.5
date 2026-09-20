@@ -40,7 +40,6 @@ import SkillDetail, {
     type SkillCardData, descriptionOf, STATUS_BADGE, KIND_BADGE,
     trySkillInChat, toggleSkillRetire, deleteSkillFile, PIN_STORAGE_KEY,
 } from '../skills/SkillDetail';
-import LearningQueuePanel from '../skills/LearningQueuePanel';
 import StatusPill, { type PillTone } from '../ui/StatusPill';
 import { ChevronRight, Grid3x3, Pin, PowerOff, RotateCcw, Trash2, Upload } from 'lucide-react';
 
@@ -454,9 +453,6 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
             )}
 
             <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
-                {/* The proposals side of the learning loop — "the gate
-                    proposes, the inbox disposes." Self-hides when empty. */}
-                <LearningQueuePanel />
                 {rows.length === 0 ? (
                     <p className="text-xs italic text-zinc-600">
                         {skills.length === 0

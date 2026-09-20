@@ -66,6 +66,7 @@ import ChatWorkTimeline from './panels/ChatWorkTimeline';
 import ComposerWorkspaceRow from './panels/ComposerWorkspaceRow';
 import TradeProposalCard, { TradeProposalLoggedRow } from './panels/TradeProposalCard';
 import MemoryProvenanceStrip from '../chat/MemoryProvenanceStrip';
+import { consumePendingSkillTry } from '../chat/skillDeepLink';
 import KeyLevelsCard from './KeyLevelsCard';
 import { getActiveUsername } from '../../utils/activeUser';
 import { baseOf, quoteOf } from '../../utils/symbol';
@@ -657,22 +658,33 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // it, so the user lands on the chat with the skill ready to invoke. Send
     // stays manual. The listener lives here because the Chart AI dock owns the
     // composer now (the old ChatInput that handled this was deleted).
+    const applySkillToken = useCallback((slug: string): void => {
+        const token = `/${slug.replace(/\.md$/i, '')}`;
+        setDraft(prev => {
+            const base = prev.trimStart();
+            if (base.startsWith(`${token} `) || base === token) return prev; // already invoked
+            return base ? `${token} ${base}` : `${token} `;
+        });
+        const el = composerRef.current;
+        if (el) { el.focus(); const end = el.value.length; try { el.setSelectionRange(end, end); } catch { /* detached */ } }
+    }, []);
     useEffect(() => {
+        // Surfaces render exclusively, so a tap on Studio's "Try in chat" lands
+        // while this dock is unmounted and its broadcast reaches nobody. Take
+        // what the hand-off parked — that is what makes the button real there.
+        const parked = consumePendingSkillTry();
+        if (parked) applySkillToken(parked);
         const onTrySkill = (ev: Event): void => {
             const slug = (ev as CustomEvent<{ slug?: string }>).detail?.slug;
             if (!slug) return;
-            const token = `/${slug.replace(/\.md$/i, '')}`;
-            setDraft(prev => {
-                const base = prev.trimStart();
-                if (base.startsWith(`${token} `) || base === token) return prev; // already invoked
-                return base ? `${token} ${base}` : `${token} `;
-            });
-            const el = composerRef.current;
-            if (el) { el.focus(); const end = el.value.length; try { el.setSelectionRange(end, end); } catch { /* detached */ } }
+            // Delivered live: drop the parked copy or the next mount re-applies
+            // a token the user already saw.
+            consumePendingSkillTry();
+            applySkillToken(slug);
         };
         window.addEventListener('august:try-skill', onTrySkill);
         return () => window.removeEventListener('august:try-skill', onTrySkill);
-    }, []);
+    }, [applySkillToken]);
     /** Composer model change: keep the app-wide default AND bind it to the
      *  active session so coming back to this chat reselects it. */
     const changeSoloModel = useCallback((value: string): void => {

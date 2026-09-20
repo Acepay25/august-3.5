@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 const read = (p: string): string => readFileSync(p, 'utf8');
 
@@ -34,6 +34,29 @@ describe('the bot roster has one owner', () => {
     it('the per-seat overrides are edited from the Agents rail', () => {
         expect(appSrc).toMatch(/onEditSeatOverrides=\{setSeatOverridesBot\}/);
         expect(read('components/agents/AgentsView.tsx')).toMatch(/label: 'Debate overrides'/);
+    });
+});
+
+describe('one read, one owner', () => {
+    it('the learning queue is mounted once', () => {
+        expect(read('components/dashboards/StrategyStudio.tsx')).not.toMatch(/LearningQueuePanel/);
+    });
+
+    it('harness lessons are mounted once', () => {
+        expect(read('components/settings/SessionUsagePanel.tsx')).not.toMatch(/HarnessLessonsBrowser/);
+    });
+
+    it('the notebook has one browser and one diary readout', () => {
+        expect(existsSync('components/dashboards/learning/NotebookSection.tsx')).toBe(false);
+    });
+
+    it('"try in chat" reaches a dock that is not mounted yet', () => {
+        const link = read('components/chat/skillDeepLink.ts');
+        expect(link).toMatch(/export const requestSkillTry/);
+        expect(link).toMatch(/export const consumePendingSkillTry/);
+        // The dock takes the parked token on mount, and clears it when the
+        // broadcast lands, so a re-mount cannot replay a stale skill.
+        expect(panelSrc).toMatch(/const parked = consumePendingSkillTry\(\);/);
     });
 });
 
