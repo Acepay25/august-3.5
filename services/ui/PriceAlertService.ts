@@ -5,7 +5,7 @@
  * - WebSocket connection to Binance for real-time prices
  * - REST polling fallback with a batched request
  * - Ref-counted feed holds + per-symbol tracking for external consumers
- *   (SetupWatchService, OutcomeAutopilotService, WatchListPanel, …)
+ *   (OutcomeAutopilotService, VetoLedgerService, WatchListPanel, …)
  *
  * The former per-trade price-alert layer (Entry/TP/SL thresholds with
  * notifications and quiet hours) was removed: nothing in production could
@@ -39,8 +39,8 @@ class PriceAlertServiceClass {
      *  socket and rebuild it (Tier-0 #5: symbols armed mid-session used to
      *  never receive ticks until an unrelated socket flap). */
     private streamSymbols = new Set<string>();
-    // SetupWatchService (and future consumers) can hook the same real-time
-    // price feed instead of opening their own socket/poll loop.
+    // Consumers can hook the same real-time price feed instead of opening
+    // their own socket/poll loop.
     private priceSubscribers: Set<(symbol: string, price: number) => void> = new Set();
     // Non-alert consumers that need the feed running even with nothing
     // tracked (setup watches). Monitoring stops only when holders and
@@ -129,7 +129,7 @@ class PriceAlertServiceClass {
     /**
      * Profile switch: drop the tracked-symbol ref-counts and stop the feed
      * (audit §2.5 — the ref-counts of the OUTGOING profile's feed holds must
-     * not survive the switch; SetupWatch/autopilot release theirs around this
+     * not survive the switch; the autopilot releases its own around this
      * call, and a leaked count would strand the old user's symbols in every
      * later stream).
      */
@@ -357,10 +357,10 @@ class PriceAlertServiceClass {
                 // so without this guard a backgrounded app re-spawns the
                 // socket (and the poll) five seconds later.
                 if (this.isPaused) return;
-                // externalMonitorHolders MUST be in this guard: a
-                // SetupWatch-only consumer (zero tracked symbols of its own
-                // until createWatch) could never recover a flapped socket
-                // because nothing armed the reconnect.
+                // externalMonitorHolders MUST be in this guard: a consumer
+                // that only monitors prices (zero tracked symbols of its own)
+                // could never recover a flapped socket because nothing armed
+                // the reconnect.
                 const needsFeed = this.externalMonitorHolders > 0
                     || this.trackedSymbols.size > 0;
                 if (needsFeed && this.wsReconnectAttempts < this.maxReconnectAttempts) {

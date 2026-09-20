@@ -211,7 +211,6 @@ const makeInput = (overrides: Partial<VerdictFinalizerInput> = {}): VerdictFinal
         options: undefined,
         processNewAnalysis: (a: TradeAnalysis) => a,
         applyUpdate: () => undefined,
-        setHighlightedAnalysisId: () => undefined,
         ...overrides,
     };
     return input;

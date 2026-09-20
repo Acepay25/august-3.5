@@ -44,7 +44,6 @@ export const PREF_KEYS = {
 
     // Alerts
     PRICE_ALERTS: 'price_alerts',
-    SETUP_WATCHES: 'setup_watches',
     OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
     QUIET_HOURS: 'quiet_hours_v1',
 

@@ -169,11 +169,6 @@ export interface VerdictFinalizerInput {
      *  runs write to the private ref and interactive runs write to
      *  `updateMessages`. */
     applyUpdate: (updater: (prev: Message[]) => Message[]) => void;
-
-    /** Sets the highlighted analysis id (UI scroll/focus). The hook owns
-     *  this setter; tests pass a no-op. Optional in the type so simpler
-     *  callers can omit it. */
-    setHighlightedAnalysisId?: (id: string | null) => void;
 }
 
 export interface VerdictFinalizerResult {
@@ -663,12 +658,6 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
         'Analysis complete',
         `${processedAnalysis?.direction ?? finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`,
     );
-
-    // Highlight the settled verdict card so the user can find it (skipped
-    // for automation runs — the caller manages its own scroll/focus).
-    if (!isAutomationRun) {
-        input.setHighlightedAnalysisId?.(debateMessageId);
-    }
 
     // Verdict → skill draft: when the moderator cites a pattern
     // the notebook does not know yet, queue a draft for the

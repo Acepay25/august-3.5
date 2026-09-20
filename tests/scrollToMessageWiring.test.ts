@@ -36,18 +36,15 @@ describe('App: the dead virtuosoRef is gone', () => {
 });
 
 describe('App: both affordances call the bridge', () => {
-    it('handleLocateMessage scrolls by messageId (the id its highlight uses) and keeps the highlight', () => {
+    it('handleLocateMessage scrolls by messageId through the bridge', () => {
         expect(appSrc).toMatch(new RegExp(
             'const handleLocateMessage = useCallback[\\s\\S]{0,400}' +
-            'scrollToMessageRef\\.current\\?\\.\\(messageId\\);[\\s\\S]{0,80}' +
-            'setHighlightedAnalysisId\\(messageId\\)',
+            'scrollToMessageRef\\.current\\?\\.\\(messageId\\);',
         ));
     });
 
     it('handleScrollToBottom resolves the LAST AI entry of the active dock session and calls the bridge', () => {
         expect(appSrc).toMatch(/const handleScrollToBottom = \(\) => \{[\s\S]{0,900}chatStore\.getSnapshot\(\)[\s\S]{0,400}e\.role === 'ai' && !e\.notice[\s\S]{0,400}scrollToMessageRef\.current\?\.\(targetId\);/);
-        // The highlight clear side-effect is preserved.
-        expect(appSrc).toMatch(/scrollToMessageRef\.current\?\.\(targetId\);\s*setHighlightedAnalysisId\(null\);/);
     });
 
     it('the bridge is threaded into TradeView', () => {

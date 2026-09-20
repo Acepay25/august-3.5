@@ -331,10 +331,6 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     // `learning_measure_v1_<user>`).
     'learning_judge_gate_v1_',
     'learning_measure_v1_',
-    // Per-user setup watches (services/ui/SetupWatchService.ts:
-    // `setup_watches_v1_<user>`; the legacy GLOBAL `setup_watches` blob is
-    // covered by PREF_KEYS).
-    'setup_watches_v1_',
     // Per-user prompt/strategy docs + automations
     'prompt_overrides_v1_',
     'strategy_docs_v1_',
