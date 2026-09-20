@@ -751,7 +751,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     <StatusPill
                         data-testid="feed-status"
                         kicker
-                        title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 15s'}
+                        title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 5s'}
                         tone={feed.status === 'live' ? 'up' : feed.status === 'connecting' ? 'neutral' : 'warn'}
                         icon={<span aria-hidden="true" className={`beacon ${feed.status === 'live' ? '' : 'is-quiet'}`.trim()} />}
                     >
@@ -870,7 +870,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             ? (mode === 'book' ? 'min-h-0 w-full flex-1' : 'hidden')
                             : 'hidden w-[300px] shrink-0 md:block'}
                     >
-                        <OrderBookPanel symbol={symbol} live={live} liveDepth={feed.depth} />
+                        <OrderBookPanel symbol={symbol} live={feed.depthLive} liveDepth={feed.depth} />
                     </div>
                 )}
                 <div
