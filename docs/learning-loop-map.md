@@ -54,6 +54,9 @@ bots (WS-3)
   read  → buildBotSharedMemoryContext → same retrieval, smallest slice
   write → lessonFromBotTurn → bots-<id>/memory.md
         → closed bot-authored trades fold into syncClosedTradeToNotebook
+  turns that earn this: the 1:1 mailbox (hooks/useBotMailbox.ts), scheduled
+  routines (services/agents/botRoutine.ts) and ROOM replies
+  (hooks/useAgentGroups.ts — one write-back per speaker, markers stripped)
 ```
 
 ### The cold-start contract (fixed 2026-09-19)

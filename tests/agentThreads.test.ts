@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { MessageRole } from '../types/enums';
 import { Message } from '../types/message';
 import {
+    deskThread,
     threadForProvider,
     threadForGroup,
     threadPreview,
@@ -276,4 +277,51 @@ describe('attributed system errors (failed replies)', () => {
         expect(threadForGroup(messages, [{ providerId: 'a1', modelId: 'model-a' }], 'g1').map(m => m.text))
             .toEqual(['go', 'Openocode Zen: request failed (400).']);
     });
+
+describe('deskThread', () => {
+    const bots = [{ providerId: 'a1', modelId: 'model-a' }];
+
+    it('keeps ensemble (multi-key) replies — the Analyze verdict — in the desk pane', () => {
+        const messages: Message[] = [
+            msg({ role: MessageRole.USER, text: 'BTC setup' }),
+            msg({ role: MessageRole.AI, text: 'short it', modelsUsed: { a1: 'model-a', b2: 'model-b' } }),
+        ];
+        expect(deskThread(messages, bots).map(m => m.text)).toEqual(['BTC setup', 'short it']);
+    });
+
+    it('excludes a bot-claimed DM from the desk pane (it belongs to the bot row)', () => {
+        const messages: Message[] = [
+            msg({ role: MessageRole.USER, text: 'what do you think' }),
+            msg({ role: MessageRole.AI, text: 'heavy', modelsUsed: { a1: 'model-a' } }),
+            msg({ role: MessageRole.USER, text: 'desk question' }),
+            msg({ role: MessageRole.AI, text: 'desk answer', modelsUsed: { solo: 'm' } }),
+        ];
+        const out = deskThread(messages, bots).map(m => m.text);
+        expect(out).toEqual(['what do you think', 'desk question', 'desk answer']);
+    });
+
+    it('drops room rows — they live in the room, not the desk', () => {
+        const messages: Message[] = [
+            msg({ role: MessageRole.USER, text: 'room prompt', roomId: 'g1' } as Partial<Message>),
+            msg({ role: MessageRole.AI, text: 'room reply', roomId: 'g1', modelsUsed: { a1: 'model-a' } } as Partial<Message>),
+            msg({ role: MessageRole.USER, text: 'desk prompt' }),
+        ];
+        expect(deskThread(messages, bots).map(m => m.text)).toEqual(['desk prompt']);
+    });
+
+    it('a bot on a DIFFERENT model than the claimed pair still leaves its row out', () => {
+        // Two bots on one provider, different models: the DM claims its exact
+        // pair, the desk must not swallow it.
+        const two = [
+            { providerId: 'a1', modelId: 'model-a' },
+            { providerId: 'a1', modelId: 'model-b' },
+        ];
+        const messages: Message[] = [
+            msg({ role: MessageRole.USER, text: 'hi b' }),
+            msg({ role: MessageRole.AI, text: 'from b', modelsUsed: { a1: 'model-b' } }),
+        ];
+        expect(deskThread(messages, two).map(m => m.text)).toEqual(['hi b']);
+    });
+});
+
 });

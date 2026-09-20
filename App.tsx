@@ -1293,6 +1293,9 @@ const App: React.FC = () => {
         // Hybrid Intelligence room toggle: shares the main hybrid
         // switch — the same live-data gate the debate pipeline uses.
         hybridEnabled: isHybridIntelligenceEnabled,
+        // WS-3: room turns teach their speakers too — same write-back the
+        // 1:1 mailbox gets (lesson → memory.md, closed trades → evidence).
+        loggedTradesRef,
     });
     const toggleGroupHybrid = useCallback(() => {
         setIsHybridIntelligenceEnabled(v => !v);

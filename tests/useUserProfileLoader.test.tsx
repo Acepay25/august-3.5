@@ -63,6 +63,10 @@ vi.mock('../services/learning/monthlyReport', () => ({
     runMonthlyReportIfDue: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('../services/learning/memoryHygiene', () => ({
+    runMemoryHygieneIfDue: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../services/analysis/TimeframeConfluenceService', () => ({
     initConfluenceService: vi.fn().mockResolvedValue(undefined),
     syncConfluenceFromTradeLog: vi.fn(),

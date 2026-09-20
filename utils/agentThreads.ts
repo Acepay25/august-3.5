@@ -90,6 +90,34 @@ export const threadForProvider = (messages: Message[], providerId: string, model
     return out;
 };
 
+/**
+ * The desk's own conversation: everything no agent thread claims — human
+ * prompts, system rows, ENSEMBLE replies (multi-key modelsUsed, the debate
+ * verdict), and lone-attributed replies from a model that no roster bot
+ * thinks with (the session chat model's Analyze answers).
+ *
+ * AgentsView's Chart AI pane reads this instead of the raw `messages` array:
+ * the raw array would ALSO show every bot's DM (a bot reply is a single-key
+ * row claimed by that bot's thread), so the desk pane would leak the other
+ * agents' conversations. The Trade dock keeps its own rendering; this is
+ * only the Agents surface's pane.
+ */
+export const deskThread = (
+    messages: Message[],
+    bots: ReadonlyArray<{ providerId: string; modelId: string }>,
+): Message[] => {
+    const claimed = new Set(bots.map(b => `${b.providerId}::${b.modelId}`));
+    return messages.filter(m => {
+        if (m.roomId) return false; // a room row lives in its room, not the desk
+        if (m.role !== MessageRole.AI) return true;
+        const keys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
+        // Unattributed AI rows (legacy, stream artifacts): the desk keeps
+        // them — dropping them would lose text with no other home.
+        if (keys.length !== 1) return true;
+        return !claimed.has(`${keys[0]}::${m.modelsUsed?.[keys[0]]}`);
+    });
+};
+
 /** A group member's claim key: provider + the bot's exact model. */
 export interface GroupMemberKey {
     providerId: string;

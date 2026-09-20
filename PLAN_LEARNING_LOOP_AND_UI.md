@@ -687,3 +687,40 @@ Five defects the loop test exposed, all fixed:
    the worth-gate leg of that fold is a live LLM call that re-fires whenever a
    cluster still has no matching skill.
 
+
+## Review pass — 2026-09-20 (second audit, three gaps closed)
+
+A full re-audit against this plan (code read, not the changelog) found the
+implementation faithful and the loop closed, with three seams that had survived
+because each looked done from one side:
+
+1. **WS-4.2's hygiene pass had no caller.** `runMemoryHygieneIfDue` existed,
+   was tested, and was documented here as "boot, due-checked" — but nothing in
+   the app called it, so the Health tab could only ever show `(never run)`.
+   Wired in `hooks/useUserProfileLoader.ts` beside `runWeeklyReviewIfDue` /
+   `runMonthlyReportIfDue`; `tests/useUserProfileLoader.test.tsx` mocks it so
+   the boot path stays deterministic. The map doc's claim is now true of the
+   code, not just of the doc.
+2. **The desk pane showed other agents' DMs.** `AgentsView`'s Chart AI pane
+   rendered the RAW `messages` array, which includes every bot's 1:1 rows — so
+   the pane that is supposed to be the dock's conversation also displayed
+   conversations belonging to the rail's rows. `utils/agentThreads.deskThread`
+   is the missing derivation: everything no roster bot claims (human prompts,
+   system rows, ENSEMBLE/Analyze verdicts, unattributed rows), room rows
+   excluded. Four cases in `tests/agentThreads.test.ts`; the rail's Chart AI
+   preview now reads the same slice it opens.
+3. **Room turns were read-only.** WS-3 wired the 1:1 mailbox and scheduled
+   routines; a room reply (`hooks/useAgentGroups.ts`) — the turns the Agents
+   surface actually produces most — taught the speaker nothing.
+   `recordBotTurnOutcome` now runs per finalized reply with that speaker's
+   identity, so a `Lesson:` line in a room reaches that bot's `memory.md` and
+   its closed trades fold into the evidence path. Pinned by a case in
+   `tests/agentGroups.test.tsx`.
+
+Found and left, with the reason: the Agents surface's Coach row selects a
+`ThreadSelection` that renders the greeting pane rather than the coach
+transcript (the dock owns that transcript; the rail row is a hop, not a
+reader). Making it a reader means either mounting `CoachThreadPanel` here or
+giving Learn's Queue tab the coach's draft cards — a UI decision, not a
+defect, and it belongs to whoever owns the surface next.
+
