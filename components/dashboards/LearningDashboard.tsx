@@ -13,7 +13,6 @@ import { EmptyState } from '../ui/EmptyState';
 import { HarnessSection } from './learning/HarnessSection';
 import { LessonsSection } from './learning/LessonsSection';
 import { MemoryGraphSection } from './learning/MemoryGraphSection';
-import { NotebookSection } from './learning/NotebookSection';
 import { ProfileHeader } from './learning/ProfileHeader';
 import { ReviewActionsSection } from './learning/ReviewActionsSection';
 import { TraderProfileCards } from './learning/TraderProfileCards';
@@ -153,7 +152,6 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             onWindowDaysChange={setWindowDays}
         />
     );
-    const notebookSection = <NotebookSection notebook={notebook} />;
     const lessonsSection = <LessonsSection topLessons={topLessons} closedWindowed={closedWindowed} />;
     const reviewActionsSection = (
         <ReviewActionsSection
@@ -169,7 +167,6 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             <div className="space-y-4 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
                 {memoryGraphSection}
                 {harnessSection}
-                {notebookSection}
                 {lessonsSection}
                 {reviewActionsSection}
                 <EmptyState
@@ -186,7 +183,6 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
             {memoryGraphSection}
             {harnessSection}
-            {notebookSection}
             {lessonsSection}
             {reviewActionsSection}
             <ProfileHeader profile={profile} username={username} />

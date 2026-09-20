@@ -8,6 +8,7 @@ import { evaluateSkill, SkillEvalResult, recordEvalVerdict } from '../../service
 import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import { getActiveUsername } from '../../utils/activeUser';
+import { requestSkillTry } from '../chat/skillDeepLink';
 import MarkdownContent from '../shared/MarkdownContent';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { FlaskConical, History } from 'lucide-react';
@@ -57,13 +58,13 @@ export const descriptionOf = (body: string): string =>
         .find(l => l.length > 0 && !l.startsWith('#')) ?? '';
 
 /**
- * "Try in chat" — drops the skill's /slug into the Chart AI composer via the
- * `august:try-skill` window event; TradeChatPanel owns the listener (it
- * prepends the marker and focuses the composer). The dispatcher fires it on
- * `window` (not `document`) to match the listener.
+ * "Try in chat" — drops the skill's /slug into the Chart AI composer. The dock
+ * owns the composer and its listener (see TradeChatPanel), and it is not
+ * mounted while this card is on screen, so the hand-off is parked as well as
+ * broadcast — see components/chat/skillDeepLink.
  */
 export const trySkillInChat = (slug: string): void => {
-    window.dispatchEvent(new CustomEvent('august:try-skill', { detail: { slug } }));
+    requestSkillTry(slug);
 };
 
 /** Toggle a skill's retired/active status and let the caller refresh. */

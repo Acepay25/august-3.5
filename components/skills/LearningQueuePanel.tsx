@@ -12,13 +12,7 @@ import {
     applyDemoteProposal,
 } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
-
-/** Same event TradeChatPanel listens for (see trySkillInChat in
- *  components/skills/SkillDetail) — dispatched directly to keep the module
- *  graph acyclic. */
-const trySkillInChat = (slug: string): void => {
-    window.dispatchEvent(new CustomEvent('august:try-skill', { detail: { slug } }));
-};
+import { requestSkillTry as trySkillInChat } from '../chat/skillDeepLink';
 
 /**
  * LearningQueuePanel (loop E /) — "the gate proposes, the inbox

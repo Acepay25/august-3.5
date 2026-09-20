@@ -46,13 +46,16 @@ describe('Learn → Health learning signals (WS-5.1 merge)', () => {
     it('mounts every section of the absorbed dashboard with nothing to show', async () => {
         render(<ToastProvider><LearningDashboard username={USER} trades={[]} /></ToastProvider>);
         for (const heading of [
-            'Trader Notebook — what the model reads',
             'Top Lessons (outcome-weighted)',
             'Memory Graph',
             'Skill Review — Apply',
         ]) {
             await waitFor(() => expect(screen.getByText(heading)).toBeTruthy());
         }
+        // No notebook card: Learn → Memory edits those files, and the health
+        // card on this same tab already reports the diary count. This dashboard
+        // was a third read of one store.
+        expect(screen.queryByText(/what the model reads/)).toBeNull();
         // The harness panel's heading carries an em dash and sits inside a
         // flex row with the window control, so match on its prefix.
         expect(screen.getByText(/Harness Accuracy/)).toBeTruthy();
