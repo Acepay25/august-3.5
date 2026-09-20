@@ -5,20 +5,20 @@ import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryS
 import { EmptyState } from '../ui/EmptyState';
 
 /**
- * JobsDrawer: a "status stack" of background work — every
- * background learning job (insight extraction, skill evals) visible in one
- * place instead of fire-and-forget toasts. Autonomy you can see.
+ * JobsDrawer: a "status stack" of background work — the insight-extraction
+ * jobs the queue has run or is running, plus each skill's latest automated-eval
+ * verdict. Autonomy you can see.
  *
  * (The sidebar's TERMINAL tab was removed — this drawer is the only
  * surface for the job queue again.)
  *
- * Data sources: the JobQueue snapshot (queued/running work) + each skill's
- * latest automated-eval verdict (completed audit trail). Re-read while open.
+ * Two sources, deliberately side by side: the JobQueue snapshot is work that
+ * went through the queue, while the skill audits are read straight from skill
+ * meta — an eval never touches the queue.
  */
 
 const JOB_LABEL: Record<string, string> = {
     EXTRACT_INSIGHTS: 'Insight extraction',
-    EXTRACT_RULES: 'Rule extraction (legacy)',
 };
 
 const STATUS_STYLE: Record<Job['status'], string> = {

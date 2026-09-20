@@ -88,7 +88,7 @@ export const collectApprovalItems = (
             items.push({
                 id: `ex-${message.id}`,
                 kind: 'expired',
-                title: coin || 'Watched setup',
+                title: coin || 'Pinned setup',
                 detail: expiry.line,
                 messageId: message.id,
                 coin,

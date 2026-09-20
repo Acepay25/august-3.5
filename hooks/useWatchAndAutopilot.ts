@@ -5,7 +5,6 @@ import { reconstructOpenings } from '../utils/debateResume';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { OutcomeAutopilotService, type AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
-import type { ApprovalItem } from '../utils/approvalInbox';
 import { TradeOutcome } from '../types';
 import type { Conversation, LoggedTrade, Message } from '../types';
 
@@ -22,7 +21,6 @@ export interface UseWatchAndAutopilotArgs {
     stableHandleSendMessage: (...args: any[]) => any;
     handleLoadConversation: (id: string) => void;
     setHighlightedAnalysisId: (id: string | null) => void;
-    setIsApprovalInboxVisible: (open: boolean) => void;
     setIsWatchListVisible: (open: boolean) => void;
     confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any) => void;
     confirmAutopilotEntryNotHit: (msg: Message) => void;
@@ -38,7 +36,6 @@ export interface UseWatchAndAutopilotArgs {
 export interface UseWatchAndAutopilotResult {
     autopilotResolutions: Record<string, AutopilotResolution>;
     setAutopilotResolutions: React.Dispatch<React.SetStateAction<Record<string, AutopilotResolution>>>;
-    handleApprovalShow: (item: ApprovalItem) => void;
     handleToggleWatch: (messageId: string, conversationId?: string | null) => void;
     watchedSignals: ReturnType<typeof collectWatchedSignals>;
     watchOpenR: string | undefined;
@@ -67,7 +64,7 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         messages, conversationHistory, loggedTrades,
         activeConversationId, activeConversation, updateMessages, messagesRef,
         stableHandleSendMessage, handleLoadConversation,
-        setHighlightedAnalysisId, setIsApprovalInboxVisible, setIsWatchListVisible,
+        setHighlightedAnalysisId, setIsWatchListVisible,
         confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
         confirmAutopilotRef, toast,
     } = args;
@@ -78,11 +75,6 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         | null
     >(null);
 
-    const handleApprovalShow = useCallback((item: ApprovalItem) => {
-        setHighlightedAnalysisId(item.messageId);
-        setIsApprovalInboxVisible(false);
-    }, [setHighlightedAnalysisId, setIsApprovalInboxVisible]);
-
     const handleToggleWatch = useCallback((messageId: string, conversationId?: string | null) => {
         const convId = conversationId || activeConversationId;
         if (!convId) return;
@@ -91,7 +83,7 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
             const nextWatch = !m.watched;
             const updated = toggleWatchOnMessage(m, nextWatch);
             if (updated.watched) {
-                toast.success('Pinned', 'This signal is on the Watch list. Win/Loss and autopilot still work the same.');
+                toast.success('Pinned', 'This signal is on the Pinned list. Win/Loss and autopilot still work the same.');
             }
             return updated;
         }), convId);
@@ -237,7 +229,6 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
 
     return {
         autopilotResolutions, setAutopilotResolutions,
-        handleApprovalShow,
         handleToggleWatch,
         watchedSignals,
         watchOpenR,

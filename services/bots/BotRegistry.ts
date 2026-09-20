@@ -59,10 +59,6 @@ export const BotRegistry = {
         return (await loadRaw()).bots;
     },
 
-    async get(id: string): Promise<HermesBot | undefined> {
-        return (await loadRaw()).bots.find(b => b.id === id);
-    },
-
     upsert(bot: HermesBot): Promise<HermesBot> {
         return enqueue(async () => {
             const storage = await loadRaw();
@@ -75,66 +71,6 @@ export const BotRegistry = {
             }
             await saveRaw(storage);
             return normalized;
-        });
-    },
-
-    create(partial: Partial<HermesBot> & { name: string; providerId: string; model: string }): Promise<HermesBot> {
-        const bot: HermesBot = {
-            id: newId(),
-            name: partial.name,
-            avatarUrl: partial.avatarUrl,
-            role: partial.role || AnalystRole.UNASSIGNED,
-            providerId: partial.providerId,
-            model: partial.model,
-            job: partial.job,
-            description: partial.description,
-            systemPromptOverride: partial.systemPromptOverride,
-            personality: partial.personality,
-            memoryScope: partial.memoryScope || 'global',
-            enabledTools: partial.enabledTools || defaultToolsForRole(partial.role || AnalystRole.UNASSIGNED),
-            skillFilter: partial.skillFilter,
-            hidden: partial.hidden,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-        };
-        return this.upsert(bot);
-    },
-
-    remove(id: string): Promise<void> {
-        return enqueue(async () => {
-            const storage = await loadRaw();
-            storage.bots = storage.bots.filter(b => b.id !== id);
-            await saveRaw(storage);
-        });
-    },
-
-    setHidden(id: string, hidden: boolean): Promise<void> {
-        return enqueue(async () => {
-            const storage = await loadRaw();
-            const bot = storage.bots.find(b => b.id === id);
-            if (!bot) return;
-            bot.hidden = hidden || undefined;
-            bot.updatedAt = Date.now();
-            await saveRaw(storage);
-        });
-    },
-
-    duplicate(id: string): Promise<HermesBot | undefined> {
-        return enqueue(async () => {
-            const storage = await loadRaw();
-            const src = storage.bots.find(b => b.id === id);
-            if (!src) return undefined;
-            if (storage.bots.length >= MAX_BOTS) throw new Error(`Bot limit reached (${MAX_BOTS})`);
-            const copy: HermesBot = {
-                ...src,
-                id: newId(),
-                name: `${src.name} copy`,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-            };
-            storage.bots.push(copy);
-            await saveRaw(storage);
-            return copy;
         });
     },
 

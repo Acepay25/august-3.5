@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
@@ -50,10 +50,6 @@ interface HeaderProps {
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     watchOpenR?: string;
-    onOpenBotManager?: () => void;
-    onOpenApprovals?: () => void;
-    approvalCount?: number;
-    /** Open the background-jobs drawer. */
     onOpenJobs?: () => void;
     /** Open the command palette. */
     onOpenCommandPalette?: () => void;
@@ -92,9 +88,6 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenWatchList,
     watchOpenCount = 0,
     watchOpenR,
-    onOpenBotManager,
-    onOpenApprovals,
-    approvalCount = 0,
     onOpenJobs,
     onOpenCommandPalette,
 }) => {
@@ -324,25 +317,11 @@ export const Header: React.FC<HeaderProps> = memo(({
                         <UpdateButton />
                     </div>
 
-                    {/* Desktop: Segmented Quick Action Tray */}
-                    {(onOpenApprovals || onOpenJobs || onOpenWatchList) && (
+                    {/* Desktop: Segmented Quick Action Tray. Approvals is NOT
+                        here — the activity rail owns that drawer (WS-5.2), and
+                        this tray used to repeat it under a second name. */}
+                    {(onOpenJobs || onOpenWatchList) && (
                         <div className="hidden sm:inline-flex items-center rounded-xl border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
-                            {onOpenApprovals && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenApprovals}
-                                    className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
-                                    title="Approvals"
-                                    aria-label={`Approvals, ${approvalCount} waiting`}
-                                >
-                                    <span>Inbox</span>
-                                    {approvalCount > 0 && (
-                                        <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-mono font-bold leading-4 text-zinc-900">
-                                            {approvalCount > 99 ? '99+' : approvalCount}
-                                        </span>
-                                    )}
-                                </button>
-                            )}
                             {onOpenJobs && (
                                 <button
                                     type="button"
@@ -359,11 +338,11 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     type="button"
                                     onClick={onOpenWatchList}
                                     className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
-                                    title={watchOpenR ? `Watch · ${watchOpenR}` : 'Watch list'}
-                                    aria-label={`Watch list, ${watchOpenCount} open`}
+                                    title={watchOpenR ? `Pinned · ${watchOpenR}` : 'Pinned signals'}
+                                    aria-label={`Pinned signals, ${watchOpenCount} open`}
                                 >
-                                    <EyeIcon className="h-3.5 w-3.5" />
-                                    <span>Watch</span>
+                                    <PinIcon className="h-3.5 w-3.5" />
+                                    <span>Pinned</span>
                                     {watchOpenCount > 0 && (
                                         <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-mono font-bold leading-4 text-zinc-900">
                                             {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}

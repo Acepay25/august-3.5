@@ -7,20 +7,18 @@
  * the Chart AI dock, the graveyard nowhere reachable, stats on a dashboard
  * nobody opened. The information architecture here is the loop's own order:
  *
- *   Queue → Skills → Memory → Health
- *   what it's deciding   what it believes   where it lives   whether it's sound
+ *   Queue → Memory → Health
+ *   what it's deciding   where it lives   whether it's sound
  *
- * Chosen over a Studio tab on purpose: a tab inside Studio would still require
- * knowing that Studio is where learning hides, and the whole complaint this
- * fixes is discoverability. Alt+5 from anywhere.
- *
- * Skills and Memory mount Studio's and Settings' existing components rather
- * than reimplementing them — one owner for the skill table and the notebook
- * browser, this file only decides where they appear.
+ * The playbook LIBRARY is deliberately not a tab here: StrategyStudio is the
+ * one owner of that table, it has its own surface (Alt+3), and mounting it a
+ * second time from here left it without the onClose the Studio surface passes —
+ * which made its "Try in chat" a dead button. Memory mounts this surface's own
+ * notebook browser rather than reimplementing it.
  */
 
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { BookOpen, Gauge, ListChecks, Library } from 'lucide-react';
+import { BookOpen, Gauge, ListChecks } from 'lucide-react';
 import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import SupervisorStream from './SupervisorStream';
@@ -28,13 +26,12 @@ import LearningQueuePanel from '../skills/LearningQueuePanel';
 import AmendmentsInbox from './AmendmentsInbox';
 import MemoryHealthCard from './MemoryHealthCard';
 
-const StrategyStudio = lazy(() => import('../dashboards/StrategyStudio'));
 const MemoryFilesManager = lazy(() => import('./MemoryFilesManager'));
 const HarnessLessonsBrowser = lazy(() =>
     import('../settings/HarnessLessonsBrowser').then(m => ({ default: m.HarnessLessonsBrowser })));
 const LearningDashboard = lazy(() => import('../dashboards/LearningDashboard'));
 
-type LearnTab = 'queue' | 'skills' | 'memory' | 'health';
+type LearnTab = 'queue' | 'memory' | 'health';
 
 export type { LearnTab };
 
@@ -42,7 +39,6 @@ const TAB_KEY = 'learn_tab_v1';
 
 const TABS: Array<{ id: LearnTab; label: string; Icon: React.FC<{ className?: string }> }> = [
     { id: 'queue', label: 'Queue', Icon: ListChecks },
-    { id: 'skills', label: 'Skills', Icon: Library },
     { id: 'memory', label: 'Memory', Icon: BookOpen },
     { id: 'health', label: 'Health', Icon: Gauge },
 ];
@@ -55,8 +51,6 @@ interface LearnViewProps {
     username: string;
     trades: LoggedTrade[];
     memoryConfig?: ProviderConfig | null;
-    /** Current market regime (from hybrid) — the Studio's tilt. */
-    currentRegime?: string;
     /** Set by a caller that wants a SPECIFIC tab (Settings → "open the
      *  notebook"). Cleared by onInitialTabConsumed once applied — same contract
      *  the Journal uses for its deep link — so a later mount honours the user's
@@ -65,7 +59,7 @@ interface LearnViewProps {
     onInitialTabConsumed?: () => void;
 }
 
-const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = null, currentRegime, initialTab, onInitialTabConsumed }) => {
+const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = null, initialTab, onInitialTabConsumed }) => {
     const [tab, setTab] = useState<LearnTab>(() => {
         const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(TAB_KEY) : null;
         return TABS.some(t => t.id === saved) ? (saved as LearnTab) : 'queue';
@@ -110,13 +104,6 @@ const LearnView: React.FC<LearnViewProps> = ({ username, trades, memoryConfig = 
                         <LearningQueuePanel />
                         <AmendmentsInbox />
                     </div>
-                )}
-
-                {tab === 'skills' && (
-                    <Suspense fallback={<Fallback />}>
-                        <StrategyStudio trades={trades} username={username}
-                            currentRegime={currentRegime} memoryConfig={memoryConfig} />
-                    </Suspense>
                 )}
 
                 {tab === 'memory' && (

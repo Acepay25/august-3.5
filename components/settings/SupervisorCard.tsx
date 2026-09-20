@@ -4,8 +4,9 @@
  * (skill drafts, forged tools, memory amendments, ladder proposals). Shows
  * whether automation is on, which model is currently doing the supervising
  * (the active chat session's model — a panel's first seat), and the recent
- * verdicts. Every decision stays overridable from the dock's supervisor
- * panel; this card is the calm, at-a-glance view.
+ * verdicts. Every decision stays overridable from the supervisor stream,
+ * which is mounted in the dock's panel and on Learn → Queue; this card is the
+ * calm, at-a-glance view.
  */
 
 import React, { useSyncExternalStore } from 'react';

@@ -108,6 +108,9 @@ interface TradeViewProps {
     onToggleDeskScene?: () => void;
     isDeskSceneOpen?: boolean;
     hasDeskSceneMessage?: boolean;
+    /** Pin/unpin a verdict to the Pinned list (App owns the watched flag). */
+    onToggleWatch?: (messageId: string) => void;
+    pinnedMessageIds?: ReadonlySet<string>;
 }
 
 interface StripData {
@@ -298,7 +301,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, coachPending = 0, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, coachPending = 0, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -721,6 +724,8 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         onToggleDeskScene,
         isDeskSceneOpen,
         hasDeskSceneMessage,
+        onToggleWatch,
+        pinnedMessageIds,
         onRefreshModels,
         registerScrollToMessage,
     };

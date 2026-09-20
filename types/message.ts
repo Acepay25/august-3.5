@@ -273,8 +273,9 @@ export interface Message {
   /** Transient mid-debate analyst-replacement offer (generator suspends until
    *  the user chooses). Cleared when the debate ends or is cancelled. */
   replacementOffer?: ReplacementOffer;
-  /** User pinned this setup to the Watch list (priority UI). Autopilot still
-   *  tracks every PENDING Long/Short the same way. */
+  /** User pinned this setup — the header tray's "Pinned" list. The field keeps
+   *  its legacy `watched` name because it is persisted in stored conversations.
+   *  Autopilot still tracks every PENDING Long/Short the same way. */
   watched?: boolean;
   watchedAt?: string;
   /** NAC-style watch-thread episodes (pin, autopilot, log) — not a new outcome path. */

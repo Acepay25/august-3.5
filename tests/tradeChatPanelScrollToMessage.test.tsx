@@ -8,6 +8,9 @@
  * `data-message-id` (the App-side analysis message id for ensemble answers,
  * falling back to the entry id). This covers the panel half;
  * tests/scrollToMessageWiring.test.ts asserts the App/TradeView wiring.
+ *
+ * The same App-side message id is what the Pin chip writes, so the Pinned
+ * list's entry point is covered here too — it depends on exactly that stamp.
  */
 
 import React from 'react';
@@ -168,5 +171,50 @@ describe('scroll-to-message bridge', () => {
         const answer = await screen.findByText(/Just the verdict text/);
         const wrapper = answer.closest('[data-entry-id]')!;
         expect(wrapper.getAttribute('data-message-id')).toBe(wrapper.getAttribute('data-entry-id'));
+    });
+});
+
+describe('the Pinned list has an entry point', () => {
+    /** Run a "Full analysis" so the answer carries an App message id — that id
+     *  is the only thing a pin can attach to (the flag lives on the Message). */
+    const pinFromVerdict = async (extra: Record<string, unknown>): Promise<void> => {
+        const onRunAnalysis = vi.fn(async (): Promise<string | { text: string; messageId?: string }> =>
+            ({ text: 'Verdict: Long BTC — the answer.', messageId: 'msg-42' }));
+        renderDock({ onRunAnalysis, ...extra });
+        const box = await screen.findByPlaceholderText(/Ask anything/);
+        fireEvent.change(box, { target: { value: 'full read' } });
+        fireEvent.click(screen.getByText('Full analysis'));
+        await screen.findByText(/Verdict: Long BTC/);
+    };
+
+    it('a settled verdict offers Pin, and clicking it reports that message id', async () => {
+        const onToggleWatch = vi.fn();
+        await pinFromVerdict({ onToggleWatch, pinnedMessageIds: new Set<string>() });
+        fireEvent.click(screen.getByLabelText('Pin this signal'));
+        expect(onToggleWatch).toHaveBeenCalledWith('msg-42');
+    });
+
+    it('an already-pinned verdict says so without needing a hover', async () => {
+        await pinFromVerdict({
+            onToggleWatch: () => {},
+            pinnedMessageIds: new Set(['msg-42']),
+        });
+        const chip = screen.getByLabelText('Unpin this signal');
+        expect(chip.getAttribute('aria-pressed')).toBe('true');
+        expect(chip.className).not.toMatch(/opacity-0/);
+        expect(chip.textContent).toBe('Pinned');
+    });
+
+    it('a plain chat answer with no analysis message behind it offers no Pin', async () => {
+        renderDock({ onToggleWatch: () => {}, pinnedMessageIds: new Set<string>() });
+        act(() => { chatStore.mutate(chatStore.getActiveId(), s => ({
+            ...s,
+            entries: [
+                { id: 'u1', role: 'user', text: 'what does this chart look like', tools: [] },
+                { id: 'a1', role: 'ai', text: 'a solo answer', tools: [] },
+            ],
+        })); });
+        await screen.findByText('a solo answer');
+        expect(screen.queryByLabelText('Pin this signal')).toBeNull();
     });
 });

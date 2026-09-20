@@ -7,11 +7,10 @@ import { EmptyState } from '../ui/EmptyState';
 import type { SidebarPane } from '../../hooks/useSidebarPane';
 import {
     ActivityIcon,
-    BotIcon,
     BookmarkIcon,
     ChevronDownIcon,
     CodeIcon,
-    EyeIcon,
+    PinIcon,
     PlusIcon,
     SearchIcon,
     SettingsIcon,
@@ -104,7 +103,6 @@ interface SidebarContentProps {
     onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
-    onOpenBotManager?: () => void;
     // Unified-pane props (desktop sidebar only). Given `sidebarPane` plus a
     // `rosterSlot`, the sidebar renders the pane tab bar and swaps its body for
     // that slot; without them it keeps the classic sessions-only body — which
@@ -146,7 +144,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onOpenSettings,
     onDeleteConversation,
     onDeleteConversations,
-    onOpenBotManager,
     sidebarPane,
     onSetSidebarPane,
     rosterSlot,
@@ -584,7 +581,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             {/* BOTS pane body — the caller's rosterSlot, mounted verbatim.
                 This component builds none of it; see the prop doc. */}
             {/* Quick actions — OUTSIDE the sessions-only fragment: journal,
-                live market, and watch list must stay reachable from the
+                live market, and the pinned list must stay reachable from the
                 unified BOTS pane too, or they vanish exactly when the
                 roster is the active surface. */}
             <nav className="px-2">
@@ -594,11 +591,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
                     )}
                     <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
-                    {onOpenBotManager && (
-                        <NavRow collapsed={collapsed} icon={<BotIcon className="h-4 w-4" />} label="Bots" onClick={act(onOpenBotManager)} />
-                    )}
                     {onOpenWatchList && (
-                        <NavRow collapsed={collapsed} icon={<EyeIcon className="h-4 w-4" />} label="Watch list" onClick={act(onOpenWatchList)} />
+                        <NavRow collapsed={collapsed} icon={<PinIcon className="h-4 w-4" />} label="Pinned signals" onClick={act(onOpenWatchList)} />
                     )}
                 </div>
             </nav>

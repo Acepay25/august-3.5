@@ -50,10 +50,14 @@ describe('NavRail activity bar', () => {
         expect(learn.getAttribute('aria-current')).toBe('page');
     });
 
-    it('settings + account stay pinned', () => {
+    it('the account menu is the rail\'s only settings entry', () => {
         const onOpenSettings = vi.fn();
         render(<NavRail surface="journal" onSelect={() => {}} onToggleSidebar={() => {}} onOpenSettings={onOpenSettings} username="Rober" />);
-        fireEvent.click(screen.getByRole('button', { name: /^Settings/ }));
+        // The gear is gone: it opened the same overlay as the menu's Settings
+        // row, so the rail was spending an icon on a duplicate.
+        expect(screen.queryByRole('button', { name: /^Settings/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+        fireEvent.click(screen.getByTestId('nav-settings'));
         expect(onOpenSettings).toHaveBeenCalled();
     });
 });

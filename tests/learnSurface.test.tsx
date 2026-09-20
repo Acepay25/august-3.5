@@ -1,7 +1,7 @@
 /**
- * Learn surface smoke test (WS-5.1) — the four tabs mount, switch, and show
- * the stores they claim to. StrategyStudio/MemoryFilesManager are lazy, so the
- * tab-switch assertions stay on the always-loaded Queue and Health panes.
+ * Learn surface smoke test (WS-5.1) — the three tabs mount, switch, and show
+ * the stores they claim to. MemoryFilesManager is lazy, so the tab-switch
+ * assertions stay on the always-loaded Queue and Health panes.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -45,11 +45,15 @@ const mount = (): void => {
 };
 
 describe('Learn surface', () => {
-    it('offers the loop in its own order: Queue, Skills, Memory, Health', () => {
+    it('offers the loop in its own order: Queue, Memory, Health — and no second Studio', () => {
         mount();
-        for (const tab of ['queue', 'skills', 'memory', 'health']) {
+        for (const tab of ['queue', 'memory', 'health']) {
             expect(screen.getByTestId(`learn-tab-${tab}`)).toBeTruthy();
         }
+        // StrategyStudio is the one owner of the playbook table and has its own
+        // surface (Alt+3). Mounting it here too gave it a second, half-wired
+        // copy: no onClose, so "Try in chat" was dead on this tab.
+        expect(screen.queryByTestId('learn-tab-skills')).toBeNull();
         expect(screen.getByTestId('learn-view').textContent).toContain('Skill supervisor');
     });
 
@@ -110,7 +114,7 @@ const DeepLinkHarness: React.FC = () => {
 };
 
 const currentTab = (): string =>
-    ['queue', 'skills', 'memory', 'health']
+    ['queue', 'memory', 'health']
         .find(t => screen.getByTestId(`learn-tab-${t}`).getAttribute('aria-current') === 'true') ?? 'none';
 
 describe('Learn deep link', () => {

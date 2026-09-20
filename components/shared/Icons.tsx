@@ -37,6 +37,7 @@ export {
   Lock as LockIcon,
   Settings as SettingsIcon,
   Eye as EyeIcon,
+  Pin as PinIcon,
   Star as StarIcon,
   MoreVertical as KebabMenuIcon,
   Maximize as FullscreenEnterIcon,

@@ -3,8 +3,8 @@
  * (VS Code-style). Clicking a surface switches views; clicking the active
  * icon toggles its side panel. The active icon carries the brand gradient
  * indicator.
- * At the bottom: Settings button and User Profile trigger with a floating
- * context menu (Settings, Profile, Changelog, Switch User) matching the
+ * At the bottom: the avatar and its account menu (Profile, Settings, Switch
+ * Profile) — the two actions with no other home, plus the one Settings entry.
  * reference design.
  */
 
@@ -14,9 +14,8 @@ import {
     FileTextIcon,
     SparklesIcon,
     BotIcon,
-    SettingsIcon,
 } from '../shared/Icons';
-import { User, Settings, History, LogOut, GraduationCap, Inbox } from 'lucide-react';
+import { User, Settings, LogOut, GraduationCap, Inbox } from 'lucide-react';
 import Tip from '../ui/Tip';
 import type { AppSurface } from '../../hooks/useSurface';
 
@@ -37,7 +36,6 @@ interface NavRailProps {
      *  the surfaces with a sidebar (trade) toggle it open/closed. */
     onToggleSidebar: () => void;
     onOpenSettings: (tab?: string) => void;
-    onOpenVersionHistory?: () => void;
     /** WS-5.2: the approvals items are ONE drawer, and the plan puts its entry
      *  point on this rail rather than only in the header's tray. */
     onOpenApprovals?: () => void;
@@ -71,7 +69,6 @@ const NavRail: React.FC<NavRailProps> = ({
     onSelect,
     onToggleSidebar,
     onOpenSettings,
-    onOpenVersionHistory,
     onOpenApprovals,
     approvalsCount,
     onSwitchUser,
@@ -180,18 +177,10 @@ const NavRail: React.FC<NavRailProps> = ({
                         </button>
                     </Tip>
                 )}
-                <Tip side="right" label="Settings" shortcut="Ctrl+,">
-                    <button
-                        type="button"
-                        aria-label="Settings, shortcut Ctrl+,"
-                        onClick={() => onOpenSettings()}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-200"
-                    >
-                        <SettingsIcon className="h-[18px] w-[18px]" />
-                    </button>
-                </Tip>
-
-                {/* User Avatar Button */}
+                {/* User Avatar Button — the only account/settings entry. The
+                    gear that used to sit here opened the same overlay as the
+                    menu's Settings row, so the rail spent an icon on a
+                    duplicate; Ctrl+, still works app-wide. */}
                 <button
                     ref={buttonRef}
                     type="button"
@@ -224,7 +213,9 @@ const NavRail: React.FC<NavRailProps> = ({
                             </div>
                         </div>
 
-                        {/* Menu Actions */}
+                        {/* Menu Actions. System Intelligence is NOT here — the
+                            header's history button owns it, and repeating it
+                            made this menu a second copy of the chrome. */}
                         <button
                             type="button"
                             role="menuitem"
@@ -241,9 +232,10 @@ const NavRail: React.FC<NavRailProps> = ({
                         <button
                             type="button"
                             role="menuitem"
+                            data-testid="nav-settings"
                             onClick={() => {
                                 setUserMenuOpen(false);
-                                onOpenSettings('general');
+                                onOpenSettings();
                             }}
                             className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.06] hover:text-zinc-100 transition-colors"
                         >
@@ -251,23 +243,8 @@ const NavRail: React.FC<NavRailProps> = ({
                                 <Settings className="h-3.5 w-3.5 text-zinc-400" />
                                 <span>Settings</span>
                             </div>
-                            <kbd className="font-mono text-[9px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded border border-white/5">Ctrl+,</kbd>
+                            <kbd className="rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500">Ctrl+,</kbd>
                         </button>
-
-                        {onOpenVersionHistory && (
-                            <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                    setUserMenuOpen(false);
-                                    onOpenVersionHistory();
-                                }}
-                                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.06] hover:text-zinc-100 transition-colors"
-                            >
-                                <History className="h-3.5 w-3.5 text-zinc-400" />
-                                <span>System Intelligence</span>
-                            </button>
-                        )}
 
                         <div className="my-1 border-t border-white/[0.06]" />
 

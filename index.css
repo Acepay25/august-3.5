@@ -1169,29 +1169,6 @@ body.desk-idle-motion-off {
   transition: left 0.18s var(--ease-snappy), width 0.18s var(--ease-snappy);
 }
 
-/* ===== EFFORT METER =====
-   Signal bars that make a reasoning budget legible at a glance: lit bars
-   scale with the level, so "Max" visibly costs more than "Low" without
-   reading the word. */
-.effort-meter {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 9px;
-  flex-shrink: 0;
-}
-.effort-meter i {
-  display: block;
-  width: 3px;
-  border-radius: 1px;
-  background: #2f2f2f;
-}
-.effort-meter i:nth-child(1) { height: 4px; }
-.effort-meter i:nth-child(2) { height: 6px; }
-.effort-meter i:nth-child(3) { height: 7.5px; }
-.effort-meter i:nth-child(4) { height: 9px; }
-.effort-meter i.is-lit { background: currentColor; }
-
 /* Quiet workspace grid for the empty chat canvas. It stays out of the way
    of the composer and chat content; base matches the page color (#0b0b0a). */
 .chat-hero-grid {
