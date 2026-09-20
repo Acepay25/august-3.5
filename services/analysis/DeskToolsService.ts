@@ -603,7 +603,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'get_order_book',
             description:
-                'Order-book depth: bid/ask walls and liquidity imbalance near price. Use for entry/stop placement and sweep risk. Works for ANY symbol — scan another coin without the user switching charts.',
+                'Order-book depth: bid/ask walls and liquidity imbalance near price. A REST snapshot cached up to ~30s (check `checkedAt`) -- recent liquidity, not a live stream, so never treat a wall as unmoved. Use for entry/stop placement and sweep risk. Works for ANY symbol — scan another coin without the user switching charts.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1158,7 +1158,13 @@ async function runDerivatives(symbol: string, signal?: AbortSignal): Promise<str
 
 async function runOrderBook(symbol: string): Promise<string> {
     const book = await fetchOrderBookDepth(symbol);
-    return JSON.stringify(book, null, 2);
+    // Stamped because this tool is cached for TOOL_CACHE_TTL_MS and
+    // fetchOrderBookDepth caches for 5 s beneath that -- the book a model reads
+    // can be ~35 s old, and an unstamped wall reads as current liquidity the
+    // trader could still act on. Deliberately NOT in STAMPED_TOOLS: when a
+    // cached body replays, the honest fact is WHEN it was taken, so the stamp
+    // keeps its original value instead of pretending to be now.
+    return JSON.stringify({ ...book, checkedAt: new Date().toISOString() }, null, 2);
 }
 
 async function runLiquidations(symbol: string): Promise<string> {
