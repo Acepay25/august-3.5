@@ -14,13 +14,33 @@ const LEGACY_KEY = KEY_PREFIX;
 const storageKey = (username?: string): string =>
     `${KEY_PREFIX}:${(username || 'default').trim() || 'default'}`;
 
+/** Legacy rows: an id used to be a bare millisecond timestamp, so drafts that
+ *  closed in the same millisecond shared one. `takeSkillDraft` matches by id,
+ *  so supervising one deleted its twins without ingesting either, and React
+ *  drops a child whose key repeats — the queue rendered fewer drafts than the
+ *  store held. The generator is fixed; this heals rows written before it.
+ *  Deterministic (position, not randomness) because the id a caller read a
+ *  moment earlier has to be the id takeSkillDraft resolves. */
+const healRepeatIds = (drafts: SkillDraft[]): SkillDraft[] => {
+    const seen = new Set<string>();
+    return drafts.map((draft, i) => {
+        if (!seen.has(draft.id)) {
+            seen.add(draft.id);
+            return draft;
+        }
+        const healed = `${draft.id}#${i}`;
+        seen.add(healed);
+        return { ...draft, id: healed };
+    });
+};
+
 const read = (username?: string): SkillDraft[] => {
     try {
         const scopedKey = storageKey(username);
         const raw = localStorage.getItem(scopedKey)
             ?? (!username ? localStorage.getItem(LEGACY_KEY) : null);
         const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed) ? healRepeatIds(parsed) : [];
     } catch {
         return [];
     }
