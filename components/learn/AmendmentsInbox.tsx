@@ -1,8 +1,8 @@
 /**
- * AmendmentsInbox — Settings → Memory review surface for model-proposed
- * notebook corrections. Approve applies the change through the notebook
- * write lock (provenance preserved); reject tombstones the proposal so
- * repeat suggestions of the same correction stay visible.
+ * AmendmentsInbox — the Learn → Queue surface for model-proposed notebook
+ * corrections. Approve applies the change through the notebook write lock
+ * (provenance preserved); reject tombstones the proposal so repeat
+ * suggestions of the same correction stay visible.
  */
 
 import React from 'react';

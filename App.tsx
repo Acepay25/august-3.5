@@ -46,7 +46,6 @@ import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 import AutomationView from './components/automation/AutomationView';
 import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CloseIcon } from './components/shared/Icons';
-import BotManagerDrawer from './components/bots/BotManagerDrawer';
 
 // Lazy-load heavy, conditionally-rendered components so the initial
 // bundle stays small. Previously the entire app was one ~1.73 MB chunk.
@@ -80,6 +79,7 @@ const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
+const BotSeatOverridesDialog = React.lazy(() => import('./components/agents/BotSeatOverridesDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
@@ -221,7 +221,7 @@ const App: React.FC = () => {
     const [isApprovalInboxVisible, setIsApprovalInboxVisible] = useState(false);
     /** Background-jobs drawer (status-stack pattern). */
     const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
-    const [isBotManagerVisible, setIsBotManagerVisible] = useState(false);
+    const [seatOverridesBot, setSeatOverridesBot] = useState<AgentBot | null>(null);
     const applyingHashRef = useRef(false);
 
     // Lazy-on-demand: only mount the legacy StrategySearch + Analytics side
@@ -1686,34 +1686,6 @@ const App: React.FC = () => {
         })();
     }, [providerConfigsLoaded, providerConfigs, lensConfig, ensembleModelSelection]);
 
-    const syncBotsFromTeam = useCallback(async (): Promise<void> => {
-        const bots = await BotRegistry.list();
-        if (bots.length === 0) return;
-        let changed = false;
-        if (lensConfig.enabled) {
-            for (const a of lensConfig.assignments) {
-                if (!a.assignedProvider || !a.role) continue;
-                const match = bots.find(b => b.role === a.role);
-                if (!match) continue;
-                const provider = providerConfigs.find(p => p.id === a.assignedProvider);
-                const model = a.assignedModel || provider?.selectedModel || provider?.models[0];
-                if (!model || (match.providerId === a.assignedProvider && match.model === model)) continue;
-                await BotRegistry.upsert({ ...match, providerId: a.assignedProvider, model });
-                changed = true;
-            }
-        } else {
-            for (let i = 0; i < Math.min(bots.length, ensembleModelSelection.length); i++) {
-                const e = ensembleModelSelection[i];
-                if (!e?.providerId || !e.model) continue;
-                const bot = bots[i];
-                if (!bot || (bot.providerId === e.providerId && bot.model === e.model)) continue;
-                await BotRegistry.upsert({ ...bot, providerId: e.providerId, model: e.model });
-                changed = true;
-            }
-        }
-        if (changed) toast.success('Bots synced from Team');
-    }, [lensConfig, ensembleModelSelection, providerConfigs, toast]);
-
     // ToolForge + memory amendments: models can PROPOSE mid-debate; the
     // user only sees them in Settings, so surface each arrival as a toast
     // (the tool result already tells the model it landed as a candidate).
@@ -1823,7 +1795,6 @@ const App: React.FC = () => {
     // resolutions, and the deferred watch-list actions.
     const {
         autopilotResolutions, setAutopilotResolutions,
-        handleApprovalShow,
         handleToggleWatch,
         watchedSignals,
         watchOpenR,
@@ -1836,10 +1807,18 @@ const App: React.FC = () => {
         messages, conversationHistory, loggedTrades,
         activeConversationId, activeConversation, updateMessages, messagesRef,
         stableHandleSendMessage, handleLoadConversation,
-        setHighlightedAnalysisId, setIsApprovalInboxVisible, setIsWatchListVisible,
+        setHighlightedAnalysisId, setIsWatchListVisible,
         confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
         confirmAutopilotRef, toast,
     });
+
+    /** Drives the dock's Pin chip. The flag lives on the Message, so a chat
+     *  entry is pinable only through the analysis message id the bridge
+     *  stamped on it (TradeChatPanel's data-message-id). */
+    const pinnedMessageIds = useMemo(
+        () => new Set(messages.filter(m => m.watched).map(m => m.id)),
+        [messages],
+    );
 
     const handleStartNewConversation = handleNewConversation;
 
@@ -1970,22 +1949,27 @@ const App: React.FC = () => {
             // The canonical handler — persists the toggle (raw setter reverted on reload).
             run: () => handleSetLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
         },
-        {
+        // Offered only when there is a debate to project — the overlay itself
+        // needs deskSceneMessage, so before the first run this toggled state
+        // that rendered nothing (same gate as the dock's 2D button).
+        ...(isDeskSceneOpen || deskSceneMessage ? [{
             id: 'desk-view',
             label: isDeskSceneOpen ? 'Close desk view' : 'Open desk view',
             hint: 'Debate',
-            // Opt-in overlay projecting the current debate as a room of seat cards.
             run: () => setIsDeskSceneOpen(v => !v),
-        },
+        }] : []),
         {
             id: 'watch-list',
-            label: 'Open Watch list',
+            label: 'Open Pinned signals',
             hint: `${watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length} open`,
             run: () => setIsWatchListVisible(true),
         },
         {
-            id: 'saved-analyses',
-            label: 'Open Saved Analyses',
+            // Distinct id + label from the 'saved-analyses' archive row above:
+            // two actions sharing one id gave CommandPalette duplicate React
+            // keys and two menu entries reading "Open Saved Analyses".
+            id: 'saved-gallery',
+            label: 'Open Analysis Gallery',
             hint: `${savedAnalyses.length} saved`,
             run: () => setIsSavedGalleryOpen(true),
         },
@@ -2007,7 +1991,7 @@ const App: React.FC = () => {
             hint: 'Messages',
             run: () => { void handleClearChat(); },
         },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, openJournal, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals]);
+    ], [handleScrollToBottom, input, stableHandleSendMessage, openJournal, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals, isDeskSceneOpen, deskSceneMessage]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -2992,8 +2976,6 @@ const App: React.FC = () => {
                 onOpenWatchList={() => setIsWatchListVisible(true)}
                 watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                 watchOpenR={watchOpenR}
-                onOpenApprovals={() => setIsApprovalInboxVisible(true)}
-                approvalCount={approvalItems.length}
                 onOpenJobs={() => setIsJobsDrawerVisible(true)}
                 onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             />
@@ -3032,8 +3014,15 @@ const App: React.FC = () => {
                     onAlways={approvalHandlers.always}
                     onNever={approvalHandlers.never}
                     onOpen={(item) => {
-                        setHighlightedAnalysisId(item.messageId);
                         setIsApprovalInboxVisible(false);
+                        // The dock owns the only transcript scroller, and it
+                        // registers its bridge on mount — so from another
+                        // surface this can honestly do one thing: land the
+                        // user on Trade. Calling the bridge there would be a
+                        // null deref that silently scrolls nothing.
+                        const dockIsMounted = surface === 'trade';
+                        setSurface('trade');
+                        if (dockIsMounted) handleLocateMessage(item.messageId);
                     }}
                 />
             </React.Suspense>
@@ -3095,7 +3084,6 @@ const App: React.FC = () => {
                         if (tab) setSettingsInitialTab(tab);
                         setIsSettingsMenuVisible(true);
                     }}
-                    onOpenVersionHistory={handleOpenVersionHistory}
                     onOpenApprovals={() => setIsApprovalInboxVisible(true)}
                     approvalsCount={approvalItems.length}
                     onSwitchUser={handleSwitchUser}
@@ -3145,6 +3133,8 @@ const App: React.FC = () => {
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
                                     onToggleDeskScene={() => setIsDeskSceneOpen(v => !v)}
+                                    onToggleWatch={handleToggleWatch}
+                                    pinnedMessageIds={pinnedMessageIds}
                                     isDeskSceneOpen={isDeskSceneOpen}
                                     hasDeskSceneMessage={!!deskSceneMessage}
                                     renderCoachSurface={() => (
@@ -3223,7 +3213,6 @@ const App: React.FC = () => {
                                     memoryConfig={memoryConfig}
                                     initialTab={learnTab}
                                     onInitialTabConsumed={learnTabConsumed}
-                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
                                 />
                             </React.Suspense>
                         )}
@@ -3265,6 +3254,7 @@ const App: React.FC = () => {
                                     onRunRoutine={runRoutineFromRail}
                                     onDeleteBot={deleteBot}
                                     onRenameBot={(botId, name) => updateBot(botId, { name })}
+                                    onEditSeatOverrides={setSeatOverridesBot}
                                     renderCoach={() => (
                                         <React.Suspense fallback={null}>
                                             <CoachThreadPanel onAllowDraft={coachAllowDraft} onDenyDraft={coachDenyDraft} />
@@ -3475,7 +3465,11 @@ const App: React.FC = () => {
                     />
                 </React.Suspense>
             )}
-            <BotManagerDrawer open={isBotManagerVisible} onClose={() => setIsBotManagerVisible(false)} onSyncFromTeam={syncBotsFromTeam} />
+            {seatOverridesBot && (
+                <React.Suspense fallback={null}>
+                    <BotSeatOverridesDialog open bot={seatOverridesBot} onClose={() => setSeatOverridesBot(null)} />
+                </React.Suspense>
+            )}
         </div>
         </React.Suspense>
     );

@@ -79,7 +79,12 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                                         <button type="button" onClick={() => onDeny(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500">Discard</button>
                                     </>
                                 )}
-                                <button type="button" onClick={() => onOpen(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-300">Show</button>
+                                {/* A skill draft's messageId is the trade it was
+                                    drafted from, not a transcript entry — there
+                                    is nothing here to locate. */}
+                                {item.kind !== 'skill' && (
+                                    <button type="button" onClick={() => onOpen(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-300">Show</button>
+                                )}
                             </div>
                         </div>
                     ))}

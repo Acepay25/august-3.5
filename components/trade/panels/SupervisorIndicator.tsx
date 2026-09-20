@@ -9,15 +9,18 @@
  */
 
 import React, { useSyncExternalStore } from 'react';
-import { Brain, Gavel, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { Brain, Eye, Gavel, Search, ShieldCheck, Zap } from 'lucide-react';
 import * as supervisorStore from '../../../services/learning/supervisorStore';
 import type { SupervisorPhase } from '../../../services/learning/supervisorStore';
 
+/** Deliberately no Sparkles: that glyph is the Studio's identity (NavRail), and
+ *  this sits in every chat header — two stars that mean different things read
+ *  as one feature with two names. */
 const PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
-    idle: <Sparkles className="h-4 w-4" />,
+    idle: <Eye className="h-4 w-4" />,
     reviewing: <Search className="h-4 w-4" />,
     verifying: <ShieldCheck className="h-4 w-4" />,
-    enhancing: <Sparkles className="h-4 w-4" />,
+    enhancing: <Zap className="h-4 w-4" />,
     deciding: <Gavel className="h-4 w-4" />,
     learning: <Brain className="h-4 w-4" />,
 };

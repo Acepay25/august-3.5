@@ -68,7 +68,11 @@ describe('TradeView: forwards the bridge to the dock', () => {
 
 describe('TradeChatPanel: renders the ids the bridge looks up', () => {
     it('entry wrappers carry data-entry-id + data-message-id without layout changes', () => {
-        expect(panelSrc).toMatch(/data-entry-id=\{e\.id\} data-message-id=\{analysisMessageIds\[e\.id\] \?\? e\.id\}/);
+        // The App message id is read once per entry (the Pin chip needs the
+        // same value), and the wrapper still stamps both ids on one attribute
+        // pair — no layout change.
+        expect(panelSrc).toMatch(/const analysisId = analysisMessageIds\[e\.id\];/);
+        expect(panelSrc).toMatch(/data-entry-id=\{e\.id\} data-message-id=\{analysisId \?\? e\.id\}/);
         expect(panelSrc).toMatch(/registerScrollToMessage\?: \(fn: \(\(messageId: string\) => void\) \| null\) => void/);
         // The registered function centers the target with a smooth scroll,
         // and the cleanup unregisters (null).

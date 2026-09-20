@@ -688,8 +688,6 @@ Please investigate this discrepancy in your analysis.
                         rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };
                     jobQueue.addJob(JobType.EXTRACT_INSIGHTS, tradeWithPM);
-                    // EXTRACT_RULES retired: IF/THEN lessons live
-                    // in skills now (ingestIfThenFromTrade runs below).
                 } catch (insightError) {
                     console.error('[AI Learning] Failed to queue background jobs:', insightError);
                 }

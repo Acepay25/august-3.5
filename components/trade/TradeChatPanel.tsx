@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
+import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Pin, Plus, RotateCcw, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
@@ -93,7 +93,6 @@ import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { copyText } from '../../utils/clipboard';
 import { TASK_BUDGETS } from '../../services/providers/taskBudgets';
 import { effortForTask, ReasoningEffort } from '../../services/providers/reasoningControls';
-import { useSmoothStreamText } from '../../hooks/useSmoothStreamText';
 import ModelPicker from '../shared/ModelPicker';
 import { SendIcon, StopIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
@@ -192,6 +191,12 @@ interface TradeChatPanelProps {
     hasDeskSceneMessage?: boolean;
     /** Triggers a fresh discovery of models from configured providers. */
     onRefreshModels?: () => Promise<void>;
+    /** Pin / unpin the signal behind an entry. Only entries that carry an
+     *  App-side analysis message id can be pinned — a plain chat answer has no
+     *  setup to track, and the Pinned list reads the flag off the message. */
+    onToggleWatch?: (messageId: string) => void;
+    /** Message ids currently pinned, so the chip shows the real state. */
+    pinnedMessageIds?: ReadonlySet<string>;
 }
 
 const TRADE_TOOLS = [
@@ -265,28 +270,17 @@ export const __clearProposalStateForTests = (): void => { proposalDisposition.cl
  *  that wait for approval in the Inbox. */
 const SCAN_SKILLS_PROMPT = 'Scan the full candle history of this chart with scan_chart_skills: study how the price actually moved (regimes, swings, gaps) and which entries have historically worked, then draft your best IF/THEN skill candidates from what the tape proves. Tell me what you found and what is waiting in the Inbox.';
 
-/** Thinking-budget levels. `bars` drives the signal-meter so the cost of a
- *  choice is visible without reading the word — `auto` gets a spark instead
- *  of bars because it isn't a budget, it's "pick per task". Warm amber marks
- *  the two settings that actually spend more. */
-const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string; bars: number | 'auto'; tone: string }[] = [
-    { id: 'off', label: 'Off', bars: 0, tone: 'text-zinc-600' },
-    { id: 'auto', label: 'Auto', bars: 'auto', tone: 'text-cyan-400' },
-    { id: 'low', label: 'Low', bars: 1, tone: 'text-zinc-300' },
-    { id: 'medium', label: 'Medium', bars: 2, tone: 'text-zinc-300' },
-    { id: 'high', label: 'High', bars: 3, tone: 'text-amber-400' },
-    { id: 'max', label: 'Max', bars: 4, tone: 'text-amber-400' },
+/** Thinking-budget levels. The words are the whole readout: `auto` is not a
+ *  budget but "pick per task", so it stays a peer of the tiers, not a bar
+ *  count between Off and Low. */
+const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string }[] = [
+    { id: 'off', label: 'Off' },
+    { id: 'auto', label: 'Auto' },
+    { id: 'low', label: 'Low' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'high', label: 'High' },
+    { id: 'max', label: 'Max' },
 ];
-
-const EffortMeter: React.FC<{ bars: number | 'auto'; tone: string }> = ({ bars, tone }) => (
-    bars === 'auto'
-        ? <Sparkles className={`h-2.5 w-2.5 ${tone}`} aria-hidden="true" />
-        : (
-            <span className={`effort-meter ${tone}`} aria-hidden="true">
-                {[1, 2, 3, 4].map(n => <i key={n} className={n <= bars ? 'is-lit' : ''} />)}
-            </span>
-        )
-);
 
 /** The trigger and the open menu show the same read for the same id — one
  *  lookup keeps them from drifting. */
@@ -315,6 +309,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
+    onToggleWatch, pinnedMessageIds,
     onRefreshModels,
 }) => {
     // Session state lives in the module store (chatStore) so an in-flight
@@ -1552,7 +1547,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 })()}
                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} />
-                    {onToggleDeskScene && (
+                    {/* The overlay needs a debate message to project, so before
+                        the first run this button could only ever do nothing. */}
+                    {onToggleDeskScene && (hasDeskSceneMessage || isDeskSceneOpen) && (
                         <button
                             type="button"
                             onClick={onToggleDeskScene}
@@ -1741,8 +1738,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     // from the bubble too, so the protocol never flashes.
                     const aiLevels = e.role === 'ai' && !e.notice ? parseKeyLevels(e.text) : null;
                     const shownText = aiLevels?.hadBlock ? aiLevels.clean : e.text;
+                    const analysisId = analysisMessageIds[e.id];
                     return (
-                    <div key={e.id} className="chat-fade-in" data-entry-id={e.id} data-message-id={analysisMessageIds[e.id] ?? e.id} data-testid={`chat-entry-${e.role}`}>
+                    <div key={e.id} className="chat-fade-in" data-entry-id={e.id} data-message-id={analysisId ?? e.id} data-testid={`chat-entry-${e.role}`}>
                         {e.role === 'user' ? (
                             <div className="flex flex-col items-end gap-1">
                                 {e.image && (
@@ -1779,6 +1777,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 {shownText && !e.streaming && (
                                     <div className="flex items-center gap-2">
                                         <CopyChip text={shownText} />
+                                        {onToggleWatch && analysisId && pinnedMessageIds && (
+                                            <PinChip pinned={pinnedMessageIds.has(analysisId)}
+                                                onToggle={() => onToggleWatch(analysisId)} />
+                                        )}
                                     </div>
                                 )}
                                 {/* The one "what the AI remembered" row. Once the
@@ -1924,7 +1926,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 className="flex items-center gap-1.5 rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
                                 <Brain className="h-3.5 w-3.5" />
                                 {effortChoiceOf(effort).label}
-                                <EffortMeter bars={effortChoiceOf(effort).bars} tone={effortChoiceOf(effort).tone} />
                                 <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[var(--ease-snappy)] ${showEffortMenu ? 'rotate-180' : ''}`} />
                             </button>
                             {showEffortMenu && (
@@ -1950,10 +1951,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                                 // is what makes Escape and Tab reach the menu.
                                                 autoFocus={effort === c.id}
                                                 onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
-                                                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
+                                                className={`block w-full rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
                                             >
                                                 {c.label}
-                                                <EffortMeter bars={c.bars} tone={c.tone} />
                                             </button>
                                         ))}
                                     </div>
@@ -2025,15 +2025,37 @@ const CopyChip: React.FC<{ text: string; className?: string }> = ({ text, classN
     );
 };
 
-/** Streams in with a smooth reveal + fade as text lands (the reference's
- *  rendering feel): freshly-appended text fades in, settled text is static. */
-const FadingText: React.FC<{ text: string; streaming: boolean }> = ({ text, streaming }) => {
-    const shown = useSmoothStreamText(text, streaming);
-    return (
-        <div className={streaming ? 'stream-fade' : undefined}>
-            <MarkdownContent content={shown} className="!text-[12px] [&_p]:my-1 [&_li]:text-[12px]" />
-        </div>
-    );
-};
+/** Pin this verdict to the Pinned list. Unlike the copy/retry chips it stays
+ *  visible once set: the hover-reveal helps you FIND the control, but hiding a
+ *  pinned signal's own state would leave the list unexplainable. */
+const PinChip: React.FC<{ pinned: boolean; onToggle: () => void }> = ({ pinned, onToggle }) => (
+    <button type="button"
+        onClick={onToggle}
+        aria-pressed={pinned}
+        aria-label={pinned ? 'Unpin this signal' : 'Pin this signal'}
+        title={pinned
+            ? 'Pinned — tracked in the Pinned list (header tray). Click to remove.'
+            : 'Pin this signal to the Pinned list. It tracks the setup; it does not arm a price trigger.'}
+        className={`flex items-center gap-1 rounded-control px-1.5 py-0.5 text-[10px] transition-opacity hover:bg-white/[0.06] focus:opacity-100 ${
+            pinned ? 'text-zinc-100' : 'text-zinc-500 opacity-0 hover:text-zinc-200 group-hover/msg:opacity-100'
+        }`}>
+        <Pin className="h-3 w-3" />
+        <span>{pinned ? 'Pinned' : 'Pin'}</span>
+    </button>
+);
+
+/** Every character the store holds, every render. The reveal used to be a
+ *  requestAnimationFrame-driven prefix of the text, which silently withheld
+ *  content: measured on a 4,800-char answer, only 1,728 characters were in the
+ *  DOM while the window was hidden (rAF fired 0 times in 400ms). The tail was
+ *  unrendered and therefore unscrollable, while the Copy chip — handed the
+ *  full string — revealed that the model had answered completely. The chunks
+ *  arriving from the provider already give the typewriter feel; the fade here
+ *  is CSS-only and can never eat text. */
+const FadingText: React.FC<{ text: string; streaming: boolean }> = ({ text, streaming }) => (
+    <div className={streaming ? 'stream-fade' : undefined}>
+        <MarkdownContent content={text} className="!text-[12px] [&_p]:my-1 [&_li]:text-[12px]" />
+    </div>
+);
 
 export default React.memo(TradeChatPanel);

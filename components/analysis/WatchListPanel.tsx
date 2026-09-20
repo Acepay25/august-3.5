@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { TradeOutcome } from '../../types';
-import { CloseIcon, EyeIcon } from '../shared/Icons';
+import { CloseIcon, PinIcon } from '../shared/Icons';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import { signalDirectionLabel } from '../../utils/analysisUtils';
@@ -51,14 +51,14 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
     if (!isVisible) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/50 sm:items-stretch" role="dialog" aria-label="Watch list">
-            <button type="button" className="absolute inset-0 cursor-default" aria-label="Close watch list overlay" onClick={onClose} />
+        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/50 sm:items-stretch" role="dialog" aria-label="Pinned signals">
+            <button type="button" className="absolute inset-0 cursor-default" aria-label="Close pinned signals overlay" onClick={onClose} />
             <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                    <EyeIcon className="h-4 w-4 text-zinc-300" />
-                    <h2 className="text-sm font-semibold text-zinc-100">Watch list</h2>
+                    <PinIcon className="h-4 w-4 text-zinc-300" />
+                    <h2 className="text-sm font-semibold text-zinc-100">Pinned signals</h2>
                     <span className="text-[11px] text-zinc-500">{openCount} open</span>
-                    <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close watch list">
+                    <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close pinned signals">
                         <CloseIcon className="h-4 w-4" />
                     </button>
                 </div>
@@ -81,7 +81,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                     {visible.length === 0 ? (
                         <p className="px-2 py-8 text-center text-[13px] text-zinc-500">
                             {filter === 'open'
-                                ? 'No pinned setups yet. Open a trading signal and tap Pin.'
+                                ? 'Nothing pinned yet. Hover a settled verdict in Chart AI and tap Pin.'
                                 : 'Nothing in this filter.'}
                         </p>
                     ) : visible.map(signal => {

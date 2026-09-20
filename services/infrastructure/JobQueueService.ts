@@ -13,10 +13,7 @@ import {
     extractAndRecordProviderInsights
 } from '../learning/severityInsights';
 export enum JobType {
-    EXTRACT_INSIGHTS = 'EXTRACT_INSIGHTS',
-    /** Retired: IF/THEN lessons live in skills. Kept as a string
-     *  for queued-job backward compatibility; no handler runs it. */
-    EXTRACT_RULES = 'EXTRACT_RULES'
+    EXTRACT_INSIGHTS = 'EXTRACT_INSIGHTS'
 }
 
 export interface JobResult {
@@ -34,8 +31,16 @@ export interface Job {
     retries: number;
 }
 
+/** How many finished jobs the queue keeps for the Jobs drawer to show. */
+const RECENT_CAP = 20;
+
 class JobQueueService {
     private queue: Job[] = [];
+    /** Finished work, newest first. The queue itself shifts a job off the
+     *  moment it settles, so without this the drawer's "Queued / recent"
+     *  section could only ever list work still in flight — a completed or
+     *  failed job was invisible the instant it became interesting. */
+    private recent: Job[] = [];
     private isProcessing = false;
     private listeners: ((job: Job) => void)[] = [];
 
@@ -77,9 +82,9 @@ class JobQueueService {
         return this.queue.length;
     }
 
-    /** Snapshot of every tracked job (Jobs drawer). Newest first. */
+    /** Live work (newest first) then the finished jobs still on hand. */
     getJobs(): Job[] {
-        return [...this.queue].reverse();
+        return [...this.queue].reverse().concat(this.recent);
     }
 
     /**
@@ -110,6 +115,10 @@ class JobQueueService {
 
                 // Notify listeners (success or failure)
                 this.notifyListeners(job);
+
+                // Keep the settled job visible for the drawer before dropping it.
+                this.recent.unshift(job);
+                if (this.recent.length > RECENT_CAP) this.recent.pop();
 
                 // Remove from queue
                 this.queue.shift();

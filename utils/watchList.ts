@@ -42,7 +42,7 @@ export const appendWatchEpisode = (message: Message, kind: WatchEpisode['kind'],
 
 export const toggleWatchOnMessage = (message: Message, watch: boolean): Message => {
     if (!watch) {
-        return appendWatchEpisode({ ...message, watched: false, watchedAt: undefined }, 'unwatched', 'Removed from Watch list');
+        return appendWatchEpisode({ ...message, watched: false, watchedAt: undefined }, 'unwatched', 'Unpinned from the list');
     }
     if (!canWatchSignal(message)) return message;
     const pinned = {
@@ -50,5 +50,5 @@ export const toggleWatchOnMessage = (message: Message, watch: boolean): Message 
         watched: true,
         watchedAt: message.watchedAt || new Date().toISOString(),
     };
-    return appendWatchEpisode(pinned, 'watched', 'Pinned to Watch list');
+    return appendWatchEpisode(pinned, 'watched', 'Pinned to the list');
 };
