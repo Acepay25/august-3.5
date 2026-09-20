@@ -20,7 +20,6 @@ export interface UseWatchAndAutopilotArgs {
      *  (and re-render every visible MessageItem) per stream chunk. */
     stableHandleSendMessage: (...args: any[]) => any;
     handleLoadConversation: (id: string) => void;
-    setHighlightedAnalysisId: (id: string | null) => void;
     setIsWatchListVisible: (open: boolean) => void;
     confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any) => void;
     confirmAutopilotEntryNotHit: (msg: Message) => void;
@@ -64,7 +63,7 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         messages, conversationHistory, loggedTrades,
         activeConversationId, activeConversation, updateMessages, messagesRef,
         stableHandleSendMessage, handleLoadConversation,
-        setHighlightedAnalysisId, setIsWatchListVisible,
+        setIsWatchListVisible,
         confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
         confirmAutopilotRef, toast,
     } = args;
@@ -115,9 +114,8 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
 
     const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
         handleLoadConversation(conversationId);
-        setHighlightedAnalysisId(messageId);
         setIsWatchListVisible(false);
-    }, [handleLoadConversation, setHighlightedAnalysisId, setIsWatchListVisible]);
+    }, [handleLoadConversation, setIsWatchListVisible]);
 
     // ─── Outcome autopilot ──────────────────────────────────────────────
     const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});

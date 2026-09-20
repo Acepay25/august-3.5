@@ -37,7 +37,6 @@ import {
 } from '../services/learning/PatternMemorySynthesisService';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { SetupWatchService } from '../services/ui/SetupWatchService';
 import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import { storageService } from '../services/infrastructure/StorageService';
@@ -104,7 +103,6 @@ export interface UseUserProfileLoaderArgs {
     setInput: React.Dispatch<React.SetStateAction<string>>;
     setImages: React.Dispatch<React.SetStateAction<any[]>>;
     setExpandedPostMortems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-    setHighlightedAnalysisId: React.Dispatch<React.SetStateAction<string | null>>;
     setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 
     setActiveUsername: (u: string) => void;
@@ -138,7 +136,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled,
         setIsEnsembleEnabled, setIsAutoCapturing, setIsUpdateAutoCapturing,
         setIsEntryNotHitCapturing, setConfidenceCalibration, setAutopilotResolutions,
-        setInput, setImages, setExpandedPostMortems, setHighlightedAnalysisId,
+        setInput, setImages, setExpandedPostMortems,
         setIsLoading, setActiveUsername, setExistingUsernames, setIsUserModalOpen,
         toast,
     } = args;
@@ -246,7 +244,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         // (watchService/levelWatchService scope themselves per user.)
         OutcomeAutopilotService.reset();
         PriceAlertService.reset();
-        SetupWatchService.reset();
         offlineQueue.setActiveUser(username);
 
         setAutopilotResolutions({});
@@ -308,8 +305,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             // outgoing profile until this load's tail commits it).
             if (isStale()) return;
             await PriceAlertService.init(username);
-            if (isStale()) return;
-            await SetupWatchService.init(username);
             if (isStale()) return;
             await OutcomeAutopilotService.init(username);
             if (isStale()) return;
@@ -489,7 +484,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             localStorage.setItem('last_active_user', username);
             profileSelectionStartedRef.current = true;
             setIsUserModalOpen(false);
-            setHighlightedAnalysisId(null);
             setIsLoading(false);
             setProfileReady(true);
         } catch (error) {
@@ -511,7 +505,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setActiveFrameworks, setActiveUsername, setAccuracySubMode,
         setAutopilotResolutions, setConfidenceCalibration, setConversationHistory,
         setCustomInstructions, setFinalTradeSummary, setGlobalMemory,
-        setHighlightedAnalysisId, setInsightKnowledgeBase, setIsAccuracyModeEnabled,
+        setInsightKnowledgeBase, setIsAccuracyModeEnabled,
         setIsAutoCapturing, setIsEnsembleEnabled, setIsEntryNotHitCapturing,
         setIsFamiliesEnabledInPureAI, setIsGlobalMemoryEnabled,
         setIsHybridIntelligenceEnabled, setIsLoading, setIsMemoryEnabledInPureAI,

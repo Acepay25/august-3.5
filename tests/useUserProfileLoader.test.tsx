@@ -3,7 +3,6 @@ import { renderHook, act } from '@testing-library/react';
 import { useUserProfileLoader, UseUserProfileLoaderArgs } from '../hooks/useUserProfileLoader';
 import * as dbService from '../services/infrastructure/dbService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { SetupWatchService } from '../services/ui/SetupWatchService';
 import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { initPromptOverrides } from '../services/infrastructure/PromptOverrideService';
@@ -85,10 +84,6 @@ vi.mock('../services/ui/PriceAlertService', () => ({
     // loadUserData now calls reset() (switch path) + init(username), both
     // before and inside its stale-write-guarded sequence.
     PriceAlertService: { init: vi.fn().mockResolvedValue(undefined), reset: vi.fn() },
-}));
-
-vi.mock('../services/ui/SetupWatchService', () => ({
-    SetupWatchService: { init: vi.fn().mockResolvedValue(undefined), reset: vi.fn() },
 }));
 
 vi.mock('../services/ui/OutcomeAutopilotService', () => ({
@@ -176,7 +171,6 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setInput: vi.fn(),
     setImages: vi.fn(),
     setExpandedPostMortems: vi.fn(),
-    setHighlightedAnalysisId: vi.fn(),
     setIsLoading: vi.fn(),
     setActiveUsername: vi.fn(),
     setExistingUsernames: vi.fn(),
@@ -318,11 +312,9 @@ describe('useUserProfileLoader', () => {
         // alerts/watches/registrations/queue across the switch.
         expect(OutcomeAutopilotService.reset).toHaveBeenCalled();
         expect(PriceAlertService.reset).toHaveBeenCalled();
-        expect(SetupWatchService.reset).toHaveBeenCalled();
         expect(offlineQueue.setActiveUser).toHaveBeenCalledWith('bob');
         // And the monitoring inits get the INCOMING username explicitly.
         expect(PriceAlertService.init).toHaveBeenCalledWith('bob');
-        expect(SetupWatchService.init).toHaveBeenCalledWith('bob');
         expect(OutcomeAutopilotService.init).toHaveBeenCalledWith('bob');
     });
 

@@ -68,7 +68,8 @@ class VetoLedgerServiceClass {
     private unsubscribePrices: (() => void) | null = null;
     private releaseMonitor: (() => void) | null = null;
     private initializedUsers = new Set<string>();
-    // Serialize preference writes (same pattern as SetupWatchService).
+    // Serialize preference writes (the same save-chain pattern the autopilot
+    // uses).
     private saveChain: Promise<void> = Promise.resolve();
 
     async init(username: string): Promise<void> {

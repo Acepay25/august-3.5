@@ -215,12 +215,12 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         expect(writtenKeys).toContain(PREF_KEYS.PRICE_ALERTS);
     });
 
-    it('restores the per-user learning/setup keys and the exported singleton keys (allow-list data-loss fix)', async () => {
+    it('restores the per-user learning/automation keys and the exported singleton keys (allow-list data-loss fix)', async () => {
         // These are all WRITTEN via setPreferenceObject (or JSON localStorage),
         // so the export sweep captures them — they must come back on restore
         // instead of being silently skipped (audit F1 data loss).
         const report = await importPreferencesData({
-            'setup_watches_v1_alice': [{ id: 'w1', symbol: 'BTCUSDT' }],
+            'automation_runs_v1_alice': [{ id: 'r1', ok: true }],
             'learning_judge_gate_v1_alice': { precision: 0.91, samples: 40, recordedAt: 'x' },
             'learning_measure_v1_alice': [],
             'model_catalog_sweep_v1': { lastSweepAt: 1726400000000 },
@@ -232,7 +232,7 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         });
         expect(report.skippedKeys).toEqual([]);
         expect(report.keysWritten).toBe(9);
-        expect(prefStore['setup_watches_v1_alice']).toEqual([{ id: 'w1', symbol: 'BTCUSDT' }]);
+        expect(prefStore['automation_runs_v1_alice']).toEqual([{ id: 'r1', ok: true }]);
         expect(prefStore['learning_judge_gate_v1_alice']).toEqual({ precision: 0.91, samples: 40, recordedAt: 'x' });
         expect(prefStore['learning_measure_v1_alice']).toEqual([]);
         expect(prefStore['thinking_leak_bin_v1']).toEqual([{ at: 'x', snippet: 'y' }]);

@@ -5,7 +5,7 @@ import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 // Apply the user's persisted idle-motion preference to <body> on app
 // startup so the desk view mounts with the correct class.
 reapplyIdleMotionClass();
-import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
+import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
@@ -141,7 +141,6 @@ import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettin
 import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
-import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurface, type AppSurface } from './hooks/useSurface';
@@ -491,7 +490,6 @@ const App: React.FC = () => {
         selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
         copiedMessageId, setCopiedMessageId,
-        highlightedAnalysisId, setHighlightedAnalysisId,
         expandedPostMortemImages, setExpandedPostMortemImages,
         expandedPostMortems, setExpandedPostMortems,
         postMortemCandidate, setPostMortemCandidate,
@@ -839,7 +837,6 @@ const App: React.FC = () => {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        setHighlightedAnalysisId,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
@@ -1539,7 +1536,6 @@ const App: React.FC = () => {
         const index = messages.findIndex(m => m.id === messageId);
         if (index >= 0) {
             scrollToMessageRef.current?.(messageId);
-            setHighlightedAnalysisId(messageId);
         }
         setIsSavedGalleryOpen(false);
     }, [messages]);
@@ -1807,7 +1803,7 @@ const App: React.FC = () => {
         messages, conversationHistory, loggedTrades,
         activeConversationId, activeConversation, updateMessages, messagesRef,
         stableHandleSendMessage, handleLoadConversation,
-        setHighlightedAnalysisId, setIsWatchListVisible,
+        setIsWatchListVisible,
         confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
         confirmAutopilotRef, toast,
     });
@@ -1879,7 +1875,6 @@ const App: React.FC = () => {
         }
         if (!targetId) return;
         scrollToMessageRef.current?.(targetId);
-        setHighlightedAnalysisId(null);
     };
 
     const commandPaletteActions = useMemo<PaletteAction[]>(() => [
@@ -2207,46 +2202,6 @@ const App: React.FC = () => {
     }, [activeConversation, handleCancelAnalysis, messagesRef, toast]);
 
 
-    // ─── Price-triggered re-debate ("watch this setup") ────────────────────
-    // A setup watch fires → launch a fresh debate for the same setup with the
-    // previous verdict as context. In-flight runs re-arm the watch instead so
-    // the next price tick (≤10s polling) launches once the pipeline frees up.
-    // The guard reads isAnalysisInProgress DIRECTLY: a ref synced via an
-    // effect lagged by one effect cycle, so a fire landing in that window was
-    // dropped — and since rearmWatch had already re-armed, the watch lost its
-    // fire-once while staying TRIGGERED.
-
-    const launchRedeBate = useCallback((watch: SetupWatch) => {
-        const payload = buildRerunPayload(watch.messageId);
-        if (!payload) {
-            toast.warning('Watch triggered', `No original prompt found for ${watch.coinName} — re-debate skipped.`);
-            return;
-        }
-        const card = messagesRef.current.find(m => m.id === watch.messageId);
-        const a = card?.analysis;
-        const verdict = a
-            ? `Previous verdict: ${a.direction || 'Neutral'} · confidence ${a.confidence || 'N/A'} · probability ${a.probability != null ? `${a.probability}%` : 'N/A'}.`
-            : 'No previous verdict available.';
-        const hidden = `Price-triggered re-debate for ${watch.coinName} (watch on ${watch.messageId}): ${describeWatchTrigger(watch)}. ${verdict} Re-analyze this setup with fresh market data and reassess the trade.`;
-        stableHandleSendMessage(payload.prompt, payload.images, hidden);
-        toast.success?.('Re-debate launched', `${watch.coinName} hit "${describeWatchTrigger(watch)}" — fresh debate started with the previous verdict as context.`);
-    }, [buildRerunPayload, messagesRef, stableHandleSendMessage, toast]);
-
-    const handleWatchTriggered = useCallback((trigger: SetupWatchTriggerEvent) => {
-        if (isAnalysisInProgress) {
-            // A run is already in progress — re-arm; the next tick retries.
-            SetupWatchService.rearmWatch(trigger.watch.id);
-            return;
-        }
-        launchRedeBate(trigger.watch);
-    }, [isAnalysisInProgress, launchRedeBate]);
-
-    // Subscribe once; armed watches persisted in Preferences re-fire after
-    // restart because SetupWatchService.init() runs in the bootstrap effect.
-    useEffect(() => {
-        return SetupWatchService.subscribe(handleWatchTriggered);
-    }, [handleWatchTriggered]);
-
     const handleViewStrategyDetails = useCallback((name: string) => {
         setStrategyToView(name);
         setIsStrategySearchVisible(true);
@@ -2482,7 +2437,6 @@ const App: React.FC = () => {
         setInput,
         setImages,
         setExpandedPostMortems,
-        setHighlightedAnalysisId,
         setIsLoading,
         setActiveUsername,
         setExistingUsernames,

@@ -19,7 +19,6 @@ export function useJournalUI() {
     const [selectedProbabilityMessageId, setSelectedProbabilityMessageId] = useState<string | null>(null);
     const [strategyToView, setStrategyToView] = useState<string | null>(null);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-    const [highlightedAnalysisId, setHighlightedAnalysisId] = useState<string | null>(null);
     const [expandedPostMortemImages, setExpandedPostMortemImages] = useState<Record<string, boolean>>({});
     const [expandedPostMortems, setExpandedPostMortems] = useState<Record<string, boolean>>({});
     const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
@@ -28,7 +27,6 @@ export function useJournalUI() {
         selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
         copiedMessageId, setCopiedMessageId,
-        highlightedAnalysisId, setHighlightedAnalysisId,
         expandedPostMortemImages, setExpandedPostMortemImages,
         expandedPostMortems, setExpandedPostMortems,
         postMortemCandidate, setPostMortemCandidate,

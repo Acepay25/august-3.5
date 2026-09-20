@@ -51,7 +51,7 @@ describe('PriceAlertService feed tracking', () => {
       'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT"]',
     );
     // The tick populated the shared price cache AND fanned out to subscribers
-    // (SetupWatchService.handlePriceTick → watch evaluation).
+    // (the price-level consumers evaluate crossings on this one feed).
     expect(svc.getCurrentPrice('BTCUSDT')).toBe(100.5);
     expect(ticks).toEqual([['BTCUSDT', 100.5]]);
     unsubscribe();

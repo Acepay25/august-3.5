@@ -180,7 +180,6 @@ export interface UseAnalysisPipelineParams {
     setIsHybridLoading: (v: boolean) => void;
     isRateLimited: boolean;
     setIsRateLimited: (v: boolean) => void;
-    setHighlightedAnalysisId: (v: string | null) => void;
     setIsPostMortemInProgress: (v: boolean) => void;
     setIsLivePostMortemVisible: (v: boolean) => void;
 
@@ -322,7 +321,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        setHighlightedAnalysisId,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
@@ -947,7 +945,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Live-backtest summary (block-scoped result is captured here so the
         // final message update below can persist it on runStats).
         let liveBtResult: LiveBacktestResult | undefined;
-        setHighlightedAnalysisId(null);
         setIsRateLimited(false);
         analysisAbortController.current?.abort();
         const currentAbortController = new AbortController();
@@ -3034,7 +3031,6 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         options,
                         processNewAnalysis,
                         applyUpdate: (updater) => updateRequestMessages(updater),
-                        setHighlightedAnalysisId,
                     });
 
                     const finalAnalysis = verdictResult.processedAnalysis;
