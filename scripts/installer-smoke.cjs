@@ -359,7 +359,18 @@ async function verifyTradeSurface(page) {
     await chartPane.waitFor({ state: 'visible', timeout: PROBE_TIMEOUT_MS });
     await dock.waitFor({ state: 'visible', timeout: PROBE_TIMEOUT_MS });
     await panel.waitFor({ state: 'visible', timeout: PROBE_TIMEOUT_MS });
-    await panel.getByText('Chart AI', { exact: true }).first().waitFor({ state: 'visible', timeout: PROBE_TIMEOUT_MS });
+    // The dock's identity control, either shape it has had: the static
+    // "Chart AI" title, or -- since 7069795 (2026-09-18), when the Coach inbox
+    // became a first-class surface -- the Chat/Coach tablist that replaced that
+    // label. Which one renders depends on whether the coach surface has
+    // hydrated yet, so BOTH are accepted, and the same locator is re-sampled
+    // below: asserting the old string alone has failed every packaged run
+    // since, and release.yml only fires on a tag, so nothing noticed for three
+    // days. Either way the probe still fails on a dock with no header identity.
+    const dockIdentity = panel.getByRole('tab', { name: 'Chat' })
+        .or(panel.getByText('Chart AI', { exact: true }))
+        .first();
+    await dockIdentity.waitFor({ state: 'visible', timeout: PROBE_TIMEOUT_MS });
     console.log('[smoke] Trade surface and expanded Chart AI dock are visible');
 
     // Re-sample after a bounded pause so a post-mount TDZ/abort crash cannot
@@ -370,7 +381,7 @@ async function verifyTradeSurface(page) {
         chartPane.isVisible(),
         dock.isVisible(),
         panel.isVisible(),
-        panel.getByText('Chart AI', { exact: true }).first().isVisible(),
+        dockIdentity.isVisible(),
     ]);
     if (checks.some((visible) => !visible)) {
         throw new Error(`Trade surface disappeared on liveness re-sample: ${JSON.stringify(checks)}`);
