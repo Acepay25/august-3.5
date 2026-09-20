@@ -238,6 +238,17 @@ export const budgetToolContent = (name: string, content: string, tailReserve = 0
             if (name === 'get_order_book') {
                 parsed.buyWalls = topByUsd(parsed.buyWalls, 5);
                 parsed.sellWalls = topByUsd(parsed.sellWalls, 5);
+                // The ladders are best-first, so a handful of near levels is the
+                // entire decision surface. Left at 100 they put the payload at
+                // ~3.9k against a 2.4k cap, and the hard slice below then hands
+                // the model BROKEN JSON -- which this function's own comment
+                // promises not to do. 8 levels each, not 12: the body is
+                // pretty-printed, so each level costs ~65 chars and 12 still
+                // landed a hair over the cap (measured 2413).
+                const nearest = (arr: unknown): unknown =>
+                    Array.isArray(arr) ? arr.slice(0, 8) : arr;
+                parsed.bids = nearest(parsed.bids);
+                parsed.asks = nearest(parsed.asks);
             } else {
                 parsed.recentEvents = Array.isArray(parsed.recentEvents) ? parsed.recentEvents.slice(0, 10) : parsed.recentEvents;
             }
@@ -1164,7 +1175,14 @@ async function runOrderBook(symbol: string): Promise<string> {
     // trader could still act on. Deliberately NOT in STAMPED_TOOLS: when a
     // cached body replays, the honest fact is WHEN it was taken, so the stamp
     // keeps its original value instead of pretending to be now.
-    return JSON.stringify({ ...book, checkedAt: new Date().toISOString() }, null, 2);
+    //
+    // The stamp goes FIRST in the object, deliberately: get_order_book has no
+    // TOOL_BUDGETS entry, so budgetToolContent caps it at
+    // MAX_TOOL_CONTENT_CHARS (2400) by cutting the END, and a limit-100 book is
+    // far over that. A trailing stamp is then the first byte lost -- the live
+    // run proved it, with the model answering that it could not read the
+    // snapshot time out of its own tool result. Leading survives the cut.
+    return JSON.stringify({ checkedAt: new Date().toISOString(), ...book }, null, 2);
 }
 
 async function runLiquidations(symbol: string): Promise<string> {
