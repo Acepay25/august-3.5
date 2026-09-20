@@ -30,7 +30,7 @@ import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
 import type { BotLearningStat } from '../../services/agents/botLearning';
 import {
-    markThreadOpened, previewTextFor, threadForProvider, unreadCount,
+    deskThread, markThreadOpened, previewTextFor, threadForProvider, unreadCount,
     type AgentThreadOpenedMap, type ThreadSelection,
 } from '../../utils/agentThreads';
 import { MessageRole } from '../../types/enums';
@@ -359,7 +359,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const listedGroups = sortByName
         ? [...unpinnedGroups].sort((a, b) => groupDisplayName(a, bots).localeCompare(groupDisplayName(b, bots)))
         : unpinnedGroups;
-    const lastChartMessage = messages[messages.length - 1];
+    const deskMessages = useMemo(() => deskThread(messages, bots), [messages, bots]);
+    const lastChartMessage = deskMessages[deskMessages.length - 1];
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
     const activeGroup = selection.kind === 'group' ? groups.find(g => g.id === selection.groupId) ?? null : null;
@@ -369,12 +370,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // The Chart AI pane IS the dock's conversation — the same array, not a
     // copy (WS-6's hard requirement). It used to be [], which made "opening it
     // here and on the Trade surface shows the same conversation" false: the
-    // pane was a launcher wearing a transcript.
+    // pane was a launcher wearing a transcript. The desk's own slice is
+    // deskThread: ensemble/Analyze verdicts and session-model answers land
+    // inline, while a bot's DM stays in that bot's row instead of leaking
+    // into the desk pane.
     const isChartPane = selection.kind === 'team';
     const thread = useMemo(
         () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId)
-            : isChartPane ? messages : []),
-        [activeBot, isChartPane, messages],
+            : isChartPane ? deskMessages : []),
+        [activeBot, isChartPane, messages, deskMessages],
     );
 
     useEffect(() => {

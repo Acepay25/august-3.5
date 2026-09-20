@@ -35,7 +35,9 @@ import {
     type RoomEntry,
 } from '../services/agents/groupRounds';
 import { parseDmMarkers } from '../services/agents/botMailbox';
+import { recordBotTurnOutcome } from '../services/agents/botLearning';
 import { isProviderReady } from '../utils/providerUtils';
+import type { LoggedTrade } from '../types';
 
 export interface GroupActivityEntry {
     id: string;
@@ -72,6 +74,7 @@ export const useAgentGroups = ({
      *  injection is added to EVERY member's system prompt — the whole room
      *  reasons over the same live read, not just the debate pipeline. */
     hybridEnabled = false,
+    loggedTradesRef,
 }: {
     providerConfigs: ProviderConfig[];
     appendMessage: (msg: Message) => void;
@@ -79,6 +82,10 @@ export const useAgentGroups = ({
     /** Active profile — enables per-bot persona/notes in room turns. */
     username?: string | null;
     hybridEnabled?: boolean;
+    /** Trade log (WS-3): a room turn's lesson writes to the speaker's
+     *  memory.md and its closed trades fold into the shared evidence path —
+     *  the same write-back a DM turn gets. Absent ⇒ read-only rooms. */
+    loggedTradesRef?: React.MutableRefObject<LoggedTrade[]>;
 }): UseAgentGroupsResult => {
     const [workingBotId, setWorkingBotId] = useState<string | null>(null);
     const [isRunning, setIsRunning] = useState(false);
@@ -235,6 +242,18 @@ export const useAgentGroups = ({
                             patchMessage(replyId, { text: finalText, isStreaming: false });
                             room.push({ speaker: bot.name, text: finalText });
                             pushActivity({ kind: 'replied', botName: bot.name });
+                            // WS-3: a room turn teaches its speaker too — the
+                            // lesson goes to the bot's memory.md and its closed
+                            // trades fold into the shared evidence path, same
+                            // write-back a DM turn earns. Fire-and-forget.
+                            if (username) {
+                                void recordBotTurnOutcome(
+                                    { id: bot.id, name: bot.name, providerId: bot.providerId },
+                                    renderRoomTurn(bot.name, unseen),
+                                    finalText,
+                                    { username, trades: loggedTradesRef?.current ?? [] },
+                                );
+                            }
                             // Deterministic routing: mentions in this reply
                             // speak next round (self-excluded; no echo loop).
                             for (const t of parseRoomMentions(finalText, members)) {
@@ -275,7 +294,7 @@ export const useAgentGroups = ({
                 setIsRunning(false);
             }
         }
-    }, [providerConfigs, appendMessage, patchMessage, pushActivity, username, hybridEnabled]);
+    }, [providerConfigs, appendMessage, patchMessage, pushActivity, username, hybridEnabled, loggedTradesRef]);
 
     return { workingBotId, isRunning, activity, runGroupThread, cancelRun };
 };

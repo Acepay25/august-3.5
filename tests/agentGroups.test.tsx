@@ -12,6 +12,12 @@ vi.mock('../services/providers/GenericAnalysisService', () => ({
     streamQuickResponse: vi.fn(),
 }));
 
+vi.mock('../services/agents/botLearning', () => ({
+    recordBotTurnOutcome: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { recordBotTurnOutcome } from '../services/agents/botLearning';
+
 const streamMock = vi.mocked(streamQuickResponse);
 
 const provider = (over: Partial<ProviderConfig> = {}): ProviderConfig => ({
@@ -52,6 +58,7 @@ const makeStore = () => {
 
 beforeEach(() => {
     streamMock.mockReset();
+    vi.mocked(recordBotTurnOutcome).mockClear();
 });
 
 describe('useAgentGroups', () => {
@@ -462,5 +469,29 @@ describe('useAgentGroups marker hygiene', () => {
         expect(replies).toHaveLength(1);
         expect(replies[0].text).toBe('Funding looks hot.');
         expect(replies[0].text).not.toContain('[[dm:');
+    });
+
+    it('WS-3: a room reply teaches its speaker — recordBotTurnOutcome runs for the bot that spoke', async () => {
+        streamMock.mockResolvedValue('Verdict: avoid.\nLesson: the room shorted a reclaimed sweep and got run over.');
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+            username: 'room-user',
+        }));
+        await act(async () => {
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, 'analyze btc', [
+                bot({ id: 'b1', name: 'Scout', modelId: 'model-a' }),
+                bot({ id: 'b2', name: 'Ledger', modelId: 'model-b' }),
+            ]);
+        });
+        // One write-back per speaker, carrying that speaker's identity and the
+        // finalized reply text (markers stripped) — the same shape a DM earns.
+        expect(vi.mocked(recordBotTurnOutcome)).toHaveBeenCalledTimes(2);
+        const first = vi.mocked(recordBotTurnOutcome).mock.calls[0];
+        expect(first[0]).toMatchObject({ id: 'b1', name: 'Scout', providerId: 'p1' });
+        expect(first[2]).toContain('reclaimed sweep');
+        expect(first[3]).toMatchObject({ username: 'room-user' });
     });
 });

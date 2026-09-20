@@ -26,6 +26,7 @@ import { ensureBookSkillDrafts } from '../services/learning/bookSkillDrafts';
 import { runWeeklyRollupIfDue } from '../services/learning/weeklyRollup';
 import { runWeeklyReviewIfDue } from '../services/learning/weeklyReview';
 import { runMonthlyReportIfDue } from '../services/learning/monthlyReport';
+import { runMemoryHygieneIfDue } from '../services/learning/memoryHygiene';
 import {
     initConfluenceService,
     syncConfluenceFromTradeLog,
@@ -368,6 +369,13 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                     if (res) console.log('[MonthlyReport] card generated for period ending', res.generatedAt.slice(0, 10));
                 }).catch(e => {
                     console.warn('[MonthlyReport] boot pass failed:', e instanceof Error ? e.message : e);
+                });
+
+                // WS-4.2: the memory hygiene pass is only a pass if something
+                // schedules it. Same due-check discipline as its siblings;
+                // fire-and-forget — the Health tab reads its log lines.
+                void runMemoryHygieneIfDue(username).catch(e => {
+                    console.warn('[MemoryHygiene] boot pass failed:', e instanceof Error ? e.message : e);
                 });
 
                 setSavedAnalyses(profile.savedAnalyses || []);
