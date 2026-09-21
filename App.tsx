@@ -144,8 +144,9 @@ import { PriceAlertService } from './services/ui/PriceAlertService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurface, type AppSurface } from './hooks/useSurface';
+import { captureChartAiRect, type MorphRect } from './hooks/useSurfaceMorph';
 import type { TradeMode } from './components/trade/TradeView';
-import NavRail, { type NavBadge } from './components/shell/NavRail';
+import type { NavBadge } from './components/shell/SurfaceMenuList';
 import { Journal } from './components/journal/Journal';
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
@@ -413,7 +414,7 @@ const App: React.FC = () => {
         });
         return new Set(identities).size === identities.length;
     }, [lensConfig, missingAnalystRoles, readyProviders]);
-    // Minara arrangement: top-level surfaces chosen from the activity bar
+    // Top-level surfaces chosen from the header's hamburger menu
     // (hooks/useSurface.ts). The trade surface is home.
     const { surface, setSurface } = useSurface();
     /** Set when another surface asks to open Learn on a SPECIFIC tab
@@ -422,9 +423,9 @@ const App: React.FC = () => {
      *  last tab survives the next mount — same contract as journalTab. */
     const [learnTab, setLearnTab] = useState<LearnTab | null>(null);
     const learnTabConsumed = useCallback(() => setLearnTab(null), []);
-    // Antigravity-style left panel: the activity bar is always visible and
-    // the active surface's icon toggles its sidebar (on Trade: the order
-    // book). Persisted so the layout survives reloads like the dock width.
+    // The trade surface's collapsible left panel: the order book, opened and
+    // closed from the toggle in the Chart's own market row. Persisted so the
+    // layout survives reloads like the dock width.
     const [tradeSidebarOpen, setTradeSidebarOpen] = useState<boolean>(() => {
         try { return localStorage.getItem('trade_sidebar_open_v1') !== '0'; } catch { return true; }
     });
@@ -524,15 +525,22 @@ const App: React.FC = () => {
         setIsApprovalInboxVisible(false);
         setSurface('journal');
     }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
-    /** NavRail/Alt-shortcut surface selection — the journal route re-runs
-     *  openJournal so a fresh entry always resets the tab. */
+    /** Nav menu/Alt-shortcut surface selection — the journal route re-runs
+     *  openJournal so a fresh entry always resets the tab.
+     *
+     *  Leaving Chart for Agents carries the dock's box along so the Agents pane
+     *  grows out of the panel it replaces (hooks/useSurfaceMorph). Every other
+     *  navigation clears it: a stale rect must not replay on an unrelated
+     *  visit, and the morph is one-way by design. */
+    const [agentsMorphFrom, setAgentsMorphFrom] = useState<MorphRect | null>(null);
     const handleSurfaceSelect = useCallback((next: AppSurface): void => {
+        setAgentsMorphFrom(next === 'agents' && surface === 'trade' ? captureChartAiRect() : null);
         if (next === 'journal') {
             openJournal();
             return;
         }
         setSurface(next);
-    }, [openJournal, setSurface]);
+    }, [openJournal, setSurface, surface]);
 
     useEffect(() => {
         const apply = (): void => {
@@ -712,10 +720,10 @@ const App: React.FC = () => {
 
     // Chart AI dock routing (the Chat surface is gone — roster clicks open
     // sessions inside the trade surface instead). Nonce-keyed so re-clicking
-    // the same bot/group/coach re-fires the open effect.
+    // the same bot/group re-fires the open effect. The Coach inbox is not
+    // routed here any more: it is a Learn tab.
     const [tradeBotRequest, setTradeBotRequest] = useState<{ botId: string; nonce: number } | null>(null);
     const [tradeGroupRequest, setTradeGroupRequest] = useState<{ groupId: string; nonce: number } | null>(null);
-    const [tradeCoachRequest, setTradeCoachRequest] = useState<number>(0);
 
     // Casual-chat model (used when ensemble is off): app-wide preference,
     // persisted in Preferences. Empty until loaded or chosen — the pipeline
@@ -770,7 +778,7 @@ const App: React.FC = () => {
     // active bot + dispatches replies through refs assigned during render
     // (same pattern as handleSendMessageRef / loggedTradesRef).
     const botThreadStateRef = useRef<{ thread: ThreadSelection; bots: AgentBot[] }>({
-        thread: { kind: 'coach' },
+        thread: { kind: 'team' },
         bots: [],
     });
     const mailboxRef = useRef<UseBotMailboxResult | null>(null);
@@ -2476,19 +2484,16 @@ const App: React.FC = () => {
     // Per-bot learning stats for the Agents rail (WS-3.4). Walks the notebook,
     // so it is keyed to notebook writes and the roster — not to price ticks.
     const botStats = useMemo(() => loadBotLearningStats(), [bots, memoryNonce]);
-    // Activity-rail badges. Memoized because App re-renders on every price
-    // tick and NavRail is React.memo'd — a fresh object literal would
-    // invalidate the memo once a second for nothing.
+    // Surface-menu badges. Memoized because App re-renders on every price tick
+    // and both Header and SurfaceMenuList are React.memo'd — a fresh object
+    // literal would invalidate the memo once a second for nothing.
     const navBadges = useMemo<Partial<Record<AppSurface, NavBadge>>>(() => {
         const next: Partial<Record<AppSurface, NavBadge>> = {};
         // The group runner owns the working pulse; a draining DM queue counts
         // too (the roster rail already read it this way — the rail didn't).
         const working = workingBotId ?? dmWorkingBotId;
-        const agentReads: string[] = [];
-        if (working) agentReads.push('a bot is working');
-        if (coachCount > 0) agentReads.push(`${coachCount} awaiting your decision`);
-        if (agentReads.length > 0) {
-            next.agents = { active: !!working, count: coachCount, detail: agentReads.join(', ') };
+        if (working) {
+            next.agents = { active: true, detail: 'a bot is working' };
         }
         if (isInsightGenerating) {
             next.journal = {
@@ -2498,17 +2503,17 @@ const App: React.FC = () => {
                     : 'generating insights',
             };
         }
-        // The Learn rail badge counts what is still UNDECIDED across every
-        // queue that surface hosts — drafts, proposals and amendments. The
-        // supervisor may already be working through them, but a decision the
-        // model has not recorded yet is something the user can still lose.
+        // The Learn badge counts what is still UNDECIDED across every queue
+        // that surface hosts — the Coach inbox's drafts and proposals, the
+        // amendments, everything else. The supervisor may already be working
+        // through them, but a decision the model has not recorded yet is
+        // something the user can still lose.
         const learnPending = countPendingEverything(activeUsername || 'default');
         if (learnPending > 0) {
             next.learn = { count: learnPending, detail: `${learnPending} awaiting review` };
         }
         return next;
-    }, [workingBotId, dmWorkingBotId, coachCount, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce]);
-    const selectCoachThread = useCallback(() => setActiveThread({ kind: 'coach' }), []);
+    }, [workingBotId, dmWorkingBotId, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce]);
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
         takeSkillDraft(draft.id, activeUsername || undefined);
@@ -2541,11 +2546,17 @@ const App: React.FC = () => {
         setTradeGroupRequest({ groupId: id, nonce: Date.now() });
         setSurface('trade');
     }, [selectGroupThread, setSurface]);
-    const openCoachInTrade = useCallback(() => {
-        selectCoachThread();
-        setTradeCoachRequest(n => n + 1);
-        setSurface('trade');
-    }, [selectCoachThread, setSurface]);
+    /** The Coach inbox merged into the Learn surface, so a coach hop names the
+     *  tab rather than opening a dock session. */
+    const renderCoachInbox = useCallback(() => (
+        <React.Suspense fallback={null}>
+            <CoachThreadPanel onAllowDraft={coachAllowDraft} onDenyDraft={coachDenyDraft} />
+        </React.Suspense>
+    ), [coachAllowDraft, coachDenyDraft]);
+    const openCoachInLearn = useCallback(() => {
+        setLearnTab('coach');
+        setSurface('learn');
+    }, [setSurface]);
     // Skill-citation chip tap: open Settings → Skills so the
     // Skill-citation chip tap: open the Strategy Studio surface so it mounts
     // and consumes the pending slug (Studio listens for the same event when
@@ -2920,7 +2931,12 @@ const App: React.FC = () => {
                 mobileMenuRef={mobileMenuRef}
                 setIsMobileMenuOpen={setIsMobileMenuOpen}
                 setIsVisionDataVisible={setIsVisionDataVisible}
-                onOpenJournal={openJournal}
+                surface={surface}
+                onSelectSurface={handleSurfaceSelect}
+                badges={navBadges}
+                onOpenApprovals={() => setIsApprovalInboxVisible(true)}
+                approvalsCount={approvalItems.length}
+                onSwitchUser={handleSwitchUser}
                 setIsSettingsVisible={setIsSettingsMenuVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 onOpenLiveMarket={handleOpenLiveMarket}
@@ -3037,26 +3053,13 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Main row: persistent desktop sidebar + chat column */}
+            {/* Main row: the surfaces fill the width beneath the header, whose
+                hamburger now carries the navigation. */}
             <div className="flex-1 flex flex-row min-h-0">
-                <NavRail
-                    surface={surface}
-                    onSelect={handleSurfaceSelect}
-                    onToggleSidebar={toggleTradeSidebar}
-                    onOpenSettings={(tab) => {
-                        if (tab) setSettingsInitialTab(tab);
-                        setIsSettingsMenuVisible(true);
-                    }}
-                    onOpenApprovals={() => setIsApprovalInboxVisible(true)}
-                    approvalsCount={approvalItems.length}
-                    onSwitchUser={handleSwitchUser}
-                    username={activeUsername || undefined}
-                    badges={navBadges}
-                />
-                {/* Surfaces (Minara arrangement): pages, not modals. The
-                    Chat surface is gone — the trade surface's Chart AI dock
-                    carries the chats, panels, roster threads and the Coach
-                    inbox; the other tabs embed existing components. */}
+                {/* Surfaces: pages, not modals. The Chat surface is gone — the
+                    trade surface's Chart AI dock carries the chats, panels and
+                    roster threads; the Coach inbox is a Learn tab; the other
+                    tabs embed existing components. */}
                 <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
                     {/* Mistake Warning Banner - Global Risk Reminder */}
                     {loggedTrades.length > 0 && (
@@ -3081,6 +3084,7 @@ const App: React.FC = () => {
                                     onSelectChatModel={setSelectedChatModel}
                                     onRefreshModels={refreshModelCatalog}
                                     sidebarOpen={surface === 'trade' && tradeSidebarOpen}
+                                    onToggleSidebar={toggleTradeSidebar}
                                     modeRequest={tradeModeRequest ?? undefined}
                                     activeUsername={activeUsername ?? undefined}
                                     onTradeModeChange={(m) => { lastRequestedTradeModeRef.current = m; }}
@@ -3090,8 +3094,6 @@ const App: React.FC = () => {
                                     groups={groups.map(g => ({ id: g.id, name: groupDisplayName(g, bots) }))}
                                     botSessionRequest={tradeBotRequest ?? undefined}
                                     groupSessionRequest={tradeGroupRequest ?? undefined}
-                                    coachSessionRequest={tradeCoachRequest || undefined}
-                                    coachPending={coachCount}
                                     onRunAnalysis={handleRunAnalysisFromChat}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
@@ -3100,14 +3102,6 @@ const App: React.FC = () => {
                                     pinnedMessageIds={pinnedMessageIds}
                                     isDeskSceneOpen={isDeskSceneOpen}
                                     hasDeskSceneMessage={!!deskSceneMessage}
-                                    renderCoachSurface={() => (
-                                        <React.Suspense fallback={null}>
-                                            <CoachThreadPanel
-                                                onAllowDraft={coachAllowDraft}
-                                                onDenyDraft={coachDenyDraft}
-                                            />
-                                        </React.Suspense>
-                                    )}
                                     renderGroupSurface={renderGroupSurface}
                                 />
                             </React.Suspense>
@@ -3176,6 +3170,8 @@ const App: React.FC = () => {
                                     memoryConfig={memoryConfig}
                                     initialTab={learnTab}
                                     onInitialTabConsumed={learnTabConsumed}
+                                    renderCoach={renderCoachInbox}
+                                    coachCount={coachCount}
                                 />
                             </React.Suspense>
                         )}
@@ -3190,7 +3186,6 @@ const App: React.FC = () => {
                                     onSelect={t => {
                                         if (t.kind === 'bot') selectBotThread(t.botId);
                                         else if (t.kind === 'group') selectGroupThread(t.groupId);
-                                        else if (t.kind === 'coach') selectCoachThread();
                                         else selectTeamThread();
                                     }}
                                     onNewBot={() => setIsNewBotOpen(true)}
@@ -3208,6 +3203,7 @@ const App: React.FC = () => {
                                     }}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
+                                    morphFrom={agentsMorphFrom}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
                                     lastOpenedMap={threadOpenedMap}
                                     attentionMap={attentionMap}
@@ -3218,11 +3214,7 @@ const App: React.FC = () => {
                                     onDeleteBot={deleteBot}
                                     onRenameBot={(botId, name) => updateBot(botId, { name })}
                                     onEditSeatOverrides={setSeatOverridesBot}
-                                    renderCoach={() => (
-                                        <React.Suspense fallback={null}>
-                                            <CoachThreadPanel onAllowDraft={coachAllowDraft} onDenyDraft={coachDenyDraft} />
-                                        </React.Suspense>
-                                    )}
+                                    onOpenCoach={openCoachInLearn}
                                     onDeleteGroup={deleteGroup}
                                     onEditGroup={groupId => {
                                         const target = groups.find(g => g.id === groupId);
@@ -3237,7 +3229,7 @@ const App: React.FC = () => {
                                     onOpenInDock={() => {
                                         if (activeThread.kind === 'bot') openBotInTrade(activeThread.botId);
                                         else if (activeThread.kind === 'group') openGroupInTrade(activeThread.groupId);
-                                        else openCoachInTrade();
+                                        else setSurface('trade');
                                     }}
                                 />
                             </React.Suspense>

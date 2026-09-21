@@ -46,7 +46,11 @@ export interface StoredChatEntry {
     at?: number;
 }
 
-export type SessionKind = 'solo' | 'panel' | 'coach' | 'group';
+export type SessionKind = 'solo' | 'panel' | 'group';
+
+/** A row stored before the Coach inbox left the dock can still say
+ *  kind 'coach'; the loader drops those rather than reopening them as chats. */
+type LegacySessionKind = SessionKind | 'coach';
 
 /** One panel seat: a specific model inside a specific provider. */
 export interface PanelSeatRef { providerId: string; modelId: string }
@@ -161,12 +165,16 @@ export const loadSessions = (): ChatSession[] => {
         const now = Date.now();
         return parsed
             .filter(validSession)
+            // The Coach inbox used to be a dock session (kind 'coach') holding
+            // no transcript of its own. It is the Learn surface's tab now, so a
+            // stored one drops rather than resurfacing as an empty chat.
+            .filter(s => (s.kind as LegacySessionKind | undefined) !== 'coach')
             .map(s => ({
                 id: s.id,
                 title: typeof s.title === 'string' && s.title.trim() ? s.title : 'New chat',
                 createdAt: Number.isFinite(s.createdAt) ? s.createdAt : now,
                 updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : now,
-                kind: s.kind === 'panel' || s.kind === 'coach' || s.kind === 'group' ? s.kind : 'solo' as const,
+                kind: s.kind === 'panel' || s.kind === 'group' ? s.kind : 'solo' as const,
                 panelModels: Array.isArray(s.panelModels) ? s.panelModels.filter(validPanelModel).slice(0, PANEL_MAX_MODELS) : undefined,
                 botId: typeof s.botId === 'string' && s.botId ? s.botId : undefined,
                 groupId: typeof s.groupId === 'string' && s.groupId ? s.groupId : undefined,

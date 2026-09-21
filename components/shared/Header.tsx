@@ -1,8 +1,11 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
+import SurfaceMenuList, { surfaceLabel, type NavBadge } from '../shell/SurfaceMenuList';
+import type { AppSurface } from '../../hooks/useSurface';
 import { Conversation } from '../../types';
 import { AutomationConfig } from '../../types/automation';
 
@@ -19,10 +22,14 @@ interface HeaderProps {
     mobileMenuRef: React.RefObject<HTMLDivElement | null>;
     setIsMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsVisionDataVisible: (visible: boolean) => void;
-    /** Open the Journal SURFACE (drawer action). The legacy journalState
-     *  overlay flag had no live consumer — navigation routes through App's
-     *  openJournal → setSurface('journal'). */
-    onOpenJournal: () => void;
+    /** The surface menu — the five tabs live in the hamburger now, so the
+     *  header carries the nav props the icon rail used to own. */
+    surface: AppSurface;
+    onSelectSurface: (surface: AppSurface) => void;
+    badges?: Partial<Record<AppSurface, NavBadge>>;
+    onOpenApprovals?: () => void;
+    approvalsCount?: number;
+    onSwitchUser?: () => void;
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
     onOpenLiveMarket: () => void;
@@ -68,7 +75,12 @@ export const Header: React.FC<HeaderProps> = memo(({
     mobileMenuRef,
     setIsMobileMenuOpen,
     setIsVisionDataVisible,
-    onOpenJournal,
+    surface,
+    onSelectSurface,
+    badges,
+    onOpenApprovals,
+    approvalsCount,
+    onSwitchUser,
     setIsSettingsVisible,
     setIsLivePostMortemVisible,
     onOpenLiveMarket,
@@ -178,18 +190,22 @@ export const Header: React.FC<HeaderProps> = memo(({
 
     return (
         <header className="sticky top-0 z-20 flex-shrink-0 border-b border-white/[0.06] bg-zinc-900/85 backdrop-blur px-4 py-1.5 sm:px-6 sm:py-2 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
-                    {/* Hamburger Menu Button */}
+                    {/* The navigation menu. The five surfaces moved in here
+                        when the icon rail went, so at every width this is the
+                        only way to change view — which is why it names the
+                        surface you are looking at. */}
                     <button
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="p-2 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors lg:hidden focus-visible:ring-2 focus-visible:ring-zinc-500"
-                        title="Menu"
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500"
+                        title={`Menu — ${surfaceLabel(surface)}`}
                         aria-label="Toggle navigation menu"
                         aria-expanded={isMobileMenuOpen}
                         aria-controls="mobile-navigation-menu"
                     >
                         <HamburgerIcon className="h-5 w-5" />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider">{surfaceLabel(surface)}</span>
                     </button>
 
                     <div className="flex flex-col justify-center">
@@ -391,9 +407,16 @@ export const Header: React.FC<HeaderProps> = memo(({
                     )}
                 </div>
 
-                {/* Slide-out Menu Panel */}
-                {isMobileMenuOpen && (
-                    <div className="fixed inset-0 z-50 lg:hidden">
+                {/* Slide-out Menu Panel — the surfaces live in here now, so it
+                    opens at every width, not just below lg.
+
+                    Portaled to <body> on purpose: this header carries
+                    `backdrop-blur`, and a filter makes its element the
+                    containing block for every fixed-position descendant — so
+                    rendered in place the drawer's `inset-0` resolved against
+                    the 53px header bar and the whole menu was clipped to it. */}
+                {isMobileMenuOpen && createPortal(
+                    <div className="fixed inset-0 z-50">
                         {/* Backdrop */}
                         <div
                             className="absolute inset-0 bg-black/50"
@@ -415,6 +438,15 @@ export const Header: React.FC<HeaderProps> = memo(({
                             </div>
 
                             <div className="flex-1 min-h-0 overflow-y-auto py-3">
+                                <SurfaceMenuList
+                                    surface={surface}
+                                    badges={badges}
+                                    approvalsCount={approvalsCount}
+                                    onOpenApprovals={onOpenApprovals ? () => { onOpenApprovals(); setIsMobileMenuOpen(false); } : undefined}
+                                    onSwitchUser={onSwitchUser ? () => { onSwitchUser(); setIsMobileMenuOpen(false); } : undefined}
+                                    onSelect={(next) => { onSelectSurface(next); setIsMobileMenuOpen(false); }}
+                                />
+                                <div className="my-1 mx-2 border-t border-white/[0.06]" />
                                 <SidebarContent
                                     activeUsername={activeUsername}
                                     conversations={conversations}
@@ -427,7 +459,6 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     onDeleteConversations={onDeleteConversations}
                                     onOpenLiveMarket={onOpenLiveMarket}
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
-                                    onOpenJournal={onOpenJournal}
                                     onOpenWatchList={onOpenWatchList}
                                     onOpenSettings={() => setIsSettingsVisible(true)}
                                     automations={automations}
@@ -441,7 +472,8 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 <UpdateButton />
                             </div>
                         </div>
-                    </div>
+                    </div>,
+                    document.body,
                 )}
             </div>
         </header >

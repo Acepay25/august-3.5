@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
+import { useSurfaceMorphIn, type MorphRect } from '../../hooks/useSurfaceMorph';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
@@ -52,6 +53,7 @@ interface AgentsViewProps {
     onAnalyze: (prompt: string, images: PipelineImage[]) => void;
     /** App renders the existing room view; this surface only hosts it. */
     renderGroup?: (group: AgentGroup) => React.ReactNode;
+    /** Decisions waiting in the Coach inbox — counts the rail's hop pill. */
     coachCount: number;
     workingBotId?: string | null;
     lastOpenedMap?: AgentThreadOpenedMap;
@@ -74,9 +76,10 @@ interface AgentsViewProps {
      *  allowlist) — the three fields the pipeline reads off the BotRegistry
      *  record that matches the bot's provider + model. */
     onEditSeatOverrides?: (bot: AgentBot) => void;
-    /** The Coach thread. Without it the Coach shortcut selected a thread this
-     *  surface had no pane for — a dead end wearing a badge. */
-    renderCoach?: () => React.ReactNode;
+    /** Jump to the Coach inbox, which lives on the Learn surface. Without it
+     *  the rail shows no Coach pill — a shortcut to a thread this surface no
+     *  longer owns would be a dead end wearing a badge. */
+    onOpenCoach?: () => void;
     /** Current provider/model chip in the composer. WS-6 asks that it open the
      *  model picker, so App hands in a mounted ModelPicker (which renders its
      *  own trigger labelled with the current selection) rather than a button
@@ -85,6 +88,9 @@ interface AgentsViewProps {
     /** Focus this same thread in the Chart AI dock — the two surfaces show
      *  one conversation, and this is how you hop between them. */
     onOpenInDock?: () => void;
+    /** The box the Chart AI dock occupied when this surface was selected. The
+     *  pane grows out of it (hooks/useSurfaceMorph) instead of replacing it. */
+    morphFrom?: MorphRect | null;
     onHydratePins?: (pins: string[]) => void;
 }
 
@@ -262,13 +268,13 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, onOpenInDock,
+    lastOpenedMap = {}, modelPicker, onOpenInDock, morphFrom = null,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
     onRenameBot,
     onEditSeatOverrides,
-    renderCoach,
+    onOpenCoach,
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
@@ -294,6 +300,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameDraft, setRenameDraft] = useState('');
     const scroller = useRef<HTMLDivElement | null>(null);
+    const paneRef = useRef<HTMLElement | null>(null);
+    useSurfaceMorphIn(paneRef, morphFrom);
     const searchRef = useRef<HTMLInputElement | null>(null);
     const [searchFocusNonce, setSearchFocusNonce] = useState(0);
 
@@ -569,13 +577,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200">
                         <Users className="h-3 w-3" /> Rooms
                     </button>
-                    <button type="button" onClick={() => selectThread({ kind: 'coach' })}
-                        aria-label="Coach — awaiting your decision"
-                        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
-                            coachCount > 0 ? 'border-amber-500/30 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                        }`} data-testid="rail-coach">
-                        <Sparkles className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
-                    </button>
+                    {/* The Coach inbox is not a thread on this surface — it is a
+                        Learn tab. The pill is the hop, and the count says
+                        whether the hop is due. */}
+                    {onOpenCoach && (
+                        <button type="button" onClick={onOpenCoach}
+                            aria-label="Coach — awaiting your decision"
+                            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                                coachCount > 0 ? 'border-amber-500/30 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                            }`} data-testid="rail-coach">
+                            <Sparkles className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
+                        </button>
+                    )}
                 </div>
 
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
@@ -657,10 +670,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
             </aside>
 
             {/* ── Main pane ── */}
-            <section className="flex min-w-0 flex-1 flex-col bg-[#0b0b0a]">
-                {selection.kind === 'coach' && renderCoach ? (
-                    <div className="flex min-h-0 flex-1 flex-col">{renderCoach()}</div>
-                ) : activeGroup && renderGroup ? (
+            <section ref={paneRef} className="flex min-w-0 flex-1 flex-col bg-[#0b0b0a]">
+                {activeGroup && renderGroup ? (
                     <div className="flex min-h-0 flex-1 flex-col">{renderGroup(activeGroup)}</div>
                 ) : (
                     <>

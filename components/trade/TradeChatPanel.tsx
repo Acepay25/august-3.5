@@ -8,7 +8,7 @@
  * write_memory_note / get_notebook_map / propose_skill / revise_skill /
  * amend_memory / forge_tool — so the model can create, update and edit its
  * own memory, skills and tools right from this chat (proposals still need the
- * human's approval in Settings / the Coach inbox; visible status rows show
+ * human's approval in Settings / the Learn surface's Coach tab; visible status rows show
  * every side-effect). It can also DRAW on the live chart exactly like the
  * user: mark_trade_levels lays an Entry/SL/TP plan as labeled lines,
  * draw_on_chart adds a trendline/ray/zone, clear_chart_drawings wipes them —
@@ -139,9 +139,9 @@ interface TradeChatPanelProps {
     /** A roster click (Agents tab) asked Chart AI to open this bot: create
      *  (or switch to) a session bound to it. Nonce-keyed so repeats work. */
     botSessionRequest?: { botId: string; nonce: number };
-    /** Same for group rooms and the Coach inbox. */
+    /** Same, for group rooms. The Coach inbox is not here — it moved to the
+     *  Learn surface when the tabs went into the hamburger menu. */
     groupSessionRequest?: { groupId: string; nonce: number };
-    coachSessionRequest?: number;
     /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
      *  debate verdict back as an AI entry). Absent ⇒ the option is hidden.
      *  May resolve with just the verdict text, or with `{ text, messageId }`
@@ -162,15 +162,11 @@ interface TradeChatPanelProps {
      *  canvas can draw them (toggle / pin / hover states already decided);
      *  null clears. Owned by TradeView — the chart stays the single renderer. */
     onChatLevelsChange?: (payload: MessageLevelLines | null) => void;
-    /** Roster surfaces carried into the dock: the Coach inbox and group
-     *  rooms render INSIDE the session tabs (App owns the wiring — the dock
-     *  only shows the slot). Absent ⇒ those session options are hidden. */
-    renderCoachSurface?: () => React.ReactNode;
+    /** Group rooms carried into the dock: the room renders INSIDE the session
+     *  tabs (App owns the wiring — the dock only shows the slot). Absent ⇒
+     *  those session options are hidden. The Coach inbox is not one of them:
+     *  it lives on the Learn surface now. */
     renderGroupSurface?: (groupId: string) => React.ReactNode;
-    /** Drafts + proposals waiting on a human decision. Rides the Chat | Coach
-     *  switch as a count so the switch also says whether a visit is due.
-     *  App owns the number (the roster rail shows the same one). */
-    coachPending?: number;
     /** Group rooms available to open as a session (title for the tab). */
     groups?: Array<{ id: string; name: string }>;
     /** Imperative scroll-to-entry bridge for App-level affordances ("Jump to
@@ -304,9 +300,9 @@ const newId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
-    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
+    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
-    renderCoachSurface, renderGroupSurface, groups = [], coachPending = 0,
+    renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
@@ -721,7 +717,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // jump-to-latest resolves from the store) and `data-message-id` (the
     // App-side analysis message id when this entry carries one, else the
     // entry id — what the gallery's Locate passes). A miss is a deliberate
-    // no-op: the coach/group surfaces render no transcript, and an analysis
+    // no-op: the group room renders no transcript, and an analysis
     // card that isn't in THIS dock's session must not yank the user
     // somewhere unrelated.
     useEffect(() => {
@@ -766,7 +762,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.addSession({ botId: botSessionRequest.botId });
     }, [botSessionRequest, sessions]);
 
-    // Same two effects for group rooms and the Coach inbox.
+    // Group rooms opened from the roster rail.
     const lastGroupRequestRef = useRef(0);
     useEffect(() => {
         if (!groupSessionRequest || groupSessionRequest.nonce === lastGroupRequestRef.current) return;
@@ -776,24 +772,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (existing) { chatStore.setActiveId(existing.id); return; }
         chatStore.addSession({ kind: 'group', title: name, groupId: groupSessionRequest.groupId });
     }, [groupSessionRequest, groups, sessions]);
-
-    // ── Coach surface ──────────────────────────────────────────────────────
-    // One find-or-create for the coach session, shared by the roster rail's
-    // deep link (below) and the dock's Chat | Coach switch — the two used to
-    // carry byte-identical copies that could drift.
-    const isCoachSurface = activeSession.kind === 'coach';
-    const openCoachSurface = useCallback((): void => {
-        const existing = sessions.find(s => s.kind === 'coach');
-        if (existing) { chatStore.setActiveId(existing.id); return; }
-        chatStore.addSession({ kind: 'coach', title: 'Coach inbox' });
-    }, [sessions]);
-
-    const lastCoachRequestRef = useRef(0);
-    useEffect(() => {
-        if (!coachSessionRequest || coachSessionRequest === lastCoachRequestRef.current) return;
-        lastCoachRequestRef.current = coachSessionRequest;
-        openCoachSurface();
-    }, [coachSessionRequest, openCoachSurface]);
 
     const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
         chatStore.mutate(id, fn);
@@ -1014,7 +992,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const user = getActiveUsername();
         void runThesisResolver(user, model, trades).catch(() => { /* best-effort */ });
         const reviewable: ReviewableSession[] = sessions
-            .filter(s => s.kind !== 'coach' && s.kind !== 'group' && s.entries.some(e => e.role === 'ai' && e.text.trim()))
+            .filter(s => s.kind !== 'group' && s.entries.some(e => e.role === 'ai' && e.text.trim()))
             .map(s => ({
                 id: s.id,
                 transcript: s.entries
@@ -1395,7 +1373,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // Flush queued harness signals when the session goes idle. takeHarness-
     // Signals emits, so this re-runs with an empty queue and settles.
     // KIND GATE: runHarnessTurn streams into the ACTIVE session's transcript
-    // — but the coach inbox / group room render a different surface the dock
+    // — but the group room renders a different surface the dock
     // never shows chat entries in. Draining into one would consume the queue
     // invisibly (the warning vanishes without ever reaching a model turn).
     // With a non-chat session selected the signals HOLD in the store;
@@ -1438,15 +1416,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const removeSession = useCallback((id: string): void => {
         chatStore.removeSession(id);
     }, []);
-
-    // Switching back to Chat has to resolve a real conversation rather than
-    // assume one exists — a profile can reach the Coach surface with every
-    // chat since deleted. (openCoachSurface lives with the deep-link effect.)
-    const openChatSurface = useCallback((): void => {
-        const conversations = sessions.filter(s => s.kind === 'solo' || s.kind === 'panel');
-        if (conversations.length === 0) { addSession('solo'); return; }
-        chatStore.setActiveId(conversations.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a)).id);
-    }, [sessions, addSession]);
 
     /** Panel seat management: add (max 5) / remove a model. */
     const setPanelModels = useCallback((sid: string, models: Array<{ providerId: string; modelId: string }>): void => {
@@ -1502,7 +1471,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     className="rounded-control p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100">
                     <PanelRightOpen className="h-4 w-4" />
                 </button>
-                <span className="select-none text-[10px] font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">{isCoachSurface ? 'Coach' : 'Chart AI'}</span>
+                <span className="select-none text-[10px] font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
                 <span className={`h-2 w-2 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
                 <SupervisorIndicator compact onOpen={() => setSupervisorOpen(true)} />
             </div>
@@ -1511,44 +1480,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
     return (
         <div className="relative flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40" data-testid="trade-chat-panel">
-            {/* Header — the reference's Agent-panel cluster: surface switch
-                left, + / history / ⋯ / × right, nothing else. Conversations
-                are reached through the Past Conversations palette, not a tab
-                strip; the Coach inbox is a first-class surface, not a menu
-                item. */}
+            {/* Header — the reference's Agent-panel cluster: wordmark left,
+                + / history / ⋯ / × right, nothing else. Conversations are
+                reached through the Past Conversations palette, not a tab
+                strip. */}
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
-                {/* The dock's wordmark doubles as the surface switch where a
-                    Coach inbox is reachable — the label already named the
-                    surface, so promoting it to a control costs no width. */}
-                {renderCoachSurface ? (
-                    <div role="tablist" aria-label="Dock surface" data-testid="dock-surface-switch"
-                        className="flex shrink-0 items-center gap-0.5 rounded-full border border-white/[0.07] bg-zinc-800/70 p-0.5">
-                        <button type="button" role="tab" aria-selected={!isCoachSurface} onClick={openChatSurface}
-                            className={`rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[var(--ease-snappy)] ${
-                                !isCoachSurface ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
-                            }`}>
-                            Chat
-                        </button>
-                        <button type="button" role="tab" aria-selected={isCoachSurface} onClick={openCoachSurface}
-                            title={coachPending > 0 ? `${coachPending} awaiting your decision` : 'Coach inbox — nothing waiting'}
-                            className={`flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold leading-none transition-colors duration-150 ease-[var(--ease-snappy)] ${
-                                isCoachSurface ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
-                            }`}>
-                            Coach
-                            {coachPending > 0 && (
-                                <span className="rounded-full bg-amber-500 px-1 font-mono text-[9px] font-bold leading-[13px] text-zinc-950">
-                                    {coachPending > 99 ? '99+' : coachPending}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-                ) : (
-                    <span className="text-[13px] font-semibold text-zinc-100">Chart AI</span>
-                )}
-                {!isCoachSurface && (
-                    <span className="truncate text-[11px] text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
-                )}
+                <span className="text-[13px] font-semibold text-zinc-100">Chart AI</span>
+                <span className="truncate text-[11px] text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
                 {(() => {
                     // The prototype's "Analyzed 2m ago" meta, told honestly:
                     // the session's last real activity, and only once a settled
@@ -1704,16 +1643,16 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 </div>
             )}
 
-            {/* Coach inbox / group room: the roster surfaces the dock embeds
-                (App owns the wiring) instead of the chat transcript. */}
-            {(activeSession.kind === 'coach' || activeSession.kind === 'group') && (
-                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar" data-testid={`chat-${activeSession.kind}-surface`}>
-                    {activeSession.kind === 'coach'
-                        ? renderCoachSurface?.()
-                        : renderGroupSurface?.(activeSession.groupId ?? '')}
+            {/* Group room: the roster surface the dock embeds (App owns the
+                wiring) instead of the chat transcript. The Coach inbox used to
+                render here too, behind a Chat | Coach switch; it is the Learn
+                surface's own tab now. */}
+            {activeSession.kind === 'group' && (
+                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar" data-testid="chat-group-surface">
+                    {renderGroupSurface?.(activeSession.groupId ?? '')}
                 </div>
             )}
-            {activeSession.kind !== 'coach' && activeSession.kind !== 'group' && (
+            {activeSession.kind !== 'group' && (
             <>
             {/* The prototype's bias read rides ABOVE the transcript: always
                 current, code-calculated — the tape's state, not a chat turn. */}

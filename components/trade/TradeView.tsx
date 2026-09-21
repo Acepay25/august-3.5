@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { GripVertical, TrendingDown, TrendingUp } from 'lucide-react';
+import { GripVertical, PanelLeft, TrendingDown, TrendingUp } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
@@ -66,9 +66,8 @@ interface TradeViewProps {
     /** A roster click elsewhere asked Chart AI to open this bot's session
      *  (nonce-keyed so repeats re-open even for the same bot). */
     botSessionRequest?: { botId: string; nonce: number };
-    /** Same for group rooms and the Coach inbox (dock session kinds). */
+    /** Same for group rooms (dock session kinds). */
     groupSessionRequest?: { groupId: string; nonce: number };
-    coachSessionRequest?: number;
     /** Run the FULL ensemble analysis from the Chart AI composer; resolves
      *  with the verdict summary text to show back in the chat — optionally
      *  alongside the created analysis message id (lets the dock stamp the
@@ -77,12 +76,10 @@ interface TradeViewProps {
         Promise<string | { text: string; messageId?: string }>;
     /** "Log this trade" on a Chart AI proposal → record an OPEN trade. */
     onLogProposedTrade?: (proposal: TradeProposal) => void;
-    /** Roster surfaces the Chart AI dock embeds (Coach inbox + group rooms). */
-    renderCoachSurface?: () => React.ReactNode;
+    /** Group rooms the Chart AI dock embeds as a session. The Coach inbox used
+     *  to be handed through here for the dock's Chat | Coach switch; it is a
+     *  tab on the Learn surface now. */
     renderGroupSurface?: (groupId: string) => React.ReactNode;
-    /** Drafts + proposals awaiting a decision — rides the dock's Chat | Coach
-     *  switch. App computes it; the roster rail shows the same number. */
-    coachPending?: number;
     /** Group rooms offered in the dock's New-session menu (name for tabs). */
     groups?: Array<{ id: string; name: string }>;
     /** Imperative scroll-to-entry bridge forwarded to the Chart AI dock:
@@ -91,12 +88,15 @@ interface TradeViewProps {
     registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
     /** Triggers a fresh discovery of models from configured providers. */
     onRefreshModels?: () => Promise<void>;
-    /** The Antigravity-style left sidebar (the order book) — toggled by
-     *  clicking the active Trade icon in the activity bar. Below lg the icon
-     *  instead sends a mode request (below), since there is no sidebar. */
+    /** The left sidebar (the order book), open/closed. Below lg the same
+     *  toggle flips the surface mode instead, since there is no sidebar. */
     sidebarOpen?: boolean;
-    /** App's activity-bar icon below lg requests a surface mode flip
-     *  (nonce-keyed so a repeat request applies). Consumed only <lg. */
+    /** Opens/closes that book. The activity bar used to own this on its active
+     *  Trade icon; with the surfaces moved into the hamburger menu the control
+     *  lives in this surface's own market row. */
+    onToggleSidebar?: () => void;
+    /** A request to flip this surface's mode (nonce-keyed so a repeat request
+     *  applies). Consumed only <lg, where the book is a mode, not a column. */
     modeRequest?: { mode: TradeMode; n: number };
     /** Active profile — the persisted mobile mode is per-user, so a profile
      *  switch re-reads it instead of keeping the previous user's choice. */
@@ -301,7 +301,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, coachSessionRequest, onRunAnalysis, onLogProposedTrade, renderCoachSurface, renderGroupSurface, coachPending = 0, groups = [], registerScrollToMessage, sidebarOpen = true, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -712,14 +712,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         trades,
         botSessionRequest,
         groupSessionRequest,
-        coachSessionRequest,
         onRunAnalysis,
         onLogProposedTrade,
         onPlanPresented: handlePlanPresented,
         onChatLevelsChange: handleChatLevels,
-        renderCoachSurface,
         renderGroupSurface,
-        coachPending,
         groups,
         onToggleDeskScene,
         isDeskSceneOpen,
@@ -737,6 +734,27 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 with its 24h delta + MARK caption on the right. */}
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-zinc-900/60 px-3 pb-1.5 pt-2">
                 <div className="flex min-w-0 items-center gap-2.5">
+                    {/* The book column's own open/close control. It used to be
+                        the activity bar's active Trade icon; that icon now
+                        opens the surface menu, so the toggle moved to the row
+                        beside the panel it controls. */}
+                    {onToggleSidebar && (
+                        <button
+                            type="button"
+                            onClick={onToggleSidebar}
+                            aria-pressed={isBelowLg ? mode === 'book' : sidebarOpen}
+                            aria-label="Toggle order book"
+                            title={isBelowLg ? 'Show the order book' : 'Show or hide the order book'}
+                            data-testid="trade-book-toggle"
+                            className={`hidden shrink-0 rounded-control border p-1.5 transition-colors duration-[120ms] ease-[var(--ease-snappy)] sm:flex ${
+                                (isBelowLg ? mode === 'book' : sidebarOpen)
+                                    ? 'border-white/20 bg-zinc-800 text-zinc-100'
+                                    : 'border-white/10 bg-zinc-800/60 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
+                            }`}
+                        >
+                            <PanelLeft className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
                     <Sparkline symbol={symbol} interval={interval} />
                     <button

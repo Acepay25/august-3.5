@@ -25,13 +25,12 @@ import { Message } from '../types/message';
 /** Which conversation surface is open. 'team' = the main ensemble
  *  transcript (the boot surface — your last conversation); 'bot' = a
  *  named bot's 1:1; 'group' = a bot group room (also the debate room —
- *  the Team merged into groups); 'coach' = the learning inbox (skill
- *  drafts + queue proposals). */
+ *  the Team merged into groups). The learning inbox is not a thread here:
+ *  the Coach is a tab on the Learn surface. */
 export type ThreadSelection =
     | { kind: 'team' }
     | { kind: 'bot'; botId: string }
-    | { kind: 'group'; groupId: string }
-    | { kind: 'coach' };
+    | { kind: 'group'; groupId: string };
 
 /**
  * Derive the per-agent thread slice for one provider — optionally

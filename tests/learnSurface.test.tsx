@@ -1,5 +1,5 @@
 /**
- * Learn surface smoke test (WS-5.1) — the three tabs mount, switch, and show
+ * Learn surface smoke test (WS-5.1) — the tabs mount, switch, and show
  * the stores they claim to. MemoryFilesManager is lazy, so the tab-switch
  * assertions stay on the always-loaded Queue and Health panes.
  */
@@ -154,8 +154,7 @@ describe('One learning surface (WS-5.1)', () => {
     });
 });
 
-describe('Graveyard view (WS-5.1)', () => {
-    it('Health lists what was retired and why, instead of only counting it', async () => {
+describe('Graveyard view (WS-5.1)', () => {    it('Health lists what was retired and why, instead of only counting it', async () => {
         await recordTombstone(USER, {
             slug: 'btc-old-range-rule', reason: 'eval-hurts', sampleN: 6, liftPts: -12,
             retiredAt: '2026-09-01T00:00:00.000Z',
@@ -168,5 +167,53 @@ describe('Graveyard view (WS-5.1)', () => {
         expect(text).toContain('btc-old-range-rule');
         expect(text).toContain('eval-hurts');
         expect(text).toContain('standing but contradicted');
+    });
+});
+
+/**
+ * The Coach inbox moved here from the Chart AI dock's Chat | Coach switch when
+ * the surfaces went into the hamburger menu. App owns the allow/deny handlers
+ * and hands the panel in, so these mount a stand-in and pin the tab contract:
+ * it exists only with the panel, it carries the pending count, and a stale
+ * stored choice cannot strand the surface on a tab it cannot render.
+ */
+const mountCoach = (coachCount = 0): void => {
+    render(
+        <LearnView
+            username={USER} trades={[]} memoryConfig={null} coachCount={coachCount}
+            renderCoach={() => <div data-testid="fake-coach-pane">coach</div>}
+        />,
+    );
+};
+
+describe('The Coach tab (merged from the dock)', () => {
+    it('shows no Coach tab when no coach panel was handed in', () => {
+        mount();
+        expect(screen.queryByTestId('learn-tab-coach')).toBeNull();
+    });
+
+    it('switches to the panel App hands in', async () => {
+        mountCoach();
+        expect(screen.queryByTestId('fake-coach-pane')).toBeNull();
+        fireEvent.click(screen.getByTestId('learn-tab-coach'));
+        await waitFor(() => expect(screen.getByTestId('fake-coach-pane')).toBeTruthy());
+    });
+
+    it('counts the decisions waiting on the tab', () => {
+        mountCoach(0);
+        expect(screen.getByTestId('learn-tab-coach').textContent).not.toMatch(/\d/);
+        cleanup();
+        mountCoach(7);
+        expect(screen.getByTestId('learn-tab-coach').textContent).toContain('7');
+        expect(screen.getByTestId('learn-tab-coach').getAttribute('title')).toBe('7 awaiting your decision');
+    });
+
+    it('a stored coach choice with no panel falls back to Queue, not a blank pane', async () => {
+        localStorage.setItem('learn_tab_v1', 'coach');
+        mount();
+        await waitFor(() => {
+            expect(screen.getByTestId('learn-tab-queue').getAttribute('aria-current')).toBe('true');
+        });
+        expect(screen.queryByTestId('learn-coach')).toBeNull();
     });
 });

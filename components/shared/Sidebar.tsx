@@ -7,7 +7,6 @@ import { EmptyState } from '../ui/EmptyState';
 import type { SidebarPane } from '../../hooks/useSidebarPane';
 import {
     ActivityIcon,
-    BookmarkIcon,
     ChevronDownIcon,
     CodeIcon,
     PinIcon,
@@ -98,7 +97,6 @@ interface SidebarContentProps {
     onLoadConversation: (id: string) => void;
     onOpenLiveMarket: () => void;
     onOpenVisionData: () => void;
-    onOpenJournal: () => void;
     onOpenWatchList?: () => void;
     onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
@@ -127,8 +125,8 @@ interface SidebarContentProps {
     collapsed?: boolean;
 }
 
-// Shared sidebar body, rendered both as the persistent desktop column
-// (App.tsx) and inside the mobile slide-out drawer (Header.tsx).
+// Shared sidebar body, rendered inside the slide-out navigation drawer
+// (Header.tsx) beneath the surface list.
 export const SidebarContent: React.FC<SidebarContentProps> = ({
     activeUsername,
     conversations,
@@ -139,7 +137,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onLoadConversation,
     onOpenLiveMarket,
     onOpenVisionData,
-    onOpenJournal,
     onOpenWatchList,
     onOpenSettings,
     onDeleteConversation,
@@ -580,17 +577,17 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
             {/* BOTS pane body — the caller's rosterSlot, mounted verbatim.
                 This component builds none of it; see the prop doc. */}
-            {/* Quick actions — OUTSIDE the sessions-only fragment: journal,
-                live market, and the pinned list must stay reachable from the
-                unified BOTS pane too, or they vanish exactly when the
-                roster is the active surface. */}
+            {/* Quick actions — OUTSIDE the sessions-only fragment: live market
+                and the pinned list must stay reachable from the unified BOTS
+                pane too, or they vanish exactly when the roster is the active
+                surface. The Journal is not here — it is a surface, and the
+                surface list above owns that entry. */}
             <nav className="px-2">
                 <div className="space-y-0">
                     <NavRow collapsed={collapsed} icon={<ActivityIcon className="h-4 w-4" />} label="Live Market" onClick={act(onOpenLiveMarket)} />
                     {hasVisionData && (
                         <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
                     )}
-                    <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
                     {onOpenWatchList && (
                         <NavRow collapsed={collapsed} icon={<PinIcon className="h-4 w-4" />} label="Pinned signals" onClick={act(onOpenWatchList)} />
                     )}

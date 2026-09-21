@@ -174,16 +174,22 @@ describe('trade chat sessions', () => {
         expect(loaded.entries[2].actions).toEqual([]);
     });
 
-    it('coach and group session kinds round-trip (roster surfaces in the dock)', () => {
-        const coach = createSession('coach');
-        coach.title = 'Coach inbox';
+    it('group session kinds round-trip, and a stored coach row drops', () => {
         const group = { ...createSession('group'), title: 'Macro room', groupId: 'g-1' };
         const botBound = { ...createSession('solo'), botId: 'bot-9' };
-        saveSessions([coach, group, botBound]);
+        saveSessions([group, botBound]);
         const loaded = loadSessions();
-        expect(loaded.map(s => s.kind)).toEqual(['coach', 'group', 'solo']);
-        expect(loaded[1].groupId).toBe('g-1');
-        expect(loaded[2].botId).toBe('bot-9');
+        expect(loaded.map(s => s.kind)).toEqual(['group', 'solo']);
+        expect(loaded[0].groupId).toBe('g-1');
+        expect(loaded[1].botId).toBe('bot-9');
+
+        // The Coach inbox left the dock (it is a Learn tab), so a profile whose
+        // stored sessions still carry one must not reopen it as a chat slot.
+        localStorage.setItem(storageKey(), JSON.stringify([
+            { id: 'c1', title: 'Coach inbox', createdAt: 1, updatedAt: 1, entries: [], kind: 'coach' },
+            { id: 's1', title: 'Real chat', createdAt: 1, updatedAt: 1, entries: [], kind: 'solo' },
+        ]));
+        expect(loadSessions().map(s => s.id)).toEqual(['s1']);
     });
 
     it('an unknown stored kind falls back to solo, never a crash', () => {
