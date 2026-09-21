@@ -123,10 +123,11 @@ test('first-run chat explains provider setup when no providers are configured', 
     await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByPlaceholder('Configure a provider in Settings first')).toBeVisible({ timeout: 15_000 });
 
-    // Settings is no longer a rail icon: the rail carried a gear that opened the
-    // same dialog as the account menu's "Settings" row, and that duplicate was
-    // removed. So the direct path is the avatar, then the menu item.
-    await page.getByRole('button', { name: 'Account menu' }).click();
+    // Settings has no rail icon and no header button: the surfaces moved into
+    // the hamburger, and the account menu that carries Settings lives at the
+    // foot of that drawer. So the path is menu → account → Settings.
+    await page.getByRole('button', { name: 'Toggle navigation menu' }).click();
+    await page.getByRole('button', { name: 'Open account menu' }).click();
     await page.getByRole('menuitem', { name: /^Settings/ }).click();
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'AI setup', exact: true })).toBeVisible({ timeout: 10_000 });
@@ -149,30 +150,44 @@ test('a profile with a seeded analysis boots clean', async ({ page }) => {
 // surfaces are Trade/Journal/Studio/Agents) — its seat-card smoke specs went
 // with it.
 
-test('the surface rail reaches the journal and back to the trade chart', async ({ page }) => {
+test('the hamburger menu reaches the journal and back to the trade chart', async ({ page }) => {
     await seedWorkspace(page, 'Navigation Workspace');
 
-    // The Antigravity rail replaced the old header buttons: Journal is a
-    // surface now (embedded <Journal/>, no dialog chrome), and Trade
-    // switches back to the chart. Matched by prefix INSIDE the rail because
-    // each button's accessible name now carries its shortcut ("Journal,
-    // shortcut Alt+2"; Trade also carries "— toggle panel"), which an exact
-    // string can no longer hit. Scoping to the Surfaces nav keeps it from
-    // matching any other "Journal"/"Trade" control.
-    const rail = page.getByRole('navigation', { name: 'Surfaces' });
-    await rail.getByRole('button', { name: /^Journal/ }).click();
+    // The surfaces moved from the always-visible icon rail into the header's
+    // menu, so every jump opens the menu first — and closes it again, because
+    // picking a surface dismisses it. Matched by prefix INSIDE the Surfaces
+    // nav because each row's accessible name also carries its shortcut
+    // ("Journal, shortcut Alt+2"), which an exact string can no longer hit.
+    const openMenu = () => page.getByRole('button', { name: 'Toggle navigation menu' }).click();
+    const surfaces = () => page.getByRole('navigation', { name: 'Surfaces' });
+
+    await openMenu();
+    await surfaces().getByRole('button', { name: /^Journal/ }).click();
     await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible({ timeout: 10_000 });
-    await rail.getByRole('button', { name: /^Trade/ }).click();
+    await openMenu();
+    await surfaces().getByRole('button', { name: /^Trade/ }).click();
     await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 10_000 });
 });
 
-test('mobile navigation keeps core actions inside the navigation dialog', async ({ page }) => {
+test('the navigation menu keeps its core actions and names where you are', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedWorkspace(page, 'Mobile Workspace');
 
+    // The button is no longer mobile-only, but it still has to say which
+    // surface it will navigate away from.
+    await expect(page.getByRole('button', { name: 'Toggle navigation menu' })).toContainText('Trade');
     await page.getByRole('button', { name: 'Toggle navigation menu' }).click();
     const navigation = page.getByRole('dialog', { name: 'Navigation menu' });
     await expect(navigation).toBeVisible();
-    await expect(navigation.getByRole('button', { name: 'Trading Journal', exact: true })).toBeVisible();
+    await expect(navigation.getByRole('button', { name: /^Journal/ })).toBeVisible();
     await expect(navigation.getByRole('button', { name: 'Live Market', exact: true })).toBeVisible();
+
+    // The drawer must fill the viewport, not the header bar. It is portaled to
+    // <body> because the header's backdrop-blur makes the header the
+    // containing block for a fixed-position descendant — rendered in place,
+    // the panel's `inset-0` resolved against the 53px bar and clipped the
+    // menu to one row (which toBeVisible never noticed).
+    const box = await navigation.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(800);
 });

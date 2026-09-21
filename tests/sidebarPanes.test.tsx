@@ -53,7 +53,6 @@ const base = {
     onLoadConversation: () => {},
     onOpenLiveMarket: () => {},
     onOpenVisionData: () => {},
-    onOpenJournal: () => {},
     onOpenSettings: () => {},
     onDeleteConversation: () => {},
 };

@@ -626,14 +626,14 @@ describe('explicit Stop is never narrated as a failure', () => {
 });
 
 describe('harness drain only into chat-kind sessions', () => {
-    it('signals HOLD while a coach session is selected and drain when a chat returns', async () => {
+    it('signals HOLD while a non-chat session is selected and drain when a chat returns', async () => {
         script(yieldText('warned now'));
         render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
         const soloId = chatStore.getActiveId();
-        act(() => { chatStore.addSession({ kind: 'coach', title: 'Coach inbox' }); });
+        act(() => { chatStore.addSession({ kind: 'group', title: 'Room', groupId: 'g-1' }); });
         act(() => { chatStore.queueHarnessSignal(SIGNAL); });
         // Held: the queue was NOT consumed, and no model turn ran into the
-        // coach transcript the dock never renders.
+        // room transcript the dock never renders as chat.
         await waitFor(() => expect(chatStore.getSnapshot().signals.length).toBe(1));
         expect(streamMock).not.toHaveBeenCalled();
         expect(screen.queryByTestId('chat-notice')).toBeNull();

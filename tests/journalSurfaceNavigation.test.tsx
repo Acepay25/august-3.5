@@ -1,14 +1,16 @@
 /**
- * Journal navigation rewire (audit 2026-09-15, UI shell): journalState.isOpen
- * had NO live consumer (the overlay render was commented out), so the command
- * palette "Open Journal", the mobile drawer entry, the #/journal hash and the
- * Think-tab reasoning deep link were all silent no-ops. Everything now routes
- * through App's openJournal → setSurface('journal').
+ * Journal navigation rewire (audit 2026-09-15, UI shell; nav moved into the
+ * hamburger on 2026-09-21): journalState.isOpen had NO live consumer (the
+ * overlay render was commented out), so the command palette "Open Journal",
+ * the navigation menu entry, the #/journal hash and the Think-tab reasoning
+ * deep link were all silent no-ops. Everything now routes through App's
+ * openJournal → setSurface('journal').
  *
  * Two layers of coverage:
- *  1. BEHAVIOR — the Header drawer's "Trading Journal" row must fire the
- *     onOpenJournal callback (Header owns that wiring; the prop replaced the
- *     dead setJournalState one).
+ *  1. BEHAVIOR — the header's navigation menu must reach the journal through
+ *     the surface row's onSelectSurface('journal') (App maps that onto
+ *     openJournal), and the legacy "Trading Journal" quick-action row must
+ *     stay deleted so the drawer holds one Journal entry, not two.
  *  2. WIRING SCANS — the App-side routing (palette/hash/deep-link/embedded
  *     Journal props + the fixed serializer deps) lives inside the 3k-line App
  *     component's effects, which no jsdom render in this repo exercises;
@@ -21,6 +23,7 @@ import { readFileSync } from 'fs';
 import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { Header } from '../components/shared/Header';
+import type { AppSurface } from '../hooks/useSurface';
 import type { Conversation } from '../types';
 
 const appSrc = readFileSync('App.tsx', 'utf8');
@@ -43,9 +46,9 @@ afterEach(() => {
     window.localStorage.clear();
 });
 
-// ─── 1. Behavior: the mobile drawer routes through onOpenJournal ───────────
+// ─── 1. Behavior: the navigation menu routes through the surface list ──────
 
-const renderHeaderWithDrawer = (onOpenJournal: () => void): void => {
+const renderHeaderWithDrawer = (onSelectSurface: (s: AppSurface) => void): void => {
     const conversations: Conversation[] = [];
     render(
         <Header
@@ -59,7 +62,8 @@ const renderHeaderWithDrawer = (onOpenJournal: () => void): void => {
             mobileMenuRef={{ current: null }}
             setIsMobileMenuOpen={() => {}}
             setIsVisionDataVisible={() => {}}
-            onOpenJournal={onOpenJournal}
+            surface="trade"
+            onSelectSurface={onSelectSurface}
             setIsSettingsVisible={() => {}}
             setIsLivePostMortemVisible={() => {}}
             onOpenLiveMarket={() => {}}
@@ -73,17 +77,24 @@ const renderHeaderWithDrawer = (onOpenJournal: () => void): void => {
     );
 };
 
-describe('Header mobile drawer → journal surface routing', () => {
-    it('clicking "Trading Journal" invokes the onOpenJournal callback', () => {
-        const onOpenJournal = vi.fn();
-        renderHeaderWithDrawer(onOpenJournal);
-        fireEvent.click(screen.getByText('Trading Journal'));
-        expect(onOpenJournal).toHaveBeenCalledTimes(1);
+describe('Header navigation menu → journal surface routing', () => {
+    it('the Journal row invokes onSelectSurface("journal")', () => {
+        const onSelectSurface = vi.fn();
+        renderHeaderWithDrawer(onSelectSurface);
+        fireEvent.click(screen.getByRole('button', { name: /^Journal/ }));
+        expect(onSelectSurface).toHaveBeenCalledWith('journal');
+    });
+
+    it('carries no second Journal entry — the surface list owns that route', () => {
+        renderHeaderWithDrawer(() => {});
+        expect(screen.queryByText('Trading Journal')).toBeNull();
     });
 
     it('Header no longer carries the dead setJournalState plumbing', () => {
         expect(headerSrc).not.toMatch(/setJournalState/);
-        expect(headerSrc).toMatch(/onOpenJournal: \(\) => void/);
+        // onOpenJournal was the drawer row's prop; the row moved into the
+        // surface list, so the prop must not come back as a dead chain.
+        expect(headerSrc).not.toMatch(/onOpenJournal/);
     });
 });
 
@@ -123,8 +134,8 @@ describe('App journal routing (source contract)', () => {
         expect(appSrc).toMatch(/serializeAppHash\(route\)[\s\S]{0,400}\[surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible\]/);
     });
 
-    it('NavRail + Alt-shortcuts enter the journal through openJournal', () => {
-        expect(appSrc).toMatch(/onSelect=\{handleSurfaceSelect\}/);
+    it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {
+        expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
         expect(appSrc).toMatch(/if \(next === 'journal'\) \{\s*openJournal\(\);/);
     });
 });

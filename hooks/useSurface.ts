@@ -1,10 +1,9 @@
 /**
- * useSurface — Minara's top-level navigation model: the app is a set of
- * surfaces (Trade, Journal, Studio, Agents) chosen from the icon rail, not a
- * single page with modal everything. The Chat surface was removed — the
- * trade surface's Chart AI dock carries the conversations now — so a stored
- * 'chat' value migrates to 'trade'. Persisted like uiMode; unknown/absent
- * values fall back to trade.
+ * useSurface — the app is a set of surfaces (Trade, Journal, Studio, Agents,
+ * Learn) chosen from the header's hamburger menu, not a single page with modal
+ * everything. The Chat surface was removed — the trade surface's Chart AI dock
+ * carries the conversations now — so a stored 'chat' value migrates to 'trade'.
+ * Persisted like uiMode; unknown/absent values fall back to trade.
  */
 
 import { useEffect, useState } from 'react';

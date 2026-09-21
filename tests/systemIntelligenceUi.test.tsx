@@ -74,7 +74,8 @@ describe('System Intelligence UI', () => {
             activeUsername="Alice" saveStatus="SAVED" isAnalysisInProgress={false}
             isPostMortemInProgress={false} currentVisionData={[]} isFreshSession
             isMobileMenuOpen={false} mobileMenuRef={React.createRef<HTMLDivElement>()}
-            setIsMobileMenuOpen={vi.fn()} setIsVisionDataVisible={vi.fn()} onOpenJournal={vi.fn()}
+            setIsMobileMenuOpen={vi.fn()} setIsVisionDataVisible={vi.fn()}
+            surface="trade" onSelectSurface={vi.fn()}
             setIsSettingsVisible={vi.fn()} setIsLivePostMortemVisible={vi.fn()}
             onOpenLiveMarket={vi.fn()} onOpenVersionHistory={open}
             conversations={[]} activeConversationId={null} onNewConversation={vi.fn()}

@@ -35,7 +35,7 @@ const base = {
     bots: [] as AgentBot[],
     groups: [] as AgentGroup[],
     messages: [] as Message[],
-    selection: { kind: 'coach' } as const,
+    selection: { kind: 'team' } as const,
     onSelect: () => {},
     onNewBot: () => {},
     onNewGroup: () => {},
@@ -246,10 +246,10 @@ describe('WS-6 rail completeness', () => {
         expect(screen.getByTestId('agents-view').textContent).toContain('skip the short');
     });
 
-    it('renders the coach pane for the coach shortcut instead of a blank desk', () => {
-        render(<AgentsView {...base} selection={{ kind: 'coach' }}
-            renderCoach={() => <div data-testid="coach-pane">the coach</div>} />);
-        expect(screen.getByTestId('coach-pane')).toBeTruthy();
+    it('has no coach pane — the Coach inbox is a Learn tab, reached by the hop', () => {
+        render(<AgentsView {...base} onOpenCoach={() => {}} coachCount={2} />);
+        expect(screen.queryByTestId('coach-pane')).toBeNull();
+        expect(screen.getByTestId('rail-coach').textContent).toContain('Coach · 2');
     });
 
     it('renames a bot from its own row', () => {
@@ -390,7 +390,7 @@ describe('WS-6 focus and mobile drawer', () => {
  * Ported from the deleted components/chat/AgentRosterRail.tsx suite: coverage
  * of live row behaviour (identity, active state, name filter, per-bot thread
  * scoping, the working ring, creation, emptiness, delete affordances, the
- * Coach count) that nothing else asserted. What was NOT ported was either
+ * Coach hop count) that nothing else asserted. What was NOT ported was either
  * already covered above (row click selects, room edit, bot delete, pin,
  * rename, routines) or was chrome of the deleted rail itself (its embedded
  * variant, its “+” menu popover, the Team row it carried before rooms subsumed
@@ -489,14 +489,14 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         expect(screen.queryByLabelText('Delete War room')).toBeNull();
     });
 
-    it('counts what the Coach shortcut is waiting on, and opens that thread', () => {
-        const onSelect = vi.fn();
-        const { rerender } = render(<AgentsView {...base} onSelect={onSelect} />);
+    it('counts what the Coach hop is waiting on, and jumps to the Learn tab', () => {
+        const onOpenCoach = vi.fn();
+        const { rerender } = render(<AgentsView {...base} onOpenCoach={onOpenCoach} />);
         expect(screen.getByTestId('rail-coach').textContent?.trim()).toBe('Coach');
-        rerender(<AgentsView {...base} coachCount={2} onSelect={onSelect} />);
+        rerender(<AgentsView {...base} coachCount={2} onOpenCoach={onOpenCoach} />);
         expect(screen.getByTestId('rail-coach').textContent?.trim()).toBe('Coach · 2');
         fireEvent.click(screen.getByTestId('rail-coach'));
-        expect(onSelect).toHaveBeenCalledWith({ kind: 'coach' });
+        expect(onOpenCoach).toHaveBeenCalledTimes(1);
     });
 });
 

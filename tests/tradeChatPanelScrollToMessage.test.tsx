@@ -132,9 +132,9 @@ describe('scroll-to-message bridge', () => {
         expect(scrollSpy).not.toHaveBeenCalled();
     });
 
-    it('a coach session renders no transcript — the bridge cannot throw', () => {
+    it('a group session renders no transcript — the bridge cannot throw', () => {
         const { getRegistered } = renderDock();
-        act(() => { chatStore.addSession({ kind: 'coach', title: 'Coach inbox' }); });
+        act(() => { chatStore.addSession({ kind: 'group', title: 'Room', groupId: 'g-1' }); });
         expect(() => getRegistered()!.call(null, 'anything')).not.toThrow();
         expect(scrollSpy).not.toHaveBeenCalled();
     });
