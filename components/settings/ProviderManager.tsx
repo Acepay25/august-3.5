@@ -155,7 +155,7 @@ const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) =
     return (
         <div className=" rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
             <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Live health (this session)</p>
+                <p className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">Live health (this session)</p>
                 {cooldownMs > 0 && (
                     <StatusPill tone="warn" kicker>
                         benched · {Math.ceil(cooldownMs / 60000)}m left
@@ -806,7 +806,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                     <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{m}</span>
                                                 )}
                                                 <div className="ml-4 flex shrink-0 items-center gap-2.5" onClick={e => e.stopPropagation()}>
-                                                    <span className="font-mono text-[10px] font-medium text-zinc-500">{badgeText}</span>
+                                                    <span className="font-mono text-ui-xs font-medium text-zinc-500">{badgeText}</span>
                                                     <button type="button" onClick={() => void handleTestModel(m)} disabled={isTestingThis || isTesting || !draftUrlValidation.valid} className="p-1 text-zinc-500 hover:text-zinc-200 disabled:opacity-40" title={modelTest?.message || `Test ${m}`} aria-label={modelTest?.message ? `Test ${m} — ${modelTest.message}` : `Test model ${m}`}>
                                                         {isTestingThis ? <LoadingIcon className="h-3.5 w-3.5 animate-spin" /> : <BoltIcon className="h-3.5 w-3.5" />}
                                                     </button>

@@ -82,7 +82,7 @@ export const deleteSkillFile = async (s: SkillCardData): Promise<void> => {
 
 const MetaField: React.FC<{ label: string; value: string; wide?: boolean }> = ({ label, value, wide }) => (
     <div className={wide ? 'col-span-2' : ''}>
-        <p className="text-[10px] uppercase tracking-widest text-zinc-600">{label}</p>
+        <p className="text-ui-xs uppercase tracking-widest text-zinc-600">{label}</p>
         <p className="mt-0.5 text-xs font-medium text-zinc-300">{value}</p>
     </div>
 );
@@ -216,7 +216,7 @@ const SkillDetail: React.FC<{
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 pt-1">
-                    <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+                    <span className="text-ui-xs font-medium uppercase tracking-widest text-zinc-500">
                         {retired ? 'Retired' : 'Active'}
                     </span>
                     <ToggleSwitch checked={!retired} onChange={onToggleRetire} label={`Toggle ${skill.name} active`} />
@@ -230,7 +230,7 @@ const SkillDetail: React.FC<{
                                 title={meta.whyAccepted
                                     ? `The supervisor accepted this: ${meta.whyAccepted}`
                                     : 'Accepted by the LLM supervisor, not by you.'}
-                                className="shrink-0 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-cyan-400">
+                                className="shrink-0 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-widest text-cyan-400">
                                 auto-approved
                             </span>
                             <button type="button" data-testid="skill-undo" aria-pressed={undoArmed}
@@ -335,7 +335,7 @@ const SkillDetail: React.FC<{
                         {proofState === 'running' ? 'Checking history…' : 'Prove on history'}
                     </button>
                     {proofState === 'done' && proofResult?.status === 'ok' && (
-                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide ${
+                        <span className={`rounded-md px-2 py-0.5 text-ui-xs font-bold tracking-wide ${
                             proofResult.proof.winRate !== null && proofResult.proof.winRate >= 0.55 ? 'bg-emerald-950/60 text-emerald-400'
                                 : proofResult.proof.winRate !== null && proofResult.proof.winRate < 0.45 ? 'bg-rose-950/50 text-rose-400/90'
                                     : 'bg-amber-950/60 text-amber-400'
@@ -343,7 +343,7 @@ const SkillDetail: React.FC<{
                             {proofResult.proof.winRate === null ? 'NO OUTCOMES' : `${Math.round(proofResult.proof.winRate * 100)}%`}
                         </span>
                     )}
-                    <span className="ml-auto text-[10px] text-zinc-600">
+                    <span className="ml-auto text-ui-xs text-zinc-600">
                         {proofState === 'done' && proofResult?.status === 'ok'
                             ? `${proofResult.proof.title} · ${proofResult.proof.wins}W/${proofResult.proof.losses}L over ${proofResult.proof.hits} hits · ${proofResult.proof.symbol} ${proofResult.proof.timeframe}`
                             : 'Free · replays real candles, no AI call'}
@@ -376,11 +376,11 @@ const SkillDetail: React.FC<{
                         {evalState === 'running' ? 'Evaluating…' : 'Run A/B eval'}
                     </button>
                     {evalState === 'done' && evalResult && (
-                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide ${evalBadge(evalResult.verdict)}`} data-testid="skill-eval-verdict">
+                        <span className={`rounded-md px-2 py-0.5 text-ui-xs font-bold tracking-wide ${evalBadge(evalResult.verdict)}`} data-testid="skill-eval-verdict">
                             {evalResult.verdict.toUpperCase()}
                         </span>
                     )}
-                    <span className="ml-auto text-[10px] text-zinc-600">
+                    <span className="ml-auto text-ui-xs text-zinc-600">
                         {evalState === 'done' && evalResult
                             ? `${evalResult.alignedFlips}/${evalResult.flips} aligned flips · ${evalResult.cases.length} trades`
                             : !memoryConfig ? 'Needs a memory model' : 'Costs up to 12 provider calls'}

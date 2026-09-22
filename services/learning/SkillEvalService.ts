@@ -33,6 +33,7 @@ import {
     skillMatchesSetup,
     skillStrictlyMatchesSetup,
     stampStatusTransition,
+    skillEnabledFlag,
     EVAL_DEMOTE_STREAK,
     MIN_SAMPLE_CONFIRMED,
     type SkillMeta,
@@ -382,7 +383,7 @@ const recordEvalVerdictUnlocked = async (
     }
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
-        enabled: meta.status !== 'retired',
+        enabled: skillEnabledFlag(meta),
     }, username);
 };
 

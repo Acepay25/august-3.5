@@ -149,7 +149,9 @@ describe('Desk tool cache + result budget', () => {
     const huge = `x`.repeat(MAX_TOOL_CONTENT_CHARS * 3);
     const budgeted = budgetToolContent('web_search', huge);
     expect(budgeted.length).toBeLessThanOrEqual(MAX_TOOL_CONTENT_CHARS + 20);
-    expect(budgeted).toContain('…[truncated]');
+    // Marker names the tool and both lengths: a clipped result must not read
+    // as a complete one. Still inside the cap — the note is carved out of it.
+    expect(budgeted).toContain('…[truncated web_search:');
   });
 
   it('applies the budget to live tool results before caching', async () => {
@@ -192,6 +194,6 @@ describe('Desk tool cache + result budget', () => {
     // sliced off before — the whole "this is now" line could vanish).
     // +24 for the truncation marker (same tolerance as the cap test above).
     expect(result.content.length).toBeLessThanOrEqual(6000 + 24);
-    expect(result.content).toContain('…[truncated]');
+    expect(result.content).toContain('…[truncated get_market_packet:');
   });
 });

@@ -816,6 +816,10 @@ export const batchBacktest = async (
                 const exit = result.priceAtExit;
 
                 if (entry && sl && exit) {
+                    // REALIZED reward:risk — distance to the price the market
+                    // actually exited at. Deliberately NOT utils/riskReward's
+                    // planned R:R, which is distance to the nearest target:
+                    // same name, two different questions. Do not "unify" these.
                     const risk = Math.abs(entry - sl);
                     const reward = Math.abs(exit - entry);
                     if (risk > 0) {

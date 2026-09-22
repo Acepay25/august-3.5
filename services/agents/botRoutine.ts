@@ -93,7 +93,7 @@ export const runBotRoutineTurn = async (
         notes: deps.notes,
         teammates: deps.bots,
     }) + (shared ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${shared}` : '');
-    const history = threadForProvider(deps.messages, bot.providerId, bot.modelId);
+    const history = threadForProvider(deps.messages, bot.providerId, bot.modelId, bot.id);
     const reply = (await deps.stream(provider, prompt, history, system)).trim();
 
     // The model composes; the harness owns delivery + attribution: strip
@@ -143,6 +143,7 @@ export const botRoutineMessageRow = (
 ): Message => ({
     id,
     role: MessageRole.AI,
+    botId: bot.id,
     text: reply,
     createdAt: new Date().toISOString(),
     modelsUsed: { [bot.providerId]: bot.modelId },

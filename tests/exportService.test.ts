@@ -44,7 +44,7 @@ vi.mock('../services/infrastructure/PreferencesService', async (importOriginal) 
     };
 });
 
-import { importPreferencesData } from '../services/infrastructure/ExportService';
+import { importPreferencesData, exportPreferencesData } from '../services/infrastructure/ExportService';
 import { PREF_KEYS } from '../services/infrastructure/PreferencesService';
 import type { ProviderConfig } from '../types/provider';
 
@@ -260,5 +260,64 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         const report = await importPreferencesData({ [PREF_KEYS.PRICE_ALERTS]: [] });
         expect(report.failedKeys).toEqual([PREF_KEYS.PRICE_ALERTS]);
         expect(report.keysWritten).toBe(0);
+    });
+});
+
+/**
+ * On native, Capacitor Preferences and the WebView's localStorage are TWO
+ * DIFFERENT PLACES, and several of this app's learning stores live only in the
+ * second one (profileMemory, StorageService's learning rules, the agent
+ * roster, the calibration/performance services). `getPreferenceObject` cannot
+ * see them, so a backup that reads every key through it exports an envelope
+ * with the trader's memory missing — and a restore into Preferences alone puts
+ * what did arrive where nothing reads it.
+ *
+ * This suite simulates native by leaving those keys out of the Preferences
+ * store entirely, which is exactly what the platform does to them.
+ */
+describe('stores the app keeps in raw localStorage', () => {
+    const PROFILE_MEMORY = 'profile_memory_v1_alice';
+    const LEARNING_RULES = 'learning_rules_v2_alice';
+    const NOTEBOOK = 'memory_files_v1_alice';
+
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('are exported even though Preferences holds nothing for them', async () => {
+        localStorage.setItem(PROFILE_MEMORY, JSON.stringify([{ id: 'm1', text: 'cuts losers early' }]));
+        localStorage.setItem(LEARNING_RULES, JSON.stringify({ version: 2, rules: [] }));
+        // A PREF_KEYS member, so the first export loop reaches it — and on
+        // native that loop's store is the empty one.
+        localStorage.setItem(PREF_KEYS.MODEL_PERFORMANCE_DATA, JSON.stringify([{ model: 'x', wins: 3 }]));
+
+        const backup = await exportPreferencesData();
+        expect(backup[PROFILE_MEMORY]).toEqual([{ id: 'm1', text: 'cuts losers early' }]);
+        expect(backup[LEARNING_RULES]).toMatchObject({ version: 2 });
+        expect(backup[PREF_KEYS.MODEL_PERFORMANCE_DATA]).toEqual([{ model: 'x', wins: 3 }]);
+    });
+
+    it('come back to the place their owner reads, not only to Preferences', async () => {
+        const report = await importPreferencesData({
+            [PROFILE_MEMORY]: [{ id: 'm1', text: 'cuts losers early' }],
+        });
+        expect(report.keysWritten).toBe(1);
+        expect(JSON.parse(localStorage.getItem(PROFILE_MEMORY) ?? 'null'))
+            .toEqual([{ id: 'm1', text: 'cuts losers early' }]);
+    });
+
+    it('do not gain a shadow copy: a Preferences-owned key stays out of localStorage', async () => {
+        // The WebView origin quota is shared, so duplicating the whole notebook
+        // into a store nothing reads on native is how memory starts getting
+        // evicted — the hazard utils/memoryBudget exists to keep small.
+        await importPreferencesData({ [NOTEBOOK]: { version: 1, folders: [], files: [] } });
+        expect(prefStore[NOTEBOOK]).toBeDefined();
+        expect(localStorage.getItem(NOTEBOOK)).toBeNull();
+    });
+
+    it('skip an unreadable raw value rather than inventing one', async () => {
+        localStorage.setItem(PROFILE_MEMORY, 'not json at all');
+        const backup = await exportPreferencesData();
+        expect(PROFILE_MEMORY in backup).toBe(false);
     });
 });

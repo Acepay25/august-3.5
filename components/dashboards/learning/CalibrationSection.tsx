@@ -9,7 +9,7 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
         {/* Setups to Avoid */}
         {profile.worstSetups.length > 0 && (
             <div className="bg-red-950/20 rounded-xl border border-red-500/20 p-3 sm:p-4">
-                <h4 className="text-[10px] sm:text-xs font-bold text-red-400 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-2">
+                <h4 className="text-ui-xs sm:text-xs font-bold text-red-400 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-2">
                     Setups to Avoid
                 </h4>
                 <div className="space-y-2">
@@ -26,7 +26,7 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
         {/*Confidence Calibration */}
         {profile.confidenceAccuracy.length > 0 && (
             <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 sm:mb-4">
+                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 sm:mb-4">
                     Confidence Calibration
                 </h4>
                 <div className="space-y-4">
@@ -45,14 +45,14 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
                             );
                         })}
                 </div>
-                <p className="text-[10px] text-zinc-600 mt-4">
+                <p className="text-ui-xs text-zinc-600 mt-4">
                     * White line = expected win rate for that confidence level
                 </p>
             </div>
         )}
 
         {/* Last Updated */}
-        <p className="text-[10px] text-zinc-600 text-center">
+        <p className="text-ui-xs text-zinc-600 text-center">
             Last updated: {new Date(profile.lastUpdated).toLocaleString()}
         </p>
     </>

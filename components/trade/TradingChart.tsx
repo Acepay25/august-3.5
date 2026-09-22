@@ -1017,7 +1017,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     <>
                         <div className="fixed inset-0 z-20" aria-hidden onClick={() => setTfPickerOpen(false)} />
                         <div className="absolute left-2 top-9 z-30 w-40 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="tf-picker">
-                            <p className="px-2 py-1 text-[9px] uppercase tracking-widest text-zinc-600">Timeframes</p>
+                            <p className="px-2 py-1 text-ui-2xs uppercase tracking-widest text-zinc-600">Timeframes</p>
                             <div className="grid grid-cols-2 gap-0.5">
                                 {CHART_INTERVALS.map(tf => {
                                     const shown = tfBar.includes(tf) || tf === interval;
@@ -1052,12 +1052,12 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     the plot (ChartToolRail) — the top bar keeps timeframes. */}
                 <span className="ml-auto flex items-center gap-2 pr-1">
                     {levels.length > 0 && (
-                        <span className="text-[10px] uppercase tracking-widest text-zinc-500" title="Current verdict levels drawn on the chart">
+                        <span className="text-ui-xs uppercase tracking-widest text-zinc-500" title="Current verdict levels drawn on the chart">
                             verdict overlay · {levels.map(l => l.label).join(' ')}
                         </span>
                     )}
                     <span className={`h-1.5 w-1.5 rounded-full ${status === 'live' ? 'bg-emerald-500' : status === 'loading' ? 'animate-pulse bg-cyan-400' : 'bg-rose-500'}`} aria-label={`chart ${status}`} />
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-600">{symbol} · Binance · {interval}</span>
+                    <span className="text-ui-xs uppercase tracking-widest text-zinc-600">{symbol} · Binance · {interval}</span>
                 </span>
             </div>
             <div className="relative min-h-0 flex-1 bg-zinc-950">

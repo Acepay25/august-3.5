@@ -118,3 +118,6 @@ tests/standalone-test-rl.ts
 scripts/fix-imports.cjs
 scripts/fix-imports-v2.cjs
 hybrid-payload-dump.md
+
+# render-probe failure screenshots (diagnostic output, never committed)
+.probe-artifacts/

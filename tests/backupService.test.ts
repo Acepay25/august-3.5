@@ -33,7 +33,7 @@ vi.mock('@capacitor/filesystem', () => ({
             h.files.set(opts.path, opts.data);
             return { uri: `app://${opts.path}` };
         }),
-        deleteFile: vi.fn(async () => undefined),
+        deleteFile: vi.fn(async (opts: { path: string }) => { h.files.delete(opts.path); }),
         readdir: vi.fn(async () => ({
             files: [...h.files.keys()]
                 .filter(p => p.startsWith('AugustBackups/'))
@@ -65,7 +65,9 @@ vi.mock('../services/infrastructure/ThinkingStoreService', () => ({
     saveThinkingBatch: h.saveThinkingBatch,
 }));
 
-import { restoreBackup } from '../services/infrastructure/BackupService';
+import {
+    restoreBackup, createBackup, getBackups, selectBackupsToDelete,
+} from '../services/infrastructure/BackupService';
 
 const USERNAME = 'alice';
 const BACKUP_ID = `backup-${USERNAME}-1000`;
@@ -207,5 +209,95 @@ describe('BackupService.restoreBackup — step failures are loud (no silent part
         expect(result.success).toBe(false);
         expect(result.error).toContain('"thinking" step');
         expect(result.error).toContain('pre-restore safety backup');
+    });
+});
+
+const DAY = 86_400_000;
+/** Fixed so the day/week bucketing is not a function of wall-clock drift. */
+const NOW = Date.UTC(2026, 8, 22, 12, 0, 0);
+const row = (id: string, ageDays: number) => ({
+    id,
+    timestamp: new Date(NOW - ageDays * DAY).toISOString(),
+});
+const ages = (ids: string[], all: Array<{ id: string; timestamp: string }>): number[] =>
+    all.filter(r => ids.includes(r.id))
+        // rounded: the ISO stamp is exact, but the assertion reads as days
+        .map(r => Math.round((NOW - Date.parse(r.timestamp)) / DAY))
+        .sort((a, b) => a - b);
+
+describe('BackupService retention — a recovery point has to still exist', () => {
+    it('does not let one long session pile up unbounded', () => {
+        // Auto-backups land every 30 minutes, so a trading day is dozens of
+        // same-day records. The tiered keeps must not turn that into dozens.
+        const sameDay = Array.from({ length: 12 }, (_, i) => row(`backup-alice-${i}`, i * 0.02));
+        const deleted = selectBackupsToDelete(sameDay, NOW);
+        // newest five, plus one more for the day the other six came from.
+        expect(deleted).toHaveLength(6);
+    });
+
+    it('keeps one backup per day past the newest five, inside the daily window', () => {
+        const week = Array.from({ length: 8 }, (_, i) => row(`backup-alice-d${i}`, i));
+        const deleted = selectBackupsToDelete(week, NOW);
+        expect(ages(deleted, week)).toEqual([]);
+    });
+
+    it('drops what has aged past both tiers', () => {
+        const history = [
+            ...Array.from({ length: 6 }, (_, i) => row(`backup-alice-d${i}`, i)),
+            row('backup-alice-month', 60),
+        ];
+        expect(selectBackupsToDelete(history, NOW)).toEqual(['backup-alice-month']);
+    });
+
+    it('never lets an import evict the backups already on the machine', () => {
+        // The claim `importBackupFromText` documents. Newest record is the
+        // import, so a plain newest-5 window would spend a machine backup on it.
+        const auto = Array.from({ length: 5 }, (_, i) => row(`backup-alice-${i}`, 2 + i));
+        const mixed = [...auto, row('imported-alice-999', 1)];
+        const deleted = selectBackupsToDelete(mixed, NOW);
+        expect(deleted.filter(id => !id.startsWith('imported-'))).toEqual([]);
+    });
+
+    it('bounds imports too, oldest first', () => {
+        const imports = Array.from({ length: 5 }, (_, i) => row(`imported-alice-${i}`, i));
+        const deleted = selectBackupsToDelete(imports, NOW);
+        expect(deleted).toEqual(['imported-alice-3', 'imported-alice-4']);
+    });
+
+    it('cannot place an undated record in a time tier, so it does not survive by it', () => {
+        const history = [
+            ...Array.from({ length: 6 }, (_, i) => row(`backup-alice-${i}`, i)),
+            { id: 'backup-alice-no-stamp', timestamp: 'not a date' },
+        ];
+        expect(selectBackupsToDelete(history, NOW)).toContain('backup-alice-no-stamp');
+    });
+
+    it('keeps the whole policy through the real create → sweep path', async () => {
+        // Seven daily backups plus an import: the newest-five window alone would
+        // have spent four of them, including the import the user just loaded.
+        for (const ageDays of [1, 2, 3, 4, 5, 6, 7]) {
+            const id = `backup-alice-${1_700_000_000_000 + ageDays}`;
+            const base = `AugustBackups/${USERNAME}_${id}`;
+            const ts = new Date(Date.now() - ageDays * DAY).toISOString();
+            h.files.set(`${base}.json`, JSON.stringify(profileFixture));
+            h.files.set(`${base}.meta.json`, JSON.stringify({
+                id, username: USERNAME, timestamp: ts, version: 1,
+                sizeBytes: 10, conversationCount: 0, tradeCount: 0,
+            }));
+        }
+        const importId = `imported-${USERNAME}-123`;
+        h.files.set(`AugustBackups/${USERNAME}_${importId}.json`, JSON.stringify(profileFixture));
+        h.files.set(`AugustBackups/${USERNAME}_${importId}.meta.json`, JSON.stringify({
+            id: importId, username: USERNAME,
+            timestamp: new Date(Date.now() - 30 * 60_000).toISOString(),
+            version: 1, sizeBytes: 10, conversationCount: 0, tradeCount: 0,
+        }));
+
+        h.getUserProfile.mockResolvedValue(profileFixture as never);
+        expect(await createBackup(USERNAME)).not.toBeNull();
+
+        const survivors = (await getBackups(USERNAME)).map(b => b.id);
+        expect(survivors.filter(id => id.startsWith('backup-'))).toHaveLength(8);
+        expect(survivors).toContain(importId);
     });
 });

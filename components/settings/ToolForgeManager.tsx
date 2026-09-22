@@ -16,7 +16,7 @@ const StatusBadge: React.FC<{ tool: ForgedTool }> = ({ tool }) => {
         retired: 'bg-zinc-900 text-zinc-600 line-through',
     };
     return (
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${map[tool.status]}`}>
+        <span className={`rounded px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[tool.status]}`}>
             {tool.status}
         </span>
     );
@@ -60,13 +60,13 @@ export const ToolForgeManager: React.FC = () => {
                             <code className="text-[12px] font-semibold text-zinc-200">{tool.id}</code>
                             <StatusBadge tool={tool} />
                             {tool.status === 'confirmed' && (
-                                <span className="ml-auto shrink-0 text-[10px] text-zinc-500">
+                                <span className="ml-auto shrink-0 text-ui-xs text-zinc-500">
                                     {stats.uses} calls · {Math.round(stats.successRate * 100)}% ok
                                 </span>
                             )}
                         </div>
                         <p className="mt-1 text-[11px] leading-snug text-zinc-400">{tool.proposal.description}</p>
-                        <p className="mt-1 truncate text-[10px] text-zinc-600">
+                        <p className="mt-1 truncate text-ui-xs text-zinc-600">
                             {tool.proposal.method ?? 'GET'} {tool.proposal.urlTemplate}
                             {tool.proposal.extractPath ? ` → ${tool.proposal.extractPath}` : ''}
                         </p>

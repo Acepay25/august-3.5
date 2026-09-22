@@ -211,6 +211,78 @@ const redactPreferenceValue = (key: string, value: unknown): unknown => {
 };
 
 /**
+ * Namespaces whose OWNER talks to `localStorage` directly, bypassing the
+ * Preferences abstraction — verified at each writer, not inferred from the
+ * allow-list:
+ *
+ *   profile_memory_v1_<user>      services/learning/profileMemory.ts:80
+ *   learning_rules_v2_<user>      services/infrastructure/StorageService.ts:36,97
+ *   agents_{bots,groups,teams}_v1_<user>  services/agents/agentRoster.ts:120
+ *   model_performance_data        services/backtesting/ModelPerformanceService.ts:315
+ *   rolling_window_data           services/backtesting/ModelPerformanceService.ts:774
+ *   model_confidence_calibration  services/backtesting/ModelPerformanceService.ts:1236
+ *   confidence_calibration        (the legacy key the line above migrates FROM)
+ *   confluence_historical_stats   services/analysis/TimeframeConfluenceService.ts:206
+ *
+ * On web this is the same store `PreferencesService` falls back to, so nothing
+ * notices. On NATIVE they are two different places — Capacitor Preferences is
+ * SharedPreferences/UserDefaults — and that broke backups in both directions:
+ * reading them with `getPreferenceObject` found nothing, so the trader's
+ * learning rules, profile memory, bot roster and calibration silently never
+ * left the device; and writing them back through Preferences put them where no
+ * reader looks. So the same list drives the export read and the restore mirror.
+ *
+ * Deliberately NOT every key: the WebView's storage quota is the one this app
+ * has already been bitten by (see utils/memoryBudget), so shadow-copying keys
+ * that Preferences genuinely owns would spend eviction-prone bytes on a copy
+ * nothing reads.
+ */
+const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
+    'profile_memory_v1',
+    'learning_rules_v2',
+    'agents_bots_v1',
+    'agents_groups_v1',
+    'agents_teams_v1',
+    'model_performance_data',
+    'rolling_window_data',
+    'model_confidence_calibration',
+    'confidence_calibration',
+    'confluence_historical_stats',
+];
+
+const isRawLocalStorageKey = (key: string): boolean =>
+    RAW_LOCAL_STORAGE_PREFIXES.some(p => key === p || key.startsWith(`${p}_`));
+
+/** The value as its owner would read it, or null when neither store has it. */
+const readSweptValue = async (key: string): Promise<unknown> => {
+    const viaPreferences = await getPreferenceObject(key);
+    if (viaPreferences !== null) return viaPreferences;
+    if (!isRawLocalStorageKey(key)) return null;
+    try {
+        const raw = typeof localStorage === 'undefined'
+            ? null
+            : localStorage.getItem(key);
+        return raw === null ? null : JSON.parse(raw);
+    } catch {
+        return null;
+    }
+};
+
+/** Put a raw-localStorage owner's key back where that owner reads it. On web
+ *  this writes the same key with the same bytes PreferencesService just wrote. */
+const mirrorToLocalStorage = (key: string, value: unknown): void => {
+    if (!isRawLocalStorageKey(key)) return;
+    try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+        // Quota here is not a restore failure: the Preferences copy is written
+        // and reported. Say so, rather than marking the key failed.
+        console.warn(`[ExportService] Mirrored write to localStorage skipped for ${key}:`, e);
+    }
+};
+
+/**
  * Export all preference keys as a supplementary backup
  * This captures settings that aren't in database
  */
@@ -222,7 +294,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
 
     for (const key of keysToBackup) {
         try {
-            const value = await getPreferenceObject(key);
+            const value = await readSweptValue(key);
             if (value !== null) {
                 backup[key] = redactPreferenceValue(key, value);
             }
@@ -249,7 +321,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         } catch { /* abstraction listing unavailable — localStorage sweep still ran */ }
         for (const key of swept) {
             if (!key || keysToBackup.includes(key)) continue;
-            const value = await getPreferenceObject(key);
+            const value = await readSweptValue(key);
             if (value !== null) {
                 backup[key] = redactPreferenceValue(key, value);
             }
@@ -543,6 +615,8 @@ export const importPreferencesData = async (
                 // wrapper might be needed if base is string
                 await setPreferenceObject(key, value);
             }
+            // …and where the owner actually reads. See RAW_LOCAL_STORAGE_PREFIXES.
+            mirrorToLocalStorage(key, value);
             report.keysWritten += 1;
         } catch (error) {
             console.error(`[ExportService] Failed to import key ${key}:`, error);

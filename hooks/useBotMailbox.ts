@@ -124,7 +124,7 @@ export const useBotMailbox = ({
         botsRef.current.find(b => b.id === id) ?? null, []);
 
     const notice = useCallback((bot: AgentBot, text: string): void => {
-        appendMessage(dmNoticeRow(text, bot.providerId, bot.modelId, `dmn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`));
+        appendMessage(dmNoticeRow(text, bot.providerId, bot.modelId, `dmn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, bot.id));
     }, [appendMessage]);
 
     const runBotTurn = useCallback(async (bot: AgentBot, prompt: string, opts: {
@@ -167,7 +167,7 @@ export const useBotMailbox = ({
         const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current })
             + (sharedMemory ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${sharedMemory}` : '')
             + (hybridInjection ? `\n\n${hybridInjection}` : '');
-        const history = threadForProvider(messagesRef.current, bot.providerId, bot.modelId);
+        const history = threadForProvider(messagesRef.current, bot.providerId, bot.modelId, bot.id);
         // The incoming DM itself must be VISIBLE in the target's thread
         // (the texting metaphor): a user-role dmFrom row that the reply
         // below claims via threadForProvider's pending-user rule.
@@ -189,6 +189,9 @@ export const useBotMailbox = ({
             text: '',
             createdAt: new Date().toISOString(),
             modelsUsed: { [bot.providerId]: bot.modelId },
+            // Identity, not just provider+model: a solo Chat-AI answer from this
+            // same model otherwise looks exactly like this bot's reply.
+            botId: bot.id,
             isStreaming: true,
         });
         try {
@@ -237,6 +240,11 @@ export const useBotMailbox = ({
                     dmReplyNoticeText(bot.name, raw.trim()),
                     opts.triggeredBy.from.providerId, opts.triggeredBy.from.modelId,
                     `dmw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    // Stamped for the SAME thread the provider+model pair points
+                    // at. Without it this row is claimed by inference, which is
+                    // how a sibling bot on that pair picked up a DM addressed to
+                    // someone else.
+                    opts.triggeredBy.from.id,
                 ));
                 setDmActivityCount(n => n + 1);
             }

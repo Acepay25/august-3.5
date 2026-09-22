@@ -127,7 +127,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         <div className={`flex items-center gap-1.5 ${className}`}>
             {appVersion && (
                 <span
-                    className="text-[10px] text-zinc-600 font-mono"
+                    className="text-ui-xs text-zinc-600 font-mono"
                     title={`Installed version ${appVersion}`}
                 >
                     v{appVersion}

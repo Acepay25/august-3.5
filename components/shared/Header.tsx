@@ -217,7 +217,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 <div className="static sm:relative" ref={sessionModalRef}>
                                     <button
                                         onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
-                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-colors duration-[150ms] ease-[var(--ease-snappy)] focus-visible:ring-2 focus-visible:ring-zinc-500"
+                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-ui-xs font-medium text-zinc-400 whitespace-nowrap transition-colors duration-[150ms] ease-[var(--ease-snappy)] focus-visible:ring-2 focus-visible:ring-zinc-500"
                                         aria-expanded={isSessionModalOpen}
                                         aria-haspopup="dialog"
                                     >
@@ -240,19 +240,19 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                 {liveMarketConditions && (
                                                     <div className="mb-3 p-2 bg-zinc-800 rounded-lg border border-white/5">
                                                         <div className="flex items-center justify-between mb-1.5">
-                                                            <div className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                                                            <div className="text-ui-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-pulse" />
                                                                 LIVE MARKET (BTC)
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.volatility === 'High' ? 'border-red-500/40 text-red-400 bg-red-500/15' :
+                                                            <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.volatility === 'High' ? 'border-red-500/40 text-red-400 bg-red-500/15' :
                                                                 liveMarketConditions.volatility === 'Medium' ? 'border-amber-500/40 text-amber-400 bg-amber-500/15' :
                                                                     'border-emerald-500/40 text-emerald-400 bg-emerald-500/15'
                                                                 }`}>
                                                                  {liveMarketConditions.volatility} Volatility
                                                             </span>
-                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-zinc-300/40 text-zinc-200 bg-zinc-300/15' :
+                                                            <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-zinc-300/40 text-zinc-200 bg-zinc-300/15' :
                                                                 liveMarketConditions.liquidation === 'Medium' ? 'border-zinc-500/40 text-zinc-400 bg-zinc-500/15' :
                                                                     'border-zinc-700/40 text-zinc-500 bg-zinc-700/15'
                                                                 }`}>
@@ -261,7 +261,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                         </div>
                                                     </div>
                                                 )}
-                                                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Sessions</div>
+                                                <div className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Sessions</div>
                                                 <div className="space-y-2">
                                                     {allSessions.map(session => (
                                                         <div key={session.id} className="flex items-center justify-between text-xs py-0.5">
@@ -270,7 +270,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                                 <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                                <span className={`text-[9px] px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-red-500/30 text-red-400 bg-red-500/10' :
+                                                                <span className={`text-ui-2xs px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-red-500/30 text-red-400 bg-red-500/10' :
                                                                     session.volatility === 'Medium' ? 'border-amber-500/30 text-amber-400 bg-amber-500/10' :
                                                                         'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
                                                                     }`}>
@@ -278,11 +278,11 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                                 </span>
                                                                 <div className="text-right w-20 whitespace-nowrap relative">
                                                                     {session.isOpen ? (
-                                                                        <span className="text-[10px] text-emerald-400 font-mono">
+                                                                        <span className="text-ui-xs text-emerald-400 font-mono">
                                                                             Closes in {formatDuration(session.closesInMinutes)}
                                                                         </span>
                                                                     ) : (
-                                                                        <span className="text-[10px] text-zinc-500 font-mono">
+                                                                        <span className="text-ui-xs text-zinc-500 font-mono">
                                                                             Opens in {formatDuration(session.opensInMinutes)}
                                                                         </span>
                                                                     )}
@@ -295,9 +295,9 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                     <div className="mt-3 pt-2 border-t border-white/5">
                                                         <div className="flex items-center gap-1.5 text-amber-400 mb-1">
                                                             <ActivityIcon className="w-3 h-3" />
-                                                            <span className="text-[10px] font-bold">Market Condition</span>
+                                                            <span className="text-ui-xs font-bold">Market Condition</span>
                                                         </div>
-                                                        <div className="text-[10px] text-zinc-400 leading-tight">
+                                                        <div className="text-ui-xs text-zinc-400 leading-tight">
                                                             {sessionContext.warnings[0]}
                                                         </div>
                                                     </div>
@@ -360,7 +360,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     <PinIcon className="h-3.5 w-3.5" />
                                     <span>Pinned</span>
                                     {watchOpenCount > 0 && (
-                                        <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-mono font-bold leading-4 text-zinc-900">
+                                        <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-ui-2xs font-mono font-bold leading-4 text-zinc-900">
                                             {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
                                         </span>
                                     )}
@@ -380,7 +380,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                         >
                             <SearchIcon className="h-3.5 w-3.5 text-zinc-500" />
                             <span className="text-[11px]">Search</span>
-                            <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.2 font-mono text-[9px] text-zinc-400">⌘K</kbd>
+                            <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.2 font-mono text-ui-2xs text-zinc-400">⌘K</kbd>
                         </button>
                     )}
 
@@ -432,7 +432,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     </div>
                                     <div>
                                         <h2 className="font-bold text-white">August Trading</h2>
-                                        <span className="text-[10px] text-zinc-500">{activeUsername}</span>
+                                        <span className="text-ui-xs text-zinc-500">{activeUsername}</span>
                                     </div>
                                 </div>
                             </div>

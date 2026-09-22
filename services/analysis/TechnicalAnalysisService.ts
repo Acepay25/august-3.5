@@ -392,6 +392,22 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
     else if (bullishSignals <= 2) trendStrength = 'bearish';
 
     const round = (v: number, decimals = 2) => Math.round(v * Math.pow(10, decimals)) / Math.pow(10, decimals);
+    /**
+     * Magnitude-aware rounding for price-scale values.
+     *
+     * A fixed 2dp ATR is wrong at both ends of this market: on a sub-$10 perp
+     * `round(0.012)` returned 0.01 — a ~17% error that then propagated into
+     * Monte Carlo sigma, regime sizing and every stop suggestion. Rounding to
+     * 4 significant digits, but never FEWER decimals than the historical 2,
+     * keeps large prices byte-identical to before while restoring precision
+     * where the old fixed scale destroyed it.
+     */
+    const roundPriceScale = (v: number, sigDigits = 4): number => {
+        if (!Number.isFinite(v) || v === 0) return 0;
+        const magnitude = Math.floor(Math.log10(Math.abs(v)));
+        const decimals = Math.min(12, Math.max(2, sigDigits - 1 - magnitude));
+        return Number(v.toFixed(decimals));
+    };
 
     return {
         rsi: {
@@ -442,9 +458,9 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
             average: round(avgVolume, 4),
             trend: volumeTrend
         },
-        atr: round(atr),
+        atr: roundPriceScale(atr),
         atrPercent: round(atrPercent),
-        currentPrice: round(currentPrice),
+        currentPrice: roundPriceScale(currentPrice),
         pricePosition: positions.join(', '),
         trendStrength
     };
@@ -533,10 +549,17 @@ export const calculateConfluenceScore = (
     let bullishPoints = 0;
     let bearishPoints = 0;
     const maxPoints = timeframes.length * 6; // 6 signal types per timeframe
+    // Which TIMEFRAMES actually contributed each way. The score is a
+    // multi-timeframe confluence measure, so breadth across timeframes has to
+    // be part of it — not just the ratio of bullish to bearish points.
+    const tfBullious = new Set<string>();
+    const tfBearish = new Set<string>();
 
     for (const tf of timeframes) {
         const ind = indicators[tf];
         if (!ind) continue;
+        const bullBefore = bullishPoints;
+        const bearBefore = bearishPoints;
 
         // RSI Signal (weight: 1)
         if (ind.rsi.rsi14 > 50 && ind.rsi.rsi14 < 70) {
@@ -597,24 +620,45 @@ export const calculateConfluenceScore = (
             bearishPoints++;
             alignment.push(`${tf} BB lower half`);
         }
+
+        if (bullishPoints > bullBefore) tfBullious.add(tf);
+        if (bearishPoints > bearBefore) tfBearish.add(tf);
     }
 
     // Calculate direction and score
     const totalPoints = bullishPoints + bearishPoints;
     let direction: 'bullish' | 'bearish' | 'neutral' = 'neutral';
     let score = 50; // Neutral baseline
+    let agreeingTimeframes = 0;
 
     if (totalPoints > 0) {
         const bullishRatio = bullishPoints / totalPoints;
         if (bullishRatio > 0.6) {
             direction = 'bullish';
-            score = 50 + Math.round((bullishRatio - 0.5) * 100);
         } else if (bullishRatio < 0.4) {
             direction = 'bearish';
-            score = 50 - Math.round((0.5 - bullishRatio) * 100);
         } else {
             direction = 'neutral';
-            score = 50;
+        }
+
+        if (direction !== 'neutral') {
+            // Purity alone made this a 1-signal-1-timeframe reading score 100
+            // and earn the label `strong`, which ProbabilityEngine then turns
+            // into a 1.15x probability multiplier. `maxPoints` was computed and
+            // never used. A high score now needs agreement AND breadth: purity
+            // scaled by how many timeframes actually voted the same way.
+            const purity = Math.abs(bullishRatio - 0.5) * 2; // 0..1
+            agreeingTimeframes = direction === 'bullish' ? tfBullious.size : tfBearish.size;
+            const breadth = timeframes.length > 0 ? agreeingTimeframes / timeframes.length : 0;
+            // How much of the available signal slots actually spoke. Half of
+            // maxPoints is treated as fully-evidenced, because a clean trend
+            // rarely fires all six indicators on every timeframe.
+            const coverage = maxPoints > 0 ? Math.min(1, (totalPoints / maxPoints) * 2) : 0;
+            // Floor of 0.3 keeps a genuine single-timeframe signal visible as
+            // `moderate` without letting it reach the 75+ `strong` band.
+            const composite = purity * (0.3 + 0.7 * breadth) * (0.5 + 0.5 * coverage);
+            const magnitude = Math.round(composite * 50);
+            score = direction === 'bullish' ? 50 + magnitude : 50 - magnitude;
         }
     }
 
@@ -622,8 +666,11 @@ export const calculateConfluenceScore = (
     score = clamp100(score);
 
     // Determine strength
+    // `strong` is a claim about MULTI-timeframe confluence, so it requires two
+    // independent timeframes to agree regardless of score: a lone timeframe
+    // cannot be strong evidence however cleanly its own indicators line up.
     const strength: 'strong' | 'moderate' | 'weak' =
-        score >= 75 || score <= 25 ? 'strong' :
+        (agreeingTimeframes >= 2 && (score >= 75 || score <= 25)) ? 'strong' :
             score >= 60 || score <= 40 ? 'moderate' : 'weak';
 
     return {

@@ -15,6 +15,7 @@
 
 import { TradeAnalysis, TradeOutcome, Message, MessageRole } from '../../types';
 import { baseOf, quoteOf } from '../../utils/symbol';
+import { plannedRiskReward } from '../../utils/riskReward';
 
 /** A structured trade the model puts on the table for the user to accept. */
 export interface TradeProposal {
@@ -40,13 +41,12 @@ const CONFIDENCE_PROBABILITY: Record<'High' | 'Medium' | 'Low', number> = {
     High: 72, Medium: 58, Low: 44,
 };
 
-/** Reward:risk from the first target vs the stop, sign-correct for direction. */
-export const computeRrRatio = (p: Pick<TradeProposal, 'direction' | 'entry' | 'stopLoss' | 'takeProfits'>): number => {
-    const risk = Math.abs(p.entry - p.stopLoss);
-    if (risk === 0 || p.takeProfits.length === 0) return 0;
-    const reward = Math.abs(p.takeProfits[0] - p.entry);
-    return Math.round((reward / risk) * 100) / 100;
-};
+/** Reward:risk from the first target vs the stop, sign-correct for direction.
+ *  Delegates to the single planned-R:R definition — the old version read
+ *  `takeProfits[0]`, so a model emitting targets out of order quoted the
+ *  FARTHEST target as the nearest one. */
+export const computeRrRatio = (p: Pick<TradeProposal, 'direction' | 'entry' | 'stopLoss' | 'takeProfits'>): number =>
+    plannedRiskReward({ entry: p.entry, stopLoss: p.stopLoss, takeProfits: p.takeProfits });
 
 /** Validate + normalize the model's raw tool arguments into a proposal, or
  *  return the reason it is unusable (the tool surfaces this to the model). */

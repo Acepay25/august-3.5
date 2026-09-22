@@ -216,7 +216,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
              >
                 <BotIcon /> Auto-Discover Strategies
              </button>
-             <p className="text-[10px] sm:text-xs text-zinc-600 text-center mt-2 sm:mt-4 font-medium">
+             <p className="text-ui-xs sm:text-xs text-zinc-600 text-center mt-2 sm:mt-4 font-medium">
                 Use AI to research and add new frameworks from the web.
              </p>
           </div>
@@ -235,7 +235,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                 <button 
                                     onClick={() => onApplyStrategy(result.name)}
                                     disabled={(activeFrameworks || []).some(fw => fw.toLowerCase() === result.name.toLowerCase())}
-                                    className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider py-2 px-4 rounded-lg transition-colors ${
+                                    className={`text-ui-xs sm:text-xs font-bold uppercase tracking-wider py-2 px-4 rounded-lg transition-colors ${
                                         (activeFrameworks || []).some(fw => fw.toLowerCase() === result.name.toLowerCase())
                                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
                                         : 'bg-cyan-600 text-white hover:bg-cyan-500 shadow-lg shadow-cyan-900/20'
@@ -278,28 +278,28 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                             <h4 className="font-black uppercase tracking-tight text-sm sm:text-base flex items-center gap-2">
                                                 {family.name}
                                                 {stats.total > 0 ? (
-                                                    <span className={`text-[10px] sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold ${parseInt(String(stats.winRate)) > 50 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                                                    <span className={`text-ui-xs sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold ${parseInt(String(stats.winRate)) > 50 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
                                                         {stats.winRate}% Win
                                                     </span>
                                                 ) : (
-                                                    <span className="text-[10px] sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold bg-zinc-700 text-zinc-400">N/A</span>
+                                                    <span className="text-ui-xs sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold bg-zinc-700 text-zinc-400">N/A</span>
                                                 )}
                                             </h4>
-                                            <span className={`text-[8px] sm:text-[10px] font-bold uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/30 border border-white/10`}>{family.tag}</span>
+                                            <span className={`text-[8px] sm:text-ui-xs font-bold uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/30 border border-white/10`}>{family.tag}</span>
                                         </div>
                                         <p className="text-sm sm:text-base font-bold opacity-90 mb-1 sm:mb-2">"{family.nickname}"</p>
                                         <p className="text-xs sm:text-sm opacity-80 mb-3 sm:mb-5 leading-relaxed">{family.personality}</p>
                                         
                                         <div className="space-y-2 sm:space-y-4">
                                             <div>
-                                                <span className="text-[10px] sm:text-xs font-bold uppercase opacity-60 block mb-1 sm:mb-2">Typical Features</span>
-                                                <ul className="list-disc list-inside text-[10px] sm:text-sm opacity-80 space-y-0.5 sm:space-y-1">
+                                                <span className="text-ui-xs sm:text-xs font-bold uppercase opacity-60 block mb-1 sm:mb-2">Typical Features</span>
+                                                <ul className="list-disc list-inside text-ui-xs sm:text-sm opacity-80 space-y-0.5 sm:space-y-1">
                                                     {family.features.slice(0, 3).map((f, i) => <li key={i}>{f}</li>)}
                                                 </ul>
                                             </div>
                                             <div className="pt-2 sm:pt-3 border-t border-white/5">
-                                                <span className="text-[10px] sm:text-xs font-bold uppercase opacity-60 block mb-0.5 sm:mb-1">Outcome Tendency</span>
-                                                <p className="text-[10px] sm:text-sm opacity-90 italic">{family.tendency}</p>
+                                                <span className="text-ui-xs sm:text-xs font-bold uppercase opacity-60 block mb-0.5 sm:mb-1">Outcome Tendency</span>
+                                                <p className="text-ui-xs sm:text-sm opacity-90 italic">{family.tendency}</p>
                                             </div>
                                         </div>
                                     </div>

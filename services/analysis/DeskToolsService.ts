@@ -8,6 +8,14 @@
 import type { ProviderConfig } from '../../types/provider';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import { baseOf } from '../../utils/symbol';
+import type { FinishReason } from '../../utils/finishReason';
+import { truncatesOutput } from '../../utils/finishReason';
+import { fenceUntrusted } from '../../utils/untrusted';
+import {
+    clipNote, clipReceipt, dataUnavailable, findClipIn, harnessNoteLegend, harnessTurn,
+    isDataUnavailable, MINIMAL_CLIP_NOTE,
+} from '../../utils/harnessMarks';
+export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
@@ -27,6 +35,13 @@ import { getSessionContext } from '../infrastructure/SessionService';
 import { handleRecallTool } from '../learning/MemoryRetrievalService';
 import { formatFormingCandleLine, formatLiveMarkStamp, type FormingCandle } from '../trade/tradeChatContext';
 import { computeSetupClusterStats } from '../learning/EvidencePackService';
+import {
+    RECEIPT_CHARS,
+    clearToolArtifacts,
+    isReadBackTool,
+    readToolArtifact,
+    storeToolArtifact,
+} from './toolArtifactStore';
 import type { LoggedTrade } from '../../types';
 import type { ToolAction } from '../../types/message';
 import type { ChartDrawing } from '../trade/chartDrawings';
@@ -134,6 +149,11 @@ export const MAX_DESK_TOOL_ROUNDS = 3;
  * of re-hitting the exchange (zero extra network calls, faster tool rounds).
  */
 export const TOOL_CACHE_TTL_MS = 30_000;
+
+/** One page of a spilled tool result. Sized to stay inside the 2400-char
+ *  default budget WITH its continuation pointer, so a read-back never has to
+ *  clip the body and can always say truthfully what remains. */
+export const READ_PAGE_CHARS = 2000;
 const toolCache = new Map<string, { at: number; content: string }>();
 /** The TTL check only skipped STALE reads; it never removed them, so the Map
  *  grew unbounded over a long session (23 tools × symbols × arg variants).
@@ -147,15 +167,15 @@ const cacheTool = (key: string, content: string): void => {
     toolCache.set(key, { at: Date.now(), content });
 };
 
-/** Machine-readable "the source failed" sentinel. A failed fetch must reach
- *  the model as UNKNOWN — prose like "no results" reads as evidence of
- *  absence ("there is no news"), which is a fabricated conclusion built on an
- *  outage. Never cache a sentinel; it would freeze an outage into the TTL. */
-export const DATA_UNAVAILABLE_PREFIX = 'DATA_UNAVAILABLE:';
-const dataUnavailable = (tool: string, reason: string): string =>
-    `${DATA_UNAVAILABLE_PREFIX} ${tool} — ${reason}. The source FAILED; treat this as UNKNOWN, not as absence of evidence.`;
-export const isDataUnavailable = (content: string): boolean => content.startsWith(DATA_UNAVAILABLE_PREFIX);
-
+/** Machine-readable "the source failed" sentinel, and the clipping notes below,
+ *  are owned by `utils/harnessMarks.ts` — one definition for the whole family so
+ *  the fence legend that teaches a model to tell them apart cannot drift from
+ *  the text actually emitted. A failed fetch must reach the model as UNKNOWN —
+ *  prose like "no results" reads as evidence of absence ("there is no news"),
+ *  which is a fabricated conclusion built on an outage. Never cache a sentinel;
+ *  it would freeze an outage into the TTL. Re-exported from this module because
+ *  this is where tool results are built, and cache and evidence guards already
+ *  import the predicate from here. */
 const toolCacheKey = (call: DeskToolCall, scope?: string): string =>
     `${call.name}@${scope || 'anysymbol'}:${JSON.stringify(call.arguments ?? {}, Object.keys(call.arguments ?? {}).sort())}`;
 
@@ -165,6 +185,20 @@ const toolCacheKey = (call: DeskToolCall, scope?: string): string =>
  *  same numbers is the difference between evidence and an echo. */
 const cacheAgeNote = (ageMs: number): string =>
     `[DESK CACHE — this payload was fetched ${Math.round(ageMs / 1000)}s ago and is being replayed for the ${TOOL_CACHE_TTL_MS / 1000}s window; the price stamp below (when present) is live.]`;
+
+/** Steering line for a call this turn has already been answered. Deliberately
+ *  NOT phrased as a failure: an `ok: false` here would read as "the desk is
+ *  broken", which is exactly the belief that makes a seat try a third time.
+ *  Named here rather than inlined because the run's repeat guard, the seat's
+ *  tool-event line and any future transcript render have to agree on the wording. */
+const repeatCallNotice = (name: string, label: string, ageMs: number): string =>
+    `ALREADY FETCHED — ${label} was called ${Math.round(ageMs / 1000)}s ago in this turn `
+    + 'with these exact arguments and its full result is in your context above; it is '
+    + 'not repeated here. '
+    + `This is not a failure, and within the ${TOOL_CACHE_TTL_MS / 1000}s desk-cache window `
+    + 'the data has not changed. Answer from the result you '
+    + `already have — calling ${name} again with the same arguments returns this note, `
+    + 'not the data.';
 
 /** CACHE POLICY (2026-09-14 inverted): ONLY the pure network market reads
  *  cache — the whole reason the cache exists is sparing the exchange from N
@@ -200,8 +234,32 @@ const STAMPED_TOOLS = new Set(['get_market_packet', 'get_all_timeframes']);
 const cacheableResult = (name: string): boolean =>
     CACHEABLE_TOOLS.has(name) || name.startsWith('custom_');
 
+/**
+ * Whether a REPEAT of this tool's call may be answered with a pointer to the
+ * earlier result instead of the bytes.
+ *
+ * Exactly the tools whose second call is provably the same answer: cached
+ * (byte-stable inside the TTL) and not re-stamped. A STAMPED tool caches its
+ * body but re-appends this call's live mark price, so its repeat genuinely
+ * carries new information — gating it would hide a price move, which is the one
+ * thing a seat re-checks for. Exported so the rule is testable as a rule rather
+ * than being inferred from a payload the test harness can hardly satisfy.
+ */
+export const isRepeatGatedTool = (name: string): boolean =>
+    // CACHEABLE_TOOLS, not cacheableResult: the latter admits `custom_*`, and a
+    // forged POST performs a WRITE. Gating it would answer the second call with
+    // a success receipt for an action that never ran — the exact lie
+    // toolForge's GET-only cache exists to prevent, and this gate short-
+    // circuits before that cache is ever consulted. A repeated read recipe now
+    // costs one extra fetch, which is the safe direction.
+    CACHEABLE_TOOLS.has(name) && !STAMPED_TOOLS.has(name);
+
 export const clearDeskToolCache = (): void => {
     toolCache.clear();
+    // The artifact store is addressable only within the run that was handed the
+    // ids, so it is cleared with the cache it accompanies — never left holding
+    // bytes a future debate could resolve but should not.
+    clearToolArtifacts();
 };
 
 /** Hard cap on one tool result's injected size — tool output goes into every
@@ -224,11 +282,38 @@ const TOOL_BUDGETS: Record<string, number> = {
  * AFTER budgeting (the get_market_packet live stamps) — otherwise a full
  * packet's hard-cap slice would chop the "this is now" marks off.
  */
-export const budgetToolContent = (name: string, content: string, tailReserve = 0): string => {
+/**
+ * Whether a clipped result may promise a read-back.
+ *
+ * The receipt is an offer to call `read_tool_output`, so it is only honest for a
+ * seat that can actually see that tool: seats with an allow-list (the bot role
+ * presets, the arbiter) get a filtered surface, and a promise they cannot keep
+ * is worse than the plain "MISSING, not absent" line — it invites a wasted round
+ * of the very budget this file exists to protect.
+ */
+export const spillReceiptAllowed = (allowedTools?: string[]): boolean =>
+    !allowedTools || allowedTools.length === 0 || allowedTools.includes('read_tool_output');
+
+export const budgetToolContent = (
+    name: string,
+    content: string,
+    tailReserve = 0,
+    canReadBack = true,
+): string => {
+    const spillable = canReadBack && !isReadBackTool(name);
     let out = content;
     if (name === 'get_order_book' || name === 'get_liquidations') {
         try {
             const parsed = JSON.parse(out) as Record<string, unknown>;
+            // How many levels/records the down-samples below discarded. The
+            // model must be able to tell "the book is thin" from "you are
+            // showing me 8 of 100 levels".
+            const dropped: Record<string, number> = {};
+            const countDropped = (key: string, arr: unknown, kept: number): void => {
+                if (Array.isArray(arr) && arr.length > kept) {
+                    dropped[key] = arr.length - kept;
+                }
+            };
             const topByUsd = (arr: unknown, n: number): unknown =>
                 Array.isArray(arr)
                     ? [...arr]
@@ -236,6 +321,8 @@ export const budgetToolContent = (name: string, content: string, tailReserve = 0
                         .slice(0, n)
                     : arr;
             if (name === 'get_order_book') {
+                countDropped('buyWalls', parsed.buyWalls, 5);
+                countDropped('sellWalls', parsed.sellWalls, 5);
                 parsed.buyWalls = topByUsd(parsed.buyWalls, 5);
                 parsed.sellWalls = topByUsd(parsed.sellWalls, 5);
                 // The ladders are best-first, so a handful of near levels is the
@@ -247,19 +334,61 @@ export const budgetToolContent = (name: string, content: string, tailReserve = 0
                 // landed a hair over the cap (measured 2413).
                 const nearest = (arr: unknown): unknown =>
                     Array.isArray(arr) ? arr.slice(0, 8) : arr;
+                countDropped('bids', parsed.bids, 8);
+                countDropped('asks', parsed.asks, 8);
                 parsed.bids = nearest(parsed.bids);
                 parsed.asks = nearest(parsed.asks);
             } else {
+                countDropped('recentEvents', parsed.recentEvents, 10);
                 parsed.recentEvents = Array.isArray(parsed.recentEvents) ? parsed.recentEvents.slice(0, 10) : parsed.recentEvents;
+            }
+            // Record the omissions INSIDE the JSON rather than as a text
+            // trailer, so a consumer that parses this result still can.
+            if (Object.keys(dropped).length > 0) {
+                parsed._omitted = dropped;
             }
             out = JSON.stringify(parsed, null, 2);
         } catch {
             // Not JSON (error text) — fall through to the char cap.
         }
     }
-    const cap = Math.max(0, (TOOL_BUDGETS[name] ?? MAX_TOOL_CONTENT_CHARS) - Math.max(0, tailReserve));
+    const cap = Math.max(0, (TOOL_BUDGETS[name] ?? MAX_TOOL_CONTENT_CHARS)
+        // Carve the receipt out of the cap BEFORE it is applied, never append it
+        // after: callers size `tailReserve` so their live-price stamps land
+        // inside the budget, and a trailer bolted on afterwards would break the
+        // very promise that reserve exists to keep.
+        - Math.max(0, tailReserve)
+        - (spillable ? RECEIPT_CHARS : 0));
     if (out.length > cap) {
-        out = `${out.slice(0, cap)}\n…[truncated]`;
+        // Name the loss. A bare "…[truncated]" let a 4-level view of a 100-level
+        // book read as "the book is thin" — the model cannot tell a clipped
+        // result from a complete one, so it never re-calls for the rest.
+        const note = (visible: number) =>
+            `\n${clipNote({
+                source: name,
+                kept: visible,
+                total: out.length,
+                guidance: 'treat unlisted levels as unknown, not zero',
+            })}`;
+        // Carve the notice out of the cap instead of appending past it: callers
+        // size `tailReserve` so their own stamps survive inside the budget, and
+        // a trailer that overflowed the cap would defeat exactly that.
+        let visible = cap - note(cap).length;
+        if (visible < 0) visible = 0;
+        out = `${out.slice(0, visible)}${note(visible)}`;
+        if (out.length > cap) {
+            // Degenerate cap (tiny budget, large reserve): keep the size
+            // promise over the message.
+            out = `${out.slice(0, visible)}\n${MINIMAL_CLIP_NOTE}`;
+        }
+        // ...and now it can be got back. The artifact holds the DESK's own
+        // payload, before the array down-sampling above, so paging through it
+        // reaches the levels that were dropped rather than the ones that were
+        // merely clipped. `storeToolArtifact` refuses the read tool's own
+        // output, which is what stops a seat paging into a receipt about a
+        // receipt.
+        const id = spillable ? storeToolArtifact(name, content, visible) : null;
+        if (id) out += `\n${clipReceipt(id)}`;
     }
     return out;
 };
@@ -273,6 +402,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_btc_context: 'BTC context',
     get_session_context: 'session',
     get_price_snapshot: 'price snapshot',
+    read_tool_output: 'stored result',
     get_market_packet: 'hybrid packet',
     get_all_timeframes: 'all-timeframe compendium',
     get_chart_view: 'chart view',
@@ -304,7 +434,13 @@ export const digestToolResult = (name: string, ok: boolean, content: string, for
     const label = toolLabel(name);
     const coin = foreignSymbol ? ` · ${foreignSymbol}` : '';
     if (!ok) return `${label}${coin} · failed`;
-    return `${label}${coin} · ${rawToolDigest(name, content)}`;
+    // Tell the operator what the seat was actually shown. A debate that reaches
+    // a verdict from 4 of 118 characters of order book is a different result
+    // from one that read the whole book, and the transcript used to look
+    // identical either way.
+    const clipped = findClipIn(content);
+    const tail = clipped ? ` · clipped ${clipped.kept}/${clipped.total}` : '';
+    return `${label}${coin} · ${rawToolDigest(name, content)}${tail}`;
 };
 
 /** Detail-only digest (no label/coin prefix). */
@@ -570,6 +706,24 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     reason: { type: 'string', description: 'Why the current clauses are wrong or blunted — cite evidence' },
                 },
                 required: ['skill_slug', 'reason'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'read_tool_output',
+            description:
+                `Page through a desk result that was clipped this turn. Any tool output ending in a ${clipReceipt('ta-…')} line keeps its UNSHOWN bytes under that id — call this with the id (and the \`next offset\` the reply names) instead of reasoning around the gap or re-running the original tool. An id from an earlier run is gone; do not retry it.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string', description: 'The ta-… id from the clipped result.' },
+                    offset: { type: 'number', description: 'Character offset to start at (default 0).' },
+                    limit: { type: 'number', description: `Characters to return (default and maximum ${READ_PAGE_CHARS}; ask again with the offset the last page names for more).` },
+                },
+                required: ['id'],
                 additionalProperties: false,
             },
         },
@@ -1462,6 +1616,10 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
     }
     try {
         let content: string;
+        /** A paging instruction the seat needs in order to continue, held out
+         *  of the body so the budget cannot clip it. Same treatment as the
+         *  freshness `tail` below. */
+        let pagingTail = '';
         switch (call.name) {
             case 'amend_memory': {
                 // Model proposing a notebook correction. PENDING only — a
@@ -1738,7 +1896,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     fetchOrderBookDepth(sym).catch(() => null),
                 ]);
                 if (klines.length === 0) {
-                    content = `DATA_UNAVAILABLE: get_chart_view — no candles returned for ${sym} ${ivl}. The source failed; do not infer an empty chart.`;
+                    content = dataUnavailable('get_chart_view', `no candles returned for ${sym} ${ivl}`, 'The source failed; do not infer an empty chart');
                     break;
                 }
                 const rows = klines.map(k =>
@@ -1791,6 +1949,46 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 content = await runAllTimeframes(asSymbol(call.arguments.symbol, fallback), liveMarkOf(context));
                 break;
             }
+            case 'read_tool_output': {
+                const args = call.arguments ?? {};
+                const offset = Number(args.offset);
+                // Clamp the page to what this tool can actually deliver. A
+                // caller may ask for 8000 (the advertised maximum) against a
+                // 2400-char budget, and then the body gets clipped while the
+                // page itself reports no remainder — which told the seat
+                // "nothing further to read" about content the budget had just
+                // withheld. Better to hand back a smaller honest page and point
+                // at the rest.
+                const limit = Math.min(
+                    Number.isFinite(Number(args.limit)) ? Number(args.limit) : READ_PAGE_CHARS,
+                    READ_PAGE_CHARS,
+                );
+                const page = readToolArtifact(
+                    String(args.id ?? ''),
+                    Number.isFinite(offset) ? offset : 0,
+                    limit,
+                );
+                // Always ok:true-shaped text: a miss is DATA_UNAVAILABLE, the
+                // one sentinel vocabulary this file already teaches seats to
+                // read as "unknown", not as "the desk broke".
+                //
+                // The continuation pointer is NOT part of `content`. It was
+                // baked in before budgeting, and this tool has no TOOL_BUDGETS
+                // entry, so any page over the 2400-char default lost the one
+                // line telling the seat how to fetch the rest — it was paid for
+                // and left with "first N of M" and no offset. `limit` is
+                // advertised up to 8000, so that was the normal case, not the
+                // edge one.
+                if (page.ok) {
+                    content = page.content;
+                    pagingTail = '\n' + (page.nextOffset === null
+                        ? `[end of stored result ${page.artifact.id} — ${page.artifact.totalChars} chars, nothing further to read]`
+                        : `[next offset ${page.nextOffset} of ${page.artifact.totalChars} — call read_tool_output with offset=${page.nextOffset} for the rest]`);
+                } else {
+                    content = page.content;
+                }
+                break;
+            }
             case 'get_session_context':
                 content = runSession();
                 break;
@@ -1827,19 +2025,24 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 const { fetchKlines } = await import('./KlineService');
                 const klines = await fetchKlines(sym, ivl, 60);
                 if (klines.length < 25) {
-                    content = `DATA_UNAVAILABLE: scan_setups — not enough candles returned for ${sym} ${ivl}. The source failed; do not infer an empty tape.`;
+                    content = dataUnavailable('scan_setups', `not enough candles returned for ${sym} ${ivl}`, 'The source failed; do not infer an empty tape');
                     break;
                 }
                 const { scanSetups } = await import('../trade/setupScan');
                 const setups = scanSetups(klines.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume })));
-                let skillIndex: Array<{ slug: string; status?: string; ifCondition?: string }> = [];
+                let skillIndex: Array<{ slug: string; status?: string; ifCondition?: string; enabled: boolean }> = [];
                 try {
                     const { listSkills } = await import('../learning/SkillMemoryService');
+                    // `enabled`, not just status: this index is prompt-bound,
+                    // and a skill the idle lifecycle suspended must not reach
+                    // the model through the back door it left by — the same
+                    // gate `skillPredicateGate.ts:123` applies.
                     skillIndex = listSkills().map(({ file, meta }) => ({
                         slug: file.name.replace(/\.md$/i, ''),
                         status: meta.status,
                         ifCondition: meta.ifCondition,
-                    })).filter(s => s.status !== 'retired');
+                        enabled: file.enabled,
+                    })).filter(s => s.status !== 'retired' && s.enabled);
                 } catch { /* skill cross-ref is best-effort */ }
                 if (setups.length === 0) {
                     content = `SETUP SCAN ${sym} ${ivl} — nothing live in the last 5 bars. No breakout, pin, inside-bar resolution, gap, divergence, band play, pullback or failed break is currently triggered. Do not invent a setup.`;
@@ -1889,7 +2092,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 const { fetchKlines } = await import('./KlineService');
                 const klines = await fetchKlines(sym, ivl, 300);
                 if (klines.length === 0) {
-                    content = `DATA_UNAVAILABLE: project_future_price — not enough candles returned for ${sym} ${ivl}. The source failed; do not infer a flat market.`;
+                    content = dataUnavailable('project_future_price', `not enough candles returned for ${sym} ${ivl}`, 'The source failed; do not infer a flat market');
                     break;
                 }
                 const { projectPrices, projectionToMarkdown } = await import('../trade/priceProjection');
@@ -1899,7 +2102,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                         horizon,
                     ));
                 } catch (err) {
-                    content = `DATA_UNAVAILABLE: project_future_price — ${err instanceof Error ? err.message : String(err)}. The source failed; do not invent paths.`;
+                    content = dataUnavailable('project_future_price', `${err instanceof Error ? err.message : String(err)}`, 'The source failed; do not invent paths');
                 }
                 break;
             }
@@ -2042,8 +2245,9 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
         // re-stamp with the CURRENT call's mark/candle (cacheTool below
         // stores `budgeted`, never `withTail`).
         const withTail = STAMPED_TOOLS.has(call.name);
-        const tail = withTail ? packetStamps(call, context) : '';
-        const budgeted = budgetToolContent(call.name, content, tail.length);
+        const tail = (withTail ? packetStamps(call, context) : '') + pagingTail;
+        const budgeted = budgetToolContent(call.name, content, tail.length,
+            spillReceiptAllowed(context.allowedTools));
         // A failure sentinel must not be cached — that would freeze an
         // outage into the TTL even after the source recovers. Only the
         // whitelisted network reads cache at all (see CACHEABLE_TOOLS).
@@ -2084,6 +2288,10 @@ export const ARBITER_ALLOWED_TOOLS = [
     'get_setup_history_stats',
     'get_session_context',
     'web_search',
+    // The arbiter is the seat most likely to be handed a clipped evidence pack
+    // or book, and it is the one whose verdict depends on what the clip hid —
+    // without this it would receive a receipt it cannot redeem.
+    'read_tool_output',
     'forge_tool',
     'amend_memory',
 ] as const;
@@ -2159,9 +2367,33 @@ export const malformedToolCallReason = (text: string): string | null => {
     return null;
 };
 
+/**
+ * The one place tool output reaches a model.
+ *
+ * Each result is fenced as third-party DATA, because a `web_search` body or a
+ * user-authored HTTPS tool's response is chosen by someone other than this
+ * app and must not be able to issue instructions in the prompt's own voice.
+ *
+ * The `allowance` carve-out matters: the app appends its OWN bracketed notes
+ * to that same text — the clipping notice that says "re-call this tool for the
+ * rest", DATA_UNAVAILABLE lines, live-price stamps. Those are system notes and
+ * have to stay actionable, so the fence names them as an exception instead of
+ * telling the model to ignore the whole block.
+ *
+ * The exception is generated from `utils/harnessMarks.ts` rather than written
+ * out here. It used to be hand-written, and drifted: it taught the model to
+ * recognise "[<tool> output clipped: …]", a shape no code emits, while the
+ * markers that DO appear went unnamed — so the one note in the block the model
+ * was allowed to act on was the one it had been told to distrust.
+ */
 export function formatToolResultsForModel(results: DeskToolResult[]): string {
     return results.map(r =>
-        `### TOOL RESULT: ${r.name} (${r.ok ? 'ok' : 'error'})\n${r.content}`
+        fenceUntrusted(
+            `tool result: ${r.name} (${r.ok ? 'ok' : 'error'})`,
+            `### TOOL RESULT: ${r.name} (${r.ok ? 'ok' : 'error'})\n${r.content}`,
+            undefined,
+            harnessNoteLegend(),
+        )
     ).join('\n\n');
 }
 
@@ -2221,11 +2453,20 @@ const runStreamingTurn = async (
     let reasoning = '';
     let toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
     const prevReasoning = options.onReasoning;
+    // The stream reports its stop signal on the way through; a turn that hit
+    // the token ceiling produced this text AND is incomplete, which the
+    // CONVICTION probe on the final round has to know before it reads a tail.
+    let finishReason: FinishReason = 'unknown';
+    const prevFinish = options.onFinishReason;
     const stream = streamTurn(config, messages, {
         ...options,
         onReasoning: chunk => {
             reasoning += chunk;
             prevReasoning?.(chunk);
+        },
+        onFinishReason: reason => {
+            finishReason = reason;
+            prevFinish?.(reason);
         },
         onStreamToolCalls: calls => { toolCalls = calls; },
     });
@@ -2237,6 +2478,8 @@ const runStreamingTurn = async (
         text,
         reasoning,
         toolCalls,
+        finishReason,
+        truncated: truncatesOutput(finishReason),
         assistantMessage: toolCalls.length > 0
             ? {
                 role: 'assistant',
@@ -2356,6 +2599,13 @@ export async function runDeskToolLoop(params: {
         }
     }
     const usedTools: string[] = [];
+    /** Tool calls this turn has already been answered, keyed by the SAME
+     *  canonical key the result cache uses (name + sorted args, scoped to the
+     *  chart). Reusing `toolCacheKey` rather than inventing a second one is what
+     *  keeps the two from disagreeing about what "the same call" means. Stamped
+     *  with when it was answered, because the promise the notice makes is the
+     *  cache's promise and that one expires. */
+    const answeredThisTurn = new Map<string, number>();
     let finalText = '';
     let reasoning = '';
 
@@ -2414,11 +2664,14 @@ export async function runDeskToolLoop(params: {
                 messages.push({ role: 'assistant', content: finalText.slice(0, 2000) });
                 messages.push({
                     role: 'user',
-                    content: 'TOOL CALL ERROR — your last message was not a valid tool call: you emitted '
+                    // Marked because the trader's own request shares this role:
+                    // an unmarked repair reads as the human scolding the seat,
+                    // and it is the harness that detected the syntax.
+                    content: harnessTurn('TOOL CALL ERROR — your last message was not a valid tool call: you emitted '
                         + `${syntaxError}.\n`
                         + 'Emit EXACTLY:\n<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>\n'
                         + 'One JSON object (real quotes), one block per tool, closed with </tool_call>. '
-                        + 'Re-emit your tool call(s) now — no prose, and never invent tool results.',
+                        + 'Re-emit your tool call(s) now — no prose, and never invent tool results.'),
                 });
                 continue;
             }
@@ -2446,6 +2699,52 @@ export async function runDeskToolLoop(params: {
 
         // Cap parallel tools per round.
         calls = calls.slice(0, 3);
+
+        // ── Repeat-call guard ──────────────────────────────────────────────
+        // Re-asking for a payload the seat already has is the most common way
+        // this three-round budget dies with one round of real data in it: the
+        // result cache cheerfully replays the same kilobytes, the seat reads a
+        // replay as "I still have no answer", and asks again — so it spends its
+        // remaining rounds fetching rather than thinking. A short pointer beats
+        // the payload: same information, and it says what to do with it.
+        //
+        // Only tools the cache ALREADY declares byte-stable inside the TTL take
+        // part. A stamped tool re-appends this call's live price, so its second
+        // answer genuinely differs; and every non-cacheable tool (local state,
+        // writes, `get_price_snapshot`'s did-it-move check, the mailbox, forged
+        // tools) must run every time, exactly as the cache policy says.
+        const replays: DeskToolResult[] = [];
+        const fresh: DeskToolCall[] = [];
+        /** call.id → the key to mark answered, but ONLY once the call has
+         *  actually come back with data. */
+        const gateKeyByCallId = new Map<string, string>();
+        for (const call of calls) {
+            if (!isRepeatGatedTool(call.name)) { fresh.push(call); continue; }
+            const key = toolCacheKey(call, defaultSymbol || undefined);
+            const answeredAt = answeredThisTurn.get(key);
+            // Gate only while the bytes the seat already holds are still the
+            // ones the cache would hand it. A debate turn streams for far longer
+            // than the TTL, so an untimed gate kept asserting "the data has not
+            // changed" about a book that had since expired — and, unlike the
+            // cache hit below, it bypassed `cacheAgeNote` entirely, so the seat
+            // was never told the age at all.
+            if (answeredAt !== undefined && Date.now() - answeredAt < TOOL_CACHE_TTL_MS) {
+                replays.push({
+                    toolCallId: call.id, name: call.name, ok: true,
+                    content: repeatCallNotice(call.name, toolLabel(call.name), Date.now() - answeredAt),
+                });
+                onToolEvent?.(`${toolLabel(call.name)} · already fetched this turn`);
+                continue;
+            }
+            if (call.id) gateKeyByCallId.set(call.id, key);
+            // Marked NOW, before it has an answer, so a seat that asks for the
+            // same thing three times in ONE reply is gated on calls two and
+            // three too. Reverted below if the call does not come back with
+            // data.
+            answeredThisTurn.set(key, Date.now());
+            fresh.push(call);
+        }
+        calls = fresh;
 
         // Text-protocol tags in a LIVE-streamed turn painted raw markup into
         // the bubble (valid `<tool_call name=…>` blocks included — the tags
@@ -2507,8 +2806,19 @@ export async function runDeskToolLoop(params: {
                 allowedTools,
             })
             : [];
-        const results = [...extraResults, ...forgedResults, ...coreResults];
+        const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
         usedTools.push(...results.map(r => r.name));
+        // A call keeps its gate only if it came back with DATA.
+        // `DATA_UNAVAILABLE:` usually means the exchange blinked for a second,
+        // and gating the retry would delete the seat's only recovery path —
+        // turning one bad second of network into a whole turn argued from
+        // nothing.
+        for (const r of results) {
+            const key = gateKeyByCallId.get(r.toolCallId);
+            if (!key) continue;
+            if (r.ok && !isDataUnavailable(r.content)) answeredThisTurn.set(key, Date.now());
+            else answeredThisTurn.delete(key);
+        }
         // One digest line per result, coin-prefixed when the call targeted a
         // symbol other than the chart's — a mixed BTC/ETH turn must read
         // unambiguously in the transcript.
@@ -2555,7 +2865,7 @@ export async function runDeskToolLoop(params: {
             if (cleaned) messages.push({ role: 'assistant', content: cleaned });
             messages.push({
                 role: 'user',
-                content: `${formatToolResultsForModel(results)}\n\nContinue. If you have enough, write the public Floor reply now.`,
+                content: harnessTurn(`${formatToolResultsForModel(results)}\n\nContinue. If you have enough, write the public Floor reply now.`),
             });
         }
     }
@@ -2855,8 +3165,8 @@ export async function* streamChatWithDeskTools(
     if (loop.usedTools.length > 0) {
         finalMessages.push({
             role: 'user',
-            content: afterToolsNudge
-                || 'Tool results are above. Continue your Floor turn now from the findings. No JSON, no tool tags.',
+            content: harnessTurn(afterToolsNudge
+                || 'Tool results are above. Continue your Floor turn now from the findings. No JSON, no tool tags.'),
         });
     }
     if (options?.signal?.aborted) {

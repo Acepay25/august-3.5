@@ -237,8 +237,8 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                     {setIsStrategiesEnabled && (
                         <div className="shrink-0 flex items-center gap-2.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
                             <div className="text-right">
-                                <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">Inject into analysis</p>
-                                <p className="text-[9px] text-zinc-600">{isStrategiesEnabled ? 'On — enabled books are used' : 'Off'}</p>
+                                <p className="text-ui-xs font-bold text-zinc-300 uppercase tracking-widest">Inject into analysis</p>
+                                <p className="text-ui-2xs text-zinc-600">{isStrategiesEnabled ? 'On — enabled books are used' : 'Off'}</p>
                             </div>
                             <ToggleSwitch checked={isStrategiesEnabled} onChange={() => setIsStrategiesEnabled(!isStrategiesEnabled)} label="Toggle strategy injection" />
                         </div>
@@ -249,7 +249,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isProcessing}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         <UploadIcon className="w-3.5 h-3.5" />
                         {isProcessing ? 'Working…' : 'Upload PDF book'}
@@ -263,13 +263,13 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                         aria-label="Upload a PDF book"
                     />
                     {isProcessing && (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] text-zinc-400">
+                        <span className="inline-flex items-center gap-1.5 text-ui-xs text-zinc-400">
                             <LoadingIcon className="w-3.5 h-3.5 animate-spin" />
                             {processingLabel}
                         </span>
                     )}
                     {!readyProvider && !isProcessing && (
-                        <span className="text-[10px] text-amber-400/90">No ready AI provider — uploads will summarize once one is enabled.</span>
+                        <span className="text-ui-xs text-amber-400/90">No ready AI provider — uploads will summarize once one is enabled.</span>
                     )}
                 </div>
             </div>
@@ -305,7 +305,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                         </StatusPill>
                                     </div>
                                     <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed line-clamp-2">{doc.summary}</p>
-                                    <p className="text-[10px] text-zinc-600 mt-1 font-mono">
+                                    <p className="text-ui-xs text-zinc-600 mt-1 font-mono">
                                         {doc.pageCount} pages · {doc.charCount.toLocaleString()} chars · {new Date(doc.updatedAt).toLocaleDateString()}
                                     </p>
                                 </div>
@@ -327,14 +327,14 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={() => handleSaveEdit(doc)}
-                                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
                                                 Save
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleToggleDoc(doc)}
-                                                className="px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                                className="px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
                                                 {doc.enabled ? 'Disable' : 'Enable'}
                                             </button>
@@ -342,7 +342,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                                 type="button"
                                                 onClick={() => handleResummarize(doc)}
                                                 disabled={isProcessing}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 disabled:opacity-50 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 disabled:opacity-50 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
                                                 <RefreshIcon className="w-3 h-3" />
                                                 Re-summarize
@@ -351,13 +351,13 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => handleDelete(doc)}
-                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                         >
                                             <TrashIcon className="w-3 h-3" />
                                             Delete
                                         </button>
                                     </div>
-                                    <p className="text-[10px] text-zinc-600">
+                                    <p className="text-ui-xs text-zinc-600">
                                         {doc.enabled
                                             ? 'Enabled — this summary is injected into every analysis and debate prompt.'
                                             : 'Disabled — the models do not see this summary.'}

@@ -77,12 +77,12 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
             placeholder="Type a command…"
             className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
           />
-          <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">ESC</kbd>
+          <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-xs text-zinc-400">ESC</kbd>
         </div>
 
         <div className="max-h-72 overflow-y-auto p-1.5 custom-scrollbar">
           {inputPreview && (
-            <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-600 truncate">Analyze: {inputPreview}</div>
+            <div className="px-3 py-2 text-ui-xs uppercase tracking-wider text-zinc-600 truncate">Analyze: {inputPreview}</div>
           )}
           {filtered.length === 0 && (
             <div className="px-3 py-4 text-center text-xs text-zinc-500">No matching commands.</div>
@@ -96,12 +96,12 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
               className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${index === highlighted ? 'bg-zinc-800 text-white' : 'text-zinc-300 hover:bg-zinc-800/60'}`}
             >
               <span className="min-w-0 truncate text-xs font-medium">{action.label}</span>
-              {action.hint && <span className="shrink-0 font-mono text-[10px] text-zinc-500">{action.hint}</span>}
+              {action.hint && <span className="shrink-0 font-mono text-ui-xs text-zinc-500">{action.hint}</span>}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/[0.06] bg-zinc-950/60 px-3 py-2 text-[10px] text-zinc-500 font-mono">
+        <div className="flex items-center justify-between border-t border-white/[0.06] bg-zinc-950/60 px-3 py-2 text-ui-xs text-zinc-500 font-mono">
           <div className="flex items-center gap-2">
             <span><kbd className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">↑↓</kbd> navigate</span>
             <span><kbd className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">↵</kbd> select</span>

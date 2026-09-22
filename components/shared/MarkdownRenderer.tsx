@@ -60,7 +60,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             </div>
           ),
           th: ({ children }) => (
-            <th className="whitespace-nowrap border-b border-white/15 bg-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 text-left">{children}</th>
+            <th className="whitespace-nowrap border-b border-white/15 bg-zinc-800/80 px-3 py-1.5 text-ui-xs font-semibold uppercase tracking-widest text-zinc-400 text-left">{children}</th>
           ),
           td: ({ children }) => (
             <td className="border-b border-white/5 px-3 py-1.5 text-[13px] text-zinc-300 align-middle leading-snug">{children}</td>

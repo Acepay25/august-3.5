@@ -27,6 +27,9 @@ interface TradeLogContentProps {
     isSummarizing?: boolean;
     currentInsightIds: string[];
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
+    /** Optional: the classifier labels automatically, and this is the way to
+     *  disagree with it. Mounts that don't offer editing simply omit it. */
+    onUpdateTradeType?: (id: string, tradeType: 'scalp' | 'swing') => void;
     /** Correct a mis-logged outcome from the expanded card. */
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     /** Edit PnL (dollar amount + leveraged percent) from the expanded card. */
@@ -84,10 +87,11 @@ const TradeDetailView: React.FC<{
     onBack: () => void;
     modelIdToName: Record<string, string>;
     onUpdateLeverage: (id: string, leverage: number) => void;
+    onUpdateType?: (id: string, tradeType: 'scalp' | 'swing') => void;
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     username?: string;
-}> = ({ trade, onBack, modelIdToName, onUpdateLeverage, onUpdateOutcome, onUpdatePnL, username }) => {
+}> = ({ trade, onBack, modelIdToName, onUpdateLeverage, onUpdateType, onUpdateOutcome, onUpdatePnL, username }) => {
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
@@ -128,7 +132,7 @@ const TradeDetailView: React.FC<{
     if (isAccuracyMode) {
         containerClass = "bg-zinc-900 border border-zinc-700";
         modeBadge = (
-            <span className="text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 ml-1">
+            <span className="text-ui-xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 ml-1">
                 {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
             </span>
         );
@@ -216,7 +220,7 @@ const TradeDetailView: React.FC<{
                                                 <button
                                                     key={val}
                                                     onClick={(e) => handlePresetClick(e, val)}
-                                                    className={`text-[10px] px-2 py-1 rounded-md border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${parseInt(localLeverage) === val
+                                                    className={`text-ui-xs px-2 py-1 rounded-md border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${parseInt(localLeverage) === val
                                                         ? 'bg-zinc-700 border-zinc-500 text-zinc-100 font-semibold'
                                                         : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
                                                         }`}
@@ -230,12 +234,12 @@ const TradeDetailView: React.FC<{
                                             (the old <select> dropdown is gone). */}
                                         {onUpdateOutcome && (
                                             <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/10 flex-wrap">
-                                                <span className="text-[10px] text-zinc-400">Outcome:</span>
+                                                <span className="text-ui-xs text-zinc-400">Outcome:</span>
                                                 {[TradeOutcome.WIN, TradeOutcome.LOSS, TradeOutcome.ENTRY_NOT_HIT, TradeOutcome.SKIPPED].map(o => (
                                                     <button
                                                         key={o}
                                                         onClick={() => onUpdateOutcome(trade.id, o)}
-                                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
+                                                        className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
                                                             trade.outcome === o
                                                                 ? o === TradeOutcome.WIN
                                                                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
@@ -252,26 +256,61 @@ const TradeDetailView: React.FC<{
                                             </div>
                                         )}
 
+                                        {/* Class correction. Finalization labels every
+                                            verdict, so without this the class is
+                                            something the trader can filter by but
+                                            never disagree with — and the
+                                            `tradeTypeManualOverride` flag the detector
+                                            honours had no writer. Setting it here is
+                                            what makes the label stick: the classifier
+                                            skips any trade that already carries one. */}
+                                        {onUpdateType && (
+                                            <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/10" data-testid="trade-type-editor">
+                                                <span className="text-ui-xs text-zinc-400">Class:</span>
+                                                {(['scalp', 'swing'] as const).map(tt => (
+                                                    <button
+                                                        key={tt}
+                                                        type="button"
+                                                        aria-pressed={(trade.tradeType || analysis?.tradeType) === tt}
+                                                        onClick={() => onUpdateType(trade.id, tt)}
+                                                        title={analysis?.tradeTypeManualOverride
+                                                            ? 'Manually set — click to change'
+                                                            : 'Auto-detected — set it yourself'}
+                                                        className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
+                                                            (trade.tradeType || analysis?.tradeType) === tt
+                                                                ? 'bg-zinc-700 border-white/20 text-zinc-100'
+                                                                : 'bg-zinc-800 border-white/10 text-zinc-500 hover:text-zinc-300'
+                                                        }`}
+                                                    >
+                                                        {tt === 'scalp' ? '◆ scalp' : '◇ swing'}
+                                                    </button>
+                                                ))}
+                                                {analysis?.tradeTypeManualOverride && (
+                                                    <span className="text-ui-2xs uppercase tracking-widest text-zinc-500">manual</span>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* PnL editing — dollar amount + leveraged percent
                                             (autopilot trades only carry the percent). */}
                                         {onUpdatePnL && (
                                             <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/10">
-                                                <span className="text-[10px] text-zinc-400">PnL $</span>
+                                                <span className="text-ui-xs text-zinc-400">PnL $</span>
                                                 <input
                                                     type="number"
                                                     value={pnlDraftAmount}
                                                     onChange={(e) => setPnlDraftAmount(e.target.value)}
                                                     placeholder={pnlAmount !== undefined ? undefined : '—'}
-                                                    className="w-20 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
+                                                    className="w-20 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-ui-xs font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
                                                     aria-label="PnL in dollars"
                                                 />
-                                                <span className="text-[10px] text-zinc-400">%</span>
+                                                <span className="text-ui-xs text-zinc-400">%</span>
                                                 <input
                                                     type="number"
                                                     value={pnlDraftPercent}
                                                     onChange={(e) => setPnlDraftPercent(e.target.value)}
                                                     placeholder={pnlPercent !== undefined ? undefined : '—'}
-                                                    className="w-14 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
+                                                    className="w-14 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-ui-xs font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
                                                     aria-label="PnL as leveraged percent"
                                                 />
                                                 <button
@@ -280,7 +319,7 @@ const TradeDetailView: React.FC<{
                                                         pnlAmount: pnlDraftAmount.trim() !== '' ? parseFloat(pnlDraftAmount) : undefined,
                                                         pnlPercent: pnlDraftPercent.trim() !== '' ? parseFloat(pnlDraftPercent) : undefined,
                                                     })}
-                                                    className="px-2 py-1 rounded-md bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-[10px] font-semibold uppercase tracking-widest transition-colors"
+                                                    className="px-2 py-1 rounded-md bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-ui-xs font-semibold uppercase tracking-widest transition-colors"
                                                     title="Save PnL"
                                                 >
                                                     Save
@@ -298,7 +337,7 @@ const TradeDetailView: React.FC<{
                                     <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Stop Loss</span>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-rose-300 font-bold text-sm">{stopLoss}</span>
-                                        {stopLossPercentage && <span className="text-rose-500/60 text-[9px]">{stopLossPercentage}</span>}
+                                        {stopLossPercentage && <span className="text-rose-500/60 text-ui-2xs">{stopLossPercentage}</span>}
                                     </div>
                                 </div>
                                 <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
@@ -307,7 +346,7 @@ const TradeDetailView: React.FC<{
                                         {(takeProfit || []).map((tp, i) => (
                                             <div key={i} className="flex items-center gap-1 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-500/10">
                                                 <span className="text-emerald-300 font-bold">{tp.price}</span>
-                                                {tp.percentage && <span className="text-emerald-600 text-[9px]">{tp.percentage}</span>}
+                                                {tp.percentage && <span className="text-emerald-600 text-ui-2xs">{tp.percentage}</span>}
                                             </div>
                                         ))}
                                     </div>
@@ -324,20 +363,20 @@ const TradeDetailView: React.FC<{
                                         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm tabular-nums">
                                             <span className="text-zinc-300 tabular-nums">
                                                 worst −{trade.maxAdverseExcursion !== undefined ? `${trade.maxAdverseExcursion.toFixed(1)}%` : '—'}
-                                                <span className="text-[9px] uppercase tracking-wider text-zinc-600"> against</span>
+                                                <span className="text-ui-2xs uppercase tracking-wider text-zinc-600"> against</span>
                                             </span>
                                             <span className="text-zinc-300">
                                                 best +{trade.maxFavorableExcursion !== undefined ? `${trade.maxFavorableExcursion.toFixed(1)}%` : '—'}
-                                                <span className="text-[9px] uppercase tracking-wider text-zinc-600"> in favor</span>
+                                                <span className="text-ui-2xs uppercase tracking-wider text-zinc-600"> in favor</span>
                                             </span>
                                             {capture !== null && (
                                                 <span className={capture >= 50 ? 'text-emerald-300' : 'text-amber-300'}>
                                                     {capture.toFixed(0)}%
-                                                    <span className="text-[9px] uppercase tracking-wider text-zinc-600"> captured</span>
+                                                    <span className="text-ui-2xs uppercase tracking-wider text-zinc-600"> captured</span>
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="mt-1 text-[9px] text-zinc-600">
+                                        <p className="mt-1 text-ui-2xs text-zinc-600">
                                             Leveraged percents over the candles the position actually occupied.
                                         </p>
                                     </div>
@@ -348,7 +387,7 @@ const TradeDetailView: React.FC<{
                                     all. A count, not a rate: one trade's dissent
                                     is context, not evidence about a seat. */}
                                 {dissent && (
-                                    <div className="col-span-2 text-[10px] text-zinc-500" data-testid="trade-fincom">
+                                    <div className="col-span-2 text-ui-xs text-zinc-500" data-testid="trade-fincom">
                                         Floor before the verdict:{' '}
                                         <span className={dissent.dissents > 0 ? 'text-amber-300' : 'text-zinc-400'}>
                                             {dissent.dissents} dissent{dissent.dissents === 1 ? '' : 's'}
@@ -362,10 +401,10 @@ const TradeDetailView: React.FC<{
 
                                 {invalidationCriteria && invalidationCriteria.length > 0 && (
                                     <div className="col-span-2 p-2.5 bg-rose-950/20 rounded-lg border border-rose-500/15 hover:border-rose-500/30 transition-colors">
-                                        <span className="text-[9px] uppercase font-bold text-rose-400/80 block mb-1">Invalidation Contract</span>
+                                        <span className="text-ui-2xs uppercase font-bold text-rose-400/80 block mb-1">Invalidation Contract</span>
                                         <div className="space-y-1">
                                             {invalidationCriteria.map((c, i) => (
-                                                <div key={i} className="text-[10px] text-rose-100/80 leading-snug">
+                                                <div key={i} className="text-ui-xs text-rose-100/80 leading-snug">
                                                     <span className="font-mono font-bold text-rose-300">{c.level}</span>
                                                     <span className="text-rose-200/70"> — {c.condition}</span>
                                                 </div>
@@ -376,7 +415,7 @@ const TradeDetailView: React.FC<{
 
                                 {correctedEntry && <div className="col-span-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20 text-yellow-200 font-medium">Corrected Entry: {correctedEntry}</div>}
 
-                                <div className="col-span-2 text-[9px] text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
+                                <div className="col-span-2 text-ui-2xs text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
                                     <span>Analyst: {(() => {
                                         const usedEntries = modelsUsed && Object.keys(modelsUsed).length > 0 ? Object.entries(modelsUsed) : [];
                                         if (usedEntries.length > 0) {
@@ -397,7 +436,7 @@ const TradeDetailView: React.FC<{
                                     <div className={`col-span-2 rounded-lg border px-3 py-2 ${trade.patternMemoryGate.gateResult === 'HALT'
                                         ? ' border-rose-500/40 bg-rose-500/10'
                                         : ' border-amber-500/40 bg-amber-500/10'}`}>
-                                        <span className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
+                                        <span className={`text-ui-2xs font-black uppercase tracking-widest flex items-center gap-1.5 ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
                                             {trade.patternMemoryGate.gateResult === 'HALT' ? (
                                                 <>
                                                     <ShieldAlert className="h-3 w-3 shrink-0" />
@@ -417,7 +456,7 @@ const TradeDetailView: React.FC<{
                                         </span>
                                         <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{trade.patternMemoryGate.reason}</p>
                                         {trade.patternMemoryGate.historicalFailures.length > 0 && (
-                                            <p className="text-[10px] text-zinc-500 mt-1">
+                                            <p className="text-ui-xs text-zinc-500 mt-1">
                                                 Matched: {trade.patternMemoryGate.historicalFailures.map(f => `${f.outcome ?? ''}${f.coinName ? ` ${f.coinName}` : ''}${f.direction ? ` ${f.direction}` : ''}`).join(' · ')}
                                             </p>
                                         )}
@@ -461,6 +500,10 @@ const TradeLogRowImpl: React.FC<{
     const { analysis, outcome, timestamp, pnlPercent, pnlAmount } = trade;
     const coinName = analysis?.coinName || 'Unknown';
     const direction = analysis?.direction || 'Neutral';
+    // The classifier's output used to exist only as something to filter on — a
+    // row never showed which class it belonged to, so the filter's result could
+    // not be checked by eye. Same glyph the chips use, one vocabulary.
+    const tradeType = trade.tradeType || analysis?.tradeType;
     const rawStrategy = (analysis?.activeStrategies || [])[0] || analysis?.strategy || '';
     const strategy = rawStrategy && !/\*\*|FINAL TRADE PLAN|#\s/.test(rawStrategy)
         ? rawStrategy
@@ -505,10 +548,10 @@ const TradeLogRowImpl: React.FC<{
                                 Review
                             </StatusPill>
                         )}
-                        {isInsight && <span className="text-[10px] uppercase tracking-widest text-zinc-500">memory</span>}
+                        {isInsight && <span className="text-ui-xs uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
                     <p className="text-xs text-zinc-500 mt-1 truncate tabular-nums">
-                        {direction}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
+                        {direction}{tradeType ? ` · ${tradeType === 'scalp' ? '◆' : '◇'} ${tradeType}` : ''}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
                         {alphaLabel ? ` · ${alphaLabel}` : ''}
                         {capLabel ? ` · ${capLabel}` : ''}
@@ -568,7 +611,7 @@ const PatternMemoryDetailView: React.FC<{
 );
 
 const TradeLogContent: React.FC<TradeLogContentProps> = ({
-    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL, username,
+    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateTradeType, onUpdateOutcome, onUpdatePnL, username,
     finalSummary = null,
     individualSummaries = [],
     isReviewLoading = false,
@@ -626,13 +669,24 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
 
     const filteredTrades = useMemo(() => (trades || []).filter(trade => {
         if (tradeTypeFilter !== 'all') {
-            const tt = trade.tradeType || trade.analysis.tradeType;
+            const tt = trade.tradeType || trade.analysis?.tradeType;
             if (tradeTypeFilter === 'scalp') return tt === 'scalp';
             if (tradeTypeFilter === 'swing') return tt === 'swing' || !tt;
         }
         if (outcomeFilter !== 'all' && trade.outcome !== outcomeFilter) return false;
         return true;
     }), [trades, tradeTypeFilter, outcomeFilter]);
+
+    /** How many rows carry a scalp/swing label at all. The filter reads a field
+     *  the pipeline never writes automatically, so an empty Scalp list almost
+     *  always means "nothing has been classified", not "you made no scalps" —
+     *  and those two need different sentences. The desk tools already follow
+     *  this rule for a failed fetch: an unavailable measurement must never read
+     *  as an absence of evidence. */
+    const classifiedCount = useMemo(() => (trades || []).reduce(
+        (n, trade) => n + ((trade.tradeType || trade.analysis?.tradeType) ? 1 : 0),
+        0,
+    ), [trades]);
 
     const patternMemoryMarkdown = useMemo(() => {
         const store = getMemoryFiles();
@@ -676,6 +730,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                 onBack={() => setDetailTradeId(null)}
                 modelIdToName={modelIdToName}
                 onUpdateLeverage={onUpdateTradeLeverage}
+                onUpdateType={onUpdateTradeType}
                 onUpdateOutcome={onUpdateOutcome}
                 onUpdatePnL={onUpdatePnL}
                 username={username}
@@ -727,6 +782,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                         <button
                             key={type}
                             onClick={() => setTradeTypeFilter(type)}
+                            aria-pressed={tradeTypeFilter === type}
                             className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                                 tradeTypeFilter === type
                                     ? 'bg-zinc-800 text-zinc-100'
@@ -802,7 +858,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                             }
                         </button>
                         {duplicateCount > 0 && (
-                            <div className="text-[10px] text-center text-amber-400/80 uppercase font-bold tracking-wider animate-pulse">
+                            <div className="text-ui-xs text-center text-amber-400/80 uppercase font-bold tracking-wider animate-pulse">
                                 {duplicateCount === selectedIds.length
                                     ? 'All selected trades are already in Recent Insights'
                                     : `${duplicateCount} duplicate(s) will be skipped`
@@ -841,6 +897,23 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                             className="flex-1"
                         />
                     </div>
+                ) : totalTrades === 0 && tradeTypeFilter !== 'all' && classifiedCount === 0 ? (
+                    <EmptyState
+                        icon={<Bookmark className="w-8 h-8" />}
+                        title="Nothing is classified yet"
+                        description={`None of the ${trades.length} logged ${trades.length === 1 ? 'trade has' : 'trades have'} a scalp/swing label. Verdicts are classified when they finalize, so these predate that — an empty list here says nothing about how you traded.`}
+                        action={
+                            <button
+                                type="button"
+                                data-testid="journal-clear-type-filter"
+                                onClick={() => setTradeTypeFilter('all')}
+                                className="px-3 py-1.5 text-xs font-medium rounded-full bg-zinc-800 text-zinc-100 hover:bg-zinc-700 transition-colors"
+                            >
+                                Show all trades
+                            </button>
+                        }
+                        className="h-full"
+                    />
                 ) : totalTrades === 0 ? (
                     <EmptyState
                         icon={<Bookmark className="w-8 h-8" />}

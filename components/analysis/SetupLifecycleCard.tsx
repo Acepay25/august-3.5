@@ -35,11 +35,11 @@ export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <span className="ui-kicker">Setup lifecycle</span>
-                        <span className="rounded-md border border-white/10 bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-200">{lifecycle.label}</span>
+                        <span className="rounded-md border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-200">{lifecycle.label}</span>
                     </div>
                     <p className="mt-1 text-xs text-zinc-300">{lifecycle.summary}</p>
                 </div>
-                {!compact && <span className="shrink-0 text-[10px] text-zinc-500">Advisory only</span>}
+                {!compact && <span className="shrink-0 text-ui-xs text-zinc-500">Advisory only</span>}
             </div>
 
             {!isTerminalException && (
@@ -47,13 +47,13 @@ export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis
                     {STEPS.map(step => (
                         <div key={step.stage} className="min-w-0">
                             <div className={`h-1 rounded-full ${isStepComplete(lifecycle.stage, step.stage) ? 'bg-zinc-300' : 'bg-zinc-800'}`} />
-                            <span className={`mt-1 block truncate text-[9px] ${isStepComplete(lifecycle.stage, step.stage) ? 'text-zinc-200' : 'text-zinc-600'}`}>{step.label}</span>
+                            <span className={`mt-1 block truncate text-ui-2xs ${isStepComplete(lifecycle.stage, step.stage) ? 'text-zinc-200' : 'text-zinc-600'}`}>{step.label}</span>
                         </div>
                     ))}
                 </div>
             )}
 
-            <div className="mt-2 text-[10px] text-zinc-500">
+            <div className="mt-2 text-ui-xs text-zinc-500">
                 <span className="font-semibold text-zinc-400">Next:</span> {lifecycle.nextAction}
                 {lifecycle.expiresAt && !lifecycle.isTerminal && <span className="ml-2">Window ends {new Date(lifecycle.expiresAt).toLocaleString()}</span>}
             </div>

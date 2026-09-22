@@ -91,6 +91,12 @@ jobs:
       - name: Typecheck scripts
         run: npm run typecheck:scripts
 
+      # The packaged app is the only place an electron/*.cjs break surfaces,
+      # and this workflow is what puts it on users' machines — parse the shell
+      # before electron-builder runs.
+      - name: Electron shell parses
+        run: npm run typecheck:electron
+
       - name: Build renderer (Vite)
         run: npm run build
 
@@ -109,6 +115,14 @@ jobs:
       # by the smoke step above.
       - name: Boot probe (production bundle)
         run: npm run boot-probe
+
+      # The only gate that measures what actually RENDERED rather than what
+      # started: per-conversation row counts in a real browser, every control on
+      # Learn and Journal pressed to prove none is inert, and zero pageerrors
+      # across all six surfaces. It runs before any packaging, so a renderer
+      # that drops rows cannot reach an installer from here.
+      - name: Render probe (rendered rows, inert controls, zero pageerrors)
+        run: npm run render-probe
 
       # Packaged-Electron smoke (v1.0.20 / v1.0.25 lessons): the renderer-only
       # boot probe cannot catch prod-only failures that live inside the

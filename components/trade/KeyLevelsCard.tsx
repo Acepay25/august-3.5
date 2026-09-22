@@ -123,11 +123,11 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
         <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-zinc-800/70" data-testid="key-levels-card"
             onMouseLeave={() => setHoverId(null)}>
             <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.09em] text-zinc-400">
+                <span className="text-ui-xs font-bold uppercase tracking-[0.09em] text-zinc-400">
                     Key Levels <span className="font-mono text-zinc-500 normal-case tracking-normal">({levels.length})</span>
                 </span>
                 <label
-                    className="flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
+                    className="flex cursor-pointer items-center gap-1.5 text-ui-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
                     title={allOn ? 'Hide the other levels — pinned lines stay' : 'Draw every level on the chart'}
                 >
                     <input
@@ -144,7 +144,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                     chart
                 </label>
             </div>
-            <div className="grid grid-cols-[42px_80px_52px_1fr] gap-x-2 border-y border-white/[0.06] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-zinc-600">
+            <div className="grid grid-cols-[42px_80px_52px_1fr] gap-x-2 border-y border-white/[0.06] px-3 py-1 text-ui-2xs font-bold uppercase tracking-[0.1em] text-zinc-600">
                 <span>Level</span><span>Price</span><span>Dist</span><span>Context</span>
             </div>
             <div className="py-0.5">
@@ -174,7 +174,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                     </React.Fragment>
                 ))}
             </div>
-            <div className="border-t border-white/[0.06] px-3 py-1.5 text-[10px] text-zinc-600">
+            <div className="border-t border-white/[0.06] px-3 py-1.5 text-ui-xs text-zinc-600">
                 hover = preview on chart · click = pin / unpin
                 {drawing && <span className="ml-2 text-emerald-400">· {drawnCount} drawn</span>}
             </div>

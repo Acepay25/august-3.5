@@ -66,7 +66,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
         <span>Model Reasoning ({records.length || '?'} records)</span>
         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
         {outcome && (
-          <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] border ${OUTCOME_BADGE[outcome] || ''}`}>
+          <span className={`ml-auto px-2 py-0.5 rounded-full text-ui-xs border ${OUTCOME_BADGE[outcome] || ''}`}>
             {outcome}
           </span>
         )}
@@ -87,7 +87,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
             <>
               {byLens.map(group => (
                 <div key={group.lens} className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 px-0.5">
+                  <p className="text-ui-xs font-bold uppercase tracking-wider text-zinc-500 px-0.5">
                     {ANALYST_LENS_LABEL[group.lens]}
                   </p>
                   {group.items.map(record => (

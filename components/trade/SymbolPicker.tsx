@@ -90,7 +90,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
             >
                 {display(value)}
                 {valueMeta && valueMeta.changePercent24h !== 0 && (
-                    <span className={`font-mono text-[10px] font-semibold tabular-nums ${valueMeta.changePercent24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <span className={`font-mono text-ui-xs font-semibold tabular-nums ${valueMeta.changePercent24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {valueMeta.changePercent24h >= 0 ? '+' : ''}{valueMeta.changePercent24h.toFixed(1)}%
                     </span>
                 )}
@@ -141,13 +141,13 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                                     <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-300">
                                         {s.lastPrice > 0 ? s.lastPrice.toLocaleString(undefined, { maximumFractionDigits: s.lastPrice < 1 ? 6 : 2 }) : '—'}
                                     </span>
-                                    <span className={`w-14 shrink-0 text-right font-mono text-[10px] tabular-nums ${s.changePercent24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <span className={`w-14 shrink-0 text-right font-mono text-ui-xs tabular-nums ${s.changePercent24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {s.changePercent24h >= 0 ? '+' : ''}{s.changePercent24h.toFixed(1)}%
                                     </span>
                                 </button>
                             ))}
                         </div>
-                        <div className="border-t border-white/[0.06] px-3 py-1.5 text-[9px] text-zinc-600">
+                        <div className="border-t border-white/[0.06] px-3 py-1.5 text-ui-2xs text-zinc-600">
                             ↑↓ navigate · ↵ select · esc close · {filtered.length} of {symbols.length} USDT perps
                         </div>
                     </div>

@@ -104,7 +104,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                 <button
                     type="button"
                     onClick={() => setSort(s => ({ key, desc: s.key === key ? !s.desc : true }))}
-                    className={`inline-flex shrink-0 items-center gap-1 text-[9px] font-bold uppercase tracking-widest transition-colors hover:text-zinc-200 ${
+                    className={`inline-flex shrink-0 items-center gap-1 text-ui-2xs font-bold uppercase tracking-widest transition-colors hover:text-zinc-200 ${
                         active ? 'text-zinc-100' : 'text-zinc-500'
                     }`}
                 >
@@ -121,7 +121,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
 
     const plainTh = (label: string, className = 'px-3 py-1.5'): React.ReactNode => (
         <th className={className}>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{label}</span>
+            <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">{label}</span>
         </th>
     );
 
@@ -160,7 +160,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                         type="button"
                         onClick={() => setSetupsOnly(s => !s)}
                         aria-pressed={setupsOnly}
-                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${setupsOnly ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-white/10 text-zinc-400 hover:text-zinc-200'}`}
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-ui-xs font-semibold transition-colors ${setupsOnly ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-white/10 text-zinc-400 hover:text-zinc-200'}`}
                     >
                         Setups only
                     </button>
@@ -219,7 +219,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                     <td className="px-3 py-1.5">{regimePill(r.regime)}</td>
                                     <td className="px-3 py-1.5">
                                         {r.setups.length > 0
-                                            ? <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300" title={r.setups.map(s => `${s.title} (${s.side})`).join('; ')}>
+                                            ? <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-ui-xs font-semibold text-amber-300" title={r.setups.map(s => `${s.title} (${s.side})`).join('; ')}>
                                                 {r.setups.length} · {r.setups[0].title}
                                             </span>
                                             : <span className="text-zinc-600">—</span>}
@@ -234,7 +234,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                         type="button"
                                         data-testid="screener-retry"
                                         onClick={() => setRunNonce(n => n + 1)}
-                                        className="rounded-control border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/20"
+                                        className="rounded-control border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-ui-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/20"
                                     >
                                         Retry
                                     </button>
@@ -246,7 +246,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                         </tbody>
                     </table>
                 </div>
-                <div className="flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-4 py-1.5 text-[10px] text-zinc-500">
+                <div className="flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-4 py-1.5 text-ui-xs text-zinc-500">
                     {running && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
                     <span>
                         {running

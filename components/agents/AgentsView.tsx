@@ -37,6 +37,7 @@ import {
 import { MessageRole } from '../../types/enums';
 import type { Message } from '../../types/message';
 import StatusPill from '../ui/StatusPill';
+import VerdictAudit from '../analysis/VerdictAudit';
 
 interface AgentsViewProps {
     username: string;
@@ -171,11 +172,11 @@ const Row: React.FC<{
                             <span className="truncate text-[12px] font-semibold text-zinc-200">{title}</span>
                             {attention && (
                                 <span title={attention} data-testid="row-attention"
-                                    className="shrink-0 text-[9px] font-bold text-amber-400">⚠</span>
+                                    className="shrink-0 text-ui-2xs font-bold text-amber-400">⚠</span>
                             )}
                             {!!stat && (
                                 <span title={`${stat} skills authored`} data-testid="row-skills"
-                                    className="shrink-0 rounded-full border border-zinc-800 px-1 font-mono text-[9px] tabular-nums text-zinc-500">
+                                    className="shrink-0 rounded-full border border-zinc-800 px-1 font-mono text-ui-2xs tabular-nums text-zinc-500">
                                     {stat}
                                 </span>
                             )}
@@ -185,9 +186,9 @@ const Row: React.FC<{
                 </button>
                 <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
                     <span className="flex items-center gap-1">
-                        {time && <span className="font-mono text-[9px] text-zinc-600">{time}</span>}
+                        {time && <span className="font-mono text-ui-2xs text-zinc-600">{time}</span>}
                         {!!unread && (
-                            <span className="rounded-full bg-zinc-700 px-1.5 font-mono text-[9px] tabular-nums text-zinc-200">
+                            <span className="rounded-full bg-zinc-700 px-1.5 font-mono text-ui-2xs tabular-nums text-zinc-200">
                                 {unread > 9 ? '9+' : unread}
                             </span>
                         )}
@@ -228,7 +229,7 @@ const Row: React.FC<{
 
 const VerdictLine: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[10px] uppercase tracking-wider text-zinc-600">{label}</span>
+        <span className="text-ui-xs uppercase tracking-wider text-zinc-600">{label}</span>
         <span className="font-mono text-[11px] tabular-nums text-zinc-200">{value}</span>
     </div>
 );
@@ -245,13 +246,21 @@ const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
                 <StatusPill tone={up ? 'up' : down ? 'down' : 'neutral'} kicker>
                     {a.direction ?? 'No trade'}
                 </StatusPill>
-                <span className="truncate text-[12px] font-semibold text-zinc-100">{a.coinName ?? 'setup'}</span>
-                {a.confidence && <span className="ml-auto font-mono text-[10px] text-zinc-500">{a.confidence}</span>}
+                <span className="truncate text-ui-caption font-semibold text-zinc-100">{a.coinName ?? 'setup'}</span>
+                {a.confidence && <span className="ml-auto font-mono text-ui-xs text-zinc-500">{a.confidence}</span>}
             </div>
             <VerdictLine label="entry" value={a.entryPoints?.[0]?.price ?? '—'} />
             <VerdictLine label="stop" value={a.stopLoss ?? '—'} />
             <VerdictLine label="target" value={a.takeProfit?.[0]?.price ?? '—'} />
             {typeof a.probability === 'number' && <VerdictLine label="probability" value={`${a.probability}%`} />}
+            {/* Why the run said what it said. Until this block existed a
+               declined verdict was the single word above. */}
+            <VerdictAudit
+                analysis={a}
+                evidencePack={m.evidencePack}
+                runContract={m.runContract}
+                className="mt-1.5"
+            />
         </div>
     );
 };
@@ -347,13 +356,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const botRows = useMemo<BotRow[]>(() => bots
         .filter(b => matches(b.name))
         .map(b => {
-            const thread = threadForProvider(messages, b.providerId, b.modelId);
+            const thread = threadForProvider(messages, b.providerId, b.modelId, b.id);
             const last = thread[thread.length - 1] ?? null;
             return {
                 bot: b,
                 preview: last ? previewTextFor(last) : '',
                 time: last?.createdAt ?? null,
-                unread: unreadCount(messages, b.providerId, lastOpenedMap[b.providerId], b.modelId),
+                unread: unreadCount(messages, b.providerId, lastOpenedMap[b.providerId], b.modelId, b.id),
             };
         })
         .sort((a, b) => (b.time ?? '').localeCompare(a.time ?? '')),
@@ -389,7 +398,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // into the desk pane.
     const isChartPane = selection.kind === 'team';
     const thread = useMemo(
-        () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId)
+        () => (activeBot ? threadForProvider(messages, activeBot.providerId, activeBot.modelId, activeBot.id)
             : isChartPane ? deskMessages : []),
         [activeBot, isChartPane, messages, deskMessages],
     );
@@ -472,7 +481,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 routinesToggle={routines.length > 0 ? (
                     <button type="button" onClick={() => setOpenRoutines(open ? null : r.bot.id)}
                         aria-expanded={open} data-testid="row-routines"
-                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-500 transition-colors hover:text-zinc-300">
+                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-1.5 py-0.5 text-ui-2xs text-zinc-500 transition-colors hover:text-zinc-300">
                         <Timer className="h-2.5 w-2.5" />{routines.length}
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </button>
@@ -489,7 +498,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             aria-label={`Rename ${r.bot.name}`} data-testid="bot-rename-input" autoFocus
                             className="min-w-0 flex-1 rounded-control border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-zinc-600" />
                         <button type="submit"
-                            className="shrink-0 rounded-control border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-800">
+                            className="shrink-0 rounded-control border border-zinc-700 px-1.5 py-0.5 text-ui-xs text-zinc-300 hover:bg-zinc-800">
                             Save
                         </button>
                     </form>
@@ -498,15 +507,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <ul className="space-y-1 px-2 pb-2 pl-9">
                         {routines.map(cfg => (
                             <li key={cfg.id} className="flex items-baseline gap-2">
-                                <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-400" title={cfg.name}>
+                                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-400" title={cfg.name}>
                                     {cfg.name}
-                                    <span className="ml-1 font-mono text-[9px] text-zinc-600">
+                                    <span className="ml-1 font-mono text-ui-2xs text-zinc-600">
                                         {cfg.schedule?.cron ?? '—'}
                                     </span>
                                 </span>
                                 {onRunRoutine && (
                                     <button type="button" onClick={() => onRunRoutine(cfg)}
-                                        className="shrink-0 rounded-control border border-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
+                                        className="shrink-0 rounded-control border border-zinc-800 px-1.5 py-0.5 text-ui-2xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
                                         Run
                                     </button>
                                 )}
@@ -570,11 +579,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                 <div className="flex shrink-0 gap-1 px-2 pb-2">
                     <button type="button" onClick={onNewBot}
-                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200">
+                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:text-zinc-200">
                         <Bot className="h-3 w-3" /> Agents
                     </button>
                     <button type="button" onClick={onNewGroup}
-                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:text-zinc-200">
+                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:text-zinc-200">
                         <Users className="h-3 w-3" /> Rooms
                     </button>
                     {/* The Coach inbox is not a thread on this surface — it is a
@@ -583,7 +592,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     {onOpenCoach && (
                         <button type="button" onClick={onOpenCoach}
                             aria-label="Coach — awaiting your decision"
-                            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs transition-colors ${
                                 coachCount > 0 ? 'border-amber-500/30 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
                             }`} data-testid="rail-coach">
                             <Sparkles className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
@@ -593,7 +602,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
                     <section data-testid="rail-pinned">
-                        <h4 className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">Pinned</h4>
+                        <h4 className="px-1 pb-1 text-ui-xs font-bold uppercase tracking-wider text-zinc-600">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
@@ -612,7 +621,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                     <section>
                         <div className="flex items-center gap-1 px-1 pb-1">
-                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                            <h4 className="text-ui-xs font-bold uppercase tracking-wider text-zinc-600">
                                 Chats and tasks
                             </h4>
                             {(listedBots.length > 1 || listedGroups.length > 1) && (
@@ -660,7 +669,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2 border-t border-zinc-800/80 px-3 py-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 font-mono text-[10px] uppercase text-zinc-300">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 font-mono text-ui-xs uppercase text-zinc-300">
                         {username.slice(0, 1) || '·'}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{username}</span>
@@ -694,7 +703,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             {/* WS-3.4: what this bot has actually learned, where
                                 you are about to ask it something. */}
                             {activeStat && (
-                                <span className="hidden shrink-0 font-mono text-[10px] tabular-nums text-zinc-600 sm:inline"
+                                <span className="hidden shrink-0 font-mono text-ui-xs tabular-nums text-zinc-600 sm:inline"
                                     data-testid="bot-learning-stats"
                                     title={activeStat.lastLessonAt ? `newest lesson ${activeStat.lastLessonAt}` : 'no dated lessons'}>
                                     {activeStat.lessons} lessons · {activeStat.skillsAuthored} skills · {activeStat.evidence} evidence
@@ -715,7 +724,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             )}
                             {onOpenInDock && (
                                 <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
-                                    className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
+                                    className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
                                     Open in Chart AI
                                 </button>
                             )}
@@ -734,10 +743,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </p>
                                 </div>
                             ) : (
-                                <div className="chat-column space-y-3 py-4">
+                                <div className="chat-column space-y-3 py-4" data-testid="agent-thread">
                                     {thread.map(m => (
-                                        <div key={m.id} className={`flex flex-col ${m.role === MessageRole.USER ? 'items-end' : 'items-start'}`}>
-                                            <span className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-zinc-600">
+                                        <div key={m.id} data-testid="agent-message"
+                                            data-message-id={m.id}
+                                            data-role={m.role === MessageRole.USER ? 'user' : 'ai'}
+                                            className={`flex flex-col ${m.role === MessageRole.USER ? 'items-end' : 'items-start'}`}>
+                                            <span className="mb-0.5 font-mono text-ui-2xs uppercase tracking-wider text-zinc-600">
                                                 {m.role === MessageRole.USER ? username : activeBot?.name ?? 'desk'}
                                                 {' · '}{relTime(m.createdAt)}
                                             </span>
@@ -765,7 +777,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     <div className="mb-1 flex flex-wrap gap-1 px-1.5" data-testid="composer-attachments">
                                         {attachments.map(a => (
                                             <span key={a.id}
-                                                className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1 pr-0.5 text-[10px] text-zinc-300">
+                                                className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1 pr-0.5 text-ui-xs text-zinc-300">
                                                 {a.kind === 'image' && (
                                                     <img src={a.payload} alt="" className="h-5 w-5 rounded object-cover" />
                                                 )}
@@ -803,7 +815,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         {(['chat', 'analyze'] as const).map(m => (
                                             <button key={m} type="button" onClick={() => setMode(m)}
                                                 aria-pressed={mode === m} data-testid={`mode-${m}`}
-                                                className={`rounded-[5px] px-2 py-0.5 text-[10px] font-semibold capitalize transition-colors ${
+                                                className={`rounded-[5px] px-2 py-0.5 text-ui-xs font-semibold capitalize transition-colors ${
                                                     mode === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                                                 }`}>
                                                 {m}
@@ -818,7 +830,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-                            <p className="mx-auto mt-1.5 max-w-3xl text-center text-[10px] text-zinc-600">
+                            <p className="mx-auto mt-1.5 max-w-3xl text-center text-ui-xs text-zinc-600">
                                 Chat talks to the agent · Analyze runs the full Chart AI pipeline
                             </p>
                         </div>

@@ -17,7 +17,7 @@ interface CompareModalProps {
 
 const StatRow: React.FC<{ label: string; a: React.ReactNode; b: React.ReactNode }> = ({ label, a, b }) => (
   <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-white/5 py-1.5 text-[11px]">
-    <span className="text-zinc-500 uppercase tracking-wider text-[9px] self-center">{label}</span>
+    <span className="text-zinc-500 uppercase tracking-wider text-ui-2xs self-center">{label}</span>
     <span className="font-mono text-zinc-200 text-right">{a}</span>
     <span className="font-mono text-zinc-200 text-right">{b}</span>
   </div>
@@ -70,14 +70,14 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
             <div className="text-xs font-medium text-zinc-200">Compare runs</div>
-            <div className="text-[10px] text-zinc-500">This run vs the previous analysis in the thread</div>
+            <div className="text-ui-xs text-zinc-500">This run vs the previous analysis in the thread</div>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-white/10 bg-zinc-950/60 px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500">
+        <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-white/10 bg-zinc-950/60 px-4 py-2 text-ui-xs uppercase tracking-wider text-zinc-500">
           <span>Metric</span>
           <span className="text-right text-zinc-300">{a.models || `#${primary.id.slice(0, 6)}`}</span>
           <span className="text-right text-zinc-300">{b ? (b.models || `#${secondary?.id.slice(0, 6)}`) : 'Pick a second analysis…'}</span>
@@ -101,7 +101,7 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
 
           {!secondary && (
             <div className="mt-3">
-              <div className="mb-1 text-[9px] uppercase tracking-wider text-zinc-500">Pick a second analysis</div>
+              <div className="mb-1 text-ui-2xs uppercase tracking-wider text-zinc-500">Pick a second analysis</div>
               <div className="max-h-40 space-y-1 overflow-y-auto custom-scrollbar">
                 {analysisMessages
                   .filter(m => m.id !== primary.id && m.analysis)
@@ -114,11 +114,11 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
                       className="flex w-full items-center justify-between rounded-lg border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
                     >
                       <span className="truncate">{m.analysis?.direction} {m.analysis?.coinName || ''} · {m.analysis?.confidence}</span>
-                      <span className="shrink-0 text-[9px] text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>
+                      <span className="shrink-0 text-ui-2xs text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>
                     </button>
                   ))}
                 {analysisMessages.filter(m => m.id !== primary.id && m.analysis).length === 0 && (
-                  <div className="py-3 text-center text-[10px] text-zinc-500">No other analyses in this conversation.</div>
+                  <div className="py-3 text-center text-ui-xs text-zinc-500">No other analyses in this conversation.</div>
                 )}
               </div>
             </div>

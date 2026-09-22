@@ -269,48 +269,76 @@ const trigramSet = (s: string): Set<string> => {
 };
 
 /**
- * Pair up seats whose generations are near-identical.
+ * Indices of the samples whose text is the same generation twice.
  *
- * Byte-identical (or ~identical) openings across two DIFFERENT models are not
- * something real sampling produces — they mean an upstream gateway served one
+ * Byte-identical (or ~identical) output across two DIFFERENT models is not
+ * something real sampling produces — it means an upstream gateway served one
  * generation to several seats (free-tier routers dedupe/cache concurrent
  * near-identical prompts, or route every `:free` SKU to one shared backend).
- * Compares each seat's public output, falling back to its chain-of-thought
- * when a seat only returned a scratchpad. Returns human-readable pair labels;
- * empty when every seat generated independently.
+ *
+ * Exported index-first rather than label-first because two callers need the
+ * same judgment in different words: the transcript toast names the MODEL, while
+ * the moderator prompt only knows the SEAT and has to say "count these as one
+ * voice". One shared function is what stops the threshold drifting between them.
  */
-export const findDuplicateAnalystOutputs = (analysts: readonly AnalystOutputSample[]): string[] => {
-    // Below ~200 normalized chars there isn't enough text to judge ("Avoid."
-    // legitimately matches across seats) — skip those pairs entirely.
-    const samples = analysts
-        .map(a => {
-            const raw = a.finalOutput?.trim() ? a.finalOutput : (a.thoughtProcess ?? '');
-            const normalized = normalizeForDuplicateCheck(raw);
-            return {
-                label: `${a.name} · ${formatModelDisplayName(a.model)}`,
-                normalized,
-                grams: trigramSet(normalized),
-            };
-        })
-        .filter(s => s.normalized.length >= 200);
+export interface DuplicateTextPair {
+    a: number;
+    b: number;
+    /** Jaccard overlap of the normalized character trigrams. */
+    similarity: number;
+    identical: boolean;
+}
 
-    const pairs: string[] = [];
+/** Below this many normalized chars there isn't enough text to judge — "Avoid."
+ *  legitimately matches across seats, so short samples are skipped entirely. */
+const MIN_CHARS_TO_JUDGE = 200;
+/** Tuned so paraphrase-collapsed output still trips it while two seats that
+ *  independently reached a similar conclusion do not. */
+const DUPLICATE_SIMILARITY = 0.9;
+
+export const duplicateTextPairs = (
+    texts: readonly (string | undefined)[],
+): DuplicateTextPair[] => {
+    const samples = texts
+        .map((raw, index) => {
+            const normalized = normalizeForDuplicateCheck(raw);
+            return { index, normalized, grams: trigramSet(normalized) };
+        })
+        .filter(s => s.normalized.length >= MIN_CHARS_TO_JUDGE);
+
+    const pairs: DuplicateTextPair[] = [];
     for (let i = 0; i < samples.length; i++) {
         for (let j = i + 1; j < samples.length; j++) {
             const a = samples[i];
             const b = samples[j];
             if (a.normalized === b.normalized) {
-                pairs.push(`${a.label} ⇄ ${b.label} — identical text`);
+                pairs.push({ a: a.index, b: b.index, similarity: 1, identical: true });
                 continue;
             }
             let intersection = 0;
             for (const g of a.grams) if (b.grams.has(g)) intersection++;
             const union = a.grams.size + b.grams.size - intersection;
             const similarity = union === 0 ? 0 : intersection / union;
-            if (similarity >= 0.9) {
-                pairs.push(`${a.label} ⇄ ${b.label} — ${Math.round(similarity * 100)}% similar`);
+            if (similarity >= DUPLICATE_SIMILARITY) {
+                pairs.push({ a: a.index, b: b.index, similarity, identical: false });
             }
         }
     }
     return pairs;
 };
+
+/**
+ * Pair up seats whose generations are near-identical.
+ *
+ * Compares each seat's public output, falling back to its chain-of-thought
+ * when a seat only returned a scratchpad. Returns human-readable pair labels;
+ * empty when every seat generated independently.
+ */
+export const findDuplicateAnalystOutputs = (analysts: readonly AnalystOutputSample[]): string[] =>
+    duplicateTextPairs(
+        analysts.map(a => (a.finalOutput?.trim() ? a.finalOutput : a.thoughtProcess)),
+    ).map(p => {
+        const label = (a: AnalystOutputSample): string => `${a.name} · ${formatModelDisplayName(a.model)}`;
+        return `${label(analysts[p.a])} ⇄ ${label(analysts[p.b])} — `
+            + (p.identical ? 'identical text' : `${Math.round(p.similarity * 100)}% similar`);
+    });

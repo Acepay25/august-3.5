@@ -287,7 +287,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                             (rose = stop, emerald = target, yellow =
                                             leverage), and entry is none of those. */}
                                         <div className="mb-4">
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
+                                            <label className="block text-ui-xs uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
                                                 Entry Price
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -309,7 +309,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                                         {/* Stop Loss */}
                                         <div className="mb-4">
-                                            <label className="block text-[10px] uppercase font-bold text-rose-400 tracking-wider mb-1.5">
+                                            <label className="block text-ui-xs uppercase font-bold text-rose-400 tracking-wider mb-1.5">
                                                 Stop Loss
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -331,7 +331,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                                         {/* Take Profit 1 */}
                                         <div className="mb-4">
-                                            <label className="block text-[10px] uppercase font-bold text-emerald-400 tracking-wider mb-1.5">
+                                            <label className="block text-ui-xs uppercase font-bold text-emerald-400 tracking-wider mb-1.5">
                                                 Target 1
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -353,7 +353,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                                         {/* Take Profit 2 */}
                                         <div className="mb-4">
-                                            <label className="block text-[10px] uppercase font-bold text-emerald-400/70 tracking-wider mb-1.5">
+                                            <label className="block text-ui-xs uppercase font-bold text-emerald-400/70 tracking-wider mb-1.5">
                                                 Target 2 (Optional)
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -377,7 +377,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         {/* Leverage & Position Size */}
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-[10px] uppercase font-bold text-yellow-400 tracking-wider mb-1.5">
+                                                <label className="block text-ui-xs uppercase font-bold text-yellow-400 tracking-wider mb-1.5">
                                                     Leverage
                                                 </label>
                                                 <select
@@ -391,7 +391,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
+                                                <label className="block text-ui-xs uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
                                                     Position ($)
                                                 </label>
                                                 <input
@@ -410,7 +410,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                             {/* Suggestions */}
                             {scenarioResult?.suggestions && scenarioResult.suggestions.length > 0 && (
                                 <div className="bg-cyan-950/20 rounded-xl border border-cyan-500/20 p-4">
-                                    <h4 className="text-[10px] uppercase font-bold text-cyan-400 tracking-widest mb-3">
+                                    <h4 className="text-ui-xs uppercase font-bold text-cyan-400 tracking-widest mb-3">
                                          Suggestions
                                     </h4>
                                     <div className="space-y-2">
@@ -434,11 +434,11 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                 <div className="grid grid-cols-2 gap-4">
                                     {/* Original */}
                                     <div className="bg-zinc-800 rounded-lg p-4 border border-white/5">
-                                        <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">Original</span>
+                                        <span className="text-ui-2xs uppercase font-bold text-zinc-500 tracking-widest">Original</span>
                                         <div className="text-3xl font-black text-zinc-400 mt-1">
                                             1:{comparison?.original.rrRatio || '—'}
                                         </div>
-                                        <div className="text-[10px] text-zinc-600 mt-1">
+                                        <div className="text-ui-xs text-zinc-600 mt-1">
                                             Risk: {comparison?.original.riskPercent || 0}%
                                         </div>
                                     </div>
@@ -450,13 +450,13 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                             ? 'bg-rose-950/30 border-rose-500/30'
                                             : 'bg-zinc-800 border-white/5'
                                         }`}>
-                                        <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">Scenario</span>
+                                        <span className="text-ui-2xs uppercase font-bold text-zinc-500 tracking-widest">Scenario</span>
                                         <div className={`text-3xl font-black mt-1 ${comparison && comparison.rrChange > 0 ? 'text-emerald-400' :
                                             comparison && comparison.rrChange < 0 ? 'text-rose-400' : 'text-white'
                                             }`}>
                                             1:{currentMetrics?.rrRatio || '—'}
                                         </div>
-                                        <div className="text-[10px] text-zinc-600 mt-1">
+                                        <div className="text-ui-xs text-zinc-600 mt-1">
                                             Risk: {currentMetrics?.riskPercent || 0}%
                                         </div>
                                     </div>
@@ -484,20 +484,20 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                             Monte Carlo Simulation
                                         </h3>
                                         {isCalculating && (
-                                            <span className="text-[9px] text-cyan-400 animate-pulse">Calculating...</span>
+                                            <span className="text-ui-2xs text-cyan-400 animate-pulse">Calculating...</span>
                                         )}
                                     </div>
 
                                     <div className="grid grid-cols-3 gap-3 mb-4">
                                         <div className="text-center p-3 rounded-lg bg-black/30">
-                                            <span className="text-[9px] text-zinc-500 block">Win Rate</span>
+                                            <span className="text-ui-2xs text-zinc-500 block">Win Rate</span>
                                             <span className={`text-xl font-black ${scenarioResult.monteCarlo.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'
                                                 }`}>
                                                 {scenarioResult.monteCarlo.winRate}%
                                             </span>
                                         </div>
                                         <div className="text-center p-3 rounded-lg bg-black/30">
-                                            <span className="text-[9px] text-zinc-500 block">EV</span>
+                                            <span className="text-ui-2xs text-zinc-500 block">EV</span>
                                             <span className={`text-xl font-black ${scenarioResult.monteCarlo.expectedValue >= 0 ? 'text-emerald-400' : 'text-rose-400'
                                                 }`}>
                                                 {scenarioResult.monteCarlo.expectedValue >= 0 ? '+' : ''}
@@ -505,7 +505,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                             </span>
                                         </div>
                                         <div className="text-center p-3 rounded-lg bg-black/30">
-                                            <span className="text-[9px] text-zinc-500 block">Max DD</span>
+                                            <span className="text-ui-2xs text-zinc-500 block">Max DD</span>
                                             <span className="text-xl font-black text-amber-400">
                                                 {scenarioResult.monteCarlo.maxDrawdownAvg}%
                                             </span>
@@ -565,7 +565,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         {scenarioResult.historicalMatches.slice(0, 3).map((match, i) => (
                                             <div
                                                 key={i}
-                                                className={`text-[10px] px-3 py-2 rounded-lg flex items-center justify-between ${match.trade.outcome === TradeOutcome.WIN
+                                                className={`text-ui-xs px-3 py-2 rounded-lg flex items-center justify-between ${match.trade.outcome === TradeOutcome.WIN
                                                     ? 'bg-emerald-950/20 text-emerald-300'
                                                     : 'bg-rose-950/20 text-rose-300'
                                                     }`}
@@ -591,7 +591,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                     </h3>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="text-center p-3 rounded-lg bg-rose-950/20 border border-rose-500/20">
-                                            <span className="text-[9px] text-rose-400 block">Risk</span>
+                                            <span className="text-ui-2xs text-rose-400 block">Risk</span>
                                             <span className="text-xl font-black text-rose-400">
                                                 ${currentMetrics.riskUSD.toLocaleString()}
                                             </span>
@@ -602,16 +602,16 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 '$10' next to '100% of position' on
                                                 the shipped config — the two numbers
                                                 speak different units. */}
-                                            <span className="text-[9px] text-zinc-500 block">
+                                            <span className="text-ui-2xs text-zinc-500 block">
                                                 {currentMetrics.leveragedRiskPercent}% of margin at {currentScenarioConfig?.leverage ?? scenarioLeverage}x
                                             </span>
                                         </div>
                                         <div className="text-center p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20">
-                                            <span className="text-[9px] text-emerald-400 block">Reward (TP1)</span>
+                                            <span className="text-ui-2xs text-emerald-400 block">Reward (TP1)</span>
                                             <span className="text-xl font-black text-emerald-400">
                                                 ${currentMetrics.rewardUSD.toLocaleString()}
                                             </span>
-                                            <span className="text-[9px] text-zinc-500 block">
+                                            <span className="text-ui-2xs text-zinc-500 block">
                                                 {currentMetrics.leveragedRewardPercent}% of margin at {currentScenarioConfig?.leverage ?? scenarioLeverage}x
                                             </span>
                                         </div>
@@ -624,8 +624,8 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-white/10 bg-zinc-950 flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-600">
-                        Press <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded text-[9px]">ESC</kbd> to close
+                    <span className="text-ui-xs text-zinc-600">
+                        Press <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded text-ui-2xs">ESC</kbd> to close
                     </span>
                     <button
                         onClick={onClose}

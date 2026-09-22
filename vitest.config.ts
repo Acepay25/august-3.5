@@ -6,6 +6,14 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Worker fan-out is the remaining flake source. With ~370 files the cost is
+    // dominated by per-file jsdom setup (measured: 541s of `environment` against
+    // 33s of actual test time), so on a high-core machine unbounded forks all
+    // contend for the same event loop and a VARYING handful of files blow the
+    // per-test timeout while passing solo and passing serially. Capping the pool
+    // trades wall-clock for determinism; raise it back only with evidence.
+    pool: 'forks',
+    maxWorkers: 4,
     // Harden against worker teardown flakes on heavy files (debateChat.test.tsx):
     // vitest 4's forks pool terminates workers after `teardownTimeout` (default
     // 10s) and logs "[vitest-pool]: Timeout terminating forks worker ..." when

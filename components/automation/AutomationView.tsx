@@ -44,12 +44,12 @@ const AutomationView: React.FC<{
                 <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee66]" />
                     <h3 className="text-sm font-bold text-white truncate">{config.name}</h3>
-                    <span className="text-[10px] font-mono text-zinc-500 hidden sm:inline">{humanizeCron(config.schedule.cron)}</span>
+                    <span className="text-ui-xs font-mono text-zinc-500 hidden sm:inline">{humanizeCron(config.schedule.cron)}</span>
                     {config.enabled && (() => {
                         const next = getNextRunAt(config);
                         const paused = config.pauseUntil && config.pauseUntil > Date.now();
                         return next ? (
-                            <span className="text-[10px] text-zinc-500">
+                            <span className="text-ui-xs text-zinc-500">
                                 {paused ? 'Paused until ' : 'Next '}
                                 {new Date(paused ? config.pauseUntil! : next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
@@ -63,7 +63,7 @@ const AutomationView: React.FC<{
 
             {/* Controls */}
             <div className="px-4 py-2.5 border-b border-white/5 bg-zinc-900/60 shrink-0 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap text-[10px] text-zinc-500 font-mono">
+                <div className="flex items-center gap-2 flex-wrap text-ui-xs text-zinc-500 font-mono">
                     <span>Mode: <span className="text-zinc-300 uppercase">{config.mode === 'standard' ? 'Standard' : config.mode === 'pure_ai' ? 'Pure AI' : 'Accuracy'}</span></span>
                     <span>·</span>
                     <span>Lenses: <span className="text-zinc-300">{config.useLenses ? 'On' : 'Off'}</span></span>
@@ -76,7 +76,7 @@ const AutomationView: React.FC<{
                     <button
                         onClick={onRunNow}
                         disabled={isRunning || !config.enabled}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         title={config.enabled ? 'Run this automation now' : 'Enable the automation first'}
                     >
                         {isRunning ? <LoadingIcon className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
@@ -86,14 +86,14 @@ const AutomationView: React.FC<{
                         <button
                             type="button"
                             onClick={() => onPauseUntil(Date.now() + 8 * 60 * 60 * 1000)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         >
                             Pause 8h
                         </button>
                     )}
                     <button
                         onClick={onRefresh}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         title="Refresh runs"
                         aria-label="Refresh runs"
                     >
@@ -101,18 +101,18 @@ const AutomationView: React.FC<{
                     </button>
                     <button
                         onClick={onEdit}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         <EditIcon className="w-3 h-3" /> Edit
                     </button>
                     <button
                         onClick={onDelete}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         <TrashIcon className="w-3 h-3" /> Delete
                     </button>
                     <div className="flex items-center gap-2 pl-2 border-l border-white/10">
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Scheduled</span>
+                        <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Scheduled</span>
                         <ToggleSwitch checked={config.enabled} onChange={onToggleEnabled} label="Toggle automation" />
                     </div>
                 </div>

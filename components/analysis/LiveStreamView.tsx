@@ -78,7 +78,7 @@ const AnalystPanel: React.FC<{
       <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-zinc-800">
         <div>
           <h4 className={`font-bold text-base sm:text-lg tracking-tight ${colorClasses.title}`}>{title}</h4>
-          {modelName && <div className="text-[10px] font-mono text-zinc-500 mt-1 uppercase tracking-wider">{modelName}</div>}
+          {modelName && <div className="text-ui-xs font-mono text-zinc-500 mt-1 uppercase tracking-wider">{modelName}</div>}
         </div>
         <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border border-white/10 bg-zinc-800 ${colorClasses.title}`}>
           <BotIcon />
@@ -91,7 +91,7 @@ const AnalystPanel: React.FC<{
             open={thinkingOpen}
             onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
           >
-            <summary className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">
+            <summary className="cursor-pointer list-none px-3 py-2 text-ui-xs uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">
               {isStreamingThinking ? (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
@@ -116,7 +116,7 @@ const AnalystPanel: React.FC<{
           </div>
         ) : (
           <div className="animate-fade-in">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Final output</div>
+            <div className="mb-2 text-ui-xs font-semibold uppercase tracking-widest text-zinc-500">Final output</div>
             <div className={`font-sans ${colorClasses.text}`}>
               <MarkdownContent content={typedText} className={colorClasses.text} />
               {!isFinished && <span className={`inline-block w-1.5 h-4 ml-1 align-middle ${colorClasses.accent} animate-pulse`}></span>}
@@ -126,7 +126,7 @@ const AnalystPanel: React.FC<{
       </div>
       {!showLoadingState && isFinished && (
         <div className="absolute bottom-2 right-2">
-          <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-full border ${colorClasses.border} bg-black/60 text-zinc-400`}>Complete</span>
+          <span className={`text-ui-2xs uppercase font-bold px-2 py-0.5 rounded-full border ${colorClasses.border} bg-black/60 text-zinc-400`}>Complete</span>
         </div>
       )}
     </div>

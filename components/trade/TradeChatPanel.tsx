@@ -35,6 +35,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Pin, Plus, RotateCcw, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
+import type { Message } from '../../types/message';
 import { ChatMessage, ContentPart } from '../../services/providers/GenericProviderService';
 import { streamChatWithDeskTools, type DeskToolCall, type DeskToolResult } from '../../services/analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../../services/analysis/HybridIntelligenceService';
@@ -65,6 +66,7 @@ import ChatHistoryPalette, { relTime } from './panels/ChatHistoryPalette';
 import ChatWorkTimeline from './panels/ChatWorkTimeline';
 import ComposerWorkspaceRow from './panels/ComposerWorkspaceRow';
 import TradeProposalCard, { TradeProposalLoggedRow } from './panels/TradeProposalCard';
+import VerdictAudit from '../analysis/VerdictAudit';
 import MemoryProvenanceStrip from '../chat/MemoryProvenanceStrip';
 import { consumePendingSkillTry } from '../chat/skillDeepLink';
 import KeyLevelsCard from './KeyLevelsCard';
@@ -150,6 +152,13 @@ interface TradeChatPanelProps {
      *  can scroll straight to it. */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
         Promise<string | { text: string; messageId?: string }>;
+    /** Resolve the message id `onRunAnalysis` handed back into the App-side
+     *  message, so a settled answer can show what its verdict was built on —
+     *  the why-avoid breakdown, the evidence the moderator actually saw, the
+     *  stage ladder. Resolved lazily rather than copied into the entry, because
+     *  a stored session would otherwise carry a whole `TradeAnalysis` per
+     *  answer. Absent ⇒ the audit block does not render. */
+    getAnalysisMessage?: (messageId: string) => Message | undefined;
     /** "Log this trade" on a model proposal → App records it as an OPEN
      *  (PENDING) trade the outcome autopilot later scores. Absent ⇒ the Log
      *  button is hidden (no journal attached). */
@@ -300,7 +309,7 @@ const newId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
-    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onLogProposedTrade, onPlanPresented,
+    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
     renderGroupSurface, groups = [],
     registerScrollToMessage,
@@ -1471,7 +1480,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     className="rounded-control p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100">
                     <PanelRightOpen className="h-4 w-4" />
                 </button>
-                <span className="select-none text-[10px] font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
+                <span className="select-none text-ui-xs font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
                 <span className={`h-2 w-2 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
                 <SupervisorIndicator compact onOpen={() => setSupervisorOpen(true)} />
             </div>
@@ -1494,7 +1503,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     // answer exists to be "answered".
                     const hasAnswer = entries.some(x => x.role === 'ai' && !x.notice && !x.streaming && x.text);
                     if (!hasAnswer) return null;
-                    return <span className="hidden shrink-0 text-[10px] text-zinc-600 sm:inline" data-testid="chat-answered-meta">answered {relTime(activeSession.updatedAt)}</span>;
+                    return <span className="hidden shrink-0 text-ui-xs text-zinc-600 sm:inline" data-testid="chat-answered-meta">answered {relTime(activeSession.updatedAt)}</span>;
                 })()}
                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} />
@@ -1557,7 +1566,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         {expanded ? 'Shrink back' : 'Expand over chart'}
                                     </button>
                                     <div className="my-1 border-t border-white/[0.06]" />
-                                    <p className="px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-600">Start</p>
+                                    <p className="px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-600">Start</p>
                                     <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
                                         New panel <span className="text-zinc-600">· up to {PANEL_MAX_MODELS} models</span>
                                     </button>
@@ -1619,10 +1628,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             {/* Panel seat editor (while a panel is still short of 2 seats). */}
             {panelPickerFor && (
                 <div className="shrink-0 space-y-1.5 border-b border-white/[0.06] bg-zinc-900/70 px-3 py-2" data-testid="panel-picker">
-                    <p className="text-[10px] uppercase tracking-widest text-zinc-500">Panel seats ({sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}) — pick up to {PANEL_MAX_MODELS} models; they answer together and talk to each other</p>
+                    <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Panel seats ({sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}) — pick up to {PANEL_MAX_MODELS} models; they answer together and talk to each other</p>
                     <div className="flex flex-wrap items-center gap-1.5">
                         {(sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: { providerId: string; modelId: string }) => (
-                            <span key={m.modelId} className="flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-200">
+                            <span key={m.modelId} className="flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-200">
                                 {formatModelDisplayName(m.modelId)}
                                 <button type="button" aria-label={`Remove ${m.modelId}`}
                                     onClick={() => setPanelModels(panelPickerFor, (sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).filter((x: { providerId: string; modelId: string }) => x.modelId !== m.modelId))}
@@ -1636,7 +1645,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 placeholder="+ add model" />
                         )}
                         <button type="button" onClick={() => setPanelPickerFor(null)}
-                            className="rounded-full bg-zinc-700 px-2.5 py-1 text-[10px] font-semibold text-zinc-100 hover:bg-zinc-600">
+                            className="rounded-full bg-zinc-700 px-2.5 py-1 text-ui-xs font-semibold text-zinc-100 hover:bg-zinc-600">
                             Done
                         </button>
                     </div>
@@ -1690,6 +1699,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     const aiLevels = e.role === 'ai' && !e.notice ? parseKeyLevels(e.text) : null;
                     const shownText = aiLevels?.hadBlock ? aiLevels.clean : e.text;
                     const analysisId = analysisMessageIds[e.id];
+                    // Only a settled answer has a verdict to explain, and only
+                    // an entry this dock ran has an id to resolve it from.
+                    const verdict = e.streaming || e.notice ? undefined
+                        : (analysisId ? getAnalysisMessage?.(analysisId) : undefined);
                     return (
                     <div key={e.id} className="chat-fade-in" data-entry-id={e.id} data-message-id={analysisId ?? e.id} data-testid={`chat-entry-${e.role}`}>
                         {e.role === 'user' ? (
@@ -1709,7 +1722,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 )}
                             </div>
                         ) : e.notice ? (
-                            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400" data-testid="chat-notice">
+                            <p className="flex items-center gap-1.5 text-ui-xs font-semibold uppercase tracking-wider text-amber-400" data-testid="chat-notice">
                                 <span className="sr-only">⚡ </span>
                                 <Zap className="h-3 w-3 shrink-0" />
                                 <span>{e.tools[0] ?? 'Harness event'}</span>
@@ -1717,7 +1730,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         ) : (
                             <div className="group/msg space-y-1">
                                 {e.speaker && (
-                                    <p className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">{formatModelDisplayName(e.speaker.split(':')[1] ?? e.speaker)}</p>
+                                    <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatModelDisplayName(e.speaker.split(':')[1] ?? e.speaker)}</p>
                                 )}
                                 <ChatWorkTimeline entry={e} />
                                 <div className="text-[12px] leading-5 text-zinc-200">
@@ -1743,6 +1756,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         startedAt={e.at}
                                         nextAt={entries[i + 1]?.at}
                                         messageId={e.id}
+                                    />
+                                )}
+                                {verdict?.analysis && (
+                                    <VerdictAudit
+                                        analysis={verdict.analysis}
+                                        evidencePack={verdict.evidencePack}
+                                        runContract={verdict.runContract}
+                                        className="mt-1.5"
                                     />
                                 )}
                                 {aiLevels && aiLevels.levels.length > 0 && !e.streaming && (
@@ -1856,13 +1877,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             discoverable, like Full analysis. */}
                         <button type="button" onClick={() => void send(SCAN_SKILLS_PROMPT)} disabled={!ready || busy}
                             title="Study every candle in this chart and draft IF/THEN skills from what actually worked — drafts wait for your approval in the Inbox"
-                            className="rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
+                            className="rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
                         Scan → skills
                         </button>
                         {onRunAnalysis && draft.trim() && !isPanel && (
                             <button type="button" onClick={() => void runFullAnalysis()} disabled={busy}
                                 title="Run the full ensemble analysis (hybrid data + debate + verdict) on this request"
-                                className="rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
+                                className="rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
                             Full analysis
                             </button>
                         )}
@@ -1874,7 +1895,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 aria-label={`Thinking effort: ${effortChoiceOf(effort).label}`}
                                 aria-expanded={showEffortMenu} aria-haspopup="menu"
                                 title={`Thinking effort: ${effortChoiceOf(effort).label}`}
-                                className="flex items-center gap-1.5 rounded-full border border-white/[0.07] px-2 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
+                                className="flex items-center gap-1.5 rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
                                 <Brain className="h-3.5 w-3.5" />
                                 {effortChoiceOf(effort).label}
                                 <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[var(--ease-snappy)] ${showEffortMenu ? 'rotate-180' : ''}`} />
@@ -1922,7 +1943,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         </button>
                     </div>
                 </div>
-                <p className="mt-2 px-2 text-[10px] text-zinc-600">
+                <p className="mt-2 px-2 text-ui-xs text-zinc-600">
                     August may make mistakes · analysis, not financial advice
                 </p>
             </div>
@@ -1958,7 +1979,7 @@ const RetryChip: React.FC<{ onRetry: () => void; className?: string }> = ({ onRe
         onClick={onRetry}
         aria-label="Retry this message"
         title="Retry — regenerate the answer"
-        className={`flex items-center rounded-control px-1.5 py-0.5 text-[10px] text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
+        className={`flex items-center rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
         <RotateCcw className="h-3 w-3" />
     </button>
 );
@@ -1969,7 +1990,7 @@ const CopyChip: React.FC<{ text: string; className?: string }> = ({ text, classN
         <button type="button"
             onClick={() => { void copyText(text).then(ok => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1400); } }); }}
             aria-label="Copy message" title={copied ? 'Copied' : 'Copy this message'}
-            className={`flex items-center gap-1 rounded-control px-1.5 py-0.5 text-[10px] text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
+            className={`flex items-center gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
             {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
             <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
@@ -1987,7 +2008,7 @@ const PinChip: React.FC<{ pinned: boolean; onToggle: () => void }> = ({ pinned, 
         title={pinned
             ? 'Pinned — tracked in the Pinned list (header tray). Click to remove.'
             : 'Pin this signal to the Pinned list. It tracks the setup; it does not arm a price trigger.'}
-        className={`flex items-center gap-1 rounded-control px-1.5 py-0.5 text-[10px] transition-opacity hover:bg-white/[0.06] focus:opacity-100 ${
+        className={`flex items-center gap-1 rounded-control px-1.5 py-0.5 text-ui-xs transition-opacity hover:bg-white/[0.06] focus:opacity-100 ${
             pinned ? 'text-zinc-100' : 'text-zinc-500 opacity-0 hover:text-zinc-200 group-hover/msg:opacity-100'
         }`}>
         <Pin className="h-3 w-3" />

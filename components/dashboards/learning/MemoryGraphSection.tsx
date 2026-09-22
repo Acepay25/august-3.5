@@ -41,19 +41,19 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
     return (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Brain className="h-3.5 w-3.5 text-cyan-400" /> Memory Graph
                 </h4>
                 <div className="flex items-center gap-1">
                     {(['all', 'used', 'learned'] as const).map(t => (
                         <button key={t} onClick={() => setGraphTab(t)}
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${graphTab === t ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}>
+                            className={`px-2 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${graphTab === t ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}>
                             {t}
                         </button>
                     ))}
                 </div>
             </div>
-            <p className="text-[10px] text-zinc-600 mb-2 font-mono tabular-nums">
+            <p className="text-ui-xs text-zinc-600 mb-2 font-mono tabular-nums">
                 {memoryGraph.nodes.size} nodes · {memoryGraph.edges.length} edges
                 {' · '}{[...graphKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}
             </p>
@@ -63,9 +63,9 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                         const samples = [...memoryGraph.nodes.values()].filter(n => n.kind === kind).slice(0, 4);
                         return (
                             <div key={kind} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center justify-between gap-2">
-                                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold shrink-0">{KIND_LABELS[kind] ?? kind}</span>
-                                <span className="text-[10px] text-zinc-600 truncate min-w-0">{samples.map(s => s.label).join(' · ')}</span>
-                                <span className="text-[10px] font-mono tabular-nums text-zinc-400 shrink-0">{count}</span>
+                                <span className="text-ui-xs uppercase tracking-wider text-zinc-500 font-bold shrink-0">{KIND_LABELS[kind] ?? kind}</span>
+                                <span className="text-ui-xs text-zinc-600 truncate min-w-0">{samples.map(s => s.label).join(' · ')}</span>
+                                <span className="text-ui-xs font-mono tabular-nums text-zinc-400 shrink-0">{count}</span>
                             </div>
                         );
                     })}

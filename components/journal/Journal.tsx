@@ -45,6 +45,7 @@ interface JournalProps {
     /** (i/n) progress for manual insight-generation loops. */
     insightProgress?: { done: number; total: number } | null;
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
+    onUpdateTradeType: (id: string, tradeType: 'scalp' | 'swing') => void;
     /** Correct a mis-logged outcome from the expanded card. */
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     /** Edit PnL (dollar + percent) from the expanded card. */
@@ -111,7 +112,7 @@ const TABS: TabConfig[] = [
  *  here — the duplicated copy is how the overlay version lost its aria-labels. */
 const ExportTray: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
     const empty = trades.length === 0;
-    const cls = 'inline-flex items-center gap-1.5 rounded-control border border-white/[0.07] bg-zinc-800/80 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400 transition-colors hover:border-white/20 hover:bg-zinc-700/70 hover:text-zinc-100 disabled:opacity-40';
+    const cls = 'inline-flex items-center gap-1.5 rounded-control border border-white/[0.07] bg-zinc-800/80 px-2.5 py-1.5 text-ui-xs font-bold uppercase tracking-wide text-zinc-400 transition-colors hover:border-white/20 hover:bg-zinc-700/70 hover:text-zinc-100 disabled:opacity-40';
     return (
         <>
             <button
@@ -144,7 +145,7 @@ const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
     initialTradeId, openNonce, onInitialTradeConsumed, username,
     // Trade Log Pass-through
-    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL,
+    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateTradeType, onUpdateOutcome, onUpdatePnL,
     // Performance Review Pass-through
     finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
@@ -232,6 +233,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 isSummarizing={isSummarizing}
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={onUpdateTradeLeverage}
+                onUpdateTradeType={onUpdateTradeType}
                 onUpdateOutcome={onUpdateOutcome}
                 onUpdatePnL={onUpdatePnL}
                 username={activeUsername}
@@ -394,7 +396,7 @@ const JournalInner: React.FC<JournalProps> = ({
                                     <div className={`transition-colors ${isActive ? tab.activeColor : tab.color}`}>
                                         {tab.icon}
                                     </div>
-                                    <span className={`text-[10px] font-medium transition-colors ${isActive ? tab.activeColor : 'text-zinc-600'
+                                    <span className={`text-ui-xs font-medium transition-colors ${isActive ? tab.activeColor : 'text-zinc-600'
                                         }`}>
                                         {tab.shortLabel}
                                     </span>
@@ -410,7 +412,7 @@ const JournalInner: React.FC<JournalProps> = ({
 
 const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = ({ label, value, sub }) => (
   <div className="min-w-0">
-    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">{label}</div>
+    <div className="text-ui-xs uppercase tracking-wider text-zinc-500 mb-1">{label}</div>
     <div className="text-base font-semibold text-zinc-100 truncate">{value}</div>
     {sub && <div className="text-[11px] text-zinc-500 truncate mt-0.5">{sub}</div>}
   </div>

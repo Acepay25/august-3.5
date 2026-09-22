@@ -30,7 +30,7 @@ describe('buildGlobalMemoryIndex', () => {
         expect(idx).toContain('pattern 0');
         expect(idx).not.toContain('pattern 9');
     });
-    it('indexes the insight KB as top-5 one-liners by use count', () => {
+    it('indexes the insight KB as top-5 one-liners, and names the rank honestly', () => {
         const insights = Array.from({ length: 8 }, (_, i) => ({
             id: `i${i}`, category: 'general' as const, insight: `insight ${i} text`,
             sourceTradeId: 't', createdAt: new Date().toISOString(), useCount: i,
@@ -40,6 +40,11 @@ describe('buildGlobalMemoryIndex', () => {
         expect(idx).toContain('insight 7 text'); // highest useCount
         expect(idx).not.toContain('insight 0 text'); // lowest, cut
         expect(idx).not.toContain('"useCount"'); // no JSON dump
+        // Nothing ever increments `useCount` after distillation, so a label
+        // claiming these were "used" would report an observation the app has
+        // never made. `by use` is the wording this replaced.
+        expect(idx).toContain('by pattern strength');
+        expect(idx).not.toMatch(/by use\b/);
     });
     it('stays under the index char cap', () => {
         const fat = mem({

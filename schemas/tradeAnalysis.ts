@@ -204,7 +204,7 @@ export const TradeAnalysisSchema = z.object({
   validationWarnings: z.array(z.string()).optional(),
   originalConfidence: z.enum(['High', 'Medium', 'Low', 'Avoid']).optional(),
   verdictReview: z.object({
-    reason: z.enum(['uncited', 'ungrounded', 'incomplete-plan']),
+    reason: z.enum(['uncited', 'ungrounded', 'incomplete-plan', 'truncated-plan']),
     from: z.enum(['Long', 'Short']).optional(),
   }).optional(),
   entryTimingScore: z.object({
@@ -483,7 +483,7 @@ export const CoercedTradeAnalysisSchema = z.object({
   verdictReview: z.any().optional().transform((v): TradeAnalysis['verdictReview'] => {
     if (!v || typeof v !== 'object') return undefined;
     const rec = v as Record<string, unknown>;
-    if (rec.reason !== 'uncited' && rec.reason !== 'ungrounded' && rec.reason !== 'incomplete-plan') return undefined;
+    if (rec.reason !== 'uncited' && rec.reason !== 'ungrounded' && rec.reason !== 'incomplete-plan' && rec.reason !== 'truncated-plan') return undefined;
     return {
       reason: rec.reason,
       from: rec.from === 'Long' || rec.from === 'Short' ? rec.from : undefined,

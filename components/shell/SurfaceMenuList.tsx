@@ -60,7 +60,7 @@ interface SurfaceMenuListProps {
 const Badge: React.FC<{ badge: NavBadge }> = ({ badge }) => {
     const count = badge.count && badge.count > 0 ? badge.count : 0;
     return count > 0 ? (
-        <span className={`shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-[9px] font-bold leading-[14px] text-zinc-950 ${badge.active ? 'animate-pulse' : ''}`}>
+        <span className={`shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950 ${badge.active ? 'animate-pulse' : ''}`}>
             {count > 99 ? '99+' : count}
         </span>
     ) : (
@@ -103,7 +103,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                     <Icon className="h-4 w-4 shrink-0 text-zinc-500" />
                     <span className="flex-1 truncate">{label}</span>
                     {badge && <Badge badge={badge} />}
-                    <kbd className="shrink-0 rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500">{shortcut}</kbd>
+                    <kbd className="shrink-0 rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>
                 </button>
             );
         })}
@@ -121,7 +121,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 <Inbox className="h-4 w-4 shrink-0 text-zinc-500" />
                 <span className="flex-1">Approvals</span>
                 {!!approvalsCount && (
-                    <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-[9px] font-bold leading-[14px] text-zinc-950">
+                    <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950">
                         {approvalsCount > 99 ? '99+' : approvalsCount}
                     </span>
                 )}

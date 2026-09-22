@@ -564,6 +564,44 @@ function extractTokenUsageJs(data) {
 }
 
 /**
+ * Why the model stopped, as the provider's OWN vocabulary — the renderer
+ * normalizes it (utils/finishReason.ts). Returns undefined when the body
+ * carried no signal, which is deliberately distinct from a value: a gateway
+ * that omits the field must not be read as "stopped cleanly" nor as a
+ * truncation. Four shapes because the bridge serves all four wire formats.
+ */
+function extractStopReasonJs(data) {
+    if (!data || typeof data !== 'object') return undefined;
+    const chat = data.choices && data.choices[0] && data.choices[0].finish_reason;
+    if (typeof chat === 'string' && chat) return chat;
+    if (typeof data.stop_reason === 'string' && data.stop_reason) return data.stop_reason;
+    const status = typeof data.status === 'string' ? data.status.toLowerCase() : '';
+    if (status === 'incomplete') {
+        const why = data.incomplete_details && data.incomplete_details.reason;
+        return typeof why === 'string' && why ? why : 'max_output_tokens';
+    }
+    if (status && status !== 'completed') return status;
+    const cand = data.candidates && data.candidates[0];
+    if (cand && typeof cand.finishReason === 'string' && cand.finishReason) return cand.finishReason;
+    return undefined;
+}
+
+/** Same signal, recovered from accumulated SSE text for a streamed turn.
+ *  finish_reason arrives on the final chunk of each choice, so the LAST
+ *  occurrence wins; a stream that never emitted one returns undefined. */
+function extractStopReasonFromSse(raw) {
+    if (typeof raw !== 'string' || !raw) return undefined;
+    let found;
+    const re = /"finish_reason"\s*:\s*"([^"]+)"/g;
+    let match;
+    while ((match = re.exec(raw)) !== null) if (match[1]) found = match[1];
+    if (found) return found;
+    const anthropic = /"stop_reason"\s*:\s*"([^"]+)"/g;
+    while ((match = anthropic.exec(raw)) !== null) if (match[1]) found = match[1];
+    return found;
+}
+
+/**
  * Consume a streaming provider response: parse SSE deltas as they land, push
  * each one to the renderer over `provider:chunk` (the live paint), and
  * accumulate the final {text, reasoning, toolCalls, usage}. Returns
@@ -602,7 +640,7 @@ async function consumeProviderStream(response, request, sender) {
     }
     const fin = parser.finish();
     fin.events.forEach(emit);
-    return { text, reasoning, toolCalls: fin.toolCalls, usage: fin.usage, sawData: terminal || fin.sawData, raw };
+    return { text, reasoning, toolCalls: fin.toolCalls, usage: fin.usage, sawData: terminal || fin.sawData, raw, stopReason: extractStopReasonFromSse(raw) };
 }
 
 async function sendProviderRequest(request, sender) {
@@ -686,6 +724,7 @@ async function sendProviderRequest(request, sender) {
                         text: streamOut.text,
                         reasoning: streamOut.reasoning,
                         usage: streamOut.usage || {},
+                        finishReason: streamOut.stopReason,
                         toolCalls: streamOut.toolCalls,
                         assistantMessage: {
                             role: 'assistant',
@@ -698,7 +737,7 @@ async function sendProviderRequest(request, sender) {
                         },
                     };
                 }
-                return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamOut.usage || {} };
+                return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamOut.usage || {}, finishReason: streamOut.stopReason };
             }
             // Provider ignored stream:true and answered with one JSON body —
             // feed the accumulated raw text into the buffered parse below.
@@ -817,6 +856,7 @@ async function sendProviderRequest(request, sender) {
                 text,
                 reasoning,
                 usage: extractTokenUsageJs(data),
+                finishReason: extractStopReasonJs(data),
                 toolCalls,
                 assistantMessage: {
                     role: 'assistant',
@@ -831,7 +871,7 @@ async function sendProviderRequest(request, sender) {
     // CoT as the answer makes the renderer's pure-echo guard (reasoning ==
     // content) fire a false "streamed only its reasoning" error on desktop
     // for turns that localhost renders fine.
-    return { text, reasoning, usage: extractTokenUsageJs(data) };
+    return { text, reasoning, usage: extractTokenUsageJs(data), finishReason: extractStopReasonJs(data) };
 }
 
 // =============================================================================

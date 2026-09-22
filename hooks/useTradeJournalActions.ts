@@ -49,6 +49,12 @@ export interface UseTradeJournalActionsResult {
     handleDeleteInsight: (id: string) => void;
     handleRewriteInsightsWithAI: (ids?: string[]) => Promise<void>;
     handleUpdateTradeLeverage: (id: string, leverage: number) => void;
+    /** Correct the auto-detected scalp/swing class. The classifier labels every
+     *  verdict on finalization, so without this the label is something the
+     *  trader can filter by but never disagree with — and `tradeTypeManualOverride`
+     *  exists in the type for exactly this case, unused. Manual wins:
+     *  `withDetectedTradeType` skips any row that already carries a type. */
+    handleUpdateTradeType: (id: string, tradeType: 'scalp' | 'swing') => void;
     handleUpdateTradeOutcome: (id: string, outcome: TradeOutcome) => void;
     handleUpdateTradePnL: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     handleRegenerateFinalSummary: () => Promise<void>;
@@ -308,6 +314,25 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
         }));
     };
 
+    // Correct the class the classifier assigned. Setting it manually also marks
+    // the row as overridden, which is what stops finalization relabelling it —
+    // the detector skips any trade that already carries a type.
+    const handleUpdateTradeType = (id: string, tradeType: 'scalp' | 'swing') => {
+        setLoggedTrades(prev => prev.map(t => (
+            t.id === id
+                ? {
+                    ...t,
+                    tradeType,
+                    // The override flag lives on the analysis, which is where the
+                    // type declares it and where the detector looks.
+                    analysis: t.analysis
+                        ? { ...t.analysis, tradeType, tradeTypeManualOverride: true }
+                        : t.analysis,
+                }
+                : t
+        )));
+    };
+
     // Correct a mis-logged outcome (WIN/LOSS/etc.) from the journal card —
     // previously the only fix was delete + re-log. Backfills the thinking
     // records so outcome-correlated reasoning stays accurate.
@@ -382,6 +407,7 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
         handleDeleteInsight,
         handleRewriteInsightsWithAI,
         handleUpdateTradeLeverage,
+        handleUpdateTradeType,
         handleUpdateTradeOutcome,
         handleUpdateTradePnL,
         handleRegenerateFinalSummary,

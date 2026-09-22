@@ -154,8 +154,11 @@ export const validateScalpTrade = (
     const warnings: string[] = [];
     let shouldDowngrade = false;
 
-    // Parse entry and SL for R:R calculation
-    const entryPrice = parsePrice(analysis.entryPoints[0]?.price || '') || 0;
+    // Parse entry and SL for R:R calculation. Optional-chained: a declined
+    // verdict (Neutral / Avoid) carries no entry at all, and an unguarded
+    // `entryPoints[0]` threw a TypeError for anyone calling this on real
+    // model output — which is part of why this service was never wired in.
+    const entryPrice = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const slPrice = parsePrice(analysis.stopLoss || '') || 0;
     const tp1Price = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
 
@@ -218,8 +221,8 @@ export const validateSwingTrade = (
     const warnings: string[] = [];
     const shouldDowngrade = false;
 
-    // Parse prices
-    const entryPrice = parsePrice(analysis.entryPoints[0]?.price || '') || 0;
+    // Parse prices (see the scalp validator above: no entry is a real shape)
+    const entryPrice = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const slPrice = parsePrice(analysis.stopLoss || '') || 0;
     const tp1Price = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
 
@@ -284,6 +287,22 @@ export const getTradeTypeStats = (trades: LoggedTrade[]): {
         scalp: calcStats(scalpTrades),
         swing: calcStats(swingTrades)
     };
+};
+
+/**
+ * Label only — the version the pipeline is allowed to call.
+ *
+ * `applyTradeTypeToAnalysis` below also fills a missing
+ * `validityDurationMinutes`, and that field is what
+ * `OutcomeAutopilotService` expires a setup from. Running it over every verdict
+ * would hand an expiry window to runs that never had one, i.e. quietly widen
+ * autopilot while looking like a journal label. The filter needs the label, so
+ * this writes the label and nothing else — and it leaves a type that is already
+ * stated (manual or otherwise) alone.
+ */
+export const withDetectedTradeType = (analysis: TradeAnalysis): TradeAnalysis => {
+    if (!analysis || analysis.tradeType) return analysis;
+    return { ...analysis, tradeType: detectTradeType(analysis).detectedType };
 };
 
 /**

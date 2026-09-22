@@ -27,6 +27,9 @@ import type {
     TradeAnalysis,
 } from '../types';
 import type { ProviderConfig } from '../types/provider';
+// Real module, not mocked: these cases assert the verdict quarantine reads the
+// SAME window ensembleService opens around the moderator call.
+import { beginTruncationWindow, consumeTruncations, recordFinishReason } from '../utils/finishReason';
 
 // ─── Hoisted mocks ──────────────────────────────────────────────────────────
 
@@ -301,6 +304,36 @@ The moderator's read of the chart:
         expect(result.processedAnalysis.direction).toBe('Neutral');
         expect(result.processedAnalysis.confidence).toBe('Avoid');
         expect(result.processedAnalysis.verdictReview).toEqual({ reason: 'incomplete-plan' });
+    });
+
+    it('quarantines as truncated-plan when the verdict hit its token ceiling', async () => {
+        // The distinction the operator needs: the moderator was cut off
+        // mid-plan (raise the budget) versus the moderator never wrote a plan
+        // (prompt/lane problem). Same unparseable body, different window state.
+        beginTruncationWindow();
+        recordFinishReason('length');
+        try {
+            const result = await finalizeVerdict(makeInput({
+                fullResponseText: 'random gibberish with no trade information at all',
+            }));
+            expect(result.processedAnalysis.verdictReview).toEqual({ reason: 'truncated-plan' });
+            expect(result.processedAnalysis.strategy).toMatch(/output-token ceiling/);
+        } finally {
+            consumeTruncations();
+        }
+    });
+
+    it('leaves an untruncated run reporting incomplete-plan after a window that saw only clean stops', async () => {
+        beginTruncationWindow();
+        recordFinishReason('stop');
+        try {
+            const result = await finalizeVerdict(makeInput({
+                fullResponseText: 'random gibberish with no trade information at all',
+            }));
+            expect(result.processedAnalysis.verdictReview).toEqual({ reason: 'incomplete-plan' });
+        } finally {
+            consumeTruncations();
+        }
     });
 });
 

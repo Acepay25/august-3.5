@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { getBackups, createBackup, deleteBackup, exportBackupToFile, restoreBackup, BackupMetadata } from '../../services/infrastructure/BackupService';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { getBackups, createBackup, deleteBackup, exportBackupToFile, importBackupFromText, restoreBackup, BackupMetadata } from '../../services/infrastructure/BackupService';
 import { ExportIcon, TrashIcon, RefreshIcon, LoadingIcon, PlusIcon } from '../shared/Icons';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -20,6 +20,8 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
   const [backups, setBackups] = useState<BackupMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [status, setStatus] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
@@ -70,6 +72,38 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
       setStatus({ kind: 'error', text: 'Export failed.' });
     } finally {
       setBusyId(null);
+    }
+  };
+
+  /** Choose an exported .json and add it to the list. Import is deliberately
+   *  NOT restore: nothing live is touched here, so picking the wrong file costs
+   *  one row in the list rather than a journal. The overwrite stays behind
+   *  handleRestore's destructive confirm. */
+  const handleImportFile = async (file: File) => {
+    setIsImporting(true);
+    setStatus(null);
+    try {
+      const result = await importBackupFromText(await file.text());
+      if (!result.ok) {
+        setStatus({
+          kind: 'error',
+          text: result.error
+            || `That file is not a backup this app can read: ${(result.errors || []).slice(0, 2).join('; ')}`,
+        });
+        return;
+      }
+      const p = result.preview;
+      setStatus({
+        kind: 'success',
+        text: `Imported ${p?.tradeCount ?? 0} trades · ${p?.conversationCount ?? 0} chats from "${p?.username}". Nothing was overwritten yet — press Restore on it. ${result.limitations?.[0] || ''}`,
+      });
+      void refresh();
+    } catch (err) {
+      console.error('[BackupManager] Import failed:', err);
+      setStatus({ kind: 'error', text: 'Import failed.' });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -139,14 +173,35 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
             Auto-backups run every 30 minutes — stored per profile, newest 5 kept.
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={isCreating}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isCreating ? <LoadingIcon className="w-4 h-4" /> : <PlusIcon className="w-4 h-4" />}
-          {isCreating ? 'Backing up…' : 'Back up now'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            data-testid="backup-import-button"
+            className="px-3 py-2 rounded-xl border border-white/10 text-zinc-200 hover:bg-zinc-800 text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isImporting ? 'Reading…' : 'Import from file'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            data-testid="backup-import-input"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) void handleImportFile(file);
+            }}
+          />
+          <button
+            onClick={handleCreate}
+            disabled={isCreating}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCreating ? <LoadingIcon className="w-4 h-4" /> : <PlusIcon className="w-4 h-4" />}
+            {isCreating ? 'Backing up…' : 'Back up now'}
+          </button>
+        </div>
       </div>
 
       {status && (
@@ -175,7 +230,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
                 <p className="text-xs font-medium text-zinc-200">
                   {new Date(backup.timestamp).toLocaleString()}
                 </p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">
+                <p className="text-ui-xs text-zinc-500 mt-0.5">
                   {backup.tradeCount} trades · {backup.conversationCount} chats · {formatSize(backup.sizeBytes)}
                 </p>
               </div>

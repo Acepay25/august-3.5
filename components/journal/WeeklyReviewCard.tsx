@@ -21,10 +21,10 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
     return (
         <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="flex items-baseline justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                <p className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">
                     Weekly review · {digest.generatedAt.slice(0, 10)}
                 </p>
-                <span className="text-[9px] text-zinc-600">via {digest.providerName}</span>
+                <span className="text-ui-2xs text-zinc-600">via {digest.providerName}</span>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-zinc-200">{digest.impulse}</p>
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500 tabular-nums">
@@ -40,7 +40,7 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
                 the weekly surface shows gate/refinement/eval health, not
                 just trade health. '—' when a ratio has no sample. */}
             {digest.metaCalibration && (
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/5 pt-2 text-[10px] uppercase tracking-widest text-zinc-600 tabular-nums">
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/5 pt-2 text-ui-xs uppercase tracking-widest text-zinc-600 tabular-nums">
                     <span>gate precision {pctOrDash(digest.metaCalibration.worthGatePrecision)}</span>
                     <span>refinement recovery {pctOrDash(digest.metaCalibration.refinementRecovery)}</span>
                     <span>eval agreement {pctOrDash(digest.metaCalibration.evalAgreement)}</span>

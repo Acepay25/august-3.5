@@ -92,7 +92,7 @@ const AutomationRunCard: React.FC<{
                     {statusBadge}
                     <span className={`font-black text-sm tracking-wider uppercase ${directionColor}`}>{direction}</span>
                     {analysis?.coinName && <span className="font-mono text-xs font-bold text-zinc-300">{analysis.coinName}</span>}
-                    <span className="ml-auto text-[10px] font-mono text-zinc-500">{time}</span>
+                    <span className="ml-auto text-ui-xs font-mono text-zinc-500">{time}</span>
                 </div>
 
                 {run.status === 'error' && run.error && (
@@ -103,7 +103,7 @@ const AutomationRunCard: React.FC<{
 
                 {run.userMessage?.text && (
                     <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-2 mb-2" title={run.userMessage.text}>
-                        <span className="text-zinc-600 font-bold uppercase tracking-widest text-[9px] mr-1.5">Prompt</span>
+                        <span className="text-zinc-600 font-bold uppercase tracking-widest text-ui-2xs mr-1.5">Prompt</span>
                         {run.userMessage.text}
                     </p>
                 )}
@@ -117,13 +117,13 @@ const AutomationRunCard: React.FC<{
                     <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
                         {run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0 && (
                             <div>
-                                <button onClick={() => setShowReasoning(!showReasoning)} className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
+                                <button onClick={() => setShowReasoning(!showReasoning)} className="text-ui-xs uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
                                     Reasoning ({Object.keys(run.message.thoughtProcesses).length}) <ChevronDownIcon className={`w-3 h-3 transition-transform ${showReasoning ? 'rotate-180' : ''}`} />
                                 </button>
                                 <div className={`collapsible-content ${showReasoning ? 'expanded' : ''} space-y-2`}>
                                     {Object.entries(run.message.thoughtProcesses).map(([key, text]) => (
                                         <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg">
-                                            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
+                                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
                                             <p className="text-[11px] text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
                                         </div>
                                     ))}
@@ -132,13 +132,13 @@ const AutomationRunCard: React.FC<{
                         )}
                         {run.message?.debateTurns && run.message.debateTurns.length > 0 && (
                             <div>
-                                <button onClick={() => setShowDebate(!showDebate)} className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
+                                <button onClick={() => setShowDebate(!showDebate)} className="text-ui-xs uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
                                     Debate ({run.message.debateTurns.length} turns) <ChevronDownIcon className={`w-3 h-3 transition-transform ${showDebate ? 'rotate-180' : ''}`} />
                                 </button>
                                 <div className={`collapsible-content ${showDebate ? 'expanded' : ''} space-y-1.5`}>
                                     {run.message.debateTurns.map((turn, i) => (
                                         <div key={i} className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg">
-                                            <p className="text-[9px] font-bold uppercase tracking-widest text-cyan-400/80 mb-1">{turn.speaker}{turn.round ? ` · Round ${turn.round}` : ''}</p>
+                                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-cyan-400/80 mb-1">{turn.speaker}{turn.round ? ` · Round ${turn.round}` : ''}</p>
                                             <p className="text-[11px] text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">{turn.text}</p>
                                         </div>
                                     ))}

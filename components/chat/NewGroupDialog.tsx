@@ -155,7 +155,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                     </button>
                                     {checked && (
                                         <div className="mt-1.5 flex items-center gap-2 pl-7" data-testid={`group-role-row-${bot.id}`}>
-                                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Role</span>
+                                            <span className="shrink-0 text-ui-xs font-semibold uppercase tracking-widest text-zinc-500">Role</span>
                                             <SelectMenu
                                                 aria-label={`Role for ${bot.name}`}
                                                 data-testid={`group-role-${bot.id}`}

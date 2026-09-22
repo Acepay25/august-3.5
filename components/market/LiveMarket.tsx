@@ -6,7 +6,7 @@ import StatusPill from '../ui/StatusPill';
 import { Kline } from '../../types';
 import { ChartCandle } from '../../types/chart';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
-import { analyzeWithAI, AITrendlineAnalysis, MarketInsights } from '../../services/analysis/AITrendlineService';
+import { analyzeWithAI, convertToLineData, AITrendlineAnalysis, MarketInsights, TrendlineResult } from '../../services/analysis/AITrendlineService';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -210,6 +210,10 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
     const [aiSummary, setAiSummary] = useState<string>('');
     const [keyLevels, setKeyLevels] = useState<{ price: number; type: 'support' | 'resistance' }[]>([]);
     const [marketInsights, setMarketInsights] = useState<MarketInsights | null>(null);
+    /** The AI's drawn trendlines. The model returns exact endpoints and this
+     *  panel already pays for the call, but until now the array was only ever
+     *  console.logged — the work was bought and thrown away. */
+    const [trendlines, setTrendlines] = useState<TrendlineResult[]>([]);
     const [isInsightsPanelExpanded, setIsInsightsPanelExpanded] = useState(true);
     const aiAnalysisRequestRef = useRef(0);
 
@@ -338,7 +342,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                     setAiSummary(analysis.summary);
                     setKeyLevels(analysis.keyLevels);
                     setMarketInsights(analysis.insights);
-                    console.log(`[Binance AI] ${analysis.trendlines.length} trendlines, bias: ${analysis.marketBias}`);
+                    setTrendlines(analysis.trendlines);
                 }
             } catch (error) {
                 console.warn('[Binance AI] Analysis failed:', error);
@@ -718,7 +722,7 @@ ${JSON.stringify(marketData, null, 2)}
                     {/* Price Display & Close */}
                     <div className="flex items-center gap-2 sm:gap-4">
                         <div className="text-right">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">Current</span>
+                            <span className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider block">Current</span>
                             {/* duration-300 is the tick-flash read; the class is swapped imperatively in the socket effect. */}
                             <span ref={priceDisplayRef} className="font-mono text-base sm:text-lg font-bold text-zinc-400 transition-colors duration-300 ease-[var(--ease-snappy)]">
                                 Loading...
@@ -816,7 +820,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 {/* Key Levels */}
                                 {!isAIAnalyzing && keyLevels.length > 0 && (
                                     <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2">
-                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Key Levels</span>
+                                        <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">Key Levels</span>
                                         <div className="flex flex-col gap-1 mt-1">
                                             {keyLevels.slice(0, 4).map((level, i) => (
                                                 <div key={i} className="flex items-center justify-between gap-2 text-xs">
@@ -830,10 +834,35 @@ ${JSON.stringify(marketData, null, 2)}
                                     </div>
                                 )}
 
+                                {/* AI Trendlines — endpoints via the service's own
+                                    adapter, so the row cannot drift from what the
+                                    chart format would have drawn. */}
+                                {!isAIAnalyzing && trendlines.length > 0 && (
+                                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2" data-testid="ai-trendlines">
+                                        <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">Trendlines</span>
+                                        <div className="flex flex-col gap-1 mt-1">
+                                            {trendlines.slice(0, 4).map((line, i) => {
+                                                const [from, to] = convertToLineData(line);
+                                                const lo = Math.min(from.value, to.value);
+                                                const hi = Math.max(from.value, to.value);
+                                                return (
+                                                    <div key={`${line.startTime}-${i}`} className="flex items-baseline justify-between gap-2 text-xs">
+                                                        <span className="text-zinc-300 truncate">{line.label || line.type}</span>
+                                                        <span className="font-mono text-white shrink-0">
+                                                            ${lo.toLocaleString()}–${hi.toLocaleString()}
+                                                            <span className="text-zinc-600"> · {line.importance}</span>
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* AI Summary */}
                                 {!isAIAnalyzing && aiSummary && (
                                     <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2">
-                                        <span className="text-[10px] text-zinc-400 leading-relaxed line-clamp-3">{aiSummary}</span>
+                                        <span className="text-ui-xs text-zinc-400 leading-relaxed line-clamp-3">{aiSummary}</span>
                                     </div>
                                 )}
                             </div>
@@ -858,7 +887,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 <Spinner size="w-3 h-3" color="border-cyan-400" className="ml-2" />
                             )}
                             {!isAIAnalyzing && marketBias !== 'neutral' && (
-                                <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${marketBias === 'bullish'
+                                <span className={`ml-2 px-2 py-0.5 rounded text-ui-xs font-bold uppercase ${marketBias === 'bullish'
                                     ? 'bg-emerald-500/20 text-emerald-400'
                                     : 'bg-rose-500/20 text-rose-400'
                                     }`}>

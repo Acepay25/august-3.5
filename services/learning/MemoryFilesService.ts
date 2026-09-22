@@ -19,6 +19,14 @@
 import { getPreferenceObject, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome, UserProfile } from '../../types';
 import { isMeaningfulLabel } from '../../utils/meaningfulLabel';
+import {
+    CLEANUP_DEDUP_WINDOW_MS,
+    bytesOf,
+    describePressure,
+    measureNotebook,
+    type NotebookPressure,
+    type NotebookSize,
+} from '../../utils/memoryBudget';
 
 const MEMORY_KEY_PREFIX = 'memory_files_v1_';
 /** Diaries keep only the most recent entries so the injected file stays tight. */
@@ -134,6 +142,10 @@ const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
         if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
             adoptCache(stored);
             await ensureHarnessFoldersUnlocked(username);
+            // A load that changes nothing never persists, and the pressure
+            // read is what refuses new files — so measure on the read path too,
+            // or a notebook can sit at the trigger all session unmeasured.
+            measureIntoCache();
             return;
         }
         adoptCache(freshSeed());
@@ -202,31 +214,158 @@ const persist = async (username: string): Promise<void> => {
         );
     }
     if (persistSilentDepth === 0) upsertNotebookIndexInCache();
-    if (memoryCache.folders.length === 0 && memoryCache.files.length === 0) {
-        await removePreference(`${MEMORY_KEY_PREFIX}${owner}`);
-    } else {
-        warnIfNotebookHuge();
-        await setPreferenceObject(`${MEMORY_KEY_PREFIX}${owner}`, memoryCache);
+    try {
+        if (memoryCache.folders.length === 0 && memoryCache.files.length === 0) {
+            notebookSize = null;
+            await removePreference(`${MEMORY_KEY_PREFIX}${owner}`);
+        } else {
+            measureIntoCache();
+            await setPreferenceObject(`${MEMORY_KEY_PREFIX}${owner}`, memoryCache);
+        }
+    } catch (e) {
+        // Record, then rethrow: every caller's handling of a failed write is
+        // unchanged, and this is the only place that can see it happened.
+        recordWriteFailure(e);
+        throw e;
     }
+    lastWriteFailure = null;
+    writeFailureStreak = 0;
     if (persistSilentDepth === 0) {
         memoryChangeListeners.forEach(handler => handler(owner));
     }
 };
 
-/** Whole-store blob guard: Preferences keys have platform size limits. */
-const NOTEBOOK_SIZE_WARN_CHARS = 1_000_000;
-let lastSizeWarnedAt = 0;
-const warnIfNotebookHuge = (): void => {
+/**
+ * A notebook write that the storage layer refused.
+ *
+ * This used to be invisible, and it is the worst failure mode this store has:
+ * `setPreferenceObject` rejects on a full origin quota (and on a native write
+ * error), every caller catches and logs, and the in-memory cache goes on
+ * serving every byte the trader has ever learned — so the app looks healthy,
+ * the Health tab looks healthy, and NOTHING FURTHER IS ON DISK. The next reload
+ * returns to whatever was last written successfully. `utils/memoryBudget.ts`
+ * describes this exact hazard and only mitigates it by refusing to grow; the
+ * blob can still outlive the quota, and a failed write still had no owner.
+ *
+ * So the failure is not swallowed here: it is named, counted, and read by
+ * `memoryHealth`, which puts it in front of the user as the first thing on the
+ * memory report. Deliberately NOT retried or auto-shrunk — nothing in this
+ * store is safe to evict to make room (see the budget's rule).
+ */
+export interface NotebookWriteFailure {
+    atMs: number;
+    /** `quota` when the store refused the blob for size — the one the user can
+     *  act on — and `error` for anything else. */
+    kind: 'quota' | 'error';
+    message: string;
+    /** The measured blob the store refused, UTF-16 bytes (0 if never measured). */
+    bytes: number;
+    /** Consecutive failures since the last write that reached disk. */
+    streak: number;
+}
+
+let lastWriteFailure: NotebookWriteFailure | null = null;
+let writeFailureStreak = 0;
+
+/** Refused-for-size is the actionable case, and each engine spells it
+ *  differently: the DOMException name on Chromium/WebKit, a message on
+ *  Firefox, and Capacitor surfaces the platform's own storage error. */
+const QUOTA_SIGNATURES = ['quota', 'exceeded', 'full', 'exceed'];
+
+const isQuotaFailure = (e: unknown): boolean => {
+    const err = e as { name?: unknown; message?: unknown } | null;
+    const hay = `${String(err?.name ?? '')} ${String(err?.message ?? e)}`.toLowerCase();
+    return QUOTA_SIGNATURES.some(s => hay.includes(s));
+};
+
+const recordWriteFailure = (e: unknown): void => {
+    const now = Date.now();
+    writeFailureStreak += 1;
+    const message = e instanceof Error ? e.message : String(e);
+    lastWriteFailure = {
+        atMs: now,
+        kind: isQuotaFailure(e) ? 'quota' : 'error',
+        message: message.slice(0, 200),
+        bytes: notebookSize?.bytes ?? 0,
+        streak: writeFailureStreak,
+    };
+    console.error(
+        `[MemoryFiles] Notebook write FAILED (${lastWriteFailure.kind}, ${lastWriteFailure.streak} in a row)`
+        + ` — the trader's memory is NOT being saved:`,
+        e,
+    );
+};
+
+/** The last notebook write the storage layer refused, or null when writes are
+ *  reaching disk (including when nothing has been written yet). */
+export const getNotebookWriteFailure = (): NotebookWriteFailure | null => lastWriteFailure;
+
+
+/**
+ * The last measured size of the cache, and the pressure it implies. Recomputed
+ * on every persist — never cached across a reload, because it is derived from
+ * bytes that are themselves in memory — so `getNotebookSize()` cannot drift
+ * from what is actually stored. `null` until something has been persisted or
+ * loaded, which is a notebook nobody has opened yet.
+ */
+let notebookSize: NotebookSize | null = null;
+
+/**
+ * The single measurement point. Called from `persist` (every write) and from
+ * `initMemoryFilesUnlocked` (so a load that writes nothing is still measured).
+ * The number that governs the budget is the serialized payload — that is the
+ * string Preferences is about to be asked to hold, envelope and escaping
+ * included — while the per-folder attribution comes from the content itself,
+ * because "which folder is fat" has to name something a user can act on.
+ */
+const measureIntoCache = (): void => {
     try {
-        const size = JSON.stringify(memoryCache).length;
-        if (size > NOTEBOOK_SIZE_WARN_CHARS && size - lastSizeWarnedAt > 250_000) {
-            lastSizeWarnedAt = size;
-            console.warn(
-                `[MemoryFiles] Notebook blob reached ${(size / 1_000_000).toFixed(1)} MB — ` +
-                'every write rewrites it whole and Preferences may refuse it. Consider pruning notes/diaries.'
-            );
-        }
-    } catch { /* guard must never break a persist */ }
+        const detail = measureNotebook(memoryCache.files, memoryCache.folders);
+        notebookSize = {
+            ...detail,
+            bytes: Math.max(detail.bytes, bytesOf(JSON.stringify(memoryCache))),
+        };
+        reportPressure(notebookSize);
+    } catch { /* a guard must never break a persist */ }
+};
+
+let lastReportedAt = 0;
+let lastReportedPressure: NotebookPressure | null = null;
+const reportPressure = (size: NotebookSize): void => {
+    if (size.pressure === 'ok') { lastReportedPressure = null; return; }
+    const now = Date.now();
+    // A tier change always speaks; a repeat of the same tier is throttled, so a
+    // post-mortem that re-persists the blob five times logs the pressure once.
+    if (lastReportedPressure === size.pressure && now - lastReportedAt < CLEANUP_DEDUP_WINDOW_MS) return;
+    lastReportedPressure = size.pressure;
+    lastReportedAt = now;
+    const line = describePressure(size);
+    if (size.pressure === 'hard') console.error(`[MemoryFiles] ${line}`);
+    else console.warn(`[MemoryFiles] ${line}`);
+};
+
+/** The current notebook size + pressure, or null before anything is loaded. */
+export const getNotebookSize = (): NotebookSize | null => notebookSize;
+
+/** True when the blob has grown into the tiers a hygiene pass exists to
+ *  relieve. An unmeasured notebook (`null`) is deliberately NOT a request: a
+ *  pass scheduled before the blob loads would be guessing, and the weekly clock
+ *  still covers it. Refusing growth is only half the budget's job — this is the
+ *  half that makes reaching the trigger tier DO something. */
+export const notebookWantsCleanup = (): boolean => {
+    const tier = notebookSize?.pressure;
+    return tier === 'trigger' || tier === 'hard';
+};
+
+/** True when the harness must stop growing the notebook. `newFiles` refuses
+ *  creation only (appends still land, so learning continues); `all` refuses
+ *  every model write. Refusal, never eviction: see utils/memoryBudget.ts for
+ *  why there is nothing safe to delete in this store. */
+export const notebookPressureAllows = (kind: 'newFiles' | 'appends' | 'all'): boolean => {
+    const pressure = notebookSize?.pressure ?? 'ok';
+    if (kind === 'all') return pressure !== 'hard';
+    if (kind === 'appends') return pressure !== 'hard';
+    return pressure !== 'hard' && pressure !== 'trigger';
 };
 
 let persistSilentDepth = 0;
@@ -236,12 +375,6 @@ const memoryChangeListeners = new Set<(username: string) => void>();
 export const subscribeMemoryFilesChanged = (handler: (username: string) => void): (() => void) => {
     memoryChangeListeners.add(handler);
     return () => { memoryChangeListeners.delete(handler); };
-};
-
-/** @deprecated use subscribeMemoryFilesChanged */
-export const setOnMemoryFilesChanged = (handler: ((username: string) => void) | null): void => {
-    memoryChangeListeners.clear();
-    if (handler) memoryChangeListeners.add(handler);
 };
 
 // ─── Write lock ─────────────────────────────────────────────────────────────
@@ -1067,6 +1200,15 @@ export const writeModelNoteUnlocked = async (note: ModelNote, username: string):
     const baseName = slugifyName(note.fileName.replace(/\.md$/i, '')) || 'note';
     const content = (note.content ?? '').trim();
     if (!content) throw new Error('Note content is empty');
+    // Past the hard cap the writer stops completely rather than pushing the
+    // single blob over what the platform will take. Nothing already stored is
+    // touched: the whole design of this budget is refuse-growth-not-evict (see
+    // utils/memoryBudget.ts).
+    if (!notebookPressureAllows('all')) {
+        const size = getNotebookSize();
+        throw new Error('Cannot write a notebook note — the notebook is at its hard size budget'
+            + (size ? ` (${describePressure(size)})` : ''));
+    }
 
     let folder = memoryCache.folders.find(f => f.name === cleanFolder);
     if (!folder) folder = await createMemoryFolderUnlocked(cleanFolder, username);
@@ -1110,6 +1252,7 @@ export const writeModelNoteUnlocked = async (note: ModelNote, username: string):
             return memoryCache.files.find(f => f.id === target.id) ?? target;
         }
         // Target file does not exist yet — create it with the note as its content.
+        assertRoomForNewNote();
         await pruneModelNotesIfFull(folder.id, username);
         return createMemoryFileUnlocked(folder.id, `${baseName}.md`, content, username, true);
     }
@@ -1121,8 +1264,27 @@ export const writeModelNoteUnlocked = async (note: ModelNote, username: string):
         name = `${baseName}-${i}.md`;
         i += 1;
     }
+    assertRoomForNewNote();
     await pruneModelNotesIfFull(folder.id, username);
     return createMemoryFileUnlocked(folder.id, name, content, username, true);
+};
+
+/**
+ * Refuse to add a FILE when the notebook is under size pressure. An append to a
+ * file that already exists is still allowed at this tier — it grows the blob by
+ * one section instead of by a whole row's overhead plus its folder, and it keeps
+ * the learning loop writing while the human decides what to prune. Throws,
+ * because every caller of `writeModelNote` already handles a rejection here:
+ * the harness-owned folders have refused writes this way all along.
+ */
+const assertRoomForNewNote = (): void => {
+    if (notebookPressureAllows('newFiles')) return;
+    const size = getNotebookSize();
+    throw new Error(
+        'Cannot create a new notebook file — the notebook is at its size budget'
+        + (size ? ` (${describePressure(size)})` : '')
+        + '. Append to an existing note, or prune one, first.',
+    );
 };
 
 /** Serialized public API — see withNotebookWriteLock. */

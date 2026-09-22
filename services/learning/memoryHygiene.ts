@@ -29,6 +29,12 @@
  *    newest-`MAX_TOMBSTONES` boundary and clears rows no reader can use. It
  *    revives nothing on a timer: revival needs a FRESH evidence cluster, and
  *    that test already runs at draft time via `findArchiveTwin`.
+ *  - the idle skill lifecycle (`skillIdleLifecycle.runSkillIdleSweep`), the
+ *    only stage here that ACTS without a verdict — and the reason it is
+ *    allowed to is that it never touches a belief: it changes which skills are
+ *    injected, reversibly, on a clock, and files the leftovers into the
+ *    archive folder that retirement already uses. Nothing is deleted, and a
+ *    trigger that fires again returns the skill with no human involved.
  *
  * Nothing here deletes a belief. The destructive moves go through the
  * proposal queue, where the supervisor (or the human) judges them — and every
@@ -45,6 +51,9 @@ import { runNotebookReview } from './MemoryReviewService';
 import { queueLearningProposal } from '../../utils/learningQueue';
 import { runContradictionSweep } from '../../utils/contradictionSweep';
 import { runGraveyardSweep, MAX_TOMBSTONES } from './skillGraveyard';
+import { runSkillIdleSweep, listSuspendedSkills } from './skillIdleLifecycle';
+import { notebookWantsCleanup } from './MemoryFilesService';
+import { cleanupIsDue } from '../../utils/memoryBudget';
 
 const KEY_PREFIX = 'memory_hygiene_v1_';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -65,6 +74,10 @@ export interface HygieneResult {
     contradictionsQueued: number;
     /** Graveyard records the retention sweep collected (0 = nothing to do). */
     graveyardCollected: number;
+    /** Idle lifecycle actions taken this pass. */
+    skillsSuspended: number;
+    skillsRevived: number;
+    skillsArchived: number;
     reviewWritten: boolean;
     lines: string[];
 }
@@ -72,12 +85,22 @@ export interface HygieneResult {
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
 
-/** True when no pass has ever run or the last is >=7 days old. */
+/** True when no pass has ever run, the last one is >=7 days old, or the
+ *  NOTEBOOK HAS ASKED FOR ONE.
+ *
+ *  The weekly clock alone made the byte budget a reporting feature: reaching the
+ *  trigger tier logged a warning and refused new notes, but the pass that
+ *  actually shrinks the blob could still be six days away. Under pressure the
+ *  pass now runs on the budget's own dedup window instead, so a blob at the
+ *  trigger tier is relieved within hours — and `cleanupIsDue` is what keeps a
+ *  post-mortem that re-persists the blob ten times from launching ten passes.
+ *  Pressure can only SHORTEN the wait, never lengthen it. */
 export const isHygieneDue = async (username: string, now = Date.now()): Promise<boolean> => {
     try {
         const prev = await getPreferenceObject<{ lines?: HygieneLine[] }>(keyFor(username));
         const last = prev?.lines?.[0]?.atMs;
         if (typeof last !== 'number' || !Number.isFinite(last)) return true;
+        if (notebookWantsCleanup() && cleanupIsDue(last, now)) return true;
         return now - last >= WEEK_MS;
     } catch {
         return true;
@@ -113,7 +136,8 @@ export const runMemoryHygiene = async (
     const lines: string[] = [];
     const result: HygieneResult = {
         atMs: now, demotionsQueued: 0, contradictionsQueued: 0,
-        graveyardCollected: 0, reviewWritten: false, lines,
+        graveyardCollected: 0, skillsSuspended: 0, skillsRevived: 0, skillsArchived: 0,
+        reviewWritten: false, lines,
     };
     try {
         // 1. Confirmed skills that have gone quiet: propose demotion. The
@@ -182,10 +206,49 @@ export const runMemoryHygiene = async (
                 + ` ${graveyard.malformed} unreadable) — ${graveyard.retained} kept.`
             : `Graveyard: ${graveyard.retained} tombstone${graveyard.retained === 1 ? '' : 's'}, inside its retention`
                 + ` (${MAX_TOMBSTONES} newest). Revival needs new evidence, not a timer.`);
+        // 5. The idle lifecycle: a skill that has stopped matching anything
+        //    stops being injected, and one that stays out of prompts leaves the
+        //    active library. Step 1 only ever ASKED about that; asking was the
+        //    half that never actuated, because a demoted-to-candidate skill is
+        //    still ranked and still billed against the fixed injection budget.
+        //    Always logged — a pass that switches content off has to be
+        //    auditable in the Health tab even when the answer was "nothing".
+        const idle = await runSkillIdleSweep(username, { now });
+        result.skillsSuspended = idle.suspended.length;
+        result.skillsRevived = idle.revived.length;
+        result.skillsArchived = idle.archived.length;
+        if (idle.configError) {
+            lines.push(`Idle skill sweep did not run: ${idle.configError}`);
+        } else if (idle.lines.length) {
+            lines.push(...idle.lines);
+        } else {
+            const extra = idle.exempt > 0
+                ? `, ${idle.exempt} exempt as already under a verdict`
+                : '';
+            const suspended = listSuspendedSkills().length;
+            lines.push(`Idle skill sweep: ${idle.examined} skill${idle.examined === 1 ? '' : 's'} inspected`
+                + `${extra} — none newly idle${suspended ? `, ${suspended} still suspended from prompts` : ''}.`);
+        }
         await appendLog(username, now, lines);
         return result;
     } catch (e) {
         console.warn('[MemoryHygiene] pass failed (non-fatal):', e instanceof Error ? e.message : e);
+        // Log the aborted attempt rather than nothing. This preference IS the
+        // due-stamp — `isHygieneDue` reads the newest line's atMs — so a pass
+        // that died after doing real work (the idle sweep and the review queue
+        // both write notebook files, and `persist` rethrows on a full quota)
+        // used to re-fire on every boot forever, re-spending the LLM review
+        // while the Health tab showed no passes at all. Pressure can still
+        // SHORTEN the wait; it just can't be reset by a crash.
+        lines.push(`Idle sweep ABORTED: ${e instanceof Error ? e.message : String(e)}. `
+            + 'Whatever it switched before failing is already applied; this pass will not re-run until it is next due.');
+        try {
+            await appendLog(username, now, lines);
+        } catch {
+            // The log write itself can fail on the same quota. Nothing to do
+            // but let the next boot try again — never swallow a NOTEBOOK write
+            // silently, but this one is the audit trail, not the trader's data.
+        }
         return result;
     }
 };

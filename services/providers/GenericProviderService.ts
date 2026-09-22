@@ -36,7 +36,9 @@ import { applyReasoningToChatParams, buildReasoningPatch, detectWireCapabilities
 // reasoningControls, so the checker flows in through this module instead of
 // a static cycle.
 import '../learning/harnessLessons';
+import { emitFinishReason, extractFinishReason, FinishReason, normalizeFinishReason, recordFinishReason, truncatesOutput } from '../../utils/finishReason';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
+import { observePromptRatio } from '../../utils/tokenEstimate';
 import type { ElectronUpdateStatus } from '../../types/electron';
 import { chatMessagesToGemini, googleGenerateUrl, parseGeminiResponse } from '../../utils/googleGeminiFormat';
 import { createThinkingStreamGate, extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
@@ -68,7 +70,7 @@ interface ElectronProviderBridge {
          *  deltas over `provider:chunk` while the invoke promise still
          *  resolves with the accumulated final result. */
         stream?: boolean;
-    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; toolCalls?: ChatTurnResult['toolCalls']; assistantMessage?: ChatMessage; status?: number; code?: string; message?: string }>;
+    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; toolCalls?: ChatTurnResult['toolCalls']; assistantMessage?: ChatMessage; /** Raw provider stop signal (finish_reason / stop_reason / status / finishReason), normalized renderer-side. */ finishReason?: string; status?: number; code?: string; message?: string }>;
     /** Subscribe to streamed deltas of a stream:true providerChat call. */
     onProviderChunk?: (callback: (chunk: { requestId: string; type: 'text' | 'reasoning'; delta: string }) => void) => (() => void) | void;
     cancelProviderChat?: (requestId: string) => Promise<boolean>;
@@ -133,6 +135,10 @@ export interface ChatRequestOptions {
     signal?: AbortSignal;
     onReasoning?: (reasoning: string) => void;
     onUsage?: (usage: TokenUsage) => void;
+    /** Why the model stopped, normalized across all four wire formats. Fires
+     *  once per completed call. 'length' means the answer was cut off, which a
+     *  caller parsing the tail of the text has to know. */
+    onFinishReason?: (reason: FinishReason) => void;
     /** OpenAI-style tool definitions (chat_completions). */
     tools?: Array<{
         type: 'function';
@@ -162,19 +168,86 @@ export interface ChatTurnResult {
     toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
     /** Raw assistant message for appending into a tool loop (chat_completions). */
     assistantMessage?: ChatMessage;
+    /** Why the model stopped, normalized across wire formats. 'unknown' means
+     *  the gateway sent no signal — NOT that it stopped cleanly. */
+    finishReason: FinishReason;
+    /** The answer was cut off at the token ceiling. Consumers must not treat a
+     *  truncated body as complete: the verdict parser and the CONVICTION probe
+     *  both read the tail of the text. */
+    truncated: boolean;
 }
 
-function reportUsage(config: ProviderConfig, data: unknown, options?: ChatRequestOptions): void {
+/** Report the normalized stop signal. Mirrors reportUsage: one emit for the
+ *  run-level tally, one callback for a caller that needs it inline. */
+function reportFinishReason(config: ProviderConfig, reason: FinishReason, options?: ChatRequestOptions): void {
+    recordFinishReason(reason);
+    emitFinishReason({ providerId: config.id, modelId: config.selectedModel, reason });
+    options?.onFinishReason?.(reason);
+}
+
+/** Extract, report and return the stop signal from any response body shape. */
+function observeFinishReason(
+    config: ProviderConfig,
+    data: unknown,
+    options?: ChatRequestOptions,
+): { finishReason: FinishReason; truncated: boolean } {
+    const reason = extractFinishReason(data) ?? 'unknown';
+    reportFinishReason(config, reason, options);
+    return { finishReason: reason, truncated: truncatesOutput(reason) };
+}
+
+/** Text volume actually sent, so a measured usage frame can be turned into a
+ *  chars-per-token ratio. Reasoning payloads and image parts are included
+ *  because they occupy the same window the budget is drawn from. */
+function messageTextLength(messages: ChatMessage[]): number {
+    let chars = 0;
+    for (const m of messages) {
+        if (typeof m.content === 'string') chars += m.content.length;
+        else if (Array.isArray(m.content)) {
+            // Narrow on the discriminator rather than reading both branches:
+            // an image part costs roughly a few hundred tokens of vision
+            // embedding, which 1500 chars over-estimates on purpose.
+            for (const part of m.content) chars += part.type === 'text' ? part.text.length : 1500;
+        }
+        chars += (m as { tool_calls?: unknown }).tool_calls ? 200 : 0;
+    }
+    return chars;
+}
+
+function reportUsage(
+    config: ProviderConfig,
+    data: unknown,
+    options?: ChatRequestOptions,
+    messages?: ChatMessage[],
+): void {
     const usage = extractTokenUsage(data);
     if (!usage) return;
     options?.onUsage?.(usage);
     emitTokenUsage({ providerId: config.id, modelId: config.selectedModel, usage });
+    // Calibrate the context-budget estimator against this provider's OWN count.
+    // `utils/tokenEstimate` deliberately over-estimates in the absence of data;
+    // once a gateway reports real prompt tokens there is no reason to keep
+    // guessing, and a mis-guess costs either truncated memory or a 4xx.
+    if (messages?.length && usage.promptTokens > 0) {
+        observePromptRatio(usage.promptTokens, messageTextLength(messages));
+    }
 }
 
-function reportUsageDirect(config: ProviderConfig, usage: TokenUsage | undefined, options?: ChatRequestOptions): void {
+function reportUsageDirect(
+    config: ProviderConfig,
+    usage: TokenUsage | undefined,
+    options?: ChatRequestOptions,
+    /** Every Electron chat call takes the bridge and lands here, so without
+     *  this the context-budget estimator was never calibrated on the shipped
+     *  desktop app — only on web, which uses `reportUsage` instead. */
+    messages?: ChatMessage[],
+): void {
     if (!usage) return;
     options?.onUsage?.(usage);
     emitTokenUsage({ providerId: config.id, modelId: config.selectedModel, usage });
+    if (messages?.length && usage.promptTokens > 0) {
+        observePromptRatio(usage.promptTokens, messageTextLength(messages));
+    }
 }
 
 // ─── Thinking / Chain-of-Thought Extraction ──────────────────────────────────
@@ -554,7 +627,7 @@ async function chatCompletionsTurn(
         return chatCompletionsTurn(config, messages, { ...options, jsonMode: false, jsonSchema: undefined });
     }
     if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
-    reportUsage(config, response, options);
+    reportUsage(config, response, options, messages);
     const toolCalls = (message?.tool_calls || []).map((tc: any, i: number) => {
         let args: Record<string, unknown>;
         try {
@@ -573,11 +646,13 @@ async function chatCompletionsTurn(
         content: typeof content === 'string' ? content : (content ?? ''),
         ...(message?.tool_calls?.length ? { tool_calls: message.tool_calls } : {}),
     };
+    const finish = observeFinishReason(config, response, options);
     return {
         text: typeof content === 'string' ? content : '',
         reasoning: reasoning.trim(),
         toolCalls,
         assistantMessage,
+        ...finish,
     };
 }
 
@@ -629,8 +704,14 @@ async function* chatCompletionsStream(
     }
     const gate = createThinkingStreamGate();
     const toolBuf = new StreamToolCallBuffer();
+    // Chunks carry finish_reason only on the last one, and a stream that dies
+    // mid-flight never yields one — so 'unknown' here genuinely means "no
+    // signal", not "stopped cleanly".
+    let streamFinish: FinishReason | undefined;
     for await (const chunk of stream) {
-        reportUsage(config, chunk, options);
+        reportUsage(config, chunk, options, messages);
+        const chunkReason = normalizeFinishReason(chunk.choices?.[0]?.finish_reason);
+        if (chunk.choices?.[0]?.finish_reason) streamFinish = chunkReason;
         const delta = chunk.choices[0]?.delta as any;
         toolBuf.push(delta);
         const reasoning = deltaReasoning(delta);
@@ -643,6 +724,7 @@ async function* chatCompletionsStream(
     if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
     if (flushed.visible) yield flushed.visible;
     toolBuf.finish(options);
+    reportFinishReason(config, streamFinish ?? 'unknown', options);
 }
 
 // ─── Messages Format (Anthropic-style) ──────────────────────────────────────
@@ -756,7 +838,10 @@ async function messagesCall(
     // it on the same side channel as chat_completions reasoning_content.
     const thinking = extractMessagesThinking(data.content);
     if (thinking) options?.onReasoning?.(thinking);
-    reportUsage(config, data, options);
+    reportUsage(config, data, options, messages);
+    // Anthropic reports the ceiling as stop_reason:'max_tokens' on a 200 with
+    // a well-formed body, so nothing downstream could tell it from an answer.
+    observeFinishReason(config, data, options);
     if (data.content && Array.isArray(data.content)) {
         return data.content
             .filter((block: any) => block.type === 'text')
@@ -831,7 +916,10 @@ async function responsesCall(
     // `reasoning` (full text + public summary) — forward on onReasoning.
     const reasoning = extractResponsesReasoning(data.output);
     if (reasoning) options?.onReasoning?.(reasoning);
-    reportUsage(config, data, options);
+    reportUsage(config, data, options, messages);
+    // Responses reports a cut-off answer as status:'incomplete' — a success
+    // shaped response that previously parsed as if it were finished.
+    observeFinishReason(config, data, options);
     if (data.output && Array.isArray(data.output)) {
         const texts: string[] = [];
         for (const item of data.output) {
@@ -919,7 +1007,10 @@ async function googleCall(
     const data = await response.json();
     const parsed = parseGeminiResponse(data);
     if (parsed.reasoning) options?.onReasoning?.(parsed.reasoning);
-    reportUsage(config, data, options);
+    reportUsage(config, data, options, messages);
+    // Gemini reports MAX_TOKENS per candidate, so a truncated answer still has
+    // a valid candidates[0].content — indistinguishable without this.
+    observeFinishReason(config, data, options);
     return parsed.text;
 }
 
@@ -1063,7 +1154,12 @@ export async function sendChatRequest(
                             throw error;
                         }
                         if (result.reasoning) options?.onReasoning?.(result.reasoning);
-                        reportUsageDirect(effectiveConfig, result.usage, options);
+                        reportUsageDirect(effectiveConfig, result.usage, options, messages);
+                        reportFinishReason(
+                            effectiveConfig,
+                            normalizeFinishReason(result.finishReason),
+                            options,
+                        );
                         return result.text || '';
                     }).finally(() => {
                         window.clearTimeout(timeout);
@@ -1132,7 +1228,10 @@ export async function sendChatRequest(
                             text = content || '';
                         }
                         if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
-                        reportUsage(effectiveConfig, data, options);
+                        reportUsage(effectiveConfig, data, options, messages);
+                        // The proxy hands back the raw provider body, so the
+                        // same four-shape extractor covers every format here.
+                        observeFinishReason(effectiveConfig, data, options);
                         return text || '';
                     });
                 }
@@ -1213,11 +1312,18 @@ export async function sendChatTurn(
                             throw error;
                         }
                         if (bridge.reasoning) options?.onReasoning?.(bridge.reasoning);
-                        reportUsageDirect(effectiveConfig, bridge.usage, options);
+                        reportUsageDirect(effectiveConfig, bridge.usage, options, messages);
+                        // The bridge already flattened the provider body, so
+                        // this is a raw stop token rather than a response shape
+                        // — normalize directly instead of re-extracting.
+                        const bridgeFinish = normalizeFinishReason(bridge.finishReason);
+                        reportFinishReason(effectiveConfig, bridgeFinish, options);
                         return {
                             text: bridge.text || '',
                             reasoning: bridge.reasoning || '',
                             toolCalls: bridge.toolCalls || [],
+                            finishReason: bridgeFinish,
+                            truncated: truncatesOutput(bridgeFinish),
                             assistantMessage: bridge.assistantMessage || {
                                 role: 'assistant',
                                 content: bridge.text || '',
@@ -1268,7 +1374,7 @@ export async function sendChatTurn(
                             || extractReasoning(message.reasoning)
                             || splitContent.reasoning;
                         if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
-                        reportUsage(effectiveConfig, data, options);
+                        reportUsage(effectiveConfig, data, options, messages);
                         const toolCalls = (message.tool_calls || []).map((tc: any, i: number) => {
                             let args: Record<string, unknown>;
                             try {
@@ -1286,6 +1392,7 @@ export async function sendChatTurn(
                             text: splitContent.text || '',
                             reasoning: reasoning.trim(),
                             toolCalls,
+                            ...observeFinishReason(effectiveConfig, data, options),
                             assistantMessage: {
                                 role: 'assistant',
                                 content: splitContent.text || '',
@@ -1310,11 +1417,12 @@ export async function sendChatTurn(
                         text = data.choices?.[0]?.message?.content || '';
                     }
                     if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
-                    reportUsage(effectiveConfig, data, options);
+                    reportUsage(effectiveConfig, data, options, messages);
                     return {
                         text: text || '',
                         reasoning: reasoning.trim(),
                         toolCalls: [],
+                        ...observeFinishReason(effectiveConfig, data, options),
                         assistantMessage: { role: 'assistant', content: text || '' },
                     } satisfies ChatTurnResult;
                 }
@@ -1322,17 +1430,30 @@ export async function sendChatTurn(
                     return chatCompletionsTurn(effectiveConfig, messages, options);
                 }
                 // Other formats: reuse string path; text-protocol tools still work.
+                // The string transports report the stop signal themselves, so
+                // capture it on the way through rather than re-parsing a body
+                // this layer never sees.
+                let passthroughFinish: FinishReason = 'unknown';
+                const captured: ChatRequestOptions = {
+                    ...options,
+                    onFinishReason: (reason) => {
+                        passthroughFinish = reason;
+                        options?.onFinishReason?.(reason);
+                    },
+                };
                 const text = effectiveConfig.apiFormat === 'messages'
-                    ? await messagesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) })
+                    ? await messagesCall(effectiveConfig, messages, { ...captured, signal: withTimeoutSignal(options?.signal) })
                     : effectiveConfig.apiFormat === 'responses'
-                        ? await responsesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) })
+                        ? await responsesCall(effectiveConfig, messages, { ...captured, signal: withTimeoutSignal(options?.signal) })
                         : effectiveConfig.apiFormat === 'google'
-                            ? await googleCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) })
+                            ? await googleCall(effectiveConfig, messages, { ...captured, signal: withTimeoutSignal(options?.signal) })
                             : '';
                 return {
                     text,
                     reasoning: '',
                     toolCalls: [],
+                    finishReason: passthroughFinish,
+                    truncated: truncatesOutput(passthroughFinish),
                     assistantMessage: { role: 'assistant', content: text },
                 } satisfies ChatTurnResult;
             },
@@ -1431,7 +1552,8 @@ async function* streamViaElectronBridge(
             throw error;
         }
         if (result.toolCalls && result.toolCalls.length > 0) options?.onStreamToolCalls?.(result.toolCalls);
-        reportUsageDirect(config, result.usage, options);
+        reportUsageDirect(config, result.usage, options, messages);
+        reportFinishReason(config, normalizeFinishReason(result.finishReason), options);
         // Buffered fallback / lost tail: paint whatever the stream missed.
         if (result.text && result.text.length > yielded.length) {
             yield result.text.slice(yielded.length);
@@ -1661,6 +1783,7 @@ async function* streamViaProxy(
     const decoder = new TextDecoder();
     let buffer = '';
     let droppedEvents = 0;
+    let proxyFinish: FinishReason | undefined;
     const gate = createThinkingStreamGate();
     const toolBuf = new StreamToolCallBuffer();
     const forwardDelta = (delta: Record<string, unknown>): string => {
@@ -1712,7 +1835,10 @@ async function* streamViaProxy(
                     if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
                     throw error;
                 }
-                reportUsage(config, chunk, options);
+                reportUsage(config, chunk, options, messages);
+                if (chunk?.choices?.[0]?.finish_reason) {
+                    proxyFinish = normalizeFinishReason(chunk.choices[0].finish_reason);
+                }
                 toolBuf.push(chunk?.choices?.[0]?.delta || {});
                 const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
                 if (visible) yield visible;
@@ -1736,6 +1862,9 @@ async function* streamViaProxy(
                     throw error;
                 }
                 if (chunk) {
+                    if (chunk?.choices?.[0]?.finish_reason) {
+                        proxyFinish = normalizeFinishReason(chunk.choices[0].finish_reason);
+                    }
                     toolBuf.push(chunk?.choices?.[0]?.delta || {});
                     const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
                     if (visible) yield visible;
@@ -1746,6 +1875,7 @@ async function* streamViaProxy(
         if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
         if (flushed.visible) yield flushed.visible;
         toolBuf.finish(options);
+        reportFinishReason(config, proxyFinish ?? 'unknown', options);
     } finally {
         reader.releaseLock();
     }

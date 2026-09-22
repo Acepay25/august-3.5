@@ -36,6 +36,22 @@ describe('unreadCount model scoping', () => {
     });
 });
 
+describe('unreadCount identity scoping', () => {
+    const stamped = (id: string, botId: string): Message => ({ ...aiMsg(id, 'p1', 'shared-model', T0), botId });
+
+    it('a sibling bot\'s reply does not light this bot\'s badge', () => {
+        const messages = [stamped('m1', 'bot-b')];
+        // The pane drops this row, so a badge counting it would disagree with
+        // the thread it is badge for.
+        expect(unreadCount(messages, 'p1', null, 'shared-model', 'bot-a')).toBe(0);
+        // Pre-stamp history still falls back to the provider+model pair.
+        expect(unreadCount([aiMsg('m2', 'p1', 'shared-model', T0)], 'p1', null, 'shared-model', 'bot-a')).toBe(1);
+        // This is the shape that caused it: omitting the bot id claims any row
+        // on the shared model, so the badge lights for a DM the pane hides.
+        expect(unreadCount(messages, 'p1', null, 'shared-model')).toBe(1);
+    });
+});
+
 describe('unreadInSlice', () => {
     it('never-opened slices cap at 9; opened slices count newer AI only', () => {
         const slice = Array.from({ length: 12 }, (_, i) => aiMsg(`m${i}`, 'p1', 'model-a', T0 + i * 60_000));

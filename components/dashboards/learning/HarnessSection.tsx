@@ -112,13 +112,13 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
         <div className="space-y-3 sm:space-y-4">
             {/* Time-window control — stale early data must not masquerade as current */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">Harness Accuracy — the similar-setup pool</h4>
+                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">Harness Accuracy — the similar-setup pool</h4>
                 <div className="flex items-center gap-1">
                     {([0, 30, 90] as const).map(d => (
                         <button
                             key={d}
                             onClick={() => onWindowDaysChange(d)}
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                            className={`px-2 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                 windowDays === d ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
@@ -131,38 +131,38 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
             {/* Pool stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
-                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Setups indexed</p>
+                    <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Setups indexed</p>
                     <p className="text-xl font-black text-white">{poolStats.indexed}</p>
-                    <p className="text-[9px] text-zinc-600">closed trades in pool</p>
+                    <p className="text-ui-2xs text-zinc-600">closed trades in pool</p>
                 </div>
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
-                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Avg matches / query</p>
+                    <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Avg matches / query</p>
                     <p className="text-xl font-black text-white">{poolStats.avgMatches.toFixed(1)}</p>
-                    <p className="text-[9px] text-zinc-600">sampled {poolStats.sampled} queries</p>
+                    <p className="text-ui-2xs text-zinc-600">sampled {poolStats.sampled} queries</p>
                 </div>
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
-                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Cold-start queries</p>
+                    <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Cold-start queries</p>
                     <p className={`text-xl font-black ${poolStats.coldStartQueries > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
                         {poolStats.sampled > 0 ? `${Math.round((poolStats.coldStartQueries / poolStats.sampled) * 100)}%` : '—'}
                     </p>
-                    <p className="text-[9px] text-zinc-600">below {COLD_START_MIN} matches → confidence scaled down</p>
+                    <p className="text-ui-2xs text-zinc-600">below {COLD_START_MIN} matches → confidence scaled down</p>
                 </div>
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
-                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Drawdown</p>
+                    <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Drawdown</p>
                     <p className="text-xl font-black text-rose-400">{drawdown.open.toFixed(1)}%</p>
-                    <p className="text-[9px] text-zinc-600">open · historical max {drawdown.max.toFixed(1)}%</p>
+                    <p className="text-ui-2xs text-zinc-600">open · historical max {drawdown.max.toFixed(1)}%</p>
                 </div>
             </div>
 
             <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
-                <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-2">Evidence coverage vs outcome</p>
-                <p className="text-[10px] text-zinc-600 mb-2">Recorded trend, not causal proof.</p>
+                <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-2">Evidence coverage vs outcome</p>
+                <p className="text-ui-xs text-zinc-600 mb-2">Recorded trend, not causal proof.</p>
                 <div className="grid grid-cols-3 gap-2">
                     {evidenceQuality.map(bucket => (
                         <div key={bucket.coverage} className="rounded-lg border border-white/5 bg-zinc-950/50 p-2">
-                            <p className="text-[10px] uppercase tracking-widest text-zinc-500">{bucket.coverage}</p>
+                            <p className="text-ui-xs uppercase tracking-widest text-zinc-500">{bucket.coverage}</p>
                             <p className="text-sm font-semibold text-zinc-100">{bucket.winRate !== null ? `${bucket.winRate}% WR` : '—'}</p>
-                            <p className="text-[10px] text-zinc-600">n={bucket.n}{bucket.avgProbability !== null ? ` · avg p ${bucket.avgProbability}` : ''}</p>
+                            <p className="text-ui-xs text-zinc-600">n={bucket.n}{bucket.avgProbability !== null ? ` · avg p ${bucket.avgProbability}` : ''}</p>
                         </div>
                     ))}
                 </div>
@@ -170,12 +170,12 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
 
             {/* Per-model × regime leaderboard */}
             <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Per-model track record by regime</h4>
+                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Per-model track record by regime</h4>
                 {leaderboard.length === 0 ? (
                     <p className="text-xs text-zinc-600 italic">Log ≥3 trades per model to see the leaderboard.</p>
                 ) : (
                     <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left text-[10px] font-mono tabular-nums">
+                        <table className="w-full text-left text-ui-xs font-mono tabular-nums">
                             <thead>
                                 <tr className="text-zinc-600 border-b border-white/5">
                                     <th className="py-1.5 pr-3 font-bold">Model</th>
@@ -212,7 +212,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
                         </table>
                     </div>
                 )}
-                <p className="text-[9px] text-zinc-600 mt-2 leading-relaxed">
+                <p className="text-ui-2xs text-zinc-600 mt-2 leading-relaxed">
                     Regime classification: ADX thresholds — ADX ≥ 25 trend, &lt; 20 range, ATR-relative volatility; the regime is captured from the hybrid market data at log time.
                 </p>
             </div>

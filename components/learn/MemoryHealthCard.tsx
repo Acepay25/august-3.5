@@ -31,7 +31,7 @@ const Row: React.FC<{ label: string; value: React.ReactNode; title?: string }> =
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <div className="border-t border-zinc-800/80 px-3 py-2 first:border-t-0">
-        <h4 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">{title}</h4>
+        <h4 className="mb-1 text-ui-xs font-bold uppercase tracking-wider text-zinc-600">{title}</h4>
         {children}
     </div>
 );
@@ -77,9 +77,11 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
             <div className="flex items-center gap-2 px-3 py-2">
                 <Activity className="h-3.5 w-3.5 text-cyan-300" />
                 <span className="text-[12px] font-semibold text-zinc-100">Memory health</span>
-                {report.flags.length === 0
-                    ? <StatusPill tone="up" kicker className="ml-auto">clean</StatusPill>
-                    : <StatusPill tone="warn" kicker className="ml-auto">{report.flags.length} to look at</StatusPill>}
+                {report.notebook.writeFailure
+                    ? <StatusPill tone="down" kicker className="ml-auto">not saving</StatusPill>
+                    : report.flags.length === 0
+                        ? <StatusPill tone="up" kicker className="ml-auto">clean</StatusPill>
+                        : <StatusPill tone="warn" kicker className="ml-auto">{report.flags.length} to look at</StatusPill>}
             </div>
 
             {report.flags.length > 0 && (
@@ -116,6 +118,28 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
             <Section title="Notebook">
                 <Row label="files enabled / total" value={`${report.notebook.enabled} / ${report.notebook.files}`} />
                 <Row label="stored characters" value={report.notebook.chars.toLocaleString()} />
+                {/* The whole notebook is ONE rewritten Preferences blob, so the
+                    number that can actually break memory is its byte size, not
+                    its character count — this is the line that shows up in a
+                    bug report when a write is refused. `bytes` is UTF-16, the
+                    unit the web origin meters its quota in. */}
+                <Row label="blob size"
+                    value={report.notebook.pressure === null
+                        ? 'unmeasured'
+                        : `${(report.notebook.bytes / (1024 * 1024)).toFixed(2)} MB · ${report.notebook.pressure}`}
+                    title="Whole notebook blob, UTF-16 bytes. Soft 1 MB · refuses new files at 1.5 MB · refuses every notebook write at 2 MB. Nothing is ever evicted to make room." />
+                <Row label="writes reaching disk"
+                    value={report.notebook.writeFailure
+                        ? <span className="text-rose-400" data-testid="memory-write-failing">
+                            {`${report.notebook.writeFailure.streak} refused`}
+                          </span>
+                        : 'none refused'}
+                    title={report.notebook.writeFailure
+                        ? `Last refused ${report.notebook.writeFailure.message} — counted since the write that did reach disk.`
+                        : 'No notebook write has been refused by the storage layer this session. This counts writes, so it is silent before the first one.'} />
+                <Row label="skills suspended from prompts"
+                    value={String(report.notebook.suspended)}
+                    title="Idle long enough that the lifecycle stopped injecting them. Still in the library, still earning matches, and back on their own if a trigger fires again — re-enable one in the notebook." />
                 <Row label="worst-case prompt cost" value={`~${report.notebook.promptTokensWorstCase} tok`}
                     title="Doctrine slot + skill body + rules + mistake line + verdict extras. Display-only." />
                 <Row label="diary entries (never injected)" value={`${report.diary.entries} in ${report.diary.files} files`}
@@ -126,7 +150,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                 <Section title="By folder">
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {report.folders.map(f => (
-                            <span key={f.name} className="rounded-full border border-zinc-800 px-2 py-0.5 font-mono text-[10px] tabular-nums text-zinc-400">
+                            <span key={f.name} className="rounded-full border border-zinc-800 px-2 py-0.5 font-mono text-ui-xs tabular-nums text-zinc-400">
                                 {f.name} {f.enabled}/{f.files}
                             </span>
                         ))}
@@ -136,7 +160,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
 
             {report.unobserved.length > 0 && (
                 <Section title="Outside the injection window">
-                    <p className="mb-1 text-[10px] leading-4 text-zinc-600">
+                    <p className="mb-1 text-ui-xs leading-4 text-zinc-600">
                         Not served into a prompt within the retained injection log — for a skill this usually means its
                         setup stopped matching, not that it is broken.
                     </p>
@@ -148,7 +172,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
 
             {report.staleFiles.length > 0 && (
                 <Section title="No hit in 30+ days">
-                    <p className="mb-1 text-[10px] leading-4 text-zinc-600">
+                    <p className="mb-1 text-ui-xs leading-4 text-zinc-600">
                         The injection log places a real hit on each of these, and its newest one is older than the
                         evidence-decay window the loop already uses.
                     </p>
@@ -171,7 +195,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                     <p className="py-1 text-[11px] text-zinc-600">Nothing has been retired and recorded.</p>
                 ) : (
                     <>
-                        <p className="mb-1 text-[10px] leading-4 text-zinc-600">
+                        <p className="mb-1 text-ui-xs leading-4 text-zinc-600">
                             Why each rule stopped, and what it stopped on. Re-entry needs a fresh evidence cluster —
                             the next matching draft is what asks for it, not a timer.
                         </p>
@@ -199,14 +223,14 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                         {report.hygiene[0]?.text ?? 'No maintenance pass has run yet.'}
                     </p>
                     <button type="button" onClick={() => void runNow()} disabled={running}
-                        className="shrink-0 rounded-control border border-zinc-700 px-2 py-1 text-[10px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-40">
+                        className="shrink-0 rounded-control border border-zinc-700 px-2 py-1 text-ui-xs font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-40">
                         {running ? 'Running…' : due ? 'Run now' : 'Run again'}
                     </button>
                 </div>
                 {report.hygiene.length > 1 && (
                     <ul className="mt-1.5 space-y-0.5 border-t border-zinc-800/80 pt-1.5">
                         {report.hygiene.slice(1, 6).map(l => (
-                            <li key={`${l.atMs}-${l.text}`} className="flex items-start gap-1.5 text-[10px] leading-4 text-zinc-600">
+                            <li key={`${l.atMs}-${l.text}`} className="flex items-start gap-1.5 text-ui-xs leading-4 text-zinc-600">
                                 <Check className="mt-0.5 h-2.5 w-2.5 shrink-0 text-emerald-500/70" />
                                 <span>{l.text}</span>
                             </li>

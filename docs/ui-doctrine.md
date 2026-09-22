@@ -58,6 +58,20 @@ ancestor and inflates to fill the surface.
 
 ## Type and numbers
 
+- [ ] **Sizes come from the `text-ui-*` ramp, never a `text-[Npx]` literal.**
+      The ramp is `--text-ui-{xl,lg,base,caption,sm,xs,2xs}` in `index.css`,
+      every step an offset from one dial, `--ui-font-size` (14px). Roles, not
+      sizes: `text-ui-xs` says "micro-label", `text-[10px]` says nothing and
+      cannot be scaled — moving the dial leaves a hard-coded literal exactly
+      where it was. **Status: 9px and 10px are fully migrated** (622 sites, and
+      `tests/typeRamp.test.ts` fails if either comes back). 11px is still a
+      literal on purpose: the ramp has no step there, so it needs someone to
+      decide which role it means. 12px and 13px are the exception — they map
+      exactly to `text-ui-sm` (base − 2) and `text-ui-caption` (base − 1), so
+      those convert with no pixel movement; they are ordinary body and caption
+      copy rather than micro-labels, so the pass that takes them is its own
+      job. Convert as you touch them; do not add new literals. `2xs` (9px) is
+      the dense-data exception and should not be reached for without a reason.
 - [ ] Geist Variable for UI, DM Serif Text **only** for hero/display moments,
       JetBrains Mono for data.
 - [ ] Every numeric readout is `font-mono tabular-nums`. A price, P&L or R that

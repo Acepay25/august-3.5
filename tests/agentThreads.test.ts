@@ -279,7 +279,7 @@ describe('attributed system errors (failed replies)', () => {
     });
 
 describe('deskThread', () => {
-    const bots = [{ providerId: 'a1', modelId: 'model-a' }];
+    const bots = [{ id: 'bot-a', providerId: 'a1', modelId: 'model-a' }];
 
     it('keeps ensemble (multi-key) replies — the Analyze verdict — in the desk pane', () => {
         const messages: Message[] = [
@@ -292,7 +292,9 @@ describe('deskThread', () => {
     it('excludes a bot-claimed DM from the desk pane (it belongs to the bot row)', () => {
         const messages: Message[] = [
             msg({ role: MessageRole.USER, text: 'what do you think' }),
-            msg({ role: MessageRole.AI, text: 'heavy', modelsUsed: { a1: 'model-a' } }),
+            // Stamped as bot-a's reply. Claiming a DM by provider+model alone
+            // is what used to delete the desk's OWN answer below it.
+            msg({ role: MessageRole.AI, text: 'heavy', botId: 'bot-a', modelsUsed: { a1: 'model-a' } }),
             msg({ role: MessageRole.USER, text: 'desk question' }),
             msg({ role: MessageRole.AI, text: 'desk answer', modelsUsed: { solo: 'm' } }),
         ];
@@ -313,12 +315,12 @@ describe('deskThread', () => {
         // Two bots on one provider, different models: the DM claims its exact
         // pair, the desk must not swallow it.
         const two = [
-            { providerId: 'a1', modelId: 'model-a' },
-            { providerId: 'a1', modelId: 'model-b' },
+            { id: 'bot-a', providerId: 'a1', modelId: 'model-a' },
+            { id: 'bot-b', providerId: 'a1', modelId: 'model-b' },
         ];
         const messages: Message[] = [
             msg({ role: MessageRole.USER, text: 'hi b' }),
-            msg({ role: MessageRole.AI, text: 'from b', modelsUsed: { a1: 'model-b' } }),
+            msg({ role: MessageRole.AI, text: 'from b', botId: 'bot-b', modelsUsed: { a1: 'model-b' } }),
         ];
         expect(deskThread(messages, two).map(m => m.text)).toEqual(['hi b']);
     });

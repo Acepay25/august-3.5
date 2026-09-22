@@ -169,7 +169,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         title={hybridEnabled
                             ? 'Hybrid Intelligence is ON — live market data is injected into every member'
                             : 'Hybrid Intelligence is OFF — members answer from their own knowledge'}
-                        className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                        className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-ui-xs font-bold uppercase tracking-wider transition-colors ${
                             hybridEnabled
                                 ? 'border-zinc-400/60 bg-zinc-800 text-zinc-100'
                                 : 'border-white/10 text-zinc-500 hover:text-zinc-300'
@@ -272,7 +272,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         composer. Never auto-send; prefill is a hand on the
                         wheel, not a turn taken. */
                     <div className="flex h-full flex-col items-center justify-center px-6 py-10">
-                        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                        <p className="mb-3 text-ui-xs font-bold uppercase tracking-[0.2em] text-zinc-600">
                             {members.length} bots · every member answers in turn
                         </p>
                         <h1 className="mb-2 text-center font-serif text-[26px] tracking-tight text-zinc-100 sm:text-[32px]">
@@ -291,7 +291,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                     <BotAvatar bot={m} size={28} />
                                     <span className="min-w-0">
                                         <span className="block truncate text-[12px] font-semibold text-zinc-200">{m.name}</span>
-                                        <span className="block truncate text-[10px] text-zinc-500">
+                                        <span className="block truncate text-ui-xs text-zinc-500">
                                             {m.title || formatModelDisplayName(m.modelId)}
                                         </span>
                                     </span>

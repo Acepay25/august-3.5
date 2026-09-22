@@ -21,7 +21,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GripVertical, PanelLeft, TrendingDown, TrendingUp } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
-import { TradeAnalysis, LoggedTrade } from '../../types';
+import { TradeAnalysis, LoggedTrade, Message } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
@@ -74,6 +74,12 @@ interface TradeViewProps {
      *  answer entry for the gallery's Locate scroll). */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
         Promise<string | { text: string; messageId?: string }>;
+    /** Resolve the analysis message `onRunAnalysis` created, so the dock can
+     *  show what its settled verdict was built on. Threaded straight through to
+     *  `TradeChatPanel` — the chart surface owns no verdict rendering itself.
+     *  Forwarded rather than copied: the dock keeps a message id, not a stored
+     *  duplicate of the analysis. */
+    getAnalysisMessage?: (messageId: string) => Message | undefined;
     /** "Log this trade" on a Chart AI proposal → record an OPEN trade. */
     onLogProposedTrade?: (proposal: TradeProposal) => void;
     /** Group rooms the Chart AI dock embeds as a session. The Coach inbox used
@@ -143,7 +149,7 @@ const readDockWidth = (): number => {
 
 const Stat: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex min-w-0 flex-col px-3.5 first:pl-3">
-        <span className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</span>
+        <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">{label}</span>
         <span className="truncate font-mono text-[12px] font-medium tabular-nums text-zinc-200">{value}</span>
     </div>
 );
@@ -301,7 +307,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -713,6 +719,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         botSessionRequest,
         groupSessionRequest,
         onRunAnalysis,
+        getAnalysisMessage,
         onLogProposedTrade,
         onPlanPresented: handlePlanPresented,
         onChatLevelsChange: handleChatLevels,
@@ -784,7 +791,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     >
                         {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
                     </div>
-                    <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-zinc-500">
+                    <div className="mt-1 flex items-center justify-end gap-1 text-ui-xs text-zinc-500">
                         {Number.isFinite(changePct) && (
                             <span className={`inline-flex items-center gap-0.5 font-medium ${changeTone}`}>
                                 {changePct! >= 0
@@ -808,7 +815,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
                 <div className="flex w-[210px] shrink-0 flex-col px-3.5">
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500">Funding · next in</span>
+                    <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">Funding · next in</span>
                     {Number.isFinite(fundingRate) ? (() => {
                         const { frac, soon } = fundingProgress(nextFundingTime ?? 0, nowMs);
                         return (

@@ -141,7 +141,7 @@ const ExpertiseBar: React.FC<{ expertise: SituationalExpertise }> = ({ expertise
 
     return (
         <div className="space-y-1">
-            <div className="flex justify-between text-[10px] tabular-nums text-zinc-500">
+            <div className="flex justify-between text-ui-xs tabular-nums text-zinc-500">
                 <span>REV {reversalPct}%</span>
                 <span>CONT {continuationPct}%</span>
             </div>
@@ -197,7 +197,7 @@ const ModelTableRow: React.FC<{
                 <td className="py-1.5 pr-3 text-left">
                     <p className="text-zinc-200 truncate max-w-[160px]" title={name}>{name}</p>
                     {modelName && (
-                        <p className="text-[9px] text-zinc-600 truncate max-w-[160px]" title={modelName}>
+                        <p className="text-ui-2xs text-zinc-600 truncate max-w-[160px]" title={modelName}>
                             {modelName}
                         </p>
                     )}
@@ -426,7 +426,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
             {modelData.length > 0 && (
                 <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
                     <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left text-[10px] font-mono tabular-nums">
+                        <table className="w-full text-left text-ui-xs font-mono tabular-nums">
                             <thead>
                                 <tr className="text-zinc-600 border-b border-white/5">
                                     <th className="py-1.5 pr-1 w-6">

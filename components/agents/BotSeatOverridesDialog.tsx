@@ -120,7 +120,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                                     return (
                                         <button key={t} type="button" aria-pressed={on} data-testid={`override-tool-${t}`}
                                             onClick={() => setTools(prev => on ? prev.filter(x => x !== t) : [...prev, t])}
-                                            className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                                            className={`rounded px-1.5 py-0.5 text-ui-xs transition-colors ${
                                                 on ? 'bg-zinc-700 text-zinc-100' : 'border border-white/10 text-zinc-500 hover:text-zinc-300'
                                             }`}>
                                             {t}

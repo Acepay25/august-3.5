@@ -211,8 +211,19 @@ export interface SkillMeta {
     refinedAt?: string;
     /** ISO timestamp of the most recent counted trade (evidence decay input). */
     lastEvidenceAt?: string;
+    /** ISO timestamp of the most recent setup match, injected or not. Kept
+     *  apart from `lastEvidenceAt` on purpose: a suspended skill is no longer
+     *  injected, so `lastEvidenceAt` can never advance again, and an idle
+     *  clock that only counted injections would make suspension one-way.
+     *  See `services/learning/skillIdleLifecycle.ts`. */
+    lastMatchedAt?: string;
     /** ISO timestamp of the last content write — freshness signal for readers. */
     modifiedAt?: string;
+    /** Set when the idle sweep suspended a skill (dropped it from prompt
+     *  injection without retiring it). Cleared on revival. `enabled` alone
+     *  cannot carry this — a user-retired skill is also disabled — and the
+     *  archive stage has to tell the two apart. */
+    suspendedAt?: string;
     /** Timeframe the skill was proven/drafted on (e.g. '15m', '4h'). Optional
      *  so legacy and chat-authored skills stay valid; the chart scan stamps it
      *  so a reader knows which tape a pattern was earned on. */
@@ -553,6 +564,8 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
             return ids.length > 0 ? ids : undefined;
         })(),
         lastEvidenceAt: pick('lastEvidenceAt'),
+        lastMatchedAt: pick('lastMatchedAt'),
+        suspendedAt: pick('suspendedAt'),
         previousVersion,
         // Temporal ledger: JSON array in frontmatter.
         history: (() => {
@@ -568,16 +581,33 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
     };
 }
 
+/**
+ * Whether a skill's notebook file should carry `enabled: true`.
+ *
+ * Every write path that recomputes `enabled` has to go through this. Deriving
+ * it from `status` alone — as all ten of them did — silently un-suspends a
+ * skill the moment an unrelated CONTROL or OVERRIDDEN attribution writes its
+ * frontmatter back, which would make the idle lifecycle undo itself on the
+ * next closed trade.
+ */
+export const skillEnabledFlag = (meta: SkillMeta): boolean =>
+    meta.status !== 'retired' && !meta.suspendedAt;
+
 export const setSkillStatus = async (fileId: string, status: SkillStatus, username?: string): Promise<void> => {
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     if (!file) return;
     const meta = parseSkillMarkdown(file.content);
     if (!meta) return;
+    // A status change is a human (or supervisor) decision that outranks the
+    // idle sweep: bringing a skill back by hand must also lift its
+    // suspension, or `skillEnabledFlag` would keep it out and the click would
+    // silently do nothing.
+    if (status !== 'retired') meta.suspendedAt = undefined;
     stampStatusTransition(meta, status, status === 'retired' ? 'user-veto' : 'manual');
     meta.status = status;
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
-        enabled: status !== 'retired',
+        enabled: skillEnabledFlag(meta),
     }, username || 'local');
 };
 
@@ -663,6 +693,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.recentOutcomes ? [`recentOutcomes: ${meta.recentOutcomes}`] : []),
         ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
         ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
+        ...(meta.lastMatchedAt ? [`lastMatchedAt: ${meta.lastMatchedAt}`] : []),
+        ...(meta.suspendedAt ? [`suspendedAt: ${meta.suspendedAt}`] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
         ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),
@@ -1042,8 +1074,19 @@ const applySkillEvidenceUnlocked = async (
     };
     for (const file of getMemoryFiles().files.filter(isSkillFile)) {
         const meta = parseSkillMarkdown(file.content);
-        if (!meta || !file.enabled || !skillMatchesSetup(meta, setup)) continue;
+        if (!meta) continue;
+        // A skill the idle sweep suspended stays MATCHED so it can earn its way
+        // back — retirement is the irreversible path and must not be reached by
+        // an unrelated timer. `suspendedAt` is what tells the two apart; both
+        // leave `enabled` false.
+        if (!file.enabled && !meta.suspendedAt) continue;
+        if (!skillMatchesSetup(meta, setup)) continue;
         if (meta.tradeIds.includes(trade.id)) continue;
+        // This skill's trigger described a trade that just closed — the market
+        // still resembles the rule, injected or not. The idle lifecycle reads
+        // this as its revival clock, because `lastEvidenceAt` can never advance
+        // again once a skill is out of the prompt.
+        meta.lastMatchedAt = trade.timestamp ?? new Date().toISOString();
 
         // ── Weighted attribution (three-state adherence) ──
         // Full credit ONLY when retrieval actually injected this skill in the
@@ -1067,6 +1110,14 @@ const applySkillEvidenceUnlocked = async (
         } catch {
             adherence = null;
         }
+        // A suspended skill was NOT in this prompt, whatever the telemetry says
+        // — and missing telemetry reads as UNKNOWN, which takes full credit.
+        // Without this a legacy trade would both inflate a suspended skill's
+        // record and instantly undo the suspension that gated it. `suspendedAt`
+        // is tested alongside `enabled` because the notebook can toggle either
+        // one alone, and a skill that carries a suspension stamp has to be
+        // treated as absent from the prompt regardless.
+        if (!file.enabled || meta.suspendedAt) adherence = 'not-injected';
         if (adherence === 'not-injected') {
             // CONTROL group: record and move on — never inflate wins/losses
             // with outcomes this skill did not shape.
@@ -1076,7 +1127,7 @@ const applySkillEvidenceUnlocked = async (
                 meta.modifiedAt = new Date().toISOString();
                 await updateMemoryFileUnlocked(file.id, {
                     content: serializeSkill(meta, titleFromMeta(meta)),
-                    enabled: meta.status !== 'retired',
+                    enabled: skillEnabledFlag(meta),
                 }, username);
             }
             continue;
@@ -1090,7 +1141,7 @@ const applySkillEvidenceUnlocked = async (
                 meta.modifiedAt = new Date().toISOString();
                 await updateMemoryFileUnlocked(file.id, {
                     content: serializeSkill(meta, titleFromMeta(meta)),
-                    enabled: meta.status !== 'retired',
+                    enabled: skillEnabledFlag(meta),
                 }, username);
                 if (meta.overriddenIds.length >= OVERRIDE_RATE_FOR_AMENDMENT) {
                     queueLearningProposal({
@@ -1228,7 +1279,7 @@ const applySkillEvidenceUnlocked = async (
         }
         await updateMemoryFileUnlocked(file.id, {
             content: serializeSkill(meta, titleFromMeta(meta)),
-            enabled: meta.status !== 'retired',
+            enabled: skillEnabledFlag(meta),
         }, username);
 
         // Refinement gate: 3 consecutive losses AND spread over >=48h.
@@ -1460,7 +1511,7 @@ const applyRefinementUnlocked = async (
     latest.modifiedAt = latest.refinedAt;
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(latest, titleFromMeta(latest)),
-        enabled: latest.status !== 'retired',
+        enabled: skillEnabledFlag(latest),
     }, username);
     return true;
 };
@@ -1580,7 +1631,7 @@ const maybeMergeSkillUnlocked = async (
         latestMeta.modifiedAt = new Date().toISOString();
         await updateMemoryFileUnlocked(file.id, {
             content: serializeSkill(latestMeta, titleFromMeta(latestMeta)),
-            enabled: latestMeta.status !== 'retired',
+            enabled: skillEnabledFlag(latestMeta),
         }, username);
         console.log('[SkillMemory] Worth-gate merge applied to', file.name);
     } catch (e) {
@@ -1834,7 +1885,7 @@ const ingestCraftedSkillUnlocked = async (
         meta.status = deriveStatus(meta);
         await updateMemoryFileUnlocked(existing.id, {
             content: serializeSkill(meta, crafted.name || titleFromMeta(meta)),
-            enabled: meta.status !== 'retired',
+            enabled: skillEnabledFlag(meta),
         }, username);
         return;
     }
@@ -1991,7 +2042,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             meta.status = deriveStatus(meta);
             await updateMemoryFileUnlocked(existing.id, {
                 content: serializeSkill(meta, titleFromMeta(meta)),
-                enabled: meta.status !== 'retired',
+                enabled: skillEnabledFlag(meta),
             }, username);
             continue;
         }
@@ -2107,7 +2158,7 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
         merged.status = deriveStatus(merged);
         await updateMemoryFileUnlocked(keep.id, {
             content: serializeSkill(merged, titleFromMeta(merged)),
-            enabled: merged.status !== 'retired',
+            enabled: skillEnabledFlag(merged),
         }, username);
         // Superseded duplicates are ARCHIVED, not deleted.
         // Deleting broke the ledger doctrine ("superseded beliefs are never
@@ -2323,19 +2374,30 @@ export const applyRevivalProposal = async (
     stampStatusTransition(meta, 'candidate', 'revival-approved');
     meta.status = 'candidate';
     meta.supersededBy = undefined;
+    // An approved revival outranks the idle sweep, exactly as a manual status
+    // change does: leaving `suspendedAt` set would let the next derived write
+    // compute `enabled: false` and undo the approval the trader just granted.
+    meta.suspendedAt = undefined;
     meta.modifiedAt = new Date().toISOString();
     await updateMemoryFileUnlocked(target.id, {
         content: serializeSkill(meta, titleFromMeta(meta)),
         folderId: skillsFolder.id,
-        enabled: true,
+        enabled: skillEnabledFlag(meta),
     }, username);
     return true;
 });
 
 /**
- * Act on an APPROVED demote proposal: a zero-evidence confirmed skill
- * is expelled from injection by dropping it to candidate. Reversible in the
- * grid; never automatic.
+ * Act on an APPROVED demote proposal: a zero-evidence confirmed skill is
+ * dropped back to candidate. Reversible in the grid; never automatic.
+ *
+ * What this actually takes away is the CONFIRMED warrant — the status weight it
+ * ranks by, and its eligibility as a settled rule — not injection itself. A
+ * zero-evidence skill is already out of the prompt unless it carries a prior
+ * ('book'/'gated'), and a prior does not stop being injected for being
+ * candidate (MemoryRetrievalService would then dead-lock the earn-your-first-
+ * sample loop). So `enabled` stays derived here; forcing it false would be a
+ * second, independent suppression channel for a rule retrieval already owns.
  */
 export const applyDemoteProposal = async (
     slug: string,
@@ -2351,9 +2413,12 @@ export const applyDemoteProposal = async (
     stampStatusTransition(meta, 'candidate', 'demote-approved');
     meta.status = 'candidate';
     meta.modifiedAt = new Date().toISOString();
+    // Derived, not hardcoded, so no writer can bypass `skillEnabledFlag`. An
+    // already-suspended skill STAYS suspended: a demote is not a pardon, and
+    // clearing `suspendedAt` here would hand the idle sweep's decision back.
     await updateMemoryFileUnlocked(target.id, {
         content: serializeSkill(meta, titleFromMeta(meta)),
-        enabled: true,
+        enabled: skillEnabledFlag(meta),
     }, username);
     return true;
 });
@@ -2723,7 +2788,7 @@ const applyReviewRecommendationUnlocked = async (
     meta.modifiedAt = new Date().toISOString();
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
-        enabled: meta.status !== 'retired',
+        enabled: skillEnabledFlag(meta),
     }, username);
     return true;
 };

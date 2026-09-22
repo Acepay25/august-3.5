@@ -12,6 +12,8 @@ import { TradeAnalysis, ConfidenceCalibration, DebateTurn } from '../types';
 import { parseTradeAnalysis } from '../schemas/tradeAnalysis';
 import { normalizeStrategyFamily } from '../types/strategy';
 import { classifyStrategyFamily } from './strategyFamily';
+import { plannedRiskReward } from './riskReward';
+import { clipNote } from './harnessMarks';
 import { FAMILY_UI_DATA } from '../constants/models';
 import { CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_RE } from '../constants/debateMarkers';
 
@@ -1250,16 +1252,15 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
 
         // 3. Calculate Risk/Reward Ratio (R:R) — skipped when the SL was
         // flagged inverted above (rrRatio stays 0 so the gate clamps down).
+        // Defined once in utils/riskReward so the card, the proposal tool and
+        // the journal can no longer disagree on the same trade.
         if (!isNaN(slPrice) && validTakeProfits.length > 0 && newAnalysis.rrRatio !== 0) {
-            validTakeProfits.sort((a, b) => Math.abs(a - entryPrice) - Math.abs(b - entryPrice));
-
-            const nearestTpPrice = validTakeProfits[0];
-            const risk = Math.abs(entryPrice - slPrice);
-            const reward = Math.abs(nearestTpPrice - entryPrice);
-
-            if (risk > 0) {
-                newAnalysis.rrRatio = parseFloat((reward / risk).toFixed(2));
-            }
+            const ratio = plannedRiskReward({
+                entry: entryPrice,
+                stopLoss: slPrice,
+                takeProfits: validTakeProfits,
+            });
+            if (ratio > 0) newAnalysis.rrRatio = ratio;
         }
     }
 
@@ -1275,7 +1276,12 @@ export const truncateTextToTokens = (text: string, maxTokens: number = 4000): st
     if (text.length <= maxChars) return text;
 
     console.warn(`Text exceeded ${maxTokens} tokens. Truncating to ${maxChars} chars...`);
-    return text.slice(0, maxChars) + "\n...[Truncated to fit context memory]...";
+    // Named facts, not a label: a note that says only "truncated" tells the
+    // seat nothing about how much is missing, and the legend this app shows is
+    // built by reading these back.
+    return text.slice(0, maxChars) + '\n' + clipNote({
+        source: 'context memory', kept: maxChars, total: text.length,
+    });
 };
 
 /**
@@ -1313,7 +1319,8 @@ export const truncateJsonSafely = (jsonText: string, maxTokens: number = 4000): 
     const truncateStrings = (obj: any): any => {
         if (typeof obj === 'string') {
             return obj.length > MAX_STRING_LEN
-                ? obj.slice(0, MAX_STRING_LEN) + '...[truncated]'
+                ? obj.slice(0, MAX_STRING_LEN) + ' '
+                    + clipNote({ source: 'string value', kept: MAX_STRING_LEN, total: obj.length })
                 : obj;
         }
         if (Array.isArray(obj)) {
@@ -1323,7 +1330,9 @@ export const truncateJsonSafely = (jsonText: string, maxTokens: number = 4000): 
             if (serialized.length > maxChars && arr.length > 2) {
                 // Keep first and last elements, drop middle
                 const keepCount = Math.max(2, Math.floor(arr.length * 0.5));
-                arr = [...arr.slice(0, keepCount), `...[${arr.length - keepCount} more items truncated]`];
+                arr = [...arr.slice(0, keepCount), clipNote({
+                    source: 'array', kept: keepCount, total: arr.length, unit: 'items',
+                })];
             }
             return arr;
         }
