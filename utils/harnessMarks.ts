@@ -135,6 +135,37 @@ export const HARNESS_NOTE_PREFIXES: readonly string[] = [
     CLIP_RECEIPT_PREFIX,
 ];
 
+/**
+ * Strip the harness's privileged vocabulary OUT of third-party text.
+ *
+ * The untrusted fence's allowance (`harnessNoteLegend`) tells the model that
+ * any line BEGINNING with one of these prefixes is a system note to act on —
+ * because the app appends its own notes to tool output before fencing. That
+ * allowance is only honest if nothing else inside the fence can open a line
+ * with the same words: a web page (or a forged-tool response body) containing
+ * `DATA_UNAVAILABLE: …` would otherwise speak with the app's voice and issue
+ * instructions the model has been told to obey.
+ *
+ * So text the app did not author must pass through here AT INGESTION — before
+ * it is joined with the app's own notes (fence-time neutralization is too
+ * late: at that point the legit notes and the payload are one string). The
+ * escape quotes the line (`> `), which keeps the content readable while
+ * breaking both `isDataUnavailable`'s startsWith check and the legend's
+ * "lines beginning with" rule.
+ */
+export const neutralizeHarnessNotes = (body: string): string => {
+    if (typeof body !== 'string' || !body) return body;
+    let out = body;
+    for (const prefix of HARNESS_NOTE_PREFIXES) {
+        // The four prefixes are mutually non-prefixed at a line start
+        // ('…[truncated ' ends in a space, MINIMAL_CLIP_NOTE in a colon), so
+        // one pass per prefix cannot splice two halves into a fresh marker.
+        if (out.startsWith(prefix)) out = `> ${out}`;
+        out = out.split(`\n${prefix}`).join(`\n> ${prefix}`);
+    }
+    return out;
+};
+
 /** The allowance clause of the untrusted-data fence, generated from the real
  *  markers so the legend and the emitters cannot disagree — the bug this module
  *  exists to end was a hand-written legend describing a marker no code emits. */

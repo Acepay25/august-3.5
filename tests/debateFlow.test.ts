@@ -3,6 +3,13 @@ import type { Mock } from 'vitest';
 import { TradeAnalysis } from '../types';
 import type { ProviderConfig } from '../types/provider';
 import { parseMarkdownTradePlan } from '../utils/analysisUtils';
+import {
+  beginTruncationWindow,
+  consumeTruncations,
+  peekTruncations,
+  recordFinishReason,
+  resetTruncationWindow,
+} from '../utils/finishReason';
 
 // Mock the transport layer so the debate generators run with scripted chunks
 // and NO network/SDK calls (this also makes the abort/error paths observable).
@@ -1221,6 +1228,118 @@ describe('conductRealDebate (real inter-model debate)', () => {
     // The two moderator turns (questions + verdict) must not share a round.
     const rounds = new Set(moderator.map(r => r.round));
     expect(rounds.size).toBe(2);
+  });
+});
+
+// =============================================================================
+// Truncation windows — the verdict tally the finalizer peeks at
+// =============================================================================
+
+describe('truncation windows (verdict tally)', () => {
+  beforeEach(() => {
+    streamMock.mockReset();
+    sendMock.mockReset();
+    resetTruncationWindow();
+  });
+
+  const realAnalyst = (id: string, name: string, model: string) => ({
+    provider: {
+      config: { ...config, id, name, models: [model], selectedModel: model },
+      name,
+      model,
+      thoughtsKey: `${id}:${model}`,
+    },
+    result: {
+      thoughtProcess: `${name} internal thinking`,
+      finalOutput: `${name} opening statement: long bias on breakout.`,
+      analysis: /Two|Three/.test(name) ? { ...analysis, confidence: 'Medium' as const } : analysis,
+    },
+  });
+
+  async function collectEvents(gen: AsyncGenerator<RealDebateTurnEvent>): Promise<RealDebateTurnEvent[]> {
+    const events: RealDebateTurnEvent[] = [];
+    for await (const e of gen) events.push(e);
+    return events;
+  }
+
+  const accuracyDebate = () => conductDebate(
+    [analyst, analyst], ['Analyst One', 'Analyst Two'],
+    'Analyze', null, 'original', undefined,
+    config, 'model-a', false, true, null, [], '',
+  );
+
+  it('conductDebate brackets its own window — a previous run\'s truncated tally does not leak in', async () => {
+    // A previous run closed WITH a truncation; that stale figure must not be
+    // what the finalizer reads for THIS run (pre-fix accuracy mode opened no
+    // window at all, so peekTruncations handed back exactly this stale tally).
+    beginTruncationWindow();
+    recordFinishReason('length');
+    consumeTruncations();
+    expect(peekTruncations().truncated).toBe(true);
+
+    streamMock.mockImplementation(async function* () {
+      yield 'accuracy moderator chunk';
+      yield MARKDOWN_PLAN('Long');
+    });
+    await collect(accuracyDebate());
+    expect(peekTruncations().truncated).toBe(false);
+  });
+
+  it('conductDebate tallies a ceiling hit reported inside its own window', async () => {
+    streamMock.mockImplementation(async function* () {
+      // The real transport reports the stop signal through recordFinishReason;
+      // the mock stands in for it here.
+      recordFinishReason('length');
+      yield MARKDOWN_PLAN('Short');
+    });
+    await collect(accuracyDebate());
+    const tally = peekTruncations();
+    expect(tally.truncated).toBe(true);
+    expect(tally.truncatedCalls).toBe(1);
+  });
+
+  it('an aborted accuracy debate still closes the window — later calls are not counted into it', async () => {
+    streamMock.mockImplementation(async function* () {
+      yield 'partial';
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    await expect(collect(accuracyDebate())).rejects.toMatchObject({ name: 'AbortError' });
+    // Window closed by the finally: with no window open this record is a no-op…
+    recordFinishReason('length');
+    // …and the aborted run's closed tally holds no truncation.
+    expect(peekTruncations().truncated).toBe(false);
+  });
+
+  it('conductRealDebate closes the window when the verdict stream aborts', async () => {
+    streamMock.mockImplementation(async function* (...args: unknown[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+        return;
+      }
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields nothing.
+      } else if (system.includes('debate moderator')) {
+        yield 'partial verdict';
+        throw new DOMException('Aborted', 'AbortError');
+      } else {
+        yield 'rebuttal';
+      }
+    });
+
+    const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
+    await expect(collectEvents(conductRealDebate(
+      analysts,
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+    ))).rejects.toMatchObject({ name: 'AbortError' });
+
+    // The finally closed the window: a later unrelated call must not land in
+    // the aborted run's tally (pre-fix the window stayed open and swallowed it).
+    recordFinishReason('length');
+    expect(peekTruncations().truncated).toBe(false);
   });
 });
 

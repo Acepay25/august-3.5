@@ -11,6 +11,7 @@
  */
 
 import type { DeskToolDefinition, DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
+import { neutralizeHarnessNotes } from '../../utils/harnessMarks';
 
 /** ToolForge request — what a model submits. */
 export interface ToolForgeProposal {
@@ -302,6 +303,11 @@ export const executeForgedTool = async (
             content = text;
         }
         content = content.slice(0, MAX_RESPONSE_CHARS);
+        // The body is third-party text that lands in a fence carrying the
+        // harness-note allowance — strip the app's privileged prefixes from
+        // it AT INGESTION or a hostile endpoint can author "system notes"
+        // the model has been told to act on (see utils/harnessMarks).
+        content = neutralizeHarnessNotes(content);
         if (!content.trim()) throw new Error('empty response');
         if (cacheable) forgedCache.set(cacheKey, { at: Date.now(), content });
         recordForgedUse(name, true);

@@ -1051,7 +1051,23 @@ ${analystsInput}
 Start the simulation now. Begin with <DEBATE_START>.
 `;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal, onReasoning, undefined, undefined, undefined, undefined, undefined, undefined, undefined, opts?.onToolAction);
+    const stream = getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal, onReasoning, undefined, undefined, undefined, undefined, undefined, undefined, undefined, opts?.onToolAction);
+    // Bracket the autoplayed verdict with the same truncation window the real
+    // debate opens (conductRealDebate). This is the OTHER path that ends in
+    // verdictFinalizer's peekTruncations(), and it used to open NO window —
+    // so the finalizer read whatever tally the PREVIOUS run had closed with
+    // and could label this run's plan 'truncated-plan' for a token ceiling a
+    // different debate hit. finally-closed so an abort cannot leave it open.
+    return (async function* (): AsyncGenerator<string, void, unknown> {
+        beginTruncationWindow();
+        try {
+            for await (const chunk of stream) {
+                yield chunk;
+            }
+        } finally {
+            consumeTruncations();
+        }
+    })();
 };
 
 // =============================================================================
@@ -3181,6 +3197,7 @@ const conductRealDebateImpl = async function* (
     // vague". Scoped here rather than run-wide: a seat cut off mid-rebuttal
     // must not make the PLAN look truncated.
     beginTruncationWindow();
+    try {
     for (let attempt = 0; attempt < attempts.length; attempt++) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         onSpeakerStatus?.('Moderator', finalRound, true);
@@ -3234,7 +3251,10 @@ const conductRealDebateImpl = async function* (
         // concatenates with the successful verdict in one bubble.
         yield { speaker: 'Moderator', round: finalRound, text: `\n${MODERATOR_RETRY_MARKER}\n` };
     }
-    // Close the bracket opened at the top of this round. The finalizer reads the
+    } finally {
+    // Close the bracket opened at the top of this round — in a FINALLY, so an
+    // abort mid-verdict (the throw paths above) cannot leave the window open
+    // to swallow the NEXT run's finish reasons. The finalizer reads the
     // tally after the generator has ended, and `peekTruncations` keeps handing
     // back the closed figure — but from here on no unrelated call can be
     // counted into it. Every provider response reports its stop signal through
@@ -3242,6 +3262,7 @@ const conductRealDebateImpl = async function* (
     // consolidation that hits its own ceiling used to land in the verdict's
     // tally, and "raise the verdict token budget" was blaming a DM.
     consumeTruncations();
+    }
 };
 
 export const conductTwoWayPostMortemDebate = (

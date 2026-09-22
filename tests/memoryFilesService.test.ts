@@ -4,6 +4,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // store (avoids touching localStorage / Capacitor Preferences in tests).
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
+  // The notebook init reads the RAW value so it can tell "no key" apart from
+  // "unparseable blob" (getPreferenceObject erases that distinction). The mock
+  // store holds parsed objects, so stringify on the way out — except a string
+  // the test planted raw (the corrupt-blob cases), which passes through as-is.
+  getPreference: vi.fn(async (key: string) => {
+    const v = store[key];
+    if (v === undefined || v === null) return null;
+    return typeof v === 'string' ? v : JSON.stringify(v);
+  }),
   getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
   getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
       const raw = store[key];
@@ -44,7 +53,7 @@ import {
   createMemoryFileUnlocked,
   getMemoryFilesOwner,
 } from '../services/learning/MemoryFilesService';
-import { getPreferenceObject } from '../services/infrastructure/PreferencesService';
+import { getPreference } from '../services/infrastructure/PreferencesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { LoggedTrade, MemoryFile, TradeOutcome, UserProfile } from '../types';
 
@@ -112,6 +121,35 @@ describe('MemoryFilesService', () => {
       await initMemoryFiles('alice');
       expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['notes']);
       expect(findFile('a.md')?.content).toBe('hello');
+    });
+
+    it('a corrupt blob is NEVER overwritten by the seed — missing key is the only case allowed to write', async () => {
+      // One torn byte in the stored notebook. Pre-fix, getPreferenceObject
+      // returned null for this exactly as for a missing key, and the seed
+      // branch ended in persist() — replacing the whole notebook with an
+      // empty one at boot.
+      store['memory_files_v1_carol'] = '{"version":1,"folders":[{"id":"f1","na';
+      await initMemoryFiles('carol');
+      // In-memory the app serves an empty seeded notebook so it keeps working…
+      expect(getMemoryFiles().folders.map(f => f.name)).toContain('profile');
+      // …but the bytes on disk are UNTOUCHED — the only copy of whatever the
+      // user had survives for repair/restore.
+      expect(store['memory_files_v1_carol']).toBe('{"version":1,"folders":[{"id":"f1","na');
+      // And once the blob is repaired (e.g. restored from a backup), the next
+      // boot loads it normally.
+      store['memory_files_v1_carol'] = {
+        version: 1,
+        folders: [{ id: 'f1', name: 'notes', order: 0 }],
+        files: [{ id: 'x', folderId: 'f1', name: 'recovered.md', content: 'back', enabled: true, createdAt: 1, updatedAt: 1 }],
+      };
+      await initMemoryFiles('carol');
+      expect(findFile('recovered.md')?.content).toBe('back');
+    });
+
+    it('a parseable but non-notebook blob is also left untouched', async () => {
+      store['memory_files_v1_dave'] = '"just a string"';
+      await initMemoryFiles('dave');
+      expect(store['memory_files_v1_dave']).toBe('"just a string"');
     });
   });
 
@@ -613,9 +651,9 @@ describe('MemoryFilesService', () => {
       // (the old ensureHarnessFoldersUnlocked-in-syncClosedTradeToNotebook
       // shape) flushed A's stale notebook into B's Preferences key.
       await initMemoryFiles('gina');
-      const getMock = vi.mocked(getPreferenceObject);
+      const getMock = vi.mocked(getPreference);
       const originalImpl = getMock.getMockImplementation() as
-          ((key: string) => Promise<unknown>) | undefined;
+          ((key: string) => Promise<string | null>) | undefined;
       let release: () => void = () => undefined;
       const loadGate = new Promise<void>(res => { release = res; });
       getMock.mockImplementation((async (key: string) => {
@@ -624,7 +662,7 @@ describe('MemoryFilesService', () => {
       }) as never);
       try {
         const halInit = initMemoryFiles('hal');
-        // Let init enter the gated getPreferenceObject await. The cache now
+        // Let init enter the gated getPreference await. The cache now
         // still holds GINA's bytes — and must still be owned by GINA.
         await new Promise(res => setTimeout(res, 0));
         expect(getMemoryFilesOwner()).toBe('gina');

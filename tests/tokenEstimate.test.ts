@@ -149,33 +149,26 @@ describe('provider-usage anchoring', () => {
     });
 });
 
-describe('the measured ratio is actually consumed', () => {
-    // The provider wire has been calling observePromptRatio on every usage
-    // frame since this module landed, and nothing read the result — so the
-    // header's "we prefer the measured ratio" described a measurement that
-    // changed nothing. These pin that it now changes the right thing.
+describe('the measured ratio must NOT size an allowance', () => {
+    // Consuming `observedCharsPerToken` was tried on 2026-09-22 and reverted.
+    // The ratio is message-text chars over a promptTokens that also counts
+    // system framing and every tool schema, so it describes their difference,
+    // not the text — and it is a sticky module global. One CJK-dense prompt
+    // measures ~1.0 and would have pinned charsForTokens at a quarter of its
+    // size for the rest of the session, starving the memory injected into
+    // every later debate. These fail the moment the measurement is wired in
+    // again without a like-for-like numerator and denominator.
     beforeEach(() => resetObservedRatio());
 
-    it('shrinks the allowance when a provider reports denser text', () => {
+    it('leaves the allowance on the constant whatever the measurement says', () => {
         expect(charsForTokens(100)).toBe(400);
         observePromptRatio(1000, 1500);
-        expect(charsForTokens(100)).toBe(150);
-    });
-
-    it('never lets a favourable measurement buy more room than chars/4', () => {
-        observePromptRatio(1000, 6000);
-        expect(observedCharsPerToken()).toBe(6);
+        expect(observedCharsPerToken()).toBe(1.5);
         expect(charsForTokens(100)).toBe(400);
     });
 
-    it('keeps the inverse in step with the forward conversion', () => {
+    it('leaves the inverse on the constant too', () => {
         observePromptRatio(1000, 1500);
-        expect(tokensForChars(1500)).toBe(1000);
-    });
-
-    it('falls back to the constant once reset', () => {
-        observePromptRatio(1000, 1500);
-        resetObservedRatio();
-        expect(charsForTokens(100)).toBe(400);
+        expect(tokensForChars(4000)).toBe(1000);
     });
 });
