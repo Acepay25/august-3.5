@@ -63,7 +63,8 @@ describe('MarkdownRenderer', () => {
         ].join('\n');
         const { container } = render(<MarkdownRenderer content={content} />);
         expect(container.querySelector('table')).not.toBeNull();
-        expect(container.textContent).toContain('$\\alpha$');
+        // The cell's formula is typeset rather than shown as source…
+        expect(container.querySelector('td .katex')).not.toBeNull();
         expect(container.textContent).toContain('tail text');
     });
 });

@@ -1,6 +1,75 @@
 import React, { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
+// ─── Math preparation ───────────────────────────────────────────────────────
+// Two things must be true at once here, and remark-math only knows about one
+// of them: `$` is its inline delimiter, and in THIS app `$` is money first.
+
+/** Code spans and fences are verbatim — CommonMark lets a single-backtick span
+ *  cross line breaks, so the pattern mirrors the parser rather than assuming a
+ *  line. Everything between these captures is prose, and only prose gets math
+ *  prep: a regex like `/\[0\]/` in a code span must not become math. */
+const CODE_SEGMENT = /(`{3,}[\s\S]*?(?:`{3,}|$)|`+[^`]*?`+)/g;
+
+/** A `$` that directly precedes a digit is a price in this app: "$100" opens
+ *  nothing. Measured without this guard, "Risk $100 on the entry, target
+ *  $200" parsed as ONE inline math span and rendered as
+ *  "Risk 100ontheentry,target100 on the entry, target 200" — the money
+ *  vanished and the words fused. Not `$500.25`-shaped only: ANY digit. A `$`
+ *  behind a backslash (already escaped) or another `$` (a `$$` pair) is left
+ *  alone so display math and existing escapes survive. The cost is a formula
+ *  that STARTS with a digit (`$0.5$`) stays literal — never the trade of
+ *  losing a price. */
+const protectMoney = (text: string): string => text.replace(/(?<![$\\])\$(?=\d)/g, '\\$');
+
+/** `\[...\]` / `\(...\)` are KaTeX's own delimiters, but markdown eats the
+ *  backslash before anyone can typeset them ("\(" renders as "("). Rewriting
+ *  them onto `$` only when the body LOOKS like math keeps `\[2\]` — a bracket
+ *  escape for a citation or an index — as the "2" it renders as today. */
+const LOOKS_LIKE_LATEX = /[\\^_{}=]/;
+
+const rewriteParenDelimiters = (text: string): string => text
+    .replace(/\\\(([\s\S]*?)\\\)/g, (all, inner: string) => (
+        LOOKS_LIKE_LATEX.test(inner) ? `$${inner}$` : all
+    ))
+    .replace(/\\\[([\s\S]*?)\\\]/g, (all, inner: string) => (
+        LOOKS_LIKE_LATEX.test(inner) ? `$$${inner}$$` : all
+    ));
+
+/** A display formula written on ONE line — `$$R:R = …$$`, which is how most
+ *  models emit it — parses as INLINE math here, so it typesets as a run-in
+ *  span instead of the centered block the author meant. Giving the body its
+ *  own lines sends micromark down the flow path. Only whole lines qualify
+ *  (`$$` … `$$` with nothing after), so a trailing sentence can never be
+ *  swallowed by an unclosed display block. */
+const expandSingleLineDisplay = (text: string): string => text.replace(
+    /^([ \t]*)\$\$([^\n]+?)\$\$[ \t]*$/gm,
+    (all, indent: string, body: string) => (body.trim() ? `${indent}$$\n${body}\n${indent}$$` : all),
+);
+
+const prepareMath = (source: string): string => {
+    let out = '';
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+    CODE_SEGMENT.lastIndex = 0;
+    while ((match = CODE_SEGMENT.exec(source)) !== null) {
+        out += rewriteParenDelimiters(protectMoney(source.slice(cursor, match.index)));
+        out += match[0];
+        cursor = match.index + match[0].length;
+    }
+    out += rewriteParenDelimiters(protectMoney(source.slice(cursor)));
+    return expandSingleLineDisplay(out);
+};
+
+/** A formula the model botched renders as its own source in the error color —
+ *  KaTeX's default is to THROW, and a throw inside `messages.map()` takes the
+ *  whole bubble (or every later row) down with it. AI text is untrusted input
+ *  for KaTeX too. */
+const KATEX_OPTIONS = { throwOnError: false, errorColor: '#f75d5f' };
 
 interface MarkdownRendererProps {
   /** Markdown text to render. */
@@ -10,11 +79,16 @@ interface MarkdownRendererProps {
 }
 
 /**
- * Heavy markdown renderer (react-markdown + remark-gfm). Kept in its own
- * module so MarkdownContent can lazy-load it — this whole chunk (the largest
- * single dependency in the app) is only fetched on the first render of an
- * AI message instead of being bundled into the startup entry.
- * ReactMarkdown escapes raw HTML by default, so AI output can't inject markup.
+ * Heavy markdown renderer (react-markdown + remark-gfm + KaTeX). Kept in its
+ * own module so MarkdownContent can lazy-load it — this whole chunk (the
+ * largest single dependency in the app, now including katex) is only fetched
+ * on the first render of an AI message instead of being bundled into the
+ * startup entry. ReactMarkdown escapes raw HTML by default, so AI output
+ * can't inject markup; that escaping is pinned in tests/markdownRenderer.
+ *
+ * Math: `$…$`, `$$…$$` and the paren delimiters models emit are typeset.
+ * `$` is also this app's currency symbol, so prepareMath arbitrates before
+ * the parser sees the text — prices are never a formula.
  *
  * Typography: tighter paragraphs (my-3,
  * 1.65 line-height instead of my-4/leading-8), neutral zinc inline code
@@ -25,7 +99,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
   return (
     <div className={`text-sm leading-relaxed text-zinc-300 prose prose-invert prose-sm max-w-none ${className ?? ''}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
         components={{
           pre: ({ children }) => (
             <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-[12px] font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
@@ -83,7 +158,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
           ),
         }}
       >
-        {content || ''}
+        {prepareMath(content || '')}
       </ReactMarkdown>
     </div>
   );
