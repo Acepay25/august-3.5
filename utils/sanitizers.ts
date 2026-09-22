@@ -1,3 +1,35 @@
+/**
+ * Strip HTML tags, and ONLY HTML tags.
+ *
+ * The obvious `/<[^>]*>/gm` is wrong for prose: `[^>]*` matches newlines, so
+ * the first `<` anywhere opened a "tag" that stayed open until the next `>` in
+ * the whole message, and everything between was deleted. LaTeX puts a `<` in
+ * almost every answer that compares two things — `$\alpha < 0.5$`,
+ * `$entry < target$` — so a response silently lost whole spans whenever it
+ * *also* contained a later `>` (a `=>`, a `72000 > 70000`, a table row). The
+ * measured case: a 153-char answer with one table came back 84 chars, the
+ * table and the paragraph around it gone. That is the "response didn't render"
+ * bug — the renderer never saw the text.
+ *
+ * So a tag must *look* like a tag: `<` then a letter, then a name, then either
+ * `>` or whitespace-led attributes that end on the SAME line. A cleanup pass
+ * may never delete text across a block boundary; a tag it can't recognize now
+ * survives as literal text (react-markdown escapes it), which is the safe
+ * direction to fail in.
+ */
+const HTML_TAG_RE = /<\/?[A-Za-z][A-Za-z0-9_.:-]*(?:\s[^>\n]*)?\/?>/g;
+
+/** Loop until stable: `<scr<script>ipt>` only becomes clean on a second pass. */
+const stripHtmlTags = (text: string): string => {
+  let prev = '';
+  let out = text;
+  while (prev !== out) {
+    prev = out;
+    out = out.replace(HTML_TAG_RE, '');
+  }
+  return out;
+};
+
 export const sanitizeAIResponse = (text: string): string => {
   if (!text) return '';
 
@@ -33,14 +65,13 @@ export const sanitizeAIResponse = (text: string): string => {
   // "5 * 6 contracts", "TP1 94500 * 2 R:R") instead of being mangled.
   cleaned = cleaned.replace(/(?<!\d)(?<!\s)\*(?!\s)(?!\d)/g, '');
 
-  // Aggressive XSS prevention: Strip HTML tags (loop until stable to defeat nested-tag bypasses)
-  // This prevents <script>, <iframe>, <object>, etc. from being rendered if the UI ever uses dangerous HTML setting.
-  // Even though React escapes by default, this adds a layer of safety for copy-paste or other sinks.
-  let prev = '';
-  while (prev !== cleaned) {
-    prev = cleaned;
-    cleaned = cleaned.replace(/<[^>]*>/gm, '');
-  }
+  // Aggressive XSS prevention: strip HTML tags (loop until stable to defeat
+  // nested-tag bypasses). This prevents <script>, <iframe>, <object>, etc.
+  // from being rendered if the UI ever uses dangerous HTML setting. Even
+  // though React escapes by default, this adds a layer of safety for
+  // copy-paste or other sinks — but it must only ever remove TAGS, never
+  // prose that happens to contain `<` and `>` (see HTML_TAG_RE).
+  cleaned = stripHtmlTags(cleaned);
 
   return cleaned;
 };
@@ -72,12 +103,10 @@ export const sanitizeAIResponseLight = (text: string): string => {
   // eslint-disable-next-line no-control-regex -- intentional control-char stripping
   cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   // Strip HTML tags (loop until stable to defeat nested-tag bypasses); the
-  // markdown renderer escapes raw HTML as a second layer.
-  let prev = '';
-  while (prev !== cleaned) {
-    prev = cleaned;
-    cleaned = cleaned.replace(/<[^>]*>/gm, '');
-  }
+  // markdown renderer escapes raw HTML as a second layer. This is the pass
+  // every chat reply goes through, so a false positive here is invisible
+  // answer text — see HTML_TAG_RE for why it must be tag-shaped.
+  cleaned = stripHtmlTags(cleaned);
   return cleaned;
 };
 
