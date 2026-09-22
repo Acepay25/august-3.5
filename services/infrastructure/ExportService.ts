@@ -255,17 +255,24 @@ const isRawLocalStorageKey = (key: string): boolean =>
 
 /** The value as its owner would read it, or null when neither store has it. */
 const readSweptValue = async (key: string): Promise<unknown> => {
-    const viaPreferences = await getPreferenceObject(key);
-    if (viaPreferences !== null) return viaPreferences;
-    if (!isRawLocalStorageKey(key)) return null;
-    try {
-        const raw = typeof localStorage === 'undefined'
-            ? null
-            : localStorage.getItem(key);
-        return raw === null ? null : JSON.parse(raw);
-    } catch {
-        return null;
+    // Raw-localStorage owners (profile memory, learning rules, the agent
+    // rosters, the calibration stats) write localStorage DIRECTLY and never
+    // touch Preferences — so on native a Preferences copy of one of these
+    // keys is by definition OLDER: the one-time migration snapshot or the
+    // restore mirror. Reading Preferences first exported that frozen copy
+    // forever while the owner's live bytes sat in localStorage — every
+    // backup after a restore (or after the migration) shipped stale data.
+    // The owner's store wins; Preferences is the fallback for a key whose
+    // only copy is the mirror/legacy one.
+    if (isRawLocalStorageKey(key)) {
+        try {
+            const raw = typeof localStorage === 'undefined'
+                ? null
+                : localStorage.getItem(key);
+            if (raw !== null) return JSON.parse(raw);
+        } catch { /* fall through to the Preferences copy */ }
     }
+    return getPreferenceObject(key);
 };
 
 /** Put a raw-localStorage owner's key back where that owner reads it. On web

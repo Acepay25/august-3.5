@@ -320,4 +320,23 @@ describe('stores the app keeps in raw localStorage', () => {
         const backup = await exportPreferencesData();
         expect(PROFILE_MEMORY in backup).toBe(false);
     });
+
+    it('export the OWNER\'s live bytes, not the stale Preferences mirror left by a restore', async () => {
+        // Native shape: a restore (or the one-time migration) leaves a copy in
+        // Preferences, then the owner keeps writing localStorage only. Reading
+        // Preferences first shipped that frozen copy in every later backup.
+        prefStore[PROFILE_MEMORY] = [{ id: 'old', text: 'restore-time snapshot' }];
+        localStorage.setItem(PROFILE_MEMORY, JSON.stringify([{ id: 'm2', text: 'learned yesterday' }]));
+
+        const backup = await exportPreferencesData();
+        expect(backup[PROFILE_MEMORY]).toEqual([{ id: 'm2', text: 'learned yesterday' }]);
+    });
+
+    it('still find a raw-localStorage key whose only copy IS the Preferences one', async () => {
+        // Legacy/mirror-only copy with nothing in localStorage: the fallback
+        // keeps that data in the backup rather than dropping it.
+        prefStore[LEARNING_RULES] = { version: 2, rules: [{ id: 'r1' }] };
+        const backup = await exportPreferencesData();
+        expect(backup[LEARNING_RULES]).toEqual({ version: 2, rules: [{ id: 'r1' }] });
+    });
 });
