@@ -16,7 +16,7 @@
  * Preferences key.
  */
 
-import { getPreferenceObject, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
+import { getPreference, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome, UserProfile } from '../../types';
 import { isMeaningfulLabel } from '../../utils/meaningfulLabel';
 import {
@@ -138,16 +138,38 @@ const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
         memoryCacheOwner = username;
     };
     try {
-        const stored = await getPreferenceObject<MemoryFilesStore>(`${MEMORY_KEY_PREFIX}${username}`);
-        if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
-            adoptCache(stored);
-            await ensureHarnessFoldersUnlocked(username);
-            // A load that changes nothing never persists, and the pressure
-            // read is what refuses new files — so measure on the read path too,
-            // or a notebook can sit at the trigger all session unmeasured.
-            measureIntoCache();
+        // Read the RAW value, not getPreferenceObject: that getter returns
+        // null for "no key" and "unparseable" alike, and the seed branch below
+        // ends in persist — so one corrupt byte in the blob used to replace
+        // the ENTIRE notebook with an empty one at boot. A missing key is the
+        // only case allowed to write here.
+        const raw = await getPreference(`${MEMORY_KEY_PREFIX}${username}`);
+        if (raw !== null) {
+            let stored: MemoryFilesStore | null = null;
+            try {
+                stored = JSON.parse(raw) as MemoryFilesStore;
+            } catch {
+                stored = null;
+            }
+            if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
+                adoptCache(stored);
+                await ensureHarnessFoldersUnlocked(username);
+                // A load that changes nothing never persists, and the pressure
+                // read is what refuses new files — so measure on the read path too,
+                // or a notebook can sit at the trigger all session unmeasured.
+                measureIntoCache();
+                return;
+            }
+            // Corrupt or foreign blob: serve an in-memory seed so the app
+            // works, but NEVER persist it — the bytes on disk are the only
+            // copy of whatever the user had, and overwriting them is the one
+            // unrecoverable outcome. Left untouched, a repaired/restored blob
+            // is picked up on the next boot.
+            console.warn(`[MemoryFiles] Notebook for "${username}" is unparseable; serving an empty in-memory notebook and leaving the stored blob UNTOUCHED.`);
+            adoptCache(freshSeed());
             return;
         }
+        // First run: seed AND persist, so a reload does not reseed.
         adoptCache(freshSeed());
         const now = Date.now();
         memoryCache.files = SEED_FILES.map(f => ({ ...f, id: uid(), createdAt: now, updatedAt: now }));

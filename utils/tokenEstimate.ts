@@ -79,12 +79,21 @@ export const estimateTokens = (text: string | null | undefined): number => {
  * it. That is what keeps the header's two promises — prefer the measurement,
  * never budget more optimistically than before — from contradicting each other.
  */
-const effectiveCharsPerToken = (): number => {
-    const observed = observedCharsPerToken();
-    return observed === null
-        ? ASCII_CHARS_PER_TOKEN
-        : Math.min(ASCII_CHARS_PER_TOKEN, observed);
-};
+const effectiveCharsPerToken = (): number => ASCII_CHARS_PER_TOKEN;
+/** WHY THIS IGNORES THE MEASUREMENT, and why that is not the same as the bug
+ *  it replaces. `observePromptRatio` divides the characters of the messages
+ *  array by a `promptTokens` that ALSO counts system framing and every tool
+ *  schema on the wire. The quotient therefore describes the gap between those
+ *  two sets, not the text, and it is biased low by construction — one
+ *  CJK-dense prompt measures ~1.0 and, because the value is a sticky module
+ *  global, would have pinned `charsForTokens` at a quarter of its size for the
+ *  rest of the session, silently starving the memory injected into every later
+ *  debate. Consuming it was tried on 2026-09-22 and reverted for exactly that
+ *  reason. The measurement stays wired as an observable, and consuming it is
+ *  safe only once numerator and denominator describe the same payload — which
+ *  needs the full wire length, not the message text. See also
+ *  `tests/tokenEstimate.test.ts`, which pins the floor this function used to
+ *  be able to undercut. */
 
 /**
  * How many characters fit in `tokens`, using the WORST case (most chars per

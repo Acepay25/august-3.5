@@ -20,6 +20,12 @@ let store: Record<string, unknown> = {};
 let refuse: ((key: string) => Error) | null = null;
 
 vi.mock('../services/infrastructure/PreferencesService', () => ({
+    // initMemoryFiles reads the raw value (missing vs unparseable) — mirror it.
+    getPreference: vi.fn(async (key: string) => {
+        const v = store[key];
+        if (v === undefined || v === null) return null;
+        return typeof v === 'string' ? v : JSON.stringify(v);
+    }),
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
     getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
         const raw = store[key];

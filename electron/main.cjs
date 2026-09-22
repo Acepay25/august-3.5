@@ -598,7 +598,17 @@ function extractStopReasonFromSse(raw) {
     if (found) return found;
     const anthropic = /"stop_reason"\s*:\s*"([^"]+)"/g;
     while ((match = anthropic.exec(raw)) !== null) if (match[1]) found = match[1];
-    return found;
+    if (found) return found;
+    // Responses-format stream: the terminal event is response.completed /
+    // response.incomplete carrying a "status" field, never finish_reason —
+    // without this scan desktop silently under-reported the one signal this
+    // bridge exists to catch. Mirror extractStopReasonJs: incomplete reads
+    // incomplete_details.reason, defaulting to the truncation token.
+    if (/"status"\s*:\s*"incomplete"/.test(raw)) {
+        const why = /"incomplete_details"\s*:\s*\{[^}]*"reason"\s*:\s*"([^"]+)"/.exec(raw);
+        return why && why[1] ? why[1] : 'max_output_tokens';
+    }
+    return undefined;
 }
 
 /**

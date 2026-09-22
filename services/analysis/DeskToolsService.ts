@@ -13,7 +13,7 @@ import { truncatesOutput } from '../../utils/finishReason';
 import { fenceUntrusted } from '../../utils/untrusted';
 import {
     clipNote, clipReceipt, dataUnavailable, findClipIn, harnessNoteLegend, harnessTurn,
-    isDataUnavailable, MINIMAL_CLIP_NOTE,
+    isDataUnavailable, MINIMAL_CLIP_NOTE, neutralizeHarnessNotes,
 } from '../../utils/harnessMarks';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
@@ -1231,16 +1231,20 @@ async function runWebSearch(query: string, signal?: AbortSignal): Promise<string
                 RelatedTopics?: Array<{ Text?: string; FirstURL?: string } | { Topics?: Array<{ Text?: string; FirstURL?: string }> }>;
             };
             if (data.AbstractText) {
-                lines.push(`Summary: ${data.AbstractText}`);
+                // Page-chosen text, neutralized AT INGESTION: this block is
+                // later fenced WITH the harness-note allowance, so a line here
+                // that opens with DATA_UNAVAILABLE:/…[clipped: would otherwise
+                // speak in the app's privileged voice (see harnessMarks).
+                lines.push(`Summary: ${neutralizeHarnessNotes(data.AbstractText)}`);
                 if (data.AbstractURL) lines.push(`Source: ${data.AbstractURL}`);
             }
             const related: string[] = [];
             for (const item of data.RelatedTopics || []) {
                 if ('Text' in item && item.Text) {
-                    related.push(`- ${item.Text}${item.FirstURL ? ` (${item.FirstURL})` : ''}`);
+                    related.push(`- ${neutralizeHarnessNotes(item.Text)}${item.FirstURL ? ` (${item.FirstURL})` : ''}`);
                 } else if ('Topics' in item && Array.isArray(item.Topics)) {
                     for (const sub of item.Topics.slice(0, 3)) {
-                        if (sub.Text) related.push(`- ${sub.Text}${sub.FirstURL ? ` (${sub.FirstURL})` : ''}`);
+                        if (sub.Text) related.push(`- ${neutralizeHarnessNotes(sub.Text)}${sub.FirstURL ? ` (${sub.FirstURL})` : ''}`);
                     }
                 }
                 if (related.length >= 6) break;
@@ -1272,7 +1276,7 @@ async function runWebSearch(query: string, signal?: AbortSignal): Promise<string
                 while ((match = re.exec(html)) && results.length < 5) {
                     const href = match[1];
                     const title = stripHtml(match[2]);
-                    if (title) results.push(`- ${title}${href ? ` | ${href}` : ''}`);
+                    if (title) results.push(`- ${neutralizeHarnessNotes(title)}${href ? ` | ${href}` : ''}`);
                 }
                 if (results.length) {
                     lines.push('Headlines:');
