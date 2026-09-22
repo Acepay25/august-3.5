@@ -84,22 +84,22 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                 <span className="text-cyan-300">{PHASE_ICON[decision ? 'deciding' : ev.phase] ?? PHASE_ICON[ev.phase]}</span>
                 <span className="truncate text-[12px] font-semibold text-zinc-100">{ev.itemTitle || ev.text}</span>
                 {ev.itemKind && (
-                    <span className="shrink-0 rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-zinc-500">
+                    <span className="shrink-0 rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs uppercase tracking-wider text-zinc-500">
                         {KIND_LABEL[ev.itemKind] || ev.itemKind}
                     </span>
                 )}
-                <span className="ml-auto shrink-0 font-mono text-[9px] text-zinc-600">{relTime(ev.atMs)}</span>
+                <span className="ml-auto shrink-0 font-mono text-ui-2xs text-zinc-600">{relTime(ev.atMs)}</span>
             </div>
             <p className="mt-1 text-[11px] text-zinc-400">{ev.text}</p>
             {/* The model's verdict text for this item — live while streaming. */}
             {ev.streamText && (
-                <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2 font-mono text-[10px] leading-4 text-zinc-500 custom-scrollbar">
+                <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2 font-mono text-ui-xs leading-4 text-zinc-500 custom-scrollbar">
                     {ev.streamText}{ev.streaming ? '▍' : ''}
                 </pre>
             )}
             {decision && (
                 <div className="mt-1.5">
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${VERDICT_STYLE[decision.verdict]}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${VERDICT_STYLE[decision.verdict]}`}>
                         {decision.verdict}{decision.overriddenByUser ? ' (you)' : ''}
                     </span>
                     <p className="mt-1 text-[11px] text-zinc-400">{decision.reason}</p>
@@ -107,12 +107,12 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                         <div className="mt-1.5 flex gap-1.5">
                             {decision.verdict === 'rejected' || decision.verdict === 'skipped' ? (
                                 <button type="button" disabled={busy} onClick={() => void override(overrideApproveSkill)}
-                                    className="rounded-control border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40">
+                                    className="rounded-control border border-emerald-500/30 px-2 py-0.5 text-ui-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40">
                                     Approve anyway
                                 </button>
                             ) : (
                                 <button type="button" disabled={busy} onClick={() => void override(overrideRejectSkill)}
-                                    className="rounded-control border border-rose-500/30 px-2 py-0.5 text-[10px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-40">
+                                    className="rounded-control border border-rose-500/30 px-2 py-0.5 text-ui-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-40">
                                     Reject — undo this
                                 </button>
                             )}
@@ -121,7 +121,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                     {overridable && ev.itemKind !== 'skill' && undoable(ev.itemKind, decision.verdict) && (
                         <div className="mt-1.5 flex gap-1.5" data-testid={`supervisor-undo-${ev.id}`}>
                             <button type="button" disabled={busy} onClick={() => void override(overrideVerdict)}
-                                className="rounded-control border border-zinc-600 px-2 py-0.5 text-[10px] font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-40">
+                                className="rounded-control border border-zinc-600 px-2 py-0.5 text-ui-xs font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-40">
                                 {undoLabel(ev.itemKind, decision.verdict)}
                             </button>
                         </div>
@@ -149,7 +149,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                 <ListChecks className="h-4 w-4 text-cyan-300" />
                 <span className="text-[13px] font-semibold text-zinc-100">Skill supervisor</span>
                 {snap.modelName && (
-                    <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-400">
+                    <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-400">
                         {snap.modelName}
                     </span>
                 )}
@@ -164,25 +164,25 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                 <button type="button"
                     onClick={() => supervisorStore.setAutoEnabled(!snap.autoEnabled)}
                     aria-pressed={snap.autoEnabled} data-testid="supervisor-auto-toggle"
-                    className={`flex items-center gap-1 rounded-control border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                    className={`flex items-center gap-1 rounded-control border px-2 py-1 text-ui-xs font-semibold transition-colors ${
                         snap.autoEnabled ? 'border-emerald-500/30 text-emerald-300' : 'border-white/10 text-zinc-400'
                     }`}>
                     {snap.autoEnabled ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                     {snap.autoEnabled ? 'Auto — on' : 'Auto — paused'}
                 </button>
                 <button type="button" onClick={() => void runSupervisorNow()} disabled={snap.running}
-                    className="rounded-control border border-white/10 px-2 py-1 text-[10px] font-semibold text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
+                    className="rounded-control border border-white/10 px-2 py-1 text-ui-xs font-semibold text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
                     Run now
                 </button>
                 {snap.running && (
                     <button type="button" onClick={() => abortSupervisorRun()}
-                        className="rounded-control border border-rose-500/30 px-2 py-1 text-[10px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/10">
+                        className="rounded-control border border-rose-500/30 px-2 py-1 text-ui-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10">
                         Stop
                     </button>
                 )}
                 {/* A per-pass call budget means a backlog can legitimately
                     survive a sweep — so the count rides the bar, not a tooltip. */}
-                <span className="ml-auto truncate font-mono text-[9px] text-zinc-600"
+                <span className="ml-auto truncate font-mono text-ui-2xs text-zinc-600"
                     title={`${spend.spent}/${spend.sessionCap} supervised this session`}
                     data-testid="supervisor-status">
                     {snap.running

@@ -193,7 +193,7 @@ const HarnessControls: React.FC = () => {
                     onChange={e => persist({ skillLibraryCap: Math.min(200, Math.max(5, Math.round(Number(e.target.value) || 40))) })}
                     className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
-                <span className="mt-1 block text-[10px] text-zinc-600">How many confirmed skills the worth gate holds before it turns comparative (displacement/revival). Default 40.</span>
+                <span className="mt-1 block text-ui-xs text-zinc-600">How many confirmed skills the worth gate holds before it turns comparative (displacement/revival). Default 40.</span>
             </label>
             {/* Session-guard limits: preset + overrides.
                 Takes effect immediately here; the in-the-moment cap change

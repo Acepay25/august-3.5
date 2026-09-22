@@ -9,6 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import type { ProviderConfig } from '../types/provider';
+import { HARNESS_TURN_MARK } from '../utils/harnessMarks';
 
 const { streamMock, sendMock } = vi.hoisted(() => ({
     streamMock: vi.fn() as Mock<(...args: any[]) => any>,
@@ -140,6 +141,15 @@ describe('runDeskToolLoop self-heal', () => {
         // The corrective turn rode the conversation…
         const errTurn = result.messages.find(m => m.role === 'user' && String(m.content).includes('TOOL CALL ERROR'));
         expect(errTurn).toBeTruthy();
+        // Both of these ride the user role, so provenance has to be IN the
+        // text: the trader's request is bare, the harness's repair is marked.
+        // Without the mark a seat reads an automated retry as a scolding human.
+        expect(String(errTurn?.content).startsWith(HARNESS_TURN_MARK)).toBe(true);
+        const traderTurn = result.messages.find(
+            m => m.role === 'user' && m.content === 'scan eth all timeframes',
+        );
+        expect(traderTurn).toBeTruthy();
+        expect(String(traderTurn?.content)).not.toContain(HARNESS_TURN_MARK);
         expect(String(errTurn?.content)).toContain('<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>');
         // …the transcript saw the self-heal and the per-call rows…
         expect(events.some(e => e.includes('self-healing'))).toBe(true);

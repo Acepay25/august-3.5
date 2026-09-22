@@ -48,7 +48,7 @@ export const DiagnosticsPanel: React.FC = () => {
         <div className="p-3 rounded-xl bg-red-950/30 border border-red-500/20 space-y-1">
             <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-red-400">{label}</span>
-                <span className="text-[10px] text-zinc-500">
+                <span className="text-ui-xs text-zinc-500">
                     {new Date(error.timestamp).toLocaleString()}
                 </span>
             </div>
@@ -59,7 +59,7 @@ export const DiagnosticsPanel: React.FC = () => {
                 </p>
             )}
             {error.filename && (
-                <p className="text-[10px] text-zinc-500">
+                <p className="text-ui-xs text-zinc-500">
                     {error.filename}:{error.lineno}:{error.colno}
                 </p>
             )}
@@ -67,12 +67,12 @@ export const DiagnosticsPanel: React.FC = () => {
                 <>
                     <button
                         onClick={() => setShowStack(showStack === label ? null : label)}
-                        className="text-[10px] text-zinc-400 underline hover:text-zinc-200"
+                        className="text-ui-xs text-zinc-400 underline hover:text-zinc-200"
                     >
                         {showStack === label ? 'Hide stack' : 'Show stack'}
                     </button>
                     {showStack === label && (
-                        <pre className="text-[10px] text-zinc-500 overflow-x-auto whitespace-pre-wrap mt-1 max-h-32 overflow-y-auto">
+                        <pre className="text-ui-xs text-zinc-500 overflow-x-auto whitespace-pre-wrap mt-1 max-h-32 overflow-y-auto">
                             {error.stack}
                         </pre>
                     )}
@@ -126,7 +126,7 @@ export const DiagnosticsPanel: React.FC = () => {
                 <ul className="space-y-2">
                     {leaks.map((entry, index) => (
                         <li key={`${entry.at}-${index}`} className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
-                            <p className="text-[10px] text-zinc-600">
+                            <p className="text-ui-xs text-zinc-600">
                                 {entry.at ? new Date(entry.at).toLocaleString() : 'Unknown time'}
                             </p>
                             <p className="mt-1 text-xs text-zinc-400 break-words">{entry.snippet}</p>

@@ -99,7 +99,7 @@ const fmtDay = (iso: string | undefined): string => {
 };
 
 /** Shared cell chrome: one line of data, hairline-separated, no card inside. */
-const TH = 'whitespace-nowrap px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-zinc-600';
+const TH = 'whitespace-nowrap px-3 py-2 text-left text-ui-xs font-bold uppercase tracking-wider text-zinc-600';
 const TD = 'whitespace-nowrap px-3 py-2 align-middle';
 const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-1.5 py-1 text-[11px] transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] focus:outline-none';
 
@@ -141,7 +141,7 @@ export const RegimeMatrixStrip: React.FC<{
             <div className="mb-1.5 flex items-center gap-1.5">
                 <Grid3x3 className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
                 <span className="ui-kicker">Family edge by regime</span>
-                <span className="text-[10px] text-zinc-600">· tint = win rate, opacity = evidence</span>
+                <span className="text-ui-xs text-zinc-600">· tint = win rate, opacity = evidence</span>
             </div>
             <div
                 className="grid gap-1"
@@ -151,7 +151,7 @@ export const RegimeMatrixStrip: React.FC<{
                 {MATRIX_REGIMES.map(r => (
                     <span
                         key={r}
-                        className={`rounded-control px-1 pb-0.5 text-center text-[9px] font-bold uppercase tracking-wider ${
+                        className={`rounded-control px-1 pb-0.5 text-center text-ui-2xs font-bold uppercase tracking-wider ${
                             r === currentRegime ? 'text-cyan-400' : 'text-zinc-600'
                         }`}
                     >
@@ -538,7 +538,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                             {/* Name + the claim it makes. */}
                                             <td className={`${TD} max-w-[260px]`}>
                                                 <div className="truncate text-[12px] font-semibold text-zinc-100" title={title}>{title}</div>
-                                                <div className="truncate text-[10px] text-zinc-500">{claim}</div>
+                                                <div className="truncate text-ui-xs text-zinc-500">{claim}</div>
                                             </td>
                                             <td className={TD}>
                                                 <StatusPill kicker tone={statusTone(meta.status)} className={retired ? 'line-through' : ''}>
@@ -669,7 +669,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                                             : 'text-zinc-500 hover:border-rose-500/40 hover:text-rose-300'}`}
                                                     >
                                                         {armed
-                                                            ? <span className="text-[10px] uppercase tracking-wider">Confirm</span>
+                                                            ? <span className="text-ui-xs uppercase tracking-wider">Confirm</span>
                                                             : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
                                                     </button>
                                                 </div>

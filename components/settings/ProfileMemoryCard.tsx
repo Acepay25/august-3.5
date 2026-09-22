@@ -56,7 +56,7 @@ const ProfileMemoryCard: React.FC = () => {
                     className="h-3.5 w-3.5 accent-cyan-400" />
                 <span className="text-[11px] text-zinc-300">
                     Learn my trading habits automatically
-                    <span className="block text-[10px] text-zinc-500">
+                    <span className="block text-ui-xs text-zinc-500">
                         Every couple of sessions, Chart AI distills durable facts — preferred symbols, risk habits,
                         recurring mistakes — so the next session starts where the last one ended.
                     </span>
@@ -71,7 +71,7 @@ const ProfileMemoryCard: React.FC = () => {
                     {entries.map(e => (
                         <li key={e.slug} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5">
                             <div className="flex items-start gap-2">
-                                <span className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${KIND_STYLE[e.kind]}`}>
+                                <span className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider ${KIND_STYLE[e.kind]}`}>
                                     {e.kind}
                                 </span>
                                 {e.source === 'auto' && (
@@ -87,7 +87,7 @@ const ProfileMemoryCard: React.FC = () => {
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[11px] font-semibold leading-snug text-zinc-200">{e.description}</p>
                                     <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-400">{e.body}</p>
-                                    <p className="mt-1 font-mono text-[9px] text-zinc-600">{e.slug} · {new Date(e.updatedAt).toLocaleDateString()}</p>
+                                    <p className="mt-1 font-mono text-ui-2xs text-zinc-600">{e.slug} · {new Date(e.updatedAt).toLocaleDateString()}</p>
                                 </div>
                                 <button type="button" onClick={() => { forgetProfileMemory(e.slug); refresh(); }}
                                     aria-label={`Forget memory ${e.slug}`} title="Forget"

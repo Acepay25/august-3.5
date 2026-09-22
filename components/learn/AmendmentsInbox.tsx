@@ -23,7 +23,7 @@ const StatusBadge: React.FC<{ a: MemoryAmendment }> = ({ a }) => {
         rejected: 'bg-zinc-900 text-zinc-600 line-through',
     };
     return (
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${map[a.status]}`}>
+        <span className={`rounded px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[a.status]}`}>
             {a.status}
         </span>
     );
@@ -75,12 +75,12 @@ export const AmendmentsInbox: React.FC = () => {
                 <div key={a.id} className="rounded-lg border border-amber-900/40 bg-zinc-900/40 p-3" data-testid={`amendment-${a.id}`}>
                     <div className="flex items-center gap-2">
                         <code className="text-[12px] font-semibold text-zinc-200">{a.fileName}</code>
-                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">{a.kind}</span>
+                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-400">{a.kind}</span>
                         <StatusBadge a={a} />
-                        <span className="ml-auto shrink-0 text-[10px] text-zinc-600">{a.proposedBy} · {new Date(a.createdAt).toLocaleString()}</span>
+                        <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{a.proposedBy} · {new Date(a.createdAt).toLocaleString()}</span>
                     </div>
                     <p className="mt-1.5 text-[11px] leading-snug text-zinc-400"><span className="text-zinc-600">Reason:</span> {a.reason}</p>
-                    <pre className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-zinc-950/60 p-2 text-[10px] leading-4 text-zinc-300 custom-scrollbar">{a.proposedContent}</pre>
+                    <pre className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-zinc-950/60 p-2 text-ui-xs leading-4 text-zinc-300 custom-scrollbar">{a.proposedContent}</pre>
                     <div className="mt-2 flex items-center gap-2">
                         <button
                             type="button"

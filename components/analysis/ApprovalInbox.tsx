@@ -26,7 +26,7 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
     if (!isVisible) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/50 sm:items-stretch" role="dialog" aria-label="Approvals">
+        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/50 sm:items-stretch" role="dialog" aria-label="Approvals" data-testid="approval-inbox">
             <button type="button" className="absolute inset-0 cursor-default" aria-label="Close approvals overlay" onClick={onClose} />
             <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
@@ -46,7 +46,7 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                         />
                     ) : items.map(item => (
                         <div key={item.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{item.kind}</div>
+                            <div className="text-ui-xs font-bold uppercase tracking-widest text-zinc-600">{item.kind}</div>
                             <div className="mt-1 text-sm font-semibold text-zinc-100">{item.title}</div>
                             <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">{item.detail}</p>
                             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -70,7 +70,7 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                                             parse. Saying so keeps this an override
                                             surface instead of reading as the normal
                                             path the model was built to walk. */}
-                                        <p className="mb-1.5 w-full text-[10px] leading-4 text-zinc-600">
+                                        <p className="mb-1.5 w-full text-ui-xs leading-4 text-zinc-600">
                                             {supervisorStore.isAutoEnabled()
                                                 ? 'The supervisor could not decide this one — it is yours to judge.'
                                                 : 'Automatic supervision is paused, so drafts wait for you here.'}

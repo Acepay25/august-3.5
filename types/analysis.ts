@@ -108,7 +108,7 @@ export interface TradeAnalysis {
    *  but this tells the UI and journal the card is a measurement failure —
    *  never a deliberate no-trade opinion — and must not be graded as one. */
   verdictReview?: {
-    reason: 'uncited' | 'ungrounded' | 'incomplete-plan';
+    reason: 'uncited' | 'ungrounded' | 'incomplete-plan' | 'truncated-plan';
     /** The moderator's directional call before it was overridden. */
     from?: 'Long' | 'Short';
   };

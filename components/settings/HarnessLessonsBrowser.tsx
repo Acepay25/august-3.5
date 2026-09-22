@@ -24,12 +24,12 @@ export const HarnessLessonsBrowser: React.FC = () => {
                 <button
                     type="button"
                     onClick={refresh}
-                    className="text-[10px] uppercase tracking-widest text-zinc-500 hover:text-zinc-300"
+                    className="text-ui-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-300"
                 >
                     Refresh
                 </button>
             </div>
-            <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+            <p className="mt-1 text-ui-xs leading-relaxed text-zinc-600">
                 What the harness learned about provider wires (P7). Clearing a wire lesson
                 un-pins thinking-off for that class until the next probe re-learns it.
             </p>
@@ -40,16 +40,16 @@ export const HarnessLessonsBrowser: React.FC = () => {
                     {lessons.map(l => (
                         <li key={l.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/50 px-3 py-2">
                             <div className="min-w-0">
-                                <p className="text-[10px] uppercase tracking-widest text-zinc-500">
+                                <p className="text-ui-xs uppercase tracking-widest text-zinc-500">
                                     {l.kind} · {l.scope}{l.provider ? ` · ${l.provider}` : ''} · {l.at.slice(0, 10)}
                                 </p>
                                 <p className="mt-0.5 text-[11px] leading-snug text-zinc-300">{l.lesson}</p>
-                                <p className="mt-0.5 truncate text-[10px] text-zinc-600" title={l.pattern}>{l.pattern}</p>
+                                <p className="mt-0.5 truncate text-ui-xs text-zinc-600" title={l.pattern}>{l.pattern}</p>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => clearOne(l.id)}
-                                className="shrink-0 rounded-md px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
+                                className="shrink-0 rounded-md px-2 py-0.5 text-ui-xs uppercase tracking-widest text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
                             >
                                 Clear
                             </button>

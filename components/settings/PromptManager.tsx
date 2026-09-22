@@ -358,7 +358,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                             </span>
                                         </span>
                                         {overrides[entry.id] !== undefined && (
-                                            <span className="text-[10px] uppercase tracking-widest text-zinc-500 shrink-0">edited</span>
+                                            <span className="text-ui-xs uppercase tracking-widest text-zinc-500 shrink-0">edited</span>
                                         )}
                                         <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
                                     </button>

@@ -1,5 +1,6 @@
 import type { AnalystConsensus, TradeAnalysis } from '../../types';
 import { parsePrice } from '../../utils/analysisUtils';
+import { duplicateTextPairs } from '../ui/EnsembleAnalystService';
 
 // =============================================================================
 // PRE-DEBATE DIVERGENCE CHECK & ECHO CHAMBER PREVENTION
@@ -249,16 +250,47 @@ export const enforceCitedVerdict = <T extends {
 };
 
 /**
+ * Name the seats that were served the same generation, in the words the
+ * moderator needs.
+ *
+ * The duplicate check has run since long before this line existed — but it ran
+ * in the pipeline hook and stopped at a toast, so the arbiter was never told.
+ * An echoed pair is ONE argument wearing two name tags, and a moderator that
+ * counts it as two confirmations is inflating confidence on an artifact of the
+ * user's router. That is the same discipline the desk tools apply to a cached
+ * payload: a replay must announce itself as a replay, or it reads as evidence.
+ */
+const duplicatedGenerationLines = (
+    analystsResults: readonly { thoughtProcess: string; finalOutput?: string }[],
+    analystNames: readonly string[],
+): string => {
+    const pairs = duplicateTextPairs(analystsResults.map(r =>
+        (r.finalOutput?.trim() ? r.finalOutput : r.thoughtProcess)));
+    if (pairs.length === 0) return '';
+    const nameOf = (index: number): string => analystNames[index] ?? `seat ${index + 1}`;
+    return [
+        '**⚠️ DUPLICATED GENERATIONS — THESE SEATS ARE NOT INDEPENDENT**',
+        'The provider upstream served the same text to more than one seat:',
+        ...pairs.map(p => `- ${nameOf(p.a)} ⇄ ${nameOf(p.b)}`
+            + (p.identical ? ' — identical text' : ` — ${Math.round(p.similarity * 100)}% similar`)),
+        'Count each pair above as ONE argument, not two. Do not raise confidence because they agree, and do not cite the repetition as corroboration — name the single argument you are actually relying on.',
+    ].join('\n');
+};
+
+/**
  * Generate a concise divergence summary for the moderator prompt.
  */
 export const generateDivergenceContext = (
     analystsResults: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string }[],
-    _analystNames: string[]
+    analystNames: string[]
 ): string => {
-    const analysis = analyzePreDebateDivergence(analystsResults, _analystNames);
+    const analysis = analyzePreDebateDivergence(analystsResults, analystNames);
+    // Computed first: an echoed roster must be named even when the divergence
+    // score itself has nothing to complain about.
+    const echoed = duplicatedGenerationLines(analystsResults, analystNames);
 
     if (analysis.score === 0 && !analysis.isEchoChamber) {
-        return '';
+        return echoed;
     }
 
     let context = `
@@ -272,6 +304,8 @@ ${analysis.details.map(d => `- ${d}`).join('\n')}
     if (analysis.dissentProtocol) {
         context += '\n' + analysis.dissentProtocol;
     }
+
+    if (echoed) context += '\n\n' + echoed;
 
     return context.trim();
 };

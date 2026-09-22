@@ -38,7 +38,7 @@ export const DeskSteerInput: React.FC<DeskSteerInputProps> = ({ liveSeats, onSub
             data-testid={testId}
             className="flex items-center gap-2 rounded-md border border-white/15 bg-zinc-950/90 px-2.5 py-1.5"
         >
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            <span className="shrink-0 text-ui-xs font-semibold uppercase tracking-widest text-zinc-500">
                 Steer
             </span>
             <select

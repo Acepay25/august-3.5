@@ -38,6 +38,8 @@ import {
 import { annotateVerdictCitations } from '../../services/learning/MemoryInjectionService';
 import { maybeQueueVerdictSkillDraft } from '../../utils/verdictSkillDraft';
 import { appendSessionUsage } from '../../utils/sessionUsage';
+import { withDetectedTradeType } from '../../services/analysis/ScalpDetectionService';
+import { peekTruncations } from '../../utils/finishReason';
 import { estimateCostUsd } from '../../utils/tokenUsage';
 import { notifyAnalysisComplete } from '../../services/infrastructure/CompletionNotifications';
 import { VetoLedgerService } from '../../services/ui/VetoLedgerService';
@@ -314,6 +316,11 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
         const rescueSource = lastModeratorTurn || fullResponseText;
         const prosePlan = parseProseTradePlan(rescueSource);
         const rescuePlan = prosePlan ? { ...prosePlan } : null;
+        // A ceiling hit inside the verdict window means the plan text itself
+        // arrived incomplete — a different failure from a moderator that simply
+        // never wrote a parseable plan, and one the operator can fix by raising
+        // maxTokens. Read-only peek: the window stays open for the retry.
+        const verdictTruncation = peekTruncations();
         const canRescue = Boolean(
             rescuePlan?.direction
             && rescuePlan.entry
@@ -323,7 +330,9 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
         );
         const fallbackStrategy = isModeratorError
             ? `Connection Error: ${errorMessage}. Please try again.`
-            : 'Plan incomplete — the moderator markdown could not be parsed. Open the Floor for the debate.';
+            : verdictTruncation.truncated
+                ? `Plan truncated — the moderator hit its output-token ceiling on ${verdictTruncation.truncatedCalls} verdict call(s) before finishing the trade plan. Raise the verdict token budget or shorten the transcript.`
+                : 'Plan incomplete — the moderator markdown could not be parsed. Open the Floor for the debate.';
         finalAnalysis = sanitizeTradeAnalysis({
             coinName: canRescue ? (prosePlan?.coinName ?? finalSymbol ?? undefined) : (finalSymbol ?? undefined),
             direction: canRescue ? (prosePlan?.direction ?? 'Neutral') : 'Neutral',
@@ -331,7 +340,9 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
             // A verdict nobody could parse is a measurement failure,
             // not a neutral opinion — quarantine it (never graded,
             // flagged in the UI and journal).
-            verdictReview: canRescue ? undefined : { reason: 'incomplete-plan' },
+            verdictReview: canRescue ? undefined : {
+                reason: verdictTruncation.truncated ? 'truncated-plan' as const : 'incomplete-plan' as const,
+            },
             probability: canRescue ? prosePlan?.probability : undefined,
             entryPoints: canRescue && prosePlan?.entry ? [{ price: prosePlan.entry }] : undefined,
             stopLoss: canRescue ? prosePlan?.stopLoss : undefined,
@@ -405,7 +416,12 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
     if (currentAbortControllerSignal.aborted || !isCurrentRequest()) {
         throw new DOMException('Analysis run cancelled', 'AbortError');
     }
-    const processedAnalysis = processNewAnalysis(finalAnalysis);
+    // The journal's ◆ scalp / ◇ swing filter reads a field nothing ever wrote,
+    // so it could only ever land on "nothing is classified". Labelled here,
+    // AFTER processNewAnalysis recomputes the SL percentage the detector reads.
+    // Label-only on purpose: see `withDetectedTradeType` for why the
+    // validity-filling sibling must not run over every verdict.
+    const processedAnalysis = withDetectedTradeType(processNewAnalysis(finalAnalysis));
     const liveBtResult = input.liveBtResult;
 
     const predicateCeiling = typeof input.predicateCeiling === 'number' && Number.isFinite(input.predicateCeiling)

@@ -132,8 +132,8 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
         <div className="border-t border-zinc-800/80 pt-1" data-testid="memory-provenance-strip">
             <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
                 className="flex w-full items-center gap-1.5 py-0.5 text-left">
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-zinc-600">memory</span>
-                <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-500">{parts.join(' · ')}</span>
+                <span className="shrink-0 font-mono text-ui-2xs uppercase tracking-widest text-zinc-600">memory</span>
+                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-500">{parts.join(' · ')}</span>
                 {grouped.heldOut && (
                     <StatusPill
                         tone="warn"
@@ -148,9 +148,9 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                 <div className="mt-0.5 mb-1 space-y-0.5 pl-1">
                     {grouped.skills.map(slug => (
                         <div key={slug} className="flex items-center gap-1.5">
-                            <span className="w-9 shrink-0 font-mono text-[9px] uppercase tracking-wider text-cyan-300/80">skill</span>
+                            <span className="w-9 shrink-0 font-mono text-ui-2xs uppercase tracking-wider text-cyan-300/80">skill</span>
                             <button type="button" onClick={() => openSkillCard(slug)}
-                                className="min-w-0 flex-1 truncate text-left font-mono text-[10px] text-zinc-300 hover:underline">
+                                className="min-w-0 flex-1 truncate text-left font-mono text-ui-xs text-zinc-300 hover:underline">
                                 /{slug}
                             </button>
                             <button type="button" onClick={() => flag(slug)}
@@ -163,10 +163,10 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                     ))}
                     {grouped.others.map(({ kind, path }) => (
                         <div key={`${kind}:${path}`} className="flex items-center gap-1.5">
-                            <span className="w-9 shrink-0 truncate font-mono text-[9px] uppercase tracking-wider text-zinc-600">
+                            <span className="w-9 shrink-0 truncate font-mono text-ui-2xs uppercase tracking-wider text-zinc-600">
                                 {(KIND_LABEL[kind] ?? kind).split(' ')[0]}
                             </span>
-                            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-500">{path}</span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-ui-xs text-zinc-500">{path}</span>
                         </div>
                     ))}
                 </div>

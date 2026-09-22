@@ -21,7 +21,7 @@ const DirectionFilter: React.FC<{ value: string; onChange: (v: string) => void }
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+          className={`rounded-full px-2.5 py-1 text-ui-xs font-semibold uppercase tracking-wider transition-colors ${
             value === opt ? 'bg-cyan-500/20 border border-cyan-400/40 text-cyan-300' : 'border border-white/10 text-zinc-400 hover:text-zinc-200'
           }`}
         >
@@ -65,7 +65,7 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
             <div className="text-xs font-black uppercase tracking-widest text-cyan-300">Saved analyses</div>
-            <div className="text-[10px] text-zinc-500">{savedAnalyses.length} saved · click a row to expand</div>
+            <div className="text-ui-xs text-zinc-500">{savedAnalyses.length} saved · click a row to expand</div>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
             <X className="h-4 w-4" />
@@ -98,13 +98,13 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
                   onClick={() => setExpandedId(expanded ? null : sa.id)}
                   className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-zinc-800/60"
                 >
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${a.direction === 'Long' ? 'text-emerald-400' : a.direction === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{a.direction}</span>
+                  <span className={`text-ui-xs font-black uppercase tracking-wider ${a.direction === 'Long' ? 'text-emerald-400' : a.direction === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{a.direction}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-semibold text-zinc-200">{a.coinName || 'Unknown asset'}</span>
-                    <span className="block truncate text-[10px] text-zinc-500">{sa.userPrompt || modelsLabel(sa)}</span>
+                    <span className="block truncate text-ui-xs text-zinc-500">{sa.userPrompt || modelsLabel(sa)}</span>
                   </span>
-                  <span className="shrink-0 text-[9px] text-zinc-500">{new Date(sa.timestamp).toLocaleString()}</span>
-                  <span className="shrink-0 text-[9px] text-zinc-500">{expanded ? '▾' : '▸'}</span>
+                  <span className="shrink-0 text-ui-2xs text-zinc-500">{new Date(sa.timestamp).toLocaleString()}</span>
+                  <span className="shrink-0 text-ui-2xs text-zinc-500">{expanded ? '▾' : '▸'}</span>
                 </button>
                 {expanded && (
                   <div className="border-t border-white/5 px-3 py-2">
@@ -117,12 +117,12 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
                       <span className="text-zinc-500">Models</span><span className="text-zinc-200 text-right truncate">{modelsLabel(sa)}</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-[9px] italic text-zinc-600">“{sa.userPrompt || '—'}”</span>
+                      <span className="min-w-0 truncate text-ui-2xs italic text-zinc-600">“{sa.userPrompt || '—'}”</span>
                       {onLocateMessage && (
                         <button
                           type="button"
                           onClick={() => onLocateMessage(sa.id)}
-                          className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                          className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-ui-2xs uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
                         >
                           Locate in chat
                         </button>

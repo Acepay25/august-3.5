@@ -30,7 +30,14 @@ const stripMd = (text: string): string => text.replace(/\*\*/g, '');
  */
 const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
     if (!pack) return null;
-    const { statsLine, causePattern, similar, skills, doctrineHeader } = pack;
+    // `Message.evidencePack` is persisted, and the type says these arrays are
+    // there while no boundary enforces it. Reading `.length` on a missing one
+    // throws inside the caller's message map — which does not blank this card,
+    // it blanks every message after it. Default them: a pack missing its
+    // similar-trades list should render the rest of itself.
+    const { statsLine, causePattern, doctrineHeader } = pack;
+    const similar = Array.isArray(pack.similar) ? pack.similar : [];
+    const skills = Array.isArray(pack.skills) ? pack.skills : [];
     const parts = [
         statsLine ? 'journal record' : '',
         causePattern ? 'failure pattern' : '',
@@ -54,7 +61,7 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                     )}
                     {similar.length > 0 && (
                         <div>
-                            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Similar closed trades</p>
+                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Similar closed trades</p>
                             <ul className="mt-1 space-y-1">
                                 {similar.map((s, i) => (
                                     <li key={`${s.coin}-${s.date}-${i}`} className="text-[11px] leading-snug text-zinc-400">
@@ -69,7 +76,7 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                     )}
                     {skills.length > 0 && (
                         <div>
-                            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Matched notebook skills</p>
+                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Matched notebook skills</p>
                             <ul className="mt-1 space-y-1">
                                 {skills.map((s, i) => (
                                     <li key={i} className="text-[11px] leading-snug text-zinc-400">{stripMd(s).replace(/^-\s*/, '')}</li>

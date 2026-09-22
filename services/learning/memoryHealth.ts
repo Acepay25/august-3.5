@@ -21,7 +21,8 @@
  *    days-since-edit — and never folded into the stale count.
  */
 
-import { getMemoryFiles } from './MemoryFilesService';
+import { getMemoryFiles, getNotebookSize, getNotebookWriteFailure, type NotebookWriteFailure } from './MemoryFilesService';
+import { describePressure, type NotebookPressure } from '../../utils/memoryBudget';
 import {
     isSkillFile, parseSkillMarkdown, EVIDENCE_STALE_DAYS, type SkillMeta,
 } from './SkillMemoryService';
@@ -30,6 +31,7 @@ import { estimateMemoryTokensPerRun } from './MemoryRetrievalService';
 import { readSettledBeliefs } from './settledBeliefs';
 import { BELIEF_FLAG_FINGERPRINT_PREFIX } from './beliefChallenge';
 import { listTombstones } from './skillGraveyard';
+import { listSuspendedSkills } from './skillIdleLifecycle';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { listLearningProposals } from '../../utils/learningQueue';
 import { listAmendments } from './memoryAmendments';
@@ -84,6 +86,19 @@ export interface MemoryHealthReport {
         files: number;
         enabled: number;
         chars: number;
+        /** UTF-16 bytes of the whole blob, which is the unit the platform's
+         *  quota is metered in — `chars` cannot show that a CJK-heavy notebook
+         *  is closer to refusing writes. */
+        bytes: number;
+        /** `null` until the notebook has been loaded or written this session. */
+        pressure: NotebookPressure | null;
+        /** The last write the storage layer REFUSED, or null when writes are
+         *  reaching disk. Pressure says the blob is big; this says the trader's
+         *  learning stopped being saved at all — a different, louder fact. */
+        writeFailure: NotebookWriteFailure | null;
+        /** Enabled skills the idle lifecycle dropped from prompts, so a
+         *  silently-shrinking skill set is explainable on screen. */
+        suspended: number;
         /** Worst-case prompt cost of memory injection, in tokens. */
         promptTokensWorstCase: number;
     };
@@ -247,8 +262,26 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
 
     const diaryFiles = files.filter(f => folderName.get(f.folderId) === 'trader-diary');
     const skills = bucketSkills(metas);
+    // Suspension is its own fact (`suspendedAt`), not `!enabled` — a
+    // user-retired file is also disabled, and reporting that as "the app
+    // stopped using it" would be a lie. Counted by the lifecycle module itself
+    // so this report and the hygiene log can never disagree.
+    const suspendedSkills = listSuspendedSkills();
+    const notebookSize = getNotebookSize();
+    const writeFailure = getNotebookWriteFailure();
 
     const flags: string[] = [];
+    // FIRST, and above everything else: a notebook write that the storage layer
+    // refused means nothing on this page is on disk. Every other flag here is a
+    // question of what the app learned; this one is whether it kept it.
+    if (writeFailure) {
+        const mb = (writeFailure.bytes / (1024 * 1024)).toFixed(2);
+        flags.push(writeFailure.kind === 'quota'
+            ? `NOT SAVING — storage refused the ${mb} MB notebook as full, so learning is living only in this session.`
+                + ` ${writeFailure.streak} write${writeFailure.streak === 1 ? '' : 's'} lost since the last one reached disk. Free space or delete old backups, then export one.`
+            : `NOT SAVING — the notebook write failed (${writeFailure.message}).`
+                + ` ${writeFailure.streak} write${writeFailure.streak === 1 ? '' : 's'} lost since the last one reached disk; everything below is read from memory, not from disk.`);
+    }
     if (queues.supervisorPending > 0) {
         flags.push(`${queues.supervisorPending} item${queues.supervisorPending === 1 ? '' : 's'} waiting on the supervisor.`);
     }
@@ -268,6 +301,21 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
         flags.push(`${challengedBeliefs.length} settled belief${challengedBeliefs.length === 1 ? '' : 's'} ${challengedBeliefs.length === 1 ? 'is' : 'are'} contradicted by winning trades and still standing — the challenge is waiting in the queue.`);
     }
 
+    // Skills the idle lifecycle took out of prompts are reversible, so they are
+    // a note rather than a problem — but a user has to be able to see that the
+    // app stopped using a rule on its own, and where to put it back.
+    if (suspendedSkills.length > 0) {
+        const plural = suspendedSkills.length === 1 ? '' : 's';
+        const pronoun = suspendedSkills.length === 1 ? 'it' : 'them';
+        flags.push(`${suspendedSkills.length} skill${plural} suspended from prompts by the idle sweep`
+            + ` — re-enable ${pronoun} in the notebook, or retire ${pronoun} for good.`);
+    }
+    // The budget's own state, so a refused notebook write is explainable before
+    // the user wonders why learning appears to have stopped.
+    if (notebookSize && notebookSize.pressure !== 'ok') {
+        flags.push(describePressure(notebookSize));
+    }
+
     return {
         generatedAt: Date.now(),
         folders: [...byFolder.values()].sort((a, b) => b.files - a.files),
@@ -276,6 +324,10 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
             files: files.length,
             enabled: files.filter(f => f.enabled).length,
             chars: files.reduce((n, f) => n + f.content.length, 0),
+            bytes: notebookSize?.bytes ?? 0,
+            pressure: notebookSize?.pressure ?? null,
+            writeFailure,
+            suspended: suspendedSkills.length,
             promptTokensWorstCase: estimateMemoryTokensPerRun().worstCase,
         },
         unobserved,

@@ -25,6 +25,7 @@ import type { CraftedSkill } from '../../schemas/learning';
 import { parseCraftedSkill } from '../../schemas/learning';
 import { getQuickResponse } from '../providers/GenericProviderService';
 import { extractAndParseJson } from '../../utils/jsonUtils';
+import { dataUnavailable } from '../../utils/harnessMarks';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { fetchKlines } from '../analysis/KlineService';
 import { PREDICATE_GRAMMAR_HINT } from '../analysis/skillPredicate';
@@ -260,7 +261,7 @@ export async function scanChartForSkills(input: ChartScanInput): Promise<ChartSc
     }));
     if (candles.length < 60) {
         return empty(candles.length,
-            `DATA_UNAVAILABLE: ${input.symbol} ${input.interval} — only ${candles.length} candles returned. The source failed; do not infer an empty tape.`);
+            dataUnavailable(`${input.symbol} ${input.interval}`, `only ${candles.length} candles returned`, 'The source failed; do not infer an empty tape'));
     }
 
     const config = input.config ?? await resolveScanConfig(username);

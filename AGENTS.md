@@ -18,16 +18,71 @@ npm run dev                 # Start development server on port 3000
 npm run build               # tsc --noEmit && vite build (production)
 npm run preview             # Preview production build locally
 npm run typecheck           # tsc --noEmit
+npm run typecheck:scripts   # tsc over scripts/** (tsconfig.scripts.json)
+npm run typecheck:electron  # node --check electron/*.cjs — see caveat below
 npm run test                # vitest run
 npm run test:watch          # vitest watch mode
-npm run lint                # eslint (errors only; warnings are tolerated)
+npm run test:coverage       # vitest run --coverage (CI has ratcheted thresholds)
+npm run lint                # eslint WITH a max-warnings ratchet (see Code Style)
+npm run lint:loose          # eslint without the cap, for a local cleanup pass
+npm run e2e                 # playwright (5 smoke tests, drives `npm run dev`)
+npm run boot-probe          # launch the built bundle in Chromium, fail on pageerror
+npm run render-probe        # drive the running app in Chromium; assert rendered
+                            #   ROW COUNTS per conversation (dock + Agents),
+                            #   send order, reload persistence, that a settled
+                            #   verdict + malformed persisted audit data drops no
+                            #   row, that all six nav surfaces mount, that the
+                            #   Learn and Journal surfaces have no INERT control
+                            #   (each press must change text, open an overlay, or
+                            #   route; already-selected controls and
+                            #   browser-chrome actions like CSV export are
+                            #   excluded), and that Settings → Data can back up /
+                            #   export / import — plus zero pageerrors. Failures
+                            #   leave a screenshot in .probe-artifacts/. Needs no
+                            #   API key: it points the app at
+                            #   scripts/mock-provider.cjs, a local loopback model
+                            #   server. `boot-probe` asks "does it start"; this
+                            #   asks "did every message actually appear, and does
+                            #   every button do something".
+npm run installer-smoke     # drive the PACKAGED exe; the strongest gate here
 npm run electron:dev        # Vite dev server + Electron window
 npm run electron:build      # Build + package Windows installer
 npm run electron:release    # Build + publish GitHub release (via release.yml on tag push)
 ```
 
-CI (`.github/workflows/release.yml`) runs `tsc`, `vitest`, `vite build`, then
-`electron-builder --publish always` whenever a `v*` tag is pushed.
+### What each gate does NOT catch
+
+`tsconfig.json` excludes `electron/`, so **`npm run typecheck` never reads the
+main process or preload** — a syntax break in `electron/main.cjs` passes tsc,
+passes `vitest` (no test imports the shell), and only fails when a user launches
+the packaged app. Run `npm run typecheck:electron` (wired into both CI and the
+release gate) or `node --check` the file directly after editing it.
+
+**Unit tests cannot see the transcript.** `tests/` mounts components in jsdom, so
+a defect that only shows when a LIST of messages renders — a row dropped after
+the second one, or a decorative panel throwing inside `messages.map()` and taking
+every later message down with it — passes the whole suite green. Two finished
+panels shipped unmounted for exactly this reason and no test noticed. Any change
+to how a conversation renders must be checked with `npm run render-probe`, which
+counts rendered rows in a real browser instead of asserting a component returned
+the right thing. It now sweeps all six nav surfaces, the approvals inbox, the
+Agents desk pane, and Settings → Data (back up / export / import), and asserts
+zero pageerrors throughout. Two rules learned the hard way, both encoded in it:
+**overlays mount outside `<main>`**, so measuring `<main>` after opening one
+re-reports the previous surface and passes vacuously — assert the overlay's own
+root; and **a check whose measurement is identical across two different states
+is measuring the wrong thing.** Run it on an idle machine — alongside a build or
+the full suite it reports blank surfaces that the app was seconds from filling.
+
+CI (`.github/workflows/ci.yml`) runs `tsc`, `vitest`, `eslint`, the Playwright
+smoke suite, `vite build`, `boot-probe` and `render-probe`. The release gate
+(`.github/workflows/release.yml`) runs the same static + probe chain, adds
+`installer-smoke` on the packaged exe, and only then builds and publishes —
+`electron-builder --publish always` fires on a `v*` tag push. `render-probe` sits
+in both because it is the only gate that can see a rendered row: unit tests
+mount components in jsdom and cannot see a transcript drop one message out of a
+list. Steps run sequentially, so it never measures a surface while a build is
+competing for the machine.
 
 ## Project Structure
 
@@ -37,19 +92,91 @@ CI (`.github/workflows/release.yml`) runs `tsc`, `vitest`, `vite build`, then
 ├── hooks/                  # Custom hooks (useAnalysisPipeline, useTradeLogging, …)
 ├── services/               # AI provider integration & business logic
 │   ├── providers/          # GenericProviderService + GenericAnalysisService (the only
-│   │                       #   provider clients — legacy per-provider services were removed)
-│   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), backtest data
-│   ├── backtesting/        # Backtesting, model performance, live backtest
-│   ├── learning/           # Pattern memory, rules, insights, global memory
+│   │                       #   provider clients — legacy per-provider services were removed),
+│   │                       #   ensembleService (the debate engine)
+│   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), desk tools
+│   ├── backtesting/        # Backtesting, model performance, live backtest, outcomeEngine
+│   ├── learning/           # Skills, pattern memory, rules, insights, global memory
+│   ├── agents/             # Bot roster, seat personas, mailbox, routines, group rounds
+│   ├── bots/               # Per-bot memory + system notes
+│   ├── tools/              # toolForge (user/model-authored HTTPS tools)
+│   ├── research/           # Fixed 4-stage web research plan
+│   ├── trade/              # Trade journal actions + proposal parsing
+│   ├── desk/               # Desk layout/roles only — no market data lives here
+│   ├── automation/         # Scheduled automations (cron + run history)
+│   ├── validation/         # Accuracy-mode validation, gate scoring
 │   ├── ui/                 # Autopilot, debates, price alerts
 │   └── infrastructure/     # SQLite, Preferences, ProviderConfigService, backups
-├── constants/              # models, prompts (per-domain files)
+├── constants/              # models, prompts (per-domain files), promptRegistry
 ├── schemas/                # zod boundary schemas (tradeAnalysis, learning)
-├── types/                  # TypeScript types (analysis, trade, provider, message, …)
-├── utils/                  # analysisUtils, sanitizers, jsonUtils, providerUtils, …
-├── tests/                  # Vitest suites (incl. debate pipeline + financial math)
-└── electron/               # main.cjs + preload.cjs (desktop shell, safeStorage, auto-update)
+├── shared/                 # providerRequestPolicy.cjs — the ONE wire policy,
+│                           #   imported by renderer, vite dev proxy AND electron main
+├── types/                  # analysis, trade, provider, progress, message, learning …
+├── utils/                  # See "Canonical single-source modules" below
+├── tests/                  # Vitest suites (370 files)
+└── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
+
+### Canonical single-source modules
+
+When you need one of these, use the existing module — a second implementation
+is how the numbers drift apart:
+
+- `utils/riskReward.ts` — the PLANNED risk:reward ratio (nearest target ÷ stop).
+  The realized ratio in `BacktestingService` is a different question on purpose.
+- `utils/runStatus.ts` — the run status vocabulary: one colour+word per state,
+  error classification, and the error-text sanitizer. Never hardcode a status
+  colour in a component.
+- `utils/finishReason.ts` — normalizes the four providers' stop signals onto one
+  `FinishReason`, and brackets a run's truncation tally. Read the ceiling with
+  `peekTruncations()`; don't re-derive it from a missing regex match.
+- `shared/providerRequestPolicy.cjs` — thinking gates, temperature, and
+  provider URL host policy for all transports.
+- `utils/harnessMarks.ts` — the one voice for text THIS app withholds from a
+  model: the `DATA_UNAVAILABLE` sentinel, the clipping notes (which must name
+  how much was kept vs existed), the spill receipt, and the fence legend built
+  from those prefixes. Never hand-write a marker or describe one in a prompt —
+  `tests/harnessMarks.test.ts` fails on either. It also owns `harnessTurn()`,
+  which marks a harness-authored insertion that must travel in the `user` role:
+  a seat cannot obey the split unless it can tell the trader's words from the
+  harness's. Distinct from `finishReason.ts`, which answers the other question:
+  "did the provider stop early?"
+- `utils/composePrompt.ts` + `constants/promptRegistry.ts` — prompt layering.
+- `utils/memoryBudget.ts` — the notebook's soft/trigger/hard byte caps and the
+  one classifier for which tier applies. Pressure there REFUSES growth (new
+  files at the trigger, all model notes at the hard cap); it never evicts,
+  because nothing in that store is safe to evict. Don't add an eviction rule
+  without first proving which bytes are regenerable.
+- `services/learning/skillIdleLifecycle.ts` — the only clock that decides a
+  skill stops being injected for silence. Suspension is `enabled: false` plus
+  `meta.suspendedAt`, NOT a fourth `SkillStatus`: `skillEnabledFlag(meta)` is
+  the one place `enabled` may be derived, and every write path must use it or
+  an unrelated attribution write silently un-suspends the skill.
+- `MemoryFilesService.getNotebookWriteFailure()` — the only place that knows a
+  notebook write never reached disk. `setPreferenceObject` rejects on a full
+  origin quota while the in-memory cache goes on serving the whole notebook, so
+  every caller that catches-and-logs turns memory loss into an invisible state:
+  the app, the notebook UI and the Health tab all read from that same cache.
+  `persist` records the failure (quota vs error, bytes, streak), rethrows so no
+  caller's handling changes, and clears on the next success. Never add a
+  swallow-and-continue around a notebook write; surface it, like `memoryHealth`
+  does.
+- `ExportService.RAW_LOCAL_STORAGE_PREFIXES` — the key namespaces whose owners
+  talk to `localStorage` directly (`profile_memory_v1_*`, `learning_rules_v2_*`,
+  the `agents_*_v1_*` rosters, the calibration/performance/confluence stats).
+  On web that IS the Preferences fallback; on NATIVE they are two different
+  places, so reading them through `getPreferenceObject` exports nothing and
+  restoring into Preferences writes where nothing reads. The one list drives
+  both the export fallback read and the restore mirror — a new raw-localStorage
+  store must be added there or it silently leaves no backup on mobile. Do not
+  widen it "for safety": the WebView origin quota is shared, so shadow-copying
+  Preferences-owned keys spends eviction-prone bytes on a copy nothing reads.
+- `duplicateTextPairs` (`services/ui/EnsembleAnalystService.ts`) — the ONE
+  gateway-echo detector (normalized character-trigram Jaccard ≥ 0.9, samples
+  under 200 chars ignored). It answers by index so two callers can label the
+  same fact differently: the transcript toast names models, the moderator block
+  in `ensembleConsensus.ts` names seats and tells it not to count an echo twice.
+  Do not write a third similarity function.
 
 ## Providers are runtime-configured (dynamic migration)
 
@@ -188,6 +315,14 @@ Optional build-time variables:
   for data. All self-hosted via @fontsource.
 - Radius/motion tokens: `rounded-bubble` (12px, chat bubbles), `rounded-control`
   (8px, inputs/buttons), `--ease-snappy` + `.12s` transitions (Minara's numbers).
+- **An AI row is claimed by identity, never by provider+model.** `Message.botId`
+  is stamped by the writers that answer *as* a bot (`useBotMailbox`,
+  `botRoutine`), and `deskThread` drops only rows a bot positively owns.
+  `threadForProvider` still falls back to the provider+model pair so pre-stamp
+  history keeps rendering, but it excludes any row stamped for a different bot.
+  Do not reintroduce a model-shaped claim: it deleted the trader's own answers
+  from the one pane that shows them (they were claimed into a bot thread that
+  never displayed them). `tests/deskThreadClaims.test.ts` pins both directions.
 - React 19 strict mode; TypeScript strict
 - Electron shell in `electron/` (custom `app://` protocol for production, safeStorage,
   auto-updater); Capacitor config for mobile

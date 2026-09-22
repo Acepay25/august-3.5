@@ -21,7 +21,7 @@ export interface VerdictCardProps {
     grade?: string | null;
     /** Set when the verdict was quarantined by an integrity gate — the
      *  direction here is a forced override, not a neutral opinion. */
-    review?: { reason: 'uncited' | 'ungrounded' | 'incomplete-plan'; from?: 'Long' | 'Short' };
+    review?: { reason: 'uncited' | 'ungrounded' | 'incomplete-plan' | 'truncated-plan'; from?: 'Long' | 'Short' };
     seats: VerdictSeat[];
     'data-testid'?: string;
 }
@@ -55,15 +55,15 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence,
             className=" w-72 rounded-md border border-white/15 bg-zinc-950/95 px-3 py-2.5 text-left shadow-2xl"
         >
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Verdict</span>
+                <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Verdict</span>
                 <span
-                    className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${directionClass(direction)}`}
+                    className={`inline-flex items-center rounded border px-1.5 py-0.5 text-ui-xs font-bold uppercase ${directionClass(direction)}`}
                 >
                     {direction}
                 </span>
-                <span className="text-[10px] font-semibold text-zinc-300">{confidence}</span>
+                <span className="text-ui-xs font-semibold text-zinc-300">{confidence}</span>
                 {grade && (
-                    <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300">
+                    <span className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-ui-xs font-bold text-zinc-300">
                         {grade}
                     </span>
                 )}
@@ -83,7 +83,7 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence,
             </div>
             {values.length > 0 && (
                 <div className="mt-1">
-                    <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                    <p className="mb-1 text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">
                         Conviction auction
                         <span className="ml-1 font-medium normal-case tracking-normal text-zinc-500">
                             {spread <= 10
@@ -94,13 +94,13 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ direction, confidence,
                     <div className="space-y-0.5">
                         {seats.filter(s => s.value !== null).map(s => (
                             <div key={s.name} className="flex items-center gap-1.5">
-                                <span className="w-16 shrink-0 truncate text-[9px] text-zinc-400" title={s.name}>
+                                <span className="w-16 shrink-0 truncate text-ui-2xs text-zinc-400" title={s.name}>
                                     {s.name}
                                 </span>
                                 <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
                                     <span className="block h-full rounded-full bg-zinc-400" style={{ width: `${s.value}%` }} />
                                 </span>
-                                <span className="w-6 shrink-0 text-right text-[9px] font-semibold tabular-nums text-zinc-300">
+                                <span className="w-6 shrink-0 text-right text-ui-2xs font-semibold tabular-nums text-zinc-300">
                                     {s.value}
                                 </span>
                             </div>

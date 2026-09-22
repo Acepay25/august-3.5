@@ -94,7 +94,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
                 </p>
                 {conviction !== null && conviction !== undefined && (
                     <span
-                        className="mt-1 inline-flex items-center gap-1 rounded border border-white/10 bg-zinc-950/70 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-300"
+                        className="mt-1 inline-flex items-center gap-1 rounded border border-white/10 bg-zinc-950/70 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-300"
                         title="Sealed conviction (0-100)"
                     >
                         <span className="text-[8px] uppercase tracking-widest text-zinc-500">Conv</span>

@@ -111,14 +111,14 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
             >
                 <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                     Learning queue
-                    <span className="ml-2 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-zinc-500 tabular-nums">
+                    <span className="ml-2 rounded-full border border-zinc-700 px-1.5 py-0.5 text-ui-xs font-normal normal-case tracking-normal text-zinc-500 tabular-nums">
                         {proposals.length}
                     </span>
                 </span>
-                <span className="text-[10px] text-zinc-600">{open ? 'hide' : 'show'}</span>
+                <span className="text-ui-xs text-zinc-600">{open ? 'hide' : 'show'}</span>
             </button>
             {open && (
-                <p className="px-3 pt-2 text-[10px] leading-relaxed text-zinc-600">
+                <p className="px-3 pt-2 text-ui-xs leading-relaxed text-zinc-600">
                     The supervisor decides these: each one is pending review until it does, and only what it
                     cannot act on safely stays here. Apply and Dismiss are overrides, not the required path.
                 </p>
@@ -128,7 +128,7 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                     {proposals.map(p => (
                         <li key={p.id} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5">
                             <div className="flex items-start gap-2">
-                                <span className="mt-0.5 shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-500">
+                                <span className="mt-0.5 shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-500">
                                     {KIND_LABEL[p.kind] ?? p.kind}
                                 </span>
                                 <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-zinc-300">{p.text}</p>
@@ -141,14 +141,14 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                 </StatusPill>
                             </div>
                             <div className="mt-2 flex items-center gap-2 pl-1">
-                                <span className="mr-auto text-[10px] text-zinc-600">
+                                <span className="mr-auto text-ui-xs text-zinc-600">
                                     {new Date(p.createdAt).toLocaleDateString()}
                                 </span>
                                 {p.skillSlug && (
                                     <button
                                         type="button"
                                         onClick={() => trySkillInChat(p.skillSlug!)}
-                                        className="rounded-md border border-zinc-800 px-2 py-1 text-[10px] text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                                        className="rounded-md border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
                                     >
                                         Open in chat
                                     </button>
@@ -158,7 +158,7 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                         type="button"
                                         disabled={busyId === p.id}
                                         onClick={() => void apply(p)}
-                                        className="rounded-md border border-zinc-600 px-2 py-1 text-[10px] font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                                        className="rounded-md border border-zinc-600 px-2 py-1 text-ui-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
                                     >
                                         {busyId === p.id ? 'Applying…' : 'Apply'}
                                     </button>
@@ -166,13 +166,13 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                 <button
                                     type="button"
                                     onClick={() => dismiss(p)}
-                                    className="rounded-md border border-zinc-800 px-2 py-1 text-[10px] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                                    className="rounded-md border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
                                 >
                                     Dismiss
                                 </button>
                             </div>
                             {errorId === p.id && (
-                                <p className="mt-1.5 pl-1 text-[10px] text-zinc-500">
+                                <p className="mt-1.5 pl-1 text-ui-xs text-zinc-500">
                                     Target skill no longer exists — the proposal was left in place; dismiss it if it is stale.
                                 </p>
                             )}

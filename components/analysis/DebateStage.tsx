@@ -74,10 +74,10 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
             {(caption || phase) && (
                 <div className="flex flex-wrap items-baseline gap-x-2 pb-2">
                     {caption && (
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">{caption}</p>
+                        <p className="text-ui-xs font-semibold uppercase tracking-widest text-zinc-500">{caption}</p>
                     )}
                     {phase && (
-                        <p className="text-[10px] font-medium text-zinc-400">{phase}</p>
+                        <p className="text-ui-xs font-medium text-zinc-400">{phase}</p>
                     )}
                 </div>
             )}
@@ -88,10 +88,10 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                 <div className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5">
                     {stages.map((stage, i) => (
                         <React.Fragment key={stage.id}>
-                            {i > 0 && <span className="text-[9px] text-zinc-500">›</span>}
+                            {i > 0 && <span className="text-ui-2xs text-zinc-500">›</span>}
                             <span
                                 title={stage.note || stage.label}
-                                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-2xs font-semibold uppercase tracking-wider ${
                                     stage.state === 'done'
                                         ? 'bg-zinc-800 text-zinc-300'
                                         : stage.state === 'running'
@@ -140,33 +140,33 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                                             ? `${actor.seatRole} seat — the team role this run`
                                             : `Focus: ${actor.seatFocus} — the dimension this unroled seat owns`}
                                         data-testid={`actor-role-${actor.id}`}
-                                        className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 font-mono text-[9px] uppercase tracking-wider text-zinc-500"
+                                        className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 font-mono text-ui-2xs uppercase tracking-wider text-zinc-500"
                                     >
                                         {actor.seatRole || actor.seatFocus}
                                     </span>
                                 )}
                             </span>
                             {actor.thinking ? (
-                                <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+                                <span className="mt-0.5 flex items-center gap-1.5 text-ui-xs text-zinc-500">
                                     thinking
                                     <span className="streaming-dots" aria-hidden="true"><span /><span /><span /></span>
                                 </span>
                             ) : actor.toolChip ? (
-                                <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[10px] text-zinc-500">
+                                <span className="mt-0.5 flex min-w-0 items-center gap-1 text-ui-xs text-zinc-500">
                                     <Wrench className="h-3 w-3 shrink-0" />
                                     <span className="truncate">{actor.toolChip}</span>
                                 </span>
                             ) : actor.speaking && actor.speech ? (
-                                <span className="mt-0.5 block truncate text-[10px] italic text-zinc-400">
+                                <span className="mt-0.5 block truncate text-ui-xs italic text-zinc-400">
                                     “{actor.speech}”
                                 </span>
                             ) : actor.speaking ? (
-                                <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                <span className="mt-0.5 flex items-center gap-1.5 text-ui-xs text-zinc-400">
                                     drafting
                                     <span className="streaming-dots" aria-hidden="true"><span /><span /><span /></span>
                                 </span>
                             ) : (
-                                <span className="mt-0.5 block truncate text-[10px] text-zinc-600">
+                                <span className="mt-0.5 block truncate text-ui-xs text-zinc-600">
                                     {actor.thought || (live ? 'waiting' : 'idle')}
                                 </span>
                             )}
@@ -212,11 +212,11 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                 readable at a glance. */}
             {exchanges && exchanges.length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1">
-                    <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-600">Exchanges</span>
+                    <span className="text-ui-2xs font-semibold uppercase tracking-widest text-zinc-600">Exchanges</span>
                     {exchanges.map(ex => (
                         <span
                             key={`${ex.from}->${ex.to}`}
-                            className="inline-flex items-center gap-1 rounded border border-white/5 bg-zinc-950/60 px-1.5 py-0.5 text-[9px] text-zinc-500"
+                            className="inline-flex items-center gap-1 rounded border border-white/5 bg-zinc-950/60 px-1.5 py-0.5 text-ui-2xs text-zinc-500"
                             title={`${ex.from} addressed ${ex.to} ${ex.count}×`}
                         >
                             <span className="font-medium text-zinc-400">{ex.from}</span>
@@ -231,7 +231,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                 that seat only. Esc cancels. */}
             {steerTarget && onSteerSeat && (
                 <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5">
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    <span className="shrink-0 text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">
                         → {steerTarget}
                     </span>
                     <input

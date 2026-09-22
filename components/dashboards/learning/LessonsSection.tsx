@@ -43,7 +43,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
 
     return (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Top Lessons (outcome-weighted)</h4>
+            <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Top Lessons (outcome-weighted)</h4>
             {topLessons.length === 0 ? (
                 <p className="text-xs text-zinc-600 italic">Log at least 2 trades on the same coin + direction to see clusters.</p>
             ) : (
@@ -61,7 +61,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                             <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                                         )}
                                         {l.label}
-                                        <span className="text-[10px] text-zinc-500">×{l.count}</span>
+                                        <span className="text-ui-xs text-zinc-500">×{l.count}</span>
                                     </span>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {l.avgPnl !== null && (
@@ -71,7 +71,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                         )}
                                         <button
                                             onClick={() => setExpandedLesson(isOpen ? null : i)}
-                                            className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-300 transition-colors flex items-center gap-1"
+                                            className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-300 transition-colors flex items-center gap-1"
                                         >
                                             View {matches.length} trades <ChevronDownIcon className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                                         </button>
@@ -83,7 +83,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                         <div className="flex items-center gap-1 flex-wrap">
                                             <button
                                                 onClick={() => setLessonRegimeFilter('all')}
-                                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                                className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                                     lessonRegimeFilter === 'all' ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
                                                 }`}
                                             >
@@ -93,7 +93,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                                 <button
                                                     key={r}
                                                     onClick={() => setLessonRegimeFilter(prev => prev === r ? 'all' : r)}
-                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                                    className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                                         lessonRegimeFilter === r ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
                                                     }`}
                                                 >
@@ -102,7 +102,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                             ))}
                                             <button
                                                 onClick={() => setLessonPnlThreshold(v => !v)}
-                                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                                className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                                     lessonPnlThreshold ? 'bg-rose-500/20 border-rose-500/30 text-rose-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
                                                 }`}
                                             >
@@ -110,10 +110,10 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                             </button>
                                         </div>
                                         {matches.length === 0 ? (
-                                            <p className="text-[10px] text-zinc-600 italic">No trades match these filters in the current time window.</p>
+                                            <p className="text-ui-xs text-zinc-600 italic">No trades match these filters in the current time window.</p>
                                         ) : (
                                             matches.slice(-8).map(t => (
-                                                <div key={t.id} className="flex items-center justify-between rounded bg-zinc-900/60 border border-white/5 px-2 py-1 text-[10px] font-mono tabular-nums">
+                                                <div key={t.id} className="flex items-center justify-between rounded bg-zinc-900/60 border border-white/5 px-2 py-1 text-ui-xs font-mono tabular-nums">
                                                     <span className="text-zinc-400 truncate pr-2">
                                                         {new Date(t.timestamp).toLocaleDateString()} · {t.analysis?.direction}
                                                         <span className="text-zinc-600"> · {t.marketRegime ?? '?'}</span>

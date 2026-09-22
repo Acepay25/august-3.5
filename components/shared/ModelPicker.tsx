@@ -399,7 +399,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                 Free models only
                             </label>
                         ) : (
-                            <span className="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Providers</span>
+                            <span className="text-ui-xs uppercase font-semibold text-zinc-500 tracking-wider">Providers</span>
                         )}
                         <button
                             type="button"
@@ -414,7 +414,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             ) : (
                                 <RotateCw className={`h-3 w-3 shrink-0 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
                             )}
-                            <span className={`text-[10px] font-medium ${justRefreshed ? 'text-emerald-400' : ''}`}>
+                            <span className={`text-ui-xs font-medium ${justRefreshed ? 'text-emerald-400' : ''}`}>
                                 {isRefreshing ? 'Refreshing…' : justRefreshed ? 'Updated!' : 'Refresh'}
                             </span>
                         </button>

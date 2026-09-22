@@ -68,23 +68,23 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                                     {labeled.provider}
                                 </span>
                                 {labeled.isModeratorFinal && (
-                                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-medium">FINAL</span>
+                                    <span className="text-ui-2xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-medium">FINAL</span>
                                 )}
                             </div>
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-2 gap-2 mb-3">
                                 <div className="text-center p-2 rounded-lg bg-zinc-800">
-                                    <span className="text-[9px] text-zinc-500 block mb-0.5">Win Rate</span>
+                                    <span className="text-ui-2xs text-zinc-500 block mb-0.5">Win Rate</span>
                                     <span className={`text-lg font-bold ${labeled.result.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {labeled.result.winRate}%
                                     </span>
-                                    <span className="text-[9px] text-zinc-600 block">
+                                    <span className="text-ui-2xs text-zinc-600 block">
                                         {labeled.result.winCount}/{labeled.result.simulations}
                                     </span>
                                 </div>
                                 <div className="text-center p-2 rounded-lg bg-zinc-800">
-                                    <span className="text-[9px] text-zinc-500 block mb-0.5">Expected Value</span>
+                                    <span className="text-ui-2xs text-zinc-500 block mb-0.5">Expected Value</span>
                                     <span className={`text-lg font-bold ${labeled.result.expectedValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {labeled.result.expectedValue >= 0 ? '+' : ''}{labeled.result.expectedValue}%
                                     </span>
@@ -93,13 +93,13 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
 
                             {/* Probabilities */}
                             <div className="flex gap-1.5">
-                                <span className="flex-1 text-center text-[9px] px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400">
+                                <span className="flex-1 text-center text-ui-2xs px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400">
                                     TP1 {labeled.result.probabilities.tp1Hit}%
                                 </span>
-                                <span className="flex-1 text-center text-[9px] px-2 py-1 rounded-lg bg-emerald-500/5 text-emerald-300/80">
+                                <span className="flex-1 text-center text-ui-2xs px-2 py-1 rounded-lg bg-emerald-500/5 text-emerald-300/80">
                                     TP2 {labeled.result.probabilities.tp2Hit}%
                                 </span>
-                                <span className="flex-1 text-center text-[9px] px-2 py-1 rounded-lg bg-rose-500/10 text-rose-400">
+                                <span className="flex-1 text-center text-ui-2xs px-2 py-1 rounded-lg bg-rose-500/10 text-rose-400">
                                     SL {labeled.result.probabilities.slHit}%
                                 </span>
                             </div>
@@ -138,15 +138,15 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
 
                     {/* Probabilities */}
                     <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
-                        <span className="text-[10px] text-zinc-500 block mb-2">Target Probabilities</span>
+                        <span className="text-ui-xs text-zinc-500 block mb-2">Target Probabilities</span>
                         <div className="flex gap-1.5">
-                            <span className="flex-1 text-center text-[10px] px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-medium">
+                            <span className="flex-1 text-center text-ui-xs px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-medium">
                                 TP1: {monteCarloResult!.probabilities.tp1Hit}%
                             </span>
-                            <span className="flex-1 text-center text-[10px] px-2 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300">
+                            <span className="flex-1 text-center text-ui-xs px-2 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300">
                                 TP2: {monteCarloResult!.probabilities.tp2Hit}%
                             </span>
-                            <span className="flex-1 text-center text-[10px] px-2 py-1.5 rounded-lg bg-rose-500/15 text-rose-400 font-medium">
+                            <span className="flex-1 text-center text-ui-xs px-2 py-1.5 rounded-lg bg-rose-500/15 text-rose-400 font-medium">
                                 SL: {monteCarloResult!.probabilities.slHit}%
                             </span>
                         </div>

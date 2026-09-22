@@ -1741,6 +1741,7 @@ const App: React.FC = () => {
         handleDeleteInsight,
         handleRewriteInsightsWithAI,
         handleUpdateTradeLeverage,
+        handleUpdateTradeType,
         handleUpdateTradeOutcome,
         handleUpdateTradePnL,
         handleRegenerateFinalSummary,
@@ -2113,6 +2114,16 @@ const App: React.FC = () => {
     const handleLogProposedTrade = useCallback((proposal: TradeProposal): void => {
         updateMessages(prev => [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)]);
     }, [updateMessages]);
+
+    /** The dock holds a settled verdict's message id, not a copy of the
+     *  analysis — a persisted chat session would otherwise store a whole
+     *  `TradeAnalysis` per answer. This lets it resolve the backing on demand.
+     *  Memoised because `TradeChatPanel` is `React.memo`: an inline arrow would
+     *  hand it a new prop on every App pass. */
+    const getAnalysisMessage = useCallback(
+        (messageId: string): Message | undefined => messages.find(m => m.id === messageId),
+        [messages],
+    );
 
     const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
         if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
@@ -2837,22 +2848,6 @@ const App: React.FC = () => {
                 onOpenJournal={handleOpenJournal}
                 settingsInitialTab={settingsInitialTab}
                 onSettingsInitialTabConsumed={() => setSettingsInitialTab(undefined)}
-                onDeleteTrades={handleDeleteTrades}
-                onClearAllTrades={handleClearAllTrades}
-                modelIdToName={modelIdToName}
-                onUpdateInsights={handleManualInsightsUpdate}
-                isSummarizing={isSummaryInProgress}
-                currentInsightIds={currentInsightIds}
-                onUpdateTradeLeverage={handleUpdateTradeLeverage}
-                onUpdateOutcome={handleUpdateTradeOutcome}
-                onUpdatePnL={handleUpdateTradePnL}
-                finalSummary={finalTradeSummary}
-                individualSummaries={tradeSummaries}
-                isInsightGenerating={isInsightGenerating}
-                insightProgress={insightProgress}
-                newlyAddedInsightIds={newlyAddedInsightIds}
-                onDeleteInsight={handleDeleteInsight}
-                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
                 familyWinRates={familyWinRates}
                 enabledProviders={journalEnabledProviders}
                 selectedModels={journalSelectedModels}
@@ -3095,6 +3090,7 @@ const App: React.FC = () => {
                                     botSessionRequest={tradeBotRequest ?? undefined}
                                     groupSessionRequest={tradeGroupRequest ?? undefined}
                                     onRunAnalysis={handleRunAnalysisFromChat}
+                                    getAnalysisMessage={getAnalysisMessage}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
                                     onToggleDeskScene={() => setIsDeskSceneOpen(v => !v)}
@@ -3124,6 +3120,7 @@ const App: React.FC = () => {
                                 isSummarizing={isSummaryInProgress}
                                 currentInsightIds={currentInsightIds}
                                 onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                onUpdateTradeType={handleUpdateTradeType}
                                 onUpdateOutcome={handleUpdateTradeOutcome}
                                 onUpdatePnL={handleUpdateTradePnL}
                                 finalSummary={finalTradeSummary}
@@ -3249,7 +3246,7 @@ const App: React.FC = () => {
                         {isPipelineCollapsed ? (
                             /* Collapsed pill: status + expand/dismiss + Stop. */
                             <div className="pointer-events-auto flex h-fit items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950 px-3 py-1.5 shadow-lg" aria-label="Analysis progress (collapsed)">
-                                <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-300">
+                                <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-0.5 text-ui-xs font-medium text-cyan-300">
                                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                     Running
                                 </span>
@@ -3266,7 +3263,7 @@ const App: React.FC = () => {
                                     <p className="mt-0.5 text-[11px] text-zinc-500">Pipeline</p>
                                 </div>
                                 <span className="ml-auto flex shrink-0 items-center gap-1">
-                                    <span className="flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-medium text-cyan-300">
+                                    <span className="flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-1 text-ui-xs font-medium text-cyan-300">
                                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                         {isPostMortemInProgress ? 'Post-mortem' : 'Running'}
                                     </span>

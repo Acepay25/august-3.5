@@ -47,7 +47,12 @@ export type RetirementReason =
     | 'regime-shifted'
     | 'superseded'
     | 'eval-hurts'
-    | 'user-veto';
+    | 'user-veto'
+    /** Filed away by the idle lifecycle rather than judged: it kept its
+     *  status and only stopped matching. `skillIdleLifecycle` archives a skill
+     *  that stayed suspended past its window, and that transition never touches
+     *  `status`, so it leaves no history row to map from. */
+    | 'idle';
 
 export interface SkillTombstone {
     slug: string;
@@ -214,6 +219,8 @@ export function reEntryRuleForReason(reason: RetirementReason): string {
         case 'eval-hurts':
         case 'user-veto':
             return 'explicit human action required — no auto path.';
+        case 'idle':
+            return 'MAY auto-revive: it was filed for silence, not judged. If its trigger fires again the idle lifecycle returns it on its own.';
     }
 }
 
@@ -302,7 +309,12 @@ function twinMatch(
     return {
         slug: slug.replace(/\.md$/i, ''),
         ifCondition: meta.ifCondition ?? '',
-        reason: retirementReasonFromHistory(last?.reason),
+        // An idle-archived skill keeps its status and so leaves no history row;
+        // reading only the history would mislabel it 'insufficient-evidence'
+        // and hand back the wrong re-entry rule.
+        reason: meta.status !== 'retired' && meta.suspendedAt
+            ? 'idle'
+            : retirementReasonFromHistory(last?.reason),
         sampleN: (meta.wins || 0) + (meta.losses || 0),
         how,
     };

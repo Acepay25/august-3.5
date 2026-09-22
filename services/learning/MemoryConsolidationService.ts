@@ -61,9 +61,15 @@ const levenshteinDistance = (s1: string, s2: string): number => {
 // =============================================================================
 
 /**
- * Prune insights that are old and rarely used.
- * Safety: Never prunes items marked as "critical" or "high severity" (though Insight type currently lacks explicit severity, we assume 'risk_management' is sensitive).
- * For now, strictly follows Age + Usage logic.
+ * Prune insights that are old and were distilled from a weak pattern.
+ *
+ * "Rarely used" would be the wrong description and used to be the comment here:
+ * `useCount` is set once, to how many times the pattern recurred in the batch
+ * that produced the insight (`AlgorithmicMemoryService.ts:131`), and nothing
+ * increments it when the insight is served. So this deletes on BIRTH STRENGTH,
+ * not on observed use — a frequently-injected insight is no safer here than one
+ * nobody ever saw. That is a design choice, not an accident, and changing it
+ * needs a real serving counter rather than a different threshold.
  */
 export const pruneOutdatedInsights = (knowledgeBase: InsightKnowledgeBase): TradeInsight[] => {
     const now = new Date();

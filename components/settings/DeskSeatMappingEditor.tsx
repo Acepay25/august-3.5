@@ -116,7 +116,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     </p>
                 </div>
                 <span
-                    className="shrink-0 rounded border border-white/10 bg-zinc-950 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400"
+                    className="shrink-0 rounded border border-white/10 bg-zinc-950 px-1.5 py-0.5 font-mono text-ui-xs text-zinc-400"
                     title="The override table is per-user; this is the user it will be saved under."
                 >
                     user: {activeUser}
@@ -146,11 +146,11 @@ export const DeskSeatMappingEditor: React.FC = () => {
                                     <span className="min-w-0 flex-1 truncate font-mono text-zinc-200" title={name}>
                                         {name}
                                     </span>
-                                    <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                                    <span className="text-ui-xs uppercase tracking-widest text-zinc-500">
                                         → {ROLE_LABEL[role]}
                                     </span>
                                     {overridden && (
-                                        <span className="text-[9px] uppercase tracking-widest text-amber-400/80">
+                                        <span className="text-ui-2xs uppercase tracking-widest text-amber-400/80">
                                             (heuristic: {ROLE_LABEL[heuristic]})
                                         </span>
                                     )}

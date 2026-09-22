@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup exclusions for API <= 30 (fullBackupContent).
+
+  Same policy as data_extraction_rules.xml: provider API keys live in
+  Capacitor's SharedPreferences in plaintext on Android (the desktop
+  safeStorage bridge does not exist there), so the preferences file and the
+  WebView local storage must never leave the device unencrypted.
+-->
+<full-backup-content>
+    <!-- @capacitor/preferences opens getSharedPreferences(configuration.group),
+         whose default is "CapacitorStorage" — so that is the file on disk. -->
+    <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    <exclude domain="sharedpref" path="preferences.xml" />
+    <exclude domain="file" path="app_webview/Local Storage" />
+    <exclude domain="database" path="." />
+</full-backup-content>

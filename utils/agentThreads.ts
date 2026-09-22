@@ -39,11 +39,23 @@ export type ThreadSelection =
  * messages in conversation order (a subset of the input array —
  * same object identities, so memoization downstream stays cheap).
  */
-export const threadForProvider = (messages: Message[], providerId: string, modelId?: string): Message[] => {
+export const threadForProvider = (
+    messages: Message[],
+    providerId: string,
+    modelId?: string,
+    /** This bot's id. When supplied, a row positively stamped for ANOTHER bot
+     *  is never claimed here even if the two bots share a provider and model —
+     *  the stamp beats the inference, and unstamped rows fall back to it. */
+    botId?: string,
+): Message[] => {
     const out: Message[] = [];
     // Prompts waiting for the next AI reply that claims them.
     let pendingUser: Message[] = [];
     let pendingSystem: Message[] = [];
+    /** A row stamped for a DIFFERENT bot is never ours, whatever its model
+     *  looks like — two bots on one provider+model are otherwise identical to
+     *  an inference, and an inference must not outrank a recorded fact. */
+    const otherBot = (m: Message): boolean => !!botId && !!m.botId && m.botId !== botId;
     for (const m of messages) {
         if (m.role === MessageRole.USER) {
             pendingUser.push(m);
@@ -55,7 +67,8 @@ export const threadForProvider = (messages: Message[], providerId: string, model
             // names, so the failure surfaces inside that thread.
             const sysKeys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
             if (sysKeys.length === 1 && sysKeys[0] === providerId
-                && (!modelId || m.modelsUsed?.[sysKeys[0]] === modelId)) {
+                && (!modelId || m.modelsUsed?.[sysKeys[0]] === modelId)
+                && !otherBot(m)) {
                 out.push(...pendingUser, ...pendingSystem, m);
                 pendingUser = [];
                 pendingSystem = [];
@@ -72,7 +85,8 @@ export const threadForProvider = (messages: Message[], providerId: string, model
         const model = keys.length === 1 ? m.modelsUsed?.[keys[0]] : undefined;
         const mine = keys.length === 1
             && keys[0] === providerId
-            && (!modelId || model === modelId);
+            && (!modelId || model === modelId)
+            && !otherBot(m);
         if (mine) {
             out.push(...pendingUser, ...pendingSystem, m);
             pendingUser = [];
@@ -90,30 +104,36 @@ export const threadForProvider = (messages: Message[], providerId: string, model
 };
 
 /**
- * The desk's own conversation: everything no agent thread claims — human
- * prompts, system rows, ENSEMBLE replies (multi-key modelsUsed, the debate
- * verdict), and lone-attributed replies from a model that no roster bot
- * thinks with (the session chat model's Analyze answers).
+ * The desk's own conversation: every row except the ones a bot POSITIVELY owns
+ * — human prompts, system rows, ENSEMBLE replies (multi-key modelsUsed, the
+ * debate verdict), the session chat model's Analyze answers, and any row written
+ * before replies carried a producer stamp.
  *
- * AgentsView's Chart AI pane reads this instead of the raw `messages` array:
- * the raw array would ALSO show every bot's DM (a bot reply is a single-key
- * row claimed by that bot's thread), so the desk pane would leak the other
- * agents' conversations. The Trade dock keeps its own rendering; this is
- * only the Agents surface's pane.
+ * AgentsView's desk pane reads this instead of the raw `messages` array: the raw
+ * array would ALSO show every bot's DM (a bot reply is a single-key row), so the
+ * desk pane would leak the other agents' conversations. Claiming by
+ * provider+model got that leak fixed by dropping the trader's own answers
+ * instead, so the claim is keyed on `botId` now — see the filter below.
  */
 export const deskThread = (
     messages: Message[],
-    bots: ReadonlyArray<{ providerId: string; modelId: string }>,
+    bots: ReadonlyArray<{ id?: string; providerId: string; modelId: string }>,
 ): Message[] => {
-    const claimed = new Set(bots.map(b => `${b.providerId}::${b.modelId}`));
+    const owned = new Set(bots.map(b => b.id).filter(Boolean));
     return messages.filter(m => {
         if (m.roomId) return false; // a room row lives in its room, not the desk
         if (m.role !== MessageRole.AI) return true;
-        const keys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
-        // Unattributed AI rows (legacy, stream artifacts): the desk keeps
-        // them — dropping them would lose text with no other home.
-        if (keys.length !== 1) return true;
-        return !claimed.has(`${keys[0]}::${m.modelsUsed?.[keys[0]]}`);
+        // Only a POSITIVE claim removes a row. This is the case that used to
+        // lose an answer outright: a solo Chat-AI reply from the same
+        // provider+model as a roster bot read as "that bot's DM", so the desk
+        // pane dropped it while the bot's thread never showed it either — the
+        // row existed and rendered nowhere.
+        //
+        // Inference-by-model is gone from this filter on purpose. Its cost is
+        // that a bot row written before `botId` existed can surface in the desk
+        // pane: a fixed, historical set, and the cosmetic direction of failure.
+        // The alternative was hiding the reply the trader is waiting on.
+        return !m.botId || !owned.has(m.botId);
     });
 };
 
@@ -235,16 +255,18 @@ export const threadPreview = (messages: Message[], providerId: string): AgentThr
  * Unread count for one provider: AI messages in the thread newer than
  * the last time the trader opened that thread. `lastOpenedAt` is an
  * ISO timestamp (absent = never opened → everything unread, capped).
- * `modelId` scopes to an exact model (a bot's model) — same semantics
- * as threadForProvider.
+ * `modelId` scopes to an exact model (a bot's model) and `botId` excludes
+ * rows another bot positively owns — same semantics as threadForProvider, so
+ * a sibling bot's DM cannot light this row's badge.
  */
 export const unreadCount = (
     messages: Message[],
     providerId: string,
     lastOpenedAt: string | null | undefined,
     modelId?: string,
+    botId?: string,
 ): number => {
-    const thread = threadForProvider(messages, providerId, modelId);
+    const thread = threadForProvider(messages, providerId, modelId, botId);
     if (thread.length === 0) return 0;
     const openedMs = lastOpenedAt ? Date.parse(lastOpenedAt) : NaN;
     if (Number.isNaN(openedMs)) {

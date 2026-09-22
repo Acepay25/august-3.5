@@ -154,7 +154,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                 </div>
                             </div>
                             {hasLiveData && (
-                                <span className="flex items-center gap-1.5 text-[10px] font-medium text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full">
+                                <span className="flex items-center gap-1.5 text-ui-xs font-medium text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full">
                                     <span className="relative flex h-1.5 w-1.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-500"></span>
@@ -200,11 +200,11 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                             {item.showPrompt && (
                                                 <div className="p-3 pt-0 animate-fade-in">
                                                     <div className="p-3 rounded-lg bg-black/30 border border-rose-500/10">
-                                                        <div className="text-[10px] text-rose-400/80 mb-2 font-medium">Injected Prompt:</div>
-                                                        <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto font-mono leading-relaxed">
+                                                        <div className="text-ui-xs text-rose-400/80 mb-2 font-medium">Injected Prompt:</div>
+                                                        <pre className="text-ui-xs text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto font-mono leading-relaxed">
                                                             {item.prompt.substring(0, 600)}...
                                                         </pre>
-                                                        <div className="text-[9px] text-zinc-600 mt-2">
+                                                        <div className="text-ui-2xs text-zinc-600 mt-2">
                                                             Showing first 600 of {item.prompt.length} chars
                                                         </div>
                                                     </div>
@@ -261,14 +261,14 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
 
                                     {entryTimingScore.suggestedEntry && (
                                         <div className="p-3 rounded-xl bg-cyan-500/[0.08] border border-cyan-500/20">
-                                            <div className="text-[10px] text-cyan-400 mb-1.5 font-medium flex items-center gap-1">
+                                            <div className="text-ui-xs text-cyan-400 mb-1.5 font-medium flex items-center gap-1">
                                                 <TrendingUp className="h-3.5 w-3.5" />
                                                 <span>Better Entry Available</span>
                                             </div>
                                             <div className="text-lg text-cyan-100 font-mono font-bold">
                                                 ${entryTimingScore.suggestedEntry.price.toLocaleString()}
                                             </div>
-                                            <div className="text-[10px] text-cyan-300/60 mt-1.5">
+                                            <div className="text-ui-xs text-cyan-300/60 mt-1.5">
                                                 {entryTimingScore.suggestedEntry.reason}
                                             </div>
                                         </div>
@@ -305,9 +305,9 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
 
                                     {slOptimization.contextRecommendations && slOptimization.contextRecommendations.length > 0 && (
                                         <div className="space-y-1.5">
-                                            <span className="text-[10px] text-zinc-500">Context-Specific:</span>
+                                            <span className="text-ui-xs text-zinc-500">Context-Specific:</span>
                                             {slOptimization.contextRecommendations.slice(0, 2).map((rec, i) => (
-                                                <div key={i} className="text-[10px] text-amber-200/80 bg-zinc-800 px-3 py-2 rounded-lg flex justify-between">
+                                                <div key={i} className="text-ui-xs text-amber-200/80 bg-zinc-800 px-3 py-2 rounded-lg flex justify-between">
                                                     <span>{rec.context}</span>
                                                     <span className="font-semibold text-amber-300">{(rec.recommendedMultiplier * 100).toFixed(0)}%</span>
                                                 </div>
@@ -330,7 +330,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
 
                         {/* Footer Tip */}
                         <div className="text-center py-3">
-                            <div className="text-[10px] text-zinc-600 flex items-center justify-center gap-1.5">
+                            <div className="text-ui-xs text-zinc-600 flex items-center justify-center gap-1.5">
                                 <Sparkles className="h-3 w-3 text-cyan-400" />
                                 <span>Enable Hybrid Intelligence to see live results</span>
                             </div>

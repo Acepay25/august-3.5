@@ -98,7 +98,7 @@ const ToastContainer: React.FC = () => {
                 <button
                     type="button"
                     onClick={() => setExpanded(true)}
-                    className="pointer-events-auto ml-auto rounded-full border border-white/10 bg-zinc-900/90 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 shadow-lg transition-colors hover:text-zinc-200"
+                    className="pointer-events-auto ml-auto rounded-full border border-white/10 bg-zinc-900/90 px-2.5 py-1 text-ui-xs font-semibold text-zinc-400 shadow-lg transition-colors hover:text-zinc-200"
                 >
                     +{hiddenCount} more
                 </button>

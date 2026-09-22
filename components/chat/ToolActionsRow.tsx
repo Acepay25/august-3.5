@@ -107,7 +107,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                                 {label}
                             </span>
                             {n > 1 && (
-                                <span className="shrink-0 rounded-full border border-zinc-600 px-1.5 py-px text-[9px] font-bold tabular-nums leading-tight text-zinc-300">
+                                <span className="shrink-0 rounded-full border border-zinc-600 px-1.5 py-px text-ui-2xs font-bold tabular-nums leading-tight text-zinc-300">
                                     {n}
                                 </span>
                             )}
@@ -136,7 +136,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                         >
                             <span
                                 aria-hidden="true"
-                                className="shrink-0 text-[9px] text-zinc-500 transition-transform group-open/tool-line:rotate-90"
+                                className="shrink-0 text-ui-2xs text-zinc-500 transition-transform group-open/tool-line:rotate-90"
                             >
                                 ▸
                             </span>
@@ -144,7 +144,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                         </summary>
                         <div className="mb-1 mt-1 space-y-0.5 border-l border-white/10 pl-4">
                             {g.items.map((a, i) => (
-                                <p key={`${a.at}-${i}`} className="truncate text-[10px] leading-4 text-zinc-500">
+                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500">
                                     <span className="text-zinc-400">{a.verb}</span> {a.label}
                                     {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
                                 </p>

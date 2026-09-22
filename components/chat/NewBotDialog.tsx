@@ -160,7 +160,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 onClick={() => setFace('auto')}
                                 data-testid="face-auto"
                                 aria-label="Auto face (follows the name)"
-                                className={`flex h-11 w-11 items-center justify-center rounded-lg border text-[10px] font-semibold uppercase tracking-wide ${
+                                className={`flex h-11 w-11 items-center justify-center rounded-lg border text-ui-xs font-semibold uppercase tracking-wide ${
                                     face === 'auto' ? 'border-zinc-400 bg-zinc-800 text-zinc-200' : 'border-white/10 text-zinc-500 hover:border-white/25'
                                 }`}
                             >
@@ -336,7 +336,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 onClick={() => setCustomPrompt(builtInPromptForRole(role))}
                                 data-testid="bot-inherit"
                                 title="Copy the built-in role prompt into the instructions box — edit freely"
-                                className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                                className="rounded px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
                             >
                                 Inherit prompt
                             </button>

@@ -95,7 +95,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                             only {matchingSetup.winRate}% win rate ({matchingSetup.count} trades)
                         </span>
                     </div>
-                    <p className="text-[10px] text-zinc-500 mt-1">
+                    <p className="text-ui-xs text-zinc-500 mt-1">
                         Consider extra confirmation or skip this setup type.
                     </p>
                 </div>
@@ -104,7 +104,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
             {/* Recurring Mistakes */}
             {topMistakes.length > 0 && (
                 <div className="space-y-1.5">
-                    <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">
+                    <span className="text-ui-2xs uppercase font-bold text-zinc-500 tracking-wider">
                         Recurring Mistakes to Watch:
                     </span>
                     {topMistakes.map((mistake, i) => (

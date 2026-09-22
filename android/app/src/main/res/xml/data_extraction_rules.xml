@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup exclusions for API 31+ (dataExtractionRules).
+
+  API keys are stored through @capacitor/preferences, which on Android is
+  plain SharedPreferences — NOT the Electron safeStorage path, which only
+  exists on desktop (ProviderConfigService.getCryptoBridge returns null
+  here, so encryptKey passes keys through unchanged). Backing that up to
+  Google Drive would ship every configured provider key off-device with no
+  user-visible consent, so it is excluded along with the WebView's local
+  storage and the trade database.
+
+  Deliberate consequence: the journal does NOT migrate to a new phone via
+  Google restore. Export from Settings → Backup instead. That is the honest
+  trade for not uploading credentials.
+-->
+<dataExtractionRules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="sharedpref" path="preferences.xml" />
+        <exclude domain="file" path="app_webview/Local Storage" />
+        <exclude domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="file" path="app_webview/Local Storage" />
+    </device-transfer>
+</dataExtractionRules>

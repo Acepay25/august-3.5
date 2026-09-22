@@ -62,7 +62,7 @@ export interface TradeInsight {
   pattern?: string;
   direction?: 'Long' | 'Short';
   createdAt: string;
-  useCount: number; // How many times this insight was surfaced
+  useCount: number; // How many times the pattern recurred when this was distilled — nothing increments it later, so treat it as birth strength, not evidence of use
 }
 
 /**
@@ -127,7 +127,7 @@ export interface LearningRule {
   pattern?: string;                 // Pattern family (optional)
   direction?: 'Long' | 'Short';     // Trade direction (optional)
   createdAt: string;                // ISO timestamp
-  useCount: number;                 // Times this rule was injected
+  useCount: number;                 // Recurrences at distillation time; never incremented on injection (and this store has no reader at all — only the backup sweeps it)
   lastUsed?: string;                // Last time rule was used
   wins?: number;                    // Later outcomes that matched this rule
   losses?: number;

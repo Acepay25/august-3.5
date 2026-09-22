@@ -82,7 +82,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
 
                     {/* Win Rate Visual */}
                     <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
-                        <div className="flex justify-between items-center text-[10px] mb-2">
+                        <div className="flex justify-between items-center text-ui-xs mb-2">
                             <span className="text-emerald-400 font-medium flex items-center gap-1">
                                 <Check className="h-3 w-3" /> Wins
                             </span>
@@ -97,7 +97,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                     {/* Secondary Stats */}
                     <div className="grid grid-cols-2 gap-2">
                         <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
-                            <span className="text-[10px] text-zinc-500 block mb-2">Average Outcome</span>
+                            <span className="text-ui-xs text-zinc-500 block mb-2">Average Outcome</span>
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-[11px]">
                                     <span className="text-emerald-400">Avg Win</span>
@@ -110,7 +110,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                             </div>
                         </div>
                         <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
-                            <span className="text-[10px] text-zinc-500 block mb-2">Ratios</span>
+                            <span className="text-ui-xs text-zinc-500 block mb-2">Ratios</span>
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-[11px]">
                                     <span className="text-amber-300">Profit Factor</span>
@@ -146,7 +146,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                     {backtestResult!.sessionBreakdown && backtestResult!.sessionBreakdown.length > 0 && (
                         <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium"> Session Performance</span>
+                                <span className="text-ui-xs text-zinc-500 uppercase tracking-wider font-medium"> Session Performance</span>
                                 {backtestResult!.bestSession && (
                                     <StatusPill tone="up">
                                         Best: {backtestResult!.bestSession}
@@ -164,7 +164,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                                                 : 'bg-zinc-800 border border-white/[0.04]'
                                             }`}
                                     >
-                                        <div className="text-[9px] text-zinc-500 mb-0.5">{session.session}</div>
+                                        <div className="text-ui-2xs text-zinc-500 mb-0.5">{session.session}</div>
                                         <div className={`text-sm font-bold ${session.winRate >= 60 ? 'text-emerald-400'
                                             : session.winRate >= 50 ? 'text-amber-400'
                                                 : 'text-rose-400'
@@ -179,7 +179,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                     )}
 
                     {backtestResult!.warning && (
-                        <div className="text-[10px] text-amber-400/80 bg-amber-500/10 p-3 rounded-xl border border-amber-500/15">
+                        <div className="text-ui-xs text-amber-400/80 bg-amber-500/10 p-3 rounded-xl border border-amber-500/15">
                              {backtestResult!.warning}
                         </div>
                     )}
@@ -188,7 +188,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                 <div className="text-center py-4">
                     <div className="text-2xl mb-2 opacity-40"></div>
                     <div className="text-[11px] text-zinc-500 mb-1">Requires 3+ logged trades with similar patterns</div>
-                    <div className="text-[10px] text-zinc-600">Same coin, direction, and pattern family</div>
+                    <div className="text-ui-xs text-zinc-600">Same coin, direction, and pattern family</div>
                 </div>
             )}
         </SectionCard>

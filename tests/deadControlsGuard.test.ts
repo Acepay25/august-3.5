@@ -149,3 +149,41 @@ describe('the Coach inbox has one host', () => {
         expect(coachMounts).toBe(1);
     });
 });
+
+/**
+ * SettingsMenu's journal interface (removed 2026-09-22).
+ *
+ * When the Journal stopped being an overlay inside Settings and became a
+ * surface, it left behind a 16-prop block on SettingsMenuProps — onDeleteTrades,
+ * modelIdToName, onUpdateInsights, onUpdateTradeLeverage, onUpdateOutcome,
+ * onUpdatePnL, finalSummary, individualSummaries, the insight-progress trio,
+ * onDeleteInsight, onRewriteInsightsWithAI — every one declared, never read, and
+ * every one still computed and passed by App. Two `any`s in there were counted
+ * warnings; the lint ratchet went 1022 → 1020 with them.
+ *
+ * The trap is that this reads as a wired surface. While it stood, App looked
+ * like it handed SettingsMenu a journal, and adding one more editor prop there
+ * (I nearly did, for the trade-class override) would have compiled, typechecked
+ * and done nothing.
+ */
+describe('SettingsMenu has no vestigial journal interface', () => {
+    const settingsSrc = read('components/settings/SettingsMenu.tsx');
+
+    const DEAD = [
+        'onDeleteTrades', 'onClearAllTrades', 'modelIdToName', 'onUpdateInsights',
+        'isSummarizing', 'currentInsightIds', 'onUpdateTradeLeverage', 'onUpdateTradeType',
+        'onUpdateOutcome', 'onUpdatePnL', 'finalSummary', 'individualSummaries',
+        'isInsightGenerating', 'insightProgress', 'newlyAddedInsightIds',
+        'onDeleteInsight', 'onRewriteInsightsWithAI',
+    ];
+
+    it.each(DEAD)('SettingsMenu does not declare or accept %s', (prop) => {
+        expect(settingsSrc).not.toMatch(new RegExp(`\\b${prop}\\b`));
+    });
+
+    it('the journal is mounted from Journal.tsx, which does read them', () => {
+        // Guards against "fixing" the dead props by deleting the live chain too.
+        expect(read('components/journal/Journal.tsx')).toMatch(/onUpdateTradeType/);
+        expect(read('components/journal/TradeLog.tsx')).toMatch(/onUpdateTradeType/);
+    });
+});

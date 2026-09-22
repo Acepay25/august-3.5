@@ -15,7 +15,7 @@ vi.mock('../services/learning/SkillMemoryService', () => ({
     listSkills: vi.fn(() => []),
 }));
 
-import { executeDeskTool } from '../services/analysis/DeskToolsService';
+import { executeDeskTool, clearDeskToolCache } from '../services/analysis/DeskToolsService';
 import { fetchKlines } from '../services/analysis/KlineService';
 import { listSkills } from '../services/learning/SkillMemoryService';
 import { ensureBookSkillDrafts, BOOK_SKILL_DRAFTS } from '../services/learning/bookSkillDrafts';
@@ -34,6 +34,11 @@ const breakoutCandles = () => {
 
 beforeEach(() => {
     localStorage.clear();
+    // The tool caches a payload for 30s by (name, arguments). The two
+    // scan_setups cases below ask for the SAME symbol, so without this the
+    // second reads the first's cached skill cross-reference and the assertion
+    // tests the cache instead of the gate.
+    clearDeskToolCache();
     vi.mocked(fetchKlines).mockReset();
     vi.mocked(listSkills).mockReset();
     vi.mocked(listSkills).mockReturnValue([]);
@@ -43,7 +48,9 @@ describe('scan_setups tool', () => {
     it('returns live setups with evidence and cites a matching skill', async () => {
         vi.mocked(fetchKlines).mockResolvedValue(breakoutCandles() as never);
         vi.mocked(listSkills).mockReturnValue([{
-            file: { name: 'breakout-retest.md' } as never,
+            // `enabled` is load-bearing here: this index is prompt-bound, so a
+            // skill the idle lifecycle suspended must not be cited into it.
+            file: { name: 'breakout-retest.md', enabled: true } as never,
             meta: { status: 'confirmed', ifCondition: 'IF price breaks out of the range THEN retest' } as never,
         }]);
         const r = await executeDeskTool({ id: 'c1', name: 'scan_setups', arguments: { symbol: 'BTCUSDT', interval: '15m' } });
@@ -52,6 +59,20 @@ describe('scan_setups tool', () => {
         expect(r.content).toContain('Range breakout');
         expect(r.content).toContain('breakout-retest');
         expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '15m', 60);
+    });
+
+    /** The skill cross-reference is content the model reads, so it obeys the
+     *  same gate retrieval does: a suspended skill is out of prompts here too,
+     *  not just out of the debate preamble. */
+    it('does not cite a skill the idle lifecycle suspended', async () => {
+        vi.mocked(fetchKlines).mockResolvedValue(breakoutCandles() as never);
+        vi.mocked(listSkills).mockReturnValue([{
+            file: { name: 'breakout-retest.md', enabled: false } as never,
+            meta: { status: 'confirmed', ifCondition: 'IF price breaks out of the range THEN retest' } as never,
+        }]);
+        const r = await executeDeskTool({ id: 'c2', name: 'scan_setups', arguments: { symbol: 'BTCUSDT', interval: '15m' } });
+        expect(r.content).toContain('Range breakout');
+        expect(r.content).not.toContain('breakout-retest');
     });
 
     it('says nothing is live when the tape is flat (no invented setups)', async () => {

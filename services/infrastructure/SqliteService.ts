@@ -208,6 +208,12 @@ const createTables = async (): Promise<void> => {
             meta TEXT
         );
     `);
+    // Every read of this table filters by username, and it was the only one
+    // without the index its siblings got — so it was full-scanning on each
+    // open. IF NOT EXISTS means this also lands for pre-existing installs.
+    await db.execute(`
+        CREATE INDEX IF NOT EXISTS idx_saved_analyses_username ON saved_analyses(username);
+    `);
 
     // Thinking records table — stores per-model reasoning for training & analysis
     await db.execute(`

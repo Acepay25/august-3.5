@@ -19,7 +19,7 @@ export interface ChatAttachmentStripProps {
 const ChatAttachmentStrip: React.FC<ChatAttachmentStripProps> = ({ attachments, onRemove }) => (
     <div className="mb-1.5 flex flex-wrap gap-1.5">
         {attachments.map(a => (
-            <span key={a.id} className="flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-800 py-1 pl-1 pr-1.5 text-[10px] text-zinc-300">
+            <span key={a.id} className="flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-800 py-1 pl-1 pr-1.5 text-ui-xs text-zinc-300">
                 {a.kind === 'image'
                     ? <img src={a.payload} alt={a.name} className="h-8 w-12 rounded object-cover" />
                     : <FileText className="h-3 w-3 text-zinc-500" />}

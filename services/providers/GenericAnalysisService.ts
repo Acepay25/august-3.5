@@ -33,6 +33,7 @@ import { EFFORT_BY_TASK, effortForTask, WireAuditEntry } from './reasoningContro
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { getMemoryFilesContext } from '../learning/MemoryRetrievalService';
 import { composePrompt } from '../../utils/composePrompt';
+import { clipNote } from '../../utils/harnessMarks';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import {
     DESK_TOOLS_PROMPT,
@@ -457,14 +458,24 @@ export async function analyzeTradingView(
             ? truncateTextToTokens(`\n\n**RECENT INSIGHTS:**\nUse matching closed trades only. Ignore unrelated coins/regimes:\n${recentInsights}\n`, 600)
             : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
 
+        /** One clip for every context block that rides this prompt. The old
+         *  form appended a bare "...[truncated]", which let a model read 200
+         *  chars of trade history as the whole record — naming what was dropped
+         *  and how much is what turns "I have nothing on this setup" into "I
+         *  have an excerpt of it". */
+        const clipContext = (text: string, kept: number, source: string): string =>
+            text.length > kept
+                ? `${text.slice(0, kept)} ${clipNote({ source, kept, total: text.length })}`
+                : text;
+
         if (isSmallContextModel(modelName)) {
             const effectiveSystemPrompt = composePrompt([
                 { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
                 { id: 'job', text: getPrompt('analysis.compact', COMPACT_ANALYSIS_PROMPT) },
             ]);
-            const minimalPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated]' : patternMemoryContext;
-            const minimalInsights = recentInsightsContext.length > 200 ? recentInsightsContext.substring(0, 200) + '...[truncated]' : recentInsightsContext;
-            const minimalImages = imageSummaryContext.length > 500 ? imageSummaryContext.substring(0, 500) + '...[truncated]' : imageSummaryContext;
+            const minimalPattern = clipContext(patternMemoryContext, 400, 'pattern memory');
+            const minimalInsights = clipContext(recentInsightsContext, 200, 'recent insights');
+            const minimalImages = clipContext(imageSummaryContext, 500, 'chart image summaries');
             systemPrompt = effectiveSystemPrompt;
             userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nPresent your readable trade proposal.`;
         } else {
@@ -472,10 +483,10 @@ export async function analyzeTradingView(
             // were cut harder than the small-context branch, defeating the
             // token-level truncation above). Pattern memory & insights are the
             // highest-value context for the trade proposal.
-            const truncatedImages = imageSummaryContext.length > 800 ? imageSummaryContext.substring(0, 800) + '...[truncated for TPM]' : imageSummaryContext;
-            const truncatedPattern = patternMemoryContext.length > 600 ? patternMemoryContext.substring(0, 600) + '...[truncated for TPM]' : patternMemoryContext;
-            const truncatedInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]' : recentInsightsContext;
-            const truncatedMemory = memoryContext.length > 600 ? memoryContext.substring(0, 600) + '...[truncated for TPM]' : memoryContext;
+            const truncatedImages = clipContext(imageSummaryContext, 800, 'chart image summaries');
+            const truncatedPattern = clipContext(patternMemoryContext, 600, 'pattern memory');
+            const truncatedInsights = clipContext(recentInsightsContext, 300, 'recent insights');
+            const truncatedMemory = clipContext(memoryContext, 600, 'harness memory');
             userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nPresent your readable trade proposal.`;
         }
     }

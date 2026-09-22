@@ -35,7 +35,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
     return (
         <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="flex items-baseline justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                <p className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">
                     Monthly report · {card.periodStart.slice(0, 10)} → {card.generatedAt.slice(0, 10)}
                 </p>
             </div>
@@ -58,7 +58,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
                 </ul>
             )}
             <div className="mt-3 border-t border-white/5 pt-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Grade the panel (Brier, 0.25 = coin flip)</p>
+                <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Grade the panel (Brier, 0.25 = coin flip)</p>
                 <div className="mt-1 space-y-0.5">
                     {card.panel.moderator && gradeCell(card.panel.moderator)}
                     {card.panel.ensembleLine && gradeCell(card.panel.ensembleLine)}

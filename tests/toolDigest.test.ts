@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { digestToolResult } from '../services/analysis/DeskToolsService';
+import { clipNote } from '../utils/harnessMarks';
 
 describe('digestToolResult (labeled transcript rows)', () => {
     it('always prefixes the human tool label', () => {
@@ -33,5 +34,19 @@ describe('digestToolResult (labeled transcript rows)', () => {
         const stats = digestToolResult('get_setup_history_stats', true, JSON.stringify({ sample: 12, wins: 7, losses: 5, winRate: 0.5833 }));
         expect(stats).toBe('setup history · 7W/5L (58% win)');
         expect(digestToolResult('get_setup_history_stats', true, JSON.stringify({ sample: 0 }))).toBe('setup history · no logged trades');
+    });
+
+    it('tells the operator how much of the payload the seat was actually shown', () => {
+        // The transcript row used to read the same whether a seat argued from
+        // the whole book or from the first 4 characters of it.
+        const clipped = '{"buyWalls":[]}\n'
+            + clipNote({ source: 'order_book', kept: 4, total: 118, guidance: 'treat unlisted levels as unknown, not zero' });
+        const digest = digestToolResult('get_order_book', true, clipped);
+        expect(digest.startsWith('order book · ')).toBe(true);
+        expect(digest).toContain('· clipped 4/118');
+    });
+
+    it('adds nothing when nothing was withheld', () => {
+        expect(digestToolResult('get_order_book', true, '{"buyWalls":[]}') ).not.toContain('clipped');
     });
 });

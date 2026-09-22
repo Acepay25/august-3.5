@@ -185,7 +185,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                     }`}
             >
                 {prefix && (
-                    <span className="pl-2.5 text-[10px] uppercase tracking-widest text-zinc-500">{prefix}</span>
+                    <span className="pl-2.5 text-ui-xs uppercase tracking-widest text-zinc-500">{prefix}</span>
                 )}
                 <span className={`min-w-0 flex-1 truncate text-left text-[12px] font-semibold ${triggerClassName ? '' : prefix ? 'px-1.5 py-1' : 'px-2.5 py-1'}`}>
                     {current?.label ?? placeholder}
@@ -205,7 +205,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                     {sections.map((section, si) => (
                         <React.Fragment key={si}>
                             {section.label && (
-                                <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+                                <p className="px-3 pb-1 pt-2 text-ui-xs font-semibold uppercase tracking-widest text-zinc-600">
                                     {section.label}
                                 </p>
                             )}

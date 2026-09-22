@@ -6,6 +6,7 @@ import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache, ARBI
 import { createDebateMailbox, synthesizeReplyToLine, formatDmEventLine } from '../analysis/DebateMailbox';
 import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learning/EvidencePackService';
 import { persuasionProfile } from '../analysis/convictionDrift';
+import { clipNote, harnessTurn } from '../../utils/harnessMarks';
 import type { HermesBot } from '../../types/bot';
 import { TASK_BUDGETS } from './taskBudgets';
 import { effortForTask } from './reasoningControls';
@@ -71,6 +72,7 @@ import { formatHarnessNotesBlock, recordBudgetLessonFromAudit } from '../learnin
 import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
+import { beginTruncationWindow, consumeTruncations } from '../../utils/finishReason';
 import { compactDebateEpisode } from '../../utils/debateEpisodes';
 import { debatePreStep } from '../../utils/debatePreStep';
 import type { DebateRunEvent } from '../../types';
@@ -1501,16 +1503,37 @@ const buildDebateTranscript = (
     // (especially the latest clarification answers) the most.
     const maxChars = totalTokens * 4;
     if (withLevels.length <= maxChars) return withLevels;
+    const table = levelsTable
+        ? `\n\n**LEVELS SNAPSHOT (do not invent a parallel tape):**\n${levelsTable}`
+        : '';
+    /** The note that will be prepended, for a given number of kept lines. The
+     *  fit test has to include it, the snapshot and the joins — the old check
+     *  sized `lines` alone against maxChars and then appended both, so the
+     *  result routinely arrived longer than the caller's budget. */
+    const noteFor = (keptCount: number): string => clipNote({
+        // `lines` is one entry per SPEAKER per round, so its length was never a
+        // round count: a 3-seat, 4-round debate reported "first 12 of 16
+        // rounds" and overstated what was withheld about 4x.
+        source: 'earlier debate turns',
+        kept: keptCount,
+        total: lines.length,
+        unit: 'messages',
+        guidance: 'silence from the dropped turns is not agreement, and does not lower a seat\'s conviction',
+    });
     let kept = '';
+    let keptLines = 0;
     for (let i = lines.length - 1; i >= 0; i--) {
         const candidate = kept ? `${lines[i]}\n\n${kept}` : lines[i];
-        if (candidate.length > maxChars) break;
+        const probe = `${noteFor(keptLines + 1)}\n\n${candidate}${table}`;
+        if (probe.length > maxChars) break;
         kept = candidate;
+        keptLines += 1;
     }
-    const truncated = `...[Earlier debate rounds truncated to fit context memory]...\n\n${kept}`;
-    return levelsTable
-        ? `${truncated}\n\n**LEVELS SNAPSHOT (do not invent a parallel tape):**\n${levelsTable}`
-        : truncated;
+    // Say how many turns are gone, not merely that some are: a moderator told
+    // "earlier rounds truncated" cannot distinguish 1 of 9 from 8 of 9, and
+    // reads a thin-looking debate as a thin-looking conviction.
+    const truncated = `${noteFor(keptLines)}\n\n${kept}`;
+    return `${truncated}${table}`;
 };
 
 /**
@@ -2270,9 +2293,9 @@ const conductRealDebateImpl = async function* (
                         pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: `\n${CONVICTION_RETRY_MARKER}\n` });
                         messages.push({
                             role: 'user',
-                            content:
-                                `Your reply was cut off before the required conviction line. ` +
-                                `As your ENTIRE reply, output only: "CONVICTION: <0-100>" — your numeric conviction in your own stance.`,
+                            content: harnessTurn(
+                                `Your reply was cut off before the required conviction line. `
+                                + `As your ENTIRE reply, output only: "CONVICTION: <0-100>" — your numeric conviction in your own stance.`),
                         });
                         await streamWithTransientRetry(
                             runOnce,
@@ -3109,7 +3132,10 @@ const conductRealDebateImpl = async function* (
                 .filter((c): c is { seat: string; conviction: number } => c !== null);
             return formatEnsembleLineBlock(computeEnsembleLine(convictions));
         })(),
-        buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never) ? `\n\n${buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never)}` : '',
+        (() => {
+            const trust = buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never);
+            return trust ? `\n\n${trust}` : '';
+        })(),
         // Harness notes (the harness's own read path): the harness's own
         // code-observed beliefs about provider behavior (wire/budget) —
         // capped, newest first. The moderator weighs known quirks ("this
@@ -3150,6 +3176,11 @@ const conductRealDebateImpl = async function* (
 
     const finalRound = lastRebuttalRound + 1;
     const attempts = [moderatorPrompt, compactModeratorPrompt];
+    // Bracket the verdict with a truncation window so the finalizer can tell
+    // "the moderator hit its token ceiling" apart from "the moderator was
+    // vague". Scoped here rather than run-wide: a seat cut off mid-rebuttal
+    // must not make the PLAN look truncated.
+    beginTruncationWindow();
     for (let attempt = 0; attempt < attempts.length; attempt++) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         onSpeakerStatus?.('Moderator', finalRound, true);
@@ -3203,6 +3234,14 @@ const conductRealDebateImpl = async function* (
         // concatenates with the successful verdict in one bubble.
         yield { speaker: 'Moderator', round: finalRound, text: `\n${MODERATOR_RETRY_MARKER}\n` };
     }
+    // Close the bracket opened at the top of this round. The finalizer reads the
+    // tally after the generator has ended, and `peekTruncations` keeps handing
+    // back the closed figure — but from here on no unrelated call can be
+    // counted into it. Every provider response reports its stop signal through
+    // the same recorder, so a bot mailbox reply, a cron automation or a memory
+    // consolidation that hits its own ceiling used to land in the verdict's
+    // tally, and "raise the verdict token budget" was blaming a DM.
+    consumeTruncations();
 };
 
 export const conductTwoWayPostMortemDebate = (

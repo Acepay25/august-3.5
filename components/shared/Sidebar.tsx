@@ -68,7 +68,7 @@ const bucketOf = (ms: number): string => {
 
 /** Tiny bordered keyboard hint ("Ctrl+N" / "Ctrl+K") for the top rows. */
 const Kbd: React.FC<{ children: string }> = ({ children }) => (
-    <span className="shrink-0 rounded border border-white/10 px-1 py-px text-[9px] leading-4 text-zinc-600">
+    <span className="shrink-0 rounded border border-white/10 px-1 py-px text-ui-2xs leading-4 text-zinc-600">
         {children}
     </span>
 );
@@ -311,7 +311,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 {!collapsed && <span className="truncate text-sm">{getPreview(conv)}</span>}
             </button>
             {!collapsed && (
-                <span className="ml-auto shrink-0 text-[10px] text-zinc-600" title={new Date(lastActivityMs(conv)).toLocaleString()}>
+                <span className="ml-auto shrink-0 text-ui-xs text-zinc-600" title={new Date(lastActivityMs(conv)).toLocaleString()}>
                     {relTime(lastActivityMs(conv))}
                 </span>
             )}
@@ -349,7 +349,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             aria-selected
                             data-testid={`sidebar-pane-${pane}`}
                             onClick={() => onSetSidebarPane?.(pane)}
-                            className="-mb-px border-b border-zinc-200 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-100"
+                            className="-mb-px border-b border-zinc-200 pb-1.5 text-ui-xs font-bold uppercase tracking-widest text-zinc-100"
                         >
                             {label}
                         </button>
@@ -424,7 +424,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             <button
                                 type="button"
                                 onClick={act(onCreateAutomation)}
-                                className="rounded px-1.5 py-0.5 text-[10px] text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
+                                className="rounded px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
                                 title="New automation"
                                 aria-label="New automation"
                             >
@@ -438,7 +438,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         onOpenAutomation && (
                             <NavRow
                                 collapsed
-                                icon={<span className="text-[10px] font-black">⏱</span>}
+                                icon={<span className="text-ui-xs font-black">⏱</span>}
                                 label="Automations"
                                 onClick={act(() => onOpenAutomation(automations[0]?.id ?? null))}
                             />
@@ -454,7 +454,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 <button
                                     type="button"
                                     onClick={act(onCreateAutomation ?? (() => {}))}
-                                    className="text-[10px] text-zinc-300 hover:text-zinc-100 underline underline-offset-2"
+                                    className="text-ui-xs text-zinc-300 hover:text-zinc-100 underline underline-offset-2"
                                 >
                                     create one
                                 </button>
@@ -471,7 +471,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             >
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
                                 <span className="truncate text-[11px] text-zinc-400 group-hover:text-zinc-200">{a.name}</span>
-                                <span className="ml-auto text-[9px] text-zinc-600 group-hover:text-zinc-400 shrink-0">{humanizeCron(a.schedule.cron)}</span>
+                                <span className="ml-auto text-ui-2xs text-zinc-600 group-hover:text-zinc-400 shrink-0">{humanizeCron(a.schedule.cron)}</span>
                             </button>
                         ))
                     )}
@@ -488,7 +488,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             setIsSelectionMode(previous => !previous);
                             setSelectedConversationIds(new Set());
                         }}
-                        className="rounded px-1.5 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
+                        className="rounded px-1.5 py-1 text-ui-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
                     >
                         {isSelectionMode ? 'Cancel' : 'Select'}
                     </button>
@@ -503,7 +503,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         type="button"
                         onClick={handleDeleteSelected}
                         disabled={selectedConversationIds.size === 0}
-                        className="rounded-md bg-rose-500/10 px-2 py-1 text-[10px] font-medium text-rose-300 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-rose-400"
+                        className="rounded-md bg-rose-500/10 px-2 py-1 text-ui-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-rose-400"
                     >
                         Delete selected
                     </button>
@@ -537,10 +537,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             >
                                 <div className="flex items-baseline gap-2">
                                     <span className="min-w-0 truncate text-[13px] text-zinc-200">{hit.conversationTitle}</span>
-                                    <span className="ml-auto shrink-0 text-[10px] text-zinc-600">{relTime(Date.parse(hit.at) || 0)}</span>
+                                    <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{relTime(Date.parse(hit.at) || 0)}</span>
                                 </div>
                                 <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-zinc-500">
-                                    <span className="mr-1 text-[9px] uppercase tracking-wide text-zinc-600">{hit.speaker}</span>
+                                    <span className="mr-1 text-ui-2xs uppercase tracking-wide text-zinc-600">{hit.speaker}</span>
                                     {hit.excerpt}
                                 </p>
                             </button>
@@ -556,7 +556,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 ) : (
                     groupedConversations.map(group => (
                         <div key={group.label} className="pt-1">
-                            <div className="px-3 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-600">
+                            <div className="px-3 pb-0.5 pt-1.5 text-ui-xs font-medium uppercase tracking-wider text-zinc-600">
                                 {group.label}
                             </div>
                             {group.items.map(renderConversationRow)}
@@ -646,7 +646,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                         <Kbd>Ctrl+N</Kbd>
                                     </button>
                                 )}
-                                <p className="border-t border-white/[0.06] px-2.5 pb-1 pt-2 font-mono text-[10px] text-zinc-600">
+                                <p className="border-t border-white/[0.06] px-2.5 pb-1 pt-2 font-mono text-ui-xs text-zinc-600">
                                     August v{typeof APP_VERSION === 'string' ? APP_VERSION : ''}
                                 </p>
                             </div>

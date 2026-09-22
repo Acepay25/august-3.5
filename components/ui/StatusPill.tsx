@@ -41,7 +41,7 @@ const StatusPill: React.FC<StatusPillProps> = ({
     <span
         title={title}
         className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 font-bold ${
-            kicker ? 'text-[9px] uppercase tracking-widest' : 'text-[10px]'
+            kicker ? 'text-ui-2xs uppercase tracking-widest' : 'text-ui-xs'
         } ${TONE[tone]} ${className}`.trim()}
         {...rest}
     >

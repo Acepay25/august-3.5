@@ -48,6 +48,11 @@ weekly, at boot, due-checked per user
   → stale-skill demotion proposals  ┐
   → contradiction sweep             ├→ learning queue (fingerprint-deduped)
   → graveyard retention sweep       ┘   (retention only — it revives nothing)
+  → idle skill lifecycle (skillIdleLifecycle.runSkillIdleSweep) — the only
+     stage that ACTS on a clock instead of queueing: idle 90d ⇒ suspend
+     (enabled=false, still ranked-out but still MATCHED, so it can revive with
+     no human involved); still suspended 180d ⇒ move to the skills archive +
+     an 'idle' graveyard tombstone so a re-draft raises a revival card
   → notebook review → profile/suggestions.md (human-facing, never injected)
   · one health line each → memory_hygiene_v1_ → the Health tab (memoryHealth)
 bots (WS-3)
@@ -97,8 +102,8 @@ what lets the ladder test it at all.
 | memory amendments | `proposeAmendment` (:84) ← `DeskToolsService.ts:1450` | `AmendmentsInbox` + supervisor (:307,309) | yes |
 | injection records | `recordMemoryInjection` ← `getMemoryFilesContext`, `botLearning.recordBotTurnInjection` | `skillAdherenceForRun` ← `applySkillEvidence`; `listRetrievedMemorySources` UI | yes |
 | decision reflections (**no store**) | none — `DecisionReflectionService.ts:12` is a pure selector over `LoggedTrade[]` (`loggedTrades`) + their `postMortem`; it writes nothing and owns nothing | `useAnalysisPipeline.ts:1411` → the analyst prompt block | **reader-only, and that is the design** (WS-4.6: this row, not "registered above") |
-| `skill_graveyard_v1_` tombstones | `recordTombstone` ← the ledger retirement transition (`SkillMemoryService.ts:2140`) | `graveyardBlock` → worth-gate context; `memoryHealth.queues.graveyard`; retention: `runGraveyardSweep` (weekly, via hygiene) | yes |
-| `memory_hygiene_v1_` health log | `appendLog` ← `runMemoryHygiene` (demotions · contradiction sweep · notebook review · graveyard sweep) | `memoryHealth.hygiene` → `components/learn/MemoryHealthCard.tsx` | yes |
+| `skill_graveyard_v1_` tombstones | `recordTombstone` ← the ledger retirement transition, and ← the idle archive stage (`skillIdleLifecycle`, reason `idle`) | `graveyardBlock` → worth-gate context; `memoryHealth.queues.graveyard`; retention: `runGraveyardSweep` (weekly, via hygiene) | yes |
+| `memory_hygiene_v1_` health log | `appendLog` ← `runMemoryHygiene` (demotions · contradiction sweep · notebook review · graveyard sweep · idle lifecycle) | `memoryHealth.hygiene` → `components/learn/MemoryHealthCard.tsx` | yes |
 
 ## WS-1.3 — the GlobalMemory round-trip
 
@@ -181,10 +186,14 @@ therefore does change the next index's Family-A line.
    (`memory_hygiene_v1_`, :49), last run stamped in the payload, 7-day window,
    missing-or-unparsable ⇒ due — and is reached at boot from
    `weeklyReview.runWeeklyReviewIfDue` (:168-169) after its own due-check.
-   `runMemoryHygiene` runs four reported steps, one health line each:
+   `runMemoryHygiene` runs five reported steps, one health line each:
    stale-skill demotions, the contradiction sweep (moved here from the
    weekly review block, where its counts stopped at a `console.log` and reached
-   no report), the notebook review, and the graveyard retention sweep. The Health tab renders
+   no report), the graveyard retention sweep, the idle skill lifecycle, and the
+   notebook review. The first three only queue; the idle lifecycle is the one
+   step that actuates on its own, and it is bounded to being reversible — it
+   changes which skills are injected and where the file is filed, never what a
+   skill's record says. The Health tab renders
    the log via `memoryHealth.hygiene`. `runNotebookReview` still ALSO runs from
    `App.tsx:379-386` on a notebook-change debounce and needs an API key; the
    schedule only adds the weekly guarantee, it does not replace that path.

@@ -98,9 +98,9 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                 <div className="flex flex-wrap items-baseline gap-2">
                                     <span className="text-xs font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
                                     <span className="text-[11px] font-medium text-zinc-300">{dir}</span>
-                                    <span className="text-[10px] text-zinc-600">{signal.conversationTitle}</span>
+                                    <span className="text-ui-xs text-zinc-600">{signal.conversationTitle}</span>
                                     {!pending && (
-                                        <span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{signal.outcome}</span>
+                                        <span className="ml-auto text-ui-xs font-semibold uppercase tracking-widest text-zinc-400">{signal.outcome}</span>
                                     )}
                                     {pending && paper && (
                                         <span className="ml-auto text-[11px] tabular-nums text-zinc-400">{paper.line}</span>
@@ -108,15 +108,15 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                 </div>
                                 <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] tabular-nums">
                                     <div>
-                                        <div className="text-[10px] uppercase tracking-widest text-zinc-600">Entry</div>
+                                        <div className="text-ui-xs uppercase tracking-widest text-zinc-600">Entry</div>
                                         <div className="text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</div>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] uppercase tracking-widest text-zinc-600">SL</div>
+                                        <div className="text-ui-xs uppercase tracking-widest text-zinc-600">SL</div>
                                         <div className="text-rose-400">{analysis.stopLoss || '—'}</div>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] uppercase tracking-widest text-zinc-600">TP1</div>
+                                        <div className="text-ui-xs uppercase tracking-widest text-zinc-600">TP1</div>
                                         <div className="text-emerald-400">{analysis.takeProfit?.[0]?.price || '—'}</div>
                                     </div>
                                 </div>
@@ -126,7 +126,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                 {signal.watchEpisodes && signal.watchEpisodes.length > 0 && (
                                     <ol className="mt-2 space-y-1 border-t border-white/5 pt-2">
                                         {signal.watchEpisodes.slice(-6).map((ep, i) => (
-                                            <li key={`${ep.at}-${i}`} className="text-[10px] leading-4 text-zinc-500">
+                                            <li key={`${ep.at}-${i}`} className="text-ui-xs leading-4 text-zinc-500">
                                                 <span className="font-semibold uppercase tracking-widest text-zinc-600">{ep.kind}</span>
                                                 {' · '}{ep.detail}
                                             </li>

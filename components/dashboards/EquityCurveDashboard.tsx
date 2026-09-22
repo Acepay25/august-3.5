@@ -49,8 +49,8 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
     return (
         <div className=" glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2 sm:mb-3">
-                <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Equity Curve (cumulative P&L %)</div>
-                <div className="flex items-center gap-3 text-[10px] font-mono">
+                <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest">Equity Curve (cumulative P&L %)</div>
+                <div className="flex items-center gap-3 text-ui-xs font-mono">
                     <span className={pnlPositive ? 'text-emerald-400' : 'text-rose-400'}>{pnlPositive ? '+' : ''}{totalPnl}%</span>
                     <span className="text-zinc-500">Max DD {maxDrawdown}%</span>
                     <span className="text-zinc-600">{counted} trade{counted === 1 ? '' : 's'}</span>

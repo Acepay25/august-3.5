@@ -34,6 +34,8 @@ import { VerdictCard, extractConvictions, type VerdictSeat } from './VerdictCard
 import { DeskSteerInput } from './DeskSteerInput';
 import { layoutFloor, FLOOR_REFERENCE_W, FLOOR_REFERENCE_H } from './floorLayout';
 import { convictionsFromTurns, exchangesForTurns, livePhaseForMessage } from '../../utils/debateStageActors';
+import type { RunContractStage } from '../../utils/runContract';
+import Tip from '../ui/Tip';
 import { roleForName } from './pixelAvatars';
 import { subscribeRoleOverrides } from '../../services/desk/roleOverrides';
 import {
@@ -72,8 +74,10 @@ export interface DeskSceneProps {
     convictions?: Array<{ name: string; value: number }>;
     /** Optional: callback so the steer input can route into the live debate. */
     onSteerSeat?: (seatName: string, note: string) => void;
-    /** Run-contract stage ladder — the same one the in-transcript stage shows. */
-    stages?: Array<{ id: string; label: string; state: string; note?: string }>;
+    /** Run-contract stage ladder — the same one the in-transcript stage shows.
+     *  Typed off the derivation's own vocabulary, not a widened `state: string`
+     *  that would let a renamed state render as the pending fallback. */
+    stages?: RunContractStage[];
     /** Direction + grade for the verdict card. When omitted, the floor
      *  just shows the caption and skips the verdict panel. */
     verdictDetail?: { direction: string; confidence: string; grade?: string | null };
@@ -409,25 +413,23 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                 <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline gap-x-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Desk view</span>
+                            <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">Desk view</span>
                             {caption && (
                                 <span className="truncate text-[11px] font-medium text-zinc-200">{caption}</span>
                             )}
                             {phase && (
-                                <span className="truncate text-[10px] text-zinc-500">· {phase}</span>
+                                <span className="truncate text-ui-xs text-zinc-500">· {phase}</span>
                             )}
                             {verdict && (
-                                <span className="truncate text-[10px] text-zinc-500">· {verdict}</span>
+                                <span className="truncate text-ui-xs text-zinc-500">· {verdict}</span>
                             )}
                         </div>
                         {stages && stages.length > 0 && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5">
-                                {stages.map((stage, i) => (
-                                    <React.Fragment key={stage.id}>
-                                        {i > 0 && <span className="text-[9px] text-zinc-500">›</span>}
+                                {stages.map((stage, i) => {
+                                    const chip = (
                                         <span
-                                            title={stage.note || stage.label}
-                                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-2xs font-semibold uppercase tracking-wider ${
                                                 stage.state === 'done'
                                                     ? 'bg-zinc-800 text-zinc-300'
                                                     : stage.state === 'running'
@@ -444,17 +446,31 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                             )}
                                             {stage.label}
                                         </span>
-                                    </React.Fragment>
-                                ))}
+                                    );
+                                    return (
+                                        <React.Fragment key={stage.id}>
+                                            {i > 0 && <span className="text-ui-2xs text-zinc-500">›</span>}
+                                            {/* Tip only where it says something the chip
+                                                cannot fit: the skip reason. Wrapping every
+                                                chip would repeat the visible label as
+                                                tooltip text twice in the accessibility
+                                                tree — and `title=`, which this replaces,
+                                                was doing exactly that. */}
+                                            {stage.note
+                                                ? <Tip label={stage.note} side="below">{chip}</Tip>
+                                                : chip}
+                                        </React.Fragment>
+                                    );
+                                })}
                             </div>
                         )}
                         {exchanges && exchanges.length > 0 && (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
-                                <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-600">Exchanges</span>
+                                <span className="text-ui-2xs font-semibold uppercase tracking-widest text-zinc-600">Exchanges</span>
                                 {exchanges.map(ex => (
                                     <span
                                         key={`${ex.from}->${ex.to}`}
-                                        className="inline-flex items-center gap-1 rounded border border-white/5 bg-zinc-950/60 px-1.5 py-0.5 text-[9px] text-zinc-500"
+                                        className="inline-flex items-center gap-1 rounded border border-white/5 bg-zinc-950/60 px-1.5 py-0.5 text-ui-2xs text-zinc-500"
                                         title={`${ex.from} addressed ${ex.to} ${ex.count}×`}
                                     >
                                         <span className="font-medium text-zinc-400">{ex.from}</span>
@@ -474,7 +490,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             aria-pressed={editRoom}
                             title={editRoom ? 'Done editing' : 'Edit room (drag seats)'}
                             data-testid="desk-edit-room"
-                            className={`flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                            className={`flex h-7 items-center gap-1 rounded-md px-2 text-ui-xs font-semibold uppercase tracking-wider transition-colors ${
                                 editRoom
                                     ? 'bg-amber-400/20 text-amber-300 ring-1 ring-amber-400/50'
                                     : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
@@ -520,7 +536,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 onClick={askReset}
                                 title="Reset to default positions"
                                 data-testid="desk-reset-layout"
-                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-400 hover:text-rose-300"
+                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-ui-xs text-zinc-400 hover:text-rose-300"
                             >
                                 Reset
                             </button>
@@ -681,7 +697,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                     {onSteerSeat ? (
                         <DeskSteerInput liveSeats={liveSeatNames} onSubmit={onSteerSeat} />
                     ) : (
-                        <div className="text-[10px] text-zinc-500">
+                        <div className="text-ui-xs text-zinc-500">
                             Click a seat to open its full transcript. Esc closes.
                         </div>
                     )}
@@ -792,7 +808,7 @@ const HistoryButton: React.FC<{
                 aria-haspopup="true"
                 aria-expanded={open}
                 data-testid={testId}
-                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
+                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-ui-xs text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
             >
                 {label}
             </button>
@@ -806,7 +822,7 @@ const HistoryButton: React.FC<{
                     // (above) catches Escape and closes the popover.
                     className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-white/15 bg-zinc-950/95 px-2 py-1.5 shadow-2xl backdrop-blur"
                 >
-                    <p className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                    <p className="px-1 pb-1 text-ui-2xs font-semibold uppercase tracking-widest text-zinc-500">
                         {kind === 'undo' ? 'Next to undo' : 'Next to redo'} · {depth}
                         <span className="ml-1 font-normal normal-case tracking-normal text-zinc-600">↑↓ to navigate · Enter to apply</span>
                     </p>
@@ -831,7 +847,7 @@ const HistoryButton: React.FC<{
                                             el.scrollIntoView({ block: 'nearest' });
                                         }
                                     }}
-                                    className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-[10px] cursor-pointer outline-none ${
+                                    className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-ui-xs cursor-pointer outline-none ${
                                         isFocused
                                             ? 'bg-zinc-800 text-zinc-100 ring-1 ring-amber-400/40'
                                             : 'text-zinc-300 hover:bg-zinc-800/60'

@@ -118,7 +118,7 @@ export const SectionCard: React.FC<{
                     )}
                 </div>
                 {status && statusLabel && (
-                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-medium ${statusStyles[status]}`}>
+                    <span className={`text-ui-xs px-2.5 py-1 rounded-full font-medium ${statusStyles[status]}`}>
                         {statusLabel}
                     </span>
                 )}
@@ -159,7 +159,7 @@ export const StatPill: React.FC<{
 
     return (
         <div className="flex flex-col items-center p-3 rounded-xl bg-zinc-800 border border-white/10 hover:bg-zinc-700 transition-colors">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium mb-1">{label}</span>
+            <span className="text-ui-xs text-zinc-500 uppercase tracking-wider font-medium mb-1">{label}</span>
             <span className={`${sizeStyles[size]} font-bold ${variantStyles[variant]} tracking-tight`}>{value}</span>
         </div>
     );

@@ -17,6 +17,8 @@ import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { effortForTask } from '../providers/reasoningControls';
 import { executeDeskTool, isDataUnavailable } from '../analysis/DeskToolsService';
 import { extractAndParseJson } from '../../utils/jsonUtils';
+import { fenceUntrusted } from '../../utils/untrusted';
+import { dataUnavailable } from '../../utils/harnessMarks';
 import {
     parseResearchSubtasks,
     parseResearchFinding,
@@ -54,7 +56,7 @@ const INVESTIGATOR_PROMPT = (question: string, subtask: string, evidence: string
 YOUR assigned sub-task: "${subtask}"
 
 EVIDENCE fetched live by the system (search may have failed — a DATA_UNAVAILABLE line means the SOURCE is down, NOT that nothing exists):
-${evidence}
+${fenceUntrusted('web search evidence', evidence)}
 
 Answer ONLY your sub-task from this evidence, in 1-3 sentences. Quote numbers exactly as they appear. If the evidence cannot answer it, say so plainly. Reply ONLY with JSON:
 {"answer": "...", "sources": ["source titles or urls used"], "confidence": "low|medium|high"}`;
@@ -80,7 +82,7 @@ const searchEvidence = async (query: string, signal?: AbortSignal): Promise<stri
         { id: `research-search-${Date.now()}`, name: 'web_search', arguments: { query } },
         { signal },
     );
-    return result.content || `DATA_UNAVAILABLE: web_search — empty result`;
+    return result.content || dataUnavailable('web_search', 'empty result');
 };
 
 /**

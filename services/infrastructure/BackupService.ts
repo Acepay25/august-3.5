@@ -543,16 +543,80 @@ export const restoreBackup = async (
 };
 
 /**
- * Cleanup old backups, keeping only the most recent MAX_BACKUPS
+ * Cleanup old backups.
+ *
+ * The rule used to be `backups.slice(MAX_BACKUPS)` and nothing else: five
+ * records, one auto-backup per 30 minutes, so a day of trading kept roughly
+ * 2.5 hours of recovery history — and the newest-5 window counted IMPORTED
+ * records too, which is what the comment at `importBackupFromText` claims they
+ * are exempt from. A trader who imported a file could therefore evict one of
+ * the machine's own backups, and a trader whose notebook was corrupted at
+ * 09:00 could discover at 12:00 that the only copy of yesterday was already
+ * deleted. Both directions of that are memory loss, which is the one thing
+ * this store exists to prevent.
+ *
+ * So: the newest MAX_BACKUPS always, plus one per day for DAILY_TIER_DAYS and
+ * one per week for WEEKLY_TIER_WEEKS beyond that (bounded at MAX_BACKUPS + 7 +
+ * 4 records), plus the newest MAX_IMPORTED imports. Imports are excluded from
+ * the automatic window entirely — they are deliberate acts, not churn.
+ *
+ * Pure, because the jsdom suite has no IndexedDB: this is every decision the
+ * sweep makes, and `cleanupOldBackups` only performs them.
  */
+export const DAILY_TIER_DAYS = 7;
+export const WEEKLY_TIER_WEEKS = 4;
+export const MAX_IMPORTED_KEPT = 3;
+const DAY_MS = 86_400_000;
+const isImportedId = (id: string): boolean => id.startsWith('imported-');
+const stampOf = (b: { timestamp: string }): number => {
+    const t = Date.parse(b.timestamp);
+    // Undated rows sort oldest: they cannot be placed in a time tier, so the
+    // only thing they can ever win is one of the newest-MAX_BACKUPS slots.
+    return Number.isFinite(t) ? t : 0;
+};
+
+export const selectBackupsToDelete = (
+    backups: ReadonlyArray<Pick<BackupMetadata, 'id' | 'timestamp'>>,
+    now: number = Date.now(),
+): string[] => {
+    const newestFirst = (a: { timestamp: string }, b: { timestamp: string }): number =>
+        stampOf(b) - stampOf(a);
+    const imports = backups.filter(b => isImportedId(b.id)).sort(newestFirst);
+    const auto = backups.filter(b => !isImportedId(b.id)).sort(newestFirst);
+
+    const keep = new Set<string>();
+    auto.slice(0, MAX_BACKUPS).forEach(b => keep.add(b.id));
+
+    // Tiered keeps only apply PAST the always-kept window; inside it the newest
+    // five already cover whatever a day or week bucket would have chosen.
+    const dailyCutoff = now - DAILY_TIER_DAYS * DAY_MS;
+    const weeklyCutoff = now - (DAILY_TIER_DAYS + WEEKLY_TIER_WEEKS * 7) * DAY_MS;
+    const byDay = new Map<string, string>();
+    const byWeek = new Map<string, string>();
+    for (const b of auto.slice(MAX_BACKUPS)) {
+        const t = stampOf(b);
+        if (t >= dailyCutoff) {
+            const key = new Date(t).toISOString().slice(0, 10);
+            if (!byDay.has(key)) { byDay.set(key, b.id); keep.add(b.id); }
+            continue;
+        }
+        if (t >= weeklyCutoff) {
+            const key = String(Math.floor(t / (7 * DAY_MS)));
+            if (!byWeek.has(key)) { byWeek.set(key, b.id); keep.add(b.id); }
+        }
+    }
+
+    imports.slice(0, MAX_IMPORTED_KEPT).forEach(b => keep.add(b.id));
+    return backups.filter(b => !keep.has(b.id)).map(b => b.id);
+};
+
 const cleanupOldBackups = async (username: string): Promise<void> => {
     const backups = await getBackups(username);
-
-    if (backups.length > MAX_BACKUPS) {
-        const toDelete = backups.slice(MAX_BACKUPS);
-        for (const backup of toDelete) {
-            await deleteBackup(backup.id);
-        }
+    const toDelete = selectBackupsToDelete(backups);
+    for (const id of toDelete) {
+        await deleteBackup(id);
+    }
+    if (toDelete.length) {
         console.log(`[BackupService] Cleaned up ${toDelete.length} old backups`);
     }
 };
@@ -653,4 +717,122 @@ export const getImportPreview = (data: any): {
         tradeCount: data.tradeLog?.length || 0,
         savedAnalysesCount: data.savedAnalyses?.length || 0
     };
+};
+
+// ─── IMPORT ─────────────────────────────────────────────────────────────────
+// `exportBackupToFile` has always written a profile-shaped envelope documented
+// as "compatible with the existing import flow" — but no import flow existed, so
+// the one artifact a trader could carry off a machine was unreadable by this
+// app. These two functions are that missing half: the pure builder holds every
+// decision (what the file may contain, what it cannot), and the async importer
+// just stores what it produced.
+
+export interface ImportOutcome {
+    ok: boolean;
+    error?: string;
+    errors?: string[];
+    preview?: ReturnType<typeof getImportPreview>;
+    /** What the file could not carry, so a completed import never reads as a
+     *  complete one. */
+    limitations?: string[];
+    record?: BackupRecord;
+    metadata?: BackupMetadata;
+}
+
+/** A stored backup, exactly as `createBackup` writes it. Exported so the import
+ *  path cannot drift from the restore path's expectations. */
+export interface BackupRecord {
+    id: string;
+    username: string;
+    timestamp: string;
+    version: number;
+    profile: string;
+    preferences: string;
+    thinking: string;
+    sizeBytes: number;
+    conversationCount: number;
+    tradeCount: number;
+}
+
+/** Turn exported JSON into a storable backup record. Pure — no storage, no
+ *  Capacitor, so every branch of it is testable. */
+export const buildBackupRecordFromExport = (text: string): ImportOutcome => {
+    let data: unknown;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        return { ok: false, error: 'That file is not valid JSON.' };
+    }
+
+    const check = validateImportData(data);
+    if (!check.valid) return { ok: false, errors: check.errors };
+
+    const envelope = data as Record<string, unknown> & { username: string };
+    const preview = getImportPreview(envelope);
+    // The export envelope's own bookkeeping keys are not part of a UserProfile;
+    // leaving them in would persist fields the restore path never expects.
+    const { _backupExportedAt, _preferencesBackup, ...profile } = envelope;
+    const profileJson = JSON.stringify(profile);
+    const record: BackupRecord = {
+        // An `imported-` prefix keeps this distinguishable from an auto-backup
+        // in the list, and out of `cleanupOldBackups`' newest-5 window: an
+        // import must never evict the backups already on the machine.
+        id: `imported-${envelope.username.replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}`,
+        username: envelope.username,
+        timestamp: typeof _backupExportedAt === 'string'
+            ? _backupExportedAt
+            : new Date().toISOString(),
+        version: 1,
+        profile: profileJson,
+        preferences: _preferencesBackup ? JSON.stringify(_preferencesBackup) : '{}',
+        thinking: '[]',
+        sizeBytes: profileJson.length * 2,
+        conversationCount: preview.conversationCount,
+        tradeCount: preview.tradeCount,
+    };
+    const limitations = ['Reasoning records (the thinking corpus) are not carried by an exported file.'];
+    if (!_preferencesBackup) {
+        limitations.push('No provider settings/keys sidecar in this file — it predates sidecar exports.');
+    }
+    const metadata: BackupMetadata = {
+        id: record.id,
+        username: record.username,
+        timestamp: record.timestamp,
+        version: 1,
+        sizeBytes: record.sizeBytes,
+        conversationCount: record.conversationCount,
+        tradeCount: record.tradeCount,
+    };
+    return { ok: true, preview, limitations, record, metadata };
+};
+
+/**
+ * Import a file written by `exportBackupToFile` into the backup list.
+ *
+ * NON-DESTRUCTIVE by design: it stores a record and returns. Restoring — the
+ * step that replaces a live profile — stays behind `restoreBackup` and the
+ * confirm dialog that already guards it, so choosing a file can never silently
+ * overwrite a journal.
+ */
+export const importBackupFromText = async (text: string): Promise<ImportOutcome> => {
+    const outcome = buildBackupRecordFromExport(text);
+    if (!outcome.ok || !outcome.record) return outcome;
+    if (useNativeStorage()) {
+        // The native store is the app's sandbox directory; a file chosen on a
+        // desktop has no path there. Refuse loudly rather than half-import.
+        return { ok: false, error: 'Importing a backup file is available on desktop and web. On mobile, backups stay inside the app.' };
+    }
+    try {
+        const db = await initBackupDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(BACKUP_STORE_NAME, 'readwrite');
+            const request = tx.objectStore(BACKUP_STORE_NAME).add(outcome.record);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+        return outcome;
+    } catch (error) {
+        console.error('[BackupService] Failed to import backup:', error);
+        return { ok: false, error: 'Could not store the imported backup.' };
+    }
 };

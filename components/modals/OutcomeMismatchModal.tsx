@@ -56,13 +56,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                 <div className="p-6 space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
-                            <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">You Logged</div>
+                            <div className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider">You Logged</div>
                             <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-emerald-400' : 'text-red-400'}`}>
                                 {userOutcome}
                             </div>
                         </div>
                         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
-                            <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Price Shows</div>
+                            <div className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider">Price Shows</div>
                             <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-emerald-400' : 'text-red-400'}`}>
                                 {priceValidation.outcome}
                             </div>

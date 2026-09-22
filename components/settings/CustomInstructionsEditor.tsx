@@ -90,7 +90,7 @@ const InstructionCard: React.FC<{
                         className="w-full h-32 bg-zinc-950 border border-white/10 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-cyan-500/30 resize-none leading-relaxed custom-scrollbar font-mono"
                     />
                     <div className="flex justify-end mt-2">
-                        <span className="text-[10px] text-zinc-500">
+                        <span className="text-ui-xs text-zinc-500">
                             {instruction.content.trim().split(/\s+/).filter(Boolean).length} words
                         </span>
                     </div>
@@ -164,19 +164,19 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <div className="flex space-x-1 bg-zinc-900 p-1 rounded-xl border border-white/5">
                 <button
                     onClick={() => onTabChange('general')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Standard
                 </button>
                 <button
                     onClick={() => onTabChange('accuracyOriginal')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Strict Mode
                 </button>
                 <button
                     onClick={() => onTabChange('accuracyPure')}
-                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Pure AI
                 </button>
@@ -184,7 +184,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
 
             {/* Word Count Progress */}
             <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
-                <div className="flex justify-between items-center text-[10px] font-mono mb-1.5">
+                <div className="flex justify-between items-center text-ui-xs font-mono mb-1.5">
                     <span className="text-zinc-500 uppercase font-bold tracking-wider">Token Usage</span>
                     <span className={`${totalWordCount > MAX_WORD_COUNT ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
                         {totalWordCount} / {MAX_WORD_COUNT} words

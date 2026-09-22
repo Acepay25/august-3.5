@@ -25,9 +25,9 @@ export interface TradeProposalCardProps {
 const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, onLog, onCancel }) => (
     <div className="mt-1 rounded-xl border border-white/10 bg-zinc-800/70 p-2.5" data-testid="trade-proposal-card">
         <div className="flex items-center gap-2">
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
+            <span className={`rounded px-1.5 py-0.5 text-ui-xs font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
             <span className="font-mono text-[12px] font-bold text-zinc-100">{proposal.symbol}</span>
-            <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-500">{proposal.confidence} confidence</span>
+            <span className="ml-auto text-ui-xs uppercase tracking-wider text-zinc-500">{proposal.confidence} confidence</span>
         </div>
         <div className="mt-1.5 grid grid-cols-3 gap-1 font-mono text-[11px] tabular-nums">
             <span className="text-zinc-400">Entry <span className="text-zinc-100">{proposal.entry}</span></span>
@@ -55,7 +55,7 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
 /** The settled counterpart: a plan the trader already logged, left in the
  *  transcript so it can never be clicked twice. */
 export const TradeProposalLoggedRow: React.FC = () => (
-    <p className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+    <p className="mt-1 flex items-center gap-1.5 text-ui-xs font-semibold uppercase tracking-wider text-emerald-400">
         <CheckCircle className="h-3 w-3 shrink-0" />
         <span>✓ Logged as an open trade — the harness will score it against the outcome.</span>
     </p>

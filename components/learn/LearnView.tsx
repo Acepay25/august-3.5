@@ -112,7 +112,7 @@ const LearnView: React.FC<LearnViewProps> = ({
                             <Icon className="h-3.5 w-3.5" />
                             {label}
                             {id === 'coach' && coachCount > 0 && (
-                                <span className="rounded-full bg-amber-500 px-1.5 font-mono text-[9px] font-bold leading-[14px] text-zinc-950">
+                                <span className="rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950">
                                     {coachCount > 99 ? '99+' : coachCount}
                                 </span>
                             )}

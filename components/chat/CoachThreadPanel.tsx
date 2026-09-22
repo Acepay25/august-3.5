@@ -131,7 +131,7 @@ const DraftCard: React.FC<{
     return (
         <CardShell testId={`coach-draft-${d.id}`}>
             <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 text-[10px] font-bold uppercase text-zinc-400">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 text-ui-xs font-bold uppercase text-zinc-400">
                     {d.crafted.kind === 'avoid' ? 'AV' : 'RP'}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -288,7 +288,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
             {proposals.map(p => (
                 <CardShell key={p.id} testId={`coach-proposal-${p.id}`}>
                     <div className="flex items-start gap-3">
-                        <span className="mt-0.5 shrink-0 rounded-full border border-zinc-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-500">
+                        <span className="mt-0.5 shrink-0 rounded-full border border-zinc-700 px-2 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-500">
                             {p.kind}
                         </span>
                         <div className="min-w-0 flex-1">

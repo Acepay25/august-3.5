@@ -8,7 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
-import { parseSkillMarkdown, serializeSkill, titleFromMeta} from '../../services/learning/SkillMemoryService';
+import { isSkillFile, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
 import {
     initMemoryFiles,
     getMemoryFiles,
@@ -176,12 +176,26 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
 
     const handleToggleEnabled = useCallback(async (file: MemoryFile) => {
         try {
-            await updateMemoryFile(file.id, { enabled: !file.enabled }, activeUser);
+            const enabling = !file.enabled;
+            let patch: Partial<MemoryFile> = { enabled: enabling };
+            // Switching a skill back on by hand outranks the idle sweep that
+            // took it out. Leaving `suspendedAt` in the frontmatter would let
+            // `skillEnabledFlag` — which every attribution write recomputes
+            // `enabled` from — switch it straight back off again, making this
+            // toggle look like it did nothing.
+            if (enabling && isSkillFile(file)) {
+                const meta = parseSkillMarkdown(file.content);
+                if (meta?.suspendedAt) {
+                    meta.suspendedAt = undefined;
+                    patch = { ...patch, content: serializeSkill(meta, titleFromMeta(meta)) };
+                }
+            }
+            await updateMemoryFile(file.id, patch, activeUser);
             refresh();
-            toast.success(file.enabled ? 'Disabled' : 'Enabled',
-                file.enabled
-                    ? `"${file.name}" is no longer injected.`
-                    : `"${file.name}" is now injected into every prompt.`);
+            toast.success(enabling ? 'Enabled' : 'Disabled',
+                enabling
+                    ? `"${file.name}" is now injected into every prompt.`
+                    : `"${file.name}" is no longer injected.`);
         } catch (e: unknown) {
             toast.error('Could not toggle file', e instanceof Error ? e.message : 'Unknown error');
         }
@@ -260,7 +274,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     a read-only pointer so ownership stays discoverable. */}
                 {memoryConfig && (
                     <div className="pb-2">
-                        <span className="text-[10px] uppercase tracking-widest text-zinc-600">Managed by </span>
+                        <span className="text-ui-xs uppercase tracking-widest text-zinc-600">Managed by </span>
                         <span className="text-xs text-zinc-400">{memoryConfig.selectedModel || memoryConfig.name || 'memory model'}</span>
                     </div>
                 )}
@@ -387,7 +401,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                     setDraft(serialized);
                                     setIsDirty(true);
                                 }}
-                                className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors bg-zinc-900 border-white/10 text-zinc-400 hover:text-zinc-100"
+                                className="px-2 py-1 rounded text-ui-xs font-bold uppercase tracking-wider border transition-colors bg-zinc-900 border-white/10 text-zinc-400 hover:text-zinc-100"
                             >
                                 audience: {(parseSkillMarkdown(draft)?.audience ?? 'all')}
                             </button>
@@ -461,10 +475,10 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                             {file.name}
                                         </span>
                                         {file.autoManaged && (
-                                            <span className="text-[10px] uppercase tracking-widest text-zinc-500 shrink-0">auto</span>
+                                            <span className="text-ui-xs uppercase tracking-widest text-zinc-500 shrink-0">auto</span>
                                         )}
                                         {!file.enabled && (
-                                            <span className="text-[10px] uppercase tracking-widest text-zinc-600 shrink-0">off</span>
+                                            <span className="text-ui-xs uppercase tracking-widest text-zinc-600 shrink-0">off</span>
                                         )}
                                         <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
                                     </button>

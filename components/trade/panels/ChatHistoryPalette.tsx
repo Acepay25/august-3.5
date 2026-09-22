@@ -70,7 +70,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                 className="w-full border-b border-white/[0.06] bg-transparent px-4 py-3 text-[12px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
             />
             <div className="max-h-72 overflow-y-auto custom-scrollbar px-1 pb-1">
-                <p className="px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-600">Recent</p>
+                <p className="px-3 py-1 text-ui-xs uppercase tracking-widest text-zinc-600">Recent</p>
                 {rows.length === 0 && <p className="px-3 py-2 text-[11px] text-zinc-600">No conversations match.</p>}
                 {rows.map((s, i) => (
                     <div key={s.id} className={`group flex items-center gap-2 rounded-lg px-3 py-2 ${i === sel ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
@@ -79,7 +79,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                             onMouseEnter={() => onSelChange(i)}
                             className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
                             <span className={`truncate text-[12px] ${s.id === activeId ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>{s.kind === 'panel' ? '◆ ' : ''}{s.title}</span>
-                            <span className="shrink-0 text-[10px] text-zinc-600">{relTime(s.updatedAt)}</span>
+                            <span className="shrink-0 text-ui-xs text-zinc-600">{relTime(s.updatedAt)}</span>
                         </button>
                         {canDelete && (
                             <button type="button" onClick={() => onDelete(s.id)} aria-label={`Delete session ${s.title}`}
@@ -96,7 +96,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                     </button>
                 )}
             </div>
-            <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2 text-[10px] text-zinc-600">
+            <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2 text-ui-xs text-zinc-600">
                 <span>↑↓ to navigate</span>
                 <span>↵ to select</span>
             </div>

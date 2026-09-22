@@ -88,7 +88,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                                 <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                     {isCapturing ? 'Capturing...' : 'Auto-Capture'}
                                     {!isCapturing && (
-                                        <span className="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
+                                        <span className="text-ui-2xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
                                             Recommended
                                         </span>
                                     )}
@@ -137,7 +137,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 {/* Footer */}
                 <div className="px-5 py-4 border-t border-white/5 bg-zinc-950">
                     <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-zinc-600 max-w-[200px]">
+                        <p className="text-ui-xs text-zinc-600 max-w-[200px]">
                             AI will analyze why the setup didn't trigger
                         </p>
                         <button

@@ -133,6 +133,39 @@
   --font-sans: 'Geist Variable', 'Inter', system-ui, sans-serif;
   --font-serif: 'DM Serif Text', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── The UI type scale ───────────────────────────────────────────────────
+     One ramp, one source of truth, and it is RELATIVE to a single adjustable
+     base so the whole interface can be scaled for accessibility without
+     touching a class. `text-[10px]` cannot do that: a hundred-odd of them are
+     hard-coded pixel literals that a base change leaves behind, which is why
+     new UI uses these instead. Roles (not sizes) are the point — `text-ui-xs`
+     says "micro-label" where `text-[10px]` says nothing.
+
+     Line heights ride their own token so a taller base keeps its leading
+     rather than collapsing into the next row. */
+  --text-ui-xl: calc(var(--ui-font-size) + 4px);
+  --text-ui-xl--line-height: calc(var(--ui-font-size) + 8px);
+  --text-ui-lg: calc(var(--ui-font-size) + 2px);
+  --text-ui-lg--line-height: calc(var(--ui-font-size) + 6px);
+  --text-ui-base: var(--ui-font-size);
+  --text-ui-base--line-height: calc(var(--ui-font-size) + 6px);
+  --text-ui-caption: calc(var(--ui-font-size) - 1px);
+  --text-ui-caption--line-height: calc(var(--ui-font-size) + 4px);
+  --text-ui-sm: calc(var(--ui-font-size) - 2px);
+  --text-ui-sm--line-height: calc(var(--ui-font-size) + 2px);
+  /* Micro-labels: axis ticks, table headers, counts. The floor for running
+     text — `text-zinc-600` is bumped in this file specifically so ink at this
+     size clears WCAG AA on both surfaces. */
+  --text-ui-xs: calc(var(--ui-font-size) - 4px);
+  --text-ui-xs--line-height: var(--ui-font-size);
+  /* The restricted exception, for dense data cells and chart ticks where 10px
+     still costs too much width. Not a body-text size, and nothing new should
+     reach for it without a reason — it exists so the ramp can express what the
+     app already draws rather than sending the next author back to `text-[9px]`. */
+  --text-ui-2xs: calc(var(--ui-font-size) - 5px);
+  --text-ui-2xs--line-height: calc(var(--ui-font-size) - 2px);
+
   --radius-bubble: 12px;
   --radius-control: 8px;
   --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
@@ -144,6 +177,17 @@
      call sites remembering to write it. Duration stays Tailwind's .15s, which is
      already inside the .12–.18s window. */
   --default-transition-timing-function: var(--ease-snappy);
+}
+
+/* The single dial every `text-ui-*` role is measured from. Minara's UI runs on
+   14px sans, and that is what the rest of this app was laid out against, so
+   the default must reproduce the current pixels exactly — the scale is a
+   source of truth first and a user control second. Override it here (or per
+   subtree) and every labelled role moves together; the ~1000 hard-coded
+   `text-[Npx]` sites will not, which is the argument for moving new UI onto
+   the roles. */
+:root {
+  --ui-font-size: 14px;
 }
 
 /* Historical note: the app used to be monochrome, with semantic color opted

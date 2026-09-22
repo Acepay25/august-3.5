@@ -66,7 +66,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 shadow-xl">
-                <p className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1">{label}</p>
+                <p className="text-ui-xs text-zinc-400 uppercase tracking-wider mb-1">{label}</p>
                 {payload.map((entry: any, index: number) => (
                     <p key={index} className="text-sm font-bold" style={{ color: entry.color }}>
                         {entry.name}: {entry.value}{entry.name === 'winRate' ? '%' : ''}
@@ -172,7 +172,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#399ef7]"></div>
                         <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
-                    <span className="text-[10px] text-zinc-500 font-mono tabular-nums">
+                    <span className="text-ui-xs text-zinc-500 font-mono tabular-nums">
                         {filteredTrades.length} trades
                     </span>
                 </div>
@@ -185,7 +185,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             <button
                                 key={preset.days}
                                 onClick={() => handlePresetClick(preset.days)}
-                                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-md transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${!isCustomRange && selectedPreset === preset.days
+                                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-bold uppercase tracking-wider rounded-md transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${!isCustomRange && selectedPreset === preset.days
                                     ? 'bg-cyan-500 text-white shadow-md'
                                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
                                     }`}
@@ -204,9 +204,9 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 setCustomStartDate(e.target.value);
                                 if (e.target.value && customEndDate) setIsCustomRange(true);
                             }}
-                            className="flex-1 sm:flex-none px-2 py-1 text-[10px] font-mono bg-zinc-800 border border-white/10 rounded-md text-zinc-300 focus:outline-none focus:border-cyan-500/50"
+                            className="flex-1 sm:flex-none px-2 py-1 text-ui-xs font-mono bg-zinc-800 border border-white/10 rounded-md text-zinc-300 focus:outline-none focus:border-cyan-500/50"
                         />
-                        <span className="text-zinc-600 text-[10px]">to</span>
+                        <span className="text-zinc-600 text-ui-xs">to</span>
                         <input
                             type="date"
                             value={customEndDate}
@@ -214,7 +214,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 setCustomEndDate(e.target.value);
                                 if (customStartDate && e.target.value) setIsCustomRange(true);
                             }}
-                            className="flex-1 sm:flex-none px-2 py-1 text-[10px] font-mono bg-zinc-800 border border-white/10 rounded-md text-zinc-300 focus:outline-none focus:border-cyan-500/50"
+                            className="flex-1 sm:flex-none px-2 py-1 text-ui-xs font-mono bg-zinc-800 border border-white/10 rounded-md text-zinc-300 focus:outline-none focus:border-cyan-500/50"
                         />
                     </div>
                 </div>
@@ -224,7 +224,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {/* Win Rate */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Win Rate</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Win Rate</div>
                     <div className={`text-xl sm:text-3xl font-black ${overallStats.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {overallStats.winRate}%
                     </div>
@@ -232,7 +232,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
                 {/* Total Trades */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Trades</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Trades</div>
                     <div className="text-xl sm:text-3xl font-black text-white">{overallStats.totalTrades}</div>
                 </div>
 
@@ -243,7 +243,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     {overallStats.totalPnL !== 0 && (
                         <div className={`absolute top-0 left-0 w-full h-1 ${overallStats.totalPnL > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
                     )}
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Net PnL</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Net PnL</div>
                     {overallStats.totalPnL !== 0 ? (
                         <div className={`text-lg sm:text-2xl font-mono font-black tabular-nums ${overallStats.totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {overallStats.totalPnL >= 0 ? '+' : ''}{overallStats.totalPnL.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
@@ -256,7 +256,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         <div className="text-lg sm:text-2xl font-mono font-black text-zinc-500 tabular-nums">$0</div>
                     )}
                     {overallStats.totalPnL !== 0 && overallStats.totalPnLPercent !== 0 && (
-                        <div className={`text-[10px] font-mono tabular-nums mt-0.5 ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
+                        <div className={`text-ui-xs font-mono tabular-nums mt-0.5 ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
                             {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
                         </div>
                     )}
@@ -264,7 +264,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
                 {/* Profit Factor */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Profit Factor</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Profit Factor</div>
                     <div className={`text-xl sm:text-3xl font-black ${overallStats.profitFactor >= 1.5 ? 'text-cyan-400' : overallStats.profitFactor >= 1 ? 'text-yellow-400' : 'text-rose-400'}`}>
                         {overallStats.profitFactor >= 999 ? '∞' : `${overallStats.profitFactor}x`}
                     </div>
@@ -278,10 +278,10 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 offers this view. */}
             <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
                 <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Calibration Ledger</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest">Calibration Ledger</div>
                     {ledger.overallBrier !== null && (
                         <span
-                            className={`text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                            className={`text-ui-xs font-bold tabular-nums px-1.5 py-0.5 rounded ${
                                 brierQuality(ledger.overallBrier) === 'good'
                                     ? 'text-emerald-400 bg-emerald-500/10'
                                     : brierQuality(ledger.overallBrier) === 'fair'
@@ -300,7 +300,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 <div className="overflow-x-auto">
                     <table className="w-full text-[11px]">
                         <thead>
-                            <tr className="text-zinc-500 uppercase tracking-wider text-[9px]">
+                            <tr className="text-zinc-500 uppercase tracking-wider text-ui-2xs">
                                 <th className="text-left py-1 font-bold">Verdict</th>
                                 <th className="text-right py-1 font-bold">N</th>
                                 <th className="text-right py-1 font-bold">Hit</th>
@@ -325,10 +325,10 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 cost, post-first-red, and giveback views — the research says
                 these changed behavior where raw P&L did not. */}
             <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
-                <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2">Discipline</div>
+                <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2">Discipline</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <div className="text-[10px] text-zinc-400 font-bold mb-1">Plan adherence</div>
+                        <div className="text-ui-xs text-zinc-400 font-bold mb-1">Plan adherence</div>
                         <table className="w-full text-[11px]">
                             <tbody className="font-mono">
                                 {[discipline.adherence.followed, discipline.adherence.broken].map(r => (
@@ -342,7 +342,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             </tbody>
                         </table>
                         {discipline.giveback.days > 0 && (
-                            <p className="text-[10px] text-zinc-500 mt-1">
+                            <p className="text-ui-xs text-zinc-500 mt-1">
                                 {discipline.giveback.days} green day{discipline.giveback.days === 1 ? '' : 's'} finished red — overtrading into a lead.
                             </p>
                         )}
@@ -350,7 +350,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             window, so the sample count rides along — these are not
                             book-wide averages until coverage grows. */}
                         {discipline.excursion.n > 0 && (
-                            <p className="text-[10px] text-zinc-500 mt-1" data-testid="discipline-excursion">
+                            <p className="text-ui-xs text-zinc-500 mt-1" data-testid="discipline-excursion">
                                 Over {discipline.excursion.n} measured trade{discipline.excursion.n === 1 ? '' : 's'}: held through −
                                 {discipline.excursion.meanMaePct ?? '—'}% on average,
                                 {discipline.excursion.captureN > 0
@@ -360,7 +360,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         )}
                     </div>
                     <div>
-                        <div className="text-[10px] text-zinc-400 font-bold mb-1">Mistake cost (Σ PnL)</div>
+                        <div className="text-ui-xs text-zinc-400 font-bold mb-1">Mistake cost (Σ PnL)</div>
                         {discipline.mistakeCost.length > 0 ? (
                             <table className="w-full text-[11px]">
                                 <tbody className="font-mono">
@@ -376,9 +376,9 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 </tbody>
                             </table>
                         ) : (
-                            <p className="text-[10px] text-zinc-600">Tag mistakes when logging — the table builds itself.</p>
+                            <p className="text-ui-xs text-zinc-600">Tag mistakes when logging — the table builds itself.</p>
                         )}
-                        <div className="text-[10px] text-zinc-400 font-bold mt-2 mb-1">After the day's first red</div>
+                        <div className="text-ui-xs text-zinc-400 font-bold mt-2 mb-1">After the day's first red</div>
                         <table className="w-full text-[11px]">
                             <tbody className="font-mono">
                                 {[discipline.afterFirstRed.before, discipline.afterFirstRed.after].map(r => (
@@ -396,7 +396,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
             {/* Win Rate Trend Chart */}
             <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
-                <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Win Rate Trend</div>
+                <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Win Rate Trend</div>
                 {trendData.length > 1 ? (
                     <div className="h-32">
                         <ResponsiveContainer width="100%" height="100%">
@@ -429,7 +429,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
             {/* Performance by Confidence */}
             <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
-                <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">By Confidence</div>
+                <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">By Confidence</div>
                 {confidenceChartData.length > 0 ? (
                     <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
@@ -456,7 +456,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 {/* Legend */}
                 <div className="flex flex-wrap justify-center gap-4 mt-2 pt-2 border-t border-white/5">
                     {confidenceStats.map(s => (
-                        <div key={s.level} className="text-[10px] text-zinc-500">
+                        <div key={s.level} className="text-ui-xs text-zinc-500">
                             <span className="font-bold" style={{ color: CONFIDENCE_COLORS[s.level] }}>{s.level}</span>: {s.wins}W / {s.total}T
                         </div>
                     ))}
@@ -465,7 +465,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
             {/* Pattern Family Performance */}
             <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
-                <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Pattern Families</div>
+                <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Pattern Families</div>
                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     {familyStats.map(family => {
                         const color = FAMILY_COLORS[family.family] || COLORS.zinc;
@@ -478,13 +478,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                     backgroundColor: `${color}10`
                                 }}
                             >
-                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color }}>
+                                <span className="text-ui-2xs sm:text-ui-xs font-bold uppercase tracking-wider block mb-1" style={{ color }}>
                                     {family.family.replace('Family ', '')}
                                 </span>
                                 <span className="text-lg sm:text-xl font-black block" style={{ color }}>
                                     {family.total > 0 ? `${family.winRate}%` : '-'}
                                 </span>
-                                <span className="text-[8px] sm:text-[9px] opacity-60 text-zinc-400">
+                                <span className="text-[8px] sm:text-ui-2xs opacity-60 text-zinc-400">
                                     {family.wins}W / {family.total}T
                                 </span>
                             </div>
@@ -497,13 +497,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {/* Top Coins */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Top Coins</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Top Coins</div>
                     {topCoins.length > 0 ? (
                         <div className="space-y-2">
                             {topCoins.map((coin, idx) => (
                                 <div key={coin.coin} className="flex items-center justify-between p-2 bg-zinc-800 rounded-lg">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-zinc-600 font-mono tabular-nums w-4">#{idx + 1}</span>
+                                        <span className="text-ui-xs text-zinc-600 font-mono tabular-nums w-4">#{idx + 1}</span>
                                         <span className="font-bold text-sm text-white">{coin.coin}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
@@ -534,7 +534,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
                 {/* Streaks */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
-                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Streaks</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Streaks</div>
                     <div className="space-y-3 sm:space-y-4">
                         {/* Current Streak */}
                         <div className="flex items-center justify-between p-3 rounded-lg" style={{
@@ -555,11 +555,11 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         {/* Best/Worst */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-center">
-                                <span className="text-[9px] text-emerald-600 uppercase tracking-wider block mb-1">Best Win Streak</span>
+                                <span className="text-ui-2xs text-emerald-600 uppercase tracking-wider block mb-1">Best Win Streak</span>
                                 <span className="text-2xl font-black text-emerald-400">{streakData.bestWinStreak}</span>
                             </div>
                             <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-center">
-                                <span className="text-[9px] text-rose-600 uppercase tracking-wider block mb-1">Worst Loss Streak</span>
+                                <span className="text-ui-2xs text-rose-600 uppercase tracking-wider block mb-1">Worst Loss Streak</span>
                                 <span className="text-2xl font-black text-rose-400">{streakData.worstLossStreak}</span>
                             </div>
                         </div>
@@ -570,13 +570,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             {/* Avg Win/Loss */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-center">
-                    <div className="text-[9px] sm:text-[10px] text-emerald-600 uppercase font-bold tracking-widest mb-1">Avg Win</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-emerald-600 uppercase font-bold tracking-widest mb-1">Avg Win</div>
                     <div className="text-base sm:text-xl font-mono font-bold text-emerald-400">
                         +{overallStats.avgWinSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>
                 </div>
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 text-center">
-                    <div className="text-[9px] sm:text-[10px] text-rose-600 uppercase font-bold tracking-widest mb-1">Avg Loss</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-rose-600 uppercase font-bold tracking-widest mb-1">Avg Loss</div>
                     <div className="text-base sm:text-xl font-mono font-bold text-rose-400">
                         -{overallStats.avgLossSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>

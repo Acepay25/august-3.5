@@ -309,6 +309,14 @@ export interface Message {
    *  bots starts an EMPTY room instead of re-claiming the old one. Absent on
    *  1:1/DM/ensemble rows (they never carry a room). */
   roomId?: string;
+  /** The roster BOT that produced this row (AgentBot.id), stamped by every
+   *  writer that answers AS a bot. Without it a bot's reply is attributed only
+   *  by provider+model — which a solo Chat-AI answer from the same model
+   *  matches exactly, so the desk pane dropped the trader's own answer into a
+   *  bot's thread that never displayed it. `roomId` made this same argument for
+   *  rooms; a 1:1 turn needed it too. Absent on desk/ensemble rows and on every
+   *  row written before it existed, so those keep the provider+model fallback. */
+  botId?: string;
   /** Notebook files / skills retrieved for this run (inspectable on the card). */
   memoryRetrieved?: Array<{ path: string; kind: string }>;
   /** Verdict evidence pack: the journal evidence assembled for

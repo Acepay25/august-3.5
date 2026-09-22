@@ -86,7 +86,7 @@ const ToolActivityRow: React.FC<ToolActivityRowProps> = ({ lines, running = fals
             data-state={running ? 'running' : 'ok'}
         >
             {rows.map((row, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-[10px] leading-4 text-zinc-500">
+                <div key={i} className="flex items-center gap-1.5 text-ui-xs leading-4 text-zinc-500">
                     <Wrench className={`h-3 w-3 shrink-0 ${row.state === 'failed' ? 'text-rose-400/70' : 'text-zinc-600'}`} aria-hidden="true" />
                     <span className={`shrink-0 ${row.state === 'calling' ? 'text-zinc-500' : row.state === 'failed' ? 'text-rose-300' : 'text-zinc-400'}`}>
                         {row.label}

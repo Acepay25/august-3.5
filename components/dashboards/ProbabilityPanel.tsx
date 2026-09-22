@@ -73,7 +73,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                     <select
                         value={probMode}
                         onChange={(e) => setProbMode(e.target.value as 'AI' | 'Algo')}
-                        className="bg-transparent text-[10px] font-medium text-zinc-400 px-1 py-0.5 outline-none cursor-pointer hover:text-white transition-colors appearance-none text-center min-w-[50px]"
+                        className="bg-transparent text-ui-xs font-medium text-zinc-400 px-1 py-0.5 outline-none cursor-pointer hover:text-white transition-colors appearance-none text-center min-w-[50px]"
                         title="Switch between AI Reasoning and Algorithmic Calculation"
                         disabled={isCalculating}
                     >
@@ -101,12 +101,12 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                     {/* Selected Trade Indicator */}
                     {selectedCoinName && (
                         <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/50">
-                            <span className="text-[10px] text-zinc-400">
+                            <span className="text-ui-xs text-zinc-400">
                                  Viewing: <span className="font-bold text-zinc-100">{selectedCoinName}</span>
                             </span>
                             <button
                                 onClick={onClearSelection}
-                                className="text-[9px] px-2 py-0.5 rounded bg-zinc-700/60 text-zinc-300 hover:bg-zinc-700 transition-colors"
+                                className="text-ui-2xs px-2 py-0.5 rounded bg-zinc-700/60 text-zinc-300 hover:bg-zinc-700 transition-colors"
                             >
                                 Clear
                             </button>
@@ -124,7 +124,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                             levelProbabilities.slProbability > 30 ? 'bg-amber-500/10 border-amber-500/20' :
                                 'bg-emerald-500/10 border-emerald-500/20'
                             }`}>
-                            <span className="text-[9px] text-zinc-500 block mb-1">
+                            <span className="text-ui-2xs text-zinc-500 block mb-1">
                                 {slIsUpperBound ? 'Stop Loss ≤ (upper bound)' : 'Stop Loss'}
                             </span>
                             <span className={`text-xl font-bold font-mono ${levelProbabilities.slProbability > 50 ? 'text-rose-400' :
@@ -142,7 +142,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                                     tp.probability > 40 ? 'bg-amber-500/10 border-amber-500/20' :
                                         'bg-zinc-500/10 border-zinc-500/20'
                                     }`}>
-                                    <span className="text-[9px] text-zinc-500 block mb-1">TP{tp.level}</span>
+                                    <span className="text-ui-2xs text-zinc-500 block mb-1">TP{tp.level}</span>
                                     <span className={`text-xl font-bold font-mono ${tp.probability > 60 ? 'text-emerald-400' :
                                         tp.probability > 40 ? 'text-amber-400' :
                                             'text-zinc-400'
@@ -160,7 +160,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                                         (levelProbabilities as any).tp1Probability > 40 ? 'bg-amber-500/10 border-amber-500/20' :
                                             'bg-zinc-500/10 border-zinc-500/20'
                                         }`}>
-                                        <span className="text-[9px] text-zinc-500 block mb-1">TP1</span>
+                                        <span className="text-ui-2xs text-zinc-500 block mb-1">TP1</span>
                                         <span className={`text-xl font-bold font-mono ${(levelProbabilities as any).tp1Probability > 60 ? 'text-emerald-400' :
                                             (levelProbabilities as any).tp1Probability > 40 ? 'text-amber-400' :
                                                 'text-zinc-400'
@@ -175,7 +175,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                                         (levelProbabilities as any).tp2Probability > 40 ? 'bg-amber-500/10 border-amber-500/20' :
                                             'bg-zinc-500/10 border-zinc-500/20'
                                         }`}>
-                                        <span className="text-[9px] text-zinc-500 block mb-1">TP2</span>
+                                        <span className="text-ui-2xs text-zinc-500 block mb-1">TP2</span>
                                         <span className={`text-xl font-bold font-mono ${(levelProbabilities as any).tp2Probability > 60 ? 'text-emerald-400' :
                                             (levelProbabilities as any).tp2Probability > 40 ? 'text-amber-400' :
                                                 'text-zinc-400'
@@ -190,8 +190,8 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
 
                     {/* AI Reasoning Section */}
                     <div className="p-3 rounded-xl bg-zinc-800 border border-zinc-700/50">
-                        <span className="text-[10px] text-zinc-300 font-medium block mb-2"> AI Reasoning</span>
-                        <div className="space-y-2 text-[10px]">
+                        <span className="text-ui-xs text-zinc-300 font-medium block mb-2"> AI Reasoning</span>
+                        <div className="space-y-2 text-ui-xs">
                             {/* Reasoning field labels wear only sanctioned hues:
                                 cyan/amber/emerald for the three facets that have a
                                 meaning, neutral zinc for "Pattern" (no semantic hue
@@ -268,7 +268,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                         <>
                             <Spinner size="w-5 h-5" color="border-zinc-500" className="mb-3" />
                             <span className="text-xs text-zinc-300 font-medium">AI Calculating Probabilities...</span>
-                            <p className="text-[10px] text-zinc-500 mt-2 text-center max-w-[180px]">
+                            <p className="text-ui-xs text-zinc-500 mt-2 text-center max-w-[180px]">
                                 The moderator is currently resolving the debate and estimating level success rates.
                             </p>
                         </>

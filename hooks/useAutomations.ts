@@ -55,6 +55,15 @@ export interface AutomationRunOverrides {
     moderatorModel?: string;
 }
 
+/** What the pipeline reports when it returns. The scheduler needs this because
+ *  several pipeline exits reach neither `onMessage` nor `onError` — without an
+ *  observable return, a run that bailed early would never be settled. */
+export interface AutomationPipelineOutcome {
+    /** true = the pipeline finished by its own rules, which is NOT the same as
+     *  "produced a verdict" (cancellation and the offline re-queue both set it). */
+    ok?: boolean;
+}
+
 export interface AutomationPipelineRunner {
     (
         prompt: string,
@@ -69,7 +78,7 @@ export interface AutomationPipelineRunner {
                 onError: (error: string) => void;
             };
         }
-    ): void;
+    ): Promise<AutomationPipelineOutcome | void>;
 }
 
 export interface UseAutomationsParams {
@@ -419,6 +428,11 @@ export function useAutomations(params: UseAutomationsParams) {
         const done = new Promise<void>(res => { resolveDone = res; });
         let finished = false;
         const finish = (run: Partial<AutomationRun> & { status: AutomationRun['status'] }) => {
+            // Exactly-once: the pipeline callback and the settlement guard
+            // below can both legitimately reach `finish`, and a duplicate
+            // would write a second run row and double-count runCount.
+            if (finished) return;
+            finished = true;
             const finishedAt = new Date().toISOString();
             appendRun(config.id, {
                 id: runId,
@@ -436,13 +450,18 @@ export function useAutomations(params: UseAutomationsParams) {
             void persistConfigs(nextConfigs);
             inFlightRef.current = null;
             setRunningAutomationId(null);
-            if (!finished) {
-                finished = true;
-                resolveDone();
-            }
+            resolveDone();
         };
 
-        runPipeline(prompt, images, undefined, {
+        // `runPipeline` invokes onMessage/onError BEFORE it returns, so
+        // awaiting its promise is a superset of waiting on `done` — and unlike
+        // `done` it cannot be stranded. Four of the pipeline's early returns
+        // (cancelled, 429 rate-limit, quota, offline re-queue) reach NO
+        // automation callback at all; when one of those fired, `done` never
+        // resolved, `inFlightRef` stayed set, and the tick loop's in-flight
+        // guard silently disabled every automation until the app restarted.
+        // A 429 is the single most likely outcome of an unattended run.
+        const settled = await Promise.resolve(runPipeline(prompt, images, undefined, {
             automation: {
                 automationId: config.id,
                 conversation,
@@ -458,7 +477,28 @@ export function useAutomations(params: UseAutomationsParams) {
                     toast.error('Automation failed', `"${config.name}" — ${error}`);
                 },
             },
-        });
+        })).then(
+            result => ({ ok: true as const, result }),
+            (error: unknown) => ({ ok: false as const, error }),
+        );
+
+        if (!finished) {
+            if (!settled.ok) {
+                const msg = settled.error instanceof Error
+                    ? settled.error.message
+                    : 'The automation run threw before producing a result.';
+                finish({ status: 'error', error: msg });
+                toast.error('Automation failed', `"${config.name}" — ${msg}`);
+            } else if ((settled.result as unknown as AutomationPipelineOutcome | undefined)?.ok === true) {
+                // The pipeline considered itself finished without a verdict
+                // bubble — cancellation and the offline re-queue both land
+                // here. Not a failure, and not a completed analysis.
+                finish({ status: 'skipped', error: 'The run ended before producing a verdict (cancelled, or re-queued for reconnect).' });
+            } else {
+                finish({ status: 'error', error: 'The run ended before producing a verdict (rate limit, quota, or an early pipeline exit).' });
+                toast.error('Automation failed', `"${config.name}" — the run ended without a verdict.`);
+            }
+        }
 
         // Wait for the run to complete (finish callback) so callers that
         // await this (catch-up chaining) serialize correctly.

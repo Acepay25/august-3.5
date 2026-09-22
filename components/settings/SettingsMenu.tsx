@@ -15,6 +15,7 @@ import DeskSeatMappingEditor from './DeskSeatMappingEditor';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
+import { StorageLocationCard } from './StorageLocationCard';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { EmptyState } from '../ui/EmptyState';
 import { AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
@@ -135,23 +136,12 @@ interface SettingsMenuProps {
     onToggleProviderConfig?: (id: string) => Promise<void>;
     onAddModel?: (providerId: string, modelId: string) => Promise<void>;
     onRemoveModel?: (providerId: string, modelId: string) => Promise<void>;
-    // Journal embedded props
-    onDeleteTrades?: (ids: string[]) => void;
-    onClearAllTrades?: () => void;
-    modelIdToName?: Record<string, string>;
-    onUpdateInsights?: (ids: string[]) => void;
-    isSummarizing?: boolean;
-    currentInsightIds?: string[];
-    onUpdateTradeLeverage?: (id: string, leverage: number) => void;
-    onUpdateOutcome?: (id: string, outcome: any) => void;
-    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
-    finalSummary?: string | null;
-    individualSummaries?: any[];
-    isInsightGenerating?: boolean;
-    insightProgress?: { done: number; total: number } | null;
-    newlyAddedInsightIds?: Set<string>;
-    onDeleteInsight?: (id: string) => void;
-    onRewriteInsightsWithAI?: (ids?: string[]) => void;
+    // A 16-prop "Journal embedded props" block used to sit here, left behind
+    // when the Journal stopped being an overlay inside Settings and became a
+    // surface: every prop declared, none read, all still computed and passed by
+    // App. The journal's editors live in <Journal>/<TradeLog> now. The names are
+    // deliberately not listed — tests/deadControlsGuard.test.ts forbids them in
+    // this file, comment included.
     familyWinRates?: Record<string, { total: number; wins: number; winRate: number }>;
     enabledProviders?: AIProvider[];
     selectedModels?: Record<string, string>;
@@ -189,7 +179,7 @@ const NavTabButton: React.FC<{
             <span className="truncate">{label}</span>
         </span>
         {badge && (
-            <span className="shrink-0 rounded-full bg-zinc-700 px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-zinc-200">
+            <span className="shrink-0 rounded-full bg-zinc-700 px-1.5 py-0.5 font-mono text-ui-2xs font-bold leading-none text-zinc-200">
                 {badge}
             </span>
         )}
@@ -600,7 +590,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 sit on a user-facing screen. */}
                             <div className="pt-4 border-t border-zinc-800/80 space-y-2">
                                 <details className="group">
-                                    <summary className="flex cursor-pointer select-none list-none items-center justify-between font-mono text-[10px] text-zinc-600 hover:text-zinc-400">
+                                    <summary className="flex cursor-pointer select-none list-none items-center justify-between font-mono text-ui-xs text-zinc-600 hover:text-zinc-400">
                                         <span>Developer</span>
                                         <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500 transition-transform duration-150 ease-[var(--ease-snappy)] group-open:rotate-90" aria-hidden="true" />
                                     </summary>
@@ -608,7 +598,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <DiagnosticsPanel />
                                     </div>
                                 </details>
-                                <p className="text-[10px] text-zinc-600 text-center font-mono">
+                                <p className="text-ui-xs text-zinc-600 text-center font-mono">
                                     {APP_NAME} v{APP_VERSION}
                                 </p>
                             </div>
@@ -659,15 +649,15 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {/* Stats grid */}
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                             <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Total Logged</span>
+                                                <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Total Logged</span>
                                                 <p className="mt-1 font-mono text-xl font-bold text-zinc-100">{totalTrades}</p>
                                             </div>
                                             <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Win Rate</span>
+                                                <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Win Rate</span>
                                                 <p className="mt-1 font-mono text-xl font-bold text-emerald-400">{decidedTrades > 0 ? `${winRate}%` : '—'}</p>
                                             </div>
                                             <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Wins / Losses</span>
+                                                <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Wins / Losses</span>
                                                 <p className="mt-1 font-mono text-xl font-bold text-zinc-200">
                                                     <span className="text-emerald-400">{winTrades}</span>
                                                     <span className="text-zinc-600 mx-1">/</span>
@@ -675,7 +665,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 </p>
                                             </div>
                                             <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                                                <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500">Open / Pending</span>
+                                                <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Open / Pending</span>
                                                 <p className="mt-1 font-mono text-xl font-bold text-amber-400">{pendingTrades}</p>
                                             </div>
                                         </div>
@@ -809,7 +799,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     onChange={(v) => onSetVisionModel?.(v)}
                                                     mode="model-only"
                                                 />
-                                                <p className="text-[10px] text-zinc-600 mt-2 leading-relaxed">
+                                                <p className="text-ui-xs text-zinc-600 mt-2 leading-relaxed">
                                                     One model for every vision feature — chart OCR, post-trade uploads, and PDF book OCR.
                                                 </p>
                                             </div>
@@ -835,7 +825,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 }}
                                                 mode="provider-model"
                                             />
-                                            <p className="text-[10px] text-zinc-600 mt-2 leading-relaxed">
+                                            <p className="text-ui-xs text-zinc-600 mt-2 leading-relaxed">
                                                 The librarian: reviews the notebook, distills skills, organizes memory files, and runs every background learning pass.
                                             </p>
                                         </div>
@@ -937,7 +927,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 { label: 'Open / Pending', value: String(trades.length - decided), tone: trades.length - decided > 0 ? 'text-amber-400' : 'text-zinc-100' },
                                             ].map(stat => (
                                                 <div key={stat.label} className="rounded-xl border border-white/[0.06] bg-zinc-800/40 px-3.5 py-3">
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{stat.label}</div>
+                                                    <div className="text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">{stat.label}</div>
                                                     <div className={`mt-1 font-mono text-xl font-bold tabular-nums ${stat.tone}`}>{stat.value}</div>
                                                 </div>
                                             ))}
@@ -1204,7 +1194,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <div className="flex flex-wrap items-center gap-3 rounded-control border border-zinc-800 bg-zinc-950/40 p-2.5">
                                             {memoryConfig && (
                                                 <span className="text-[11px] text-zinc-400">
-                                                    <span className="text-[10px] uppercase tracking-widest text-zinc-600">Managed by </span>
+                                                    <span className="text-ui-xs uppercase tracking-widest text-zinc-600">Managed by </span>
                                                     {memoryConfig.selectedModel || memoryConfig.name || 'memory model'}
                                                 </span>
                                             )}
@@ -1224,7 +1214,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     data-testid="open-learn-memory"
                                                     className="ml-auto rounded-control border border-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
                                                     Open the notebook
-                                                    <span className="ml-1 font-mono text-[10px] text-zinc-600">Alt+5</span>
+                                                    <span className="ml-1 font-mono text-ui-xs text-zinc-600">Alt+5</span>
                                                 </button>
                                             )}
                                         </div>
@@ -1300,6 +1290,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         title="Data"
                                         description="Session usage and the profile's automatic backups."
                                     />
+
+                                    <StorageLocationCard />
 
                                     <SessionUsagePanel />
 

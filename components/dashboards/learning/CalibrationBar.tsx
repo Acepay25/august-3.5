@@ -26,7 +26,7 @@ export const CalibrationBar: React.FC<{ label: string; actual: number; expected:
                     style={{ left: `${expected}%` }}
                 />
             </div>
-            <div className="flex justify-between text-[10px]">
+            <div className="flex justify-between text-ui-xs">
                 <span className={diff >= 5 ? 'text-emerald-400' : diff <= -10 ? 'text-red-400' : 'text-yellow-400'}>
                     {status}
                 </span>

@@ -39,20 +39,20 @@ const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn })
                 />
                 <span className="text-[11px] text-zinc-300">
                     Supervise automatically
-                    <span className="block text-[10px] text-zinc-500">
+                    <span className="block text-ui-xs text-zinc-500">
                         New drafts, tool candidates and memory amendments are judged as they arrive. Pausing
                         leaves everything in the queues for you.
                     </span>
                 </span>
             </label>
-            <p className="mb-2 font-mono text-[10px] text-zinc-600">
+            <p className="mb-2 font-mono text-ui-xs text-zinc-600">
                 supervising model: {snap.modelName || 'the active session\'s model (or the memory provider)'}
                 {snap.running ? ' · working now' : ''}
             </p>
             {/* The pass spends a bounded number of calls, so a backlog can
                 legitimately survive a sweep. Say so — "no recent verdicts" must
                 not read as "nothing is waiting". */}
-            <p className={`mb-3 font-mono text-[10px] ${snap.pendingCount > 0 ? 'text-amber-400/90' : 'text-zinc-600'}`} data-testid="supervisor-pending">
+            <p className={`mb-3 font-mono text-ui-xs ${snap.pendingCount > 0 ? 'text-amber-400/90' : 'text-zinc-600'}`} data-testid="supervisor-pending">
                 {snap.pendingCount > 0
                     ? `${snap.pendingCount} item${snap.pendingCount === 1 ? '' : 's'} waiting for review`
                     : 'queues clear'}
@@ -61,7 +61,7 @@ const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn })
                 <button type="button" onClick={onOpenLearn} data-testid="open-learn-link"
                     className="mb-3 w-full rounded-control border border-zinc-700 px-2 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
                     Open the Learn surface
-                    <span className="ml-1 font-mono text-[10px] text-zinc-600">Alt+5</span>
+                    <span className="ml-1 font-mono text-ui-xs text-zinc-600">Alt+5</span>
                 </button>
             )}
             {decisions.length > 0 && (

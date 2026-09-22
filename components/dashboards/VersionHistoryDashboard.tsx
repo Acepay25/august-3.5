@@ -215,7 +215,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 </div>
                                 <div className="flex flex-col items-end">
                                     <div className="text-xs text-emerald-500/40 font-mono">Real-time Feedback</div>
-                                    <div className="text-[10px] text-zinc-500">{signals.length > 0 ? `Last: ${new Date(signals[signals.length - 1].timestamp).toLocaleTimeString()}` : 'Awaiting first resolved trade'}</div>
+                                    <div className="text-ui-xs text-zinc-500">{signals.length > 0 ? `Last: ${new Date(signals[signals.length - 1].timestamp).toLocaleTimeString()}` : 'Awaiting first resolved trade'}</div>
                                 </div>
                             </div>
                         </ModernCard>
@@ -243,7 +243,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         </select>
                                     </div>
                                     <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
-                                        <p className="text-[10px] text-zinc-300 font-mono leading-relaxed">
+                                        <p className="text-ui-xs text-zinc-300 font-mono leading-relaxed">
                                             <span className="text-zinc-400 font-bold uppercase">{rules[selectedRuleIndex]?.meta.kind}</span> {' '}
                                             [{rules[selectedRuleIndex]?.meta.status} · {rules[selectedRuleIndex]?.meta.wins}W/{rules[selectedRuleIndex]?.meta.losses}L]
                                             <br />
@@ -290,18 +290,18 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         </select>
                                     </div>
                                     <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
-                                        <p className="text-[10px] text-amber-200/80 font-mono leading-relaxed">
+                                        <p className="text-ui-xs text-amber-200/80 font-mono leading-relaxed">
                                             "{insights[selectedInsightIndex]?.insight}"
                                         </p>
                                     </div>
                                     <div className="flex items-center justify-between border-t border-zinc-800/80 py-1.5">
-                                        <span className="text-[9px] text-amber-200/50 font-mono">
+                                        <span className="text-ui-2xs text-amber-200/50 font-mono">
                                             {insights[selectedInsightIndex]?.qualityScore ?? 50}/100 · {insights[selectedInsightIndex]?.timesUsed ?? 0} used · {insights[selectedInsightIndex]?.timesHelpful ?? 0} helpful
                                         </span>
                                         <div className="flex gap-1">
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, true)}
-                                                className="p-1 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                className="p-1 rounded text-ui-2xs bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
                                                 title="Mark helpful"
                                                 aria-label="Mark helpful"
                                             >
@@ -309,7 +309,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             </button>
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, false)}
-                                                className="p-1 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                className="p-1 rounded text-ui-2xs bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
                                                 title="Mark not helpful"
                                                 aria-label="Mark not helpful"
                                             >
@@ -326,12 +326,12 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 lessons and how their quality is tracking. */}
                             {Object.keys(providerStats).length > 0 && (
                                 <div className="mt-2 pt-2 border-t border-zinc-800/80">
-                                    <div className="text-[9px] text-amber-200/50 font-mono mb-1">BY PROVIDER</div>
+                                    <div className="text-ui-2xs text-amber-200/50 font-mono mb-1">BY PROVIDER</div>
                                     <div className="flex flex-col gap-0.5">
                                         {Object.entries(providerStats)
                                             .sort((a, b) => b[1].count - a[1].count)
                                             .map(([provider, stat]) => (
-                                                <div key={provider} className="flex items-center justify-between text-[9px] font-mono">
+                                                <div key={provider} className="flex items-center justify-between text-ui-2xs font-mono">
                                                     <span className="text-amber-200/70 truncate pr-2" title={provider}>{providerLabel(provider)}</span>
                                                     <span className="text-amber-200/40 whitespace-nowrap">{stat.count} · {stat.avgQuality}/100</span>
                                                 </div>
@@ -362,7 +362,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         <ModernCard title="Pattern Class." accent="purple" icon={<Icons.Zap className="w-5 h-5" />}>
                             <div className="flex flex-wrap gap-2 mt-2">
                                 {['Family A', 'Family B', 'Family C', 'Omega'].map(f => (
-                                    <span key={f} className="px-2 py-1 bg-zinc-800/60 border border-zinc-700/50 rounded-full text-[10px] text-zinc-300">
+                                    <span key={f} className="px-2 py-1 bg-zinc-800/60 border border-zinc-700/50 rounded-full text-ui-xs text-zinc-300">
                                         {f}
                                     </span>
                                 ))}
@@ -386,14 +386,14 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                     <select
                                         value={selectedSchema}
                                         onChange={(e) => setSelectedSchema(e.target.value)}
-                                        className="bg-zinc-800 text-[10px] text-zinc-300 rounded px-2 py-1 border border-zinc-700"
+                                        className="bg-zinc-800 text-ui-xs text-zinc-300 rounded px-2 py-1 border border-zinc-700"
                                     >
                                         <option value="tradeValidation">Val. Gate</option>
                                         <option value="marketAnalysis">Analysis</option>
                                         <option value="postMortem">Post-Mortem</option>
                                     </select>
                                 </div>
-                                <div className="flex-1 bg-zinc-800/60 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto custom-scrollbar">
+                                <div className="flex-1 bg-zinc-800/60 rounded-xl p-3 font-mono text-ui-2xs text-zinc-400 overflow-auto custom-scrollbar">
                                     <div className="whitespace-pre">
                                         {typeof validationSchemas[selectedSchema] === 'string'
                                             ? validationSchemas[selectedSchema]

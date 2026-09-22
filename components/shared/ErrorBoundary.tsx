@@ -78,11 +78,11 @@ class ErrorBoundary extends Component<Props, State> {
                 // Inline fallback — one bad message must not take down the app.
                 return (
                     <div className=" rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
-                        <div className="font-bold uppercase tracking-widest text-[9px] mb-1">This message failed to render</div>
+                        <div className="font-bold uppercase tracking-widest text-ui-2xs mb-1">This message failed to render</div>
                         <div className="text-rose-300/70 truncate">{this.state.error?.message || 'Unknown error'}</div>
                         <button
                             onClick={this.handleReset}
-                            className="mt-2 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                            className="mt-2 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         >
                             Retry
                         </button>

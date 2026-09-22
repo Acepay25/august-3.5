@@ -82,7 +82,7 @@ const JobsDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
                 )}
                 {jobs.length > 0 && (
                     <>
-                        <p className="pb-2 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Queued / recent</p>
+                        <p className="pb-2 text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Queued / recent</p>
                         <div className="space-y-2 pb-4">
                             {jobs.map(job => (
                                 <div key={job.id} data-job-row className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5">
@@ -90,12 +90,12 @@ const JobsDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
                                         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-200">
                                             {JOB_LABEL[job.type] ?? job.type}
                                         </span>
-                                        <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
+                                        <span className={`rounded-md px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
                                             {job.status}
                                         </span>
                                     </div>
                                     {job.result?.error && (
-                                        <p className="mt-1 line-clamp-2 text-[10px] text-rose-400/80">
+                                        <p className="mt-1 line-clamp-2 text-ui-xs text-rose-400/80">
                                             {String(job.result.error?.message ?? job.result.error).slice(0, 200)}
                                         </p>
                                     )}
@@ -106,19 +106,19 @@ const JobsDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
                 )}
                 {evaluated.length > 0 && (
                     <>
-                        <p className="pb-2 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Recent skill audits</p>
+                        <p className="pb-2 text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Recent skill audits</p>
                         <div className="space-y-2">
                             {evaluated.map(({ name, meta }) => (
                                 <div key={name} data-eval-row className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
                                         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-200">{name}</span>
                                         {meta.evalVerdict && (
-                                            <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${VERDICT_STYLE[meta.evalVerdict] ?? 'bg-zinc-800 text-zinc-400'}`}>
+                                            <span className={`rounded-md px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${VERDICT_STYLE[meta.evalVerdict] ?? 'bg-zinc-800 text-zinc-400'}`}>
                                                 {meta.evalVerdict}
                                             </span>
                                         )}
                                     </div>
-                                    <p className="mt-0.5 text-[10px] text-zinc-600">
+                                    <p className="mt-0.5 text-ui-xs text-zinc-600">
                                         {[meta.evalDetail ? `${meta.evalDetail} flips` : '', meta.lastEvalAt ? new Date(meta.lastEvalAt).toLocaleString() : ''].filter(Boolean).join(' · ')}
                                     </p>
                                 </div>

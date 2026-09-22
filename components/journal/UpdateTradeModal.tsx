@@ -104,7 +104,7 @@ export const UpdateTradeModal: React.FC<{
                                     <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                         {isCapturing ? 'Fetching Market Data...' : 'Auto-Capture Market Data'}
                                         {!isCapturing && (
-                                            <span className="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
+                                            <span className="text-ui-2xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
                                                 Recommended
                                             </span>
                                         )}
@@ -124,7 +124,7 @@ export const UpdateTradeModal: React.FC<{
                     {onAutoCapture && (
                         <div className="flex items-center gap-3">
                             <div className="flex-1 h-px bg-zinc-800"></div>
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Or Manual Input</span>
+                            <span className="text-ui-xs text-zinc-500 font-bold uppercase tracking-widest">Or Manual Input</span>
                             <div className="flex-1 h-px bg-zinc-800"></div>
                         </div>
                     )}

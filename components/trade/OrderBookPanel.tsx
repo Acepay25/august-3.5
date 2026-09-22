@@ -87,7 +87,7 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
         <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40">
             <div className="flex shrink-0 items-center justify-between px-2 py-1.5">
                 <span className="ui-kicker">Order Book</span>
-                <span className={`font-mono text-[10px] ${usingLive ? 'text-emerald-400' : 'text-zinc-600'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
+                <span className={`font-mono text-ui-xs ${usingLive ? 'text-emerald-400' : 'text-zinc-600'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
                     {usingLive ? 'live' : `${dominant}`}
                 </span>
             </div>
@@ -95,7 +95,7 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
                 {asksView.map(a => (
                     <Row key={`a${a.price}`} side="ask" price={a.price} qty={a.qty} maxQty={maxQty} wall={sellWalls.has(a.price)} />
                 ))}
-                <div className="my-1 flex items-center justify-between border-y border-white/[0.06] bg-zinc-900/60 px-2 py-1 font-mono text-[10px] tabular-nums text-zinc-400">
+                <div className="my-1 flex items-center justify-between border-y border-white/[0.06] bg-zinc-900/60 px-2 py-1 font-mono text-ui-xs tabular-nums text-zinc-400">
                     <span className={spreadPercent > 0.05 ? 'text-amber-400' : ''}>spread {spreadPercent.toFixed(3)}%</span>
                     <span className="text-zinc-300">{bestAsk ? fmtPrice(bestAsk) : '—'}</span>
                 </div>

@@ -298,7 +298,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                     {isCapturing ? 'Capturing...' : 'Auto-Capture & Log'}
                                     {!isCapturing && (
-                                        <span className="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
+                                        <span className="text-ui-2xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
                                             Recommended
                                         </span>
                                     )}
@@ -346,14 +346,14 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     {/* Discipline quick-tags (Batch 5): optional — everything
                         here feeds the adherence/mistake-cost analytics. */}
                     <div className="rounded-xl border border-white/5 bg-zinc-900/60 px-3 py-2.5">
-                        <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Tags (optional)</div>
+                        <div className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Tags (optional)</div>
                         <div className="flex flex-wrap gap-1.5">
                             {MISTAKE_TAGS.map(t => (
                                 <button
                                     key={t.id}
                                     type="button"
                                     onClick={() => toggleMistakeTag(t.id)}
-                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                    className={`rounded-md border px-2 py-0.5 text-ui-xs font-medium transition-colors ${
                                         mistakeTags.includes(t.id)
                                             ? 'border-white/25 bg-zinc-700 text-zinc-100'
                                             : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
@@ -363,14 +363,14 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 </button>
                             ))}
                         </div>
-                        <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">State at entry</div>
+                        <div className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">State at entry</div>
                         <div className="flex flex-wrap gap-1.5">
                             {EMOTIONAL_STATES.map(s => (
                                 <button
                                     key={s}
                                     type="button"
                                     onClick={() => setEmotionalState(cur => cur === s ? null : s)}
-                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+                                    className={`rounded-md border px-2 py-0.5 text-ui-xs font-medium capitalize transition-colors ${
                                         emotionalState === s
                                             ? 'border-white/25 bg-zinc-700 text-zinc-100'
                                             : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
@@ -380,14 +380,14 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 </button>
                             ))}
                         </div>
-                        <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">Followed the plan?</div>
+                        <div className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">Followed the plan?</div>
                         <div className="flex flex-wrap gap-1.5">
                             {[true, false].map(v => (
                                 <button
                                     key={String(v)}
                                     type="button"
                                     onClick={() => setFollowedPlan(cur => cur === v ? null : v)}
-                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                    className={`rounded-md border px-2 py-0.5 text-ui-xs font-medium transition-colors ${
                                         followedPlan === v
                                             ? 'border-white/25 bg-zinc-700 text-zinc-100'
                                             : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
@@ -401,7 +401,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                             enabled in Settings; completion rides onto the trade. */}
                         {checklistCfg.enabled && (
                             <>
-                                <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">
+                                <div className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">
                                     Checklist ({checklistChecked.size}/{checklistCfg.items.length})
                                 </div>
                                 <div className="flex flex-col gap-1">
@@ -410,7 +410,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                             key={item.id}
                                             type="button"
                                             onClick={() => toggleChecklistItem(item.id)}
-                                            className={`flex items-center gap-2 rounded-md border px-2 py-1 text-left text-[10px] font-medium transition-colors ${
+                                            className={`flex items-center gap-2 rounded-md border px-2 py-1 text-left text-ui-xs font-medium transition-colors ${
                                                 checklistChecked.has(item.id)
                                                     ? 'border-white/25 bg-zinc-700 text-zinc-100'
                                                     : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
@@ -431,7 +431,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                 {/* Footer */}
                 <div className="px-5 py-4 border-t border-white/5 bg-zinc-950">
                     <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-zinc-600 max-w-[200px]">
+                        <p className="text-ui-xs text-zinc-600 max-w-[200px]">
                             Trade will only be finalized after you confirm the capture method
                         </p>
                         <button

@@ -267,12 +267,17 @@ export const dmMessageRow = (
 });
 
 /** A notice row for a thread (system-role, attributed so threadForProvider
- *  files it into the right bot's thread). */
-export const dmNoticeRow = (text: string, providerId: string, modelId: string, id: string): Message => ({
+ *  files it into the right bot's thread). `botId` makes that filing exact: a
+ *  notice addressed to one bot must not surface in another bot's thread just
+ *  because the two think with the same provider+model. */
+export const dmNoticeRow = (
+    text: string, providerId: string, modelId: string, id: string, botId?: string,
+): Message => ({
     id,
     role: MessageRole.SYSTEM,
     text,
     createdAt: new Date().toISOString(),
     modelsUsed: { [providerId]: modelId },
+    ...(botId ? { botId } : {}),
     dmNotice: true,
 });

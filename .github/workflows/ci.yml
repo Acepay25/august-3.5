@@ -33,8 +33,17 @@ jobs:
       - name: Type check scripts
         run: npm run typecheck:scripts
 
+      # tsc excludes electron/*.cjs and vitest never imports the main process,
+      # so a syntax break in the desktop shell is invisible to every other gate
+      # here — and it only shows up when a user launches the packaged app.
+      - name: Electron shell parses
+        run: npm run typecheck:electron
+
+      # Runs WITH coverage so vitest.config.ts's ratchet floors (36/28/36/30)
+      # are actually enforced — they were configured but never executed by any
+      # gate, so coverage could fall under the floor without failing anything.
       - name: Tests
-        run: npm run test
+        run: npm run test:coverage
 
       - name: Lint
         run: npm run lint
@@ -52,3 +61,14 @@ jobs:
       # installed by the smoke step.
       - name: Boot probe (production bundle)
         run: npm run boot-probe
+
+      # boot-probe asks only "does it start". This is the gate that can see the
+      # transcript — it counts rendered rows per conversation, presses every
+      # control on the Learn and Journal surfaces and asserts each one does
+      # something, and sweeps all six nav surfaces for pageerrors. Unit tests
+      # mount components in jsdom and cannot catch a row dropped after the
+      # second one, which is how two finished panels shipped unmounted.
+      # Sequential here, so it is not running alongside a build — the one
+      # condition its own flake note warns about.
+      - name: Render probe (rendered rows, inert controls, zero pageerrors)
+        run: npm run render-probe

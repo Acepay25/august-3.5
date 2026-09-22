@@ -20,6 +20,7 @@
  */
 
 import { LoggedTrade } from '../../types';
+import { clipNote } from '../../utils/harnessMarks';
 import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { regimeRankFactor } from '../../utils/regimeSentinel';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
@@ -42,14 +43,50 @@ import {
     type MemoryRetrievalQuery,
     type WalkedMemoryHit,
 } from './MemoryGraph';
+import { charsForTokens, windowBudgetTokens } from '../../utils/tokenEstimate';
 
 export type { MemoryRetrievalQuery };
 
-/** Hard per-stage budget for EVERYTHING except the doctrine slot. */
+/** Hard per-stage budget for EVERYTHING except the doctrine slot.
+ *
+ * These are FLOORS, not the budget itself. They used to be the whole
+ * allowance, which meant a 900-character notebook slice was the model's
+ * ENTIRE retrieved memory regardless of whether it was talking to an 8K or a
+ * 1M-context model. The effective budget now scales with the context window
+ * (see `stageBudgetChars`) and these constants only stop it shrinking.
+ */
 const STAGE_BUDGET_CHARS: Record<MemoryStage, number> = {
     opening: 900,
     rebuttal: 400,
     verdict: 600,
+};
+
+/** Share of the retrieved-memory allowance each stage gets, relative to the
+ *  opening — preserves the historical 900 : 400 : 600 proportions exactly. */
+const STAGE_BUDGET_SHARE: Record<MemoryStage, number> = {
+    opening: 1,
+    rebuttal: STAGE_BUDGET_CHARS.rebuttal / STAGE_BUDGET_CHARS.opening,
+    verdict: STAGE_BUDGET_CHARS.verdict / STAGE_BUDGET_CHARS.opening,
+};
+
+/** Fraction of the model's context window spent on retrieved memory, and a
+ *  hard ceiling so a 1M-context model is not sent an unbounded notebook. */
+const MEMORY_CONTEXT_FRACTION = 0.02;
+const MEMORY_CONTEXT_MAX_TOKENS = 900;
+
+/** Effective character budget for a stage: window-derived, never below the
+ *  historical floor, never above the ceiling. */
+export const stageBudgetChars = (
+    stage: MemoryStage,
+    contextWindowTokens?: number,
+): number => {
+    const tokens = windowBudgetTokens(
+        MEMORY_CONTEXT_FRACTION,
+        MEMORY_CONTEXT_MAX_TOKENS,
+        contextWindowTokens,
+    );
+    const derived = charsForTokens(tokens * STAGE_BUDGET_SHARE[stage]);
+    return Math.max(STAGE_BUDGET_CHARS[stage], derived);
 };
 const DOCTRINE_SLOT_CHARS = 800;
 const SKILL_BLOCK_MAX = 400;
@@ -567,18 +604,26 @@ export function getMemoryFilesContext(
     stage: MemoryStage = 'opening',
     options?: MemoryContextOptions,
 ): string {
-    const budget = STAGE_BUDGET_CHARS[stage];
+    const budget = stageBudgetChars(stage);
     const blocks: string[] = [];
     /** What ACTUALLY made it into the prompt — recorded for attribution. */
     const injected: Array<{ path: string; kind: string; chars?: number }> = [];
     let used = 0;
+    /** Characters that existed but did not fit. Reported to the model rather
+     *  than cut silently: a silent trim makes an absent lesson look like a
+     *  contradicted one, and the model cannot ask for what it cannot see. */
+    let elidedChars = 0;
 
     const push = (block: string): number => {
-        if (!block || used >= budget) return 0;
+        if (!block || used >= budget) {
+            if (block && used >= budget) elidedChars += block.length;
+            return 0;
+        }
         const room = budget - used;
         const capped = cap(block, room);
         blocks.push(capped);
         used += capped.length;
+        if (capped.length < block.length) elidedChars += block.length - capped.length;
         return capped.length;
     };
 
@@ -674,6 +719,19 @@ export function getMemoryFilesContext(
     if (beliefs) parts.push(beliefs);
     if (doctrine) parts.push(doctrine);
     if (blocks.length > 0) parts.push(blocks.join('\n\n'));
+    if (elidedChars > 0) {
+        // Through `clipNote` rather than hand-written: it names how much was
+        // KEPT as well as dropped, which is what lets `findClipIn` read this
+        // back and the fence legend describe it. The old phrasing reported only
+        // the loss, so the activity line could not say "clipped n/m".
+        parts.push(clipNote({
+            source: 'notebook memory',
+            kept: used,
+            total: used + elidedChars,
+            guidance: 'treat the absence above as "not injected this stage", NOT as '
+                + '"no lesson exists" — recall_notebook_memory can retrieve more',
+        }));
+    }
 
     return `═══════════════════════════════════════════════════════════════
 📓 MY MEMORY (doctrine + what matches THIS setup — not a blank slate)

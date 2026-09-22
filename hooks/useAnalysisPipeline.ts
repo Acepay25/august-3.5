@@ -109,6 +109,7 @@ import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { CLARIFICATION_MARKERS_RE, DEBATE_END_MARKERS_RE, MODERATOR_ERROR_BLOCK_RE, MODERATOR_RETRY_MARKER, MODERATOR_RETRY_RE, REPLACEMENT_TIMEOUT_MARKER } from '../constants/debateMarkers';
 import { parseDmMarkers } from '../services/agents/botMailbox';
+import { classifyStepError, describeStepError } from '../utils/runStatus';
 
 // ─── Run Outcome ──────────────────────────────────────────────────────────────
 
@@ -568,9 +569,30 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
     };
 
-    const failStep = (id: string) => {
+    /**
+     * Mark a step failed, WITH A REASON.
+     *
+     * `reason` is what the user sees expanded. Before the step type had an
+     * error field the UI could only paint a red ✕, and the only place the
+     * message existed at all was a chat bubble that rendered raw provider
+     * text. Every failure path should pass the error it is reacting to.
+     */
+    const failStep = (id: string, reason?: unknown) => {
         if (automationSilentRef.current) return;
-        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'error' as const, endTime: Date.now() } : s));
+        const classified = reason === undefined
+            ? { kind: 'unknown' as const, text: describeStepError('unknown') }
+            : classifyStepError(reason);
+        setAnalysisSteps(prev => prev.map(s => s.id === id
+            ? { ...s, status: 'error' as const, endTime: Date.now(), errorKind: classified.kind, errorText: classified.text }
+            : s));
+    };
+
+    /** Mark a step the user stopped. Neutral, not a failure. */
+    const stopStep = (id: string) => {
+        if (automationSilentRef.current) return;
+        setAnalysisSteps(prev => prev.map(s => s.id === id
+            ? { ...s, status: 'stopped' as const, endTime: Date.now(), errorKind: 'cancelled', errorText: describeStepError('cancelled') }
+            : s));
     };
 
     const addSubStep = (id: string, subStep: { label: string; detail?: string; filename?: string }) => {
@@ -1460,7 +1482,7 @@ ${reflectionBlock}`
                 } catch (gateError) {
                     console.error('[GateKeeper] Gate check failed:', gateError);
                     // Fail-open: proceed without Gate constraints
-                    failStep('gate-scan');
+                    failStep('gate-scan', gateError);
                     if (!isAutomationRun) toast.warning('Gate check skipped', 'Quality constraints could not be applied — analysis will proceed without gate validation.');
                 }
             }
@@ -3377,7 +3399,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     // Bot threads see ONLY their own thread (derived view);
                     // ordinary casual chat keeps the full conversation.
                     useBotThread && activeBot
-                        ? threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId)
+                        ? threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId, activeBot.id)
                         : currentMessages,
                     useBotThread && activeBot ? activeBot.systemPrompt : undefined,
                     currentAbortController.signal,
@@ -3433,7 +3455,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             // replaced the abort-controller ref — labeling that run's genuine
             // error as "cancelled" silently swallowed real failures.
             const cancelled = currentAbortController.signal.aborted;
-            if (!cancelled) failStep(currentPhaseRef.current);
+            // A user Stop is not a failure — it gets the neutral 'stopped'
+            // chrome. Only a real error carries the rose treatment, and now
+            // carries the reason with it.
+            if (cancelled) stopStep(currentPhaseRef.current);
+            else failStep(currentPhaseRef.current, error);
             // A pending replacement wait is void — a late click on the banner
             // must never resolve into a dead debate.
             replacementChoiceRef.current = null;

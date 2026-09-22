@@ -10,6 +10,7 @@ import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
 import { runSimulationAsync, MonteCarloResult, SimulationConfig } from '../analysis/MonteCarloService';
 import { parsePrice } from '../../utils/analysisUtils';
 import { sanitizeLevelOrdering } from '../../utils/levelOrder';
+import { firstTargetDistance } from '../../utils/riskReward';
 
 // =============================================================================
 // TYPES
@@ -89,7 +90,14 @@ export function calculateMetrics(config: ScenarioConfig): ScenarioMetrics {
 
     // Calculate distances
     const slDistance = Math.abs(entry - stopLoss);
-    const tp1Distance = takeProfits.length > 0 ? Math.abs(takeProfits[0] - entry) : slDistance * 2;
+    // Target CLOSEST to entry, not array index 0 — the ordering rule the card
+    // and the journal already use. The 2R stand-in applies ONLY when no
+    // targets were listed at all: a target that is present but unusable (equal
+    // to entry, or not a number) must stay a zero distance, or the scenario
+    // screen invents a payoff the plan never contained.
+    const tp1Distance = takeProfits.length === 0
+        ? slDistance * 2
+        : (firstTargetDistance(entry, takeProfits) ?? 0);
 
     // Calculate percentages
     const riskPercent = (slDistance / entry) * 100;
