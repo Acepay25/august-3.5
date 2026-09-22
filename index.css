@@ -143,28 +143,37 @@
      says "micro-label" where `text-[10px]` says nothing.
 
      Line heights ride their own token so a taller base keeps its leading
-     rather than collapsing into the next row. */
+     rather than collapsing into the next row.
+
+     They are UNITLESS 1.5 — the same ratio the inherited html { line-height:
+     1.5 } gave every one of these sizes before the ramp existed, so the
+     migration moved no leading. Unitless is also what the accessibility dial
+     above needs: it multiplies each element's own font-size, where a px
+     calc() would hold the line box fixed as the base grows. The first cut of
+     this block wrote tight px values instead (9px labels got a 12px box
+     against the 13.5px they had), which read as a sudden density change
+     across the trade screen — measured, not subjective. */
   --text-ui-xl: calc(var(--ui-font-size) + 4px);
-  --text-ui-xl--line-height: calc(var(--ui-font-size) + 8px);
+  --text-ui-xl--line-height: 1.5;
   --text-ui-lg: calc(var(--ui-font-size) + 2px);
-  --text-ui-lg--line-height: calc(var(--ui-font-size) + 6px);
+  --text-ui-lg--line-height: 1.5;
   --text-ui-base: var(--ui-font-size);
-  --text-ui-base--line-height: calc(var(--ui-font-size) + 6px);
+  --text-ui-base--line-height: 1.5;
   --text-ui-caption: calc(var(--ui-font-size) - 1px);
-  --text-ui-caption--line-height: calc(var(--ui-font-size) + 4px);
+  --text-ui-caption--line-height: 1.5;
   --text-ui-sm: calc(var(--ui-font-size) - 2px);
-  --text-ui-sm--line-height: calc(var(--ui-font-size) + 2px);
+  --text-ui-sm--line-height: 1.5;
   /* Micro-labels: axis ticks, table headers, counts. The floor for running
      text — `text-zinc-600` is bumped in this file specifically so ink at this
      size clears WCAG AA on both surfaces. */
   --text-ui-xs: calc(var(--ui-font-size) - 4px);
-  --text-ui-xs--line-height: var(--ui-font-size);
+  --text-ui-xs--line-height: 1.5;
   /* The restricted exception, for dense data cells and chart ticks where 10px
      still costs too much width. Not a body-text size, and nothing new should
      reach for it without a reason — it exists so the ramp can express what the
      app already draws rather than sending the next author back to `text-[9px]`. */
   --text-ui-2xs: calc(var(--ui-font-size) - 5px);
-  --text-ui-2xs--line-height: calc(var(--ui-font-size) - 2px);
+  --text-ui-2xs--line-height: 1.5;
 
   --radius-bubble: 12px;
   --radius-control: 8px;
