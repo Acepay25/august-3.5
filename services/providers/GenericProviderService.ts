@@ -36,7 +36,7 @@ import { applyReasoningToChatParams, buildReasoningPatch, detectWireCapabilities
 // reasoningControls, so the checker flows in through this module instead of
 // a static cycle.
 import '../learning/harnessLessons';
-import { emitFinishReason, extractFinishReason, FinishReason, normalizeFinishReason, recordFinishReason, truncatesOutput } from '../../utils/finishReason';
+import { extractFinishReason, FinishReason, normalizeFinishReason, recordFinishReason, truncatesOutput } from '../../utils/finishReason';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
 import { observePromptRatio } from '../../utils/tokenEstimate';
 import type { ElectronUpdateStatus } from '../../types/electron';
@@ -177,11 +177,13 @@ export interface ChatTurnResult {
     truncated: boolean;
 }
 
-/** Report the normalized stop signal. Mirrors reportUsage: one emit for the
- *  run-level tally, one callback for a caller that needs it inline. */
+/** Report the normalized stop signal: the run-level tally, plus the inline
+ *  callback for a caller that needs the value now. There is deliberately no
+ *  global listener bus here — the tally and the callback are the two readers,
+ *  and a third (a subscriber list nothing ever subscribed to) is how this file
+ *  grew write-only code once before. */
 function reportFinishReason(config: ProviderConfig, reason: FinishReason, options?: ChatRequestOptions): void {
     recordFinishReason(reason);
-    emitFinishReason({ providerId: config.id, modelId: config.selectedModel, reason });
     options?.onFinishReason?.(reason);
 }
 

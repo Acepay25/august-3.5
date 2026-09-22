@@ -110,24 +110,6 @@ export const extractFinishReason = (data: unknown): FinishReason | undefined => 
     return undefined;
 };
 
-export interface FinishReasonEvent {
-    providerId: string;
-    modelId: string;
-    reason: FinishReason;
-}
-
-type Listener = (event: FinishReasonEvent) => void;
-const listeners = new Set<Listener>();
-
-export const subscribeFinishReason = (listener: Listener): (() => void) => {
-    listeners.add(listener);
-    return () => { listeners.delete(listener); };
-};
-
-export const emitFinishReason = (event: FinishReasonEvent): void => {
-    listeners.forEach(listener => listener(event));
-};
-
 // ─── Per-run truncation tally ───────────────────────────────────────────────
 
 let windowOpen = false;
