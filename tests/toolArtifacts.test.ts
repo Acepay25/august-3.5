@@ -42,8 +42,11 @@ describe('the size promise survives the receipt', () => {
         const tailReserve = 500;
         const out = budgetToolContent('get_funding', giant(40_000), tailReserve);
         expect(out.length).toBeLessThanOrEqual(MAX_TOOL_CONTENT_CHARS);
-        // Room for the caller's stamp is not eaten by the receipt.
-        expect(out.length + tailReserve).toBeLessThanOrEqual(MAX_TOOL_CONTENT_CHARS + tailReserve);
+        // The reserve is real headroom: the receipt is carved OUT of the cap
+        // before slicing, so the caller's stamp lands inside the budget. (The
+        // assertion this replaces added tailReserve to BOTH sides — it was the
+        // line above in disguise and could not fail.)
+        expect(out.length).toBeLessThanOrEqual(MAX_TOOL_CONTENT_CHARS - tailReserve);
     });
 
     it('degrades to a bare marker when the budget is smaller than the notice', () => {
