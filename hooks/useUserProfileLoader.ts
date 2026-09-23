@@ -368,8 +368,10 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
                 // WS-4.2: the memory hygiene pass is only a pass if something
                 // schedules it. Same due-check discipline as its siblings;
-                // fire-and-forget — the Health tab reads its log lines.
-                void runMemoryHygieneIfDue(username).catch(e => {
+                // fire-and-forget — the Health tab reads its log lines. The
+                // loaded trade log rides along for the lift review, the way
+                // weekly/monthly take it above.
+                void runMemoryHygieneIfDue(username, undefined, loadedTrades).catch(e => {
                     console.warn('[MemoryHygiene] boot pass failed:', e instanceof Error ? e.message : e);
                 });
 

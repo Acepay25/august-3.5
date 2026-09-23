@@ -35,6 +35,9 @@
  *    injected, reversibly, on a clock, and files the leftovers into the
  *    archive folder that retirement already uses. Nothing is deleted, and a
  *    trigger that fires again returns the skill with no human involved.
+ *  - veto retraction and negative-lift demotion (both below) — the two
+ *    measured signals that had a verdict and a dashboard card but no
+ *    actuation path: everything they produced used to stop at being read.
  *
  * Nothing here deletes a belief. The destructive moves go through the
  * proposal queue, where the supervisor (or the human) judges them — and every
@@ -46,7 +49,10 @@ import { getPreferenceObject, setPreferenceObject } from '../infrastructure/Pref
 import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
 import { getFirstReadyProvider } from '../../utils/providerUtils';
 import type { ProviderConfig } from '../../types/provider';
-import { listSkills, EVIDENCE_STALE_DAYS } from './SkillMemoryService';
+import { listSkills, reviewSkillEffectiveness, EVIDENCE_STALE_DAYS } from './SkillMemoryService';
+import { computeAllSkillLifts } from './MemoryProvenanceService';
+import { getRecentMemoryInjections } from './MemoryInjectionService';
+import { VetoLedgerService } from '../ui/VetoLedgerService';
 import { runNotebookReview } from './MemoryReviewService';
 import { queueLearningProposal } from '../../utils/learningQueue';
 import { runContradictionSweep } from '../../utils/contradictionSweep';
@@ -54,12 +60,21 @@ import { runGraveyardSweep, MAX_TOMBSTONES } from './skillGraveyard';
 import { runSkillIdleSweep, listSuspendedSkills } from './skillIdleLifecycle';
 import { notebookWantsCleanup } from './MemoryFilesService';
 import { cleanupIsDue } from '../../utils/memoryBudget';
+import type { LoggedTrade } from '../../types';
 
 const KEY_PREFIX = 'memory_hygiene_v1_';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /** A confirmed skill silent this long has earned nothing and is costing
  *  prompt budget on every matching setup. */
 const SILENCE_QUARTERS = 2;
+/** Settled vetoes a skill needs before its accuracy is a claim worth acting
+ *  on — below this, the ratio is noise from two or three setups. */
+const VETO_MIN_SETTLED = 5;
+/** Share of settled vetoes that BLOCKED A WINNER (WOULD_TP) above which the
+ *  veto is presumed to cost more than it saves. Deliberately a majority bar,
+ *  not a coin flip: every proposal it queues hands a live veto back to the
+ *  market for the supervisor (or the human) to judge. */
+const VETO_COST_RATIO = 0.6;
 const LOG_CAP = 20;
 
 export interface HygieneLine {
@@ -70,6 +85,10 @@ export interface HygieneLine {
 export interface HygieneResult {
     atMs: number;
     demotionsQueued: number;
+    /** Avoid skills whose settled vetoes keep costing winners (step 6). */
+    vetoDemotionsQueued: number;
+    /** Skills whose own lift went below baseline (step 7). */
+    liftDemotionsQueued: number;
     /** New merge/priority proposals from the contradiction sweep. */
     contradictionsQueued: number;
     /** Graveyard records the retention sweep collected (0 = nothing to do). */
@@ -130,12 +149,13 @@ const appendLog = async (username: string, atMs: number, lines: string[]): Promi
  */
 export const runMemoryHygiene = async (
     username: string,
-    opts: { providerConfigs?: ProviderConfig[]; now?: number } = {},
+    opts: { providerConfigs?: ProviderConfig[]; now?: number; trades?: LoggedTrade[] } = {},
 ): Promise<HygieneResult> => {
     const now = opts.now ?? Date.now();
     const lines: string[] = [];
     const result: HygieneResult = {
-        atMs: now, demotionsQueued: 0, contradictionsQueued: 0,
+        atMs: now, demotionsQueued: 0, vetoDemotionsQueued: 0, liftDemotionsQueued: 0,
+        contradictionsQueued: 0,
         graveyardCollected: 0, skillsSuspended: 0, skillsRevived: 0, skillsArchived: 0,
         reviewWritten: false, lines,
     };
@@ -229,6 +249,97 @@ export const runMemoryHygiene = async (
             lines.push(`Idle skill sweep: ${idle.examined} skill${idle.examined === 1 ? '' : 's'} inspected`
                 + `${extra} — none newly idle${suspended ? `, ${suspended} still suspended from prompts` : ''}.`);
         }
+
+        // 6. Veto retraction. An AVOID skill is the one belief no trade
+        //    outcome can ever refute — nothing trades while it blocks — so the
+        //    settled vetoes in the ledger are its entire falsification record.
+        //    The rollup was READ by a dashboard card and written back
+        //    nowhere: a confirmed avoid skill whose blocks keep costing
+        //    winners (WOULD_TP) kept vetoing forever. Both thresholds are
+        //    deliberately high because a wrong demotion hands a live veto
+        //    back to the market; and, like every destructive move here, it
+        //    only queues — `applyDemoteProposal` runs when a judge says so.
+        const accuracy = await VetoLedgerService.getAccuracyBySkill(username);
+        const costly: string[] = [];
+        let vetoExamined = 0;
+        for (const { file, meta } of listSkills()) {
+            const slot = accuracy[file.name];
+            if (!slot) continue;
+            vetoExamined += 1;
+            const settled = slot.hits + slot.runs;
+            if (settled < VETO_MIN_SETTLED) continue;
+            if (slot.runs / settled <= VETO_COST_RATIO) continue;
+            if (meta.status !== 'confirmed') continue;
+            if (meta.evalVerdict === 'hurts') continue; // already on a demotion path
+            const slug = file.name.replace(/\.md$/i, '');
+            const queued = queueLearningProposal({
+                kind: 'demote',
+                skillSlug: slug,
+                text: `"${slug}" has settled ${settled} veto${settled === 1 ? '' : 's'} and ${slot.runs} of them`
+                    + ` (${Math.round((slot.runs / settled) * 100)}%) blocked a setup that would have hit take-profit —`
+                    + ' the veto now costs more than it saves. Demote to candidate until its rule is rescoped?',
+                fingerprint: `veto-costly|${slug}`,
+            }, username);
+            if (queued) costly.push(slug);
+        }
+        result.vetoDemotionsQueued = costly.length;
+        lines.push(costly.length > 0
+            ? `Veto ledger: queued ${costly.length} demotion proposal${costly.length === 1 ? '' : 's'}`
+                + ` for avoid skills whose blocks keep costing winners (${costly.join(', ')}).`
+            : vetoExamined === 0
+                ? 'Veto ledger: no settled veto matches a live skill — nothing here can be falsified yet.'
+                : `Veto ledger: ${vetoExamined} skill${vetoExamined === 1 ? '' : 's'} with settled vetoes,`
+                    + ` none past the ${Math.round(VETO_COST_RATIO * 100)}%-costly bar.`);
+
+        // 7. Negative lift. `computeSkillLift` has always known when a skill
+        //    made things WORSE — post-influence win rate below the skill's own
+        //    pre-skill baseline — and the only consumer of that verdict was a
+        //    manual button on the dashboard. The verdict now reaches the same
+        //    proposal queue every other destructive move uses, through the
+        //    same canonical review (`reviewSkillEffectiveness` applies the
+        //    sample floor and writes the rationale), so the numbers cannot
+        //    drift from what the dashboard shows. Trades arrive the way the
+        //    sibling passes take them — from the caller — because this module
+        //    has never touched the journal store. With none in scope the step
+        //    reports itself skipped rather than pretending the loop ran.
+        const trades = opts.trades;
+        if (!trades || trades.length === 0) {
+            lines.push('Lift review skipped — no trade log in scope for this pass.');
+        } else {
+            try {
+                const injections = await getRecentMemoryInjections(username);
+                const liftByFileId = Object.fromEntries(
+                    computeAllSkillLifts(trades, injections).map(l => [l.fileId, l]),
+                );
+                const negative = reviewSkillEffectiveness({ liftByFileId }).filter(r =>
+                    r.recommendation === 'demote'
+                    && r.liftVerdict === 'negative'
+                    && r.evalVerdict !== 'hurts'); // the eval's own path speaks for it
+                const nameById = new Map(listSkills().map(s => [s.file.id, s.file.name]));
+                let liftQueued = 0;
+                for (const review of negative) {
+                    const fileName = nameById.get(review.fileId);
+                    if (!fileName) continue;
+                    const slug = fileName.replace(/\.md$/i, '');
+                    const queued = queueLearningProposal({
+                        kind: 'demote',
+                        skillSlug: slug,
+                        text: review.rationale,
+                        fingerprint: `neg-lift|${slug}`,
+                    }, username);
+                    if (queued) liftQueued += 1;
+                }
+                result.liftDemotionsQueued = liftQueued;
+                lines.push(liftQueued > 0
+                    ? `Lift review: queued ${liftQueued} demotion proposal${liftQueued === 1 ? '' : 's'}`
+                        + ' for skills whose setups got worse once they were injecting.'
+                    : negative.length > 0
+                        ? `Lift review: ${negative.length} below-baseline proposal${negative.length === 1 ? '' : 's'} already pending.`
+                        : 'Lift review: no enabled skill is below its own pre-influence baseline.');
+            } catch (e) {
+                lines.push(`Lift review skipped — ${e instanceof Error ? e.message : String(e)}.`);
+            }
+        }
         await appendLog(username, now, lines);
         return result;
     } catch (e) {
@@ -253,14 +364,17 @@ export const runMemoryHygiene = async (
     }
 };
 
-/** Boot hook, beside `runWeeklyReviewIfDue`. Fire-and-forget, own due-check. */
+/** Boot hook, beside `runWeeklyReviewIfDue`. Fire-and-forget, own due-check.
+ *  `trades` (like the sibling passes' second argument) is what the lift
+ *  review measures over — pass it or step 7 reports itself skipped. */
 export const runMemoryHygieneIfDue = async (
     username: string,
     providerConfigs?: ProviderConfig[],
+    trades?: LoggedTrade[],
 ): Promise<HygieneResult | null> => {
     try {
         if (!(await isHygieneDue(username))) return null;
-        return await runMemoryHygiene(username, { providerConfigs });
+        return await runMemoryHygiene(username, { providerConfigs, trades });
     } catch {
         return null;
     }
