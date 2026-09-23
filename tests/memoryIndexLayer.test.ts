@@ -24,11 +24,22 @@ describe('buildGlobalMemoryIndex', () => {
         expect(idx).toContain('Family B: 48% WR (12/25)');
     });
     it('indexes list sections newest-first with a cap, not the whole wall', () => {
-        const patterns = Array.from({ length: 10 }, (_, i) => `pattern ${i}`);
-        const idx = buildGlobalMemoryIndex(mem({ aiPatternMemory: patterns }));
+        const corrections = Array.from({ length: 10 }, (_, i) => `correction ${i}`);
+        const idx = buildGlobalMemoryIndex(mem({ globalCorrections: corrections }));
         expect(idx).toContain('newest 5 of 10');
-        expect(idx).toContain('pattern 0');
-        expect(idx).not.toContain('pattern 9');
+        expect(idx).toContain('correction 0');
+        expect(idx).not.toContain('correction 9');
+    });
+    it('never renders a legacy aiPatternMemory list — the insight KB is the one source', () => {
+        // Stored profiles still LOAD the field (schema keeps it) so old data
+        // survives, but since the duplicate write was removed neither the
+        // index nor anything downstream may show it again: the same lesson
+        // used to reach one prompt twice.
+        const idx = buildGlobalMemoryIndex(mem({
+            aiPatternMemory: ['⚠️ RECURRING MISTAKE: legacy duplicate (3 occurrences in recent batch)'],
+        }));
+        expect(idx).not.toContain('PATTERN MEMORY');
+        expect(idx).not.toContain('legacy duplicate');
     });
     it('indexes the insight KB as top-5 one-liners, and names the rank honestly', () => {
         const insights = Array.from({ length: 8 }, (_, i) => ({
@@ -48,8 +59,14 @@ describe('buildGlobalMemoryIndex', () => {
     });
     it('stays under the index char cap', () => {
         const fat = mem({
-            aiPatternMemory: Array.from({ length: 10 }, () => 'x'.repeat(200)),
             globalCorrections: Array.from({ length: 10 }, () => 'y'.repeat(200)),
+            insightKnowledgeBase: {
+                insights: Array.from({ length: 10 }, (_, i) => ({
+                    id: `i${i}`, category: 'general' as const, insight: 'z'.repeat(200),
+                    sourceTradeId: 't', createdAt: new Date().toISOString(), useCount: i,
+                })),
+                lastUpdated: '',
+            },
         });
         expect(buildGlobalMemoryIndex(fat).length).toBeLessThanOrEqual(905); // 900 + ellipsis line
     });
@@ -65,7 +82,13 @@ describe('buildGlobalMemoryIndex', () => {
 describe('constructOptimizedContext (index layer)', () => {
     it('injects the INDEX, never the raw JSON dump', () => {
         const ctx = constructOptimizedContext([], undefined, mem({
-            aiPatternMemory: ['sweep then reclaim in london'],
+            insightKnowledgeBase: {
+                insights: [{
+                    id: 'i1', category: 'general' as const, insight: 'sweep then reclaim in london',
+                    sourceTradeId: 't', createdAt: new Date().toISOString(), useCount: 3,
+                }],
+                lastUpdated: '',
+            },
         }));
         expect(ctx).toContain('GLOBAL MEMORY INDEX');
         expect(ctx).toContain('sweep then reclaim in london');

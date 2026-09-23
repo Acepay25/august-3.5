@@ -103,20 +103,14 @@ export const updateGlobalMemoryAlgorithmically = (
         memory.familyPerformance[family] = `${wr}% WR (${totalWins}/${totalCount})`;
     }
 
-    // 4. Update AI Pattern Memory (Using MistakePatternService)
-    // We analyze the recent trades for recurring mistakes
+    // 4. Recurring-mistake detection — the SINGLE source for the lessons
+    // below. The legacy `aiPatternMemory` write that used to live here fed
+    // the same detector into a second store, so every lesson reached the
+    // prompt twice (the index rendered both — docs/learning-loop-map.md
+    // asymmetry #2, now closed). The write is gone: the field stays in the
+    // type/schema so stored profiles load, but it never grows again and
+    // `buildGlobalMemoryIndex` no longer renders it.
     const recurringMistakes = detectRecurringMistakes(recentTrades);
-
-    // Convert mistakes to "AI Pattern Memory" strings
-    // e.g. "Recurring timing issue: Premature entry before confirmation (3x)"
-    const newPatterns = recurringMistakes.map(m =>
-        `⚠️ RECURRING MISTAKE: ${m.description} (${m.occurrences} occurrences in recent batch)`
-    );
-
-    // Keep unique patterns, favor new ones
-    // We keep up to 10 insights (Legacy String Memory)
-    const uniquePatterns = new Set([...newPatterns, ...memory.aiPatternMemory]);
-    memory.aiPatternMemory = Array.from(uniquePatterns).slice(0, 10);
 
     // 4b. Structured insights (MemoryConsolidationService).
     // Convert recurring mistakes to Structured Insights

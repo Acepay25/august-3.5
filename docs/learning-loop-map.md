@@ -93,7 +93,7 @@ what lets the ladder test it at all.
 | `distilled/` | `distilledMemory.ts:239,302` | `loadDistilledFacts` ← `PatternMemorySynthesisService.ts:692` | yes (not prompt-visible) |
 | `lens/` | `lensMemory.ts:135` | `summarizeLensMemory` ← `DoctrineConsolidationService.ts:29`, `AnalystLensService.ts:12` | yes |
 | `GlobalMemory.familyPerformance` | `AlgorithmicMemoryService.ts:27,103` | `buildGlobalMemoryIndex` (`utils/memoryUtils.ts:23`) → `constructOptimizedContext` (`GenericAnalysisService.ts:334,335`) | yes |
-| `GlobalMemory.aiPatternMemory` | `AlgorithmicMemoryService.ts:28,119` | same index (:29) | yes |
+| `GlobalMemory.aiPatternMemory` | **none** — write removed (E3); init `:28` still seeds `[]` so the field exists, and stored strings load untouched but never grow | none — the `PATTERN MEMORY` section was deleted from `buildGlobalMemoryIndex` (was "same index (:29)") | **no** — frozen legacy field; `insightKnowledgeBase` is the one source |
 | `GlobalMemory.userPreferences` | `AlgorithmicMemoryService.ts:29-33,166-175` | same index (:41) + `syncProfileMemoryUnlocked` (`MemoryFilesService.ts:683`) | yes |
 | `GlobalMemory.globalCorrections` | `AlgorithmicMemoryService.ts:34,189` | same index (:35) | yes |
 | skill drafts | `queueSkillDraft` (`utils/skillDrafts.ts:39`) | `CoachThreadPanel`/`ApprovalInbox` + supervisor (:445) | yes |
@@ -108,13 +108,15 @@ what lets the ladder test it at all.
 ## WS-1.3 — the GlobalMemory round-trip
 
 Confirmed **closed**. `updateGlobalMemory` is a pure delegate to
-`AlgorithmicMemoryService.updateGlobalMemoryAlgorithmically`, and all four
-fields reach the model through the single choke-point
+`AlgorithmicMemoryService.updateGlobalMemoryAlgorithmically`, and the three
+live fields (`familyPerformance`, `userPreferences`, `globalCorrections`)
+reach the model through the single choke-point
 `utils/memoryUtils.buildGlobalMemoryIndex` → `constructOptimizedContext`
 (`GenericAnalysisService.ts:334` and `:335`, the two accuracy-mode branches).
-`familyPerformance` is injected verbatim, which is what
-`tests/memoryIndexLayer.test.ts` pins. A post-mortem on a Family-A trade
-therefore does change the next index's Family-A line.
+The fourth, legacy `aiPatternMemory`, was frozen by E3 — see asymmetry #2 —
+so it no longer reaches the model at all. `familyPerformance` is injected
+verbatim, which is what `tests/memoryIndexLayer.test.ts` pins. A post-mortem
+on a Family-A trade therefore does change the next index's Family-A line.
 
 ## Asymmetries found (feed WS-4)
 
@@ -129,10 +131,14 @@ therefore does change the next index's Family-A line.
    count, from each diary file's `## ` headings). Either delete the write or fix the two
    comments — a journal the user reads is a legitimate reason to keep it, but
    it must be stated, not implied. Not deleted here: it is user-facing history.
-2. **`aiPatternMemory` duplicates `insightKnowledgeBase.insights`.** Both come
-   from `detectRecurringMistakes` (`AlgorithmicMemoryService.ts:112-119` and
-   `:123-146`) and both reach the same index — the same content twice in one
-   prompt.
+2. **CLOSED (E3): `aiPatternMemory` duplicated `insightKnowledgeBase.insights`.**
+   Both came from `detectRecurringMistakes` and both reached the same index —
+   the same content twice in one prompt. The legacy write and the index
+   section are deleted; the field stays in the type/schema so stored profiles
+   load byte-identically, but it never grows and is never rendered. Pinned by
+   `tests/algorithmicMemory.test.ts` (write gone, stored list untouched,
+   insights still grow from the same detector) and the "never renders a
+   legacy list" case in `tests/memoryIndexLayer.test.ts`.
 3. **Dead code on the memory path — three removed, one kept, one uncalled.**
    Removed after verifying zero callers: `GenericAnalysisService.updateGlobalMemory`
    (the old AI-summarizer variant, plus the private `GLOBAL_MEMORY_JSON_SCHEMA`
