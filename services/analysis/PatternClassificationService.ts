@@ -146,8 +146,13 @@ export const classifyPattern = (
         scores.familyB += 40; // Baseline for ranging
     }
 
-    // CHoCH (Change of Character) logic - hard to detect without swing points
-    // We use a proxy: HTF trend is Neutral or Weak, but LTF is strong.
+    // Family B is SCORED ON A PROXY, not because CHoCH is undetectable — it
+    // already is: CandlePatternDetector#detectStructurePatterns derives
+    // bullish/bearish CHoCH plus BOS from local swings, and the packet's
+    // pattern table carries those to every seat. This scorer weights the
+    // family from momentum instead, because a structural flip and a
+    // momentum shift are different evidence for the same claim; do not
+    // replace it with a second swing parser.
     // Threshold: the histogram must exceed 20% of 1h ATR — the old `> 0`
     // fired on any nonzero histogram (noise), making Family B the default
     // winner in nearly every non-strong regime.

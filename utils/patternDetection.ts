@@ -7,7 +7,21 @@ export interface DetectedPattern {
     confidence: number; // 0 to 1
     description: string;
     significance: string;
+    /** Pivot extremes the pattern actually rests on — the weakest of its two
+     *  lines, since a triangle is only as valid as its least-touched edge. */
+    touches: number;
 }
+
+/**
+ * The three-touch rule: two pivots define a line, but they do not *confirm*
+ * one — a third touch is what separates a level the market respects from two
+ * random wicks that happen to line up. Reported so a 2-touch reading can be
+ * labeled an assumption instead of a setup.
+ */
+const TOUCHES_TO_CONFIRM = 3;
+
+export const patternStatus = (pattern: DetectedPattern): 'confirmed' | 'assumption' =>
+    pattern.touches >= TOUCHES_TO_CONFIRM ? 'confirmed' : 'assumption';
 
 export interface KeyZones {
     support: number[];
@@ -104,7 +118,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'bearish',
                 confidence: 0.85,
                 description: `Shoulders at ~${ls.price.toFixed(2)}, Head at ${head.price.toFixed(2)}`,
-                significance: 'Major Bearish Reversal'
+                significance: 'Major Bearish Reversal',
+                touches: 3
             });
         }
     }
@@ -123,7 +138,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'bullish',
                 confidence: 0.85,
                 description: `Shoulders at ~${ls.price.toFixed(2)}, Head at ${head.price.toFixed(2)}`,
-                significance: 'Major Bullish Reversal'
+                significance: 'Major Bullish Reversal',
+                touches: 3
             });
         }
     }
@@ -142,7 +158,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'bearish',
                 confidence: 0.8,
                 description: `Resistance zone detected at ~${peak1.price.toFixed(2)}`,
-                significance: 'Bearish Reversal'
+                significance: 'Bearish Reversal',
+                touches: 2
             });
         }
     }
@@ -160,7 +177,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'bullish',
                 confidence: 0.8,
                 description: `Support zone detected at ~${trough1.price.toFixed(2)}`,
-                significance: 'Bullish Reversal'
+                significance: 'Bullish Reversal',
+                touches: 2
             });
         }
     }
@@ -193,7 +211,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'bullish',
                 confidence: 0.75,
                 description: 'Flat resistance with higher lows.',
-                significance: 'Bullish Continuation'
+                significance: 'Bullish Continuation',
+                touches: 3 // three highs define the flat top, three lows the rising line
             });
         } else if (lowerHighs && flatLows) {
             patterns.push({
@@ -201,7 +220,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'bearish',
                 confidence: 0.75,
                 description: 'Flat support with lower highs.',
-                significance: 'Bearish Continuation'
+                significance: 'Bearish Continuation',
+                touches: 3 // three lows define the flat base, three highs the falling line
             });
         } else if (lowerHighs && higherLows) {
              patterns.push({
@@ -209,7 +229,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 type: 'neutral',
                 confidence: 0.7,
                 description: 'Price coiling with lower highs and higher lows.',
-                significance: 'Breakout Imminent'
+                significance: 'Breakout Imminent',
+                touches: 3 // three highs on the converging top, three lows on the base
             });
         }
     }
