@@ -52,7 +52,12 @@ export type RetirementReason =
      *  status and only stopped matching. `skillIdleLifecycle` archives a skill
      *  that stayed suspended past its window, and that transition never touches
      *  `status`, so it leaves no history row to map from. */
-    | 'idle';
+    | 'idle'
+    /** The lesson did not die, it MOVED: the dedupe sweep archived a duplicate
+     *  whose evidence was folded into a surviving skill. `absorbedInto` names
+     *  that survivor, so the next drafter consolidates into it instead of
+     *  re-deriving the same trigger as a second skill. */
+    | 'absorbed';
 
 export interface SkillTombstone {
     slug: string;
@@ -61,6 +66,8 @@ export interface SkillTombstone {
     /** Measured lift in percentage points, or null when unknown. */
     liftPts: number | null;
     retiredAt: string;
+    /** Set for `absorbed` only: the live skill that took the evidence. */
+    absorbedInto?: string;
 }
 
 const keyFor = (username: string): string =>
@@ -109,7 +116,12 @@ export async function graveyardBlock(username: string, max = MAX_TOMBSTONES): Pr
     if (list.length === 0) return '';
     return list
         .slice(0, max)
-        .map(t => `- ${t.slug}: tried, retired: ${t.reason} after N=${t.sampleN}, lift ${t.liftPts !== null ? `${t.liftPts >= 0 ? '+' : ''}${t.liftPts}pt` : 'unknown'}`)
+        .map(t => (t.reason === 'absorbed' && t.absorbedInto
+            // The point of recording the survivor at all: a retired twin with no
+            // destination reads as "this was thrown away", and the next
+            // drafter re-derives it. This line reads as "it lives over there".
+            ? `- ${t.slug}: ABSORBED into ${t.absorbedInto} — the lesson and its evidence live there now. Consolidate into it; do not re-derive it.`
+            : `- ${t.slug}: tried, retired: ${t.reason} after N=${t.sampleN}, lift ${t.liftPts !== null ? `${t.liftPts >= 0 ? '+' : ''}${t.liftPts}pt` : 'unknown'}`))
         .join('\n');
 }
 
@@ -221,6 +233,10 @@ export function reEntryRuleForReason(reason: RetirementReason): string {
             return 'explicit human action required — no auto path.';
         case 'idle':
             return 'MAY auto-revive: it was filed for silence, not judged. If its trigger fires again the idle lifecycle returns it on its own.';
+        case 'absorbed':
+            // No path back: its wins, losses and trade ids are now the
+            // survivor's, so re-opening it would count the same trades twice.
+            return 'stays retired for good — its evidence was folded into the skill named in the graveyard line. Re-opening it would double-count that sample.';
     }
 }
 
