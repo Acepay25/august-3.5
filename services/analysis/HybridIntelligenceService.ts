@@ -60,6 +60,11 @@ import {
 
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
 import {
+    detectChartPatterns,
+    DetectedPattern,
+    patternStatus,
+} from '../../utils/patternDetection';
+import {
     SmcStructureRead,
     buildSmcStructureRead,
     formatSmcStructureBlock,
@@ -198,6 +203,15 @@ export interface HybridDataPacket {
     // trader would see" layer that lets the model reason about structure
     // it could not derive from indicators alone.
     detectedPatterns: Record<HybridTimeframe, CandlePatternScan>;
+
+    // ========== GEOMETRIC CHART PATTERNS ==========
+    // Swing-anchored geometry over the timeframe's full fetched history
+    // (300 bars), not the 30-candle window the formation scan above uses:
+    // triangles, double tops/bottoms, head and shoulders. A flag/wedge needs
+    // dozens of bars to be visible at all, so it cannot come from the same
+    // window. Carries `touches`, which is what separates a drawn line from a
+    // straight edge laid across two wicks.
+    chartPatterns: Record<HybridTimeframe, DetectedPattern[]>;
 
     // ========== LIQUIDITY SWEEPS ==========
     // Level-anchored price-action events from the last completed candle per
@@ -463,6 +477,16 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         '1d': scanCandlePatterns(snapshot.klines['1d'], 30)
     };
 
+    // Geometric patterns over the WHOLE fetched window, not the 30-candle
+    // formation window: a symmetrical triangle is four+ swing points across
+    // weeks of 4h bars, and the detector refuses under 50 candles.
+    const chartPatterns = {
+        '15m': detectChartPatterns(snapshot.klines['15m']),
+        '1h': detectChartPatterns(snapshot.klines['1h']),
+        '4h': detectChartPatterns(snapshot.klines['4h']),
+        '1d': detectChartPatterns(snapshot.klines['1d'])
+    };
+
     console.log(`  - Candle History: 1d=${candleHistory['1d'].summary}, 4h=${candleHistory['4h'].summary}, 1h=${candleHistory['1h'].summary}`);
     console.log(`  - Detected Patterns: 1d=${detectedPatterns['1d'].patterns.length} patterns, 4h=${detectedPatterns['4h'].patterns.length} patterns`);
 
@@ -598,6 +622,8 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         candleHistory,
         // Detected Candle Patterns (pin bar, double top, BOS, …)
         detectedPatterns,
+        // Swing geometry (triangles, H&S, double tops/bottoms) over 300 bars
+        chartPatterns,
         // Level-anchored liquidity sweep events (last completed candle per TF)
         liquiditySweeps,
         // SMC structure detectors (equal H/L, FVG, OB, P/D, DOL, CVD, AB=CD)
@@ -871,6 +897,27 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
                 `${(p.strength * 100).toFixed(0)}%`,
                 p.priceLevel !== undefined ? `$${fmtOhlc(p.priceLevel)}` : '—',
                 p.note ?? '',
+            ]);
+        }
+    }
+
+    // Geometry in the SAME table as the formations, labeled so the two layers
+    // cannot be read as one: a 30-candle engulfing and a 300-candle triangle
+    // are different claims about different windows. A 2-touch line is the
+    // case that matters — two wicks that happen to align is the most common
+    // way a "pattern" is wrong, so it is named as an assumption here rather
+    // than left for the seat to notice.
+    for (const tf of tfs) {
+        const geo = data.chartPatterns?.[tf] ?? [];
+        for (const p of [...geo].sort((a, b) => b.confidence - a.confidence).slice(0, 2)) {
+            const assumption = patternStatus(p) === 'assumption';
+            patternRows.push([
+                tf,
+                p.name,
+                p.type,
+                `${(p.confidence * 100).toFixed(0)}%`,
+                '—',
+                `geometry (${p.touches} touches) · ${p.description}${assumption ? ' · ASSUMPTION, not a setup: this line has no third touch' : ''}`,
             ]);
         }
     }
