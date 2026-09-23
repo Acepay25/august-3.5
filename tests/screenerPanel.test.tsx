@@ -73,6 +73,22 @@ describe('ScreenerPanel', () => {
         expect(onClose).toHaveBeenCalled();
     });
 
+    it('is a modal dialog: Escape closes it and focus lands inside it', async () => {
+        const onClose = vi.fn();
+        mount(vi.fn(), onClose);
+        await waitFor(() => expect(screen.getByTestId('screener-row-BTCUSDT')).toBeTruthy());
+
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.getAttribute('aria-modal')).toBe('true');
+
+        // The trap focuses the container on open (delayed a frame) — without
+        // it, Tab in a portal starts at the top of the document instead.
+        await waitFor(() => expect(document.activeElement).toBe(dialog));
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalled();
+    });
+
     it('aborts the scan when the panel closes', async () => {
         const onClose = vi.fn();
         const { rerender } = render(<ScreenerPanel open onClose={onClose} onChangeSymbol={vi.fn()} />);

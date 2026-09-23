@@ -14,6 +14,8 @@ import { display as symbolDisplay } from '../../utils/symbol';
 import { fmtPrice } from '../../utils/formatters';
 import StatusPill from '../ui/StatusPill';
 import type { LoggedTrade } from '../../types/trade';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export interface ScreenerPanelProps {
     open: boolean;
@@ -92,6 +94,13 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
         return sorted;
     }, [rows, query, setupsOnly, sort]);
 
+    // A11y (it had neither): Escape closes the dialog and Tab stays inside it,
+    // with focus returned to whatever opened it on close. Before this the only
+    // way out was clicking the X or the backdrop — a keyboard user was stuck.
+    // Both hooks are unconditional, above the `!open` return below.
+    const panelRef = useFocusTrap<HTMLDivElement>(open);
+    useEscapeClose(open, onClose);
+
     if (!open) return null;
 
     /** Sortable column head. The arrow IS the direction read (no separate
@@ -139,10 +148,13 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
         <>
             <div className="fixed inset-0 z-40 bg-black/70" aria-hidden="true" onClick={onClose} />
             <div
+                ref={panelRef}
                 role="dialog"
+                aria-modal="true"
                 aria-label="Market screener"
+                tabIndex={-1}
                 data-testid="screener-panel"
-                className="fixed left-1/2 top-1/2 z-50 flex max-h-[82vh] w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
+                className="fixed left-1/2 top-1/2 z-50 flex max-h-[82vh] w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl focus:outline-none"
             >
                 <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] px-4 py-2.5">
                     <h2 className="text-[13px] font-bold text-zinc-100">Screener</h2>
