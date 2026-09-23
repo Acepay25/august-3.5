@@ -1495,8 +1495,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 strip. */}
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
-                <span className="text-[13px] font-semibold text-zinc-100">Chart AI</span>
-                <span className="truncate text-[11px] text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
+                <span className="text-ui-caption font-semibold text-zinc-100">Chart AI</span>
+                <span className="truncate text-ui-dense text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
                 {(() => {
                     // The prototype's "Analyzed 2m ago" meta, told honestly:
                     // the session's last real activity, and only once a settled
@@ -1557,34 +1557,34 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 <div className="absolute right-0 top-9 z-30 max-h-96 w-56 overflow-y-auto rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="chat-new-menu">
                                     {isPanel && (
                                         <button type="button" onClick={() => { setShowNewMenu(false); setPanelPickerFor(activeId); }}
-                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
+                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                             Panel models <span className="text-zinc-600">· {activeSession.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}</span>
                                         </button>
                                     )}
                                     <button type="button" onClick={() => { setShowNewMenu(false); onToggleExpanded?.(); }}
-                                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
+                                        className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         {expanded ? 'Shrink back' : 'Expand over chart'}
                                     </button>
                                     <div className="my-1 border-t border-white/[0.06]" />
                                     <p className="px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-600">Start</p>
-                                    <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
+                                    <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         New panel <span className="text-zinc-600">· up to {PANEL_MAX_MODELS} models</span>
                                     </button>
                                     <button type="button" onClick={() => { setShowNewMenu(false); setShowNewBot(true); }}
                                         data-testid="new-agent-option"
-                                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
+                                        className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         New agent <span className="text-zinc-600">· create a roster bot</span>
                                     </button>
                                     {renderGroupSurface && groups.length > 0 && groups.slice(0, 6).map(g => (
                                         <button key={g.id} type="button"
                                             onClick={() => { setShowNewMenu(false); const existing = sessions.find(s => s.groupId === g.id); if (existing) { chatStore.setActiveId(existing.id); return; } chatStore.addSession({ kind: 'group', title: g.name, groupId: g.id }); }}
-                                            className="block w-full truncate rounded-lg px-2 py-1 text-left text-[11px] text-zinc-400 hover:bg-white/[0.06]">
+                                            className="block w-full truncate rounded-lg px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
                                             {g.name} <span className="text-zinc-600">· room</span>
                                         </button>
                                     ))}
                                     {bots.length > 0 && bots.slice(0, 6).map(b => (
                                         <button key={b.id} type="button" onClick={() => addSession('solo', b.id)}
-                                            className="block w-full truncate rounded-lg px-2 py-1 text-left text-[11px] text-zinc-400 hover:bg-white/[0.06]">
+                                            className="block w-full truncate rounded-lg px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
                                             {b.name} <span className="text-zinc-600">· as bot</span>
                                         </button>
                                     ))}
@@ -1669,13 +1669,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             <div ref={scrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4">
                 {entries.length === 0 && !panelPickerFor && (
                     <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
-                        <p className="text-[11px] leading-5 text-zinc-500">
+                        <p className="text-ui-dense leading-5 text-zinc-500">
                             The model sees this chart live — a fresh code-calculated packet rides every message, it can pull the book, the full hybrid data or the exact screen state (including your drawings), take chart screenshots you attach, and grow itself: memory notes, skill proposals and new tools from this chat.
                         </p>
                         <div className="flex flex-wrap justify-center gap-1.5">
                             {QUICK_PROMPTS.map(({ text, Icon }) => (
                                 <button key={text} type="button" disabled={!ready} onClick={() => void send(text)}
-                                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 transition-colors hover:border-white/15 hover:text-zinc-100 disabled:opacity-40">
+                                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-zinc-800 px-2.5 py-1 text-ui-dense text-zinc-300 transition-colors hover:border-white/15 hover:text-zinc-100 disabled:opacity-40">
                                     <Icon className="h-3 w-3 shrink-0 text-zinc-500 transition-colors group-hover:text-cyan-400" aria-hidden="true" />
                                     {text}
                                 </button>
@@ -1717,7 +1717,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     <div className="group/msg flex max-w-[85%] items-start gap-1">
                                         {!answerStreaming && <CopyChip text={e.text} className="mt-2" />}
                                         {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} className="mt-2" />}
-                                        <p className="min-w-0 rounded-bubble bg-zinc-800 px-3 py-2 text-[12px] leading-5 text-zinc-100">{e.text}</p>
+                                        <p className="min-w-0 rounded-bubble bg-zinc-800 px-3 py-2 text-ui-sm leading-5 text-zinc-100">{e.text}</p>
                                     </div>
                                 )}
                             </div>
@@ -1733,7 +1733,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatModelDisplayName(e.speaker.split(':')[1] ?? e.speaker)}</p>
                                 )}
                                 <ChatWorkTimeline entry={e} />
-                                <div className="text-[12px] leading-5 text-zinc-200">
+                                <div className="text-ui-sm leading-5 text-zinc-200">
                                     {shownText
                                         ? <FadingText text={shownText} streaming={!!e.streaming} />
                                         : null}
@@ -1807,7 +1807,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 sentence-case disclaimer. Generous padding, no hard divider. */}
             <div className="shrink-0 px-3 pb-3 pt-1">
                 {modelIssue && provider && (
-                    <div className="mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-4 text-amber-300" data-testid="model-fallback-warning">
+                    <div className="mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-ui-dense leading-4 text-amber-300" data-testid="model-fallback-warning">
                         <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                         <span className="min-w-0 flex-1">
                             {modelIssue} Answering with <strong className="font-semibold">{provider.name} · {formatModelDisplayName(provider.selectedModel)}</strong> — re-pick a model in the dropdown.
@@ -1841,7 +1841,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); void send(draft); }
                         }}
                         placeholder={ready ? 'Ask anything…' : isPanel ? 'Add at least 2 panel models above' : 'Configure a provider in Settings first'}
-                        className="max-h-28 min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-5 text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
+                        className="max-h-28 min-h-[24px] w-full resize-none bg-transparent text-ui-caption leading-5 text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
                     />
                     <div className="mt-2 flex items-center gap-1.5">
                         <input type="file" multiple accept="image/*,.md,.txt,.csv,.json" ref={fileInputRef} className="hidden"
@@ -1859,12 +1859,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     <div className="fixed inset-0 z-20" aria-hidden onClick={() => setShowAttachMenu(false)} />
                                     <div className="absolute bottom-9 left-0 z-30 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="attach-menu">
                                         <button type="button" onClick={() => { setShowAttachMenu(false); fileInputRef.current?.click(); }}
-                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-white/[0.06]">
+                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                             <FileText className="h-3.5 w-3.5 text-zinc-500" /> Upload files &amp; images
                                         </button>
                                         <button type="button" onClick={() => { setShowAttachMenu(false); captureChart(); }}
                                             disabled={!onCaptureChart} title={onCaptureChart ? undefined : 'Chart not ready'}
-                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
+                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
                                             <Camera className="h-3.5 w-3.5 text-zinc-500" /> Screenshot chart
                                         </button>
                                     </div>
@@ -1923,7 +1923,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                                 // is what makes Escape and Tab reach the menu.
                                                 autoFocus={effort === c.id}
                                                 onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
-                                                className={`block w-full rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
+                                                className={`block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
                                             >
                                                 {c.label}
                                             </button>
@@ -2026,7 +2026,7 @@ const PinChip: React.FC<{ pinned: boolean; onToggle: () => void }> = ({ pinned, 
  *  is CSS-only and can never eat text. */
 const FadingText: React.FC<{ text: string; streaming: boolean }> = ({ text, streaming }) => (
     <div className={streaming ? 'stream-fade' : undefined}>
-        <MarkdownContent content={text} className="!text-[12px] [&_p]:my-1 [&_li]:text-[12px]" />
+        <MarkdownContent content={text} className="!text-ui-sm [&_p]:my-1 [&_li]:text-ui-sm" />
     </div>
 );
 

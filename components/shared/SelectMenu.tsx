@@ -187,7 +187,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                 {prefix && (
                     <span className="pl-2.5 text-ui-xs uppercase tracking-widest text-zinc-500">{prefix}</span>
                 )}
-                <span className={`min-w-0 flex-1 truncate text-left text-[12px] font-semibold ${triggerClassName ? '' : prefix ? 'px-1.5 py-1' : 'px-2.5 py-1'}`}>
+                <span className={`min-w-0 flex-1 truncate text-left text-ui-sm font-semibold ${triggerClassName ? '' : prefix ? 'px-1.5 py-1' : 'px-2.5 py-1'}`}>
                     {current?.label ?? placeholder}
                 </span>
                 <ChevronDownIcon className={`${triggerClassName ? '' : 'mr-2'} h-3 w-3 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -225,7 +225,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                                         disabled={opt.disabled}
                                         onMouseEnter={() => !opt.disabled && setActiveIndex(idx)}
                                         onClick={() => choose(opt)}
-                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors ${
+                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-ui-caption transition-colors ${
                                             opt.disabled
                                                 ? 'cursor-not-allowed text-zinc-600'
                                                 : isActive
@@ -235,7 +235,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                                     >
                                         <span className="min-w-0 flex-1 truncate">{opt.label}</span>
                                         {opt.meta && (
-                                            <span className="shrink-0 text-[11px] text-zinc-500">{opt.meta}</span>
+                                            <span className="shrink-0 text-ui-dense text-zinc-500">{opt.meta}</span>
                                         )}
                                         {isCurrent && <CheckIcon className="h-3 w-3 shrink-0 text-zinc-200" />}
                                     </button>

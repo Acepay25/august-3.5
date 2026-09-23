@@ -27,7 +27,7 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
                 <span className="text-ui-2xs text-zinc-600">via {digest.providerName}</span>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-zinc-200">{digest.impulse}</p>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500 tabular-nums">
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-ui-dense text-zinc-500 tabular-nums">
                 <span>{s.closed} closed ({s.wins}W/{s.losses}L)</span>
                 <span>Net ${Math.round(s.netPnlUsd)}</span>
                 {s.avgR !== null && <span>avg R {s.avgR.toFixed(2)}</span>}

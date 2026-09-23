@@ -176,7 +176,7 @@ export function useConfirmDialog() {
                                         <div className="mt-4">
                                             <label
                                                 htmlFor="confirm-typed-input"
-                                                className="block text-[11px] font-semibold uppercase tracking-widest text-zinc-500"
+                                                className="block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500"
                                             >
                                                 {state.typedConfirmHint ?? `Type ${state.typedConfirm} to confirm`}
                                             </label>

@@ -101,7 +101,7 @@ const fmtDay = (iso: string | undefined): string => {
 /** Shared cell chrome: one line of data, hairline-separated, no card inside. */
 const TH = 'whitespace-nowrap px-3 py-2 text-left text-ui-xs font-bold uppercase tracking-wider text-zinc-600';
 const TD = 'whitespace-nowrap px-3 py-2 align-middle';
-const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-1.5 py-1 text-[11px] transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] focus:outline-none';
+const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-1.5 py-1 text-ui-dense transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] focus:outline-none';
 
 /** How full a heatmap cell is: hue from the edge, alpha from the edge AND the
  *  evidence weight, so a 9-trade 78% stays visibly fainter than a 60-trade
@@ -160,7 +160,7 @@ export const RegimeMatrixStrip: React.FC<{
                 ))}
                 {rows.map(row => (
                     <React.Fragment key={row.family}>
-                        <span className="self-center truncate text-[11px] text-zinc-400">
+                        <span className="self-center truncate text-ui-dense text-zinc-400">
                             {row.family.replace(/_/g, ' ')}
                         </span>
                         {row.cells.map((cell, i) => {
@@ -174,7 +174,7 @@ export const RegimeMatrixStrip: React.FC<{
                                     title={cell
                                         ? `${row.family} · ${regime}: ${cell.w}W/${cell.l}L (${Math.round((cell.w / n) * 100)}%)${thin ? ' — thin sample' : ''}`
                                         : `${row.family} · ${regime}: no settled trades`}
-                                    className={`rounded-control px-1 py-1 text-center font-mono text-[11px] tabular-nums ring-1 ring-inset transition-colors ${
+                                    className={`rounded-control px-1 py-1 text-center font-mono text-ui-dense tabular-nums ring-1 ring-inset transition-colors ${
                                         cell
                                             ? cell.w / n >= 0.5 ? 'text-emerald-400' : 'text-rose-400'
                                             : 'text-zinc-700'
@@ -384,7 +384,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
                 <div>
                     <h2 className="font-serif text-[17px] tracking-tight text-zinc-100">Strategy Studio</h2>
-                    <p className="text-[11px] text-zinc-500">
+                    <p className="text-ui-dense text-zinc-500">
                         {rows.length === skills.length
                             ? `${skills.length} playbooks`
                             : `${rows.length} of ${skills.length} playbooks`}
@@ -392,7 +392,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                     </p>
                 </div>
                 {onClose && (
-                    <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
+                    <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
                         Back to Chat
                     </button>
                 )}
@@ -409,7 +409,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 <select
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value as SkillMeta['status'] | 'all')}
-                    className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-[11px] uppercase tracking-wide text-zinc-300 focus:outline-none"
+                    className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-dense uppercase tracking-wide text-zinc-300 focus:outline-none"
                 >
                     <option value="all">Any status</option>
                     <option value="confirmed">Confirmed</option>
@@ -419,13 +419,13 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 <select
                     value={familyFilter}
                     onChange={e => setFamilyFilter(e.target.value as StrategyFamily | 'all')}
-                    className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-[11px] uppercase tracking-wide text-zinc-300 focus:outline-none"
+                    className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-dense uppercase tracking-wide text-zinc-300 focus:outline-none"
                 >
                     <option value="all">Any family</option>
                     {STRATEGY_FAMILIES.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
                 </select>
                 <label
-                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
                     title="Import skill .md files — they must carry valid skill frontmatter"
                 >
                     {isImporting
@@ -447,7 +447,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 tally, so it only stands in while the matrix is still empty. */}
             <RegimeMatrixStrip matrix={regimeMatrix} currentRegime={currentRegime} />
             {matrixLine && Object.keys(regimeMatrix).length === 0 && (
-                <div className="border-b border-white/5 px-5 py-2 text-[11px] leading-5 text-zinc-500">
+                <div className="border-b border-white/5 px-5 py-2 text-ui-dense leading-5 text-zinc-500">
                     {matrixLine}
                 </div>
             )}
@@ -470,7 +470,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                        in a stacked card — only the skill's claim rides under its
                        name, because a slug without its claim is not readable. */
                     <div className="overflow-x-auto custom-scrollbar rounded-control border border-zinc-800/80">
-                        <table className="w-full border-collapse text-left text-[11px]" data-testid="strategy-studio-skills">
+                        <table className="w-full border-collapse text-left text-ui-dense" data-testid="strategy-studio-skills">
                             <thead>
                                 <tr className="border-b border-zinc-800/80 bg-zinc-900">
                                     <th className={TH}>Skill</th>
@@ -537,7 +537,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                         >
                                             {/* Name + the claim it makes. */}
                                             <td className={`${TD} max-w-[260px]`}>
-                                                <div className="truncate text-[12px] font-semibold text-zinc-100" title={title}>{title}</div>
+                                                <div className="truncate text-ui-sm font-semibold text-zinc-100" title={title}>{title}</div>
                                                 <div className="truncate text-ui-xs text-zinc-500">{claim}</div>
                                             </td>
                                             <td className={TD}>
@@ -565,7 +565,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                                 <span
                                                     data-testid={`studio-wl-${slug}`}
                                                     title={`${meta.wins}W / ${meta.losses}L`}
-                                                    className={`font-mono text-[11px] tabular-nums ${sample === 0 ? 'text-zinc-600' : winRate >= 0.6 ? 'text-emerald-400' : winRate <= 0.4 ? 'text-rose-400' : 'text-zinc-300'}`}
+                                                    className={`font-mono text-ui-dense tabular-nums ${sample === 0 ? 'text-zinc-600' : winRate >= 0.6 ? 'text-emerald-400' : winRate <= 0.4 ? 'text-rose-400' : 'text-zinc-300'}`}
                                                 >
                                                     {Math.round(meta.wins)}W {Math.round(meta.losses)}L
                                                     <span className="ml-1 text-zinc-600">n={sample}</span>
@@ -584,7 +584,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                                 measured" sample count — never 0R. */}
                                             <td className={`${TD} hidden xl:table-cell text-right`}>
                                                 <span
-                                                    className={`font-mono text-[11px] tabular-nums ${expectancy === undefined ? 'text-zinc-600' : expectancy > 0 ? 'text-emerald-400' : expectancy < 0 ? 'text-rose-400' : 'text-zinc-300'}`}
+                                                    className={`font-mono text-ui-dense tabular-nums ${expectancy === undefined ? 'text-zinc-600' : expectancy > 0 ? 'text-emerald-400' : expectancy < 0 ? 'text-rose-400' : 'text-zinc-300'}`}
                                                     title={expectancy === undefined
                                                         ? `unmeasured — ${meta.rSampled ?? 0}/${EXPECTANCY_MIN_R_SAMPLE} counted outcomes carry realized R`
                                                         : 'average realized R per measured outcome'}
@@ -601,7 +601,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                                 )}
                                             </td>
                                             <td
-                                                className={`${TD} hidden lg:table-cell font-mono text-[11px] tabular-nums`}
+                                                className={`${TD} hidden lg:table-cell font-mono text-ui-dense tabular-nums`}
                                                 title={`last A/B eval: ${meta.lastEvalAt ?? 'never'} · last content write: ${meta.modifiedAt ?? 'unknown'}`}
                                             >
                                                 <span className={meta.lastEvalAt ? 'text-zinc-400' : 'text-zinc-600'}>

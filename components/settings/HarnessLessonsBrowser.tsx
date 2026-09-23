@@ -18,7 +18,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
     return (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="flex items-baseline justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
+                <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">
                     Harness lessons ({lessons.length})
                 </p>
                 <button
@@ -34,7 +34,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
                 un-pins thinking-off for that class until the next probe re-learns it.
             </p>
             {lessons.length === 0 ? (
-                <p className="mt-2 text-[11px] text-zinc-600">No lessons recorded yet.</p>
+                <p className="mt-2 text-ui-dense text-zinc-600">No lessons recorded yet.</p>
             ) : (
                 <ul className="mt-2 space-y-1.5">
                     {lessons.map(l => (
@@ -43,7 +43,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
                                 <p className="text-ui-xs uppercase tracking-widest text-zinc-500">
                                     {l.kind} · {l.scope}{l.provider ? ` · ${l.provider}` : ''} · {l.at.slice(0, 10)}
                                 </p>
-                                <p className="mt-0.5 text-[11px] leading-snug text-zinc-300">{l.lesson}</p>
+                                <p className="mt-0.5 text-ui-dense leading-snug text-zinc-300">{l.lesson}</p>
                                 <p className="mt-0.5 truncate text-ui-xs text-zinc-600" title={l.pattern}>{l.pattern}</p>
                             </div>
                             <button

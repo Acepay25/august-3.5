@@ -236,7 +236,7 @@ const SkillDetail: React.FC<{
                             <button type="button" data-testid="skill-undo" aria-pressed={undoArmed}
                                 onClick={() => { if (undoArmed) { setUndoArmed(false); onToggleRetire(); return; } setUndoArmed(true); }}
                                 onBlur={() => setUndoArmed(false)}
-                                className="rounded-control border border-rose-500/40 px-2 py-1 text-[11px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/10">
+                                className="rounded-control border border-rose-500/40 px-2 py-1 text-ui-dense font-semibold text-rose-300 transition-colors hover:bg-rose-500/10">
                                 {undoArmed ? 'Confirm undo' : 'Undo approval'}
                             </button>
                         </>
@@ -245,7 +245,7 @@ const SkillDetail: React.FC<{
                         <button type="button" data-testid="skill-delete" aria-pressed={armed}
                             onClick={() => { if (armed) { onDelete(); return; } setArmed(true); }}
                             onBlur={() => setArmed(false)}
-                            className={`rounded-control border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                            className={`rounded-control border px-2 py-1 text-ui-dense font-semibold transition-colors ${
                                 armed
                                     ? 'border-rose-500/50 bg-rose-500/10 text-rose-300'
                                     : 'border-zinc-700 text-zinc-400 hover:border-rose-500/40 hover:text-rose-300'
@@ -289,7 +289,7 @@ const SkillDetail: React.FC<{
 
             {/* Provenance: where this belief came from. */}
             {(meta?.originMessageId || meta?.regime) && (
-                <p className="shrink-0 text-[11px] text-zinc-600">
+                <p className="shrink-0 text-ui-dense text-zinc-600">
                     {meta?.originMessageId
                         ? <>Learned from trade <span className="font-mono text-zinc-500">{meta.originMessageId.slice(0, 20)}</span></>
                         : null}
@@ -299,7 +299,7 @@ const SkillDetail: React.FC<{
             )}
 
             {refined && meta?.previousVersion && (
-                <div className="mt-4 shrink-0 space-y-1 rounded-xl border border-zinc-800 bg-zinc-900 p-4 font-mono text-[11px] leading-5">
+                <div className="mt-4 shrink-0 space-y-1 rounded-xl border border-zinc-800 bg-zinc-900 p-4 font-mono text-ui-dense leading-5">
                     <p className="text-zinc-500">
                         Refined {new Date(meta.refinedAt!).toLocaleString()} after {meta.consecutiveLosses === 0 ? 'consecutive losses' : `${meta.consecutiveLosses} consecutive losses`}
                     </p>
@@ -329,7 +329,7 @@ const SkillDetail: React.FC<{
                         disabled={proofState === 'running'}
                         data-testid="prove-skill-history"
                         title="Replay the coin's candle history and report this behavior's first-touch win-rate"
-                        className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         <History className="h-3.5 w-3.5" />
                         {proofState === 'running' ? 'Checking history…' : 'Prove on history'}
@@ -350,10 +350,10 @@ const SkillDetail: React.FC<{
                     </span>
                 </div>
                 {proofState === 'done' && proofResult && proofResult.status !== 'ok' && (
-                    <p className="mt-2 text-[11px] text-zinc-500">{proofResult.message}</p>
+                    <p className="mt-2 text-ui-dense text-zinc-500">{proofResult.message}</p>
                 )}
                 {proofState === 'done' && proofResult?.status === 'ok' && (
-                    <p className="mt-2 text-[11px] text-zinc-500">
+                    <p className="mt-2 text-ui-dense text-zinc-500">
                         Average move when it worked: +{(proofResult.proof.avgMfe * 100).toFixed(1)}% · against you: {(proofResult.proof.avgMae * 100).toFixed(1)}%. Historical readout — the skill's live W/L ladder still governs promotion.
                     </p>
                 )}
@@ -370,7 +370,7 @@ const SkillDetail: React.FC<{
                         disabled={evalState === 'running' || !memoryConfig}
                         data-testid="run-skill-eval"
                         title={!memoryConfig ? 'Configure a memory model first (Settings → Memory model)' : 'Run a with-skill vs without-skill A/B over matched trades'}
-                        className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         <FlaskConical className="h-3.5 w-3.5" />
                         {evalState === 'running' ? 'Evaluating…' : 'Run A/B eval'}
@@ -387,7 +387,7 @@ const SkillDetail: React.FC<{
                     </span>
                 </div>
                 {evalState === 'done' && evalResult?.error && (
-                    <p className="mt-2 text-[11px] text-rose-400/80">{evalResult.error}</p>
+                    <p className="mt-2 text-ui-dense text-rose-400/80">{evalResult.error}</p>
                 )}
             </div>
 
@@ -396,7 +396,7 @@ const SkillDetail: React.FC<{
                     Instructions
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5">
-                    <MarkdownContent content={skill.body || '(empty skill)'} className="text-[13px] leading-6" />
+                    <MarkdownContent content={skill.body || '(empty skill)'} className="text-ui-caption leading-6" />
                 </div>
             </div>
         </div>

@@ -150,7 +150,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                 </div>
                                 <div>
                                     <h2 className="text-base font-semibold text-white tracking-tight">Analytics</h2>
-                                    <p className="text-[11px] text-zinc-500">Real-time AI insights</p>
+                                    <p className="text-ui-dense text-zinc-500">Real-time AI insights</p>
                                 </div>
                             </div>
                             {hasLiveData && (
@@ -187,10 +187,10 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                                 className="w-full p-3 flex items-center justify-between hover:bg-rose-500/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                             >
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="text-[11px] font-bold text-white bg-rose-500/30 px-2 py-0.5 rounded-lg">
+                                                    <span className="text-ui-dense font-bold text-white bg-rose-500/30 px-2 py-0.5 rounded-lg">
                                                         {item.provider.toUpperCase()}
                                                     </span>
-                                                    <span className="text-[11px] text-rose-300/80">
+                                                    <span className="text-ui-dense text-rose-300/80">
                                                         {item.winRate}% win • {item.coldStreak} streak
                                                     </span>
                                                 </div>
@@ -214,7 +214,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                     ))}
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-2 text-[12px] text-emerald-400/80 bg-emerald-500/[0.05] rounded-xl p-3 border border-emerald-500/10">
+                                <div className="flex items-center gap-2 text-ui-sm text-emerald-400/80 bg-emerald-500/[0.05] rounded-xl p-3 border border-emerald-500/10">
                                     <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
                                     <span>All models performing optimally</span>
                                 </div>

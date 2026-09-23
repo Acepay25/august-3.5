@@ -111,7 +111,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                 <div className="flex items-start justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-zinc-100">New Bot</h2>
-                        <p className="mt-1 text-[12px] leading-snug text-zinc-500">
+                        <p className="mt-1 text-ui-sm leading-snug text-zinc-500">
                             A named teammate with its own memory, skills, and chat. It can message your other agents.
                         </p>
                     </div>
@@ -142,7 +142,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             type="button"
                             onClick={() => setTab(key)}
                             data-testid={`avatar-tab-${key}`}
-                            className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                            className={`rounded-lg px-3 py-1.5 text-ui-sm font-semibold transition-colors ${
                                 tab === key ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
@@ -187,12 +187,12 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             <button
                                 type="button"
                                 onClick={() => setFace(randomFace())}
-                                className="flex items-center gap-1.5 text-[12px] font-medium text-zinc-300 hover:text-zinc-100"
+                                className="flex items-center gap-1.5 text-ui-sm font-medium text-zinc-300 hover:text-zinc-100"
                             >
                                 ⟳ Randomize
                             </button>
                         </div>
-                        <p className="mt-1 text-center text-[11px] text-zinc-600">
+                        <p className="mt-1 text-center text-ui-dense text-zinc-600">
                             {face === 'auto' ? 'Face follows the name.' : 'Pinned face.'}
                         </p>
                     </div>
@@ -215,7 +215,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             ))}
                         </div>
                         <div className="mt-3 flex items-center justify-center">
-                            <label className="cursor-pointer rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[12px] font-medium text-zinc-300 hover:border-white/25 hover:text-zinc-100">
+                            <label className="cursor-pointer rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-sm font-medium text-zinc-300 hover:border-white/25 hover:text-zinc-100">
                                 {uploadSrc ? 'Replace image…' : 'Upload image…'}
                                 <input
                                     type="file"
@@ -253,7 +253,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 />
                             </label>
                         </div>
-                        <p className="mt-1 text-center text-[11px] text-zinc-600">
+                        <p className="mt-1 text-center text-ui-dense text-zinc-600">
                             {uploadSrc ? 'Stored locally, downscaled to 96px.' : 'Pick an image — it stays on this device.'}
                         </p>
                     </div>
@@ -275,42 +275,42 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 </button>
                             ))}
                         </div>
-                        <p className="mt-3 text-center text-[11px] text-zinc-600">Our pixel seats, role-colored.</p>
+                        <p className="mt-3 text-center text-ui-dense text-zinc-600">Our pixel seats, role-colored.</p>
                     </div>
                 )}
 
                 {/* Fields */}
                 <div className="mt-5 space-y-3">
                     <div>
-                        <label htmlFor="bot-name" className="mb-1 block text-[12px] font-semibold text-zinc-300">Name</label>
+                        <label htmlFor="bot-name" className="mb-1 block text-ui-sm font-semibold text-zinc-300">Name</label>
                         <input
                             id="bot-name"
                             value={name}
                             onChange={e => setName(e.target.value)}
                             placeholder="inbox-triage"
                             data-testid="bot-name"
-                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>
                     <div>
-                        <label htmlFor="bot-title" className="mb-1 block text-[12px] font-semibold text-zinc-300">Title</label>
+                        <label htmlFor="bot-title" className="mb-1 block text-ui-sm font-semibold text-zinc-300">Title</label>
                         <input
                             id="bot-title"
                             value={title}
                             onChange={e => setTitle(e.target.value)}
                             placeholder="Inbox Triage"
-                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>
                     <div>
-                        <label htmlFor="bot-desc" className="mb-1 block text-[12px] font-semibold text-zinc-300">Description</label>
+                        <label htmlFor="bot-desc" className="mb-1 block text-ui-sm font-semibold text-zinc-300">Description</label>
                         <textarea
                             id="bot-desc"
                             value={description}
                             onChange={e => setDescription(e.target.value)}
                             placeholder="What should this Bot help with?"
                             rows={3}
-                            className="w-full resize-none rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            className="w-full resize-none rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>
 
@@ -320,14 +320,14 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         instructions), or leave general. */}
                     <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
                         <div className="flex items-center gap-2">
-                            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Role</span>
+                            <span className="shrink-0 text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Role</span>
                             <SelectMenu
                                 aria-label="Debate role"
                                 data-testid="bot-role"
                                 value={role}
                                 onChange={v => setRole(v as AnalystRole)}
                                 options={SEAT_ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
-                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-[12px] hover:bg-zinc-800"
+                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-ui-sm hover:bg-zinc-800"
                             />
                         </div>
                         {role !== AnalystRole.UNASSIGNED && (
@@ -342,7 +342,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             </button>
                         )}
                         <div>
-                            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Trader instructions</span>
+                            <span className="mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Trader instructions</span>
                             <textarea
                                 value={customPrompt}
                                 onChange={e => setCustomPrompt(e.target.value)}
@@ -351,9 +351,9 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     : 'Leave empty for the general-analyst default (full market analysis, web + tools)'}
                                 rows={3}
                                 data-testid="bot-instructions"
-                                className="w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[12px] leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                                className="w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-sm leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                             />
-                            <p className="mt-1 text-[11px] leading-snug text-zinc-600">
+                            <p className="mt-1 text-ui-dense leading-snug text-zinc-600">
                                 {role !== AnalystRole.UNASSIGNED
                                     ? 'The bot inherits this role\'s prompt in debates; your instructions refine it and win on conflict.'
                                     : ANALYST_ROLE_DEFINITIONS[AnalystRole.MACRO_VOLATILITY].focus.length > 0
@@ -368,20 +368,20 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         type="button"
                         onClick={() => setAdvancedOpen(v => !v)}
                         aria-expanded={advancedOpen}
-                        className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-400 hover:text-zinc-200"
+                        className="flex items-center gap-1.5 text-ui-sm font-semibold text-zinc-400 hover:text-zinc-200"
                     >
                         {advancedOpen ? '▾' : '▸'} Advanced
                     </button>
                     {advancedOpen && (
                         <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
                             <div>
-                                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Shared notebook</span>
-                                <label className="flex items-start gap-2 text-[12px] text-zinc-300">
+                                <span className="mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Shared notebook</span>
+                                <label className="flex items-start gap-2 text-ui-sm text-zinc-300">
                                     <input type="checkbox" checked={isolated} data-testid="bot-memory-isolated"
                                         onChange={e => setIsolated(e.target.checked)}
                                         className="mt-0.5 h-3.5 w-3.5 accent-cyan-400" />
                                     <span>Isolate this bot from the shared book
-                                        <span className="block text-[11px] text-zinc-500">
+                                        <span className="block text-ui-dense text-zinc-500">
                                             By default a bot reads the notebook the analysts read, and what it
                                             learns can surface for others. An isolated bot thinks from its own
                                             notes only.
@@ -390,28 +390,28 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 </label>
                             </div>
                             <div>
-                                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Provider</span>
+                                <span className="mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Provider</span>
                                 <SelectMenu
                                     aria-label="Provider"
                                     data-testid="bot-provider"
                                     value={providerId}
                                     onChange={setProviderId}
                                     options={readyProviders.map(p => ({ value: p.id, label: p.name }))}
-                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] hover:bg-zinc-800"
+                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
                                 />
                             </div>
                             <div>
-                                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Model</span>
+                                <span className="mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Model</span>
                                 <SelectMenu
                                     aria-label="Model"
                                     data-testid="bot-model"
                                     value={effectiveModel}
                                     onChange={setModelId}
                                     options={(provider?.models ?? []).map(m => ({ value: m, label: formatModelDisplayName(m) }))}
-                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] hover:bg-zinc-800"
+                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
                                 />
                             </div>
-                            <p className="text-[11px] leading-snug text-zinc-600">
+                            <p className="text-ui-dense leading-snug text-zinc-600">
                                 The bot thinks with this model. Give two bots different models to keep their chats separate.
                             </p>
                         </div>
@@ -422,7 +422,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200"
+                        className="rounded-lg px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200"
                     >
                         Cancel
                     </button>
@@ -431,7 +431,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         onClick={create}
                         disabled={!canCreate}
                         data-testid="create-bot"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-[13px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-lg bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         Create Bot
                     </button>

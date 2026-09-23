@@ -22,7 +22,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
     const gradeCell = (row: { label: string; n: number; winRate: number; brier: number | null; quality: string } | null): React.ReactNode => {
         if (!row || row.n === 0) return null;
         return (
-            <div key={row.label} className="flex items-baseline justify-between gap-3 text-[11px] tabular-nums">
+            <div key={row.label} className="flex items-baseline justify-between gap-3 text-ui-dense tabular-nums">
                 <span className="truncate text-zinc-300">{row.label}</span>
                 <span className="shrink-0 text-zinc-500">
                     {row.n} closed · {row.winRate.toFixed(0)}% win
@@ -39,7 +39,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
                     Monthly report · {card.periodStart.slice(0, 10)} → {card.generatedAt.slice(0, 10)}
                 </p>
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500 tabular-nums">
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-ui-dense text-zinc-500 tabular-nums">
                 <span>{w.closed} closed ({w.wins}W/{w.losses}L)</span>
                 <span>Net ${Math.round(w.netPnlUsd)}</span>
                 {w.avgR !== null && <span>avg R {w.avgR.toFixed(2)}</span>}
@@ -48,7 +48,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
                 {l.bestTrade && <span>best: {l.bestTrade.label} +${Math.round(l.bestTrade.pnlUsd)}</span>}
             </div>
             {card.needsAttention.length > 0 && (
-                <ul className="mt-3 space-y-1 text-[11px] text-zinc-400">
+                <ul className="mt-3 space-y-1 text-ui-dense text-zinc-400">
                     {card.needsAttention.map(line => (
                         <li key={line} className="flex gap-2">
                             <span className="text-zinc-600">—</span>
@@ -64,7 +64,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
                     {card.panel.ensembleLine && gradeCell(card.panel.ensembleLine)}
                     {card.panel.seats.map(s => gradeCell(s))}
                     {card.panel.seats.length === 0 && !card.panel.moderator && (
-                        <p className="text-[11px] text-zinc-600">no graded rows this period</p>
+                        <p className="text-ui-dense text-zinc-600">no graded rows this period</p>
                     )}
                 </div>
             </div>

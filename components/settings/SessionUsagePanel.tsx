@@ -41,9 +41,9 @@ const SessionUsagePanel: React.FC = () => {
         const tokens = s.promptTokens + s.completionTokens || s.tokensEst;
         return (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-                <p className="text-[11px] text-zinc-500">{label}</p>
+                <p className="text-ui-dense text-zinc-500">{label}</p>
                 <p className="mt-1 text-sm text-zinc-100">{s.runs} runs · {Math.round(s.durationMs / 1000)}s</p>
-                <p className="mt-1 text-[11px] text-zinc-500">
+                <p className="mt-1 text-ui-dense text-zinc-500">
                     {s.tokensExact ? '' : '~'}{formatChars(tokens)} tok
                     {s.costUsd > 0 ? ` · $${s.costUsd.toFixed(3)}` : ''}
                 </p>
@@ -63,7 +63,7 @@ const SessionUsagePanel: React.FC = () => {
             </div>
             {models.length > 0 && (
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Today by model</p>
+                    <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Today by model</p>
                     <div className="mt-3 flex items-center gap-4">
                         <svg viewBox="0 0 80 80" className="h-20 w-20 shrink-0" aria-hidden="true">
                             {models.reduce<{ offset: number; nodes: React.ReactNode[] }>((acc, slice, index) => {
@@ -85,7 +85,7 @@ const SessionUsagePanel: React.FC = () => {
                         <div className="min-w-0 flex-1">
                             <p className="text-sm text-zinc-100">{today.tokensExact ? '' : '~'}{formatChars(todayTokens)} tok today</p>
                             {topModel && (
-                                <p className="mt-1 text-[11px] text-zinc-400">
+                                <p className="mt-1 text-ui-dense text-zinc-400">
                                     Top model · {formatModelDisplayName(topModel.modelId)} · {Math.round(topModel.share * 100)}%
                                 </p>
                             )}
@@ -102,7 +102,7 @@ const SessionUsagePanel: React.FC = () => {
                     </div>
                     <ul className="mt-3 space-y-1">
                         {models.map((slice, index) => (
-                            <li key={slice.modelId} className="flex items-center justify-between gap-2 text-[11px] text-zinc-400">
+                            <li key={slice.modelId} className="flex items-center justify-between gap-2 text-ui-dense text-zinc-400">
                                 <span className="flex min-w-0 items-center gap-2">
                                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: SLICE_COLORS[index % SLICE_COLORS.length] }} />
                                     <span className="truncate" title={slice.modelId}>{formatModelDisplayName(slice.modelId)}</span>
@@ -116,7 +116,7 @@ const SessionUsagePanel: React.FC = () => {
             {entries.length > 0 && (
                 <button
                     type="button"
-                    className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                    className="text-ui-dense text-zinc-500 hover:text-zinc-300"
                     onClick={() => { void clearSessionUsage().then(() => setEntries([])); }}
                 >
                     Clear usage history
@@ -135,8 +135,8 @@ const HarnessControls: React.FC = () => {
     };
     return (
         <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Harness</p>
-            <label className="block text-[11px] text-zinc-400">
+            <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Harness</p>
+            <label className="block text-ui-dense text-zinc-400">
                 Account equity (USD)
                 <input
                     type="number"
@@ -147,7 +147,7 @@ const HarnessControls: React.FC = () => {
                     className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
             </label>
-            <label className="block text-[11px] text-zinc-400">
+            <label className="block text-ui-dense text-zinc-400">
                 Risk per ticket (%)
                 <input
                     type="number"
@@ -159,7 +159,7 @@ const HarnessControls: React.FC = () => {
                     className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
             </label>
-            <label className="block text-[11px] text-zinc-400">
+            <label className="block text-ui-dense text-zinc-400">
                 Prompt A/B (control lane)
                 <select
                     value={String(settings.promptAbRate)}
@@ -171,7 +171,7 @@ const HarnessControls: React.FC = () => {
                     <option value="0.5">50%</option>
                 </select>
             </label>
-            <label className="block text-[11px] text-zinc-400">
+            <label className="block text-ui-dense text-zinc-400">
                 Default thinking effort
                 <select
                     value={settings.responseEffort}
@@ -182,7 +182,7 @@ const HarnessControls: React.FC = () => {
                     <option value="fast">Fast — one step lighter on every call</option>
                 </select>
             </label>
-            <label className="block text-[11px] text-zinc-400">
+            <label className="block text-ui-dense text-zinc-400">
                 Skill library cap
                 <input
                     type="number"
@@ -198,7 +198,7 @@ const HarnessControls: React.FC = () => {
             {/* Session-guard limits: preset + overrides.
                 Takes effect immediately here; the in-the-moment cap change
                 rule (typed confirm) applies to the banner, not this panel. */}
-            <label className="block text-[11px] text-zinc-400">
+            <label className="block text-ui-dense text-zinc-400">
                 Session guard preset
                 <select
                     value={settings.guardPreset ?? 'default'}
@@ -210,7 +210,7 @@ const HarnessControls: React.FC = () => {
                 </select>
             </label>
             <div className="grid grid-cols-2 gap-2">
-                <label className="block text-[11px] text-zinc-400">
+                <label className="block text-ui-dense text-zinc-400">
                     Daily loss limit (%)
                     <input
                         type="number"
@@ -223,7 +223,7 @@ const HarnessControls: React.FC = () => {
                         className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                     />
                 </label>
-                <label className="block text-[11px] text-zinc-400">
+                <label className="block text-ui-dense text-zinc-400">
                     Max trades / day
                     <input
                         type="number"
@@ -239,7 +239,7 @@ const HarnessControls: React.FC = () => {
             {/* Pre-trade checklist: OFF by default; when on, the
                 capture modal shows the items and completion rides onto the
                 trade (checklistCompleted) feeding adherence stats. */}
-            <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-ui-dense text-zinc-400 cursor-pointer select-none">
                 <input
                     type="checkbox"
                     checked={checklist.enabled}
@@ -248,7 +248,7 @@ const HarnessControls: React.FC = () => {
                 />
                 Pre-trade checklist at capture (off by default)
             </label>
-            <label className="block text-[11px] text-zinc-400">
+            <label className="block text-ui-dense text-zinc-400">
                 Debate cost cap (USD, 0 = off)
                 <input
                     type="number"

@@ -414,7 +414,7 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = 
   <div className="min-w-0">
     <div className="text-ui-xs uppercase tracking-wider text-zinc-500 mb-1">{label}</div>
     <div className="text-base font-semibold text-zinc-100 truncate">{value}</div>
-    {sub && <div className="text-[11px] text-zinc-500 truncate mt-0.5">{sub}</div>}
+    {sub && <div className="text-ui-dense text-zinc-500 truncate mt-0.5">{sub}</div>}
   </div>
 );
 

@@ -76,7 +76,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     ? <p className="text-xs text-zinc-600 italic">Nothing used yet — skills appear here once injected into an analysis.</p>
                     : <div className="space-y-1.5">
                         {learnedSkills.slice(0, 8).map(s => (
-                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
+                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
                                 <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)}</span>
                             </div>
@@ -88,7 +88,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     ? <p className="text-xs text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow skill memory.</p>
                     : <div className="space-y-1.5">
                         {notebookSkills.slice(0, 10).map(s => (
-                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
+                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.meta.ifCondition || s.file.name.replace(/\.md$/i, '')}</span>
                                 <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)} · {s.meta.status}</span>
                             </div>

@@ -86,7 +86,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
                 style={{ borderColor: emphasis === 'block-print' ? accent : undefined }}
             >
                 <p
-                    className={`break-words text-[11px] leading-snug text-zinc-100 ${
+                    className={`break-words text-ui-dense leading-snug text-zinc-100 ${
                         emphasis === 'block-print' ? 'font-bold uppercase tracking-wide' : ''
                     }`}
                 >

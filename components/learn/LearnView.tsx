@@ -46,7 +46,7 @@ const TABS: Array<{ id: LearnTab; label: string; Icon: React.FC<{ className?: st
 ];
 
 const Fallback: React.FC = () => (
-    <div className="p-6 text-[11px] text-zinc-600">Loading…</div>
+    <div className="p-6 text-ui-dense text-zinc-600">Loading…</div>
 );
 
 interface LearnViewProps {
@@ -104,7 +104,7 @@ const LearnView: React.FC<LearnViewProps> = ({
                         <button key={id} type="button" onClick={() => setTab(id)}
                             aria-current={active ? 'true' : undefined} data-testid={`learn-tab-${id}`}
                             title={id === 'coach' && coachCount > 0 ? `${coachCount} awaiting your decision` : undefined}
-                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-[12px] font-semibold transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-ui-sm font-semibold transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                                 active
                                     ? 'border-zinc-100 text-zinc-100'
                                     : 'border-transparent text-zinc-500 hover:text-zinc-300'

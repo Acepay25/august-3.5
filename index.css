@@ -163,6 +163,16 @@
   --text-ui-caption--line-height: 1.5;
   --text-ui-sm: calc(var(--ui-font-size) - 2px);
   --text-ui-sm--line-height: 1.5;
+  /* Dense secondary copy — the step between `sm` and `xs` the ramp was
+     missing. 11px was the largest pixel literal left in the UI (281
+     occurrences across 60+ files): with no step there, the accessibility dial
+     simply could not reach them, and mapping them onto `sm` or `xs` would
+     have moved pixels in 281 places at once. base − 3 keeps every one exactly
+     where it was — the same pixel-exact bargain `xs`/`2xs` made when the ramp
+     replaced 10px and 9px. Role, not size: panels, table rows and secondary
+     labels that are too dense for `sm` and too important for `xs`. */
+  --text-ui-dense: calc(var(--ui-font-size) - 3px);
+  --text-ui-dense--line-height: 1.5;
   /* Micro-labels: axis ticks, table headers, counts. The floor for running
      text — `text-zinc-600` is bumped in this file specifically so ink at this
      size clears WCAG AA on both surfaces. */

@@ -157,7 +157,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                 className="fixed left-1/2 top-1/2 z-50 flex max-h-[82vh] w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl focus:outline-none"
             >
                 <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] px-4 py-2.5">
-                    <h2 className="text-[13px] font-bold text-zinc-100">Screener</h2>
+                    <h2 className="text-ui-caption font-bold text-zinc-100">Screener</h2>
                     <div className="flex min-w-0 flex-1 items-center gap-2 rounded-control border border-white/10 bg-zinc-800 px-2 py-1">
                         <Search className="h-3 w-3 shrink-0 text-zinc-500" aria-hidden="true" />
                         <input
@@ -165,7 +165,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                             onChange={e => setQuery(e.target.value)}
                             placeholder="Filter symbol…"
                             aria-label="Filter screener symbols"
-                            className="min-w-0 flex-1 bg-transparent text-[12px] text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                            className="min-w-0 flex-1 bg-transparent text-ui-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
                         />
                     </div>
                     <button
@@ -182,7 +182,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                     </button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-                    <table className="w-full border-collapse text-[11px]">
+                    <table className="w-full border-collapse text-ui-dense">
                         <thead className="sticky top-0 bg-zinc-900">
                             <tr className="border-b border-white/[0.06]">
                                 {sortTh('volume', 'Symbol', 'px-4 py-1.5')}
@@ -240,7 +240,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                 </tr>
                             ))}
                             {visible.length === 0 && !running && universeFailed && (
-                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[11px]">
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-ui-dense">
                                     <span className="text-rose-400 font-semibold" role="alert">Feed failed — the futures ticker could not be reached.</span>{' '}
                                     <button
                                         type="button"
@@ -253,7 +253,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                                 </td></tr>
                             )}
                             {visible.length === 0 && !running && !universeFailed && (
-                                <tr><td colSpan={7} className="px-4 py-8 text-center text-[11px] text-zinc-500">No coins match.</td></tr>
+                                <tr><td colSpan={7} className="px-4 py-8 text-center text-ui-dense text-zinc-500">No coins match.</td></tr>
                             )}
                         </tbody>
                     </table>

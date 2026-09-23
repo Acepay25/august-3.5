@@ -195,8 +195,8 @@ const SettingsGroup: React.FC<{
     <section className="space-y-1.5">
         {title && (
             <div className="px-1">
-                <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">{title}</h4>
-                {description && <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-600">{description}</p>}
+                <h4 className="text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">{title}</h4>
+                {description && <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-600">{description}</p>}
             </div>
         )}
         <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl border border-white/[0.07] bg-zinc-900/50">
@@ -224,9 +224,9 @@ const SettingsRow: React.FC<{
                 </span>
             )}
             <div className="min-w-0">
-                <div className="text-[13px] font-semibold leading-5 text-zinc-200">{title}</div>
+                <div className="text-ui-caption font-semibold leading-5 text-zinc-200">{title}</div>
                 {description && (
-                    <div className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{description}</div>
+                    <div className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">{description}</div>
                 )}
             </div>
         </div>
@@ -259,7 +259,7 @@ const SegmentedControl: React.FC<{
                 aria-checked={value === o.id}
                 title={o.title}
                 onClick={() => onChange(o.id)}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors duration-150 ease-[var(--ease-snappy)] ${
+                className={`rounded-full px-2.5 py-1 text-ui-dense font-semibold transition-colors duration-150 ease-[var(--ease-snappy)] ${
                     value === o.id ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
             >
@@ -640,7 +640,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     onClose();
                                                     onOpenJournal?.('log');
                                                 }}
-                                                className="mb-3.5 inline-flex items-center justify-center gap-2 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.98]"
+                                                className="mb-3.5 inline-flex items-center justify-center gap-2 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.98]"
                                             >
                                                 <span>Open Trading Journal</span>
                                                 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -685,7 +685,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Trade Log</span>
                                                     <ArrowUpRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
                                                 </div>
-                                                <p className="mt-1.5 text-[11px] text-zinc-400">View and manage all recorded trades, outcomes, and screenshots.</p>
+                                                <p className="mt-1.5 text-ui-dense text-zinc-400">View and manage all recorded trades, outcomes, and screenshots.</p>
                                             </button>
 
                                             <button
@@ -700,7 +700,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>
                                                     <Sparkles className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
                                                 </div>
-                                                <p className="mt-1.5 text-[11px] text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
+                                                <p className="mt-1.5 text-ui-dense text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
                                             </button>
 
                                             <button
@@ -715,7 +715,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Model Performance</span>
                                                     <Bot className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
                                                 </div>
-                                                <p className="mt-1.5 text-[11px] text-zinc-400">Compare win rates and accuracy across different AI providers and models.</p>
+                                                <p className="mt-1.5 text-ui-dense text-zinc-400">Compare win rates and accuracy across different AI providers and models.</p>
                                             </button>
                                         </div>
 
@@ -796,7 +796,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {readyConfigProviders.length > 0 && (
                                             <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
-                                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                                                <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
                                                     Vision Model
                                                 </div>
                                                 <ModelPicker
@@ -812,7 +812,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         )}
 
                                         <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
-                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                                            <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
                                                 Memory Model
                                             </div>
                                             <ModelPicker
@@ -837,7 +837,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </div>
 
                                         <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
-                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                                            <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
                                                 Debate Moderator
                                             </div>
                                             <ModelPicker
@@ -906,7 +906,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             </span>
                                             <div className="min-w-0 flex-1">
                                                 <div className="truncate text-base font-semibold text-zinc-100">{username || 'Trader'}</div>
-                                                <div className="mt-0.5 text-[11px] text-zinc-500">
+                                                <div className="mt-0.5 text-ui-dense text-zinc-500">
                                                     {APP_NAME} v{APP_VERSION}
                                                     {providerConfigsLoaded
                                                         ? ` · ${readyProviders} ${readyProviders === 1 ? 'provider' : 'providers'} connected`
@@ -917,7 +917,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <button
                                                     type="button"
                                                     onClick={onSwitchUser}
-                                                    className="inline-flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100"
+                                                    className="inline-flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100"
                                                 >
                                                     <Users className="h-3.5 w-3.5" aria-hidden="true" />
                                                     Switch profile
@@ -948,7 +948,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     <button
                                                         type="button"
                                                         onClick={() => setActiveTab('journal')}
-                                                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                                                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
                                                     >
                                                         Open <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                                                     </button>
@@ -963,7 +963,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         <button
                                                             type="button"
                                                             onClick={() => void onExportData()}
-                                                            className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                                                            className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
                                                         >
                                                             Export
                                                         </button>
@@ -978,7 +978,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     <button
                                                         type="button"
                                                         onClick={() => setActiveTab('actions')}
-                                                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                                                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1.5 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
                                                     >
                                                         Open <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                                                     </button>
@@ -1087,8 +1087,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/[0.07] bg-zinc-900/50 px-4 py-3 text-left transition-colors hover:bg-zinc-800/40"
                                         >
                                             <span className="min-w-0">
-                                                <span className="block text-[13px] font-semibold text-zinc-200">Advanced</span>
-                                                <span className="mt-0.5 block text-[11px] text-zinc-500">Context injection and capture prompts — most users can leave these as-is.</span>
+                                                <span className="block text-ui-caption font-semibold text-zinc-200">Advanced</span>
+                                                <span className="mt-0.5 block text-ui-dense text-zinc-500">Context injection and capture prompts — most users can leave these as-is.</span>
                                             </span>
                                             <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-150 ease-[var(--ease-snappy)] ${isAdvancedOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                                         </button>
@@ -1192,14 +1192,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         same file and neither was obviously
                                         canonical. */}
                                     <div className="px-4 pt-4">
-                                        <h3 className="text-[13px] font-bold text-zinc-100">Memory</h3>
-                                        <p className="mt-0.5 mb-3 text-[11px] text-zinc-500">
+                                        <h3 className="text-ui-caption font-bold text-zinc-100">Memory</h3>
+                                        <p className="mt-0.5 mb-3 text-ui-dense text-zinc-500">
                                             The notebook, the skill library, the approval queues and memory
                                             health all live on the Learn surface. Settings keeps the switches.
                                         </p>
                                         <div className="flex flex-wrap items-center gap-3 rounded-control border border-zinc-800 bg-zinc-950/40 p-2.5">
                                             {memoryConfig && (
-                                                <span className="text-[11px] text-zinc-400">
+                                                <span className="text-ui-dense text-zinc-400">
                                                     <span className="text-ui-xs uppercase tracking-widest text-zinc-600">Managed by </span>
                                                     {memoryConfig.selectedModel || memoryConfig.name || 'memory model'}
                                                 </span>
@@ -1212,13 +1212,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)}
                                                         className="h-3.5 w-3.5 accent-cyan-400"
                                                     />
-                                                    <span className="text-[11px] text-zinc-300">Global memory</span>
+                                                    <span className="text-ui-dense text-zinc-300">Global memory</span>
                                                 </label>
                                             )}
                                             {onOpenLearn && (
                                                 <button type="button" onClick={() => onOpenLearn('memory')}
                                                     data-testid="open-learn-memory"
-                                                    className="ml-auto rounded-control border border-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
+                                                    className="ml-auto rounded-control border border-zinc-700 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
                                                     Open the notebook
                                                     <span className="ml-1 font-mono text-ui-xs text-zinc-600">Alt+5</span>
                                                 </button>
@@ -1239,8 +1239,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
-                                                <h3 className="text-[13px] font-bold text-zinc-100">Skills</h3>
-                                                <p className="mt-0.5 text-[11px] text-zinc-500">
+                                                <h3 className="text-ui-caption font-bold text-zinc-100">Skills</h3>
+                                                <p className="mt-0.5 text-ui-dense text-zinc-500">
                                                     Browse, prove, retire and import your skill library in the Strategy Studio.
                                                 </p>
                                             </div>
@@ -1248,7 +1248,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <button
                                                     type="button"
                                                     onClick={onOpenStrategyStudio}
-                                                    className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                                                    className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
                                                 >
                                                     Open Strategy Studio
                                                 </button>
@@ -1256,8 +1256,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </div>
                                     </div>
                                     <div className="border-t border-zinc-800 pt-4">
-                                        <h3 className="text-[13px] font-bold text-zinc-100">Forged tools</h3>
-                                        <p className="mt-0.5 text-[11px] text-zinc-500 mb-3">
+                                        <h3 className="text-ui-caption font-bold text-zinc-100">Forged tools</h3>
+                                        <p className="mt-0.5 text-ui-dense text-zinc-500 mb-3">
                                             Model-authored desk tools awaiting your approval.
                                         </p>
                                         <ToolForgeManager />
@@ -1269,11 +1269,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <div className="h-full min-h-0 animate-fade-in flex flex-col">
                                     {onOpenStrategyStudio && (
                                         <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-2.5">
-                                            <p className="text-[11px] text-zinc-500">Upload playbooks below — or browse everything the harness knows as one library.</p>
+                                            <p className="text-ui-dense text-zinc-500">Upload playbooks below — or browse everything the harness knows as one library.</p>
                                             <button
                                                 type="button"
                                                 onClick={onOpenStrategyStudio}
-                                                className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                                                className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
                                             >
                                                 Strategy Studio
                                             </button>

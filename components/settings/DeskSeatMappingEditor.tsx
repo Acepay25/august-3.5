@@ -125,7 +125,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
 
             <div className="rounded-md border border-white/10 bg-zinc-950/40">
                 {entries.length === 0 ? (
-                    <p className="px-3 py-2 text-[11px] text-zinc-500">
+                    <p className="px-3 py-2 text-ui-dense text-zinc-500">
                         No overrides — every seat uses the default heuristic.
                     </p>
                 ) : (
@@ -136,7 +136,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                             return (
                                 <li
                                     key={name}
-                                    className="flex items-center gap-2 px-3 py-1.5 text-[12px]"
+                                    className="flex items-center gap-2 px-3 py-1.5 text-ui-sm"
                                 >
                                     <span
                                         aria-hidden="true"
@@ -177,13 +177,13 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     onChange={e => setDraftName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
                     placeholder="Seat name (e.g. Satoshi)"
-                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-[12px] text-zinc-100 placeholder-zinc-600 focus:border-amber-400/40 focus:outline-none"
+                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-400/40 focus:outline-none"
                 />
                 <select
                     value={draftRole}
                     onChange={e => setDraftRole(e.target.value as RolePreset)}
                     aria-label="Role"
-                    className="rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-[12px] text-zinc-100 focus:outline-none"
+                    className="rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-ui-sm text-zinc-100 focus:outline-none"
                 >
                     {ROLES.map(r => (
                         <option key={r} value={r}>{ROLE_LABEL[r]}</option>
@@ -193,7 +193,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     type="button"
                     onClick={handleAdd}
                     disabled={!draftName.trim()}
-                    className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2.5 py-1.5 text-[12px] font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
+                    className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
                 >
                     <Plus className="h-3.5 w-3.5" /> Add
                 </button>
@@ -203,7 +203,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                         onClick={askResetAll}
                         title="Remove all overrides (typed confirm)"
                         data-testid="desk-mapping-reset"
-                        className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-[12px] text-zinc-400 hover:text-rose-300"
+                        className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-400 hover:text-rose-300"
                     >
                         <RotateCcw className="h-3.5 w-3.5" /> Reset
                     </button>

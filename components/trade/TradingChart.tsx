@@ -997,7 +997,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                         key={tf}
                         type="button"
                         onClick={() => onIntervalChange(tf)}
-                        className={`rounded-control px-2 py-1 text-[11px] font-semibold transition-colors ${
+                        className={`rounded-control px-2 py-1 text-ui-dense font-semibold transition-colors ${
                             interval === tf ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                         }`}
                     >
@@ -1024,7 +1024,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                                     return (
                                         <button key={tf} type="button" onClick={() => toggleTfBar(tf)} disabled={tf === interval}
                                             aria-pressed={shown} title={tf === interval ? 'The current timeframe always shows' : undefined}
-                                            className={`flex items-center justify-between rounded-lg px-2 py-1 text-[11px] transition-colors hover:bg-white/[0.06] disabled:opacity-40 ${
+                                            className={`flex items-center justify-between rounded-lg px-2 py-1 text-ui-dense transition-colors hover:bg-white/[0.06] disabled:opacity-40 ${
                                                 shown ? 'text-zinc-100' : 'text-zinc-500'
                                             }`}>
                                             {tf}
@@ -1041,7 +1041,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     overlay's color so the button and the line agree. */}
                 <button type="button" onClick={() => setIndicatorsOn(v => !v)} aria-pressed={indicatorsOn}
                     title="Toggle the SMA-20 overlay"
-                    className={`ml-1.5 rounded-control border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                    className={`ml-1.5 rounded-control border px-2 py-1 text-ui-dense font-semibold transition-colors ${
                         indicatorsOn
                             ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
                             : 'border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
@@ -1101,7 +1101,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                         }}
                         onBlur={() => finishTextEdit(false)}
                         placeholder="Type a note…"
-                        className="absolute z-20 w-40 rounded-control border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-100 focus:outline-none"
+                        className="absolute z-20 w-40 rounded-control border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-ui-dense text-zinc-100 focus:outline-none"
                         style={{
                             left: Math.min(textEdit.x + CHART_RAIL_WIDTH + 6, (hostRef.current?.clientWidth ?? 400) - 170),
                             top: Math.max(4, textEdit.y - 24),
@@ -1110,7 +1110,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                 )}
                 {status === 'unavailable' && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <p className="text-[11px] text-zinc-600">Candles unavailable — Binance fetch failed; retrying in 4s.</p>
+                        <p className="text-ui-dense text-zinc-600">Candles unavailable — Binance fetch failed; retrying in 4s.</p>
                     </div>
                 )}
             </div>

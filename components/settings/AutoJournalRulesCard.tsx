@@ -39,8 +39,8 @@ export const AutoJournalRulesCard: React.FC<AutoJournalRulesCardProps> = ({ user
     return (
         <section className="space-y-1.5" aria-label="Standing journal rules">
             <div className="px-1">
-                <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">Standing journal rules</h4>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-600">
+                <h4 className="text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">Standing journal rules</h4>
+                <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-600">
                     Made from the approvals inbox. &ldquo;Always&rdquo; journals the coin without asking,
                     &ldquo;Never&rdquo; dismisses it — remove a rule to go back to asking.
                 </p>
@@ -67,8 +67,8 @@ export const AutoJournalRulesCard: React.FC<AutoJournalRulesCardProps> = ({ user
                                 : <Ban className="h-4 w-4" />}
                         </span>
                         <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-semibold leading-5 text-zinc-200">{rule.coin}</div>
-                            <div className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
+                            <div className="text-ui-caption font-semibold leading-5 text-zinc-200">{rule.coin}</div>
+                            <div className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
                                 {rule.policy === 'always'
                                     ? 'Always journal — logged without asking.'
                                     : 'Never journal — dismissed without asking.'}
@@ -78,7 +78,7 @@ export const AutoJournalRulesCard: React.FC<AutoJournalRulesCardProps> = ({ user
                             type="button"
                             onClick={() => revoke(rule.coin)}
                             aria-label={`Remove the ${rule.policy === 'always' ? 'always' : 'never'} journal rule for ${rule.coin}`}
-                            className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.98]"
+                            className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1 text-ui-dense font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.98]"
                         >
                             Ask instead
                         </button>

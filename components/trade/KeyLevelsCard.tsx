@@ -151,7 +151,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                 {levels.map((l, i) => (
                     <React.Fragment key={l.id}>
                         {i === splitAt && (
-                            <div className="my-0.5 flex items-center justify-center gap-2 border-y border-dashed border-emerald-500/30 bg-emerald-500/[0.06] py-1 text-[11px] text-emerald-400" data-testid="key-levels-last">
+                            <div className="my-0.5 flex items-center justify-center gap-2 border-y border-dashed border-emerald-500/30 bg-emerald-500/[0.06] py-1 text-ui-dense text-emerald-400" data-testid="key-levels-last">
                                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
                                 last <span className="font-mono font-bold tabular-nums">{fmtPx(mark!)}</span>
                             </div>
@@ -169,7 +169,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                             <span className={`text-[11.5px] font-bold ${KIND_TEXT[l.kind]}`}>{l.label}{pinned.has(l.id) && <span className="ml-0.5 text-cyan-400" aria-hidden="true">⌖</span>}</span>
                             <span className="font-mono text-[11.5px] tabular-nums text-zinc-200">{fmtPx(l.price)}</span>
                             <span className={`font-mono text-[10.5px] tabular-nums ${KIND_TEXT[l.kind]}`}>{formatDist(l.price, mark)}</span>
-                            <span className="line-clamp-2 text-[11px] leading-4 text-zinc-400">{l.context}</span>
+                            <span className="line-clamp-2 text-ui-dense leading-4 text-zinc-400">{l.context}</span>
                         </button>
                     </React.Fragment>
                 ))}

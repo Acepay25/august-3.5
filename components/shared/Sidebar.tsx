@@ -76,7 +76,7 @@ const Kbd: React.FC<{ children: string }> = ({ children }) => (
 const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick, collapsed = false }) => (
     <button
         onClick={onClick}
-        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-1.5 rounded-lg text-[13px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900`}
+        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-1.5 rounded-lg text-ui-caption text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900`}
         title={collapsed ? label : undefined}
         aria-label={collapsed ? label : undefined}
     >
@@ -364,7 +364,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 <button
                     onClick={act(onNewConversation)}
                     disabled={isFreshSession}
-                    className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-2 rounded-lg text-[13px] text-zinc-300 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed`}
+                    className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-2 rounded-lg text-ui-caption text-zinc-300 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed`}
                     title={isFreshSession ? 'Start typing to begin a conversation' : 'Start a new conversation'}
                     aria-label="Start a new conversation"
                 >
@@ -387,7 +387,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             aria-expanded={searchOpen}
                             aria-label="Search your chat history"
                             title="Search sessions (full-text via recall)"
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors"
+                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-ui-caption text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors"
                         >
                             <SearchIcon className="h-4 w-4 shrink-0 text-zinc-500" />
                             <span className="truncate flex-1 text-left">Search</span>
@@ -470,7 +470,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 title={`${a.name} — ${humanizeCron(a.schedule.cron)}`}
                             >
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
-                                <span className="truncate text-[11px] text-zinc-400 group-hover:text-zinc-200">{a.name}</span>
+                                <span className="truncate text-ui-dense text-zinc-400 group-hover:text-zinc-200">{a.name}</span>
                                 <span className="ml-auto text-ui-2xs text-zinc-600 group-hover:text-zinc-400 shrink-0">{humanizeCron(a.schedule.cron)}</span>
                             </button>
                         ))
@@ -496,7 +496,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             </div>}
             {!collapsed && isSelectionMode && (
                 <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-lg bg-zinc-800 px-2.5 py-2">
-                    <span className="text-[11px] text-zinc-400">
+                    <span className="text-ui-dense text-zinc-400">
                         {selectedConversationIds.size} selected
                     </span>
                     <button
@@ -536,10 +536,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 className="w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-zinc-800/40"
                             >
                                 <div className="flex items-baseline gap-2">
-                                    <span className="min-w-0 truncate text-[13px] text-zinc-200">{hit.conversationTitle}</span>
+                                    <span className="min-w-0 truncate text-ui-caption text-zinc-200">{hit.conversationTitle}</span>
                                     <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{relTime(Date.parse(hit.at) || 0)}</span>
                                 </div>
-                                <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-zinc-500">
+                                <p className="mt-0.5 line-clamp-2 text-ui-dense leading-4 text-zinc-500">
                                     <span className="mr-1 text-ui-2xs uppercase tracking-wide text-zinc-600">{hit.speaker}</span>
                                     {hit.excerpt}
                                 </p>
@@ -628,7 +628,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                     type="button"
                                     role="menuitem"
                                     onClick={() => { setUserMenuOpen(false); act(onOpenSettings)(); }}
-                                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-zinc-200 transition-colors hover:bg-white/[0.06]"
+                                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-zinc-200 transition-colors hover:bg-white/[0.06]"
                                 >
                                     <SettingsIcon className="h-4 w-4 shrink-0 text-zinc-500" />
                                     <span className="flex-1">Settings</span>
@@ -639,7 +639,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                         type="button"
                                         role="menuitem"
                                         onClick={() => { setUserMenuOpen(false); act(onNewConversation)(); }}
-                                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-zinc-200 transition-colors hover:bg-white/[0.06]"
+                                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-zinc-200 transition-colors hover:bg-white/[0.06]"
                                     >
                                         <PlusIcon className="h-4 w-4 shrink-0 text-zinc-500" />
                                         <span className="flex-1">New chat</span>

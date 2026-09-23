@@ -468,7 +468,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 placeholder="Unknown bot — pick another, or run the ensemble"
                                 aria-label="Run as bot"
                                 data-testid="automation-run-as-bot"
-                                triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[13px] hover:bg-zinc-800"
+                                triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
                             />
                             <p className="text-ui-xs text-zinc-500 mt-1.5">
                                 {runAsBot
@@ -569,7 +569,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     )}
 
                     {error && (
-                        <p className="text-[11px] text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-lg px-3 py-2">{error}</p>
+                        <p className="text-ui-dense text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-lg px-3 py-2">{error}</p>
                     )}
                 </div>
 

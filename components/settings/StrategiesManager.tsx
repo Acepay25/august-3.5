@@ -230,7 +230,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                 <div className="flex items-center justify-between gap-3">
                     <div>
                         <h3 className="text-sm font-bold text-white tracking-tight">Strategies</h3>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                        <p className="text-ui-dense text-zinc-500 mt-0.5">
                             Upload trading books (PDF) — a model summarizes them into strategies every analyst and the moderator follow.
                         </p>
                     </div>
@@ -282,7 +282,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                     <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
                         <BookmarkIcon className="w-8 h-8 text-zinc-500 mx-auto mb-3" />
                         <p className="text-xs font-bold text-zinc-400">No strategy books yet</p>
-                        <p className="text-[11px] text-zinc-600 mt-1 max-w-sm mx-auto leading-relaxed">
+                        <p className="text-ui-dense text-zinc-600 mt-1 max-w-sm mx-auto leading-relaxed">
                             Upload a trading PDF and it will be summarized into strategies here. Enable it and the ensemble
                             (analysts + moderator) will follow it like a human trader following the book.
                         </p>
@@ -304,7 +304,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                             {doc.enabled ? 'Enabled' : 'Disabled'}
                                         </StatusPill>
                                     </div>
-                                    <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed line-clamp-2">{doc.summary}</p>
+                                    <p className="text-ui-dense text-zinc-500 mt-1 leading-relaxed line-clamp-2">{doc.summary}</p>
                                     <p className="text-ui-xs text-zinc-600 mt-1 font-mono">
                                         {doc.pageCount} pages · {doc.charCount.toLocaleString()} chars · {new Date(doc.updatedAt).toLocaleDateString()}
                                     </p>
@@ -318,7 +318,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                         value={drafts[doc.id] ?? doc.summary}
                                         onChange={(e) => setDrafts(prev => ({ ...prev, [doc.id]: e.target.value }))}
                                         spellCheck={false}
-                                        className="w-full h-64 resize-y bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] leading-relaxed text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/40 transition-colors whitespace-pre"
+                                        className="w-full h-64 resize-y bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-ui-dense leading-relaxed text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/40 transition-colors whitespace-pre"
                                         placeholder="AI summary — edit freely; your text is what the models see."
                                         aria-label={`Edit strategies from ${doc.sourceName}`}
                                     />

@@ -205,7 +205,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 <div className="h-48 w-full min-w-0 flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 text-center">
                                     <Icons.Chart className="h-6 w-6 text-emerald-500/60" />
                                     <p className="text-sm font-medium text-zinc-200">No feedback yet</p>
-                                    <p className="max-w-[240px] text-[11px] leading-relaxed text-zinc-500">Resolved trades will create the first reinforcement signal.</p>
+                                    <p className="max-w-[240px] text-ui-dense leading-relaxed text-zinc-500">Resolved trades will create the first reinforcement signal.</p>
                                 </div>
                             )}
                             <div className="flex justify-between items-end mt-4">

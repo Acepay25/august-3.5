@@ -31,7 +31,7 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
             <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
                     <h2 className="text-sm font-semibold text-zinc-100">Approvals</h2>
-                    <span className="text-[11px] text-zinc-500">{items.length}</span>
+                    <span className="text-ui-dense text-zinc-500">{items.length}</span>
                     <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close approvals">
                         <CloseIcon className="h-4 w-4" />
                     </button>
@@ -48,16 +48,16 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                         <div key={item.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                             <div className="text-ui-xs font-bold uppercase tracking-widest text-zinc-600">{item.kind}</div>
                             <div className="mt-1 text-sm font-semibold text-zinc-100">{item.title}</div>
-                            <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">{item.detail}</p>
+                            <p className="mt-1 text-ui-sm leading-relaxed text-zinc-400">{item.detail}</p>
                             <div className="mt-3 flex flex-wrap gap-1.5">
                                 {(item.kind === 'autopilot') && (
                                     <>
-                                        <button type="button" onClick={() => onAllow(item)} className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-zinc-200">Allow once</button>
-                                        <button type="button" onClick={() => onDeny(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500">Deny</button>
+                                        <button type="button" onClick={() => onAllow(item)} className="rounded-lg border border-white/15 px-2.5 py-1 text-ui-dense text-zinc-200">Allow once</button>
+                                        <button type="button" onClick={() => onDeny(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-500">Deny</button>
                                         {item.coin && (
                                             <>
-                                                <button type="button" onClick={() => onAlways(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-400">Always {item.coin}</button>
-                                                <button type="button" onClick={() => onNever(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500">Never {item.coin}</button>
+                                                <button type="button" onClick={() => onAlways(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-400">Always {item.coin}</button>
+                                                <button type="button" onClick={() => onNever(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-500">Never {item.coin}</button>
                                             </>
                                         )}
                                     </>
@@ -75,15 +75,15 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                                                 ? 'The supervisor could not decide this one — it is yours to judge.'
                                                 : 'Automatic supervision is paused, so drafts wait for you here.'}
                                         </p>
-                                        <button type="button" onClick={() => onAllow(item)} className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-zinc-200">Save skill</button>
-                                        <button type="button" onClick={() => onDeny(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500">Discard</button>
+                                        <button type="button" onClick={() => onAllow(item)} className="rounded-lg border border-white/15 px-2.5 py-1 text-ui-dense text-zinc-200">Save skill</button>
+                                        <button type="button" onClick={() => onDeny(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-500">Discard</button>
                                     </>
                                 )}
                                 {/* A skill draft's messageId is the trade it was
                                     drafted from, not a transcript entry — there
                                     is nothing here to locate. */}
                                 {item.kind !== 'skill' && (
-                                    <button type="button" onClick={() => onOpen(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-300">Show</button>
+                                    <button type="button" onClick={() => onOpen(item)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-300">Show</button>
                                 )}
                             </div>
                         </div>

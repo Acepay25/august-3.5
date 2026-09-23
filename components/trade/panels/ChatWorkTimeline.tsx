@@ -33,7 +33,7 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
         // Nothing yet: the MiniMax waiting tip covers
         // the silent first moments of a turn.
         return running ? (
-            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-zinc-500" data-testid="thinking-placeholder">
+            <p className="flex items-start gap-1.5 text-ui-dense leading-5 text-zinc-500" data-testid="thinking-placeholder">
                 <Lightbulb className="mt-0.5 h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
                 <span className="min-w-0 break-words">Tip: {tipForSeed(entry.id)}</span>
             </p>

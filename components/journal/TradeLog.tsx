@@ -200,7 +200,7 @@ const TradeDetailView: React.FC<{
 
                                 {/* Trade Settings Row */}
                                 <div className="col-span-2 flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-1 flex-wrap gap-3">
-                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 tracking-widest">Trade Parameters</span>
+                                    <span className="text-ui-dense uppercase font-semibold text-zinc-500 tracking-widest">Trade Parameters</span>
                                     <div className="flex items-center gap-2.5 flex-wrap">
                                         <span className="text-xs text-zinc-400">Leverage:</span>
                                         <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700 px-2.5 py-1">
@@ -330,18 +330,18 @@ const TradeDetailView: React.FC<{
                                 </div>
 
                                 <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Entry Zone</span>
+                                    <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Entry Zone</span>
                                     <span className="text-cyan-200 font-bold text-sm">{(entryPoints || [])[0]?.price || 'N/A'}</span>
                                 </div>
                                 <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Stop Loss</span>
+                                    <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Stop Loss</span>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-rose-300 font-bold text-sm">{stopLoss}</span>
                                         {stopLossPercentage && <span className="text-rose-500/60 text-ui-2xs">{stopLossPercentage}</span>}
                                     </div>
                                 </div>
                                 <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-2">Take Profit Targets</span>
+                                    <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-2">Take Profit Targets</span>
                                     <div className="flex flex-wrap gap-2">
                                         {(takeProfit || []).map((tp, i) => (
                                             <div key={i} className="flex items-center gap-1 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-500/10">
@@ -359,7 +359,7 @@ const TradeDetailView: React.FC<{
                                     showing dashes everywhere. */}
                                 {(trade.maxAdverseExcursion !== undefined || trade.maxFavorableExcursion !== undefined) && (
                                     <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800" data-testid="trade-excursions">
-                                        <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Held Through</span>
+                                        <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Held Through</span>
                                         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm tabular-nums">
                                             <span className="text-zinc-300 tabular-nums">
                                                 worst −{trade.maxAdverseExcursion !== undefined ? `${trade.maxAdverseExcursion.toFixed(1)}%` : '—'}
@@ -454,7 +454,7 @@ const TradeDetailView: React.FC<{
                                                 </>
                                             )}
                                         </span>
-                                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{trade.patternMemoryGate.reason}</p>
+                                        <p className="text-ui-dense text-zinc-400 mt-1 leading-relaxed">{trade.patternMemoryGate.reason}</p>
                                         {trade.patternMemoryGate.historicalFailures.length > 0 && (
                                             <p className="text-ui-xs text-zinc-500 mt-1">
                                                 Matched: {trade.patternMemoryGate.historicalFailures.map(f => `${f.outcome ?? ''}${f.coinName ? ` ${f.coinName}` : ''}${f.direction ? ` ${f.direction}` : ''}`).join(' · ')}

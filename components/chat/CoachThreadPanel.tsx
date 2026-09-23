@@ -62,7 +62,7 @@ const ActionButton: React.FC<{
         type="button"
         data-testid={testId}
         onClick={onPress}
-        className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+        className={`rounded-lg px-3 py-1.5 text-ui-sm font-semibold transition-colors ${
             variant === 'solid'
                 ? 'bg-zinc-200 text-zinc-900 hover:bg-white'
                 : 'border border-white/10 text-zinc-300 hover:bg-zinc-800 hover:text-white'
@@ -137,18 +137,18 @@ const DraftCard: React.FC<{
                 <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                         <p className="truncate text-[14px] font-semibold text-zinc-100">{d.crafted.name}</p>
-                        <span className="ml-auto shrink-0 text-[11px] text-zinc-500">{timeAgo(d.createdAt)}</span>
+                        <span className="ml-auto shrink-0 text-ui-dense text-zinc-500">{timeAgo(d.createdAt)}</span>
                     </div>
-                    <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">
+                    <p className="mt-1 text-ui-sm leading-relaxed text-zinc-400">
                         <span className="font-semibold text-zinc-300">If</span> {d.crafted.ifCondition}
                         <span className="font-semibold text-zinc-300"> → then</span> {d.crafted.thenAction}
                     </p>
-                    <p className="mt-1 text-[11px] text-zinc-600">
+                    <p className="mt-1 text-ui-dense text-zinc-600">
                         {d.coin ? `${d.coin} · ` : ''}
                         {d.crafted.kind === 'avoid' ? 'avoid' : 'repeat'} skill · from trade {d.tradeId.slice(0, 8)}…
                     </p>
                     {proofState === 'done' && proof && (
-                        <p className="mt-2 text-[11px] leading-relaxed text-zinc-500" data-testid={`coach-draft-proof-${d.id}`}>
+                        <p className="mt-2 text-ui-dense leading-relaxed text-zinc-500" data-testid={`coach-draft-proof-${d.id}`}>
                             {proof.status === 'ok'
                                 ? <>Replay of {proof.proof.bars} {proof.proof.symbol} {proof.proof.timeframe} candles as <span className="text-zinc-300">{proof.proof.title}</span>: {proof.proof.hits} hits, {proof.proof.wins}W/{proof.proof.losses}L{proof.proof.winRate !== null ? ` (${Math.round(proof.proof.winRate * 100)}%)` : ' (no outcomes)'}, avg +{(proof.proof.avgMfe * 100).toFixed(1)}% in favor / −{Math.abs(proof.proof.avgMae * 100).toFixed(1)}% against. Historical readout — it does not grade the draft.</>
                                 : proof.message}
@@ -163,7 +163,7 @@ const DraftCard: React.FC<{
                     disabled={proofState === 'running'}
                     data-testid={`coach-draft-prove-${d.id}`}
                     title="Replay this coin's candle history and report what the matched detector behavior would have done"
-                    className="text-[11px] text-zinc-500 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="text-ui-dense text-zinc-500 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     {proofState === 'running' ? 'Replaying history…' : 'Prove on history'}
                 </button>
@@ -171,7 +171,7 @@ const DraftCard: React.FC<{
                     <button
                         type="button"
                         onClick={() => onOpenTrade(d.tradeId)}
-                        className="ml-auto text-[11px] text-zinc-500 hover:text-zinc-300"
+                        className="ml-auto text-ui-dense text-zinc-500 hover:text-zinc-300"
                     >
                         View the trade
                     </button>
@@ -258,7 +258,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                 </span>
                 <div className="min-w-0">
                     <p className="text-[15px] font-semibold leading-tight text-zinc-100">Coach</p>
-                    <p className="text-[11px] leading-tight text-zinc-500">
+                    <p className="text-ui-dense leading-tight text-zinc-500">
                         The learning loop&apos;s inbox — drafts and proposals waiting on your call
                     </p>
                 </div>
@@ -292,8 +292,8 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                             {p.kind}
                         </span>
                         <div className="min-w-0 flex-1">
-                            <p className="text-[12px] leading-relaxed text-zinc-300">{p.text}</p>
-                            <p className="mt-1 text-[11px] text-zinc-600">{timeAgo(p.createdAt)}</p>
+                            <p className="text-ui-sm leading-relaxed text-zinc-300">{p.text}</p>
+                            <p className="mt-1 text-ui-dense text-zinc-600">{timeAgo(p.createdAt)}</p>
                         </div>
                     </div>
                     <div className="mt-3 flex items-center justify-end gap-2">

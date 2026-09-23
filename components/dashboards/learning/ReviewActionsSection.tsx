@@ -39,7 +39,7 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
                                 <span className={`text-ui-xs font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-red-400' : r.recommendation === 'refine' ? 'text-yellow-400' : 'text-emerald-400'}`}>
                                     {r.recommendation}
                                 </span>
-                                <span className="text-[11px] text-zinc-300 ml-1.5 truncate inline-block max-w-[45%] align-bottom">{r.title}</span>
+                                <span className="text-ui-dense text-zinc-300 ml-1.5 truncate inline-block max-w-[45%] align-bottom">{r.title}</span>
                                 <p className="text-ui-xs text-zinc-600 truncate" title={r.rationale}>{r.rationale}</p>
                             </div>
                             {r.recommendation === 'refine' ? (

@@ -58,7 +58,7 @@ export const RowMenu: React.FC<{
             {items.map(item => (
                 <button key={item.label} type="button" role="menuitem"
                     onClick={() => { item.onSelect(); onClose(); }}
-                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] transition-colors ${
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-ui-dense transition-colors ${
                         item.danger ? 'text-rose-300 hover:bg-rose-500/10' : 'text-zinc-300 hover:bg-zinc-800'
                     }`}>
                     {item.label}

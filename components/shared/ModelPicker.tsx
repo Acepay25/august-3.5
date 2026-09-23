@@ -361,7 +361,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             <button
                 onClick={handleToggle}
                 className={`flex items-center gap-1.5 rounded-lg text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white ${
-                    compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-sm font-medium'
+                    compact ? 'px-2 py-1 text-ui-dense' : 'px-2.5 py-1.5 text-sm font-medium'
                 }`}
             >
                 <span className="truncate max-w-[180px]">{getDisplayText()}</span>
@@ -387,7 +387,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     }`}
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
                 >
-                    <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-1.5 text-[11px] text-zinc-400">
+                    <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-1.5 text-ui-dense text-zinc-400">
                         {mode !== 'provider-only' ? (
                             <label className="flex cursor-pointer items-center gap-2 hover:text-zinc-200 select-none">
                                 <input
@@ -405,7 +405,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             type="button"
                             onClick={handleRefresh}
                             disabled={isRefreshing}
-                            className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-cyan-300 disabled:opacity-50 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 cursor-pointer"
+                            className="flex items-center gap-1.5 text-ui-dense text-zinc-400 hover:text-cyan-300 disabled:opacity-50 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 cursor-pointer"
                             title="Refresh models from provider APIs"
                             aria-label="Refresh models"
                         >
@@ -440,7 +440,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                         key={provider.id}
                                         onClick={() => handleSelectProvider(provider.id)}
                                         onMouseEnter={() => mode !== 'provider-only' && setHoveredProvider(provider.id)}
-                                        className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
+                                        className={`w-full flex items-center justify-between px-3 py-2 text-ui-caption transition-colors ${
                                             isActive
                                                 ? 'bg-zinc-800 text-white'
                                                 : isCurrentProvider
@@ -486,7 +486,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                             key={model}
                                             onClick={() => !disabled && handleSelectModel(hoveredProvider, model)}
                                             disabled={disabled}
-                                            className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
+                                            className={`w-full flex items-center justify-between px-3 py-2 text-ui-caption transition-colors ${
                                                 disabled
                                                     ? 'text-zinc-600 cursor-not-allowed'
                                                     : isCurrent

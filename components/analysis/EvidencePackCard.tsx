@@ -54,17 +54,17 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                 <TaskTrigger title={`Verdict evidence · ${parts.join(' · ')}`} />
                 <TaskContent>
                     {statsLine && (
-                        <p className="text-[11px] leading-relaxed text-zinc-300">{stripMd(statsLine)}</p>
+                        <p className="text-ui-dense leading-relaxed text-zinc-300">{stripMd(statsLine)}</p>
                     )}
                     {causePattern && (
-                        <p className=" text-[11px] leading-relaxed font-medium">{stripMd(causePattern)}</p>
+                        <p className=" text-ui-dense leading-relaxed font-medium">{stripMd(causePattern)}</p>
                     )}
                     {similar.length > 0 && (
                         <div>
                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Similar closed trades</p>
                             <ul className="mt-1 space-y-1">
                                 {similar.map((s, i) => (
-                                    <li key={`${s.coin}-${s.date}-${i}`} className="text-[11px] leading-snug text-zinc-400">
+                                    <li key={`${s.coin}-${s.date}-${i}`} className="text-ui-dense leading-snug text-zinc-400">
                                         <span className={s.outcome === 'WIN' ? 'font-semibold text-zinc-100' : s.outcome === 'LOSS' ? 'font-semibold text-zinc-500' : 'font-semibold'}>{s.outcome}</span>
                                         {' · '}{s.date} {s.coin} {s.direction}
                                         <span className="text-zinc-600"> · {s.similarity}% match</span>
@@ -79,13 +79,13 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Matched notebook skills</p>
                             <ul className="mt-1 space-y-1">
                                 {skills.map((s, i) => (
-                                    <li key={i} className="text-[11px] leading-snug text-zinc-400">{stripMd(s).replace(/^-\s*/, '')}</li>
+                                    <li key={i} className="text-ui-dense leading-snug text-zinc-400">{stripMd(s).replace(/^-\s*/, '')}</li>
                                 ))}
                             </ul>
                         </div>
                     )}
                     {doctrineHeader && (
-                        <p className="border-t border-white/5 pt-2 text-[11px] italic leading-relaxed text-zinc-500">
+                        <p className="border-t border-white/5 pt-2 text-ui-dense italic leading-relaxed text-zinc-500">
                             Doctrine: {stripMd(doctrineHeader)}
                         </p>
                     )}

@@ -24,8 +24,8 @@ const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn })
     const decisions = snap.events.filter(e => e.decision).slice(-4).reverse();
     return (
         <div className="px-4 pb-4" data-testid="supervisor-card">
-            <h3 className="text-[13px] font-bold text-zinc-100">Skill supervisor</h3>
-            <p className="mt-0.5 mb-3 text-[11px] text-zinc-500">
+            <h3 className="text-ui-caption font-bold text-zinc-100">Skill supervisor</h3>
+            <p className="mt-0.5 mb-3 text-ui-dense text-zinc-500">
                 A model reviews the approval queues the way you would — verifying each item against your
                 catalog, graveyard and memory, enhancing the salvageable, approving the solid ones as
                 candidates. Everything it decides lives on the Learn surface, where each call is yours to undo.
@@ -37,7 +37,7 @@ const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn })
                     onChange={e => supervisorStore.setAutoEnabled(e.target.checked)}
                     className="h-3.5 w-3.5 accent-cyan-400"
                 />
-                <span className="text-[11px] text-zinc-300">
+                <span className="text-ui-dense text-zinc-300">
                     Supervise automatically
                     <span className="block text-ui-xs text-zinc-500">
                         New drafts, tool candidates and memory amendments are judged as they arrive. Pausing
@@ -59,7 +59,7 @@ const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn })
             </p>
             {onOpenLearn && (
                 <button type="button" onClick={onOpenLearn} data-testid="open-learn-link"
-                    className="mb-3 w-full rounded-control border border-zinc-700 px-2 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
+                    className="mb-3 w-full rounded-control border border-zinc-700 px-2 py-1.5 text-ui-dense font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
                     Open the Learn surface
                     <span className="ml-1 font-mono text-ui-xs text-zinc-600">Alt+5</span>
                 </button>
@@ -67,7 +67,7 @@ const SupervisorCard: React.FC<{ onOpenLearn?: () => void }> = ({ onOpenLearn })
             {decisions.length > 0 && (
                 <ul className="space-y-1.5">
                     {decisions.map(e => (
-                        <li key={e.id} className="flex items-baseline gap-2 text-[11px]">
+                        <li key={e.id} className="flex items-baseline gap-2 text-ui-dense">
                             <span className={`shrink-0 font-bold uppercase tracking-wider ${VERDICT_PILL[e.decision?.verdict ?? 'skipped']}`}>
                                 {e.decision?.verdict}
                             </span>

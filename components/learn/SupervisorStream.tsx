@@ -82,7 +82,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
         <div className="rounded-xl border border-white/[0.06] bg-zinc-900/60 p-2.5" data-testid={`supervisor-event-${ev.id}`}>
             <div className="flex items-center gap-1.5">
                 <span className="text-cyan-300">{PHASE_ICON[decision ? 'deciding' : ev.phase] ?? PHASE_ICON[ev.phase]}</span>
-                <span className="truncate text-[12px] font-semibold text-zinc-100">{ev.itemTitle || ev.text}</span>
+                <span className="truncate text-ui-sm font-semibold text-zinc-100">{ev.itemTitle || ev.text}</span>
                 {ev.itemKind && (
                     <span className="shrink-0 rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs uppercase tracking-wider text-zinc-500">
                         {KIND_LABEL[ev.itemKind] || ev.itemKind}
@@ -90,7 +90,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                 )}
                 <span className="ml-auto shrink-0 font-mono text-ui-2xs text-zinc-600">{relTime(ev.atMs)}</span>
             </div>
-            <p className="mt-1 text-[11px] text-zinc-400">{ev.text}</p>
+            <p className="mt-1 text-ui-dense text-zinc-400">{ev.text}</p>
             {/* The model's verdict text for this item — live while streaming. */}
             {ev.streamText && (
                 <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2 font-mono text-ui-xs leading-4 text-zinc-500 custom-scrollbar">
@@ -102,7 +102,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${VERDICT_STYLE[decision.verdict]}`}>
                         {decision.verdict}{decision.overriddenByUser ? ' (you)' : ''}
                     </span>
-                    <p className="mt-1 text-[11px] text-zinc-400">{decision.reason}</p>
+                    <p className="mt-1 text-ui-dense text-zinc-400">{decision.reason}</p>
                     {overridable && ev.itemKind === 'skill' && (
                         <div className="mt-1.5 flex gap-1.5">
                             {decision.verdict === 'rejected' || decision.verdict === 'skipped' ? (
@@ -147,7 +147,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="supervisor-stream">
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
                 <ListChecks className="h-4 w-4 text-cyan-300" />
-                <span className="text-[13px] font-semibold text-zinc-100">Skill supervisor</span>
+                <span className="text-ui-caption font-semibold text-zinc-100">Skill supervisor</span>
                 {snap.modelName && (
                     <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-400">
                         {snap.modelName}
@@ -196,7 +196,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
             </div>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 custom-scrollbar" data-testid="supervisor-log">
                 {newestFirst.length === 0 ? (
-                    <p className="px-1 py-6 text-center text-[11px] leading-5 text-zinc-600">
+                    <p className="px-1 py-6 text-center text-ui-dense leading-5 text-zinc-600">
                         The supervisor reviews new skill drafts, tool candidates, memory amendments and
                         ladder proposals automatically — verifying them against your catalog, graveyard and
                         memory, enhancing the salvageable, and approving the solid ones as candidates.

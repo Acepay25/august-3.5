@@ -150,7 +150,7 @@ const readDockWidth = (): number => {
 const Stat: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex min-w-0 flex-col px-3.5 first:pl-3">
         <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">{label}</span>
-        <span className="truncate font-mono text-[12px] font-medium tabular-nums text-zinc-200">{value}</span>
+        <span className="truncate font-mono text-ui-sm font-medium tabular-nums text-zinc-200">{value}</span>
     </div>
 );
 
@@ -769,7 +769,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         onClick={() => setScreenerOpen(true)}
                         aria-label="Open market screener"
                         data-testid="screener-trigger"
-                        className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                        className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
                     >
                         Screener
                     </button>
@@ -821,10 +821,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         return (
                             <>
                                 <span className="flex items-baseline justify-between">
-                                    <span className={`font-mono text-[12px] font-medium tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <span className={`font-mono text-ui-sm font-medium tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {(fundingRate! * 100).toFixed(4)}%
                                     </span>
-                                    <span className="font-mono text-[11px] tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
+                                    <span className="font-mono text-ui-dense tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
                                 </span>
                                 <span className="mt-1 block h-[3px] overflow-hidden rounded-full bg-zinc-800" aria-hidden="true" data-testid="funding-bar">
                                     {/* duration-300 is deliberate: the bar's width is a data value
@@ -833,7 +833,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                 </span>
                             </>
                         );
-                    })() : <span className="font-mono text-[12px] text-zinc-200">—</span>}
+                    })() : <span className="font-mono text-ui-sm text-zinc-200">—</span>}
                 </div>
             </div>
 
@@ -865,7 +865,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             aria-selected={mode === m}
                             data-testid={`trade-mode-${m}`}
                             onClick={() => pickMode(m)}
-                            className={`relative z-10 rounded-full px-4 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 ease-[var(--ease-snappy)] active:scale-[0.97] ${
+                            className={`relative z-10 rounded-full px-4 py-1 text-ui-dense font-semibold uppercase tracking-wider transition-colors duration-150 ease-[var(--ease-snappy)] active:scale-[0.97] ${
                                 mode === m ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                             }`}
                         >

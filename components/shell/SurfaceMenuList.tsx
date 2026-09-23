@@ -90,7 +90,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                        so the shortcut has to be spelled out here — the visible
                        <kbd> would otherwise exist for the mouse only. */
                     aria-label={badge ? `${label}. ${badge.detail}, shortcut ${shortcut}` : `${label}, shortcut ${shortcut}`}
-                    className={`relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                    className={`relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                         active ? 'text-zinc-100' : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100'
                     }`}
                 >
@@ -116,7 +116,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 data-testid="nav-approvals"
                 onClick={onOpenApprovals}
                 aria-label={approvalsCount ? `Approvals, ${approvalsCount} waiting` : 'Approvals'}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100"
             >
                 <Inbox className="h-4 w-4 shrink-0 text-zinc-500" />
                 <span className="flex-1">Approvals</span>
@@ -133,7 +133,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 type="button"
                 data-testid="nav-switch-user"
                 onClick={onSwitchUser}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
             >
                 <LogOut className="h-4 w-4 shrink-0" />
                 <span className="flex-1">Switch profile</span>
