@@ -206,6 +206,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const [draftThinking, setDraftThinking] = useState<'auto' | 'on' | 'off'>('auto');
     const [draftInputUsd, setDraftInputUsd] = useState('');
     const [draftOutputUsd, setDraftOutputUsd] = useState('');
+    // Optional model context window (tokens) — retrieved-memory budgets
+    // scale from it instead of the hard-coded default. Empty ⇒ unset.
+    const [draftCtxWindow, setDraftCtxWindow] = useState('');
     const [showKey, setShowKey] = useState(false);
 
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -248,6 +251,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             setDraftThinking(selected.thinkingCapable === true ? 'on' : selected.thinkingCapable === false ? 'off' : 'auto');
             setDraftInputUsd(selected.inputUsdPer1k !== undefined ? String(selected.inputUsdPer1k) : '');
             setDraftOutputUsd(selected.outputUsdPer1k !== undefined ? String(selected.outputUsdPer1k) : '');
+            setDraftCtxWindow(selected.contextWindowTokens !== undefined ? String(selected.contextWindowTokens) : '');
             setNameDraft(selected.name);
             setIsEditingName(false);
             setShowKey(false);
@@ -284,9 +288,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             draftThinkingDirty ||
             draftInputUsd !== (selected.inputUsdPer1k !== undefined ? String(selected.inputUsdPer1k) : '') ||
             draftOutputUsd !== (selected.outputUsdPer1k !== undefined ? String(selected.outputUsdPer1k) : '') ||
+            draftCtxWindow !== (selected.contextWindowTokens !== undefined ? String(selected.contextWindowTokens) : '') ||
             (!!nameDraft.trim() && nameDraft.trim() !== selected.name)
         );
-        }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftThinkingDirty, draftInputUsd, draftOutputUsd, nameDraft]);
+        }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftThinkingDirty, draftInputUsd, draftOutputUsd, draftCtxWindow, nameDraft]);
 
     // Surface dirtiness to the host (SettingsMenu) so closing the modal while
     // a draft is staged can warn instead of silently discarding edits.
@@ -312,6 +317,12 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 : undefined,
             inputUsdPer1k: draftInputUsd.trim() ? Number(draftInputUsd) : undefined,
             outputUsdPer1k: draftOutputUsd.trim() ? Number(draftOutputUsd) : undefined,
+            // Empty or garbage ⇒ unset (default window), never NaN leaking
+            // into windowBudgetTokens' arithmetic.
+            contextWindowTokens: (() => {
+                const n = Number(draftCtxWindow);
+                return draftCtxWindow.trim() && Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+            })(),
         };
         if (nameDraft.trim() && nameDraft.trim() !== selected.name) {
             updates.name = nameDraft.trim();
@@ -330,7 +341,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             setTestResult({ success: false, message: error instanceof Error ? error.message : 'Provider settings could not be saved.' });
             return;
         }
-    }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftThinking, draftInputUsd, draftOutputUsd, nameDraft, draftUrlValidation, onUpdateProvider]);
+    }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftThinking, draftInputUsd, draftOutputUsd, draftCtxWindow, nameDraft, draftUrlValidation, onUpdateProvider]);
 
     const handleTestModel = useCallback(async (modelId: string): Promise<{ success: boolean; message: string }> => {
         if (!selected || !draftUrlValidation.valid) {
@@ -894,6 +905,13 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             <input type="number" min="0" step="0.001" value={draftInputUsd} onChange={(e) => setDraftInputUsd(e.target.value)} placeholder="Input $/1k" className={inputBase} />
                             <input type="number" min="0" step="0.001" value={draftOutputUsd} onChange={(e) => setDraftOutputUsd(e.target.value)} placeholder="Output $/1k" className={inputBase} />
                         </div>
+                    </details>
+                    <details className="text-ui-dense text-zinc-500">
+                        <summary className="cursor-pointer">Context window (optional)</summary>
+                        <p className="mt-1 text-xs text-zinc-500">
+                            Model context window in tokens. Retrieved-memory budgets scale with it; leave empty for the 65,536 default.
+                        </p>
+                        <input type="number" min="1" step="1" value={draftCtxWindow} onChange={(e) => setDraftCtxWindow(e.target.value)} placeholder="e.g. 131072" className={`${inputBase} mt-2`} />
                     </details>
                 </div>
             )}

@@ -69,6 +69,9 @@ export const assemblePipelineMemoryContext = (
      *  slice below (skills, similar setups/trades, loss priming) sees only
      *  what was KNOWN by that moment. Omitted ⇒ live behavior, unchanged. */
     asOfMs?: number,
+    /** Model context window (tokens) — threads to the notebook slice's stage
+     *  budgets. Omitted ⇒ default window, unchanged. */
+    contextWindowTokens?: number,
 ): PipelineMemoryContext => {
     const detectedLearningCoin = mineCoinFromPrompt(effectiveInput);
     const pendingDirection = mineDirectionFromPrompt(effectiveInput);
@@ -120,8 +123,8 @@ export const assemblePipelineMemoryContext = (
     // seats tailor to the trader, not just the tape.
     const profileMemoryIndex = buildProfileMemoryIndex();
     const withProfile = (ctx: string): string => [profileMemoryIndex, ctx].filter(Boolean).join('\n\n---\n\n');
-    const memoryFilesContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
-    const moderatorMemoryContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
+    const memoryFilesContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs, contextWindowTokens }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
+    const moderatorMemoryContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs, contextWindowTokens }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
     // Rebuttal rounds re-enter the same seats, and until now they argued with
     // ZERO retrieved memory — the 400-char rebuttal budget existed with no
     // caller. Same runId as the opening slice on purpose: the ε-holdout is
@@ -129,7 +132,7 @@ export const assemblePipelineMemoryContext = (
     // group would quietly receive treatment in round 2. Deliberately lean: no
     // profile prefix and no bot memory, since the persona and openings are
     // already on the seat's context and this budget is a third of the opening's.
-    const rebuttalMemoryContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'rebuttal', { runId, asOfMs });
+    const rebuttalMemoryContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'rebuttal', { runId, asOfMs, contextWindowTokens });
     const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
     // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the analysts

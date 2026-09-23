@@ -42,6 +42,15 @@ export interface ProviderConfig {
    */
   thinkingCapable?: boolean;
   /**
+   * Model context window in tokens — optional. When set, retrieved-memory
+   * stage budgets scale with it (`stageBudgetChars` →
+   * `utils/tokenEstimate.windowBudgetTokens`) instead of assuming the
+   * 65,536 default, so a small-window provider gets a smaller notebook
+   * slice instead of a budget sized for a model it is not. Set from the
+   * provider editor; absent ⇒ default window, behavior unchanged.
+   */
+  contextWindowTokens?: number;
+  /**
    * Override for json_schema constrained decoding on chat_completions
    * providers. undefined = decide by verified-host detection; true = always
    * send response_format json_schema when requested (an OpenAI-compatible

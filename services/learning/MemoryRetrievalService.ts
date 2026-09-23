@@ -603,6 +603,11 @@ export interface MemoryContextOptions {
      *  transitions, not samples), so this gates existence and status only.
      *  Omitted ⇒ today's behavior, byte-identical. */
     asOfMs?: number;
+    /** The model's context window (tokens) — threads to `stageBudgetChars`
+     *  so the stage budget derives from the REAL window instead of always
+     *  assuming the default. Omitted ⇒ `DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS`,
+     *  byte-identical to before the field existed. */
+    contextWindowTokens?: number;
 }
 
 export function getMemoryFilesContext(
@@ -612,7 +617,7 @@ export function getMemoryFilesContext(
     stage: MemoryStage = 'opening',
     options?: MemoryContextOptions,
 ): string {
-    const budget = stageBudgetChars(stage);
+    const budget = stageBudgetChars(stage, options?.contextWindowTokens);
     const blocks: string[] = [];
     /** What ACTUALLY made it into the prompt — recorded for attribution. */
     const injected: Array<{ path: string; kind: string; chars?: number }> = [];
