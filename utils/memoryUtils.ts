@@ -1,5 +1,5 @@
 
-import { Message, GlobalMemory, LoggedTrade } from '../types';
+import { Message, GlobalMemory } from '../types';
 
 /**
  * Index-layer memory injection (Batch 5, — the ZCode memory
@@ -24,12 +24,6 @@ export const buildGlobalMemoryIndex = (globalMemory: GlobalMemory): string => {
     if (fams.length > 0) {
         lines.push('FAMILY PERFORMANCE (win rates by setup family):');
         for (const [family, stat] of fams.slice(0, 8)) lines.push(`- ${family}: ${stat}`);
-    }
-
-    if (Array.isArray(globalMemory.aiPatternMemory) && globalMemory.aiPatternMemory.length > 0) {
-        const total = globalMemory.aiPatternMemory.length;
-        lines.push(`PATTERN MEMORY (newest ${Math.min(total, INDEX_LINE_CAP)} of ${total}):`);
-        for (const p of globalMemory.aiPatternMemory.slice(0, INDEX_LINE_CAP)) lines.push(`- ${p}`);
     }
 
     if (Array.isArray(globalMemory.globalCorrections) && globalMemory.globalCorrections.length > 0) {
