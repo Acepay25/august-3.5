@@ -1311,7 +1311,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 regimeWeightingContext,
                 lossPrimingRows,
                 asOfMs: memoryAsOfMs,
-            } = assemblePipelineMemoryContext(effectiveInput, loggedTrades, freshHybridData ?? null, userMessage.id);
+            } = assemblePipelineMemoryContext(
+                effectiveInput,
+                loggedTrades,
+                freshHybridData ?? null,
+                userMessage.id,
+                undefined,
+                // One window value for every seat that reads this slice (it
+                // rides analyst AND moderator prompts): the memory model's own
+                // window decides, and windowBudgetTokens' floor keeps a tiny
+                // window from zeroing memory out entirely.
+                memoryConfig?.contextWindowTokens,
+            );
 
             // ── CODE-CHECKED SKILL TRIGGERS ──
             // Retrieval answers which skills are RELEVANT; a predicate answers

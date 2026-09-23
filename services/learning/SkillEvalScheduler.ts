@@ -209,6 +209,7 @@ export const buildDefaultRunner = (
         const productionContext = getMemoryFilesContext(query, [], 'analyst', 'opening', {
             ...(skill ? { excludeSkillName: skill.name } : {}),
             recordInjections: false,
+            contextWindowTokens: cfg.contextWindowTokens,
         });
         let skillNote: string;
         if (skillEnabled && skill) {
