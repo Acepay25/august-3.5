@@ -41,6 +41,7 @@ import { upsertSettledBelief } from '../services/learning/settledBeliefs';
 import { recordBotTurnOutcome, loadBotLearningStats } from '../services/agents/botLearning';
 import { saveBot, getBots } from '../services/agents/agentRoster';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
+import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import type { LoggedTrade, TradeAnalysis } from '../types';
 import { TradeOutcome } from '../types';
 
@@ -336,5 +337,168 @@ describe('WS-3.3 provenance', () => {
         expect(row.skillsAuthored).toBe(stamped.length);
         expect(row.lastLessonAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(getBots()).toHaveLength(1);
+    });
+});
+
+/** The two measured signals that used to stop at being read: veto accuracy
+ *  (the ledger's falsification of avoid skills) and post-vs-pre lift. Both
+ *  must reach the proposal queue — and only the proposal queue. */
+describe('veto retraction and lift actuation', () => {
+    const skillsFolder = (): string => getMemoryFiles().folders.find(f => f.name === 'skills')!.id;
+    const day = (n: number): string => new Date(Date.now() - n * 86_400_000).toISOString();
+
+    it('proposes demotion when an avoid skill keeps blocking winners — and only once', async () => {
+        // Fresh + confirmed so the staleness step (whose fingerprint is also
+        // `…demote`) cannot be what queues this.
+        const name = 'btc-veto-costly-avoid.md';
+        await createMemoryFile(skillsFolder(), name, `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+wins: 2
+losses: 1
+lastEvidenceAt: ${new Date().toISOString()}
+ifCondition: btc london sweep short
+thenAction: skip the short
+---
+
+# Avoid
+`, USER, true);
+
+        const veto = (outcome: 'WOULD_TP' | 'WOULD_SL', i: number) => ({
+            id: `veto-seed-${i}`, skillName: name, coinName: 'BTCUSDT', symbol: 'BTCUSDT',
+            direction: 'Short' as const, referencePrice: 100,
+            createdAt: new Date(Date.now() - (20 - i) * 60_000).toISOString(),
+            settledAt: new Date(Date.now() - (10 - i) * 60_000).toISOString(),
+            outcome,
+        });
+        // 6 settled: 4 blocked winners (costly), 2 vindicated → 67% > 60% bar.
+        store[`skill_veto_ledger_v1_${USER}`] = [
+            veto('WOULD_TP', 0), veto('WOULD_TP', 1), veto('WOULD_TP', 2),
+            veto('WOULD_TP', 3), veto('WOULD_SL', 4), veto('WOULD_SL', 5),
+        ];
+        VetoLedgerService.resetForTest(); // the singleton may have cached an empty ledger
+
+        try {
+            const res = await runMemoryHygiene(USER, { providerConfigs: [] });
+            expect(res.vetoDemotionsQueued).toBe(1);
+            expect(res.demotionsQueued).toBe(0); // NOT the staleness path
+
+            const slug = name.replace(/\.md$/, '');
+            const mine = listLearningProposals(USER).filter(p => p.fingerprint === `veto-costly|${slug}`);
+            expect(mine).toHaveLength(1);
+            expect(mine[0].kind).toBe('demote');
+            expect(mine[0].text).toMatch(/blocked a setup that would have hit take-profit/);
+
+            // It proposes; it does not demote. The judge decides.
+            expect(listSkills()[0].meta.status).toBe('confirmed');
+
+            // Same week again — the fingerprint absorbs it.
+            const again = await runMemoryHygiene(USER, { providerConfigs: [] });
+            expect(again.vetoDemotionsQueued).toBe(0);
+            expect(listLearningProposals(USER).filter(p => p.fingerprint.startsWith('veto-costly|'))).toHaveLength(1);
+        } finally {
+            VetoLedgerService.resetForTest(); // don't leak seeded records to later tests
+        }
+    });
+
+    it('leaves an avoid skill alone when its vetoes mostly vindicate it', async () => {
+        const name = 'btc-veto-saving-avoid.md';
+        await createMemoryFile(skillsFolder(), name, `---
+status: confirmed
+kind: avoid
+coin: ETHUSDT
+direction: Long
+wins: 3
+losses: 1
+lastEvidenceAt: ${new Date().toISOString()}
+ifCondition: eth breaks out
+thenAction: skip the long
+---
+
+# Avoid
+`, USER, true);
+        const rec = (outcome: 'WOULD_TP' | 'WOULD_SL', i: number) => ({
+            id: `veto-save-${i}`, skillName: name, coinName: 'ETHUSDT', symbol: 'ETHUSDT',
+            direction: 'Long' as const, referencePrice: 100,
+            createdAt: new Date(Date.now() - (20 - i) * 60_000).toISOString(),
+            settledAt: new Date(Date.now() - (10 - i) * 60_000).toISOString(),
+            outcome,
+        });
+        // 1 blocked winner vs 5 vindicated blocks → well under the bar.
+        store[`skill_veto_ledger_v1_${USER}`] = [
+            rec('WOULD_SL', 0), rec('WOULD_SL', 1), rec('WOULD_SL', 2),
+            rec('WOULD_SL', 3), rec('WOULD_SL', 4), rec('WOULD_TP', 5),
+        ];
+        VetoLedgerService.resetForTest();
+        try {
+            const res = await runMemoryHygiene(USER, { providerConfigs: [] });
+            expect(res.vetoDemotionsQueued).toBe(0);
+            expect(listLearningProposals(USER).filter(p => p.fingerprint.startsWith('veto-costly|'))).toHaveLength(0);
+            const line = res.lines.find(l => /veto ledger/i.test(l));
+            expect(line).toMatch(/past the 60%-costly bar/);
+        } finally {
+            VetoLedgerService.resetForTest();
+        }
+    });
+
+    it('proposes demotion when a skill’s own lift goes negative — and says so when no trades are in scope', async () => {
+        const name = 'btc-lift-repeat.md';
+        await createMemoryFile(skillsFolder(), name, `---
+status: confirmed
+kind: repeat
+coin: BTCUSDT
+direction: Short
+wins: 4
+losses: 2
+lastEvidenceAt: ${new Date().toISOString()}
+tradeIds: t-lift-3
+ifCondition: btc london sweep short
+thenAction: enter after the reclaim
+---
+
+# Repeat
+`, USER, true);
+
+        const t = (id: string, daysAgo: number, outcome: TradeOutcome): LoggedTrade => ({
+            id,
+            analysis: {
+                coinName: 'BTCUSDT', direction: 'Short',
+                entryPoints: [{ price: 100 }], stopLoss: 105, takeProfit: [{ price: 90 }],
+            } as unknown as TradeAnalysis,
+            outcome,
+            timestamp: day(daysAgo),
+        });
+        // Two winners BEFORE the skill's own tradeId (its influence start),
+        // then the same setup loses twice and wins once: 100% → 33%.
+        const trades = [
+            t('t-pre-1', 40, TradeOutcome.WIN),
+            t('t-pre-2', 30, TradeOutcome.WIN),
+            t('t-lift-3', 20, TradeOutcome.LOSS),
+            t('t-lift-4', 10, TradeOutcome.LOSS),
+            t('t-lift-5', 5, TradeOutcome.WIN),
+        ];
+        const slug = name.replace(/\.md$/, '');
+
+        // Without a trade log the step must ADMIT it didn't run.
+        const blind = await runMemoryHygiene(USER, { providerConfigs: [] });
+        expect(blind.liftDemotionsQueued).toBe(0);
+        expect(blind.lines.join(' ')).toMatch(/Lift review skipped — no trade log in scope/);
+        expect(listLearningProposals(USER).filter(p => p.fingerprint === `neg-lift|${slug}`)).toHaveLength(0);
+
+        const res = await runMemoryHygiene(USER, { providerConfigs: [], trades });
+        expect(res.liftDemotionsQueued).toBe(1);
+        const mine = listLearningProposals(USER).filter(p => p.fingerprint === `neg-lift|${slug}`);
+        expect(mine).toHaveLength(1);
+        expect(mine[0].kind).toBe('demote');
+        // The canonical review's rationale — the same sentence the dashboard shows.
+        expect(mine[0].text).toMatch(/BELOW the pre-skill baseline/);
+
+        // Proposes only, and the fingerprint absorbs a re-run.
+        expect(listSkills()[0].meta.status).toBe('confirmed');
+        const again = await runMemoryHygiene(USER, { providerConfigs: [], trades });
+        expect(again.liftDemotionsQueued).toBe(0);
+        expect(listLearningProposals(USER).filter(p => p.fingerprint === `neg-lift|${slug}`)).toHaveLength(1);
     });
 });
