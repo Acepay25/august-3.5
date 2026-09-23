@@ -33,6 +33,23 @@ vi.mock('../services/learning/MemoryModelService', () => ({
     })) as never,
 }));
 
+// Eval arms now run the production predicate gate, which reads klines. A
+// fixed rising tape anchored to the fixture trade's own timestamp keeps the
+// suite offline and the fired trigger deterministic.
+vi.mock('../services/analysis/KlineService', () => ({
+    fetchKlines: vi.fn(async () => {
+        const end = Math.floor(Date.parse('2026-08-09T12:00:00.000Z') / 1000);
+        return Array.from({ length: 60 }, (_, i) => ({
+            time: end - (60 - i) * 3600,
+            open: 100 + i,
+            high: 102 + i,
+            low: 99 + i,
+            close: 101 + i,
+            volume: 1000,
+        }));
+    }),
+}));
+
 import { buildDefaultRunner } from '../services/learning/SkillEvalScheduler';
 import {
     initMemoryFiles,
@@ -68,9 +85,9 @@ const SKILL_BODY_MARKER = 'wait for the 4h close below the range low';
  * versions of this suite seeded a 10-line frontmatter stub, which let the
  * raw-file injection ride under the eval body budget and MASKED the
  * frontmatter-eats-the-budget bug. With this seed, the raw markdown is far
- * longer than EVAL_SKILL_BODY_MAX (700) — the body marker sits deep in the
- * file, so any implementation that injects the RAW content truncates it
- * away.
+ * longer than the shared SKILL_BLOCK_MAX (400) the treatment arm now uses —
+ * the body marker sits deep in the file, so any implementation that injects
+ * the RAW content truncates it away.
  */
 const realSizeSkillContent = (): string => {
     const iso = new Date().toISOString();
@@ -127,8 +144,10 @@ const seedNotebook = async (): Promise<{ fileId: string }> => {
     const skills = folders.find(f => f.name === 'skills')!;
     const content = realSizeSkillContent();
     // Guard the guard: if this fixture ever shrinks back under the eval body
-    // budget it stops proving the truncation bug is fixed.
-    expect(content.length).toBeGreaterThan(700);
+    // budget it stops proving the truncation bug is fixed. The invariant is
+    // raw file > SKILL_BLOCK_MAX (400) — frontmatter must have somewhere to
+    // hide from a raw-injection regression.
+    expect(content.length).toBeGreaterThan(400);
     const file = await createMemoryFile(skills.id, 'btc-short-avoid.md', content, USER, true);
     return { fileId: file.id };
 };
@@ -154,9 +173,9 @@ describe('skill A/B eval arm construction', () => {
 
         expect(analyzeCalls).toHaveLength(2);
         const [treatment, baseline] = analyzeCalls;
-        // The body marker sits ~700 chars INTO THE RAW FILE behind the
+        // The body marker sits deep INTO THE RAW FILE behind the
         // frontmatter — if the treatment arm ever regresses to injecting
-        // raw markdown, the 700-char cap truncates this away.
+        // raw markdown, the shared 400-char verdict cap truncates this away.
         expect(treatment.prompt).toContain(SKILL_BODY_MARKER);
         // And the budget buys PROCEDURE, not YAML: none of the file's
         // frontmatter keys may leak into the arm.
@@ -191,5 +210,47 @@ describe('skill A/B eval arm construction', () => {
         await new Promise(r => setTimeout(r, 20));
         const records = await getRecentMemoryInjections(USER);
         expect(records).toHaveLength(0);
+    });
+
+    /**
+     * PARITY: production evaluates each skill's code trigger and appends the
+     * CODE-CHECKED note to every seat before the debate (a live AVOID trigger
+     * even caps the verdict, via the sentence inside that note). An arm that
+     * skips it measures an intervention the trader never receives — and the
+     * verdict now feeds demotion proposals, so the mismatch is load-bearing.
+     * The note must reach BOTH arms: it is shared context, not the treatment.
+     */
+    it('hands both arms the production predicate note', async () => {
+        // Scoped to a different family than the trade so retrieval never
+        // surfaces it: only the gate may see it, keeping every other prompt
+        // byte-identical to the arms above.
+        const skillsFolder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const predicateMeta = {
+            status: 'confirmed' as const,
+            kind: 'repeat' as const,
+            coin: 'BTCUSDT',
+            family: 'Family B',
+            wins: 2,
+            losses: 1,
+            consecutiveLosses: 0,
+            tradeIds: ['x', 'y', 'z'],
+            ifCondition: 'reclaim keeps printing higher lows',
+            predicate: 'close > sma20',
+            body: '**When:** Family B reclaim prints higher lows.\n**What I do:** join after the close.',
+        };
+        await createMemoryFile(skillsFolder.id, 'btc-reclaim-repeat.md', serializeSkill(predicateMeta, 'Repeat BTC reclaim'), USER, true);
+
+        const runner = buildDefaultRunner({ id: 'test-provider' } as never, USER);
+        const skill = skillContext();
+
+        await runner(makeTrade(), { skillEnabled: true, skill });
+        await runner(makeTrade(), { skillEnabled: false, skill });
+
+        expect(analyzeCalls).toHaveLength(2);
+        const [treatment, baseline] = analyzeCalls;
+        // `close > sma20` fires on the fixture's 60 rising bars, so the gate
+        // produced its note exactly as it would on a live run.
+        expect(treatment.prompt).toContain('condition is LIVE');
+        expect(baseline.prompt).toContain('condition is LIVE');
     });
 });

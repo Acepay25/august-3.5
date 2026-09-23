@@ -127,6 +127,32 @@ describe('evaluateSkillPredicates', () => {
         expect(timespanArgs).toEqual(['BTCUSDT 15m', 'BTCUSDT 1h', 'BTCUSDT 4h']);
     });
 
+    it('sizes the fetch for replay depth so an old cutoff still leaves a judgeable series', async () => {
+        // fetchKlines returns bars ENDING NOW: at the live 120-bar depth a
+        // 10-day-old cutoff filters every bar away and the gate would report
+        // inconclusive for every historical run — the eval arm then measures
+        // no trigger at all. Depth covers the cutoff's age plus warmup, and
+        // stops at MAX_REPLAY_BARS (one unpaginated request).
+        await evaluateSkillPredicates({
+            coin: 'BTCUSDT',
+            skills: [skill({ coin: 'BTC', predicate: 'close > sma20' })],
+            asOfMs: Date.now() - 10 * 24 * 3_600_000,
+        });
+        const limit = fetchMock.mock.calls[0][2] as number;
+        expect(limit).toBeGreaterThan(120);
+        expect(limit).toBeLessThanOrEqual(1000);
+    });
+
+    it('honours an explicit bar count over replay sizing', async () => {
+        await evaluateSkillPredicates({
+            coin: 'BTCUSDT',
+            skills: [skill({ coin: 'BTC', predicate: 'close > sma20' })],
+            asOfMs: Date.now() - 10 * 24 * 3_600_000,
+            bars: 42,
+        });
+        expect(fetchMock).toHaveBeenCalledWith('BTCUSDT', '1h', 42);
+    });
+
     it('counts an unwarmed indicator as inconclusive instead of quiet', async () => {
         // Only 10 bars: rsi14 (14-period) has no value, so nothing is provable.
         fetchMock.mockResolvedValue(rising().slice(0, 10) as never);

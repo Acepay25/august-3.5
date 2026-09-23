@@ -89,11 +89,19 @@ export const stageBudgetChars = (
     return Math.max(STAGE_BUDGET_CHARS[stage], derived);
 };
 const DOCTRINE_SLOT_CHARS = 800;
-const SKILL_BLOCK_MAX = 400;
+/** Verdict-stage skill-body cap. Exported because the A/B eval's treatment
+ *  arm must send EXACTLY what this stage sends — an arm with its own budget
+ *  measures an intervention production never applies
+ *  (SkillEvalScheduler imports this constant). */
+export const SKILL_BLOCK_MAX = 400;
 const RISK_RULES_MAX = 300;
 const MISTAKE_LINE_MAX = 200;
 /** Extra matched skills surfaced as index lines at verdict depth (on top of #1). */
 const VERDICT_EXTRA_SKILLS = 2;
+/** Pull tier (the recall tool): the model ASKED for the procedure, so it
+ *  gets more than the verdict slice's standing injection — 700 on purpose,
+ *  a different tier from `SKILL_BLOCK_MAX`, not a competing budget. */
+const RECALL_SKILL_BODY_MAX = 700;
 
 export interface RetrievedMemorySource {
     path: string;
@@ -785,7 +793,7 @@ export function handleRecallTool(
             // verdict slice; the model asked for the PROCEDURE, not the
             // bookkeeping YAML.
             const body = substituteSkillContext(skillBody(m.file.content), query);
-            const capped = body.length > 700 ? `${body.slice(0, 700).trimEnd()}\n…` : body;
+            const capped = body.length > RECALL_SKILL_BODY_MAX ? `${body.slice(0, RECALL_SKILL_BODY_MAX).trimEnd()}\n…` : body;
             sections.push(
                 `SKILL ${m.meta.status.toUpperCase()} (${Math.round(m.meta.wins)}W/${Math.round(m.meta.losses)}L · ${evidenceFreshness(m.meta)}):\n${capped}`
             );
