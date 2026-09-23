@@ -51,7 +51,7 @@ vi.mock('../services/tools/toolForge', () => ({
     confirmedForgedToolDefinitions: vi.fn(() => []),
 }));
 
-import { runDeskToolLoop, streamChatWithDeskTools, clearDeskToolCache, budgetToolContent } from '../services/analysis/DeskToolsService';
+import { runDeskToolLoop, streamChatWithDeskTools, clearDeskToolCache, budgetToolContent, MAX_DESK_TOOL_ROUNDS } from '../services/analysis/DeskToolsService';
 
 /** Drain an async generator into an array. */
 const collect = async (gen: AsyncGenerator<string>): Promise<string[]> => {
@@ -170,24 +170,68 @@ describe('desk tool loop — live streaming rounds', () => {
     });
 
     it('streams a final continuation when the loop exhausts rounds on tools', async () => {
-        scriptStream([
-            { text: 'R0 ', toolCalls: [{ id: 'c1', name: 'get_price_snapshot', arguments: {} }] },
-            { text: 'R1 ', toolCalls: [{ id: 'c2', name: 'get_order_book', arguments: {} }] },
-            { text: 'R2 ', toolCalls: [{ id: 'c3', name: 'get_price_snapshot', arguments: {} }] },
-            { text: 'Final read after the findings.' },
-        ]);
+        // Derived from the constant, not scripted at a fixed count: the point
+        // is that the budget RUNS OUT while the model still wants tools, so a
+        // hard-coded number silently stops testing exhaustion the moment the
+        // cap moves — the rounds all succeed, the model stops on its own, and
+        // the continuation path goes untested while the test stays green.
+        const rounds = Array.from({ length: MAX_DESK_TOOL_ROUNDS }, (_, i) => ({
+            text: `R${i} `,
+            // Distinct arguments every round: the stall guard now ends a turn
+            // that replays the same call, so an exhaustion test that repeats
+            // itself would prove the wrong thing.
+            toolCalls: [{
+                id: `c${i}`,
+                name: 'get_price_snapshot',
+                arguments: { symbol: `SYM${i}USDT` },
+            }],
+        }));
+        scriptStream([...rounds, { text: 'Final read after the findings.' }]);
         const chunks: string[] = [];
         for await (const c of streamChatWithDeskTools(config, [...baseMessages], { enabled: true, defaultSymbol: 'BTCUSDT' })) {
             chunks.push(c);
         }
-        expect(chunks.join('')).toBe('R0 R1 R2 Final read after the findings.');
-        // 3 loop rounds + the continuation.
-        expect(streamMock).toHaveBeenCalledTimes(4);
+        expect(chunks.join('')).toBe(`${rounds.map((_, i) => `R${i} `).join('')}Final read after the findings.`);
+        // Every round spent, then the continuation.
+        expect(streamMock).toHaveBeenCalledTimes(MAX_DESK_TOOL_ROUNDS + 1);
         // The continuation carries the tool results and the nudge.
-        const continuationMessages = streamMock.mock.calls[3][1] as Array<{ role: string; content: string }>;
+        const continuationMessages = streamMock.mock.calls[MAX_DESK_TOOL_ROUNDS][1] as Array<{ role: string; content: string }>;
         const last = continuationMessages[continuationMessages.length - 1];
         expect(last.role).toBe('user');
         expect(last.content).toContain('Continue your Floor turn');
+    });
+
+    it('a seat replaying the same call is stopped and asked to answer', async () => {
+        // The round cap cannot see this failure: every one of these results is
+        // served from the 30s cache, so eight rounds of it produces eight
+        // identical bytes and no answer. The guard ends the turn early, marks
+        // the reason in the transcript, and hands the caller the same
+        // "you owe one more streamed turn" signal an exhausted budget does.
+        const same = { id: 'c', name: 'get_price_snapshot', arguments: { symbol: 'BTCUSDT' } };
+        scriptStream([
+            { text: 'A ', toolCalls: [same] },
+            { text: 'B ', toolCalls: [{ ...same, id: 'c2' }] },
+            { text: 'C ', toolCalls: [{ ...same, id: 'c3' }] },
+            { text: 'D ', toolCalls: [{ ...same, id: 'c4' }] },
+            { text: 'E ', toolCalls: [{ ...same, id: 'c5' }] },
+            { text: 'F ', toolCalls: [{ ...same, id: 'c6' }] },
+            { text: 'G ', toolCalls: [{ ...same, id: 'c7' }] },
+            { text: 'H ', toolCalls: [{ ...same, id: 'c8' }] },
+        ]);
+        const events: string[] = [];
+        const chunks: string[] = [];
+        for await (const c of streamChatWithDeskTools(config, [...baseMessages], {
+            enabled: true, defaultSymbol: 'BTCUSDT', onToolEvent: l => events.push(l),
+        })) {
+            chunks.push(c);
+        }
+        // Stopped at the third identical call, not the eighth.
+        expect(streamMock.mock.calls.length).toBeLessThan(MAX_DESK_TOOL_ROUNDS + 1);
+        expect(events.some(e => e.includes('repeated call'))).toBe(true);
+        // The notice rode a message that already existed — it never inserted a
+        // new one between an assistant tool_calls turn and its replies.
+        const last = streamMock.mock.calls.at(-1)?.[1] as Array<{ role: string; content: string }>;
+        expect(last.some(m => String(m.content).includes('REPEAT'))).toBe(true);
     });
 
     it('keeps the legacy non-streaming shape for non-native formats', async () => {
