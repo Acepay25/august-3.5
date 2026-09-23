@@ -14,6 +14,8 @@ import { getMemoryFilesContext } from '../../services/learning/MemoryRetrievalSe
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { listRetrievedMemorySources, type MemoryRetrievalQuery, type RetrievedMemorySource } from '../../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../../services/bots/BotMemoryService';
+import { BOT_MEMORY_TOTAL_CHAR_BUDGET } from '../../services/bots/botMemoryBudget';
+import { clipNote } from '../../utils/harnessMarks';
 import type { BotMemoryScope } from '../../types/bot';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../../services/learning/SetupMemoryService';
 import type { HybridDataPacket } from '../../services/analysis/HybridIntelligenceService';
@@ -21,8 +23,10 @@ import { getActiveUsername } from '../../utils/activeUser';
 import type { LoggedTrade } from '../../types';
 
 // Merged cap across ALL bots' memory context — the notebook
-// opening budget is 900 chars; bot memory should not dwarf it.
-const BOT_MEMORY_TOTAL_CAP = 1800;
+// opening budget is 900 chars; bot memory should not dwarf it. The number
+// itself lives with the reader so a second surface (Chart AI) can divide the
+// SAME allowance instead of inventing its own.
+const BOT_MEMORY_TOTAL_CAP = BOT_MEMORY_TOTAL_CHAR_BUDGET;
 
 // Pattern-family + coin + direction mining lives in utils/patternMining.ts so
 // the bots (services/agents/botLearning.ts) mine the SAME query — this is a
@@ -92,22 +96,41 @@ export const assemblePipelineMemoryContext = (
             const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
             const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: BotMemoryScope }> } : null;
             if (!data?.bots?.length) return '';
-            // Merge memory from EVERY enabled bot rather than
-            // whichever entry happened to sort first — the debate roster may
-            // not include bots[0] at all. Deduped, query-filtered per bot,
-            // and capped to a merged total so N bots cannot balloon the
-            // analyst prompt outside the stage-budget discipline.
+            // The coin universe the note filter would otherwise guess at: a
+            // lesson about a coin THIS TRADER keeps a journal for is another
+            // coin's lesson, whatever the baseline majors list says.
+            const knownCoins = [...new Set(
+                (loggedTrades ?? [])
+                    .map(t => t?.analysis?.coinName)
+                    .filter((a): a is string => typeof a === 'string' && a.length >= 2),
+            )];
+            const botQuery = { ...memoryQuery, knownCoins };
+            // Only a GLOBAL bot's notebook may be merged into somebody else's
+            // prompt. `memoryScope: 'isolated'` means "keeps to its own notes,
+            // nothing it learns is retrieved by others" — and this merge read
+            // every bot while using the field only to size bytes, so an
+            // isolated agent's private notes went to every seat.
+            const shareable = data.bots.filter(b => b?.id && (b.memoryScope ?? 'global') === 'global');
+            if (shareable.length === 0) return '';
+            // Divide the allowance instead of letting the first two bots spend
+            // it: each got a fixed 900/1200 before, so with five bots the last
+            // three were pushed past the merged cap and cut.
+            const perBot = Math.max(200, Math.ceil(BOT_MEMORY_TOTAL_CAP / shareable.length));
             const seen = new Set<string>();
             const contexts: string[] = [];
             let used = 0;
-            for (const bot of data.bots) {
-                if (!bot?.id || seen.has(bot.id)) continue;
+            for (const bot of shareable) {
+                if (seen.has(bot.id)) continue;
                 seen.add(bot.id);
-                const ctx = getBotMemoryContext(bot.id, memoryQuery, bot.memoryScope || 'global');
+                const ctx = getBotMemoryContext(bot.id, botQuery, perBot);
                 if (!ctx) continue;
                 if (used >= BOT_MEMORY_TOTAL_CAP) break;
                 const room = BOT_MEMORY_TOTAL_CAP - used;
-                const clipped = ctx.length > room ? `${ctx.slice(0, room).trimEnd()}\n…` : ctx;
+                // A bare `\n…` here told the model nothing about how much was
+                // left behind; the dialect names kept vs existed.
+                const clipped = ctx.length > room
+                    ? `${ctx.slice(0, room).trimEnd()}\n${clipNote({ source: 'merged bot memory', kept: room, total: used + ctx.length })}`
+                    : ctx;
                 contexts.push(clipped);
                 used += clipped.length;
             }

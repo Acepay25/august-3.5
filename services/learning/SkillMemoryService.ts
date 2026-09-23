@@ -2488,7 +2488,11 @@ export const syncClosedTradeToNotebook = async (
                             return data?.bots?.[0]?.id || trade.id;
                         } catch { return trade.id; }
                     })();
-                    const botCtx = getBotMemoryContext(ctxBotId, setup, 'global');
+                    // The default per-agent allowance: this judges the skill
+                    // THIS bot earned, not a roster-wide merge. Passing no
+                    // budget keeps the call shape every existing test mock of
+                    // this module already satisfies.
+                    const botCtx = getBotMemoryContext(ctxBotId, setup);
                     const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
                     if (decision) {
                         const judgedClause = {

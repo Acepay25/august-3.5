@@ -10,8 +10,16 @@ import {
     panelCouldStillBePass,
 } from '../services/trade/chatPanel';
 import type { ChatSession } from '../services/trade/chatSessions';
+import type { PanelSeat } from '../services/trade/chatPanel';
 
 const labelFor = (modelId: string): string => modelId.toUpperCase();
+
+/** A seat exactly as `panelSeats` builds one. The planner only reads id and
+ *  name, but carrying the full shape keeps a fixture from drifting away from
+ *  what the dock actually hands it — an agent seat adds `botId` on top. */
+const seat = (id: string, name: string): PanelSeat => ({
+    id, name, providerId: id.split(':')[0], modelId: id.split(':')[1],
+});
 
 describe('panelSeats', () => {
     it('dedupes models and caps at 5 seats', () => {
@@ -33,6 +41,37 @@ describe('panelSeats', () => {
         expect(panelSeats({} as ChatSession, labelFor)).toEqual([]);
     });
 
+    it('names an agent seat after the agent, keyed on the bot', () => {
+        const session = { panelModels: [
+            { providerId: 'gemini', modelId: 'llama-4', botId: 'b1' },
+        ] } as ChatSession;
+        expect(panelSeats(session, labelFor, (id) => (id === 'b1' ? 'Aria' : undefined))).toEqual([
+            { id: 'bot:b1', name: 'Aria', providerId: 'gemini', modelId: 'llama-4', botId: 'b1' },
+        ]);
+    });
+
+    it('keeps two agents that think with ONE model as two seats', () => {
+        // The reason an agent seat exists: an agent is not its model. Keying
+        // these on provider:model would silently delete a seated agent while
+        // the picker still showed it.
+        const session = { panelModels: [
+            { providerId: 'gemini', modelId: 'llama-4', botId: 'b1' },
+            { providerId: 'gemini', modelId: 'llama-4', botId: 'b2' },
+        ] } as ChatSession;
+        const seats = panelSeats(session, labelFor, id => ({ b1: 'Aria', b2: 'Bruno' })[id]);
+        expect(seats.map(s => s.name)).toEqual(['Aria', 'Bruno']);
+        expect(seats.map(s => s.id)).toEqual(['bot:b1', 'bot:b2']);
+    });
+
+    it('a deleted agent degrades to its model seat instead of naming a phantom', () => {
+        const session = { panelModels: [
+            { providerId: 'gemini', modelId: 'llama-4', botId: 'gone' },
+        ] } as ChatSession;
+        expect(panelSeats(session, labelFor, () => undefined)).toEqual([
+            { id: 'gemini:llama-4', name: 'LLAMA-4', providerId: 'gemini', modelId: 'llama-4' },
+        ]);
+    });
+
     it('lets the SAME model sit on two relays (dedupe is provider:model, not bare model)', () => {
         // Regression: deduping on modelId alone collapsed two providers offering
         // one model into a single seat, even though the ids differ.
@@ -47,9 +86,9 @@ describe('panelSeats', () => {
 
 describe('planPanelTurn', () => {
     const seats = [
-        { id: 'p:m1', name: 'M1' },
-        { id: 'p:m2', name: 'M2' },
-        { id: 'p:m3', name: 'M3' },
+        seat('p:m1', 'M1'),
+        seat('p:m2', 'M2'),
+        seat('p:m3', 'M3'),
     ];
 
     it('walks the round-robin in order', () => {
@@ -77,7 +116,7 @@ describe('planPanelTurn', () => {
     });
 
     it('a single-seat panel still completes', () => {
-        const one = [{ id: 'p:m1', name: 'M1' }];
+        const one = [seat('p:m1', 'M1')];
         expect(planPanelTurn(one, []).seat?.id).toBe('p:m1');
         // First turn is the opening (single seat — not a synthesis round).
         expect(planPanelTurn(one, []).isSynthesis).toBe(false);
@@ -102,8 +141,8 @@ describe('formatRoomTranscript', () => {
 
 describe('parsePanelMentions', () => {
     const seats = [
-        { id: 'a:m1', name: 'GPT' },
-        { id: 'a:m2', name: 'Claude Opus' },
+        seat('a:m1', 'GPT'),
+        seat('a:m2', 'Claude Opus'),
     ];
     it('routes known peers, skips self and strangers', () => {
         // Mentioning a peer FROM the other seat routes to the mentioned one;

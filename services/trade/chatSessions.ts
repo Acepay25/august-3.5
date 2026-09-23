@@ -53,7 +53,7 @@ export type SessionKind = 'solo' | 'panel' | 'group';
 type LegacySessionKind = SessionKind | 'coach';
 
 /** One panel seat: a specific model inside a specific provider. */
-export interface PanelSeatRef { providerId: string; modelId: string }
+export interface PanelSeatRef { providerId: string; modelId: string; botId?: string }
 
 export interface ChatSession {
     id: string;
