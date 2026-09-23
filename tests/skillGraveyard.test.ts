@@ -153,5 +153,9 @@ tradeIds: t2
         expect(reEntryRuleForReason('superseded')).toContain('successor');
         expect(reEntryRuleForReason('eval-hurts')).toContain('explicit human action');
         expect(reEntryRuleForReason('user-veto')).toContain('explicit human action');
+        // A merged twin must never come back: its wins/losses are already the
+        // survivor's, so reviving it would count one sample twice.
+        expect(reEntryRuleForReason('absorbed')).toContain('double-count');
+        expect(reEntryRuleForReason('absorbed')).not.toContain('auto-revive');
     });
 });

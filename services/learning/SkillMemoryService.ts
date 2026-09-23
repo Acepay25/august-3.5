@@ -2166,7 +2166,19 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
         // folder already exists for retired skills; merged dupes join them
         // (disabled, so they drop out of retrieval/evidence/dashboards).
         const archiveFolder = await ensureSkillsArchiveFolderUnlocked(username);
-        for (const extra of group.slice(1)) {
+        for (const [offset, extra] of group.slice(1).entries()) {
+            // Fold the evidence, then say WHERE it went. Without this line a
+            // merged twin's graveyard entry reads as "thrown away", and the
+            // next drafter re-derives the same trigger as a second skill —
+            // which is how one lesson ends up with two samples again.
+            const dupMeta = metas[offset + 1];
+            void recordTombstone(username, {
+                slug: extra.name.replace(/\.md$/i, ''),
+                reason: 'absorbed',
+                sampleN: (dupMeta?.wins ?? 0) + (dupMeta?.losses ?? 0),
+                liftPts: null,
+                absorbedInto: keep.name.replace(/\.md$/i, ''),
+            });
             if (archiveFolder) {
                 await updateMemoryFileUnlocked(extra.id, {
                     folderId: archiveFolder.id,
