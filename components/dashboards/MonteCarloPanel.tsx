@@ -64,7 +64,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                         >
                             {/* Provider Label */}
                             <div className="flex items-center justify-between mb-3">
-                                <span className={`text-[11px] font-semibold ${labeled.isModeratorFinal ? 'text-amber-400' : 'text-zinc-300'}`}>
+                                <span className={`text-ui-dense font-semibold ${labeled.isModeratorFinal ? 'text-amber-400' : 'text-zinc-300'}`}>
                                     {labeled.provider}
                                 </span>
                                 {labeled.isModeratorFinal && (
@@ -153,14 +153,14 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                     </div>
 
                     {/* Confidence Interval */}
-                    <div className="text-[11px] text-zinc-500 text-center">
+                    <div className="text-ui-dense text-zinc-500 text-center">
                         <span className="text-zinc-400">90% CI:</span> {monteCarloResult!.confidenceInterval.lower}% – {monteCarloResult!.confidenceInterval.upper}%
                     </div>
                 </div>
             ) : (
                 <div className="text-center py-4">
                     <div className="text-2xl mb-2 opacity-40"></div>
-                    <div className="text-[11px] text-zinc-500">Run analysis with trade setup to see results</div>
+                    <div className="text-ui-dense text-zinc-500">Run analysis with trade setup to see results</div>
                 </div>
             )}
         </SectionCard>

@@ -27,8 +27,8 @@ const ALL_TOOLS = DESK_TOOL_DEFINITIONS.map(d => d.function.name);
 const seatFor = (bots: HermesBot[], bot: AgentBot): HermesBot | undefined =>
     bots.find(b => b.providerId === bot.providerId && b.model === bot.modelId);
 
-const FIELD = 'w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[12px] leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30';
-const LABEL = 'mb-1 block text-[11px] font-semibold uppercase tracking-widest text-zinc-500';
+const FIELD = 'w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-sm leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30';
+const LABEL = 'mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500';
 
 const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; onClose: () => void }> = ({ open, bot, onClose }) => {
     const [seat, setSeat] = useState<HermesBot | null>(null);
@@ -78,7 +78,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <h2 className="text-lg font-semibold text-zinc-100">Debate overrides</h2>
-                        <p className="mt-1 text-[12px] leading-snug text-zinc-500">
+                        <p className="mt-1 text-ui-sm leading-snug text-zinc-500">
                             {bot.name} · {bot.providerId} / {bot.modelId} — how this bot behaves as an
                             analyst seat. Chats and rooms ignore these three fields.
                         </p>
@@ -89,10 +89,10 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                     </button>
                 </div>
 
-                {!loaded && <p className="mt-6 text-[12px] text-zinc-600">Loading…</p>}
+                {!loaded && <p className="mt-6 text-ui-sm text-zinc-600">Loading…</p>}
 
                 {loaded && !seat && (
-                    <p className="mt-6 rounded-lg border border-white/10 bg-zinc-900/60 p-3 text-[12px] leading-relaxed text-zinc-400">
+                    <p className="mt-6 rounded-lg border border-white/10 bg-zinc-900/60 p-3 text-ui-sm leading-relaxed text-zinc-400">
                         No debate seat runs {bot.providerId} / {bot.modelId}, so there is nothing to
                         override. Put this model on your Team first.
                     </p>
@@ -128,7 +128,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                                     );
                                 })}
                             </div>
-                            <p className="mt-1 text-[11px] leading-snug text-zinc-600">
+                            <p className="mt-1 text-ui-dense leading-snug text-zinc-600">
                                 {tools.length === 0
                                     ? 'Nothing picked keeps the role default — an empty allowlist does not revoke tools.'
                                     : `${tools.length} of ${ALL_TOOLS.length} available.`}
@@ -139,12 +139,12 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
 
                 <div className="mt-6 flex items-center justify-end gap-2">
                     <button type="button" onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200">
+                        className="rounded-lg px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200">
                         Cancel
                     </button>
                     <button type="button" onClick={() => void save()} disabled={!seat}
                         data-testid="save-seat-overrides"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-[13px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40">
+                        className="rounded-lg bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40">
                         Save
                     </button>
                 </div>

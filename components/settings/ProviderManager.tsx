@@ -96,7 +96,7 @@ const BoltIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) =
 // ─── Presentational Helpers ───────────────────────────────────────────────────
 
 const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">
+    <label className="block text-ui-dense font-medium text-zinc-400 mb-1.5">
         {children}
     </label>
 );
@@ -140,7 +140,7 @@ const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) =
     const cooldownMs = providerCooldownRemainingMs(providerId);
     if (!h || (h.requestCount === 0 && !h.lastError)) {
         return (
-            <p className="text-[11px] text-zinc-600">
+            <p className="text-ui-dense text-zinc-600">
                 No live telemetry this session yet — health appears after the first call through this provider.
             </p>
         );
@@ -162,7 +162,7 @@ const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) =
                     </StatusPill>
                 )}
             </div>
-            <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] tabular-nums text-zinc-400 sm:grid-cols-3">
+            <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-ui-dense tabular-nums text-zinc-400 sm:grid-cols-3">
                 <span>{h.requestCount} calls · {h.errorCount} errors</span>
                 <span>{h.rateLimitCount > 0 ? `${h.rateLimitCount} rate-limited` : 'no rate limits'}</span>
                 <span>{h.avgLatencyMs ? `avg ${h.avgLatencyMs}ms` : '—'}{h.lastLatencyMs ? ` · last ${h.lastLatencyMs}ms` : ''}</span>
@@ -596,7 +596,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             { title: 'Custom providers', items: configs.filter(c => !c.isBuiltIn) },
                         ] as const).filter(section => section.title === 'Custom providers' || section.items.length > 0).map(section => (
                             <div key={section.title}>
-                                <h5 className="mb-2 px-2 text-[13px] text-zinc-500">{section.title}</h5>
+                                <h5 className="mb-2 px-2 text-ui-caption text-zinc-500">{section.title}</h5>
                                 <div className="space-y-0.5">
                                     {section.items.map(c => {
                                         const isSelectedRow = selected?.id === c.id && !showAddProvider;
@@ -613,7 +613,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-zinc-700/80 bg-zinc-950">
                                                         <CubeIcon className="h-3.5 w-3.5 text-zinc-400" />
                                                     </span>
-                                                    <span className="truncate text-[13px] font-medium">{c.name}</span>
+                                                    <span className="truncate text-ui-caption font-medium">{c.name}</span>
                                                 </span>
                                                 <span className={` h-1.5 w-1.5 shrink-0 rounded-full ${isReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                             </button>
@@ -625,7 +625,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     </div>
                     <button
                         onClick={() => setShowAddProvider(true)}
-                        className="mt-3 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 py-2 text-[13px] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                        className="mt-3 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 py-2 text-ui-caption text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                     >
                         + Add provider
                     </button>
@@ -695,10 +695,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         </>
                                     )}
                                     <div className=" ml-1 flex items-center gap-1">
-                                        <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${selected.isEnabled ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
+                                        <span className={`rounded-md px-2 py-0.5 text-ui-dense font-semibold ${selected.isEnabled ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                                             {selected.isEnabled ? 'Enabled' : 'Disabled'}
                                         </span>
-                                        <button type="button" onClick={() => { void onToggleProvider(selected.id); }} className="rounded-md px-2 py-0.5 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
+                                        <button type="button" onClick={() => { void onToggleProvider(selected.id); }} className="rounded-md px-2 py-0.5 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
                                             {selected.isEnabled ? 'Disable' : 'Enable'}
                                         </button>
                                     </div>
@@ -772,7 +772,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         <option value="on">Always request thinking budget</option>
                                         <option value="off">Never request thinking</option>
                                     </select>
-                                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                                    <p className="mt-1 text-ui-dense leading-relaxed text-zinc-500">
                                         Auto-detect matches known Claude thinking models; force it on if your endpoint
                                         supports thinking on a model the detection misses, or off if the extra
                                         request field causes errors.
@@ -803,7 +803,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                         <button onClick={() => setEditingModelId(null)} aria-label="Cancel rename" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X className="h-3.5 w-3.5" /></button>
                                                     </div>
                                                 ) : (
-                                                    <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{m}</span>
+                                                    <span className="min-w-0 flex-1 truncate font-mono text-ui-caption">{m}</span>
                                                 )}
                                                 <div className="ml-4 flex shrink-0 items-center gap-2.5" onClick={e => e.stopPropagation()}>
                                                     <span className="font-mono text-ui-xs font-medium text-zinc-500">{badgeText}</span>
@@ -831,13 +831,13 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 </div>
                                             </div>
                                             {isTestingThis && (
-                                                <p className="px-3.5 text-[11px] text-zinc-500">Testing…</p>
+                                                <p className="px-3.5 text-ui-dense text-zinc-500">Testing…</p>
                                             )}
                                             {modelTest && !isTestingThis && modelTest.ok && (
-                                                <p className=" px-3.5 text-[11px] font-medium text-emerald-400">Connected!</p>
+                                                <p className=" px-3.5 text-ui-dense font-medium text-emerald-400">Connected!</p>
                                             )}
                                             {modelTest && !isTestingThis && !modelTest.ok && (
-                                                <p className=" px-3.5 text-[11px] leading-relaxed text-rose-400">{modelTest.message}</p>
+                                                <p className=" px-3.5 text-ui-dense leading-relaxed text-rose-400">{modelTest.message}</p>
                                             )}
                                             </div>
                                         );
@@ -850,7 +850,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         <button onClick={() => setShowAddModelInput(false)} className="rounded-xl px-3 text-xs text-zinc-500">Cancel</button>
                                     </div>
                                 ) : (
-                                    <button onClick={() => setShowAddModelInput(true)} className="mt-2 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 py-2 text-[13px] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
+                                    <button onClick={() => setShowAddModelInput(true)} className="mt-2 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 py-2 text-ui-caption text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
                                         + Add model
                                     </button>
                                 )}
@@ -888,7 +888,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     {testResult && (
                         <p className={`text-xs ${testResult.success ? 'text-zinc-300' : 'text-rose-300'}`}>{testResult.message}</p>
                     )}
-                    <details className="text-[11px] text-zinc-500">
+                    <details className="text-ui-dense text-zinc-500">
                         <summary className="cursor-pointer">Token pricing (optional)</summary>
                         <div className="mt-2 grid grid-cols-2 gap-3">
                             <input type="number" min="0" step="0.001" value={draftInputUsd} onChange={(e) => setDraftInputUsd(e.target.value)} placeholder="Input $/1k" className={inputBase} />

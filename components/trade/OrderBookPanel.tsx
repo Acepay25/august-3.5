@@ -102,7 +102,7 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
                 {bidsView.map(b => (
                     <Row key={`b${b.price}`} side="bid" price={b.price} qty={b.qty} maxQty={maxQty} wall={buyWalls.has(b.price)} />
                 ))}
-                {asksView.length === 0 && bidsView.length === 0 && <p className="px-2 py-3 text-[11px] text-zinc-600">Loading book…</p>}
+                {asksView.length === 0 && bidsView.length === 0 && <p className="px-2 py-3 text-ui-dense text-zinc-600">Loading book…</p>}
             </div>
         </div>
     );

@@ -415,7 +415,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                         <div className="flex flex-wrap items-baseline gap-x-2">
                             <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">Desk view</span>
                             {caption && (
-                                <span className="truncate text-[11px] font-medium text-zinc-200">{caption}</span>
+                                <span className="truncate text-ui-dense font-medium text-zinc-200">{caption}</span>
                             )}
                             {phase && (
                                 <span className="truncate text-ui-xs text-zinc-500">· {phase}</span>

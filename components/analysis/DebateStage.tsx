@@ -249,7 +249,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, phase
                         type="button"
                         onClick={submitSteer}
                         disabled={!steerDraft.trim()}
-                        className="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold text-zinc-300 enabled:bg-zinc-800 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
+                        className="shrink-0 rounded-md px-2 py-0.5 text-ui-dense font-semibold text-zinc-300 enabled:bg-zinc-800 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
                     >
                         Queue
                     </button>

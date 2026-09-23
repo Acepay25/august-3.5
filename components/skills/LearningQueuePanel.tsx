@@ -131,7 +131,7 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                 <span className="mt-0.5 shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-500">
                                     {KIND_LABEL[p.kind] ?? p.kind}
                                 </span>
-                                <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-zinc-300">{p.text}</p>
+                                <p className="min-w-0 flex-1 text-ui-dense leading-relaxed text-zinc-300">{p.text}</p>
                                 <StatusPill tone={auto ? 'info' : 'warn'} kicker
                                     data-testid="proposal-review-state"
                                     title={auto

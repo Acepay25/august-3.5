@@ -102,7 +102,7 @@ const AutomationRunCard: React.FC<{
                 )}
 
                 {run.userMessage?.text && (
-                    <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-2 mb-2" title={run.userMessage.text}>
+                    <p className="text-ui-dense text-zinc-500 leading-relaxed line-clamp-2 mb-2" title={run.userMessage.text}>
                         <span className="text-zinc-600 font-bold uppercase tracking-widest text-ui-2xs mr-1.5">Prompt</span>
                         {run.userMessage.text}
                     </p>
@@ -124,7 +124,7 @@ const AutomationRunCard: React.FC<{
                                     {Object.entries(run.message.thoughtProcesses).map(([key, text]) => (
                                         <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg">
                                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
-                                            <p className="text-[11px] text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
+                                            <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -139,7 +139,7 @@ const AutomationRunCard: React.FC<{
                                     {run.message.debateTurns.map((turn, i) => (
                                         <div key={i} className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg">
                                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-cyan-400/80 mb-1">{turn.speaker}{turn.round ? ` · Round ${turn.round}` : ''}</p>
-                                            <p className="text-[11px] text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">{turn.text}</p>
+                                            <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">{turn.text}</p>
                                         </div>
                                     ))}
                                 </div>

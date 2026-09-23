@@ -57,7 +57,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
                     <PinIcon className="h-4 w-4 text-zinc-300" />
                     <h2 className="text-sm font-semibold text-zinc-100">Pinned signals</h2>
-                    <span className="text-[11px] text-zinc-500">{openCount} open</span>
+                    <span className="text-ui-dense text-zinc-500">{openCount} open</span>
                     <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close pinned signals">
                         <CloseIcon className="h-4 w-4" />
                     </button>
@@ -68,7 +68,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                             key={id}
                             type="button"
                             onClick={() => setFilter(id)}
-                            className={`rounded-md px-2 py-1 text-[11px] capitalize ${filter === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            className={`rounded-md px-2 py-1 text-ui-dense capitalize ${filter === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
                         >
                             {id}
                         </button>
@@ -76,10 +76,10 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
                     {bookRisk && (
-                        <p className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] leading-relaxed text-zinc-400">{bookRisk}</p>
+                        <p className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-dense leading-relaxed text-zinc-400">{bookRisk}</p>
                     )}
                     {visible.length === 0 ? (
-                        <p className="px-2 py-8 text-center text-[13px] text-zinc-500">
+                        <p className="px-2 py-8 text-center text-ui-caption text-zinc-500">
                             {filter === 'open'
                                 ? 'Nothing pinned yet. Hover a settled verdict in Chart AI and tap Pin.'
                                 : 'Nothing in this filter.'}
@@ -97,16 +97,16 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                             <div key={signal.messageId} className=" rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                                 <div className="flex flex-wrap items-baseline gap-2">
                                     <span className="text-xs font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
-                                    <span className="text-[11px] font-medium text-zinc-300">{dir}</span>
+                                    <span className="text-ui-dense font-medium text-zinc-300">{dir}</span>
                                     <span className="text-ui-xs text-zinc-600">{signal.conversationTitle}</span>
                                     {!pending && (
                                         <span className="ml-auto text-ui-xs font-semibold uppercase tracking-widest text-zinc-400">{signal.outcome}</span>
                                     )}
                                     {pending && paper && (
-                                        <span className="ml-auto text-[11px] tabular-nums text-zinc-400">{paper.line}</span>
+                                        <span className="ml-auto text-ui-dense tabular-nums text-zinc-400">{paper.line}</span>
                                     )}
                                 </div>
-                                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] tabular-nums">
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-ui-dense tabular-nums">
                                     <div>
                                         <div className="text-ui-xs uppercase tracking-widest text-zinc-600">Entry</div>
                                         <div className="text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</div>
@@ -121,7 +121,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                     </div>
                                 </div>
                                 {resolution && pending && (
-                                    <p className="mt-2 text-[11px] text-cyan-300">Autopilot: {resolution.detail}</p>
+                                    <p className="mt-2 text-ui-dense text-cyan-300">Autopilot: {resolution.detail}</p>
                                 )}
                                 {signal.watchEpisodes && signal.watchEpisodes.length > 0 && (
                                     <ol className="mt-2 space-y-1 border-t border-white/5 pt-2">
@@ -136,17 +136,17 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                 <div className="mt-3 flex flex-wrap gap-1.5">
                                     {pending && !resolution && (
                                         <>
-                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.WIN, signal.conversationId)} className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">Win</button>
-                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.LOSS, signal.conversationId)} className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300">Loss</button>
+                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.WIN, signal.conversationId)} className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-ui-dense font-semibold text-emerald-300">Win</button>
+                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.LOSS, signal.conversationId)} className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-ui-dense font-semibold text-rose-300">Loss</button>
                                         </>
                                     )}
                                     {pending && resolution && onConfirmAutopilot && (
-                                        <button type="button" onClick={() => onConfirmAutopilot(signal.messageId, signal.conversationId)} className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-300">Confirm autopilot</button>
+                                        <button type="button" onClick={() => onConfirmAutopilot(signal.messageId, signal.conversationId)} className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-ui-dense font-semibold text-cyan-300">Confirm autopilot</button>
                                     )}
-                                    <button type="button" onClick={() => onOpenSignal(signal.conversationId, signal.messageId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-300 hover:text-zinc-100">
+                                    <button type="button" onClick={() => onOpenSignal(signal.conversationId, signal.messageId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-300 hover:text-zinc-100">
                                         {inThisChat ? 'Show in chat' : 'Open chat'}
                                     </button>
-                                    <button type="button" onClick={() => onToggleWatch(signal.messageId, signal.conversationId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300">
+                                    <button type="button" onClick={() => onToggleWatch(signal.messageId, signal.conversationId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-500 hover:text-zinc-300">
                                         Unpin
                                     </button>
                                 </div>

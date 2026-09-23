@@ -110,7 +110,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                 <div className="flex items-start justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-zinc-100">{editing ? 'Group Settings' : 'New Group Chat'}</h2>
-                        <p className="mt-1 text-[12px] leading-snug text-zinc-500">
+                        <p className="mt-1 text-ui-sm leading-snug text-zinc-500">
                             {editing
                                 ? 'Change who is in this room and what role each member plays. The transcript stays.'
                                 : 'One prompt goes to every member, one at a time, with a live activity feed. @name to direct, @everyone for all.'}
@@ -149,8 +149,8 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                         </span>
                                         <BotAvatar bot={bot} size={30} />
                                         <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-[13px] font-semibold text-zinc-100">{bot.name}</span>
-                                            {bot.title && <span className="block truncate text-[11px] text-zinc-500">{bot.title}</span>}
+                                            <span className="block truncate text-ui-caption font-semibold text-zinc-100">{bot.name}</span>
+                                            {bot.title && <span className="block truncate text-ui-dense text-zinc-500">{bot.title}</span>}
                                         </span>
                                     </button>
                                     {checked && (
@@ -162,7 +162,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                                 value={role}
                                                 onChange={v => setRole(bot.id, v as AnalystRole)}
                                                 options={MEMBER_ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
-                                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-[12px] hover:bg-zinc-800"
+                                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-sm hover:bg-zinc-800"
                                             />
                                         </div>
                                     )}
@@ -171,7 +171,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         );
                     })}
                     {bots.length === 0 && (
-                        <li className="px-2 py-3 text-[12px] text-zinc-500">
+                        <li className="px-2 py-3 text-ui-sm text-zinc-500">
                             Create a Bot first — groups are made of bots.
                         </li>
                     )}
@@ -181,7 +181,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-[13px] font-semibold text-zinc-400 hover:text-zinc-200"
+                        className="rounded-lg px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200"
                     >
                         Cancel
                     </button>
@@ -194,7 +194,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         }}
                         disabled={saveDisabled}
                         data-testid="create-group"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-[13px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-lg bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         {editing ? 'Save' : `Create Group${selected.size >= 2 ? ` (${selected.size})` : ''}`}
                     </button>

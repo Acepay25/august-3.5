@@ -1381,7 +1381,7 @@ const App: React.FC = () => {
      *  can drift. */
     const renderGroupSurface = useCallback((groupId: string): React.ReactNode => {
         const group = groups.find(g => g.id === groupId);
-        if (!group) return <p className="p-4 text-[11px] leading-5 text-zinc-500">This room was deleted.</p>;
+        if (!group) return <p className="p-4 text-ui-dense leading-5 text-zinc-500">This room was deleted.</p>;
         return (
             <React.Suspense fallback={null}>
                 <GroupChatView
@@ -3250,7 +3250,7 @@ const App: React.FC = () => {
                                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                     Running
                                 </span>
-                                <button type="button" onClick={() => setIsPipelineCollapsed(false)} className="text-[11px] text-zinc-400 transition-colors hover:text-zinc-100" title="Show pipeline steps">Show</button>
+                                <button type="button" onClick={() => setIsPipelineCollapsed(false)} className="text-ui-dense text-zinc-400 transition-colors hover:text-zinc-100" title="Show pipeline steps">Show</button>
                                 <button type="button" onClick={() => setIsPipelineDismissed(true)} className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200" title="Hide for this run" aria-label="Dismiss analysis progress">
                                     <CloseIcon className="h-3.5 w-3.5" />
                                 </button>
@@ -3260,7 +3260,7 @@ const App: React.FC = () => {
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
                                     <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>
-                                    <p className="mt-0.5 text-[11px] text-zinc-500">Pipeline</p>
+                                    <p className="mt-0.5 text-ui-dense text-zinc-500">Pipeline</p>
                                 </div>
                                 <span className="ml-auto flex shrink-0 items-center gap-1">
                                     <span className="flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-1 text-ui-xs font-medium text-cyan-300">

@@ -108,7 +108,7 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
                 </button>
                 {expanded && (
                   <div className="border-t border-white/5 px-3 py-2">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-ui-dense">
                       <span className="text-zinc-500">Entry</span><span className="font-mono text-zinc-200 text-right">{a.entryPoints?.[0]?.price || '—'}</span>
                       <span className="text-zinc-500">Stop loss</span><span className="font-mono text-zinc-200 text-right">{a.stopLoss || '—'}</span>
                       <span className="text-zinc-500">Take profit</span><span className="font-mono text-zinc-200 text-right">{a.takeProfit?.map(t => t.price).join(' / ') || '—'}</span>

@@ -114,7 +114,7 @@ export const SectionCard: React.FC<{
                 <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-semibold text-white/90 tracking-tight">{title}</h4>
                     {subtitle && (
-                        <p className="text-[11px] text-zinc-500 mt-0.5">{subtitle}</p>
+                        <p className="text-ui-dense text-zinc-500 mt-0.5">{subtitle}</p>
                     )}
                 </div>
                 {status && statusLabel && (

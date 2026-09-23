@@ -295,10 +295,10 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     )}
                 </div>
                 {framingLine && (
-                    <p className="text-[11px] text-zinc-300 mb-2">{framingLine}.</p>
+                    <p className="text-ui-dense text-zinc-300 mb-2">{framingLine}.</p>
                 )}
                 <div className="overflow-x-auto">
-                    <table className="w-full text-[11px]">
+                    <table className="w-full text-ui-dense">
                         <thead>
                             <tr className="text-zinc-500 uppercase tracking-wider text-ui-2xs">
                                 <th className="text-left py-1 font-bold">Verdict</th>
@@ -329,7 +329,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <div className="text-ui-xs text-zinc-400 font-bold mb-1">Plan adherence</div>
-                        <table className="w-full text-[11px]">
+                        <table className="w-full text-ui-dense">
                             <tbody className="font-mono">
                                 {[discipline.adherence.followed, discipline.adherence.broken].map(r => (
                                     <tr key={r.label} className="border-t border-white/5 text-zinc-300">
@@ -362,7 +362,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div>
                         <div className="text-ui-xs text-zinc-400 font-bold mb-1">Mistake cost (Σ PnL)</div>
                         {discipline.mistakeCost.length > 0 ? (
-                            <table className="w-full text-[11px]">
+                            <table className="w-full text-ui-dense">
                                 <tbody className="font-mono">
                                     {discipline.mistakeCost.slice(0, 4).map(r => (
                                         <tr key={r.tag} className="border-t border-white/5 text-zinc-300">
@@ -379,7 +379,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             <p className="text-ui-xs text-zinc-600">Tag mistakes when logging — the table builds itself.</p>
                         )}
                         <div className="text-ui-xs text-zinc-400 font-bold mt-2 mb-1">After the day's first red</div>
-                        <table className="w-full text-[11px]">
+                        <table className="w-full text-ui-dense">
                             <tbody className="font-mono">
                                 {[discipline.afterFirstRed.before, discipline.afterFirstRed.after].map(r => (
                                     <tr key={r.label} className="border-t border-white/5 text-zinc-300">

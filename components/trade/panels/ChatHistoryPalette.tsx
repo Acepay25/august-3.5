@@ -67,18 +67,18 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                 }}
                 placeholder="Search all conversations…"
                 aria-label="Search all conversations"
-                className="w-full border-b border-white/[0.06] bg-transparent px-4 py-3 text-[12px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+                className="w-full border-b border-white/[0.06] bg-transparent px-4 py-3 text-ui-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
             />
             <div className="max-h-72 overflow-y-auto custom-scrollbar px-1 pb-1">
                 <p className="px-3 py-1 text-ui-xs uppercase tracking-widest text-zinc-600">Recent</p>
-                {rows.length === 0 && <p className="px-3 py-2 text-[11px] text-zinc-600">No conversations match.</p>}
+                {rows.length === 0 && <p className="px-3 py-2 text-ui-dense text-zinc-600">No conversations match.</p>}
                 {rows.map((s, i) => (
                     <div key={s.id} className={`group flex items-center gap-2 rounded-lg px-3 py-2 ${i === sel ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
                         <button type="button"
                             onClick={() => onSelect(s.id)}
                             onMouseEnter={() => onSelChange(i)}
                             className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
-                            <span className={`truncate text-[12px] ${s.id === activeId ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>{s.kind === 'panel' ? '◆ ' : ''}{s.title}</span>
+                            <span className={`truncate text-ui-sm ${s.id === activeId ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>{s.kind === 'panel' ? '◆ ' : ''}{s.title}</span>
                             <span className="shrink-0 text-ui-xs text-zinc-600">{relTime(s.updatedAt)}</span>
                         </button>
                         {canDelete && (
@@ -91,7 +91,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                 ))}
                 {hidden > 0 && (
                     <button type="button" onClick={onShowAll}
-                        className="w-full px-3 py-2 text-left text-[11px] text-zinc-500 transition-colors hover:text-zinc-200">
+                        className="w-full px-3 py-2 text-left text-ui-dense text-zinc-500 transition-colors hover:text-zinc-200">
                         Show {hidden} more…
                     </button>
                 )}

@@ -103,7 +103,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
         rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
         components={{
           pre: ({ children }) => (
-            <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-[12px] font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
+            <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-ui-sm font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
               {children}
             </pre>
           ),
@@ -138,7 +138,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             <th className="whitespace-nowrap border-b border-white/15 bg-zinc-800/80 px-3 py-1.5 text-ui-xs font-semibold uppercase tracking-widest text-zinc-400 text-left">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-white/5 px-3 py-1.5 text-[13px] text-zinc-300 align-middle leading-snug">{children}</td>
+            <td className="border-b border-white/5 px-3 py-1.5 text-ui-caption text-zinc-300 align-middle leading-snug">{children}</td>
           ),
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-white/15 pl-3 text-zinc-400 italic">{children}</blockquote>

@@ -447,8 +447,8 @@ const PromptDiffView: React.FC<{ baseText: string; currentText: string }> = ({ b
     const rows = useMemo(() => diffLines(baseText, currentText), [baseText, currentText]);
     const changed = rows.filter(r => r.op !== 'same').length;
     return (
-        <div className="flex-1 overflow-y-auto custom-scrollbar text-[12px] font-mono leading-5">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2 text-[11px] font-sans">
+        <div className="flex-1 overflow-y-auto custom-scrollbar text-ui-sm font-mono leading-5">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2 text-ui-dense font-sans">
                 <span className="text-zinc-500">Built-in default ← → your version</span>
                 <span className={changed > 0 ? 'text-amber-400' : 'text-zinc-500'}>
                     {changed > 0 ? `${changed} changed line${changed === 1 ? '' : 's'}` : 'identical'}

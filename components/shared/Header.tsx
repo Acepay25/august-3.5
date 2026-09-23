@@ -205,7 +205,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                         aria-controls="mobile-navigation-menu"
                     >
                         <HamburgerIcon className="h-5 w-5" />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider">{surfaceLabel(surface)}</span>
+                        <span className="text-ui-dense font-semibold uppercase tracking-wider">{surfaceLabel(surface)}</span>
                     </button>
 
                     <div className="flex flex-col justify-center">
@@ -342,7 +342,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 <button
                                     type="button"
                                     onClick={onOpenJobs}
-                                    className="inline-flex items-center rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                    className="inline-flex items-center rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
                                     title="Background jobs — evals & learning passes"
                                     aria-label="Background jobs"
                                 >
@@ -353,7 +353,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 <button
                                     type="button"
                                     onClick={onOpenWatchList}
-                                    className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                    className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
                                     title={watchOpenR ? `Pinned · ${watchOpenR}` : 'Pinned signals'}
                                     aria-label={`Pinned signals, ${watchOpenCount} open`}
                                 >
@@ -379,7 +379,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                             aria-label="Command palette"
                         >
                             <SearchIcon className="h-3.5 w-3.5 text-zinc-500" />
-                            <span className="text-[11px]">Search</span>
+                            <span className="text-ui-dense">Search</span>
                             <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.2 font-mono text-ui-2xs text-zinc-400">⌘K</kbd>
                         </button>
                     )}

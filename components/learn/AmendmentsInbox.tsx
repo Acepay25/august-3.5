@@ -67,19 +67,19 @@ export const AmendmentsInbox: React.FC = () => {
     return (
         <div className="space-y-2" data-testid="amendments-inbox">
             {amendments.length === 0 && (
-                <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-[12px] text-zinc-600">
+                <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
                     No amendment proposals. Models can propose corrections to your notebook via <code className="text-zinc-400">amend_memory</code>.
                 </p>
             )}
             {pending.map(a => (
                 <div key={a.id} className="rounded-lg border border-amber-900/40 bg-zinc-900/40 p-3" data-testid={`amendment-${a.id}`}>
                     <div className="flex items-center gap-2">
-                        <code className="text-[12px] font-semibold text-zinc-200">{a.fileName}</code>
+                        <code className="text-ui-sm font-semibold text-zinc-200">{a.fileName}</code>
                         <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-400">{a.kind}</span>
                         <StatusBadge a={a} />
                         <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{a.proposedBy} · {new Date(a.createdAt).toLocaleString()}</span>
                     </div>
-                    <p className="mt-1.5 text-[11px] leading-snug text-zinc-400"><span className="text-zinc-600">Reason:</span> {a.reason}</p>
+                    <p className="mt-1.5 text-ui-dense leading-snug text-zinc-400"><span className="text-zinc-600">Reason:</span> {a.reason}</p>
                     <pre className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-zinc-950/60 p-2 text-ui-xs leading-4 text-zinc-300 custom-scrollbar">{a.proposedContent}</pre>
                     <div className="mt-2 flex items-center gap-2">
                         <button
@@ -87,7 +87,7 @@ export const AmendmentsInbox: React.FC = () => {
                             disabled={busyId === a.id}
                             onClick={() => { void resolve(a, true); }}
                             data-testid={`approve-amendment-${a.id}`}
-                            className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[11px] font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
+                            className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
                         >
                             <Check className="h-3 w-3" /> {a.kind === 'supersede' ? 'Append correction' : 'Apply replacement'}
                         </button>
@@ -95,7 +95,7 @@ export const AmendmentsInbox: React.FC = () => {
                             type="button"
                             disabled={busyId === a.id}
                             onClick={() => { void resolve(a, false); }}
-                            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+                            className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
                         >
                             <X className="h-3 w-3" /> Reject
                         </button>
@@ -104,10 +104,10 @@ export const AmendmentsInbox: React.FC = () => {
             ))}
             {resolved.length > 0 && (
                 <details className="rounded-lg border border-white/5 bg-zinc-900/30 px-3 py-2">
-                    <summary className="cursor-pointer text-[11px] text-zinc-500">{resolved.length} resolved</summary>
+                    <summary className="cursor-pointer text-ui-dense text-zinc-500">{resolved.length} resolved</summary>
                     <div className="mt-2 space-y-1.5">
                         {resolved.map(a => (
-                            <div key={a.id} className="flex items-center gap-2 text-[11px] text-zinc-500">
+                            <div key={a.id} className="flex items-center gap-2 text-ui-dense text-zinc-500">
                                 <StatusBadge a={a} />
                                 <code className="text-zinc-400">{a.fileName}</code>
                                 <span className="truncate text-zinc-600">{a.reason}</span>

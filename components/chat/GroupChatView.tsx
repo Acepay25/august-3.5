@@ -180,7 +180,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         <span className={`inline-block h-1.5 w-1.5 rounded-full ${hybridEnabled ? 'bg-zinc-200' : 'bg-zinc-600'}`} />
                     </button>
                 )}
-                <span className="shrink-0 text-[11px] text-zinc-500">{members.length} bots</span>
+                <span className="shrink-0 text-ui-dense text-zinc-500">{members.length} bots</span>
                 {onEditGroup && (
                     <button
                         type="button"
@@ -217,9 +217,9 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                     className="flex w-full items-center gap-2 py-1 text-left"
                 >
                     <ChevronDown className={`h-3 w-3 text-zinc-500 transition-transform ${activityOpen ? '' : '-rotate-90'}`} />
-                    <span className="text-[11px] font-semibold text-zinc-400">Activity</span>
+                    <span className="text-ui-dense font-semibold text-zinc-400">Activity</span>
                     {isRunning && workingBotId && (
-                        <span className="text-[11px] text-zinc-500">
+                        <span className="text-ui-dense text-zinc-500">
                             {members.find(m => m.id === workingBotId)?.name} is working…
                         </span>
                     )}
@@ -227,14 +227,14 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                 {activityOpen && (
                     <ul className="max-h-32 space-y-0.5 overflow-y-auto pb-1">
                         {activity.length === 0 ? (
-                            <li className="py-1 text-[11px] text-zinc-600">
+                            <li className="py-1 text-ui-dense text-zinc-600">
                                 Quiet room — send the first prompt below.
                             </li>
                         ) : (
                             [...activity].reverse().map(entry => {
                                 const bot = memberByName(entry.botName);
                                 return (
-                                    <li key={entry.id} className="flex items-center gap-2 py-0.5 text-[11px]">
+                                    <li key={entry.id} className="flex items-center gap-2 py-0.5 text-ui-dense">
                                         <span
                                             className={`w-3 shrink-0 text-center ${
                                                 entry.kind === 'replied' ? 'text-emerald-400' : entry.kind === 'passed' ? 'text-zinc-500' : 'text-zinc-400'
@@ -278,7 +278,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         <h1 className="mb-2 text-center font-serif text-[26px] tracking-tight text-zinc-100 sm:text-[32px]">
                             Start a new thread
                         </h1>
-                        <p className="mb-8 max-w-md text-center text-[12px] leading-relaxed text-zinc-500">
+                        <p className="mb-8 max-w-md text-center text-ui-sm leading-relaxed text-zinc-500">
                             One prompt opens the floor. @name to direct one member, @everyone for all.
                         </p>
                         <div className="mb-8 flex max-w-xl flex-wrap justify-center gap-2" data-testid="group-members-strip">
@@ -290,7 +290,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                 >
                                     <BotAvatar bot={m} size={28} />
                                     <span className="min-w-0">
-                                        <span className="block truncate text-[12px] font-semibold text-zinc-200">{m.name}</span>
+                                        <span className="block truncate text-ui-sm font-semibold text-zinc-200">{m.name}</span>
                                         <span className="block truncate text-ui-xs text-zinc-500">
                                             {m.title || formatModelDisplayName(m.modelId)}
                                         </span>
@@ -308,7 +308,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                         setInput(starter);
                                         document.getElementById('group-room-composer')?.focus();
                                     }}
-                                    className="rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-[11px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-100"
+                                    className="rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-dense text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-100"
                                 >
                                     {starter}
                                 </button>
@@ -324,17 +324,17 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                     {/* You — reference pattern: full-width card
                                         with a "You · time" header, left-aligned. */}
                                     <div className="relative rounded-xl border border-white/[0.06] bg-zinc-900/60 px-4 py-3">
-                                        <p className="mb-1 text-[12px]">
+                                        <p className="mb-1 text-ui-sm">
                                             <span className="font-bold text-zinc-100">You</span>
                                             <span className="ml-2 text-zinc-500">{relTime(thread.prompt.createdAt)}</span>
                                         </p>
-                                        <div className="text-[13px] text-zinc-100 whitespace-pre-wrap break-words">{thread.prompt.text}</div>
+                                        <div className="text-ui-caption text-zinc-100 whitespace-pre-wrap break-words">{thread.prompt.text}</div>
                                         {onReplyInThread && (
                                             <button
                                                 type="button"
                                                 onClick={() => setOpenReplyId(id => (id === thread.prompt.id ? null : thread.prompt.id))}
                                                 data-testid={`reply-link-${thread.prompt.id}`}
-                                                className="mt-1.5 block text-[11px] text-zinc-500 transition-colors hover:text-zinc-200"
+                                                className="mt-1.5 block text-ui-dense text-zinc-500 transition-colors hover:text-zinc-200"
                                             >
                                                 Reply in thread
                                             </button>
@@ -353,13 +353,13 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                             <div key={reply.id} className="group relative flex items-start gap-2.5">
                                                 <BotAvatar bot={bot} size={28} working={reply.isStreaming} />
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-[12px] font-semibold text-zinc-300">
+                                                    <p className="text-ui-sm font-semibold text-zinc-300">
                                                         {bot.name}
                                                         <span className="ml-2 font-normal text-zinc-600">{relTime(reply.createdAt)}</span>
                                                     </p>
                                                     <MarkdownContent
                                                         content={reply.text}
-                                                        className="text-[13px] leading-relaxed text-zinc-200 [&_strong]:text-zinc-50"
+                                                        className="text-ui-caption leading-relaxed text-zinc-200 [&_strong]:text-zinc-50"
                                                     />
                                                     {reply.isStreaming && <span className="ml-1 animate-pulse text-zinc-500">▍</span>}
                                                 </div>
@@ -381,7 +381,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                     {isLast && isRunning && (
                                         <div className="flex items-center gap-3">
                                             {workingBotId && (
-                                                <p className="pl-1 text-[12px] italic text-zinc-500" data-testid="group-thinking">
+                                                <p className="pl-1 text-ui-sm italic text-zinc-500" data-testid="group-thinking">
                                                     {members.find(m => m.id === workingBotId)?.name} is thinking…
                                                 </p>
                                             )}
@@ -390,7 +390,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                                     type="button"
                                                     onClick={onCancelRun}
                                                     data-testid="group-cancel"
-                                                    className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+                                                    className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-100"
                                                 >
                                                     <Square className="h-3 w-3" />
                                                     Stop
@@ -408,14 +408,14 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(thread.prompt.id); } }}
                                                 placeholder={`Reply in thread… (@name to direct)`}
                                                 aria-label="Reply in thread"
-                                                className="min-w-0 flex-1 bg-transparent text-[13px] text-zinc-100 placeholder-zinc-600 outline-none"
+                                                className="min-w-0 flex-1 bg-transparent text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => sendReply(thread.prompt.id)}
                                                 disabled={!(replyDrafts[thread.prompt.id] ?? '').trim() || isRunning}
                                                 data-testid={`reply-send-${thread.prompt.id}`}
-                                                className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                                                className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-ui-sm font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                                             >
                                                 Reply
                                             </button>
@@ -450,7 +450,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                             type="button"
                             onClick={onCancelRun}
                             data-testid="composer-cancel"
-                            className="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-[12px] font-bold text-zinc-200 hover:border-zinc-400 hover:bg-zinc-800"
+                            className="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-ui-sm font-bold text-zinc-200 hover:border-zinc-400 hover:bg-zinc-800"
                         >
                             Stop
                         </button>
@@ -460,7 +460,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                             onClick={send}
                             disabled={!input.trim()}
                             data-testid="new-thread-button"
-                            className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-[12px] font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                            className="shrink-0 rounded-lg bg-zinc-200 px-3 py-1.5 text-ui-sm font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             New Thread
                         </button>

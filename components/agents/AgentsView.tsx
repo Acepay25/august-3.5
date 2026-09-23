@@ -169,7 +169,7 @@ const Row: React.FC<{
                     </span>
                     <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1">
-                            <span className="truncate text-[12px] font-semibold text-zinc-200">{title}</span>
+                            <span className="truncate text-ui-sm font-semibold text-zinc-200">{title}</span>
                             {attention && (
                                 <span title={attention} data-testid="row-attention"
                                     className="shrink-0 text-ui-2xs font-bold text-amber-400">⚠</span>
@@ -181,7 +181,7 @@ const Row: React.FC<{
                                 </span>
                             )}
                         </span>
-                        <span className="block truncate text-[11px] text-zinc-500">{preview || 'No messages yet'}</span>
+                        <span className="block truncate text-ui-dense text-zinc-500">{preview || 'No messages yet'}</span>
                     </span>
                 </button>
                 <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
@@ -230,7 +230,7 @@ const Row: React.FC<{
 const VerdictLine: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex items-baseline justify-between gap-3">
         <span className="text-ui-xs uppercase tracking-wider text-zinc-600">{label}</span>
-        <span className="font-mono text-[11px] tabular-nums text-zinc-200">{value}</span>
+        <span className="font-mono text-ui-dense tabular-nums text-zinc-200">{value}</span>
     </div>
 );
 
@@ -496,7 +496,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         }}>
                         <input value={renameDraft} onChange={e => setRenameDraft(e.target.value)}
                             aria-label={`Rename ${r.bot.name}`} data-testid="bot-rename-input" autoFocus
-                            className="min-w-0 flex-1 rounded-control border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-zinc-600" />
+                            className="min-w-0 flex-1 rounded-control border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-ui-dense text-zinc-200 outline-none focus:border-zinc-600" />
                         <button type="submit"
                             className="shrink-0 rounded-control border border-zinc-700 px-1.5 py-0.5 text-ui-xs text-zinc-300 hover:bg-zinc-800">
                             Save
@@ -561,14 +561,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 data-testid="agents-rail">
                 <div className="flex shrink-0 items-center gap-1.5 p-2">
                     <button type="button" onClick={onNewBot} data-testid="rail-new"
-                        className="flex items-center gap-1 rounded-control border border-zinc-700 px-2 py-1 text-[11px] font-semibold text-zinc-200 transition-colors hover:bg-zinc-800">
+                        className="flex items-center gap-1 rounded-control border border-zinc-700 px-2 py-1 text-ui-dense font-semibold text-zinc-200 transition-colors hover:bg-zinc-800">
                         <Plus className="h-3 w-3" /> New
                     </button>
                     <div className="relative ml-auto min-w-0 flex-1">
                         <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-600" />
                         <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search"
                             aria-label="Search conversations" data-testid="rail-search"
-                            className="w-full rounded-control border border-zinc-800 bg-zinc-950 py-1 pl-7 pr-2 text-[11px] text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-zinc-600" />
+                            className="w-full rounded-control border border-zinc-800 bg-zinc-950 py-1 pl-7 pr-2 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-zinc-600" />
                     </div>
                     <button type="button" onClick={() => setCollapsed(true)} data-testid="rail-collapse"
                         aria-label="Collapse conversations" title="Collapse the conversation rail"
@@ -635,7 +635,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             )}
                         </div>
                         {listedBots.length === 0 && listedGroups.length === 0 && (
-                            <p className="px-1 py-3 text-[11px] leading-5 text-zinc-600">
+                            <p className="px-1 py-3 text-ui-dense leading-5 text-zinc-600">
                                 No agents yet. Create one and it appears here with its own thread.
                             </p>
                         )}
@@ -672,7 +672,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 font-mono text-ui-xs uppercase text-zinc-300">
                         {username.slice(0, 1) || '·'}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{username}</span>
+                    <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-300">{username}</span>
                     <span data-testid="desk-status" title={providerReady ? 'A provider is configured — the desk can think' : 'No provider ready — configure one in Settings'}
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${providerReady ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
                 </div>
@@ -697,7 +697,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     <PanelLeftOpen className="h-3.5 w-3.5" />
                                 </button>
                             )}
-                            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-zinc-200">
+                            <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">
                                 {activeBot ? `@${activeBot.name}` : 'Chart AI'}
                             </span>
                             {/* WS-3.4: what this bot has actually learned, where
@@ -734,7 +734,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">
                                     <Sparkles className="mb-3 h-7 w-7 text-zinc-500" />
                                     <h2 className="font-serif text-2xl text-zinc-100">{greeting(username || 'trader')}</h2>
-                                    <p className="mt-1 max-w-sm text-[12px] leading-5 text-zinc-500">
+                                    <p className="mt-1 max-w-sm text-ui-sm leading-5 text-zinc-500">
                                         {activeBot
                                             ? botIsolated
                                                 ? `@${activeBot.name} thinks from its own notes only — it is isolated from the shared notebook.`
@@ -753,7 +753,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                 {m.role === MessageRole.USER ? username : activeBot?.name ?? 'desk'}
                                                 {' · '}{relTime(m.createdAt)}
                                             </span>
-                                            <div className={`max-w-[85%] rounded-bubble px-3 py-2 text-[13px] leading-5 ${
+                                            <div className={`max-w-[85%] rounded-bubble px-3 py-2 text-ui-caption leading-5 ${
                                                 m.role === MessageRole.USER
                                                     ? 'bg-zinc-800 text-zinc-100'
                                                     : 'border border-zinc-800/80 bg-zinc-900 text-zinc-200'
@@ -795,7 +795,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
                                     }}
                                     rows={2} placeholder={placeholder} aria-label="Message"
-                                    className="w-full resize-none bg-transparent px-1.5 py-1 text-[13px] leading-5 text-zinc-100 outline-none placeholder:text-zinc-600" />
+                                    className="w-full resize-none bg-transparent px-1.5 py-1 text-ui-caption leading-5 text-zinc-100 outline-none placeholder:text-zinc-600" />
                                 <div className="mt-1 flex items-center gap-2 px-1">
                                     <button type="button" onClick={openPicker} data-testid="composer-attach"
                                         aria-label="Attach image" disabled={mode !== 'analyze'}

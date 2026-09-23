@@ -75,7 +75,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <h3
         className={[
           'font-semibold text-zinc-300',
-          compact ? 'text-[13px] mb-1' : 'text-sm mb-1.5',
+          compact ? 'text-ui-caption mb-1' : 'text-sm mb-1.5',
         ].join(' ')}
       >
         {title}
@@ -84,7 +84,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         <p
           className={[
             'text-zinc-600 leading-relaxed',
-            compact ? 'text-[11px] max-w-[28ch]' : 'text-xs max-w-xs',
+            compact ? 'text-ui-dense max-w-[28ch]' : 'text-xs max-w-xs',
           ].join(' ')}
         >
           {description}

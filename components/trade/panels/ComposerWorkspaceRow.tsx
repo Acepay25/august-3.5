@@ -32,7 +32,7 @@ const ComposerWorkspaceRow: React.FC<ComposerWorkspaceRowProps> = ({
     symbol, interval, isPanel, panelCount, pickerOpen, onTogglePicker, botName, contextAt,
 }) => (
     <div className="flex shrink-0 items-center gap-2 px-1 pb-2 pt-1">
-        <span className="truncate text-[12px] font-semibold text-zinc-200">{symbolDisplay(symbol)}</span>
+        <span className="truncate text-ui-sm font-semibold text-zinc-200">{symbolDisplay(symbol)}</span>
         {isPanel && (
             <button type="button" onClick={onTogglePicker}
                 aria-expanded={pickerOpen} title="Add / remove panel models (up to 5)"

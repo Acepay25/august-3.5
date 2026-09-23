@@ -24,8 +24,8 @@ interface MemoryHealthCardProps {
 
 const Row: React.FC<{ label: string; value: React.ReactNode; title?: string }> = ({ label, value, title }) => (
     <div className="flex items-baseline justify-between gap-3 py-1" title={title}>
-        <span className="min-w-0 truncate text-[11px] text-zinc-500">{label}</span>
-        <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-200">{value}</span>
+        <span className="min-w-0 truncate text-ui-dense text-zinc-500">{label}</span>
+        <span className="shrink-0 font-mono text-ui-dense tabular-nums text-zinc-200">{value}</span>
     </div>
 );
 
@@ -64,7 +64,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
 
     if (!report) {
         return (
-            <div className="flex items-center gap-2 p-4 text-[11px] text-zinc-500">
+            <div className="flex items-center gap-2 p-4 text-ui-dense text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading memory…
             </div>
         );
@@ -76,7 +76,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
         <div className="overflow-hidden rounded-control border border-zinc-800/80 bg-zinc-900" data-testid="memory-health-card">
             <div className="flex items-center gap-2 px-3 py-2">
                 <Activity className="h-3.5 w-3.5 text-cyan-300" />
-                <span className="text-[12px] font-semibold text-zinc-100">Memory health</span>
+                <span className="text-ui-sm font-semibold text-zinc-100">Memory health</span>
                 {report.notebook.writeFailure
                     ? <StatusPill tone="down" kicker className="ml-auto">not saving</StatusPill>
                     : report.flags.length === 0
@@ -87,7 +87,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
             {report.flags.length > 0 && (
                 <ul className="space-y-1 border-t border-zinc-800/80 px-3 py-2">
                     {report.flags.map(f => (
-                        <li key={f} className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-300/90">
+                        <li key={f} className="flex items-start gap-1.5 text-ui-dense leading-4 text-amber-300/90">
                             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                             <span>{f}</span>
                         </li>
@@ -192,7 +192,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
 
             <Section title={`Graveyard (${tombstones.length})`}>
                 {tombstones.length === 0 ? (
-                    <p className="py-1 text-[11px] text-zinc-600">Nothing has been retired and recorded.</p>
+                    <p className="py-1 text-ui-dense text-zinc-600">Nothing has been retired and recorded.</p>
                 ) : (
                     <>
                         <p className="mb-1 text-ui-xs leading-4 text-zinc-600">
@@ -219,7 +219,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
 
             <Section title="Hygiene">
                 <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1 text-[11px] leading-4 text-zinc-500">
+                    <p className="min-w-0 flex-1 text-ui-dense leading-4 text-zinc-500">
                         {report.hygiene[0]?.text ?? 'No maintenance pass has run yet.'}
                     </p>
                     <button type="button" onClick={() => void runNow()} disabled={running}

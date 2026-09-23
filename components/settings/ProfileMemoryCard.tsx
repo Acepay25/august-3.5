@@ -45,8 +45,8 @@ const ProfileMemoryCard: React.FC = () => {
 
     return (
         <div className="px-4 pb-4" data-testid="profile-memory-card">
-            <h3 className="text-[13px] font-bold text-zinc-100">Assistant memory</h3>
-            <p className="mt-0.5 mb-3 text-[11px] text-zinc-500">
+            <h3 className="text-ui-caption font-bold text-zinc-100">Assistant memory</h3>
+            <p className="mt-0.5 mb-3 text-ui-dense text-zinc-500">
                 What Chart AI remembers about <em>you</em> — preferences, corrections, ongoing context. The
                 model saves these with <span className="font-mono text-zinc-400">remember</span> and they
                 ride every prompt as a one-line index. Delete anything that's wrong or stale.
@@ -54,7 +54,7 @@ const ProfileMemoryCard: React.FC = () => {
             <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5" data-testid="trader-learning-toggle">
                 <input type="checkbox" checked={learning} onChange={e => { setTraderLearningEnabled(e.target.checked); setLearning(e.target.checked); }}
                     className="h-3.5 w-3.5 accent-cyan-400" />
-                <span className="text-[11px] text-zinc-300">
+                <span className="text-ui-dense text-zinc-300">
                     Learn my trading habits automatically
                     <span className="block text-ui-xs text-zinc-500">
                         Every couple of sessions, Chart AI distills durable facts — preferred symbols, risk habits,
@@ -63,7 +63,7 @@ const ProfileMemoryCard: React.FC = () => {
                 </span>
             </label>
             {entries.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-zinc-800 px-3 py-4 text-center text-[11px] text-zinc-600">
+                <p className="rounded-lg border border-dashed border-zinc-800 px-3 py-4 text-center text-ui-dense text-zinc-600">
                     No memories yet — the assistant saves one when it learns something durable about you.
                 </p>
             ) : (
@@ -85,8 +85,8 @@ const ProfileMemoryCard: React.FC = () => {
                                     </StatusPill>
                                 )}
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-[11px] font-semibold leading-snug text-zinc-200">{e.description}</p>
-                                    <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-400">{e.body}</p>
+                                    <p className="text-ui-dense font-semibold leading-snug text-zinc-200">{e.description}</p>
+                                    <p className="mt-1 whitespace-pre-wrap text-ui-dense leading-relaxed text-zinc-400">{e.body}</p>
                                     <p className="mt-1 font-mono text-ui-2xs text-zinc-600">{e.slug} · {new Date(e.updatedAt).toLocaleDateString()}</p>
                                 </div>
                                 <button type="button" onClick={() => { forgetProfileMemory(e.slug); refresh(); }}

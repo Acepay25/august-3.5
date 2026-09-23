@@ -16,7 +16,7 @@ interface CompareModalProps {
 }
 
 const StatRow: React.FC<{ label: string; a: React.ReactNode; b: React.ReactNode }> = ({ label, a, b }) => (
-  <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-white/5 py-1.5 text-[11px]">
+  <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-white/5 py-1.5 text-ui-dense">
     <span className="text-zinc-500 uppercase tracking-wider text-ui-2xs self-center">{label}</span>
     <span className="font-mono text-zinc-200 text-right">{a}</span>
     <span className="font-mono text-zinc-200 text-right">{b}</span>
@@ -111,7 +111,7 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
                       key={m.id}
                       type="button"
                       onClick={() => onPickSecondary(m.id)}
-                      className="flex w-full items-center justify-between rounded-lg border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
+                      className="flex w-full items-center justify-between rounded-lg border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
                     >
                       <span className="truncate">{m.analysis?.direction} {m.analysis?.coinName || ''} · {m.analysis?.confidence}</span>
                       <span className="shrink-0 text-ui-2xs text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>

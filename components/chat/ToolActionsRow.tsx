@@ -129,7 +129,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                         className="group/tool-line"
                     >
                         <summary
-                            className={`flex cursor-pointer list-none items-center gap-2 text-[11px] [&::-webkit-details-marker]:hidden ${g.ok ? 'text-zinc-400' : 'text-rose-300'}`}
+                            className={`flex cursor-pointer list-none items-center gap-2 text-ui-dense [&::-webkit-details-marker]:hidden ${g.ok ? 'text-zinc-400' : 'text-rose-300'}`}
                             title={g.ok
                                 ? `${who ? `${who} — ` : ''}${n} item${n === 1 ? '' : 's'} awaiting human review`
                                 : `${g.tool} was rejected by the harness — nothing was stored.`}

@@ -39,12 +39,12 @@ export const ToolForgeManager: React.FC = () => {
 
     return (
         <div className="space-y-2">
-            <p className="text-[11px] leading-snug text-zinc-500">
+            <p className="text-ui-dense leading-snug text-zinc-500">
                 Tools proposed by the models during debates (via <code className="text-zinc-400">forge_tool</code>).
                 A candidate is an inert HTTP recipe — it cannot run until you approve it.
             </p>
             {tools.length === 0 && (
-                <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-[12px] text-zinc-600">
+                <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
                     No forged tools yet. Models propose one by calling <code className="text-zinc-400">forge_tool</code> when the desk lacks a lookup they need.
                 </p>
             )}
@@ -57,7 +57,7 @@ export const ToolForgeManager: React.FC = () => {
                         data-testid={`forged-tool-${tool.id}`}
                     >
                         <div className="flex items-center gap-2">
-                            <code className="text-[12px] font-semibold text-zinc-200">{tool.id}</code>
+                            <code className="text-ui-sm font-semibold text-zinc-200">{tool.id}</code>
                             <StatusBadge tool={tool} />
                             {tool.status === 'confirmed' && (
                                 <span className="ml-auto shrink-0 text-ui-xs text-zinc-500">
@@ -65,7 +65,7 @@ export const ToolForgeManager: React.FC = () => {
                                 </span>
                             )}
                         </div>
-                        <p className="mt-1 text-[11px] leading-snug text-zinc-400">{tool.proposal.description}</p>
+                        <p className="mt-1 text-ui-dense leading-snug text-zinc-400">{tool.proposal.description}</p>
                         <p className="mt-1 truncate text-ui-xs text-zinc-600">
                             {tool.proposal.method ?? 'GET'} {tool.proposal.urlTemplate}
                             {tool.proposal.extractPath ? ` → ${tool.proposal.extractPath}` : ''}
@@ -76,7 +76,7 @@ export const ToolForgeManager: React.FC = () => {
                                     type="button"
                                     onClick={() => act(() => approveForgedTool(tool.id))}
                                     data-testid={`approve-forged-${tool.id}`}
-                                    className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[11px] font-semibold text-zinc-200 hover:bg-zinc-800"
+                                    className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800"
                                 >
                                     <Check className="h-3 w-3" /> Approve network access
                                 </button>
@@ -85,7 +85,7 @@ export const ToolForgeManager: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => act(() => retireForgedTool(tool.id))}
-                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                                 >
                                     <Ban className="h-3 w-3" /> Retire
                                 </button>

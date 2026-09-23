@@ -189,7 +189,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setShowFullTrace(prev => !prev)}
-                                className="mt-1 text-[11px] font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-100"
+                                className="mt-1 text-ui-dense font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-100"
                             >
                                 {showFullTrace ? 'Show less' : 'Show more'}
                             </button>

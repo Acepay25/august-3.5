@@ -86,7 +86,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                 aria-expanded={open}
                 data-testid="symbol-picker-trigger"
                 onClick={toggle}
-                className="flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-[13px] font-bold text-zinc-100 transition-colors hover:border-white/20 focus:outline-none"
+                className="flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-caption font-bold text-zinc-100 transition-colors hover:border-white/20 focus:outline-none"
             >
                 {display(value)}
                 {valueMeta && valueMeta.changePercent24h !== 0 && (
@@ -118,12 +118,12 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                                 }}
                                 placeholder="Search symbol…"
                                 aria-label="Search symbols"
-                                className="min-w-0 flex-1 bg-transparent text-[13px] text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                                className="min-w-0 flex-1 bg-transparent text-ui-caption text-zinc-100 placeholder-zinc-500 focus:outline-none"
                             />
                         </div>
                         <div ref={listRef} className="max-h-80 overflow-y-auto custom-scrollbar" data-testid="symbol-picker-list">
                             {filtered.length === 0 ? (
-                                <p className="px-3 py-6 text-center text-[11px] text-zinc-500" data-testid="symbol-picker-empty">
+                                <p className="px-3 py-6 text-center text-ui-dense text-zinc-500" data-testid="symbol-picker-empty">
                                     No symbol matches &quot;{query}&quot;.
                                 </p>
                             ) : filtered.map((s, i) => (
@@ -136,9 +136,9 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                                     onClick={() => commit(s.symbol)}
                                     className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${i === cursor ? 'bg-white/[0.06]' : ''}`}
                                 >
-                                    <span className="w-28 shrink-0 truncate font-mono text-[12px] font-bold text-zinc-100">{display(s.symbol)}</span>
-                                    <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500">{s.baseAsset} perpetual</span>
-                                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-300">
+                                    <span className="w-28 shrink-0 truncate font-mono text-ui-sm font-bold text-zinc-100">{display(s.symbol)}</span>
+                                    <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500">{s.baseAsset} perpetual</span>
+                                    <span className="shrink-0 font-mono text-ui-dense tabular-nums text-zinc-300">
                                         {s.lastPrice > 0 ? s.lastPrice.toLocaleString(undefined, { maximumFractionDigits: s.lastPrice < 1 ? 6 : 2 }) : '—'}
                                     </span>
                                     <span className={`w-14 shrink-0 text-right font-mono text-ui-xs tabular-nums ${s.changePercent24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>

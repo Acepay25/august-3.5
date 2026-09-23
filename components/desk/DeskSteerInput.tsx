@@ -46,7 +46,7 @@ export const DeskSteerInput: React.FC<DeskSteerInputProps> = ({ liveSeats, onSub
                 onChange={e => setTarget(e.target.value)}
                 disabled={disabled}
                 aria-label="Seat to steer"
-                className="shrink-0 rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-200 focus:outline-none"
+                className="shrink-0 rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-ui-dense text-zinc-200 focus:outline-none"
             >
                 {liveSeats.map(s => (
                     <option key={s} value={s}>
@@ -64,13 +64,13 @@ export const DeskSteerInput: React.FC<DeskSteerInputProps> = ({ liveSeats, onSub
                 }}
                 disabled={disabled}
                 placeholder="Note for the selected seat (only they see it)"
-                className="min-w-0 flex-1 bg-transparent text-[11px] text-zinc-100 placeholder-zinc-600 focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent text-ui-dense text-zinc-100 placeholder-zinc-600 focus:outline-none"
             />
             <button
                 type="button"
                 onClick={submit}
                 disabled={!draft.trim() || disabled}
-                className="shrink-0 rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
+                className="shrink-0 rounded bg-zinc-800 px-2 py-0.5 text-ui-dense font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
             >
                 Queue
             </button>
