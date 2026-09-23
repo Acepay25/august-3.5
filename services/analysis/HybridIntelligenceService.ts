@@ -1120,6 +1120,11 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         `### Read rules`,
         `- Numbers above are code-calculated. Cite a table cell when you name a level.`,
         `- A value you cannot trace to a cell here must be labeled as your own estimate — an untraceable number stated as fact is a hallucination, not analysis.`,
+        // Seats were pasting this packet's own layout back at the trader — a
+        // "Key levels" block of "R1 | 86879 | pivot resistance" lines, inside a
+        // code fence, because that is the shape the pivot table arrives in. The
+        // numbers were right; the answer read like a debug dump.
+        `- These tables are your INPUT, not the trader's output. Never paste a row back in pipe form ("R1 | 86879 | pivot resistance") and never wrap this packet's tables in a code fence. Say the price in a sentence with the reason it matters, or list it as price + why.`,
         `- ADX regime is authoritative vs the chart-structure table. ${adxRule}`,
         `- 1H ATR for stops: $${data.indicators['1h']?.atr ?? '—'}. Volume: ${av.trend}. OBV divergence: ${av.obvDivergence}.`,
     ].filter(Boolean);
