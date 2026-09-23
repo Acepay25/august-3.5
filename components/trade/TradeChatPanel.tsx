@@ -444,7 +444,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             }
         }
         const persona = [agent?.persona, roleNote].filter(Boolean).join('\n\n');
-        const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}${agent?.notes ? `\n\n## Your own notes on this trader and these setups\n${agent.notes}` : ''}`;
+        // Same heading the desk uses (`buildBotSystemPrompt`) — one agent
+        // should meet its own notes under one name wherever it is asked.
+        const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}${agent?.notes ? `\n\n## Your private notes\n${agent.notes}` : ''}`;
         return persona ? `${base}\n\n## Your role\n${persona}` : base;
     }, [symbol, trades]);
 
