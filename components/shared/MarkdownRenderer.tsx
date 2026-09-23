@@ -103,13 +103,21 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
         rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
         components={{
           pre: ({ children }) => (
-            <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-ui-sm font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
+            <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-ui-sm font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap [&_code]:rounded-none [&_code]:border-0 [&_code]:bg-transparent [&_code]:px-0 [&_code]:py-0">
               {children}
             </pre>
           ),
           code: ({ className: codeClassName, children, ...props }) => {
             // Fenced blocks carry a language-* class and live inside the
             // boxed <pre>; bare backticks are neutral zinc pills.
+            //
+            // The language test is NOT enough on its own: a fence written
+            // without a language (which is what the models usually emit)
+            // carries no `language-*` class, fell through to the inline pill,
+            // and an INLINE element paints its background once per line box --
+            // so a nine-line block arrived as nine stacked grey bands inside
+            // the pre's own box. The pre neutralises any code inside it from
+            // here, so the pill styling can only ever reach real inline code.
             const isBlock = /language-/.test(String(codeClassName || ''));
             if (isBlock) {
               return (

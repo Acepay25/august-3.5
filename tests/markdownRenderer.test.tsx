@@ -67,4 +67,33 @@ describe('MarkdownRenderer', () => {
         expect(container.querySelector('td .katex')).not.toBeNull();
         expect(container.textContent).toContain('tail text');
     });
+
+    // A fence with no language tag carries no `language-*` class, so the
+    // renderer's block test missed it and it fell through to the INLINE code
+    // pill. An inline element paints its background once per line box, so the
+    // Chart AI's key-levels block arrived as a stack of grey bands inside the
+    // pre's own box. The pre now neutralises any code inside it.
+    it('renders a language-less fence as one block, not per-line pills', () => {
+        const fence = ['```', 'R1 | 86879 | pivot resistance', 'PP | 85979 | session midpoint', 'S2 | 84359 | next support'].join('\n');
+        const { container } = render(<MarkdownRenderer content={fence} />);
+        const pre = container.querySelector('pre');
+        expect(pre).not.toBeNull();
+        // The descendant overrides are the whole fix; without them the pill's
+        // background and border come back per line.
+        expect(pre!.className).toContain('[&_code]:bg-transparent');
+        expect(pre!.className).toContain('[&_code]:border-0');
+        expect(pre!.querySelector('code')).not.toBeNull();
+        // And the content survives the restyle.
+        expect(pre!.textContent).toContain('pivot resistance');
+        expect(pre!.textContent).toContain('next support');
+    });
+
+    it('keeps the pill on real inline code, which is what it was for', () => {
+        const { container } = render(<MarkdownRenderer content={'stop is `65000` here'} />);
+        expect(container.querySelector('pre')).toBeNull();
+        const code = container.querySelector('code');
+        expect(code).not.toBeNull();
+        expect(code!.className).toContain('bg-white/[0.06]');
+        expect(code!.textContent).toBe('65000');
+    });
 });
