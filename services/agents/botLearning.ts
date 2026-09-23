@@ -24,7 +24,8 @@
 import type { LoggedTrade } from '../../types';
 import { getMemoryFilesContext, type MemoryRetrievalQuery } from '../learning/MemoryRetrievalService';
 import { recordMemoryInjection } from '../learning/MemoryInjectionService';
-import { readBotMemoryMarkdown, botMemoryFolderName, getBotMemoryContext } from '../bots/BotMemoryService';
+import { readBotMemoryMarkdown, botMemoryFolderName } from '../bots/BotMemoryService';
+import { resolveAgentContext } from './agentContext';
 import {
     createMemoryFile,
     createMemoryFolder,
@@ -236,8 +237,11 @@ export const craftAndGateBotTrade = async (
             coin: trade.analysis?.coinName,
             direction: trade.analysis?.direction,
             family: trade.analysis?.detectedPatternFamily,
-            // The acting bot's persona + notes, not the roster head's.
-            botContext: getBotMemoryContext(bot.id, setup, 'global') || trade.postMortem || '',
+            // The acting bot's persona + notes, not the roster head's — and
+            // assembled by the SAME loader the chart surface uses, so a bot
+            // cannot arrive here carrying something different from what it
+            // carried at the chart.
+            botContext: resolveAgentContext(bot, setup).notes || trade.postMortem || '',
         });
         return gate.action === 'queued' ? gate.crafted : null;
     } catch (e) {

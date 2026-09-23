@@ -16,10 +16,16 @@ import type { ChatSession } from './chatSessions';
 import { isPassReply } from '../agents/groupRounds';
 
 export interface PanelSeat {
-    /** Stable key: `${providerId}:${modelId}`. */
+    /** Stable key: `bot:<botId>` for an agent seat, else `${providerId}:${modelId}`. */
     id: string;
-    /** Seat label in the transcript (the model's display name). */
+    /** Seat label in the transcript — the agent's name, or the model's. */
     name: string;
+    providerId: string;
+    modelId: string;
+    /** Set when this seat IS a roster agent. The dock then runs it with that
+     *  bot's persona, provider/model AND its own notebook, so a panel can be
+     *  N agents rather than N models. Absent = a plain model seat. */
+    botId?: string;
 }
 
 export interface PanelTurn {
@@ -29,19 +35,39 @@ export interface PanelTurn {
     synthesis?: boolean;
 }
 
+/** The ONE seat-key rule: an agent seat keys on its bot, a model seat on its
+ *  provider+model. Shared by the seat list and the picker's chips so a chip
+ *  cannot address a different seat than the one the panel is running. */
+export const panelSeatKey = (m: { providerId: string; modelId: string; botId?: string }): string =>
+    m.botId ? `bot:${m.botId}` : `${m.providerId}:${m.modelId}`;
+
 /** The panel seats from a stored session (deduped, cap-enforced). Accepts
- *  the live (streaming) session shape too — only panelModels is read. */
-export const panelSeats = (session: Pick<ChatSession, 'panelModels'>, labelFor: (modelId: string) => string): PanelSeat[] => {
+ *  the live (streaming) session shape too — only panelModels is read.
+ *  `botNameFor` resolves a seat's `botId` to the roster agent's name; a botId
+ *  that no longer resolves degrades to a plain model seat on that bot's model
+ *  rather than naming a phantom "b1" in the transcript. */
+export const panelSeats = (
+    session: Pick<ChatSession, 'panelModels'>,
+    labelFor: (modelId: string) => string,
+    botNameFor?: (botId: string) => string | undefined,
+): PanelSeat[] => {
     const out: PanelSeat[] = [];
     const seen = new Set<string>();
-    for (const m of (session.panelModels ?? []).slice(0, 5)) {
-        // Dedupe on the SAME key the seat id uses (provider:model), not the
-        // bare modelId — otherwise two relays offering one model collapse to a
-        // single seat even though their ids differ.
-        const key = `${m.providerId}:${m.modelId}`;
+    for (const raw of (session.panelModels ?? []).slice(0, 5)) {
+        const botName = raw.botId ? botNameFor?.(raw.botId) : undefined;
+        // An unresolvable botId is a deleted agent: drop the claim and keep the
+        // model, so the seat still answers under a real name.
+        const m = botName ? raw : { providerId: raw.providerId, modelId: raw.modelId };
+        const key = panelSeatKey(m);
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ id: key, name: labelFor(m.modelId) });
+        out.push({
+            id: key,
+            name: botName ?? labelFor(m.modelId),
+            providerId: m.providerId,
+            modelId: m.modelId,
+            ...(botName ? { botId: m.botId } : {}),
+        });
     }
     return out;
 };

@@ -77,20 +77,20 @@ import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { isPassReply } from '../../services/agents/groupRounds';
 import { saveBot } from '../../services/agents/agentRoster';
 import {
-    titleFromMessage, PANEL_MAX_MODELS,
+    titleFromMessage, PANEL_MAX_MODELS, type PanelSeatRef,
 } from '../../services/trade/chatSessions';
 import * as chatStore from '../../services/trade/chatStore';
 import type { LiveEntry, LiveSession } from '../../services/trade/chatStore';
 import {
-    panelSeats, planPanelTurn, formatRoomTranscript, parsePanelMentions, panelCouldStillBePass,
+    panelSeats, planPanelTurn, formatRoomTranscript, parsePanelMentions, panelCouldStillBePass, panelSeatKey,
 } from '../../services/trade/chatPanel';
 import { createDebateMailbox, formatDmEventLine } from '../../services/analysis/DebateMailbox';
 import type { ChartSnapshot } from './TradingChart';
 import { intervalSeconds, type ChartInterval } from './TradingChart';
 import BiasChips from './BiasChips';
 import type { AgentBot } from '../../services/agents/agentRoster';
-import { seatPersonaPrompt } from '../../services/agents/seatPersonas';
-import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, resolveChatModelSelection, findChatModelOwner, chatModelIdOf } from '../../utils/providerUtils';
+import { resolveAgentContext, SINGLE_AGENT_MEMORY_BUDGET, type ResolvedAgentContext } from '../../services/agents/agentContext';
+import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, formatSeatLabel, resolveChatModelSelection, findChatModelOwner, chatModelIdOf } from '../../utils/providerUtils';
 import { isVisionModel } from '../../utils/modelUtils';
 import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { copyText } from '../../utils/clipboard';
@@ -418,13 +418,35 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  collaboration-memory index is read FRESH per prompt (like the skills
      *  index): a `remember` call lands in the NEXT turn's prompt immediately,
      *  and the model always sees what it already knows before writing — the
-     *  update-don't-duplicate discipline of this environment's memory. */
-    const systemPromptFor = useCallback((persona?: string): string => {
+     *  update-don't-duplicate discipline of this environment's memory.
+     *
+     *  `bot` is resolved through `resolveAgentContext`, the same loader the
+     *  desk answers with, so persona and notes cannot be assembled one way at
+     *  the chart and another way at the desk — which is how one named agent
+     *  ends up knowing less in one place than the other. `roleNote` is about
+     *  the ROOM (you are one of N seats), so it stays the caller's. */
+    const systemPromptFor = useCallback((bot?: AgentBot, roleNote?: string): string => {
         const skillsBlock = skillsIndexForPrompt();
         const memoryBlock = buildProfileMemoryIndex();
-        const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}`;
+        let agent: ResolvedAgentContext | null = null;
+        if (bot) {
+            try {
+                // One agent answering, so it gets the whole allowance — the
+                // debate divides the same total across its roster.
+                const knownCoins = [...new Set(
+                    (trades ?? [])
+                        .map(t => t?.analysis?.coinName)
+                        .filter((a): a is string => typeof a === 'string' && a.length >= 2),
+                )];
+                agent = resolveAgentContext(bot, { coin: symbol, knownCoins }, SINGLE_AGENT_MEMORY_BUDGET);
+            } catch {
+                agent = null;
+            }
+        }
+        const persona = [agent?.persona, roleNote].filter(Boolean).join('\n\n');
+        const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}${agent?.notes ? `\n\n## Your own notes on this trader and these setups\n${agent.notes}` : ''}`;
         return persona ? `${base}\n\n## Your role\n${persona}` : base;
-    }, []);
+    }, [symbol, trades]);
 
     /** What the model reads as "the drawings on the chart": the user's own
      *  shapes PLUS the model's marks from earlier turns — so it sees its own
@@ -1117,12 +1139,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             const soloProvider = bot
                 ? (configForSeat(bot.providerId, bot.modelId) ?? provider)
                 : provider;
-            const systemPrompt = systemPromptFor(bot ? seatPersonaPrompt(bot) : undefined);
+            const systemPrompt = systemPromptFor(bot);
             const canSeeImages = isVisionModel(soloProvider.selectedModel);
-            // Solo answers now carry the seat label too, so returning to a
-            // session shows WHICH model said each line (the renderer the
-            // panel seats already use).
-            mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, speaker: `${soloProvider.id}:${soloProvider.selectedModel}` } : en)) }));
+            // Solo answers carry the seat label, so returning to a session
+            // shows who said each line (the renderer the panel seats already
+            // use). A bot-bound session names the AGENT, not the slug: the
+            // same bot answers at the desk under its name, and one answer
+            // claimed by model here and by identity there is two claims.
+            mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, speaker: bot?.name ?? `${soloProvider.id}:${soloProvider.selectedModel}` } : en)) }));
             const userContent: string | ContentPart[] = imageAttachment && canSeeImages
                 ? [{ type: 'text', text: userText }, { type: 'image_url', image_url: { url: imageAttachment.payload } }]
                 : imageAttachment
@@ -1154,7 +1178,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         }
 
         // ── PANEL: up to 5 models, one request, cross-talk + synthesis ─────
-        const seats = panelSeats(session, formatModelDisplayName);
+        const seats = panelSeats(session, formatModelDisplayName, id => bots.find(b => b.id === id)?.name);
         if (seats.length < 2) {
             // Say it out loud — a bare return left the user staring at their
             // own message (and leaked the run controller armed above). The
@@ -1164,7 +1188,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 ...s,
                 entries: [...s.entries, {
                     id: newId('n'), role: 'ai' as const, text: '',
-                    tools: ['This panel has fewer than 2 usable seats — add models in the panel picker above.'],
+                    tools: ['This panel has fewer than 2 usable seats — add models or agents in the panel picker above.'],
                     notice: true,
                 }],
             }));
@@ -1186,8 +1210,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 const plan = planPanelTurn(seats, spoken, pull);
                 if (!plan.seat) break;
                 const seat = plan.seat;
-                const seatModel = session.panelModels?.find(m => `${m.providerId}:${m.modelId}` === seat.id);
-                const seatConfig = seatModel ? configForSeat(seatModel.providerId, seatModel.modelId) : null;
+                const seatBot = seat.botId ? bots.find(b => b.id === seat.botId) : undefined;
+                // An agent seat answers with its OWN model first: the panel was
+                // configured with the model, but the roster may since have
+                // moved the bot — the bot's current pair is the truer read.
+                const seatConfig = configForSeat(seat.providerId, seat.modelId)
+                    ?? (seatBot ? configForSeat(seatBot.providerId, seatBot.modelId) : null);
                 if (!seatConfig) {
                     // The seat's provider/model vanished from Settings — say so
                     // in the transcript; a silent skip looked like a hang.
@@ -1197,7 +1225,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         unavailableNotified.add(seat.id);
                         mutate(sid, s => ({ ...s, entries: [...s.entries, {
                             id: newId('n'), role: 'ai' as const, text: '', streaming: false, notice: true,
-                            speaker: seat.id,
+                            speaker: seat.name,
                             tools: [`Seat unavailable — "${seat.name}" is no longer configured (Settings → Providers). Remove it or re-add its model.`],
                         }] }));
                     }
@@ -1212,12 +1240,16 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 const userMsg = `${userText}\n\n${turnIntro}${roomTranscript ? `\n\n${roomTranscript}` : ''}`;
                 const aiEntry: LiveEntry = {
                     id: newId('a'), role: 'ai', text: '', tools: [], streaming: true,
-                    speaker: seat.id,
+                    speaker: seat.name,
                     at: Date.now(),
                 };
                 mutate(sid, s => ({ ...s, entries: [...s.entries, aiEntry] }));
+                // An agent seat keeps its own mandate AND the panel's: the seat
+                // still has to know it is one voice among N on this chart, which
+                // the roster persona alone never says.
+                const panelMandate = `You are "${seat.name}" on a ${seats.length}-seat chart panel. Seats: ${seats.map(x => x.name).join(', ')}.`;
                 const messages: ChatMessage[] = [
-                    { role: 'system', content: systemPromptFor(`You are "${seat.name}" on a ${seats.length}-model chart panel. Seats: ${seats.map(x => x.name).join(', ')}.`) },
+                    { role: 'system', content: systemPromptFor(seatBot, panelMandate) },
                     { role: 'user', content: userMsg },
                 ];
                 let full = '';
@@ -1349,7 +1381,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // TRIGGER …]) so the user sees a readable line, not the raw envelope.
         const noticeLine = signalText.split('\n')[0].replace(/^\[[^\]]*\]\s*/, '').replace(/^⚡\s*/, '').trim();
         const noticeEntry: LiveEntry = { id: newId('n'), role: 'ai', text: '', tools: [noticeLine], notice: true, at: Date.now() };
-        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now() };
+        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now(), ...(bot ? { speaker: bot.name } : {}) };
         mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: [...s.entries, noticeEntry, aiEntry] }));
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
@@ -1360,7 +1392,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             return;
         }
         const messages: ChatMessage[] = [
-            { role: 'system', content: systemPromptFor(bot ? seatPersonaPrompt(bot) : undefined) },
+            { role: 'system', content: systemPromptFor(bot) },
             ...session.entries.slice(-10).flatMap(e =>
                 e.text.trim() && !e.notice ? [{ role: e.role === 'user' ? 'user' : 'assistant', content: e.text } as ChatMessage] : []),
             { role: 'user', content: `${contextBlock}\n\n${signalText}` },
@@ -1427,7 +1459,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, []);
 
     /** Panel seat management: add (max 5) / remove a model. */
-    const setPanelModels = useCallback((sid: string, models: Array<{ providerId: string; modelId: string }>): void => {
+    const setPanelModels = useCallback((sid: string, models: PanelSeatRef[]): void => {
         mutate(sid, s => ({ ...s, panelModels: models.slice(0, PANEL_MAX_MODELS) }));
     }, []);
 
@@ -1437,12 +1469,29 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (!modelId) return;
         const session = sessions.find(s => s.id === panelPickerFor);
         const current = session?.panelModels ?? [];
-        // Dedupe by provider+model, not modelId alone — two relays offering the
-        // same model id are distinct seats (seats are keyed providerId:modelId).
         const pid = providerId || provider?.id || '';
-        if (current.some(m => m.modelId === modelId && m.providerId === pid)) return;
-        setPanelModels(panelPickerFor, [...current, { providerId: pid, modelId }]);
+        // Dedupe on the seat key, not modelId alone: two relays offering one
+        // model are distinct seats, and an agent seated on that same model must
+        // not displace (or be displaced by) the plain model seat.
+        const next: PanelSeatRef = { providerId: pid, modelId };
+        if (current.some(m => panelSeatKey(m) === panelSeatKey(next))) return;
+        setPanelModels(panelPickerFor, [...current, next]);
     }, [panelPickerFor, provider, sessions, setPanelModels]);
+
+    /** Seat a roster agent on the panel: it answers as itself — persona, its own
+     *  provider/model and its own notebook — beside plain model seats. It still
+     *  carries the bot's model pair so the seat survives the agent being
+     *  deleted from the roster later. */
+    const addPanelAgentSeat = useCallback((botId: string): void => {
+        if (!panelPickerFor) return;
+        const bot = bots.find(b => b.id === botId);
+        if (!bot) return;
+        const session = sessions.find(s => s.id === panelPickerFor);
+        const current = session?.panelModels ?? [];
+        const next: PanelSeatRef = { providerId: bot.providerId, modelId: bot.modelId, botId: bot.id };
+        if (current.some(m => panelSeatKey(m) === panelSeatKey(next))) return;
+        setPanelModels(panelPickerFor, [...current, next]);
+    }, [bots, panelPickerFor, sessions, setPanelModels]);
 
     // ── Attachments ─────────────────────────────────────────────────────────
     // Reading files in is the shared hook's job (see useChatAttachments); the
@@ -1628,21 +1677,40 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             {/* Panel seat editor (while a panel is still short of 2 seats). */}
             {panelPickerFor && (
                 <div className="shrink-0 space-y-1.5 border-b border-white/[0.06] bg-zinc-900/70 px-3 py-2" data-testid="panel-picker">
-                    <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Panel seats ({sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}) — pick up to {PANEL_MAX_MODELS} models; they answer together and talk to each other</p>
+                    <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Panel seats ({sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}) — pick up to {PANEL_MAX_MODELS} models or agents; they answer together and talk to each other</p>
                     <div className="flex flex-wrap items-center gap-1.5">
-                        {(sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: { providerId: string; modelId: string }) => (
-                            <span key={m.modelId} className="flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-200">
-                                {formatModelDisplayName(m.modelId)}
-                                <button type="button" aria-label={`Remove ${m.modelId}`}
-                                    onClick={() => setPanelModels(panelPickerFor, (sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).filter((x: { providerId: string; modelId: string }) => x.modelId !== m.modelId))}
+                        {(sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: PanelSeatRef) => (
+                            <span key={panelSeatKey(m)} className="flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-200">
+                                {m.botId ? (bots.find(b => b.id === m.botId)?.name ?? formatModelDisplayName(m.modelId)) : formatModelDisplayName(m.modelId)}
+                                {m.botId && <span className="text-ui-2xs uppercase tracking-widest text-zinc-500">agent</span>}
+                                <button type="button" aria-label={`Remove ${panelSeatKey(m)}`}
+                                    onClick={() => setPanelModels(panelPickerFor, (sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).filter((x: PanelSeatRef) => panelSeatKey(x) !== panelSeatKey(m)))}
                                     className="text-zinc-500 hover:text-rose-400"><X className="h-2.5 w-2.5" /></button>
                             </span>
                         ))}
                         {(sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0) < PANEL_MAX_MODELS && (
                             <ModelPicker providers={providers} value="" mode="provider-model" onChange={addPanelSeat} compact
-                                disabledValues={new Set((sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: { providerId: string; modelId: string }) => `${m.providerId}::${m.modelId}`))}
+                                disabledValues={new Set((sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: PanelSeatRef) => `${m.providerId}::${m.modelId}`))}
                                 onRefreshModels={onRefreshModels}
                                 placeholder="+ add model" />
+                        )}
+                        {/* Roster agents seat beside models: same panel, but the
+                            answer carries the agent's persona, its own model and
+                            its own notebook. Hidden when there is no roster. */}
+                        {bots.length > 0 && (sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0) < PANEL_MAX_MODELS && (
+                            <span className="flex flex-wrap items-center gap-1" data-testid="panel-agent-picks">
+                                <span className="text-ui-2xs uppercase tracking-widest text-zinc-600">agents</span>
+                                {bots
+                                    .filter(b => !(sessions.find(s => s.id === panelPickerFor)?.panelModels ?? [])
+                                        .some((m: PanelSeatRef) => m.botId === b.id))
+                                    .map(b => (
+                                        <button key={b.id} type="button" data-testid={`panel-agent-${b.id}`}
+                                            onClick={() => addPanelAgentSeat(b.id)}
+                                            className="rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-300 hover:bg-zinc-700">
+                                            + {b.name}
+                                        </button>
+                                    ))}
+                            </span>
                         )}
                         <button type="button" onClick={() => setPanelPickerFor(null)}
                             className="rounded-full bg-zinc-700 px-2.5 py-1 text-ui-xs font-semibold text-zinc-100 hover:bg-zinc-600">
@@ -1730,7 +1798,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         ) : (
                             <div className="group/msg space-y-1">
                                 {e.speaker && (
-                                    <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatModelDisplayName(e.speaker.split(':')[1] ?? e.speaker)}</p>
+                                    <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatSeatLabel(e.speaker.split(':')[1] ?? e.speaker)}</p>
                                 )}
                                 <ChatWorkTimeline entry={e} />
                                 <div className="text-ui-sm leading-5 text-zinc-200">

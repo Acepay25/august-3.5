@@ -104,6 +104,10 @@ describe('trade chat sessions', () => {
         const s = createSession('panel', [
             { providerId: 'gemini', modelId: 'a' },
             { providerId: 'x', modelId: 'b' },
+            // An agent seat: the sanitizer whitelists session fields, so a
+            // botId dropped here would silently turn a roster panel back into
+            // a model panel on reload — with the picker still showing an agent.
+            { providerId: 'gemini', modelId: 'c', botId: 'b1' },
         ]);
         s.entries.push({ id: 'a1', role: 'ai', text: 'answer', tools: [], speaker: 'gemini:a' });
         saveSessions([s]);
@@ -113,6 +117,7 @@ describe('trade chat sessions', () => {
         expect(loaded.panelModels).toEqual([
             { providerId: 'gemini', modelId: 'a' },
             { providerId: 'x', modelId: 'b' },
+            { providerId: 'gemini', modelId: 'c', botId: 'b1' },
         ]);
         expect(loaded.entries[0].speaker).toBe('gemini:a');
     });
