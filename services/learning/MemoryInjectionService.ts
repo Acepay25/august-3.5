@@ -144,14 +144,52 @@ export const skillAdherenceForRun = async (
     return 'injected-unknown';
 };
 
+/** slug (file name, `.md` included) → the skill's IF clause, for arm 3 of
+ *  the citation join. Built per annotate call, never cached across calls:
+ *  skills are edited between verdicts and a stale clause would stamp the
+ *  wrong way. DYNAMIC imports on purpose — SkillMemoryService statically
+ *  imports THIS module (`recordMemoryInjection`, `skillAdherenceForRun`),
+ *  so importing it statically here would be a cycle. Any failure yields an
+ *  empty map: arms 1-2 need no store, so the stamp degrades to the
+ *  two-join behavior instead of failing the commit. */
+const loadSkillConditions = async (): Promise<Map<string, string>> => {
+    const map = new Map<string, string>();
+    try {
+        const [memoryFiles, skillMemory] = await Promise.all([
+            import('./MemoryFilesService'),
+            import('./SkillMemoryService'),
+        ]);
+        for (const file of memoryFiles.getMemoryFiles().files) {
+            if (!skillMemory.isSkillFile(file)) continue;
+            const condition = skillMemory.parseSkillMarkdown(file.content)?.ifCondition;
+            if (condition) map.set(file.name, condition);
+        }
+    } catch {
+        // Citation stamping is telemetry — never fail the verdict commit.
+    }
+    return map;
+};
+
 /**
  * Citation stamp — called once at verdict commit with the final
  * verdict's own text. For every skill source in the NEWEST verdict-stage
- * record that carries it, set `cited` by a deterministic textual join:
- * the verdict echoes the skill's file stem, its title words, or a majority
- * of the significant words of its IF clause. Opening-stage records are
- * never stamped (an analyst seeing a skill is not the moderator citing it),
- * so unannotated verdicts keep the conservative 'injected-unknown' credit.
+ * record that carries it, set `cited` by a deterministic textual join with
+ * THREE arms, tried in order by `cites` below:
+ *   1. the verdict echoes the skill's file stem;
+ *   2. it carries every significant word of the skill's title (the stem
+ *      split on - and _);
+ *   3. it carries a MAJORITY of the significant words of the skill's
+ *      IF clause — at least 3 distinct words AND more than half of them.
+ * Arm 3 matters because the honest citation often never names the file: a
+ * verdict that FOLLOWS a skill describes its condition in its own words.
+ * With only stems and titles, such a verdict was stamped `cited:false` —
+ * scored 'overridden', counting against the skill's evidence and queueing
+ * amendment proposals against a rule the verdict actually obeyed. The
+ * ≥3-word floor stops two generic words ("rising average") from citing a
+ * long clause on coincidence.
+ * Opening-stage records are never stamped (an analyst seeing a skill is not
+ * the moderator citing it), so unannotated verdicts keep the conservative
+ * 'injected-unknown' credit.
  */
 export const annotateVerdictCitations = async (
     username: string,
@@ -175,6 +213,7 @@ export const annotateVerdictCitations = async (
             }
         }
         if (recs.length === 0) return;
+        const conditionBySlug = await loadSkillConditions();
         const text = (verdictText || '').toLowerCase();
         const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
         const verdictNorm = norm(text);
@@ -185,7 +224,17 @@ export const annotateVerdictCitations = async (
             const title = norm(stem.replace(/[-_]/g, ' '));
             const titleWords = title.split(' ').filter(w => w.length > 3);
             if (titleWords.length >= 2 && titleWords.every(w => verdictWords.has(w))) return true;
-            return false;
+            // Arm 3 — the IF clause: a verdict that follows the skill by
+            // PARAPHRASING its condition still cites it. Majority of the
+            // clause's significant words (≥3 distinct, > half of them); the
+            // floor keeps two generic words from citing a long clause.
+            const condition = conditionBySlug.get(slug);
+            if (!condition) return false;
+            const condWords = new Set(norm(condition).split(' ').filter(w => w.length > 3));
+            if (condWords.size === 0) return false;
+            let matched = 0;
+            for (const w of condWords) if (verdictWords.has(w)) matched += 1;
+            return matched >= 3 && matched * 2 > condWords.size;
         };
         await withSerializedPref(key, async () => {
             // Re-read INSIDE the lock: the polls above may have raced appends
