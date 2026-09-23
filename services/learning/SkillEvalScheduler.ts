@@ -37,7 +37,7 @@ import {
     selectEvalTrades,
     SKILL_EVAL_MAX_TRADES,
 } from './SkillEvalService';
-import { getMemoryFilesContext } from './MemoryRetrievalService';
+import { getMemoryFilesContext, SKILL_BLOCK_MAX } from './MemoryRetrievalService';
 
 /** Minimum closed trades since a skill's last eval before it becomes due again. */
 export const EVAL_MIN_TRADES_BETWEEN = 10;
@@ -166,9 +166,6 @@ export const findMatchingSetupForSkill = (meta: SkillMeta, trade: LoggedTrade): 
 
 // ─── Default runner (harness-provided, zero user setup) ─────────────────────
 
-/** Pull-tier budget for the injected skill body (matches the recall tool). */
-const EVAL_SKILL_BODY_MAX = 700;
-
 /**
  * Build a SkillAnalysisRunner from the user's own provider + prompt pipeline:
  * re-analyzes the stored trade context with and without the REAL skill body
@@ -217,12 +214,15 @@ export const buildDefaultRunner = (
         if (skillEnabled && skill) {
             // The treatment arm injects the PROCEDURE, never the raw file:
             // the frontmatter (25-35 YAML lines on real skills) used to eat
-            // the EVAL_SKILL_BODY_MAX budget and truncate the body — and an
-            // arm contaminated by bookkeeping YAML is not what production
+            // the whole budget and truncate the procedure — an arm
+            // contaminated by bookkeeping YAML is not what production
             // injection ever sends, so the A/B verdict measured the wrong
-            // treatment. Same skillBody() rule as the retrieval slices.
+            // treatment. Same skillBody() rule as the retrieval slices, and
+            // now the SAME cap: this arm used to carry a private 700-char
+            // budget while verdict-stage injection sent 400, so the eval
+            // judged a bigger treatment than the trader ever received.
             const body = substituteSkillContext(skillBody(skill.content), query);
-            const capped = body.length > EVAL_SKILL_BODY_MAX ? `${body.slice(0, EVAL_SKILL_BODY_MAX).trimEnd()}\n…` : body;
+            const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
             // Same provenance source as the verdict slice: the monotonic
             // counter, not the tail-20 id list.
             const evidenceTotal = skill.meta.evidenceCount ?? skill.meta.tradeIds.length;
@@ -238,12 +238,42 @@ export const buildDefaultRunner = (
         } else {
             skillNote = productionContext || 'Run from your general expertise only.';
         }
+        // ── PARITY: the CODE-CHECKED SKILL TRIGGERS note ──
+        // Production evaluates each skill's own code trigger and hands every
+        // seat this note before the debate starts (useAnalysisPipeline →
+        // evaluateSkillPredicates), and a live AVOID trigger also caps the
+        // verdict — the cap's sentence rides inside the note itself. An eval
+        // arm without it would measure an intervention production never
+        // applies: the eval's whole job is to judge what the trader actually
+        // gets. Same replay rules as a backtest run — judged only on bars
+        // that had CLOSED by the trade's own timestamp — and deliberately no
+        // runId, so the ε-holdout can never blank out measurement. The note
+        // goes to BOTH arms: it is shared context, not the treatment.
+        let predicateNote = '';
+        try {
+            const { evaluateSkillPredicates } = await import('./skillPredicateGate');
+            const rawCoin = (a.coinName ?? '').trim();
+            const asOfMs = Date.parse(trade.timestamp ?? '');
+            if (rawCoin && Number.isFinite(asOfMs)) {
+                const gate = await evaluateSkillPredicates({
+                    coin: /USDT?$/i.test(rawCoin) ? rawCoin.toUpperCase() : `${rawCoin.toUpperCase()}USDT`,
+                    direction: a.direction === 'Long' || a.direction === 'Short' ? a.direction : undefined,
+                    asOfMs,
+                });
+                predicateNote = gate.note;
+            }
+        } catch {
+            // Best-effort, exactly as production: no tape ⇒ no note, arms
+            // stand as they were before predicates existed.
+        }
+
         const promptParts = [
             `Analyze this ${a.coinName ?? 'crypto'} ${a.direction ?? ''} setup as of ${trade.timestamp ?? 'the logged time'}.`,
             `Entry ${a.entryPoints?.[0]?.price ?? 'n/a'}, stop ${a.stopLoss ?? 'n/a'}, target ${a.takeProfit?.[0]?.price ?? 'n/a'}.`,
         ];
         if (productionContext && skillEnabled && skill) promptParts.push(productionContext);
         promptParts.push(skillNote);
+        if (predicateNote) promptParts.push(predicateNote);
         promptParts.push('Respond with your confidence level (High/Medium/Low/Avoid), direction (Long/Short/Neutral) and a one-paragraph rationale.');
         const prompt = promptParts.join(' ');
 

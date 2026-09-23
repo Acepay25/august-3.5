@@ -37,6 +37,35 @@ export const AVOID_PREDICATE_CEILING = 0.40;
  *  block stays under ~600 chars — comparable to one memory slice. */
 export const MAX_NOTE_LINES = 6;
 
+/** Live fetch depth in bars — what the current-bar gate has always used,
+ *  cached 30s by KlineService, one request. */
+const LIVE_FETCH_BARS = 120;
+
+/** Replay fetch-depth ceiling. `fetchKlines` fetches klines in ONE request
+ *  (KlineService has no pagination) and the spot mirror caps a single
+ *  request at 1000 bars — asking for more returns fewer bars than asked,
+ *  silently. A trade older than this many bars of its own timeframe reads as
+ *  INCONCLUSIVE (never "conditions clear"), which is the honest answer until
+ *  the fetch grows a paged historical mode. */
+export const MAX_REPLAY_BARS = 1000;
+
+/** Bars a timeframe must fetch so an `asOfMs` cutoff still leaves a
+ *  judgeable series: fetchKlines returns bars ENDING NOW, so depth has to
+ *  cover the age of the cutoff (or the asOfMs filter empties the series and
+ *  every historical run silently reports inconclusive) plus indicator
+ *  warmup — LIVE_FETCH_BARS of it. */
+const replayBarsFor = (timeframe: string, asOfMs: number): number => {
+    const m = /^(\d+)\s*([mhd])$/i.exec(timeframe.trim());
+    const unitMs = !m ? 3_600_000
+        : m[2].toLowerCase() === 'm' ? 60_000
+            : m[2].toLowerCase() === 'd' ? 86_400_000
+                : 3_600_000;
+    const periodMs = (m ? Math.max(1, Number(m[1])) : 1) * unitMs;
+    const age = Date.now() - asOfMs;
+    const ageBars = Number.isFinite(age) && age > 0 ? Math.ceil(age / periodMs) : 0;
+    return Math.min(LIVE_FETCH_BARS + ageBars, MAX_REPLAY_BARS);
+};
+
 export interface PredicateGateResult {
     /** Skills whose predicate fired on the last closed bar. */
     fired: Array<{ name: string; kind: SkillKind; predicate: string; timeframe: string }>;
@@ -139,7 +168,10 @@ export async function evaluateSkillPredicates(args: {
         let series;
         try {
             const { fetchKlines } = await import('../analysis/KlineService');
-            const klines = await fetchKlines(args.coin, timeframe, args.bars ?? 120);
+            const bars = args.bars ?? (args.asOfMs === undefined
+                ? LIVE_FETCH_BARS
+                : replayBarsFor(timeframe, args.asOfMs));
+            const klines = await fetchKlines(args.coin, timeframe, bars);
             const candles: ScanCandle[] = klines
                 .filter(k => args.asOfMs === undefined || k.time * 1000 <= args.asOfMs)
                 .map(k => ({
