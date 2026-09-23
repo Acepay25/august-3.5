@@ -24,6 +24,7 @@ import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import ProfileMemoryCard from './ProfileMemoryCard';
 import SupervisorCard from './SupervisorCard';
+import AutoJournalRulesCard from './AutoJournalRulesCard';
 import type { LearnTab } from '../learn/LearnView';
 import ModelPicker from '../shared/ModelPicker';
 import {
@@ -717,6 +718,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <p className="mt-1.5 text-[11px] text-zinc-400">Compare win rates and accuracy across different AI providers and models.</p>
                                             </button>
                                         </div>
+
+                                        {/* The approvals inbox's standing Always/Never rules: created
+                                            by one click, enforced on every pinned setup — and with this
+                                            card, listable and revocable for the first time. */}
+                                        <AutoJournalRulesCard username={username} />
 
                                         {/* Journal Configuration */}
                                         <SettingsGroup
