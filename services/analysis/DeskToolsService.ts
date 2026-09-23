@@ -140,7 +140,72 @@ export interface DeskToolResult {
     symbol?: string;
 }
 
-export const MAX_DESK_TOOL_ROUNDS = 3;
+/** Rounds a seat may spend calling tools. This is a HANG GUARD, not a ration:
+ *  the loop already exits the moment the model stops emitting tool calls, so
+ *  the only thing this bounds is a seat that never stops. It is not 3 — at 3 a
+ *  seat that looked at the chart, then wanted a second frame to compare
+ *  against, was cut off mid-investigation, which is the opposite of what the
+ *  tools are for. Upper bound on what one seat's context absorbs is
+ *  `rounds × the per-tool budgets below`, so a much larger number trades
+ *  investigation for a bloated prompt — the failure mode this app already has
+ *  too many of. */
+export const MAX_DESK_TOOL_ROUNDS = 8;
+
+/**
+ * Wall-clock ceiling for ONE seat's whole tool-using turn, and the point where
+ * the seat is told once, in words, to wrap up.
+ *
+ * `MAX_DESK_TOOL_ROUNDS` bounds the number of rounds; nothing bounded the
+ * TIME. A seat spending a minute per round could sit in eight rounds for a
+ * quarter of an hour with no signal to it or to the user. The notice rides the
+ * newest tool result rather than a new message, so it cannot break the
+ * assistant/tool pairing a provider validates.
+ */
+export const DESK_TURN_BUDGET_MS = 180_000;
+export const DESK_TURN_WRAPUP_AT = 0.8;
+
+/**
+ * A seat repeating itself is a different failure from a seat running long, and
+ * the round cap cannot see it: an `A,B,A,B` replay burns every remaining round
+ * while learning nothing, because each result is served from the 30s cache.
+ * Three identical calls, or an alternating pair seen twice, ends the turn.
+ */
+const STALL_REPEAT_LIMIT = 3;
+
+/** A seat replaying its own calls is not making progress, and a round cap alone
+ *  cannot see it: an `A,B,A,B` alternation spends every remaining round while
+ *  each result comes back byte-identical out of the 30s cache. Returns a repeat
+ *  count when the tail is a loop, 0 when it is not. */
+export const detectStalledLoop = (history: string[]): number => {
+    if (history.length < 2) return 0;
+    const last = history[history.length - 1];
+    if (history.slice(-STALL_REPEAT_LIMIT).filter(h => h === last).length >= STALL_REPEAT_LIMIT) return STALL_REPEAT_LIMIT;
+    const t = history.slice(-4);
+    if (t.length === 4 && t[0] === t[2] && t[1] === t[3] && t[0] !== t[1]) return 2;
+    return 0;
+};
+
+/** Attach a harness notice to the newest message the seat is about to read,
+ *  preferring the tool result it just got. A NEW message here would land between
+ *  an assistant `tool_calls` turn and its replies on some transports and get the
+ *  seat 400'd, so this rides the message that already exists — and replaces it
+ *  rather than mutating an object the caller may still hold. */
+const appendTurnNotice = (messages: ChatMessage[], text: string): void => {
+    const idx = messages.length - 1;
+    const last = messages[idx];
+    if (!last) return;
+    if (last.role === 'tool') {
+        messages[idx] = { ...last, content: `${String(last.content ?? '')}\n\n${text}` };
+        return;
+    }
+    if (last.role === 'user' && typeof last.content === 'string') {
+        // Marked because a seat reads an unmarked harness line as the trader
+        // changing the subject mid-turn.
+        messages[idx] = { ...last, content: `${last.content}\n\n${harnessTurn(text)}` };
+    }
+};
+
+
 
 /**
  * Per-run tool cache — every Floor seat gets the same desk tools, so a debate
@@ -1198,6 +1263,7 @@ You can call live tools before you speak — opening analysis, rebuttal, clarifi
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
 The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
+BEFORE YOU NAME A SHAPE: a pattern, a trendline, a swing high/low, "higher lows", a triangle or a broken structure requires \`get_chart_view\` (or \`get_all_timeframes\` to compare frames) on this turn. The market packet you are shown carries EIGHT candles per timeframe plus code-calculated summaries of the rest — eight printed rows are not a chart, and a shape described from them is invented, not read. If you have not called the tool, either call it or say "inferred from the 8 rows shown" and give it no confidence. Naming \`draw_on_chart\` or \`mark_trade_levels\` is how a level becomes something the trader can see: pass the exact prices you are citing, never restated ones.
 run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
@@ -2372,6 +2438,20 @@ export const malformedToolCallReason = (text: string): string | null => {
 };
 
 /**
+ * An unclosed call is two different failures wearing one shape, and the bounce
+ * must not confuse them. When the ARGUMENT OBJECT is incomplete the model was
+ * CUT OFF mid-emission — telling it to "re-emit EXACTLY this" reproduces the
+ * same cut and spends another round to do it. When the arguments are whole and
+ * only the closing tag is missing, it is a syntax slip and re-emitting works.
+ */
+export const looksTruncatedToolCall = (text: string): boolean => {
+    if (!/<tool_call\s/i.test(text) || /<\/tool_call\s*>/i.test(text)) return false;
+    const tail = text.slice(text.lastIndexOf('>') + 1).trim();
+    if (!tail.startsWith('{') && !tail.startsWith('[')) return true; // cut before any args landed
+    return !/[}\]]$/.test(tail);
+};
+
+/**
  * The one place tool output reaches a model.
  *
  * Each result is fenced as third-party DATA, because a `web_search` body or a
@@ -2613,6 +2693,12 @@ export async function runDeskToolLoop(params: {
     let finalText = '';
     let reasoning = '';
 
+    // One clock for the whole turn, and the seat's own call history: the round
+    // cap counts attempts, neither of these two sees a seat that is spending
+    // its attempts on the same lookup over and over.
+    const turnStartedAt = Date.now();
+    const callHistory: string[] = [];
+    let wrapUpSent = false;
     for (let round = 0; round < MAX_DESK_TOOL_ROUNDS; round++) {
         const forgedDefs = confirmedForgedToolDefinitions();
         const allDefs = forgedDefs.length > 0
@@ -2663,7 +2749,12 @@ export async function runDeskToolLoop(params: {
             // — bounded by the same round budget as everything else.
             const syntaxError = malformedToolCallReason(finalText);
             if (syntaxError && round < MAX_DESK_TOOL_ROUNDS - 1 && !options?.signal?.aborted) {
-                onToolEvent?.('tool syntax · malformed call — self-healing');
+                // A cut-off call needs a DIFFERENT repair than a malformed one:
+                // asking for an exact re-emission asks for the same cut.
+                const truncatedCall = looksTruncatedToolCall(finalText);
+                onToolEvent?.(truncatedCall
+                    ? 'tool syntax · cut off mid-call — asking for a shorter one'
+                    : 'tool syntax · malformed call — self-healing');
                 onStreamReset?.();
                 messages.push({ role: 'assistant', content: finalText.slice(0, 2000) });
                 messages.push({
@@ -2671,11 +2762,17 @@ export async function runDeskToolLoop(params: {
                     // Marked because the trader's own request shares this role:
                     // an unmarked repair reads as the human scolding the seat,
                     // and it is the harness that detected the syntax.
-                    content: harnessTurn('TOOL CALL ERROR — your last message was not a valid tool call: you emitted '
-                        + `${syntaxError}.\n`
-                        + 'Emit EXACTLY:\n<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>\n'
-                        + 'One JSON object (real quotes), one block per tool, closed with </tool_call>. '
-                        + 'Re-emit your tool call(s) now — no prose, and never invent tool results.'),
+                    content: harnessTurn(truncatedCall
+                        ? 'TOOL CALL INCOMPLETE - your last message was CUT OFF part-way through, so nothing ran. '
+                            + 'Make it fit: one tool, the fewest arguments, no prose. Emit EXACTLY:\n'
+                            + '<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>\n'
+                            + 'If the call will not fit, answer from what you already have and name what you did not look up.'
+                        : 'TOOL CALL ERROR - your last message was not a valid tool call: you emitted '
+                            + `${syntaxError}.\n`
+                            + 'Emit EXACTLY:\n'
+                            + '<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>\n'
+                            + 'One JSON object (real quotes), one block per tool, closed with </tool_call>. '
+                            + 'Re-emit your tool call(s) now - no prose, and never invent tool results.'),
                 });
                 continue;
             }
@@ -2871,6 +2968,28 @@ export async function runDeskToolLoop(params: {
                 role: 'user',
                 content: harnessTurn(`${formatToolResultsForModel(results)}\n\nContinue. If you have enough, write the public Floor reply now.`),
             });
+        }
+
+        // Signature must carry the ARGUMENTS as text: String({...}) is
+        // '[object Object]' for every call, which made three different lookups
+        // look like one repeated three times.
+        for (const c of calls) {
+            const args = typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments ?? {});
+            callHistory.push(`${c.name}:${args}`);
+        }
+        const stalled = detectStalledLoop(callHistory);
+        const elapsed = Date.now() - turnStartedAt;
+        if (!wrapUpSent && elapsed >= DESK_TURN_BUDGET_MS * DESK_TURN_WRAPUP_AT) {
+            wrapUpSent = true;
+            appendTurnNotice(messages, `TIME — this turn is near its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s ceiling. Write your reply now from what you already have, and name what you did not get to rather than filling the gap with a guess.`);
+        }
+        if (stalled) {
+            appendTurnNotice(messages, 'REPEAT — you have already asked for exactly this and the answer has not changed. Do not call another tool: answer from what is above, and say what is still unknown.');
+            onToolEvent?.('desk guard · repeated call — asking for a reply now');
+            // Ending HERE keeps the caller's existing contract: an exhausted
+            // round budget reports `endedWithToolCalls: true`, so the surface
+            // streams the one worded reply the notices just asked for.
+            break;
         }
     }
 

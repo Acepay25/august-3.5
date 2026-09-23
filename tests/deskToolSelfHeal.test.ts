@@ -54,6 +54,7 @@ import {
     clearDeskToolCache,
     stripTextToolCalls,
     malformedToolCallReason,
+    MAX_DESK_TOOL_ROUNDS,
 } from '../services/analysis/DeskToolsService';
 
 const config: ProviderConfig = {
@@ -175,7 +176,7 @@ describe('runDeskToolLoop self-heal', () => {
         });
         // Every round bounced; the budget ran out and the final text carries
         // NO raw markup.
-        expect(sendMock).toHaveBeenCalledTimes(3);
+        expect(sendMock).toHaveBeenCalledTimes(MAX_DESK_TOOL_ROUNDS);
         expect(result.finalText).toBe('Trying...');
         expect(result.finalText).not.toContain('<');
     });
