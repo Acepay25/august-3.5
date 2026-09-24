@@ -31,84 +31,34 @@ import {
 } from '../../utils/skillDrafts';
 import { defaultPrediction } from '../../utils/skillPrediction';
 import { evaluateSkillWorth, validateCraftedSkill } from './skillWorthGate';
-import { listSkills, skillStrictlyMatchesSetup, maybeMergeSkill } from './SkillMemoryService';
+import { listSkills, skillStrictlyMatchesSetup, maybeMergeSkill, type SkillMeta } from './SkillMemoryService';
+import {
+    validateIfThen,
+    coveredByLiveSkill as coveredByLiveSkillWith,
+    type CoverReader,
+} from './skillClauseBar';
 
 // ─── Deterministic tier ─────────────────────────────────────────────────────
 
-const GENERIC_IF_RE = /^(follow trend|use risk management|be careful|manage risk|trade carefully)/i;
-
-/** The same IF/THEN bar validateCraftedSkill applies to worth-gate creates. */
-export const validateIfThen = (crafted: Pick<CraftedSkill, 'ifCondition' | 'thenAction'>): string | null => {
-    const ic = (crafted.ifCondition || '').trim();
-    const ta = (crafted.thenAction || '').trim();
-    if (!ic || ic.length < 12) return 'IF condition too short or missing';
-    if (!ta || ta.length < 12) return 'THEN action too short or missing';
-    if (GENERIC_IF_RE.test(ic)) return 'IF condition is generic';
-    return null;
+/** The reader draftGates hands the cycle-free coverage check. */
+const liveReader: CoverReader<SkillMeta> = {
+    listLive: () => listSkills().map(({ meta }) => meta),
+    strictMatches: (meta, setup) => skillStrictlyMatchesSetup(meta, setup),
 };
 
-/** Words that carry setup identity — generic trading vocabulary and numbers
- *  are stripped so keyword overlap compares pattern nouns, not boilerplate. */
-const salientWords = (text: string): string[] => {
-    const stop = new Set([
-        'with', 'from', 'that', 'this', 'then', 'when', 'near', 'into', 'only', 'must',
-        'have', 'been', 'were', 'their', 'they', 'after', 'before', 'while', 'about',
-        'above', 'below', 'than', 'over', 'under', 'again', 'also', 'just', 'such',
-        'most', 'more', 'some', 'each', 'make', 'made', 'take', 'skip', 'trade',
-        'entry', 'enter', 'stop', 'target', 'price', 'level', 'trend', 'setup', 'chart',
-    ]);
-    const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
-        .filter(w => w.length >= 4 && !stop.has(w) && !/^\d+$/.test(w));
-    return [...new Set(words)].slice(0, 8);
-};
+export { validateIfThen };
 
 /** Does an enabled live skill already cover this setup? Structural match on
  *  coin/direction/family when the source knows them, keyword overlap on the
- *  IF condition for coinless pattern drafts (the book seeds). */
+ *  IF condition for coinless pattern drafts (the book seeds). The decision
+ *  itself lives in skillClauseBar so the notebook's own intake path can use
+ *  the identical bar without importing this module (which imports it). */
 export const coveredByLiveSkill = (
     crafted: CraftedSkill,
     coin?: string,
     direction?: string,
     family?: string,
-): boolean => {
-    try {
-        const dir = direction && direction !== 'Neutral' ? direction
-            : /\b(long|buy)\b/i.test(crafted.ifCondition) ? 'Long'
-                : /\b(short|sell|fade)\b/i.test(crafted.ifCondition) ? 'Short'
-                    : undefined;
-        const words = salientWords(crafted.ifCondition);
-        return listSkills().some(({ meta }) => {
-            if (meta.status === 'retired' || meta.supersededBy) return false;
-            // COIN AGREEMENT IS A PREREQUISITE FOR COVERAGE — checked FIRST,
-            // before every path below. skillStrictlyMatchesSetup returns true
-            // on sameFamily WITHOUT looking at the coin, so a BTC skill used
-            // to "cover" an ETH draft and the different-coin guard below it
-            // was dead code (a family skill suppressed the same family on
-            // every OTHER coin). Coverage is a suppression decision: an
-            // ETH setup is not covered by a BTC skill merely because they
-            // share a family. A skill with no coin (a general family/
-            // pattern lesson) still covers cross-coin drafts — it claims
-            // no coin scope.
-            const normCoin = (c: string): string => c.toUpperCase().replace(/USDT?$/, '');
-            if (coin && meta.coin && normCoin(coin) !== normCoin(meta.coin)) return false;
-            // STRICT matcher — the LOOSE one scores direction-equality alone
-            // as coverage (hits ≥ 2), so one direction-only skill claimed to
-            // cover EVERY same-direction draft on EVERY coin and the gate
-            // answered "an existing skill already covers this", silently
-            // silencing future drafts. Coverage here is a suppression
-            // decision, i.e. enforcement-grade overlap: the skill must share
-            // the coin, the pattern family, or direction + regime.
-            if (skillStrictlyMatchesSetup(meta, { coin, direction: dir, family })) return true;
-            if (words.length >= 3) {
-                const hay = `${meta.ifCondition || ''}`.toLowerCase();
-                if (words.filter(w => hay.includes(w)).length >= 2) return true;
-            }
-            return false;
-        });
-    } catch {
-        return false;
-    }
-};
+): boolean => coveredByLiveSkillWith(crafted, liveReader, coin, direction, family);
 
 export type DraftGateVerdict =
     | { ok: true; crafted: CraftedSkill }
