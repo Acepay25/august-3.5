@@ -170,7 +170,12 @@ export const describePressure = (size: NotebookSize): string => {
     const action = size.pressure === 'soft'
         ? 'watching it'
         : size.pressure === 'trigger'
-            ? 'the harness has stopped creating new notebook files — delete or archive notes to undo this'
+            // Says what is actually true. The old wording claimed ALL notebook
+            // file creation had stopped; only model-note creation ever did.
+            // Skill creation stops at this tier too, and a hygiene pass
+            // consolidates duplicates on the same signal — but diary and index
+            // files are still written, so the claim is scoped, not absolute.
+            ? 'the harness has stopped adding new skills and model notes — existing skills still update and still count new outcomes, and a hygiene pass merges duplicates to make room'
             : 'the notebook writer is refused outright — nothing stored was deleted, but nothing new will be written';
     return `Notebook at ${mb} MB (${size.pressure})${where} — ${action}.`;
 };

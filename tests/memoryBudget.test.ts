@@ -49,6 +49,7 @@ import {
     getNotebookSize,
     initMemoryFiles,
     notebookPressureAllows,
+    updateMemoryFile,
     writeModelNote,
 } from '../services/learning/MemoryFilesService';
 
@@ -165,7 +166,14 @@ describe('describePressure', () => {
         const fat = measureNotebook(files, folders);
         const line = describePressure({ ...fat, pressure: 'trigger' });
         expect(line).toMatch(/profile\/ holds \d+%/);
-        expect(line).toMatch(/stopped creating new notebook files/);
+        // Scoped on purpose. The old string claimed ALL notebook file creation
+        // had stopped, which was never true — only model-note creation did.
+        // It now names the two kinds that actually stop and says the rest
+        // keeps working, so the Health tab cannot overstate what the budget
+        // does.
+        expect(line).toMatch(/stopped adding new skills and model notes/);
+        expect(line).toMatch(/existing skills still update/);
+        expect(line).not.toMatch(/stopped creating new notebook files/);
     });
 });
 
@@ -228,6 +236,40 @@ describe('the budget wired into the notebook', () => {
         await expect(writeModelNote({
             folder: 'lessons', fileName: 'already-here', decision: 'append', content: 'x',
         } as never, USER)).rejects.toThrow(/hard size budget/);
+    });
+
+    /**
+     * Skill creation is the growth the model drives itself, and it is the
+     * only kind it can re-derive by consolidating — so it is what the budget
+     * stops at the trigger tier. Until this, only writeModelNote consulted the
+     * budget and the harness kept minting skills while the Health tab claimed
+     * it had stopped.
+     */
+    it('refuses a new SKILL at the trigger, but updates existing skills and leaves other folders alone', async () => {
+        const skills = folder('skills');
+        expect(skills).toBeTruthy();
+        // One real skill, so we can prove the update path still works.
+        const live = await createMemoryFile(skills.id, 'live-skill.md', '# Live\n\n**When:** BTC sweeps.\n', USER, true);
+        await fillWith(NOTEBOOK_CLEANUP_TRIGGER_BYTES, 'fat.md');
+        expect(getNotebookSize()?.pressure).toBe('trigger');
+
+        await expect(createMemoryFile(skills.id, 'brand-new-skill.md', '# New\n', USER, true))
+            .rejects.toThrow(/Cannot add a new skill/);
+
+        // A non-skill folder is untouched — the refusal is scoped.
+        await expect(createMemoryFile(folder('market-conditions').id, 'note.md', 'still fine', USER, true))
+            .resolves.toBeTruthy();
+
+        // And the existing library still learns: updates land at this tier.
+        await updateMemoryFile(live.id, { content: '# Live\n\n**When:** BTC sweeps twice.\n' }, USER);
+        expect(getMemoryFiles().files.find(f => f.id === live.id)!.content).toContain('twice');
+    });
+
+    it('allows new skills freely below the trigger tier', async () => {
+        const skills = folder('skills');
+        expect(getNotebookSize()?.pressure).toBe('ok');
+        await expect(createMemoryFile(skills.id, 'early-skill.md', '# Early\n', USER, true))
+            .resolves.toBeTruthy();
     });
 
     it('destroys nothing on the way: every pre-existing file survives a refusal', async () => {
