@@ -245,8 +245,25 @@ function reportUsageDirect(
     messages?: ChatMessage[],
 ): void {
     if (!usage) return;
-    options?.onUsage?.(usage);
-    emitTokenUsage({ providerId: config.id, modelId: config.selectedModel, usage });
+    // Coerce, don't just pass through. A truthy object with missing or
+    // non-numeric fields (an un-normalized snake_case payload from a transport,
+    // or any future one) used to reach mergeTokenUsage, where `0 + undefined`
+    // produced NaN for the whole run ledger — and `estimateCostUsd(NaN) ?? 0`
+    // then made shouldSkipRemaining() always false, silently disabling the
+    // per-debate spend cap. Normalized upstream AND refused here, so one bad
+    // transport cannot take the cost guard down with it.
+    const promptTokens = Number(usage.promptTokens);
+    const completionTokens = Number(usage.completionTokens);
+    if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) return;
+    const safe: TokenUsage = {
+        promptTokens,
+        completionTokens,
+        totalTokens: Number.isFinite(Number(usage.totalTokens))
+            ? Number(usage.totalTokens)
+            : promptTokens + completionTokens,
+    };
+    options?.onUsage?.(safe);
+    emitTokenUsage({ providerId: config.id, modelId: config.selectedModel, usage: safe });
     if (messages?.length && usage.promptTokens > 0) {
         observePromptRatio(usage.promptTokens, messageTextLength(messages));
     }

@@ -234,7 +234,17 @@ function devProviderProxy() {
             {
               const geminiConfig = body.generationConfig as Record<string, unknown> | undefined;
               if (geminiConfig) {
-                const geminiThinking = geminiThinkingParams(request.jsonMode, String(config.selectedModel || ''), request.reasoningEffort);
+                // The output cap is REQUIRED — Gemini bills thinking tokens
+                // INSIDE maxOutputTokens, so an unclamped budget at or above
+                // the cap is a hard 400. `chatMessagesToGemini` above already
+                // produced a correctly clamped value via the 4-arg form; this
+                // line was overwriting it with the raw ladder value.
+                const geminiThinking = geminiThinkingParams(
+                    request.jsonMode,
+                    String(config.selectedModel || ''),
+                    request.reasoningEffort,
+                    request.maxTokens || 4096,
+                );
                 if (geminiThinking) geminiConfig.thinkingConfig = geminiThinking;
                 else delete geminiConfig.thinkingConfig;
               }
