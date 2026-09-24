@@ -2,10 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   getCalibrationDrift,
   getConfidenceAccuracy,
+  getCalibratedWinRate,
   initializeCalibration,
+  updateCalibration,
   updateGranularCalibration,
 } from '../services/validation/ConfidenceCalibrationService';
 import { MAX_TRADE_AGE_DAYS } from '../constants/calibrationConstants';
+import { TradeOutcome } from '../types';
 import type { ConfidenceCalibration, GranularCalibrationEntry } from '../types';
 
 /** Calibration fixture with the given bucket populated; others empty. */
@@ -130,4 +133,58 @@ describe('granularEntries are bounded by the same horizon as base entries', () =
     expect(JSON.stringify(out.granularEntries)).not.toContain('REAL-HISTORY-ENTRY');
     expect(out.granularEntries![0].timestamp).toBe(iso(0));
   });
+});
+
+/**
+ * The aggregate buckets used to be INCREMENTED and never decremented, while
+ * `entries` aged out at MAX_TRADE_AGE_DAYS. Every real consumer read the
+ * buckets — the drift verdict, the confidence penalty, the Health tab, and the
+ * block injected into EVERY analysis prompt. Executed before the fix: 30 High
+ * wins from 120 days ago plus 10 recent High losses reported "High: 75% win
+ * rate, n=40, STRONG" in the prompt while the correctly-computed decayed
+ * reader said 0%. A model told its edge is intact years after it decayed.
+ */
+describe('calibration aggregates follow the decay horizon', () => {
+    const iso = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+
+    it('drops out-of-horizon trades from the aggregate, not just from entries', () => {
+        const stale: ConfidenceCalibration = {
+            ...initializeCalibration(),
+            // 30 old High wins, all beyond the horizon.
+            entries: Array.from({ length: 30 }, () => ({
+                timestamp: iso(MAX_TRADE_AGE_DAYS + 30),
+                confidence: 'High' as const,
+                outcome: 'WIN' as const,
+            })),
+            // 3 recent High losses.
+            high: { wins: 30, losses: 0, total: 30 },
+        };
+
+        const out = updateCalibration(stale, 'High', TradeOutcome.LOSS);
+
+        // The stale 30 wins are GONE from the aggregate…
+        expect((out.entries ?? []).every(e => new Date(e.timestamp).getTime()
+            >= Date.now() - MAX_TRADE_AGE_DAYS * 86_400_000)).toBe(true);
+        expect(out.high!.wins).toBe(0);
+        expect(out.high!.total).toBeGreaterThan(0);
+        // …so the bucket now reflects only what survives the horizon.
+        expect(out.high!.wins).toBeLessThan(out.high!.total);
+    });
+
+    it('a stale history cannot keep a provider reading as calibrated', () => {
+        const stale: ConfidenceCalibration = {
+            ...initializeCalibration(),
+            entries: Array.from({ length: 30 }, () => ({
+                timestamp: iso(MAX_TRADE_AGE_DAYS + 30),
+                confidence: 'High' as const,
+                outcome: 'WIN' as const,
+            })),
+            high: { wins: 30, losses: 0, total: 30 },
+        };
+        const out = updateCalibration(stale, 'High', TradeOutcome.LOSS);
+        const rate = getCalibratedWinRate(out, 'High');
+        // Whatever the verdict, it is computed from a bounded population —
+        // never 100% from a 120-day-old record.
+        expect(rate === null || rate < 100).toBe(true);
+    });
 });

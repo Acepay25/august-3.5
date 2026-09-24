@@ -285,6 +285,42 @@ describe('scanTradeOutcome — inverted-plan refusal (Tier-0 #7)', () => {
   });
 });
 
+/**
+ * TP1 is a PARTIAL exit (the stop moves to breakeven), so a run to TP2/TP3
+ * never captured the full entry→last-TP move. The engine used to hand back
+ * lastTp.price as if the whole position had exited there, and three callers
+ * multiply that by full size — measured 1.67× overstatement on a three-TP
+ * ladder. It fed `realizedR`, which types/trade.ts calls the only R safe to
+ * accumulate into the skill ledger, plus position sizing and batchBacktest.
+ */
+describe('multi-TP scale-out exit price', () => {
+    const T = 1_700_000_000_000;
+
+    it('blends TP1 and the last target instead of reporting the full move', () => {
+        const scan = scanTradeOutcome(candles(T, [
+            [100, 100, 100, 100],  // fill
+            [100, 111, 100, 110],  // sweeps TP1, then the later targets
+        ]), 100, 90, [105, 108, 110], true);
+        expect(scan.tpHits.length).toBeGreaterThan(1);
+        const res = resolveOutcomeFromScan(scan);
+        expect(res.outcome).toBe('WIN');
+        const first = scan.tpHits[0].price;
+        const last = scan.tpHits[scan.tpHits.length - 1].price;
+        expect(res.exitPrice).toBeCloseTo((first + last) / 2, 6);
+        expect(res.exitPrice).toBeLessThan(last);
+    });
+
+    it('leaves a single-TP win unchanged', () => {
+        const scan = scanTradeOutcome(candles(T, [
+            [100, 100, 100, 100],
+            [100, 106, 100, 105],
+        ]), 100, 90, [105, 0, 0], true);
+        const res = resolveOutcomeFromScan(scan);
+        expect(res.outcome).toBe('WIN');
+        expect(res.exitPrice).toBe(105);
+    });
+});
+
 describe('formatDurationMs', () => {
   it('formats hours and minutes', () => {
     expect(formatDurationMs(0)).toBe('0m');

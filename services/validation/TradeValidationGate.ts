@@ -615,7 +615,15 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
 
     // 3.2 Risk/Reward Validation
     if (entryPrice > 0 && stopLoss > 0 && takeProfit1 > 0 && atr > 0) {
-        const rrResult = validateRiskReward(entryPrice, stopLoss, takeProfit1, atr, adjustedConfidence);
+        // Pass the direction. Without it this took the legacy Math.abs path, so
+        // a geometrically impossible plan (Long with the stop ABOVE entry)
+        // scored 80/100 and "VALIDATION: PASSED" at High confidence, while the
+        // direction-aware branch refuses and mirrors it. The AI boundary
+        // usually repairs levels first, so this is defense-in-depth for
+        // hand-edited, legacy and prose-parsed plans — but outcomeEngine
+        // already refuses the same plan as INVALID, and two engines
+        // disagreeing about one trade is how that disagreement reads as edge.
+        const rrResult = validateRiskReward(entryPrice, stopLoss, takeProfit1, atr, adjustedConfidence, analysisDirection as TradeDirection);
         validationScores.riskReward = rrResult.isValid ? RR_VALIDATION_PASS_SCORE : RR_VALIDATION_FAIL_SCORE;
         warnings.push(...rrResult.warnings);
 

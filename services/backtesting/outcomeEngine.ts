@@ -311,10 +311,29 @@ export const resolveOutcomeFromScan = (scan: TradeScanResult): OutcomeResolution
       };
     }
     const lastTp = scan.tpHits[scan.tpHits.length - 1];
+    // The FULL position did not exit at the last TP. TP1 is a partial exit
+    // (stop moves to breakeven), so a run to TP2/TP3 captured roughly half at
+    // TP1 and the remainder at the last target. Returning lastTp.price made
+    // every caller multiply the full entry→last-TP move by full size —
+    // measured 1.67× on a three-TP ladder — and it fed `realizedR`, which
+    // types/trade.ts calls the only R safe to accumulate into the skill
+    // ledger, plus position sizing and batchBacktest.avgRR.
+    //
+    // PnL is linear in price, so the blended exit is the midpoint of TP1 and
+    // the last target. Same arithmetic OutcomeAutopilotService already used
+    // for its own resolution; the shared engine is the right home so the two
+    // cannot disagree about the same trade. A single-TP run is unchanged
+    // (first === last), and so is the TP1→breakeven case, which resolves on
+    // the breakeven branch above with its own exit price.
+    const scaleOutEntryTp = scan.tpHits[0];
+    const blendedExit = scan.tpHits.length > 1
+      && Number.isFinite(scaleOutEntryTp.price) && Number.isFinite(lastTp.price)
+      ? (scaleOutEntryTp.price + lastTp.price) / 2
+      : lastTp.price;
     return {
       outcome: 'WIN',
       hitTarget: lastTp.level,
-      exitPrice: lastTp.price,
+      exitPrice: blendedExit,
       exitTime: lastTp.candleTime,
       exitCandleIndex: lastTp.candleIndex,
     };

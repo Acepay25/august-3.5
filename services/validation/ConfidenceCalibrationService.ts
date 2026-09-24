@@ -78,15 +78,6 @@ export const updateCalibration = (
     // Get the key for the confidence level
     const key = confidence.toLowerCase() as 'high' | 'medium' | 'low' | 'avoid';
 
-    // Update aggregate stats
-    const stats = { ...calibration[key] };
-    stats.total += 1;
-    if (outcome === TradeOutcome.WIN) {
-        stats.wins += 1;
-    } else {
-        stats.losses += 1;
-    }
-
     // Create new timestamped entry for time-decay calculations
     const newEntry: CalibrationEntry = {
         timestamp: new Date().toISOString(),
@@ -101,6 +92,24 @@ export const updateCalibration = (
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - MAX_TRADE_AGE_DAYS);
     const prunedEntries = entries.filter(e => new Date(e.timestamp) >= cutoffDate);
+
+    // Rebuild the aggregate from the PRUNED entries — never increment it.
+    //
+    // The buckets used to be incremented and never decremented, so they were
+    // an all-time tally while `entries` aged out at 90 days — and every real
+    // consumer read the buckets. Executed: 30 High wins from 120 days ago plus
+    // 10 recent High losses reported "High: 75% win rate, n=40, STRONG" in the
+    // prompt injected into EVERY analysis, while the correctly-computed decayed
+    // reader said 0%. The drift verdict, the confidence penalty and the Health
+    // tab all inherited the stale number, and nothing called the correct reader
+    // at all. One population now, derived from the surviving entries.
+    const stats = { wins: 0, losses: 0, total: 0 };
+    for (const e of prunedEntries) {
+        if (e.confidence?.toLowerCase() !== key) continue;
+        stats.total += 1;
+        if (e.outcome === 'WIN') stats.wins += 1;
+        else stats.losses += 1;
+    }
 
     return {
         ...calibration,
