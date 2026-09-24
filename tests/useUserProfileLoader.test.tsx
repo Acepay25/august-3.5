@@ -117,6 +117,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 }));
 
 const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseUserProfileLoaderArgs => ({
+    profileReadyRef: { current: false },
     handleCancelAnalysis: vi.fn(),
     invalidatePostMortemRuns: vi.fn(),
     lensConfig: null,
@@ -175,7 +176,7 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setActiveUsername: vi.fn(),
     setExistingUsernames: vi.fn(),
     setIsUserModalOpen: vi.fn(),
-    toast: { info: vi.fn() },
+    toast: { info: vi.fn(), error: vi.fn() },
     ...overrides,
 });
 
@@ -256,6 +257,35 @@ describe('useUserProfileLoader', () => {
         expect(args.setActiveUsername).toHaveBeenCalledWith('fresh_user');
         expect(dbService.saveUserProfile).toHaveBeenCalledWith('fresh_user', expect.any(Object));
         expect(result.current.profileReady).toBe(true);
+    });
+
+    /**
+     * A FAILED load must not adopt the username. The profile's data was never
+     * read, so React state still holds the PREVIOUS user's conversations and
+     * trades; committing the switch let the 1500ms debounced autosave write
+     * that stale state over the incoming profile — empty arrays over a real
+     * trade log on a cold boot, one user's trades into another's on a switch.
+     * Both reproduced before this guard.
+     */
+    it('a failed load does NOT adopt the profile, and reports it', async () => {
+        vi.mocked(dbService.getUserProfile).mockRejectedValueOnce(new Error('IndexedDB unavailable'));
+
+        const args = createMockArgs();
+        const { result } = renderHook(() => useUserProfileLoader(args));
+
+        await act(async () => {
+            await result.current.loadUserData('victim');
+        });
+
+        // The load failed, so the username must not be committed anywhere…
+        expect(args.setActiveUsername).not.toHaveBeenCalledWith('victim');
+        expect(sessionStorage.getItem('activeUsername')).toBeNull();
+        expect(localStorage.getItem('last_active_user')).toBeNull();
+        // …and the autosave must be told the active profile is NOT ready.
+        expect(result.current.profileReady).toBe(false);
+        expect(args.profileReadyRef.current).toBe(false);
+        // The trader is told, rather than losing data silently.
+        expect(args.toast.error).toHaveBeenCalled();
     });
 
     it('workspace bootstrap runs once on mount — changed hook args must not reload the profile', async () => {

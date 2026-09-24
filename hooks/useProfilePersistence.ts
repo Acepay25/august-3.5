@@ -32,6 +32,9 @@ export interface ProfileSettingsState {
 
 export interface UseProfilePersistenceArgs extends ProfileSettingsState {
     activeUsername: string | null;
+    /** True once the ACTIVE profile's data has actually loaded. Read through a
+     *  ref so the autosave can gate without re-arming on every render. */
+    profileReadyRef?: React.MutableRefObject<boolean>;
     activeConversationId: string | null;
     setSaveStatus: React.Dispatch<React.SetStateAction<'SAVED' | 'SAVING' | 'ERROR'>>;
 
@@ -68,9 +71,28 @@ export interface UseProfilePersistenceResult {
  * dbService merges them, so a settings toggle never re-serializes
  * multi-MB conversation payloads.
  */
+/** Shallow, key-wise compare of two settings snapshots. `customInstructions`
+ *  and `confidenceCalibration` are objects, so they are compared by JSON —
+ *  settings are a few KB at most and this only runs on unload. */
+const settingsEqual = (a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | null | undefined): boolean => {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const k of keys) {
+        const av = a[k];
+        const bv = b[k];
+        if (av === bv) continue;
+        if (av && bv && typeof av === 'object' && typeof bv === 'object') {
+            if (JSON.stringify(av) === JSON.stringify(bv)) continue;
+        }
+        return false;
+    }
+    return true;
+};
+
 export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfilePersistenceResult => {
     const {
-        activeUsername, activeConversationId, setSaveStatus, toast,
+        activeUsername, activeConversationId, setSaveStatus, toast, profileReadyRef,
         conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
         finalTradeSummary, globalMemory, insightKnowledgeBase,
         memoryConfig, memoryModel,
@@ -85,6 +107,11 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     } = args;
 
     const lastSavedSnapshotRef = useRef<Partial<Omit<UserProfile, 'username'>> | null>(null);
+    // Settings have their OWN last-saved marker: the SETTINGS effect writes a
+    // light payload and never touches the heavy snapshot, so comparing against
+    // lastSavedSnapshotRef.settings would test a value the DATA path wrote at
+    // some earlier moment — not what the settings writer last persisted.
+    const lastSavedSettingsRef = useRef<Record<string, unknown> | null>(null);
     const buildProfileSnapshot = useCallback((): Partial<Omit<UserProfile, 'username'>> => ({
         conversations: conversationHistory,
         tradeLog: loggedTrades,
@@ -118,6 +145,14 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     // (1) DATA save — heavy payload, only on real data changes.
     useEffect(() => {
         if (!activeUsername) return;
+        // Only ever write for a profile that actually LOADED. The loader
+        // already refuses to adopt a username whose load threw; this is the
+        // second lock on the same door, because the failure mode is total and
+        // silent — a transient storage error turning the autosave into a
+        // writer of whatever happens to be in React state (the previous
+        // user's trades, or an empty array on a cold boot) under a username
+        // whose data was never read.
+        if (profileReadyRef && !profileReadyRef.current) return;
 
         // Bail out when already SAVING — this effect re-arms on EVERY stream
         // chunk, and a state write to the same value would still schedule a
@@ -146,6 +181,12 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         };
     }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, setSaveStatus]);
 
+    // The light payload, in one place so the SETTINGS effect and the unload
+    // dirty-check can never drift on WHICH fields count as settings.
+    const buildSettingsSnapshot = useCallback(() => ({
+        activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel,
+    }), [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel]);
+
     // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
     // longer debounce (2500ms) since settings changes are low-risk and we
     // don't want every checkbox tick to trigger a save storm.
@@ -162,8 +203,9 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+                    settings: buildSettingsSnapshot(),
                 });
+                lastSavedSettingsRef.current = buildSettingsSnapshot();
                 setSaveStatus('SAVED');
             } catch (err) {
                 console.error("Failed to save user profile (settings):", err);
@@ -230,14 +272,24 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
             if (!last) return true; // never saved yet
             // Shallow reference check on the heavy arrays is sufficient —
             // any state mutation produces a new array reference (immutable updates).
-            return last.conversations !== conversationHistory
+            if (last.conversations !== conversationHistory
                 || last.tradeLog !== loggedTrades
                 || last.tradeSummaries !== tradeSummaries
                 || last.savedAnalyses !== savedAnalyses
                 || last.finalTradeSummary !== finalTradeSummary
                 || last.globalMemory !== globalMemory
                 || last.insightKnowledgeBase !== insightKnowledgeBase
-                || last.lastActiveConversationId !== (activeConversationId || undefined);
+                || last.lastActiveConversationId !== (activeConversationId || undefined)) {
+                return true;
+            }
+            // Settings too. The SETTINGS effect has its own 2500ms debounce, so
+            // a toggle flipped and then closed inside that window reported
+            // "not dirty" here, the unload flush returned early, and the
+            // setting silently reverted on next launch.
+            if (!settingsEqual(lastSavedSettingsRef.current as Record<string, unknown> | null, buildSettingsSnapshot())) {
+                return true;
+            }
+            return false;
         },
         save: async (snapshot) => {
             if (!activeUsername) return;
