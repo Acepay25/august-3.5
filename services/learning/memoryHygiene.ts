@@ -49,7 +49,7 @@ import { getPreferenceObject, setPreferenceObject } from '../infrastructure/Pref
 import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
 import { getFirstReadyProvider } from '../../utils/providerUtils';
 import type { ProviderConfig } from '../../types/provider';
-import { listSkills, reviewSkillEffectiveness, EVIDENCE_STALE_DAYS } from './SkillMemoryService';
+import { listSkills, reviewSkillEffectiveness, consolidateSkills, EVIDENCE_STALE_DAYS } from './SkillMemoryService';
 import { computeAllSkillLifts } from './MemoryProvenanceService';
 import { getRecentMemoryInjections } from './MemoryInjectionService';
 import { VetoLedgerService } from '../ui/VetoLedgerService';
@@ -212,6 +212,28 @@ export const runMemoryHygiene = async (
                 : 'Notebook review had nothing to say (empty or unchanged notebook).');
         } else {
             lines.push('Skipped the notebook review — no ready provider.');
+        }
+
+        // 3b. Under byte pressure, consolidate BEFORE anything else asks the
+        //     model to stop minting. createMemoryFileUnlocked refuses a new
+        //     skill once the notebook reaches the trigger tier, so the growth
+        //     the budget stops has to be made room for here: exact-claim
+        //     duplicates merge and the losers archive. This REDIRECTS the
+        //     model into compressing its library rather than blocking it.
+        //
+        //     It bounds the ACTIVE library, not the blob — consolidation
+        //     archives files with their content intact, because nothing in
+        //     this store is proven safe to delete (utils/memoryBudget.ts).
+        if (notebookWantsCleanup()) {
+            const before = listSkills().length;
+            await consolidateSkills(username);
+            const after = listSkills().length;
+            const merged = before - after;
+            if (merged > 0) {
+                lines.push(`Consolidated ${merged} duplicate skill${merged === 1 ? '' : 's'}`
+                    + ` to make room under notebook size pressure`
+                    + ` (${before} → ${after} active). Archived copies keep their content.`);
+            }
         }
 
         // 4. Graveyard retention: enforce the newest-MAX_TOMBSTONES boundary the

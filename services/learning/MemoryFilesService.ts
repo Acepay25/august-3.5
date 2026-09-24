@@ -618,6 +618,29 @@ export const createMemoryFileUnlocked = async (
     if (memoryCache.files.some(f => f.folderId === folderId && f.name === cleanName)) {
         throw new Error(`"${cleanName}" already exists in this folder`);
     }
+    // Byte pressure, enforced at the ONE choke point every creation flows
+    // through. Until now only `writeModelNoteUnlocked` consulted the budget,
+    // so past the trigger tier the harness kept minting skills and per-coin
+    // diaries while the Health tab told the trader it had stopped.
+    //
+    // Scoped to the skills folder on purpose. Skills are the unbounded growth
+    // the model drives itself, and the only kind it can re-derive by
+    // consolidating. Refusing here REDIRECTS rather than blocks: the hygiene
+    // pass merges duplicate skills on the same pressure signal, so the model
+    // keeps learning by compressing instead of accumulating. Appends and
+    // updates to existing files are untouched, so evidence still lands at
+    // every tier — only minting a NEW skill stops.
+    if (!notebookPressureAllows('newFiles')) {
+        const folder = memoryCache.folders.find(f => f.id === folderId)?.name ?? 'misc';
+        if (folder === 'skills') {
+            throw new Error(
+                'Cannot add a new skill — the notebook is at its size budget'
+                + `${notebookSize ? ` (${describePressure(notebookSize)})` : ''}.`
+                + ' The existing library still updates and still counts new outcomes;'
+                + ' a hygiene pass will merge duplicates to make room.',
+            );
+        }
+    }
     const now = Date.now();
     const file: MemoryFile = { id: uid(), folderId, name: cleanName, content, enabled: true, autoManaged, createdAt: now, updatedAt: now };
     memoryCache.files.push(file);
