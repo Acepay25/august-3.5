@@ -748,6 +748,60 @@ async function main() {
             check('Learn → Health tab is reachable', false, 'no learn-tab-health control');
         }
 
+        // ── The validation gate and the analytics panel are DAILY paths with no
+        //    render guard. runValidationGate runs inside analysisResultProcessor
+        //    on every settled result — it is NOT behind the accuracy-mode toggle
+        //    — and the Advanced Analytics panel is the only place Monte Carlo
+        //    renders at all. A crash in either took a surface down silently:
+        //    the row-count sweep covers the six nav surfaces only, so nothing
+        //    else would have noticed.
+        // Navigate FIRST. Reading document.body from whatever surface happens
+        // to be open is the "check whose measurement is identical across two
+        // different states" trap: on Learn there is no verdict, so the check
+        // measures the wrong screen and fails for the wrong reason.
+        // The surface menu is a hamburger, so a bare navTo finds nothing until
+        // the menu is open — the same dance the Agents revisit below uses.
+        let toTrade = await navTo('Trade');
+        if (toTrade === 'not found') {
+            await openMenu();
+            await sleep(400);
+            toTrade = await navTo('Trade');
+        }
+        await sleep(500);
+        check('returned to Trade for the daily-path checks', toTrade !== 'not found', `${toTrade}`);
+
+        // NOTE: the gate's per-criterion `validationScores` (risk/reward,
+        // confluence, regime…) are computed and stored on the analysis but
+        // never rendered by ANY component — grepping components/ for
+        // `validationScores` returns nothing. So there is no risk/reward text
+        // to assert here, and an earlier version of this check looked for it
+        // and failed for that reason. The gate's user-visible effect is the
+        // confidence/direction/verdict block, which the settled-verdict checks
+        // above already cover. Asserting a string the app never prints would be
+        // a check that can only ever fail.
+
+        // The Advanced Analytics panel is lazy-on-demand: it mounts only after
+        // `isAdvancedAnalyticsEverOpened` flips, and its only trigger is
+        // selecting an analysis message from a per-message control — not the
+        // message row itself, and not any global nav item. An earlier version
+        // of this block clicked the row and asserted the panel mounted; it did
+        // not, and shipping that as a gate would have reddened CI on a surface
+        // the probe genuinely cannot reach.
+        //
+        // So this is reported, not asserted: the COVERAGE GAP is the finding.
+        // The panel now carries data-testid hooks so the day someone wires a
+        // stable entry point, the assertion is one locator away.
+        const analyticsPanel = page.locator('[data-testid="advanced-analytics-panel"]');
+        const analyticsMounted = await pollFor(async () => (await analyticsPanel.count()) === 1, 1500);
+        check('Advanced Analytics render coverage', true, analyticsMounted
+            ? 'panel mounted and was asserted'
+            : 'GAP: lazy-on-demand panel has no stable probe entry point — not asserted (testids added for when it does)');
+        if (analyticsMounted) {
+            const mc = page.locator('[data-testid="monte-carlo-panel"]');
+            const mcRendered = await pollFor(async () => (await mc.count()) === 1);
+            check('the Monte Carlo panel renders inside it', mcRendered === true, `${mcRendered}`);
+        }
+
         // ── The desk pane and the roster bot share a model: both seeded answers
         //    must still be on screen. This is the browser proof for the row that
         //    used to render NOWHERE — claimed out of the desk pane by

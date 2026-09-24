@@ -44,6 +44,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
         : 'Probability simulation';
 
     return (
+        <div data-testid="monte-carlo-panel">
         <SectionCard
             title="Monte Carlo"
             subtitle={subtitle}
@@ -164,6 +165,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                 </div>
             )}
         </SectionCard>
+        </div>
     );
 };
 

@@ -124,6 +124,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
         <>
             {/* Modern Side Panel */}
             <div
+                data-testid="advanced-analytics-panel"
                 ref={dialogRef}
                 role="dialog"
                 aria-modal="true"
