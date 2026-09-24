@@ -484,6 +484,45 @@ async function main() {
             JSON.stringify(afterThird));
         check('trade surface still mounted', afterThird.treeAlive === 1);
 
+        // The dock header's primary control is a direct hop to Chat, so the
+        // move that a trader makes constantly is one click instead of opening
+        // the hamburger. Asserted HERE, from the Trade surface, because the
+        // reverse direction (Chat → dock) is covered by `open-in-dock` later.
+        //
+        // Self-contained on purpose: `navTo`/`openMenu`/`pollFor` are declared
+        // further down, and reaching for them from here hits their temporal
+        // dead zone (const declarations).
+        const chatJump = await page.evaluate(() => {
+            const b = document.querySelector('[data-testid="dock-open-chat"]');
+            if (!b) return 'missing';
+            if (b.disabled) return 'disabled';
+            b.click();
+            return 'clicked';
+        });
+        const landedOnChat = await page.locator('[data-testid="agents-view"]')
+            .waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+        check('the dock header jumps straight to Chat',
+            chatJump === 'clicked' && landedOnChat === true, `${chatJump}/${landedOnChat}`);
+        // And back again, so the probe resumes on the surface it expects.
+        if (landedOnChat) {
+            await page.evaluate(() => {
+                document.querySelector('button[aria-controls="mobile-navigation-menu"]')?.click();
+            });
+            await sleep(300);
+            const backToTrade = await page.evaluate(() => {
+                const hit = [...document.querySelectorAll('#mobile-navigation-menu button, #mobile-navigation-menu a')]
+                    .find(b => /^Trade/i.test((b.textContent || '').trim()));
+                if (!hit) return 'not found';
+                hit.click();
+                return 'clicked';
+            });
+            const backLanded = await page.locator('[data-testid="trade-view"]')
+                .waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+            check('can return to Trade from the Chat hop',
+                backToTrade === 'clicked' && backLanded === true, `${backToTrade}/${backLanded}`);
+        }
+
+
         // ── The Chat surface (id/testids still "agents") ───────────────────────────────────────────
         // It reads the App-side message array through a filter
         // (`utils/agentThreads.deskThread`), which is a DIFFERENT store from the
