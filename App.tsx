@@ -1577,10 +1577,17 @@ const App: React.FC = () => {
 
 
 
+    // True once the ACTIVE profile's data has actually loaded. Owned here
+    // because the autosave below is constructed before the loader further
+    // down, and both must agree: data may only be written for a profile that
+    // loaded. A load that throws used to adopt the username anyway, and the
+    // debounced autosave then wrote stale (or empty) state over that profile.
+    const profileReadyRef = useRef(false);
+
     // Profile persistence (extracted to hooks/useProfilePersistence.ts):
     // heavy DATA save, light SETTINGS save, mid-run heartbeat, unload flush.
     useProfilePersistence({
-        activeUsername, activeConversationId, setSaveStatus, toast,
+        activeUsername, activeConversationId, setSaveStatus, toast, profileReadyRef,
         conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
         finalTradeSummary, globalMemory, insightKnowledgeBase,
         memoryConfig, memoryModel,
@@ -2461,6 +2468,7 @@ const App: React.FC = () => {
         setExistingUsernames,
         setIsUserModalOpen,
         toast,
+        profileReadyRef,
     });
     resetAppStateRef.current = userProfileResetAppState;
 

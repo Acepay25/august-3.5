@@ -108,7 +108,11 @@ export interface UseUserProfileLoaderArgs {
     setActiveUsername: (u: string) => void;
     setExistingUsernames: React.Dispatch<React.SetStateAction<string[]>>;
     setIsUserModalOpen: (open: boolean) => void;
-    toast: { info: (msg: string) => void };
+    toast: { info: (msg: string) => void; error: (title: string, message?: string) => void };
+    /** Owned by the caller because the autosave hook is constructed BEFORE
+     *  this one and must read the same flag. Set true only once a profile's
+     *  data has actually loaded; the autosave refuses to write otherwise. */
+    profileReadyRef: React.MutableRefObject<boolean>;
 }
 
 export interface UseUserProfileLoaderResult {
@@ -138,7 +142,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsEntryNotHitCapturing, setConfidenceCalibration, setAutopilotResolutions,
         setInput, setImages, setExpandedPostMortems,
         setIsLoading, setActiveUsername, setExistingUsernames, setIsUserModalOpen,
-        toast,
+        toast, profileReadyRef,
     } = args;
 
     const [profileReady, setProfileReady] = useState(false);
@@ -488,17 +492,29 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             setIsUserModalOpen(false);
             setIsLoading(false);
             setProfileReady(true);
+            profileReadyRef.current = true;
         } catch (error) {
             console.error('App: failed to load user data', error);
             // A superseded load must not mark the newer profile's pending
             // load as failed — the current generation owns the UI now.
             if (isStale()) return;
-            setActiveUsername(username);
-            sessionStorage.setItem('activeUsername', username);
-            profileSelectionStartedRef.current = true;
-            setIsUserModalOpen(false);
+            // DO NOT COMMIT THE SWITCH. This profile's data was never loaded,
+            // so the React state still holds the PREVIOUS user's
+            // conversations and trades. Adopting the username here made the
+            // 1500ms debounced autosave write that stale state over the
+            // incoming profile: on a fresh boot, empty arrays over a real
+            // trade log; on a switch, one user's trades into another's. Both
+            // reproduced. Stay on the last good state and say so, rather than
+            // trading a transient storage error for the user's data.
             setIsLoading(false);
-        }
+            setIsUserModalOpen(false);
+            setProfileReady(false);
+            profileReadyRef.current = false;
+            toast.error(
+                'Could not load that profile',
+                `${username} was not opened because its data failed to load, so nothing was overwritten. `
+                + 'Your previous session is unchanged — try again, or restore from a backup in Settings → Data.',
+            );        }
     }, [
         ensembleModelCount, ensembleModelSelection, handleCancelAnalysis,
         handleSetEnsembleModelSelection, handleSetLensConfig,
@@ -516,7 +532,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setMemoryConfig, setMemoryModel, setSavedAnalyses,
         setSummarizationModel, setSummarizationProvider, setSummaryCharLimit,
         setTradeSummaries, setUseAlgorithmicInsights, setUseAlgorithmicSummary,
-        setVisionModel, toast,
+        setVisionModel, toast, profileReadyRef,
     ]);
 
     // The workspace scan is a MOUNT-ONLY bootstrap. It must never re-run when

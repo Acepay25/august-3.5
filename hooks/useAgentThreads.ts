@@ -63,6 +63,18 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
         () => loadThreadOpenedMap(activeUsername ?? ''));
     const [bots, setBots] = useState<AgentBot[]>(() => getBots());
     const [groups, setGroups] = useState<AgentGroup[]>(() => getGroups());
+    // Re-read on a profile switch. The roster store keys every read on
+    // getActiveUsername() at CALL time, so a fresh getBots() after a switch
+    // returns the incoming user's bots — but this state was seeded once at
+    // mount and only refreshed by the roster pub/sub, which fires on a WRITE.
+    // Switching profiles therefore left the previous user's bots, groups and
+    // teams on the Agents surface for the rest of the session, and editing one
+    // wrote into the NEW user's roster. Mirrors the opened-map effect a few
+    // lines below, which already handled the switch for the other store.
+    useEffect(() => {
+        setBots(getBots());
+        setGroups(getGroups());
+    }, [activeUsername]);
     useEffect(() => subscribeAgentRoster(() => {
         setBots(getBots());
         setGroups(getGroups());
