@@ -1184,7 +1184,12 @@ export const fetchDerivativesData = async (symbol: string): Promise<DerivativesD
         const result: DerivativesData = {
             openInterest: oi.oi,
             openInterestValue: oi.oiValue,
-            oiChange24h: 0, // Would need historical data to calculate
+            // The real 24h figure is computed below as oiChangePct from a
+            // 24×1h history. A hard-coded 0 here printed "OI 24h: 0.0%" in the
+            // prompt table immediately above the line carrying the actual
+            // number, so the model's "conviction read" was a literal zero that
+            // reads as a measurement. Same population, same source.
+            oiChange24h: Math.round(oiChangePct * 100) / 100,
             longShortRatio: lsr,
             topTraderRatio: ttr,
             takerBuySell: tbs,

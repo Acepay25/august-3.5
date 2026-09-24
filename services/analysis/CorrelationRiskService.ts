@@ -136,18 +136,26 @@ export const detectBTCMajorLevels = async (): Promise<{
  */
 export const getBTCDominanceTrend = async (): Promise<'rising' | 'falling' | 'stable'> => {
     try {
-        // CoinGecko doesn't provide historical dominance easily, so we'll estimate
-        // by comparing current BTC price change vs TOTAL market cap change
         const response = await fetch('https://api.coingecko.com/api/v3/global');
         if (!response.ok) return 'stable';
 
         const data = await response.json();
-        const btcChange24h = data.data?.market_cap_change_percentage_24h_usd ?? 0;
-
-        // If BTC is outperforming, dominance is rising
-        // This is a simplified heuristic - in production you'd track historical dominance
-        if (btcChange24h > 2) return 'rising';
-        if (btcChange24h < -2) return 'falling';
+        // Use the REAL dominance change when the API reports it. The old code
+        // read `market_cap_change_percentage_24h_usd` — the TOTAL crypto
+        // market's move — and called it BTC dominance, despite its own comment
+        // saying it compared BTC against the total. That is a sign INVERSION,
+        // not a rough approximation: when BTC is flat and alts rally, the total
+        // cap rises, the code reported "dominance rising", and the caller added
+        // a 20-point risk penalty plus an "alt longs especially risky" warning
+        // to the prompt — precisely when alts were outperforming.
+        //
+        // When the API does not report the change, the honest answer is "no
+        // signal". Deriving one from a different metric is how the inversion
+        // happened in the first place.
+        const dominanceChange = data?.data?.btc_dominance_change_percentage_24h;
+        if (typeof dominanceChange !== 'number' || !Number.isFinite(dominanceChange)) return 'stable';
+        if (dominanceChange > 0.5) return 'rising';
+        if (dominanceChange < -0.5) return 'falling';
         return 'stable';
     } catch {
         return 'stable';

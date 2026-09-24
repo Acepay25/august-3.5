@@ -489,6 +489,14 @@ export const generateTASummary = (
  * Calculate support and resistance levels from price data
  */
 export const calculateKeyLevels = (klines: Kline[]): { support: number[]; resistance: number[] } => {
+    // Guard an empty series. A single failed timeframe fetch yields [], and
+    // indexing it threw — which propagated out of fetchHybridData, where BOTH
+    // callers swallow and return null. One flaky 4h request out of four
+    // therefore discarded 15m + 1h + 1d indicators, regime, derivatives, order
+    // book and the entire prompt injection, and the model analysed a chart
+    // with no structure and no indication anything was missing. Empty levels
+    // is exactly the degradation dataQuality.unavailableSources records.
+    if (!Array.isArray(klines) || klines.length === 0) return { support: [], resistance: [] };
     const highs = klines.map(k => k.high);
     const lows = klines.map(k => k.low);
     const currentPrice = klines[klines.length - 1].close;
@@ -1242,6 +1250,12 @@ export const calculatePivotPoints = (klines: Kline[]): PivotPoints => {
  * Calculate Fibonacci Retracement Levels
  */
 export const calculateFibonacciLevels = (klines: Kline[]): FibonacciLevels => {
+    // Empty series ⇒ no swing to anchor a retracement on. See
+    // calculateKeyLevels for why an absent timeframe must degrade rather
+    // than throw and take the whole packet with it.
+    if (!Array.isArray(klines) || klines.length === 0) {
+        return { levels: [] } as unknown as FibonacciLevels;
+    }
     // Find swing high and swing low from recent data
     const recentKlines = klines.slice(-50);
     const swingHigh = Math.max(...recentKlines.map(k => k.high));
@@ -1313,6 +1327,12 @@ export const countLevelTouches = (klines: Kline[], level: number, tolerance = 0.
  * Calculate Enhanced Key Levels
  */
 export const calculateEnhancedKeyLevels = (klines: Kline[], timeframe: string): KeyLevelsEnhanced => {
+    // Degrade on an empty series rather than throw — see calculateKeyLevels.
+    if (!Array.isArray(klines) || klines.length === 0) {
+        return {
+            support: [], resistance: [], pivotPoints: null, fibonacci: { levels: [] },
+        } as unknown as KeyLevelsEnhanced;
+    }
     const currentPrice = klines[klines.length - 1]?.close || 0;
 
     // Pivot Points

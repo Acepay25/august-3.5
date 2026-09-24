@@ -1293,19 +1293,29 @@ export const getCalibrationSummaries = (): ProviderCalibrationSummary[] => {
             seSum += b.wins * Math.pow(1 - anchor, 2) + (b.total - b.wins) * Math.pow(anchor, 2);
             samples += b.total;
         }
-        const totalWins = buckets.high.wins + buckets.medium.wins + buckets.low.wins;
-        const overallWinRate = samples > 0 ? (totalWins / samples) * 100 : 0;
         const highTotal = buckets.high.total;
         const highWinRate = highTotal > 0 ? (buckets.high.wins / highTotal) * 100 : null;
-        const highGap = highWinRate !== null ? Math.round((overallWinRate - highWinRate) * 10) / 10 : null;
+        // Declared anchor MINUS realized, exactly as the field's doc says. The
+        // old code compared High against the model's OWN all-bucket average,
+        // so the verdict answered a question nobody asked and could land wrong
+        // in both directions: executed, a provider hitting the 70% anchor
+        // exactly was graded "underconfident", and one winning 30% of its
+        // High calls was graded "calibrated" (gap 0) and so never demoted.
+        // Positive = overconfident, matching the comment and threshold signs.
+        const highGap = highWinRate !== null
+            ? Math.round((CONFIDENCE_ANCHOR.high * 100 - highWinRate) * 10) / 10
+            : null;
         const brierScore = samples > 0 ? Math.round((seSum / samples) * 10000) / 10000 : null;
 
         let verdict: ProviderCalibrationSummary['verdict'] = 'insufficient-data';
         if (samples >= 5 && highGap !== null && highTotal >= 3) {
             verdict = highGap > 12 ? 'overconfident' : highGap < -12 ? 'underconfident' : 'calibrated';
-        } else if (samples >= 5) {
-            verdict = 'calibrated';
         }
+        // The old `else if (samples >= 5) verdict = 'calibrated'` awarded
+        // "calibrated" to a model with ZERO High samples — a verdict about
+        // High-confidence behaviour from data containing no High trades.
+        // Absence of that evidence is 'insufficient-data', which is what it
+        // says now.
 
         return { provider, brierScore, samples, highGap, verdict };
     });
