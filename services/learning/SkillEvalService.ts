@@ -36,6 +36,7 @@ import {
     skillEnabledFlag,
     EVAL_DEMOTE_STREAK,
     MIN_SAMPLE_CONFIRMED,
+    followedEvidence,
     type SkillMeta,
 } from './SkillMemoryService';
 import { evaluateClaim } from '../../utils/skillPrediction';
@@ -336,8 +337,11 @@ const recordEvalVerdictUnlocked = async (
     // ladder pass; this records WHEN it was last tested + surfaces the
     // outcome in the eval detail).
     if (meta.prediction) {
-        const claim = evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses });
-        meta.claimTestedEvidence = meta.wins + meta.losses;
+        // Followed evidence, NOT raw counters: the birth cluster authored this
+        // skill's claim, so it cannot also be the evidence that satisfies it.
+        const followed = followedEvidence(meta);
+        const claim = evaluateClaim(meta.kind, meta.prediction, followed);
+        meta.claimTestedEvidence = followed.wins + followed.losses;
         meta.evalDetail += claim.pending
             ? ` | claim ${claim.reason}`
             : ` | claim ${claim.met ? 'MET' : 'UNMET'}: ${claim.reason}`;
@@ -392,13 +396,16 @@ const recordEvalVerdictUnlocked = async (
         // (same semantics as deriveStatus's ladder). Rehabilitation is
         // exempt: it restores what an eval wrongly benched, not a first tier.
         const claimBlocksPromotion = meta.prediction && (() => {
-            const c = evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses });
+            // Followed evidence only — the same exclusion the ladder applies.
+            // Using raw counters here let the eval path re-promote a skill on
+            // the very birth cluster the ladder refuses to count.
+            const c = evaluateClaim(meta.kind, meta.prediction, followedEvidence(meta));
             return !c.pending && !c.met;
         })();
         if (isRehabilitation) {
             stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail})`);
             meta.status = 'confirmed';
-        } else if (meta.wins + meta.losses >= MIN_SAMPLE_CONFIRMED && !claimBlocksPromotion) {
+        } else if (followedEvidence(meta).wins + followedEvidence(meta).losses >= MIN_SAMPLE_CONFIRMED && !claimBlocksPromotion) {
             stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail}) — promotion`);
             meta.status = 'confirmed';
         }

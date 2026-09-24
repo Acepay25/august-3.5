@@ -1473,6 +1473,20 @@ export const halveCounts = (meta: SkillMeta, times: number): void => {
     for (let i = 0; i < times; i++) {
         meta.wins = Math.floor(meta.wins / 2);
         meta.losses = Math.floor(meta.losses / 2);
+        // The birth cluster decays WITH the record it belongs to. Left fixed,
+        // it becomes a ratchet: 8 birth wins halved to wins=1 still subtracted
+        // 8, so followed evidence floored at 0 and the skill had to re-earn its
+        // entire birth cluster before a single followed sample existed — and
+        // every later 90-day silence re-halved it again, leaving a stale skill
+        // that could be neither promoted nor auto-retired.
+        if (meta.birthEvidence) {
+            meta.birthEvidence = {
+                ...meta.birthEvidence,
+                wins: Math.floor(meta.birthEvidence.wins / 2),
+                losses: Math.floor(meta.birthEvidence.losses / 2),
+                clusterSize: Math.floor(meta.birthEvidence.clusterSize / 2),
+            };
+        }
         // The expectancy pair decays with the record it belongs to, or a skill
         // would keep quoting an average earned from evidence that no longer
         // counts. Halving both keeps netR/rSampled stable while shrinking the
@@ -2168,7 +2182,16 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             wins: 0,
             losses: 0,
             consecutiveLosses: 0,
-            tradeIds: [],
+            // The authoring trade id IS recorded, for DEDUPE only. Two paths
+            // re-sync the same trade (log time, post-mortem, bot fold), and
+            // applySkillEvidence skips a trade already in tradeIds — without
+            // it, a second sync with no injection record reads UNKNOWN, takes
+            // the full-credit path, and banks the authoring trade as evidence
+            // the very co-occurrence this batch removed. It also keeps
+            // usePostMortem's alreadyAutoIngested guard working, which asks
+            // whether this trade id already landed in a skill.
+            tradeIds: [trade.id],
+            birthEvidence: { wins: 0, losses: 0, clusterSize: 1, at: new Date().toISOString() },
             // `prior` is what keeps this injectable. MemoryRetrievalService
             // withholds any zero-evidence skill that lacks it, and without
             // injection this skill could never earn evidence — the loop would
@@ -2186,7 +2209,17 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
         meta.status = deriveStatus(meta);
         const slug = slugifyName([coin, kind, clause.ifCondition.slice(0, 40)].filter(Boolean).join(' '))
             || 'if-then';
-        await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
+        // Contain the write. createMemoryFileUnlocked refuses a new skill once
+        // the notebook hits the trigger tier, and this function is awaited by
+        // syncClosedTradeToNotebook OUTSIDE its own try block — an escaping
+        // throw there would abort the worth gate, the consolidation pass and
+        // the auto-eval scheduler for every future trade, permanently. One
+        // refused skill must cost one skill, not the learning loop.
+        try {
+            await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
+        } catch (e) {
+            console.warn('[SkillMemory] skill not created from post-mortem clause:', e instanceof Error ? e.message : e);
+        }
     }
 };
 
@@ -2444,25 +2477,16 @@ export const applyDisplacementProposal = async (
     if (!target) return false;
     const meta = parseSkillMarkdown(target.content);
     if (!meta) return false;
-    stampStatusTransition(meta, 'retired', 'superseded');
-    meta.status = 'retired';
-    if (challenger?.supersededBy) meta.supersededBy = challenger.supersededBy;
-    meta.modifiedAt = new Date().toISOString();
-    await updateMemoryFileUnlocked(target.id, {
-        content: serializeSkill(meta, titleFromMeta(meta)),
-        enabled: false,
-    }, username);
-    // The displaced skill moves to the archive so the graveyard dedup 
-    // can see it on the next creation pass.
-    const archive = await ensureSkillsArchiveFolderUnlocked(username);
-    if (archive) {
-        await updateMemoryFileUnlocked(target.id, { folderId: archive.id, enabled: false }, username);
-    }
-    // The docstring promised "create the challenger in its place" — the
-    // gate's judged clauses ride in the proposal payload, so approval must
-    // actually install them (as a CANDIDATE — it displaced on score, but it
-    // still has to earn confirmed). Without this, approving displacement
-    // silently loses the challenger the gate compared.
+
+    // CREATE THE CHALLENGER FIRST. Retiring before creating meant a failed
+    // create left a confirmed skill archived with no replacement, and a retry
+    // could never complete: `isSkillFile` no longer matches an archived file,
+    // so the guard above returns false forever. Under byte pressure that is
+    // exactly when the create throws. Order is the whole fix.
+    //
+    // The challenger installs as a CANDIDATE — it displaced on score, but it
+    // still has to earn confirmed on its own post-injection evidence.
+    let createdChallenger = false;
     if (challenger?.ifCondition && challenger?.thenAction) {
         const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
         const dup = folder && getMemoryFiles().files.filter(isSkillFile).find(f => {
@@ -2470,7 +2494,7 @@ export const applyDisplacementProposal = async (
             return m?.ifCondition?.toLowerCase() === challenger.ifCondition?.toLowerCase();
         });
         if (folder && !dup) {
-            const meta: SkillMeta = {
+            const newMeta: SkillMeta = {
                 status: 'candidate',
                 kind: challenger.kind ?? 'repeat',
                 wins: challenger.wins ?? 0,
@@ -2483,8 +2507,37 @@ export const applyDisplacementProposal = async (
                 body: `Displaces "${displacedSlug}" at the library cap (approved from the learning queue).`,
             };
             const slug = slugifyName(challenger.ifCondition.slice(0, 60)) || `skill-${Date.now()}`;
-            await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
+            // Throwing here is SAFE now: the incumbent is still live, so the
+            // proposal can simply be retried from an intact state.
+            await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(newMeta, titleFromMeta(newMeta)), username, true);
+            createdChallenger = true;
         }
+    }
+
+    // Only now retire the incumbent. If the challenger could not be installed
+    // (byte pressure, duplicate name), retiring anyway would destroy a
+    // confirmed skill and leave the library smaller with nothing in its place.
+    if (challenger?.ifCondition && challenger?.thenAction && !createdChallenger) {
+        const alreadyThere = getMemoryFiles().files.filter(isSkillFile).some(f => {
+            const m = parseSkillMarkdown(f.content);
+            return m?.ifCondition?.toLowerCase() === challenger.ifCondition?.toLowerCase();
+        });
+        if (!alreadyThere) return false;
+    }
+
+    stampStatusTransition(meta, 'retired', 'superseded');
+    meta.status = 'retired';
+    if (challenger?.supersededBy) meta.supersededBy = challenger.supersededBy;
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(target.id, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: false,
+    }, username);
+    // The displaced skill moves to the archive so the graveyard dedup
+    // can see it on the next creation pass.
+    const archive = await ensureSkillsArchiveFolderUnlocked(username);
+    if (archive) {
+        await updateMemoryFileUnlocked(target.id, { folderId: archive.id, enabled: false }, username);
     }
     return true;
 });

@@ -636,8 +636,10 @@ export const createMemoryFileUnlocked = async (
             throw new Error(
                 'Cannot add a new skill — the notebook is at its size budget'
                 + `${notebookSize ? ` (${describePressure(notebookSize)})` : ''}.`
-                + ' The existing library still updates and still counts new outcomes;'
-                + ' a hygiene pass will merge duplicates to make room.',
+                + ' The existing library still updates and still counts new outcomes.'
+                + ' A hygiene pass merges duplicate skills to shrink the active library,'
+                + ' but archived files keep their content, so only deleting notes in'
+                + ' Settings frees stored space.',
             );
         }
     }
