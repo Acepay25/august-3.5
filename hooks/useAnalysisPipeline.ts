@@ -1537,6 +1537,7 @@ ${reflectionBlock}`
                     ...(userMessage.ocrCache?.texts ?? []),
                 ].filter((t, i, arr) => arr.indexOf(t) === i);
                 const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => processAnalysisResult(analysis, {
+                    runId: userMessage.id,
                     capturedGateResult,
                     update: options?.isUpdate ? {
                         isUpdate: options.isUpdate,
@@ -2221,7 +2222,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         pattern: fulfilledAnalysts[0]?.result?.analysis?.marketConditions?.pattern,
                         // Regime-conditional enforcement.
                         regime: freshHybridData?.regime?.regime,
-                    });
+                    }, userMessage.id);
                     const skillVeto = skillVetoMeta ? titleFromMeta(skillVetoMeta) : undefined;
 
                     // ── Veto falsification ledger ──

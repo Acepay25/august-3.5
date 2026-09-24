@@ -44,6 +44,7 @@ import {
   MIN_CLUSTER_FOR_SKILL,
   REFINE_AFTER_CONSECUTIVE_LOSSES,
 } from '../services/learning/SkillMemoryService';
+import { shouldSkillHoldout } from '../utils/skillHoldout';
 import { LoggedTrade, TradeOutcome } from '../types';
 
 const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
@@ -342,6 +343,85 @@ tradeIds: a,b,c,d,e,f,g
     expect(next.confidence).toBe('Avoid');
     expect(next.direction).toBe('Neutral');
     expect(next.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
+  });
+
+  /**
+   * The ε-holdout is only a control if the CODE veto stands down too. It
+   * already blanked prompt injection and the predicate clamp on ~10% of runs,
+   * but the veto kept firing — so the "control" group received the exact
+   * intervention it was the counterfactual for, and every lift number, the
+   * CI gate and controlIds were measured against a treated population.
+   * Both sides DERIVE their run id from the hash so this cannot quietly stop
+   * being an example of the ~10% slice.
+   */
+  describe('ε-holdout reaches the code veto', () => {
+    const findRunId = (wantHoldout: boolean): string => {
+      for (let i = 0; i < 500; i++) {
+        const id = `run-${i}`;
+        if (shouldSkillHoldout(id) === wantHoldout) return id;
+      }
+      throw new Error(`no run id found for holdout=${String(wantHoldout)}`);
+    };
+
+    const seedConfirmedAvoid = async (): Promise<void> => {
+      const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+      await createMemoryFile(folder.id, 'btc-short-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+tradeIds: a,b,c,d,e,f,g
+---
+
+# Avoid BTCUSDT Short Family A
+
+**Procedure:** Wait for the 15m reclaim.
+`, 'test-user', true);
+    };
+
+    const probe = () => ({
+      coinName: 'BTCUSDT',
+      direction: 'Short',
+      confidence: 'High',
+      probability: 80,
+      detectedPatternFamily: 'Family A',
+      riskVeto: undefined as string | undefined,
+    });
+
+    beforeEach(async () => {
+      await seedConfirmedAvoid();
+    });
+
+    it('stands the veto down completely on a holdout control run', () => {
+      const control = applyNotebookSkillsToAnalysis(probe(), { runId: findRunId(true) });
+      expect(control.confidence).toBe('High');
+      expect(control.direction).toBe('Short');
+      expect(control.riskVeto).toBeUndefined();
+      // Proof the fixture is live, not empty: the same skill DOES veto a
+      // treated run, and run id is the only difference between the two.
+      const treated = applyNotebookSkillsToAnalysis(probe(), { runId: findRunId(false) });
+      expect(treated.confidence).toBe('Avoid');
+      expect(treated.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
+    });
+
+    it('keeps vetoing when no run id is supplied (every pre-existing caller)', () => {
+      // Omitting runId must NOT be read as a holdout — shouldSkillHoldout
+      // returns false for undefined precisely so tests, synthetic paths and
+      // any caller that cannot identify its run behave exactly as before.
+      const legacy = applyNotebookSkillsToAnalysis(probe());
+      expect(legacy.confidence).toBe('Avoid');
+      expect(legacy.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
+    });
+
+    it('confirmedAvoidForSetup returns null on a holdout run', () => {
+      const setup = { coin: 'BTCUSDT', direction: 'Short', family: 'Family A' };
+      expect(confirmedAvoidForSetup(setup)).not.toBeNull();
+      expect(confirmedAvoidForSetup(setup, findRunId(true))).toBeNull();
+      expect(confirmedAvoidForSetup(setup, findRunId(false))).not.toBeNull();
+    });
   });
 
   it('does NOT veto a different coin that merely shares the direction (S1 strict enforcement)', async () => {

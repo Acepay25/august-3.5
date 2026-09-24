@@ -276,6 +276,9 @@ describe('processAnalysisResult', () => {
         expect(ctx.onSetCurrentSlOptimization).toHaveBeenCalledOnce();
         expect(onMonteCarlo).toHaveBeenCalledOnce();
         expect(onBacktest).toHaveBeenCalledWith(expect.any(Object), ctx.loggedTrades, 'bull');
+        // toHaveBeenCalledWith treats an explicit `runId: undefined` as equal
+        // to an ABSENT key, so this assertion on its own cannot prove the
+        // runId reaches skill enforcement — see the runId-forwarding test.
         expect(mocks.applyNotebookSkillsToAnalysis).toHaveBeenCalledWith(expect.any(Object), {
             regime: 'bull',
             username: 'alice',
@@ -388,5 +391,25 @@ describe('processAnalysisResult', () => {
             regime: { detected: 'unknown', trendDirection: 'neutral' },
         });
         expect(onBacktest).toHaveBeenCalledOnce();
+    });
+
+    /**
+     * The ε-holdout is only honest if the code veto stands down on the same
+     * runs prompt injection is blanked on. It used to fire anyway, so the
+     * control group received the intervention it was the counterfactual for.
+     * The runId is the only channel that can tell enforcement which run it is
+     * on — so this pins the thread, not just the call.
+     */
+    it('forwards the run identity to notebook skill enforcement', () => {
+        mocks.runValidationGate.mockReturnValueOnce(validationOutput());
+        processAnalysisResult(baseAnalysis(), context({
+            runId: 'run-holdout-7',
+            onMonteCarlo: vi.fn(),
+            onBacktest: vi.fn(),
+        }));
+        expect(mocks.applyNotebookSkillsToAnalysis).toHaveBeenCalledWith(
+            expect.any(Object),
+            expect.objectContaining({ runId: 'run-holdout-7' }),
+        );
     });
 });

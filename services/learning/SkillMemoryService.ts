@@ -41,6 +41,7 @@ import {
 } from './skillGraveyard';
 import { isStaleByRegime } from '../../utils/regimeSentinel';
 import { validateIfThen, coveredByLiveSkill as coveredByLiveSkillWith, type CoverReader } from './skillClauseBar';
+import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
@@ -2695,7 +2696,16 @@ export const applyNotebookSkillsToAnalysis = <T extends {
     originalConfidence?: string;
     riskVeto?: string;
     validationWarnings?: string[];
-}>(analysis: T, options?: { regime?: string; activeLens?: string; username?: string }): T => {
+}>(analysis: T, options?: { regime?: string; activeLens?: string; username?: string; runId?: string }): T => {
+    // The ε-holdout must stand down here too. It already blanks PROMPT
+    // injection and the predicate clamp on ~10% of runs, but the code veto
+    // kept firing — so the "control" group received the exact intervention
+    // it is the counterfactual for, and every lift number, the CI gate and
+    // controlIds were computed against a treated population. This mirrors
+    // skillPredicateGate: the whole enforcement layer stands down together.
+    // No runId ⇒ no holdout, so every caller that cannot identify its run
+    // (tests, synthetic paths) behaves exactly as before.
+    if (shouldSkillHoldout(options?.runId)) return analysis;
     const setup = {
         coin: analysis.coinName,
         direction: analysis.direction,
@@ -2750,10 +2760,18 @@ export const applyNotebookSkillsToAnalysis = <T extends {
             path: `skills/${skillFileNameFor(m) ?? fileNameFromMeta(m)}`,
             kind: 'skill',
         }));
+        // runId + holdout are REQUIRED, not optional metadata here:
+        // skillAdherenceForRun joins records by runId, so an unstamped record
+        // can never be attributed to the trade it shaped. Worse, the trade
+        // then classifies as CONTROL and enters controlIds — a vetoed
+        // holdout run poisoning the control group a second time, through the
+        // evidence path rather than the enforcement path.
         void recordMemoryInjection(username, {
             stage: 'verdict',
             audience: 'moderator',
             coin: analysis.coinName,
+            runId: options?.runId,
+            holdout: false,
             sources,
         }).catch(() => { /* telemetry is best-effort */ });
     };
@@ -2794,7 +2812,12 @@ export const applyNotebookSkillsToAnalysis = <T extends {
 
 export const confirmedAvoidForSetup = (
     setup: { coin?: string; direction?: string; family?: string; pattern?: string; regime?: string },
+    runId?: string,
 ): SkillMeta | null => {
+    // Same ε-holdout stand-down as applyNotebookSkillsToAnalysis: on a held-out
+    // run this veto must not fire, or the control group is treated. Omitting
+    // runId keeps every existing caller behaving exactly as before.
+    if (shouldSkillHoldout(runId)) return null;
     // Strict matching — this result drives the moderator's
     // skip_to_verdict veto, so a "BTC long" avoid must never HALT an ETH
     // long just because the direction matches.
