@@ -72,6 +72,12 @@ const makeTrade = (id: string, outcome: TradeOutcome, overrides: Partial<LoggedT
     ...overrides,
 });
 
+/** Relative ISO stamp, so a seeded `lastEvidenceAt` never silently crosses a
+ *  time gate. A hardcoded date here once aged past EVIDENCE_STALE_DAYS (30)
+ *  and applyEvidenceDecay halved the seeded tally mid-test, turning an
+ *  evidence-attribution test into a decay test. */
+const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toISOString();
+
 const seedSkill = async (name: string, frontmatter = ''): Promise<string> => {
     await initMemoryFiles(USER);
     const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
@@ -553,7 +559,7 @@ describe('injected-vs-control attribution', () => {
     });
 
     it('a matched-but-NOT-injected trade lands in controlIds, not wins/losses', async () => {
-        const fileId = await seedSkill('ctrl-a.md', 'lastEvidenceAt: 2026-08-25T00:00:00.000Z\n');
+        const fileId = await seedSkill('ctrl-a.md', `lastEvidenceAt: ${daysAgo(1)}\n`);
         // Seed telemetry: THIS run injected a DIFFERENT skill and never
         // THIS one → the run is a matched-window record without the skill
         // → injected === false → CONTROL.
@@ -577,7 +583,7 @@ describe('injected-vs-control attribution', () => {
     });
 
     it('an INJECTED trade keeps full credit as before', async () => {
-        const fileId = await seedSkill('ctrl-b.md', 'lastEvidenceAt: 2026-08-25T00:00:00.000Z\n');
+        const fileId = await seedSkill('ctrl-b.md', `lastEvidenceAt: ${daysAgo(1)}\n`);
         // Telemetry shows THIS skill was injected in the trade's run
         // (no citation annotation → 'injected-unknown' → full credit).
         store['memory_injections_v1_round40-user'] = [{
@@ -598,7 +604,7 @@ describe('injected-vs-control attribution', () => {
     });
 
     it('unknown telemetry (empty log) keeps full credit — tiering cannot starve', async () => {
-        const fileId = await seedSkill('ctrl-c.md', 'lastEvidenceAt: 2026-08-25T00:00:00.000Z\n');
+        const fileId = await seedSkill('ctrl-c.md', `lastEvidenceAt: ${daysAgo(1)}\n`);
 
         const win = makeTrade('ctrl-3', 'WIN' as TradeOutcome);
         await applySkillEvidence(win, USER, [win]);
@@ -618,7 +624,7 @@ describe('regime scope gap-fill', () => {
     });
 
     it('first evidenced regime sets the scope; a later different regime does NOT re-scope', async () => {
-        const fileId = await seedSkill('regime-gap.md', 'lastEvidenceAt: 2026-08-25T00:00:00.000Z\n');
+        const fileId = await seedSkill('regime-gap.md', `lastEvidenceAt: ${daysAgo(1)}\n`);
         seedInjection('regime-gap.md');
         const t1 = makeTrade('rg-1', 'WIN' as TradeOutcome, { marketRegime: 'trending' });
         await applySkillEvidence(t1, USER, [t1]);

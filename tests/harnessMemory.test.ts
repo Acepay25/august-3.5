@@ -409,7 +409,7 @@ Wait for the reclaim.
     expect(next.direction).toBe('Long');
   });
 
-  it('promotes a post-mortem IF/THEN into a skill on the first closed trade', async () => {
+  it('promotes a post-mortem IF/THEN into a zero-evidence gated candidate', async () => {
     const trade = makeTrade({
       id: 'if-1',
       postMortem: 'IF 15m close reclaims VWAP with rising volume THEN wait for a retest before shorting.',
@@ -417,8 +417,52 @@ Wait for the reclaim.
     await ingestIfThenFromTrade(trade, 'test-user');
     const hit = getMemoryFiles().files.map(f => parseSkillMarkdown(f.content)).find(m => m?.ifCondition?.includes('VWAP'));
     expect(hit?.thenAction).toMatch(/retest/i);
+    // The kind is the HYPOTHESIS under test (the trade lost), but the trade is
+    // its SOURCE, not evidence for it — so it is born with a zero tally.
     expect(hit?.kind).toBe('avoid');
-    expect(hit?.losses).toBe(1);
+    expect(hit?.wins).toBe(0);
+    expect(hit?.losses).toBe(0);
+    expect(hit?.consecutiveLosses).toBe(0);
+    // A listed-but-uncounted trade would be deduped out of the first real
+    // evidence pass, so the id must NOT be recorded at birth.
+    expect(hit?.tradeIds).toEqual([]);
+    expect(hit?.status).toBe('candidate');
+    // …and `prior` is what keeps a zero-evidence skill injectable at all.
+    // Without it MemoryRetrievalService withholds it, no evidence can accrue,
+    // and the loop deadlocks.
+    expect(hit?.prior).toBe('gated');
+  });
+
+  it('refuses an IF/THEN below the 12-char clause bar', async () => {
+    const trade = makeTrade({
+      id: 'if-short',
+      postMortem: 'IF chop THEN wait for a retest before shorting this setup.',
+    });
+    await ingestIfThenFromTrade(trade, 'test-user');
+    const hit = getMemoryFiles().files.map(f => parseSkillMarkdown(f.content))
+      .find(m => m?.ifCondition?.toLowerCase().startsWith('if chop'));
+    expect(hit).toBeFalsy();
+  });
+
+  it('does not mint a twin when a live skill already covers the setup', async () => {
+    const first = makeTrade({
+      id: 'twin-1',
+      postMortem: 'IF 15m close reclaims VWAP with rising volume THEN wait for a retest before shorting.',
+    });
+    await ingestIfThenFromTrade(first, 'test-user');
+    const countAfterFirst = getMemoryFiles().files
+      .map(f => parseSkillMarkdown(f.content))
+      .filter(m => m?.ifCondition?.includes('VWAP')).length;
+    expect(countAfterFirst).toBe(1);
+
+    // Same coin + family + direction, a second closed trade: the coverage gate
+    // must suppress the second write rather than enqueue an inbox twin.
+    const second = makeTrade({ id: 'twin-2' });
+    await ingestIfThenFromTrade(second, 'test-user');
+    const countAfterSecond = getMemoryFiles().files
+      .map(f => parseSkillMarkdown(f.content))
+      .filter(m => m?.ifCondition?.includes('VWAP')).length;
+    expect(countAfterSecond).toBe(1);
   });
 
   it('does not ingest an IF/THEN from an execution-error post-mortem', async () => {

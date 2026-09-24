@@ -63,11 +63,17 @@ const craft = (n: number) => ({
 const botTrade = (id: string): LoggedTrade => ({
     id,
     analysis: {
-        coinName: 'BTCUSDT', direction: 'Short', detectedPatternFamily: 'Family A',
+        // Deliberately NOT BTC. The chart-AI skill in this test is a BTC skill,
+        // and coverage treats same-coin as covered (the enforcement-grade
+        // matcher is sameCoin || sameFamily || direction+regime). A same-coin
+        // clause is therefore correctly suppressed as a twin, the bot would
+        // author no file, and the provenance assertion below would pass
+        // vacuously instead of testing what it exists to test.
+        coinName: 'ETHUSDT', direction: 'Short', detectedPatternFamily: 'Family B',
         entryPoints: [{ price: 100 }], stopLoss: 105, takeProfit: [{ price: 90 }],
     } as unknown as TradeAnalysis,
     outcome: TradeOutcome.LOSS,
-    postMortem: 'IF BTC sweeps the prior low and closes back above it THEN do not short the reclaim',
+    postMortem: 'IF ETH loses the daily open and reclaims it on the hourly print THEN wait for a retest before fading',
     timestamp: new Date(Date.now() - 5000).toISOString(),
     modelsUsed: { 'prov-bot': 'm' },
 });
