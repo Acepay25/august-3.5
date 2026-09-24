@@ -1417,6 +1417,53 @@ code,
   animation: slideInLeft 0.3s ease-out forwards;
 }
 
+/* ── Directional surface transitions (Chat ⇄ Chart AI) ──────────────────────
+ * A short horizontal travel plus a fade, so the direction of the hop is
+ * legible without feeling like a page turn. Deliberately a small offset
+ * (~28px) rather than a full-width slide: these are two views of ONE
+ * conversation, and a big slide would imply a page change that did not happen.
+ *
+ * CSS keyframes on purpose. The global `prefers-reduced-motion` block below
+ * zeroes every animation, so these get accessibility for free. The surface
+ * morph is `Element.animate()` (WAAPI), which that block cannot reach — which
+ * is why useSurfaceMorph has to check matchMedia by hand. New motion should
+ * not inherit that obligation.
+ *
+ *   .surface-enter-right → arrived FROM the right (Chat → Chart AI)
+ *   .surface-enter-left  → arrived FROM the left  (Chart AI → Chat)
+ * Applied by App to the ENTERING surface for one cycle. */
+@keyframes surfaceEnterFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes surfaceEnterFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.surface-enter-right {
+  animation: surfaceEnterFromRight 0.22s var(--ease-snappy) both;
+}
+
+.surface-enter-left {
+  animation: surfaceEnterFromLeft 0.22s var(--ease-snappy) both;
+}
+
 /* Slide up animation for mobile bottom sheet */
 @keyframes slideUp {
   from {

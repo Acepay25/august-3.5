@@ -533,8 +533,21 @@ const App: React.FC = () => {
      *  navigation clears it: a stale rect must not replay on an unrelated
      *  visit, and the morph is one-way by design. */
     const [agentsMorphFrom, setAgentsMorphFrom] = useState<MorphRect | null>(null);
+    /** Which edge the NEXT surface should appear to arrive from, for the
+     *  Chat ⇄ Chart AI hop. Set on that hop only and consumed once — a stale
+     *  direction would replay on an unrelated visit, the same reason the morph
+     *  rect is cleared on every other navigation. */
+    const [surfaceEnterFrom, setSurfaceEnterFrom] = useState<'left' | 'right' | null>(null);
     const handleSurfaceSelect = useCallback((next: AppSurface): void => {
         setAgentsMorphFrom(next === 'agents' && surface === 'trade' ? captureChartAiRect() : null);
+        // Chat is reached FROM the chart, so it arrives from the left; the
+        // chart is reached FROM Chat, so it arrives from the right. Every
+        // other surface pair gets no directional animation at all.
+        setSurfaceEnterFrom(
+            (next === 'agents' && surface === 'trade') ? 'left'
+                : (next === 'trade' && surface === 'agents') ? 'right'
+                    : null,
+        );
         if (next === 'journal') {
             openJournal();
             return;
@@ -3091,6 +3104,7 @@ const App: React.FC = () => {
                                     modeRequest={tradeModeRequest ?? undefined}
                                     activeUsername={activeUsername ?? undefined}
                                     onTradeModeChange={(m) => { lastRequestedTradeModeRef.current = m; }}
+                                    surfaceEnterFrom={surfaceEnterFrom}
                                     verdict={deskSceneMessage?.analysis}
                                     bots={bots}
                                     trades={loggedTrades}
@@ -3209,6 +3223,7 @@ const App: React.FC = () => {
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
                                     morphFrom={agentsMorphFrom}
+                                    surfaceEnterFrom={surfaceEnterFrom}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
                                     lastOpenedMap={threadOpenedMap}
                                     attentionMap={attentionMap}
@@ -3232,6 +3247,13 @@ const App: React.FC = () => {
                                             onChange={setSelectedChatModel} onRefreshModels={refreshModelCatalog} compact />
                                     )}
                                     onOpenInDock={() => {
+                                        // Chat → Chart AI: the chart arrives from
+                                        // the RIGHT. This path deliberately does
+                                        // NOT go through handleSurfaceSelect (the
+                                        // bot/group branches navigate themselves),
+                                        // so the direction has to be set here too
+                                        // or the hop animates as a plain cut.
+                                        setSurfaceEnterFrom('right');
                                         if (activeThread.kind === 'bot') openBotInTrade(activeThread.botId);
                                         else if (activeThread.kind === 'group') openGroupInTrade(activeThread.groupId);
                                         else setSurface('trade');

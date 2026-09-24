@@ -37,6 +37,7 @@ import { formatWatchFiredForModel } from '../../services/trade/chartTriggers';
 import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
+import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
@@ -110,6 +111,9 @@ interface TradeViewProps {
     /** Reports every mode change upward so App's toggle semantics (which
      *  mode is currently active) stay in sync with the user's own picks. */
     onTradeModeChange?: (mode: TradeMode) => void;
+    /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop.
+     *  Consumed by useSurfaceEnter; see hooks/useSurfaceEnter.ts. */
+    surfaceEnterFrom?: SurfaceEnterDirection;
     /** Toggles the 2D debate desk floor projection modal. */
     onToggleDeskScene?: () => void;
     isDeskSceneOpen?: boolean;
@@ -307,9 +311,13 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
+    // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
+    // root for one cycle. The hook owns nothing else — App keeps the flag so
+    // re-navigating animates again.
+    const surfaceEnterClass = useSurfaceEnter(surfaceEnterFrom);
     const [strip, setStrip] = useState<StripData | null>(null);
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [symbols, setSymbols] = useState<SymbolMeta[]>(FALLBACK_SYMBOLS);
@@ -735,7 +743,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     };
 
     return (
-        <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trade-view">
+        <div className={`flex h-full min-h-0 flex-col bg-zinc-950 ${surfaceEnterClass}`} data-testid="trade-view">
             {/* ROW 1 · identity + hero (prototype's market row): instrument,
                 spark, screener, feed state on the left; the big live price
                 with its 24h delta + MARK caption on the right. */}

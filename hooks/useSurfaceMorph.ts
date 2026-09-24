@@ -1,11 +1,18 @@
 /**
- * useSurfaceMorph — the Chart AI → Agents transition.
+ * useSurfaceMorph — the Chart AI → Chat transition.
  *
- * The dock and the Agents pane show the SAME conversation (utils/agentThreads
- * is the single thread model, and both mount it), so jumping between them read
- * as a page swap when it is really one panel moving. App measures the dock
- * while Chart is still on screen, hands that box down, and this FLIPs the
- * incoming pane from it into its own bounds — translate + scale on the
+ * CORRECTION: this file used to assert that the dock and the Chat pane "show
+ * the SAME conversation" and that `utils/agentThreads` was "the single thread
+ * model, and both mount it". Neither is true — the dock reads
+ * `services/trade/chatStore.ts`, the Chat pane reads App's `messages`, and
+ * `TradeChatPanel` never imports agentThreads. The render-probe has said so
+ * since :487-491. The morph is still worth having: it makes the hop read as
+ * one panel moving rather than a page swap. But it is a spatial continuity
+ * trick, not evidence of a shared conversation.
+ *
+ * App measures the dock while Chart is still on screen, hands that box down,
+ * and this FLIPs the incoming pane from it into its own bounds —
+ * translate + scale on the
  * compositor, so nothing reflows and no animation library is needed.
  *
  * Skipped when the trader asked for stillness: the OS

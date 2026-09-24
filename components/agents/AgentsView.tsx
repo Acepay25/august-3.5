@@ -1,13 +1,29 @@
 /**
- * AgentsView — the Agents surface as a chat, not a roster that bounces you
- * somewhere else (WS-6).
+ * AgentsView — the Chat surface, not a roster that bounces you somewhere
+ * else (WS-6). Reached from the nav as "Chat"; the surface id and every
+ * testid still say `agents`, because a dozen gates pin them independently of
+ * the label.
  *
  * Three regions, mirroring the reference: a conversation rail, a main pane,
- * and one pill composer. What it does NOT do is fork anything:
+ * and one pill composer.
  *
- *  - the rows are built from the SAME `messages` array the Chart AI dock reads
- *    (`utils/agentThreads` is the single thread model), so a conversation
- *    opened here and on the Trade surface is one conversation, not two copies;
+ * ⚠️ THE TWO SURFACES DO NOT SHARE A STORE TODAY. This comment used to claim
+ * they did, and the claim was false — it is why "a conversation opened here
+ * and on the Trade surface is one conversation" was believed and planned
+ * against. The truth, which the render-probe already documented at
+ * `render-probe.cjs:487-491`:
+ *
+ *  - this surface reads App's `messages` (useConversations) and slices it
+ *    with `utils/agentThreads`;
+ *  - the Chart AI dock reads and writes `services/trade/chatStore.ts`, a
+ *    module singleton that survives unmount so a running stream is not
+ *    aborted by a surface switch.
+ *
+ * So a bot thread is the same PERSONA over two different transcripts. The
+ * join between them is an id link, not a shared array: the dock appends its
+ * own lean entry and keeps the pipeline's rich `Message` id alongside it
+ * (`TradeChatPanel.tsx` → `getAnalysisMessage`).
+ *
  *  - Chat mode sends through `runUserBotTurn`, the same bot transport the DM
  *    mailbox uses;
  *  - Analyze mode hands the text to `handleSendMessage` — the real pipeline,
@@ -25,6 +41,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { useSurfaceMorphIn, type MorphRect } from '../../hooks/useSurfaceMorph';
+import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
@@ -89,6 +106,8 @@ interface AgentsViewProps {
     /** Focus this same thread in the Chart AI dock — the two surfaces show
      *  one conversation, and this is how you hop between them. */
     onOpenInDock?: () => void;
+    /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop. */
+    surfaceEnterFrom?: SurfaceEnterDirection;
     /** The box the Chart AI dock occupied when this surface was selected. The
      *  pane grows out of it (hooks/useSurfaceMorph) instead of replacing it. */
     morphFrom?: MorphRect | null;
@@ -277,7 +296,7 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, onOpenInDock, morphFrom = null,
+    lastOpenedMap = {}, modelPicker, onOpenInDock, morphFrom = null, surfaceEnterFrom = null,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
@@ -311,6 +330,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const scroller = useRef<HTMLDivElement | null>(null);
     const paneRef = useRef<HTMLElement | null>(null);
     useSurfaceMorphIn(paneRef, morphFrom);
+    // Directional enter for the Chat ⇄ Chart AI hop. Deliberately separate
+    // from the FLIP above: the morph scales the pane out of the dock's old
+    // box, this slides the surface in from the edge it was reached from.
+    // App owns the flag so re-navigating animates again.
+    const surfaceEnterClass = useSurfaceEnter(surfaceEnterFrom);
     const searchRef = useRef<HTMLInputElement | null>(null);
     const [searchFocusNonce, setSearchFocusNonce] = useState(0);
 
@@ -541,7 +565,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     }, [onSelect, bots, lastOpenedMap]);
 
     return (
-        <div className="flex h-full min-h-0" data-testid="agents-view">
+        <div className={`flex h-full min-h-0 ${surfaceEnterClass}`} data-testid="agents-view">
             {/* ── Rail — a column at md+, an overlay drawer below ── */}
             {railOpen && (
                 <button type="button" aria-label="Close conversations"
