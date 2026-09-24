@@ -439,9 +439,25 @@ function providerRequestDetails(request) {
         };
         if (systemBits.length > 0) body.systemInstruction = { parts: [{ text: systemBits.join('\n\n') }] };
         if (request.jsonMode) body.generationConfig.responseMimeType = 'application/json';
-        // Canonical Gemini thinking decision (includeThoughts + 8192 budget,
-        // never under JSON mode) from the shared policy module.
-        const geminiThinking = policy.geminiThinkingParams(request.jsonMode, geminiModel, request.reasoningEffort);
+        // Canonical Gemini thinking decision (includeThoughts + budget, never
+        // under JSON mode) from the shared policy module.
+        //
+        // The output cap is REQUIRED, not optional: Gemini bills thinking
+        // tokens INSIDE maxOutputTokens, so a budget at or above the cap is a
+        // hard 400. The renderer always passed it (utils/googleGeminiFormat.ts
+        // passes the 4th arg); this call site did not, so the clamp never
+        // engaged here. Executed against a mock enforcing the documented rule:
+        // effort=high with the app's TASK_BUDGETS.analysis (8192) emitted
+        // thinkingBudget=8192 == the cap → 400, and the moderator verdict
+        // (max effort, 12288) emitted 16384 → 400. The default profile is
+        // `quality`, so this was the DEFAULT desktop path for any Gemini
+        // seat, not an edge case.
+        const geminiThinking = policy.geminiThinkingParams(
+            request.jsonMode,
+            geminiModel,
+            request.reasoningEffort,
+            request.maxTokens || 4096,
+        );
         if (geminiThinking) body.generationConfig.thinkingConfig = geminiThinking;
         else delete body.generationConfig.thinkingConfig;
     } else {
@@ -729,11 +745,28 @@ async function sendProviderRequest(request, sender) {
             armBodyPhase();
             const streamOut = await consumeProviderStream(response, request, sender);
             if (streamOut.sawData) {
+                // NORMALIZE, and never substitute `{}`.
+                //
+                // sseParser stores the provider's RAW usage (snake_case), and
+                // the renderer's only guard is falsiness — so a snake_case
+                // object passed straight through, and `0 + undefined` in
+                // mergeTokenUsage produced NaN for the whole run ledger.
+                // Executed against the real bridge: Session Usage rendered "—"
+                // for every desktop run, and worse, `estimateCostUsd(NaN) ?? 0`
+                // made shouldSkipRemaining() always false — so the
+                // per-debate `debateCostCapUsd` money guard NEVER FIRED on
+                // desktop. A spend limit the user set was silently inert.
+                //
+                // extractTokenUsageJs is the same normalizer the BUFFERED path
+                // already used, and it returns undefined (not {}) when a
+                // provider reports no usage — which is the value the renderer's
+                // falsiness guard is actually written for.
+                const streamUsage = extractTokenUsageJs({ usage: streamOut.usage });
                 if (streamOut.toolCalls.length > 0) {
                     return {
                         text: streamOut.text,
                         reasoning: streamOut.reasoning,
-                        usage: streamOut.usage || {},
+                        usage: streamUsage,
                         finishReason: streamOut.stopReason,
                         toolCalls: streamOut.toolCalls,
                         assistantMessage: {
@@ -747,7 +780,7 @@ async function sendProviderRequest(request, sender) {
                         },
                     };
                 }
-                return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamOut.usage || {}, finishReason: streamOut.stopReason };
+                return { text: streamOut.text, reasoning: streamOut.reasoning, usage: streamUsage, finishReason: streamOut.stopReason };
             }
             // Provider ignored stream:true and answered with one JSON body —
             // feed the accumulated raw text into the buffered parse below.

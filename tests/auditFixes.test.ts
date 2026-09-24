@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
+import path, { resolve } from 'path';
+import * as providerPolicy from '../shared/providerRequestPolicy.cjs';
 
 // Batch 14 regression tests — audit fixes for landed batches.
 
@@ -244,5 +247,74 @@ describe('getHarnessSettings — unconfigured equity is 0, not a phantom $10,000
     it('keeps a configured positive equity', () => {
         localStorage.setItem('harness_settings_v1', JSON.stringify({ equityUsd: 25_000 }));
         expect(getHarnessSettings().equityUsd).toBe(25_000);
+    });
+});
+
+/**
+ * The Gemini thinking clamp is only engaged when the caller passes the
+ * output cap — the 4th argument. The renderer always did; `electron/main.cjs`
+ * and `vite.config.ts` did not, so both emitted the RAW ladder value. Gemini
+ * bills thinking tokens INSIDE maxOutputTokens, so a budget at or above the
+ * cap is a hard 400. Executed against a mock enforcing that rule: effort=high
+ * with the app's TASK_BUDGETS.analysis (8192) emitted 8192 == the cap, and the
+ * moderator verdict (max effort, 12288) emitted 16384. The default profile is
+ * `quality`, so every quality-profile desktop Gemini request failed.
+ *
+ * These pin the SHARED policy the three transports call, plus the fact that
+ * each call site now supplies the cap.
+ */
+describe('Gemini thinkingBudget is clamped to the caller output cap', () => {
+
+    it('never emits a budget at or above maxOutputTokens', () => {
+        const cases: Array<[boolean, string, number]> = [
+            [false, 'gemini-2.5-pro', 8192],
+            [false, 'gemini-2.5-pro', 12288],
+            [false, 'gemini-2.5-flash', 2560],
+        ];
+        for (const [jsonMode, model, maxTokens] of cases) {
+            const cfg = providerPolicy.geminiThinkingParams(jsonMode, model, 'max', maxTokens);
+            if (!cfg) continue; // JSON mode / effort off — no budget at all
+            expect(cfg.thinkingBudget).toBeLessThan(maxTokens);
+        }
+    });
+
+    it('is still disabled under JSON mode and at effort off', () => {
+        expect(providerPolicy.geminiThinkingParams(true, 'gemini-2.5-pro', 'high', 8192)).toBeUndefined();
+        expect(providerPolicy.geminiThinkingParams(false, 'gemini-2.5-pro', 'off', 8192)).toBeUndefined();
+    });
+
+    it('every out-of-process transport now supplies the cap', () => {
+        // A source-level ratchet: the clamp is easy to "simplify" away again,
+        // and nothing else would catch it until Gemini 400'd in production.
+        const root = path.resolve(__dirname, '..');
+        for (const rel of ['electron/main.cjs', 'vite.config.ts']) {
+            const src = readFileSync(resolve(root, rel), 'utf8');
+            let found = 0;
+            for (let at = src.indexOf('geminiThinkingParams('); at !== -1;
+                at = src.indexOf('geminiThinkingParams(', at + 1)) {
+                // Depth-aware scan: a regex stops at the first ')' and these
+                // calls nest String(...) and a default expression.
+                let depth = 0;
+                let commas = 0;
+                let lastCommaAt = -1;
+                let seen = false;
+                let closeAt = -1;
+                for (let i = src.indexOf('(', at); i < src.length; i++) {
+                    const ch = src[i];
+                    if (ch === '(') { depth++; seen = true; }
+                    else if (ch === ')') { depth--; if (depth === 0) { closeAt = i; break; } }
+                    else if (ch === ',' && depth === 1) { commas++; lastCommaAt = i; }
+                    else if (ch === ' ' && depth === 1) seen = true;
+                }
+                expect(seen, rel).toBe(true);
+                // A trailing comma (the multi-line call style) is not an arg.
+                const trailing = lastCommaAt >= 0 && src.slice(lastCommaAt + 1, closeAt).trim() === '';
+                const argCount = commas + 1 - (trailing ? 1 : 0);
+                // 4 positional args: jsonMode, model, effort, maxTokens.
+                expect(argCount, `${rel} @${at}`).toBe(4);
+                found++;
+            }
+            expect(found, rel).toBeGreaterThan(0);
+        }
     });
 });
