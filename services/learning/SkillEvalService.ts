@@ -43,15 +43,13 @@ import { evaluateClaim } from '../../utils/skillPrediction';
 /** Max matched trades to evaluate per skill (cost cap). */
 export const SKILL_EVAL_MAX_TRADES = 6;
 
-export interface SkillEvalCase {
-    tradeId: string;
-    coin?: string;
-    direction?: string;
-    actualOutcome: 'WIN' | 'LOSS' | 'BREAKEVEN';
-}
-
 export interface SkillEvalPair {
     tradeId: string;
+    /** What the trade actually did. The verdict is graded against THIS, not
+     *  against the model's own confidence shift — a skill that talks the
+     *  model into more confidence on a loser moves exactly the direction an
+     *  (inverted) repeat skill "wants", and used to score "helps". */
+    actualOutcome: 'WIN' | 'LOSS';
     /** Confidence WITHOUT the skill. */
     baselineConfidence?: string;
     /** Direction WITHOUT the skill. */
@@ -104,7 +102,7 @@ export type SkillAnalysisRunner = (
     options: { skillEnabled: boolean; skill?: SkillEvalSkillContext },
 ) => Promise<SkillEvalAnalysisOutput>;
 
-const outcomeOf = (t: LoggedTrade): SkillEvalCase['actualOutcome'] =>
+const outcomeOf = (t: LoggedTrade): SkillEvalPair['actualOutcome'] =>
     t.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS';
 
 /** Pick the historical trades this skill applies to (newest first, capped).
@@ -113,8 +111,18 @@ const outcomeOf = (t: LoggedTrade): SkillEvalCase['actualOutcome'] =>
  *  from each trade's persisted `marketRegime` so a skill scoped to one
  *  regime is audited on that regime's trades only. */
 export const selectEvalTrades = (meta: SkillMeta, trades: LoggedTrade[]): LoggedTrade[] => {
+    // The skill's own training trades are excluded: its IF/THEN was authored
+    // FROM those post-mortems, so re-benchmarking them measures how well it
+    // fits its own source material, not whether it generalizes.
+    //
+    // CAVEAT, stated rather than hidden: serializeSkill tail-caps tradeIds at
+    // 20 (the true cumulative count is `evidenceCount`), so this excludes the
+    // skill's RECENT training trades, not its whole history. For a skill past
+    // 20 samples the older ones can still appear here.
+    const trained = new Set(meta.tradeIds ?? []);
     return trades
         .filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && t.analysis)
+        .filter(t => !trained.has(t.id))
         .filter(t => skillStrictlyMatchesSetup(meta, {
             coin: t.analysis?.coinName,
             direction: t.analysis?.direction === 'Long' || t.analysis?.direction === 'Short'
@@ -189,6 +197,7 @@ export const evaluateSkill = async (
 
         const pair: SkillEvalPair = {
             tradeId: t.id,
+            actualOutcome: outcomeOf(t),
             baselineConfidence: baseline.confidence,
             baselineDirection: baseline.direction,
             withConfidence: withSkill.confidence,
@@ -204,11 +213,24 @@ export const evaluateSkill = async (
             || baseline.direction !== withSkill.direction;
         if (!changed) continue;
         flips += 1;
-        const aligned = base.kind === 'avoid'
+        const moved = base.kind === 'avoid'
             ? avoidAligned(baseline.confidence, withSkill.confidence)
                 ?? (withSkill.direction !== baseline.direction ? withSkill.direction === 'Neutral' : undefined)
             : repeatAligned(baseline.confidence, withSkill.confidence)
                 ?? (withSkill.direction !== baseline.direction ? baseline.direction === 'Neutral' : undefined);
+        // Grade the move against what the trade ACTUALLY did, not against the
+        // direction the skill's kind wants in the abstract. A repeat skill that
+        // raises confidence on a loser has moved "the repeat way" and landed on
+        // the wrong side of the trade; scoring that `aligned` let a harmful
+        // skill be promoted, and — because two `helps` runs rehabilitate a
+        // benched skill — actively cleared a prior demotion.
+        //
+        // `moved === undefined` (the model shifted without a decisive signal)
+        // counts as NEITHER: it is not evidence the skill helped.
+        const towardOutcome = base.kind === 'avoid'
+            ? pair.actualOutcome === 'LOSS'   // an avoid skill is right on losers
+            : pair.actualOutcome === 'WIN';   // a repeat skill is right on winners
+        const aligned = moved === undefined ? undefined : (moved === towardOutcome);
         if (aligned === true) alignedFlips += 1;
         else if (aligned === false) misalignedFlips += 1;
     }

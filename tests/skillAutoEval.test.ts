@@ -237,6 +237,47 @@ tradeIds: a,b,c
         expect(isSkillDueForEval(meta, trades)).toBe(false);
     });
 
+    /**
+     * The due gate used to count EVERY closed trade since the last eval, so
+     * ten unrelated ETH trades re-triggered an audit of a stale BTC skill. The
+     * eval then re-ran on the same historical cases, the near-deterministic
+     * runner reproduced the same flips, and the streak advanced on evidence
+     * that had not changed.
+     */
+    it('unrelated trades since the last eval do not make a skill due', async () => {
+        await initMemoryFiles('unrelated-user');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const lastEvalAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
+        const file = await createMemoryFile(skills.id, 'btc-short-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+ifCondition: BTC short setup in Family A
+thenAction: skip the short
+lastEvalAt: ${lastEvalAt}
+tradeIds: a,b,c
+---
+
+# Avoid BTC short
+`, 'unrelated-user', true);
+        const meta = parseSkillMarkdown(file.content)!;
+        const tradeTime = new Date(Date.now() - 2 * 86_400_000).toISOString();
+        // 10 closed trades, none of which match the skill's setup. The family
+        // must share NO word segment with 'Family A' — familiesRelate treats
+        // any two labels containing the literal word "family" as related, so
+        // 'Family Z' would still have counted as a match.
+        const unrelated = Array.from({ length: 10 }, (_, i) => makeTrade({
+            id: `u${i}`,
+            timestamp: tradeTime,
+            analysis: { coinName: 'ETHUSDT', direction: 'Long', detectedPatternFamily: 'liquidity-sweep' } as TradeAnalysis,
+        }));
+        expect(isSkillDueForEval(meta, unrelated)).toBe(false);
+    });
+
     it('hurts demotions respect the sequential streak gate and the staleness expiry on evidence passes', async () => {
         await initMemoryFiles('stale-user');
         const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
