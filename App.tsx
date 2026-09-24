@@ -3104,6 +3104,7 @@ const App: React.FC = () => {
                                     modeRequest={tradeModeRequest ?? undefined}
                                     activeUsername={activeUsername ?? undefined}
                                     onTradeModeChange={(m) => { lastRequestedTradeModeRef.current = m; }}
+                                    onOpenChat={() => handleSurfaceSelect('agents')}
                                     surfaceEnterFrom={surfaceEnterFrom}
                                     verdict={deskSceneMessage?.analysis}
                                     bots={bots}

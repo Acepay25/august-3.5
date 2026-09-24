@@ -111,6 +111,8 @@ interface TradeViewProps {
     /** Reports every mode change upward so App's toggle semantics (which
      *  mode is currently active) stay in sync with the user's own picks. */
     onTradeModeChange?: (mode: TradeMode) => void;
+    /** Jump straight to the Chat surface from the dock header. */
+    onOpenChat?: () => void;
     /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop.
      *  Consumed by useSurfaceEnter; see hooks/useSurfaceEnter.ts. */
     surfaceEnterFrom?: SurfaceEnterDirection;
@@ -311,7 +313,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
@@ -960,6 +962,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                 onToggleCollapsed={isBelowLg ? undefined : () => { setDockCollapsed(true); setDockExpanded(false); }}
                                 expanded={dockExpanded}
                                 onToggleExpanded={() => setDockExpanded(v => !v)}
+                                onOpenChat={onOpenChat}
                             />
                         </div>
                     </>

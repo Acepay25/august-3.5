@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Pin, Plus, RotateCcw, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
+import { Activity, Brain, Camera, Check, ChevronDown, Compass, Copy, Crosshair, Eye, FileText, History, LayoutGrid, MessageSquare, MoreHorizontal, PanelRightOpen, Pin, Plus, RotateCcw, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
@@ -191,6 +191,10 @@ interface TradeChatPanelProps {
     onToggleCollapsed?: () => void;
     expanded?: boolean;
     onToggleExpanded?: () => void;
+    /** Jump straight to the Chat surface from the dock header. Routed
+     *  through App's surface select so the directional enter animation
+     *  (Chat arrives from the left) fires like every other Chat hop. */
+    onOpenChat?: () => void;
     /** Toggles the 2D debate desk floor projection modal. */
     onToggleDeskScene?: () => void;
     isDeskSceneOpen?: boolean;
@@ -313,7 +317,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     onChatLevelsChange,
     renderGroupSurface, groups = [],
     registerScrollToMessage,
-    collapsed, onToggleCollapsed, expanded, onToggleExpanded,
+    collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -1576,18 +1580,19 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             )}
                         </button>
                     )}
-                    {(() => {
-                        // ⟳ Re-run the last question with FRESH live context —
-                        // the prototype's Refresh-analysis button, on real rails.
-                        const lastUser = [...entries].reverse().find(x => x.role === 'user' && x.text && x.text !== '(chart screenshot)');
-                        return (
-                            <button type="button" onClick={() => lastUser && void send('', lastUser.id)} disabled={!ready || busy || !lastUser}
-                                aria-label="Re-run last question" title={lastUser ? 'Re-ask the last question with fresh market context' : 'Ask something first'}
-                                className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40">
-                                <RotateCcw className="h-4 w-4" />
-                            </button>
-                        );
-                    })()}
+                    {/* The primary jump OUT of the dock. This was a re-run (⟳)
+                        button — re-asking the last question with fresh market
+                        context — which sat under the cursor unused, while the
+                        move a trader makes constantly is "get me to Chat". It
+                        goes straight there now; the re-run moved into the
+                        Customization menu below, so the function survives even
+                        though the top-level control no longer is it. */}
+                    <button type="button" onClick={onOpenChat} disabled={!onOpenChat}
+                        data-testid="dock-open-chat"
+                        aria-label="Open Chat" title="Open the Chat surface"
+                        className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40">
+                        <MessageSquare className="h-4 w-4" />
+                    </button>
                     <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
                         className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
                         <Plus className="h-4 w-4" />
@@ -1612,6 +1617,23 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                             Panel models <span className="text-zinc-600">· {activeSession.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}</span>
                                         </button>
                                     )}
+                                    {/* The re-run that used to be the top-level ⟳
+                                        button. Same behaviour, fresh context, one
+                                        level deeper where it does not compete
+                                        with getting to Chat. */}
+                                    {(() => {
+                                        const lastUser = [...entries].reverse()
+                                            .find(x => x.role === 'user' && x.text && x.text !== '(chart screenshot)');
+                                        return (
+                                            <button type="button"
+                                                onClick={() => { setShowNewMenu(false); if (lastUser) void send('', lastUser.id); }}
+                                                disabled={!ready || busy || !lastUser}
+                                                data-testid="dock-rerun"
+                                                className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06] disabled:opacity-40">
+                                                Re-run last question
+                                            </button>
+                                        );
+                                    })()}
                                     <button type="button" onClick={() => { setShowNewMenu(false); onToggleExpanded?.(); }}
                                         className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         {expanded ? 'Shrink back' : 'Expand over chart'}
