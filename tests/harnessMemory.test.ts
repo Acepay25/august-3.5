@@ -43,6 +43,7 @@ import {
   ingestIfThenFromTrade,
   MIN_CLUSTER_FOR_SKILL,
   REFINE_AFTER_CONSECUTIVE_LOSSES,
+  followedEvidence,
 } from '../services/learning/SkillMemoryService';
 import { shouldSkillHoldout } from '../utils/skillHoldout';
 import { LoggedTrade, TradeOutcome } from '../types';
@@ -81,6 +82,63 @@ describe('Harness memory (skills + retrieval)', () => {
     const meta = parseSkillMarkdown(created!.content)!;
     expect(meta.kind).toBe('avoid');
     expect(meta.losses).toBe(MIN_CLUSTER_FOR_SKILL);
+    expect(meta.status).toBe('candidate');
+  });
+
+  /**
+   * A skill's IF/THEN is authored from the post-mortems of the trades that
+   * spawned it, so those trades are the SOURCE of the claim, not a test of it.
+   * Counting them as evidence let eight co-occurring wins mint a skill already
+   * `confirmed` — clearing the cold-start CI gate (which needs n>=8) and
+   * satisfying the skill's own birth certificate with the same co-occurrence.
+   *
+   * These trades carry a FRESH timestamp on purpose: the shared `makeTrade`
+   * helper pins 2026-08-09, which is now past EVIDENCE_STALE_DAYS, so
+   * applyEvidenceDecay halves the tally on every evidence pass and a test
+   * about promotion turns into a test about decay.
+   */
+  const freshTrade = (o: Partial<LoggedTrade> = {}): LoggedTrade => makeTrade({
+    timestamp: new Date(Date.now() - 60_000).toISOString(),
+    ...o,
+  });
+
+  it('does NOT confirm a skill on its own birth cluster, however large', async () => {
+    // 8 WINS in one cluster. Pre-fix this born `confirmed` outright.
+    const wins = Array.from({ length: 8 }, (_, i) => freshTrade({
+      id: `w-${i}`,
+      outcome: TradeOutcome.WIN,
+    }));
+    const created = await maybeUpsertSkill(wins[7], wins, 'test-user');
+    expect(created).not.toBeNull();
+    const meta = parseSkillMarkdown(created!.content)!;
+    expect(meta.kind).toBe('repeat');
+    expect(meta.wins).toBe(8);
+    // The whole 8 IS the birth cluster — none of it is post-injection.
+    expect(meta.birthEvidence).toEqual(expect.objectContaining({ wins: 8, clusterSize: 8 }));
+    expect(followedEvidence(meta)).toEqual({ wins: 0, losses: 0 });
+    expect(meta.status).toBe('candidate');
+  });
+
+  it('promotes once the skill earns post-injection evidence on its own', async () => {
+    const wins = Array.from({ length: 8 }, (_, i) => freshTrade({
+      id: `w-${i}`,
+      outcome: TradeOutcome.WIN,
+    }));
+    const created = await maybeUpsertSkill(wins[7], wins, 'test-user');
+    const fileId = created!.id;
+
+    // Three more wins. No injection telemetry is seeded, so attribution
+    // takes the 'injected-unknown' full-credit path — a treated outcome,
+    // which is exactly what post-injection evidence means here.
+    for (let i = 0; i < 3; i++) {
+      const t = freshTrade({ id: `post-${i}`, outcome: TradeOutcome.WIN });
+      await applySkillEvidence(t, 'test-user', [t]);
+    }
+    const meta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === fileId)!.content)!;
+    expect(meta.wins).toBe(11);
+    expect(followedEvidence(meta)).toEqual({ wins: 3, losses: 0 });
+    // Three followed samples do NOT clear MIN_SAMPLE_CONFIRMED (5), so it must
+    // still be a candidate. This asserts the gate is REAL, not merely moved.
     expect(meta.status).toBe('candidate');
   });
 
