@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { GripVertical, PanelLeft, TrendingDown, TrendingUp } from 'lucide-react';
+import { GripVertical, PanelRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
@@ -759,7 +759,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                     : 'border-white/10 bg-zinc-800/60 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
                             }`}
                         >
-                            <PanelLeft className="h-3.5 w-3.5" />
+                            <PanelRight className="h-3.5 w-3.5" />
                         </button>
                     )}
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
@@ -888,21 +888,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     it belongs to the Book mode instead: always mounted,
                     hidden unless the Book tab is active (sidebarOpen doesn't
                     gate it there — the mode switcher owns phone/tablet). */}
-                {(sidebarOpen || isBelowLg) && (
-                    <div
-                        data-testid="trade-sidebar"
-                        className={isBelowLg
-                            ? (mode === 'book' ? 'min-h-0 w-full flex-1' : 'hidden')
-                            : 'hidden w-[300px] shrink-0 md:block'}
-                    >
-                        <OrderBookPanel symbol={symbol} live={feed.depthLive} liveDepth={feed.depth} />
-                    </div>
-                )}
                 <div
                     data-testid="trade-chart-pane"
                     className={isBelowLg
                         ? (mode === 'chart' ? 'min-h-0 flex-1' : 'hidden')
-                        : `min-h-[420px] flex-1 lg:min-h-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}
+                        : `min-h-[420px] flex-1 lg:min-h-0 lg:min-w-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}
                 >
                     <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
@@ -913,6 +903,25 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         modelDrawings={modelDrawings}
                         onRemoveModelShape={removeModelShape} />
                 </div>
+                {/* The order book sits BETWEEN the chart and the AI dock, not
+                    to the chart's left. The chart is the primary object on this
+                    surface and the book is a column you read after it; that is
+                    also the order Binance, Bybit and Minara all use. Below lg
+                    the three panes stack with two `hidden`, so DOM order only
+                    matters at lg+ — where the book is now a right-hand column.
+                    `trade-sidebar` is a legacy testid name; renaming it is
+                    cosmetic churn against two test files and buys nothing, so
+                    it stays. */}
+                {(sidebarOpen || isBelowLg) && (
+                    <div
+                        data-testid="trade-sidebar"
+                        className={isBelowLg
+                            ? (mode === 'book' ? 'min-h-0 w-full flex-1' : 'hidden')
+                            : 'hidden w-[300px] shrink-0 md:block'}
+                    >
+                        <OrderBookPanel symbol={symbol} live={feed.depthLive} liveDepth={feed.depth} />
+                    </div>
+                )}
                 {/* The dock belongs to the AI mode below lg (always mounted
                     there — the desktop collapse toggle is a lg+ affordance
                     and must never blank the chat pane on phones). */}

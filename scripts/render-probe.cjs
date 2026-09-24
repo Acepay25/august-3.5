@@ -776,6 +776,39 @@ async function main() {
         await sleep(500);
         check('returned to Trade for the daily-path checks', toTrade !== 'not found', `${toTrade}`);
 
+        // The order book is a DAILY surface and until now had NO test hooks at
+        // all — the panel shipped without a single data-testid, so nothing
+        // outside its own unit test could assert it rendered. The ladder is
+        // 12 asks + spread band + 12 bids; a row count catches a ladder that
+        // silently emptied (a dead socket, an all-zero-qty frame) and a spread
+        // band that stopped painting, both of which a pageerror check misses
+        // because neither throws.
+        const bookRows = page.locator('[data-testid="orderbook-row"]');
+        const bookRowCount = await pollFor(async () => {
+            const n = await bookRows.count();
+            return n >= 24 ? n : 0;
+        }, 8000);
+        check('the order book paints a full ladder', bookRowCount >= 24,
+            `${bookRowCount || await bookRows.count()} rows (12 asks + 12 bids)`);
+        const bookBand = page.locator('[data-testid="orderbook-spread"]');
+        check('the order book paints its spread band', (await bookBand.count()) === 1,
+            `${await bookBand.count()}`);
+        const bookHead = page.locator('[data-testid="orderbook-header"]');
+        check('the order book has its Price/Size/Total header', (await bookHead.count()) === 1,
+            `${await bookHead.count()}`);
+        // The book moved to the RIGHT of the chart: assert the arrangement,
+        // not just the presence. A future reordering that puts it back on the
+        // left is a design decision, and this makes it a deliberate one.
+        const bookIsRightOfChart = await page.evaluate(() => {
+            const book = document.querySelector('[data-testid="trade-sidebar"]');
+            const chart = document.querySelector('[data-testid="trade-chart-pane"]');
+            if (!book || !chart) return 'missing';
+            return book.getBoundingClientRect().left >= chart.getBoundingClientRect().right - 1
+                ? 'right' : 'not-right';
+        });
+        check('the order book sits to the RIGHT of the chart', bookIsRightOfChart === 'right',
+            `${bookIsRightOfChart}`);
+
         // NOTE: the gate's per-criterion `validationScores` (risk/reward,
         // confluence, regime…) are computed and stored on the analysis but
         // never rendered by ANY component — grepping components/ for
