@@ -34,6 +34,11 @@ interface ValidationAdjustmentState {
 }
 
 export interface AnalysisResultProcessorContext {
+    /** Identity of the run this analysis belongs to. Threaded to notebook skill
+     *  enforcement so the ε-holdout can stand the code veto down on the same
+     *  runs it blanks prompt injection on. Absent ⇒ no holdout, which keeps
+     *  every pre-existing caller behaving exactly as before. */
+    runId?: string;
     capturedGateResult: GateOutput | null;
     update?: AnalysisUpdateContext;
     freshHybridData: HybridDataPacket | null;
@@ -329,6 +334,7 @@ export const processAnalysisResult = (
     Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis, {
         regime: context.freshHybridData?.regime?.regime,
         username: context.getActiveUsername(),
+        runId: context.runId,
     }));
     finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
     Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
