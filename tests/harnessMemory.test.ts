@@ -561,9 +561,16 @@ Wait for the reclaim.
     expect(hit?.wins).toBe(0);
     expect(hit?.losses).toBe(0);
     expect(hit?.consecutiveLosses).toBe(0);
-    // A listed-but-uncounted trade would be deduped out of the first real
-    // evidence pass, so the id must NOT be recorded at birth.
-    expect(hit?.tradeIds).toEqual([]);
+    // The authoring trade id IS recorded — for DEDUPE only. Two paths re-sync
+    // the same trade (log, post-mortem, bot fold) and applySkillEvidence skips
+    // a trade already in tradeIds; without the id a second sync with no
+    // injection record reads UNKNOWN, takes the full-credit path, and banks the
+    // authoring trade as evidence. It also keeps usePostMortem's
+    // alreadyAutoIngested guard (which asks whether this id already landed in a
+    // skill) working. The zero tally is what stops it counting as evidence.
+    expect(hit?.tradeIds).toEqual(['if-1']);
+    expect(hit?.birthEvidence).toEqual(expect.objectContaining({ wins: 0, losses: 0, clusterSize: 1 }));
+    expect(followedEvidence(hit!)).toEqual({ wins: 0, losses: 0 });
     expect(hit?.status).toBe('candidate');
     // …and `prior` is what keeps a zero-evidence skill injectable at all.
     // Without it MemoryRetrievalService withholds it, no evidence can accrue,

@@ -52,6 +52,7 @@ import {
     updateMemoryFile,
     writeModelNote,
 } from '../services/learning/MemoryFilesService';
+import { ingestIfThenFromTrade } from '../services/learning/SkillMemoryService';
 
 describe('bytesOf', () => {
     it('counts UTF-16 code units at two bytes each', () => {
@@ -263,6 +264,30 @@ describe('the budget wired into the notebook', () => {
         // And the existing library still learns: updates land at this tier.
         await updateMemoryFile(live.id, { content: '# Live\n\n**When:** BTC sweeps twice.\n' }, USER);
         expect(getMemoryFiles().files.find(f => f.id === live.id)!.content).toContain('twice');
+    });
+
+    /**
+     * Regression guard. A refused skill write must cost ONE skill, not the
+     * learning loop. `ingestIfThenFromTradeUnlocked` is awaited by
+     * `syncClosedTradeToNotebook` OUTSIDE its own try block, so a throw
+     * escaping the per-clause create used to abort the worth gate, the
+     * consolidation pass and the auto-eval scheduler for every subsequent
+     * trade — permanently, once the notebook crossed the trigger tier.
+     */
+    it('a refused skill write does not propagate out of the post-mortem ingest', async () => {
+        await fillWith(NOTEBOOK_CLEANUP_TRIGGER_BYTES, 'fat.md');
+        expect(getNotebookSize()?.pressure).toBe('trigger');
+        const trade = {
+            id: 'pressure-1',
+            analysis: { coinName: 'BTCUSDT', direction: 'Short', detectedPatternFamily: 'Family A' } as never,
+            outcome: 'LOSS' as never,
+            postMortem: 'IF BTC reclaims the prior day high THEN stand aside from the short entirely',
+            timestamp: new Date().toISOString(),
+        };
+        // Must RESOLVE, not reject: the clause is simply not created.
+        await expect(ingestIfThenFromTrade(trade, USER)).resolves.toBeUndefined();
+        // …and the rest of the learning tail is still reachable afterwards.
+        await expect(ingestIfThenFromTrade({ ...trade, id: 'pressure-2' }, USER)).resolves.toBeUndefined();
     });
 
     it('allows new skills freely below the trigger tier', async () => {
