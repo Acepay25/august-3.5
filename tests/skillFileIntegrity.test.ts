@@ -104,6 +104,14 @@ describe('created skill file integrity', () => {
     expect(meta.consecutiveLosses).toBe(MIN_CLUSTER_FOR_SKILL);
     expect(meta.tradeIds).toEqual(['t-0', 't-1', 't-2']);
     expect(meta.evidenceCount).toBe(MIN_CLUSTER_FOR_SKILL);
+    // The cluster that AUTHORED this skill is recorded separately, so the
+    // promotion maths can exclude it. It round-trips the frontmatter like
+    // every other field.
+    expect(meta.birthEvidence).toEqual(expect.objectContaining({
+      wins: 0,
+      losses: MIN_CLUSTER_FOR_SKILL,
+      clusterSize: MIN_CLUSTER_FOR_SKILL,
+    }));
     // Birth certificate: every new skill leaves with a falsifiable claim.
     expect(meta.prediction).toBeTruthy();
     // A skill without a one-line summary is invisible to the index and

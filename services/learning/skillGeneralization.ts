@@ -113,6 +113,14 @@ export const generalizeSkillClusterUnlocked = async (
     const evidenceCount = rows.reduce(
         (s, r) => s + Math.max(r.meta.evidenceCount ?? 0, r.meta.tradeIds.length), 0,
     );
+    // The generalized skill's IF/THEN is copied from its sources, so the
+    // evidence that produced those sources is ITS source material too. It must
+    // be carried or the generalized twin is born `confirmed` on evidence that
+    // predates it existing. Sums across distinct coin skills — unlike the
+    // consolidation case, these are genuinely different trades.
+    const birthWins = rows.reduce((s, r) => s + (r.meta.birthEvidence?.wins ?? 0), 0);
+    const birthLosses = rows.reduce((s, r) => s + (r.meta.birthEvidence?.losses ?? 0), 0);
+    const birthClusterSize = rows.reduce((s, r) => s + (r.meta.birthEvidence?.clusterSize ?? 0), 0);
 
     const slug = slugifyName(`${scope.family} ${scope.regime} ${scope.kind} all coins`) || 'generalized-skill';
     const fileName = `${slug}.md`;
@@ -139,6 +147,9 @@ export const generalizeSkillClusterUnlocked = async (
         tradeIds,
         controlIds: controlIds.length > 0 ? controlIds.slice(-20) : undefined,
         evidenceCount,
+        ...(birthClusterSize > 0
+            ? [{ birthEvidence: { wins: birthWins, losses: birthLosses, clusterSize: birthClusterSize, at: now } }]
+            : []),
         ifCondition: richest.meta.ifCondition,
         thenAction: richest.meta.thenAction,
         description: `Generalized across ${candidate.coins.join(', ')}: ${richest.meta.description ?? richest.meta.thenAction ?? scope.family}`,

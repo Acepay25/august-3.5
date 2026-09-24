@@ -164,6 +164,19 @@ export interface SkillMeta {
      *  real running total, not a capped display artifact (promotion math
      *  never reads it; the provenance line and generalization sum do). */
     evidenceCount?: number;
+    /** The cluster that CREATED this skill, kept out of the promotion maths.
+     *
+     *  A skill's IF/THEN is authored from the post-mortems of the trades that
+     *  spawned it, so those trades are the source of the claim, not a test of
+     *  it. Counting them as evidence let eight co-occurring wins mint a skill
+     *  already `confirmed` — clearing the zero-sample CI gate and satisfying
+     *  the skill's own birth certificate with the same co-occurrence.
+     *
+     *  Promotion and the CI gate read only the FOLLOWED remainder
+     *  (`wins + losses - clusterSize`), so a skill earns `confirmed` from
+     *  outcomes observed after it was injected, not before. Absent on every
+     *  skill that was not born from a cluster. */
+    birthEvidence?: { wins: number; losses: number; clusterSize: number; at: string };
     ifCondition?: string;
     thenAction?: string;
     /** Optional machine-checkable trigger, evaluated against the tape by
@@ -468,6 +481,27 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
             const raw = parseInt(pick('evidenceCount') || '', 10);
             return Number.isFinite(raw) && raw > 0 ? raw : undefined;
         })(),
+        birthEvidence: (() => {
+            const raw = pick('birthEvidence');
+            if (!raw) return undefined;
+            try {
+                const p = JSON.parse(raw) as { wins?: number; losses?: number; clusterSize?: number; at?: string };
+                const clusterSize = Number(p?.clusterSize);
+                if (!Number.isFinite(clusterSize) || clusterSize <= 0) return undefined;
+                return {
+                    wins: Number.isFinite(Number(p.wins)) ? Number(p.wins) : 0,
+                    losses: Number.isFinite(Number(p.losses)) ? Number(p.losses) : 0,
+                    clusterSize,
+                    at: typeof p.at === 'string' ? p.at : '',
+                };
+            } catch {
+                // A malformed row degrades to "no recorded birth cluster",
+                // which makes the skill STRICTER (it must earn its sample from
+                // injection), never laxer. Legacy files have no such key at
+                // all and are unaffected.
+                return undefined;
+            }
+        })(),
         ifCondition: pick('ifCondition'),
         predicate: pick('predicate'),
         thenAction: pick('thenAction'),
@@ -733,6 +767,9 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         // feeds the "learned from N logged trades" provenance line and the
         // generalization evidence sum, both of which must be honest.
         `evidenceCount: ${Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length)}`,
+        // The birth cluster, kept separate so promotion can exclude it. JSON
+        // because it is a small struct, matching the shadow/regimeStats shape.
+        ...(meta.birthEvidence ? [`birthEvidence: ${JSON.stringify(meta.birthEvidence)}`] : []),
         // Expectancy is written only when at least one outcome carried a
         // measured R. Omitting the pair (rather than emitting `netR: 0`) is
         // what keeps an unmeasured skill from reading as break-even.
@@ -858,6 +895,21 @@ export const evalDemotionActive = (meta: SkillMeta): boolean => {
 };
 
 /**
+ * Evidence observed AFTER the skill was injected — the birth cluster
+ * subtracted out. The cluster that authored the IF/THEN is the source of the
+ * claim, not a test of it, so it cannot count toward the sample floor, the
+ * confidence interval, or the claim's own evidence.
+ */
+export const followedEvidence = (meta: SkillMeta): { wins: number; losses: number } => {
+    const n = meta.birthEvidence?.clusterSize ?? 0;
+    if (n <= 0) return { wins: meta.wins, losses: meta.losses };
+    return {
+        wins: Math.max(0, meta.wins - meta.birthEvidence!.wins),
+        losses: Math.max(0, meta.losses - meta.birthEvidence!.losses),
+    };
+};
+
+/**
  * The raw ladder (5 samples, 60% win rate) is a FLOOR, not the gate —
  * a 4-1 record at N=5 is statistically indistinguishable from a coin flip.
  * Confirmation additionally requires the Wilson interval of the followed
@@ -868,7 +920,10 @@ export const evalDemotionActive = (meta: SkillMeta): boolean => {
 export const confirmationCiGate = (
     meta: SkillMeta,
     control?: { wins: number; losses: number },
-): boolean => ciGatePasses(meta.kind, meta.wins, meta.losses, control);
+): boolean => {
+    const f = followedEvidence(meta);
+    return ciGatePasses(meta.kind, f.wins, f.losses, control);
+};
 
 /** Control-group evidence for the CI comparison — the settled
  *  outcomes of the skill's controlIds (matched-but-not-injected trades). */
@@ -964,6 +1019,11 @@ export const skillExpectancyR = (
 };
 
 const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number }): SkillStatus => {
+    // The birth cluster is evidence the skill was AUTHORED from, not evidence
+    // it was TESTED on, so it is excluded from the claim test, the sample
+    // floor and the confidence interval alike. Every number below therefore
+    // describes outcomes observed after injection.
+    const followed = followedEvidence(meta);
     // ── birth certificate ──
     // The skill's own pre-registered claim, tested against its followed
     // evidence. evaluateClaim is pure arithmetic, so the ladder can consume
@@ -971,12 +1031,12 @@ const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number 
     // promotion (the skill must meet the bar it promised, not just the
     // generic one); met or pending claims defer to the normal ladder.
     const claim = meta.prediction
-        ? evaluateClaim(meta.kind, meta.prediction, { wins: meta.wins, losses: meta.losses })
+        ? evaluateClaim(meta.kind, meta.prediction, followed)
         : null;
     const claimUnmet = Boolean(claim && !claim.pending && !claim.met);
 
-    const sample = meta.wins + meta.losses;
-    const winRate = sample > 0 ? meta.wins / sample : 0;
+    const sample = followed.wins + followed.losses;
+    const winRate = sample > 0 ? followed.wins / sample : 0;
     // RETIREMENT FIRST: the retire band is a statement about the skill's
     // OUTCOMES (it has proven itself wrong often enough to leave the
     // library), and it must outrank the eval pin below. A hurts-pinned
@@ -1799,6 +1859,11 @@ const maybeUpsertSkillUnlocked = async (
         // The whole cluster's evidence is counted at birth — record the
         // true total now, before tradeIds gets tail-capped by serialize.
         evidenceCount: cluster.length,
+        // …and record it SEPARATELY too, so promotion maths can tell the
+        // cluster (which authored this IF/THEN) from outcomes observed after
+        // injection. Without this a cluster of 8 wins born the skill
+        // `confirmed` on its own co-occurrence.
+        birthEvidence: { wins, losses, clusterSize: cluster.length, at: new Date().toISOString() },
         ifCondition: clause?.ifCondition,
         thenAction: clause?.thenAction,
         // Birth certificate: the worth-gate's judged claim when it
@@ -2201,6 +2266,20 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
             // Keep the strongest provenance fields across the group.
             refinedAt: metas.map(m => m.refinedAt).filter(Boolean).sort().at(-1) ?? metas[0].refinedAt,
             evidenceCount: uniqueTrades.size,
+            // Carry the birth cluster through the merge, or the promotion
+            // constraint silently evaporates on the first consolidation pass.
+            // MAX, not sum: these members state the SAME claim (the grouping
+            // is on the full identity key), so their clusters describe the
+            // same underlying co-occurrence rather than independent samples —
+            // and max is the conservative direction, since it demands the most
+            // post-injection evidence before promotion.
+            birthEvidence: (() => {
+                const clusters = metas
+                    .map(m => m.birthEvidence)
+                    .filter((b): b is NonNullable<SkillMeta['birthEvidence']> => Boolean(b));
+                if (clusters.length === 0) return undefined;
+                return clusters.reduce((a, b) => (a.clusterSize >= b.clusterSize ? a : b));
+            })(),
             // Birth certificate: with the strict IF-claim grouping every
             // member states the same trigger, so any defined prediction in
             // the group is faithful — take the group leader's, or the first
