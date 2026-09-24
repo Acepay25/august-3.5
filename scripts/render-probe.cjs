@@ -167,7 +167,12 @@ async function sendInDock(page, text, netIssues = [], expectedAi = 1) {
                     || document.body).textContent || '').replace(/\s+/g, ' ').slice(0, 400),
                 wanted: needle,
             }), text);
-            throw new Error(`sendInDock("${text}") never rendered a row.\n    `
+            // The Playwright error is the CAUSE; the DOM dump is the context.
+            // Discarding `err` (as this used to) threw away the one line that
+            // says whether it was a timeout, a missing element or a detached
+            // handle — which is what you actually need when a gate fails.
+            throw new Error(`sendInDock("${text}") never rendered a row`
+                + `${err instanceof Error ? ` — ${err.message}` : ''}.\n    `
                 + JSON.stringify(diag).replace(/","/g, '",\n    "'));
         }
     };
@@ -194,6 +199,7 @@ async function sendInDock(page, text, netIssues = [], expectedAi = 1) {
             entryCount: document.querySelectorAll('[data-entry-id]').length,
         }));
         throw new Error(`sendInDock("${text}"): user row rendered, no settled reply.`
+            + `${err instanceof Error ? ` — ${err.message}` : ''}`
             + `\n    ${JSON.stringify(diag).replace(/","/g, '",\n    "')}`
             + `\n    wire: ${netIssues.slice(0, 6).join(' | ') || 'no failing request on the mock port'}`);
     }

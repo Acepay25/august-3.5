@@ -1,0 +1,97 @@
+name: Guards
+
+# Deterministic gates that `.github/workflows/ci.yml` does not run.
+#
+# Every step here is pure Node: no display, no browser, no Electron runtime,
+# no timing. That is deliberate. This repo's own probe notes warn that the
+# render probe reports blank surfaces when it runs alongside a build, and a
+# flaky job is worse than a missing one — it teaches people to ignore red.
+# Anything that needs a display belongs in ci.yml (boot-probe, render-probe);
+# anything here must be reproducible on a cold runner.
+#
+# The gaps these close, from the deep dive 2026-09-24:
+#   1. `scripts/**/*.cjs` is in eslint's ignore list, and tsconfig.scripts.json
+#      only includes `scripts/**/*.ts` (one file). So the ~1,900 lines of probe
+#      logic — the gates that are supposed to be the strongest in the repo —
+#      get no lint and no parse check. A selector that silently matches nothing
+#      reduces coverage without failing anything.
+#   2. vite.config.ts documents a real past regression: a 363KB static chart
+#      import pulled into the eager startup graph by one top-level import. It
+#      was hand-fixed with manualChunks, and there is no size gate, so the same
+#      class returns the moment someone adds an eager import.
+#
+# NOT here, on purpose: a live Electron boot on Linux. The packaged-shell smoke
+# (`installer-smoke`) is Windows-only and builds with `--dir --win`, so a Linux
+# job cannot reuse it, and an xvfb job authored from Windows could not be
+# validated before landing. The drift that actually bit us — the provider
+# chunk bridge returning raw usage — is now covered deterministically by
+# tests/electronIpcContract.test.ts and tests/desktopUsageBridge.test.ts, which
+# run in ci.yml on every platform.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 1. The probes parse. Cheap, and a syntax error in a gate script is
+      #    otherwise invisible until a machine runs it and silently reports
+      #    nothing.
+      - name: Probe and tooling scripts parse
+        run: |
+          set -euo pipefail
+          for f in scripts/*.cjs electron/*.cjs; do
+            echo "  node --check $f"
+            node --check "$f"
+          done
+
+      # 2. The same scripts, linted. eslint.config.js ignores them because they
+      #    are one-off CJS, so they get their own narrow flat config
+      #    (scripts/eslint.config.mjs) carrying error-level correctness rules
+      #    only — no stylistic opinions, so a gate script stays lintable.
+      - name: Probe scripts lint
+        run: npx eslint --config scripts/eslint.config.mjs "scripts/*.cjs"
+
+      # 3. Bundle-size ratchet. The ceiling is a ratchet, not a target: it
+      #    fails only on a REGRESSION past the current build, and is meant to
+      #    be lowered deliberately as chunks improve.
+      - name: Production build (for the size ratchet)
+        run: npm run build
+
+      - name: Startup chunk stays under the ratchet
+        run: |
+          set -euo pipefail
+          # 2600 kB raw. The last measured entry chunk was ~1956 kB, so this
+          # leaves ~33% headroom — enough that ordinary work does not trip it,
+          # tight enough to catch the eager-import regression class (a single
+          # 363KB chart import was enough to matter).
+          CEILING_KB=2600
+          entry=$(ls -S dist/assets/index-*.js | head -1)
+          if [ -z "$entry" ]; then
+            echo "::error::no entry chunk found in dist/assets"
+            exit 1
+          fi
+          size_kb=$(( $(wc -c < "$entry") / 1024 ))
+          echo "entry chunk: $(basename "$entry") = ${size_kb} kB (ceiling ${CEILING_KB} kB)"
+          if [ "$size_kb" -gt "$CEILING_KB" ]; then
+            echo "::error::entry chunk ${size_kb} kB exceeds the ${CEILING_KB} kB ratchet — an eager import crept into the startup graph. Use React.lazy() or manualChunks."
+            exit 1
+          fi
