@@ -29,6 +29,7 @@ import {
     isSkillFile,
     skillBody,
     skillMatchesSetup,
+    skillStrictlyMatchesSetup,
     type SkillMeta,
 } from './SkillMemoryService';
 import {
@@ -89,9 +90,22 @@ export const isSkillDueForEval = (
     if (meta.lastEvalAt) {
         const t0 = Date.parse(meta.lastEvalAt);
         if (Number.isFinite(t0)) {
+            // MATCHING trades only, not every closed trade. Counting all of
+            // them let ten unrelated ETH trades re-trigger an audit of a stale
+            // BTC skill — the eval then re-ran on the same historical cases,
+            // the near-deterministic runner reproduced the same flips, and the
+            // streak advanced on evidence that had not changed at all.
             const since = trades.filter(t =>
                 (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS)
                 && Date.parse(t.timestamp || '') > t0
+                && skillStrictlyMatchesSetup(meta, {
+                    coin: t.analysis?.coinName,
+                    direction: t.analysis?.direction === 'Long' || t.analysis?.direction === 'Short'
+                        ? t.analysis.direction
+                        : undefined,
+                    family: t.analysis?.detectedPatternFamily,
+                    regime: t.marketRegime,
+                })
             ).length;
             if (since < EVAL_MIN_TRADES_BETWEEN) return false;
             // Fresh-cooldown gate.

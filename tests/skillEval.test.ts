@@ -90,6 +90,101 @@ describe('SkillEvalService (with-skill vs without-skill A/B)', () => {
         expect(res.verdict).toBe('hurts');
     });
 
+    /**
+     * The defect this batch closes. Grading by DIRECTION OF EFFECT alone let a
+     * skill that talks the model into more confidence on a LOSS score "helps"
+     * — and two `helps` runs rehabilitate a benched skill, so the causal
+     * signal that should have read "hurts" was what cleared a demotion.
+     */
+    it('scores a REPEAT skill that raises confidence on a LOSS as hurts, not helps', async () => {
+        await initMemoryFiles('eval-repeat-loss');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const file = await createMemoryFile(skills.id, 'btc-short-repeat.md', `---
+status: confirmed
+kind: repeat
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+ifCondition: BTC short setup in Family A
+thenAction: take the short
+tradeIds: a,b,c
+---
+
+# Repeat BTC short
+
+**When:** BTC short in Family A
+**What I do:** take the short.
+`, 'eval-repeat-loss', true);
+
+        // makeTrade defaults to a LOSS. A repeat skill moves confidence UP —
+        // "the repeat way" — but the trade lost, so that move is wrong.
+        const runner = async (_t: LoggedTrade, { skillEnabled }: { skillEnabled: boolean }) =>
+            skillEnabled
+                ? { confidence: 'High', direction: 'Short' }
+                : { confidence: 'Low', direction: 'Short' };
+
+        const res = await evaluateSkill(file.id, 'eval-repeat-loss', [makeTrade({ id: 'm1' })], {} as never, runner);
+        expect(res.flips).toBe(1);
+        expect(res.alignedFlips).toBe(0);
+        expect(res.misalignedFlips).toBe(1);
+        expect(res.verdict).toBe('hurts');
+        expect(res.cases[0].actualOutcome).toBe('LOSS');
+    });
+
+    it('scores a REPEAT skill that raises confidence on a WIN as helps', async () => {
+        await initMemoryFiles('eval-repeat-win');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const file = await createMemoryFile(skills.id, 'btc-short-repeat.md', `---
+status: confirmed
+kind: repeat
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+ifCondition: BTC short setup in Family A
+thenAction: take the short
+tradeIds: a,b,c
+---
+
+# Repeat BTC short
+
+**When:** BTC short in Family A
+**What I do:** take the short.
+`, 'eval-repeat-win', true);
+
+        const runner = async (_t: LoggedTrade, { skillEnabled }: { skillEnabled: boolean }) =>
+            skillEnabled
+                ? { confidence: 'High', direction: 'Short' }
+                : { confidence: 'Low', direction: 'Short' };
+
+        // The SAME move as the case above, opposite outcome. The outcome is
+        // the only thing separating them, which is the whole point.
+        const res = await evaluateSkill(file.id, 'eval-repeat-win',
+            [makeTrade({ id: 'm1', outcome: 'WIN' as never })], {} as never, runner);
+        expect(res.alignedFlips).toBe(1);
+        expect(res.misalignedFlips).toBe(0);
+        expect(res.verdict).toBe('helps');
+    });
+
+    it('excludes the skill own training trades from the eval sample', async () => {
+        await initMemoryFiles('eval-train');
+        const fileId = await seedSkill('eval-train');
+        const meta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === fileId)!.content)!;
+        // seedSkill records tradeIds a,b,c — a trade carrying one of those ids
+        // was the SOURCE of the skill and must not be re-benchmarked on it.
+        const trades = [
+            makeTrade({ id: 'a' }),
+            makeTrade({ id: 'm1' }),
+            makeTrade({ id: 'm2', timestamp: '2026-08-10T12:00:00.000Z' }),
+        ];
+        const picked = selectEvalTrades(meta, trades).map(t => t.id);
+        expect(picked).not.toContain('a');
+        expect(picked.sort()).toEqual(['m1', 'm2']);
+    });
+
     it('is inconclusive when the skill never changes the decision', async () => {
         await initMemoryFiles('eval-same');
         const fileId = await seedSkill('eval-same');
