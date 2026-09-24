@@ -484,7 +484,7 @@ async function main() {
             JSON.stringify(afterThird));
         check('trade surface still mounted', afterThird.treeAlive === 1);
 
-        // ── The Agents surface ───────────────────────────────────────────
+        // ── The Chat surface (id/testids still "agents") ───────────────────────────────────────────
         // It reads the App-side message array through a filter
         // (`utils/agentThreads.deskThread`), which is a DIFFERENT store from the
         // dock's chat session — so it gets driven and counted on its own. This
@@ -502,11 +502,11 @@ async function main() {
             await toggle.first().click();
             await sleep(350);
             // The toggle's own accessible text starts with the current surface
-            // name ("Agents" once it is open), so matching /^Agents/ across all
+            // name ("Chat" once it is open), so matching /^Chat/ across all
             // buttons re-clicks the hamburger — whose open menu then covers
             // itself with a full-screen backdrop and the click never lands.
             await page.locator('#mobile-navigation-menu')
-                .getByRole('button', { name: /^Agents/ }).first().click();
+                .getByRole('button', { name: /^Chat/ }).first().click();
             // The transcript container only exists once the thread has a row —
             // an empty thread renders the greeting hero instead. Wait for the
             // composer, which is present either way.
@@ -610,7 +610,7 @@ async function main() {
             { label: 'Trade', expect: '[data-testid="trade-view"]' },
             { label: 'Journal', expect: null },
             { label: 'Studio', expect: null },
-            { label: 'Agents', expect: '[data-testid="agents-view"]' },
+            { label: 'Chat', expect: '[data-testid="agents-view"]' },
             // The sixth control in the menu; it opens the approval inbox as a
             // fixed overlay that mounts OUTSIDE <main> (App renders it as a
             // sibling of the header). Measuring <main> here re-reports whatever
@@ -845,13 +845,13 @@ async function main() {
         //    must still be on screen. This is the browser proof for the row that
         //    used to render NOWHERE — claimed out of the desk pane by
         //    provider+model, never shown in the bot's own thread.
-        let backToAgents = await navTo('Agents');
-        if (backToAgents === 'not found') {
+        let backToChat = await navTo('Chat');
+        if (backToChat === 'not found') {
             await openMenu();
             await sleep(400);
-            backToAgents = await navTo('Agents');
+            backToChat = await navTo('Chat');
         }
-        check('can return to the Agents surface', backToAgents === 'clicked', backToAgents);
+        check('can return to the Chat surface', backToChat === 'clicked', backToChat);
         const paneText = await pollFor(async () => {
             const text = await page.locator('[data-testid="agents-view"]').innerText();
             return text.trim().length > 200 ? text : null;

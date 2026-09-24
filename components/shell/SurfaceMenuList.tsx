@@ -41,7 +41,14 @@ export const SURFACE_ITEMS: Array<{
     { id: 'trade', label: 'Trade', shortcut: 'Alt+1', Icon: ActivityIcon },
     { id: 'journal', label: 'Journal', shortcut: 'Alt+2', Icon: FileTextIcon },
     { id: 'studio', label: 'Studio', shortcut: 'Alt+3', Icon: SparklesIcon },
-    { id: 'agents', label: 'Agents', shortcut: 'Alt+4', Icon: BotIcon },
+    // The surface is called Chat; the id stays `agents` because a dozen gates
+    // pin it independently of the label (surfaceMenu.test asserts
+    // onSelect('agents'), and agents-view / agents-rail / chart-ai-row are
+    // testids across agentsSurface.test, deadControlsGuard and the probe).
+    // Renaming the id would churn all of them for no user-visible gain.
+    // The RAIL keeps its own "Agents" pill — that names the bot roster, which
+    // is a section of this surface, not the surface itself.
+    { id: 'agents', label: 'Chat', shortcut: 'Alt+4', Icon: BotIcon },
     { id: 'learn', label: 'Learn', shortcut: 'Alt+5', Icon: GraduationCap },
 ];
 

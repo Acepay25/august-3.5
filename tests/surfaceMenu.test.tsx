@@ -18,7 +18,7 @@ const renderMenu = (props: Partial<React.ComponentProps<typeof SurfaceMenuList>>
 describe('the surface menu', () => {
     it('lists every surface, and marks + names the active one', () => {
         renderMenu();
-        for (const label of ['Trade', 'Journal', 'Studio', 'Agents', 'Learn']) {
+        for (const label of ['Trade', 'Journal', 'Studio', 'Chat', 'Learn']) {
             // Prefix match: the accessible name also carries the shortcut.
             expect(screen.getByRole('button', { name: new RegExp(`^${label}`) })).toBeTruthy();
         }
@@ -31,14 +31,14 @@ describe('the surface menu', () => {
     it('clicking a row selects that surface', () => {
         const onSelect = vi.fn();
         renderMenu({ onSelect });
-        fireEvent.click(screen.getByRole('button', { name: /^Agents/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Chat/ }));
         expect(onSelect).toHaveBeenCalledWith('agents');
     });
 
     it('announces a live badge through the row name and shows its count', () => {
         renderMenu({ surface: 'learn', badges: { agents: { count: 3, detail: '3 awaiting your decision' } } });
-        const agents = screen.getByRole('button', { name: /^Agents/ });
-        expect(agents.getAttribute('aria-label')).toBe('Agents. 3 awaiting your decision, shortcut Alt+4');
+        const agents = screen.getByRole('button', { name: /^Chat/ });
+        expect(agents.getAttribute('aria-label')).toBe('Chat. 3 awaiting your decision, shortcut Alt+4');
         expect(agents.textContent).toContain('3');
     });
 
@@ -46,7 +46,7 @@ describe('the surface menu', () => {
         const { container } = renderMenu({ badges: { agents: { active: true, detail: 'a bot is working' } } });
         // The count pill is the amber-500 badge; the dot is amber-400.
         expect(container.querySelectorAll('.bg-amber-500')).toHaveLength(0);
-        expect(screen.getByRole('button', { name: /^Agents/ }).querySelector('span.animate-pulse')).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Chat/ }).querySelector('span.animate-pulse')).toBeTruthy();
     });
 });
 
