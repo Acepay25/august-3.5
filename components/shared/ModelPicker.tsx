@@ -5,7 +5,7 @@
  * Left: provider list → Right: model list for hovered provider.
  */
 
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderConfig } from '../../types/provider';
 import {
@@ -17,7 +17,7 @@ import {
     writeFreeOnlyPref,
 } from '../../utils/providerUtils';
 import { ChevronRightIcon, ChevronDownIcon, CheckIcon } from './Icons';
-import { RotateCw, Check } from 'lucide-react';
+import { RotateCw, Check, Search as SearchIcon } from 'lucide-react';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
  *  re-positioned with the flyout's real size before the first paint). */
@@ -163,7 +163,26 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
         }
     }, [isRefreshing, onRefreshModels]);
 
+    const [query, setQuery] = useState('');
     const readyProviders = providers.filter(isProviderReady);
+
+    // Search is a FLAT index over every model on every ready provider, not
+    // over the hovered one. Typing a model name should find it wherever it
+    // lives — otherwise the box only searches whichever provider the pointer
+    // happens to be over, which is the opposite of what a search box implies.
+    const searchHits = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return [];
+        const hits: Array<{ providerId: string; model: string }> = [];
+        for (const pr of readyProviders) {
+            for (const model of pr.models) {
+                if (model.toLowerCase().includes(q)) hits.push({ providerId: pr.id, model });
+            }
+        }
+        return freeOnly ? hits.filter(h => isFreeModelId(h.model)) : hits;
+    }, [readyProviders, query, freeOnly]);
+
+    const isSearching = query.trim().length > 0;
 
     // Parse current value to extract providerId and modelId
     const parseValue = useCallback(() => {
@@ -233,6 +252,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             const insideFlyout = flyoutRef.current?.contains(target) ?? false;
             if (!insideContainer && !insideFlyout) {
                 setIsOpen(false);
+
+                setQuery('');
                 setHoveredProvider(null);
                 setAnchor(null);
                 setFlyoutPos(null);
@@ -248,6 +269,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 setIsOpen(false);
+
+                setQuery('');
                 setHoveredProvider(null);
                 setAnchor(null);
                 setFlyoutPos(null);
@@ -266,6 +289,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             const t = e.target as Node | null;
             if (t && flyoutRef.current && flyoutRef.current.contains(t)) return;
             setIsOpen(false);
+
+            setQuery('');
             setHoveredProvider(null);
             setAnchor(null);
             setFlyoutPos(null);
@@ -302,6 +327,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
         if (mode === 'provider-only') {
             onChange(providerId);
             setIsOpen(false);
+
+            setQuery('');
             setHoveredProvider(null);
             setAnchor(null);
             setFlyoutPos(null);
@@ -318,6 +345,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             onChange(modelId);
         }
         setIsOpen(false);
+
+        setQuery('');
         setHoveredProvider(null);
         setAnchor(null);
         setFlyoutPos(null);
@@ -383,10 +412,32 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     onMouseDownCapture={(e) => e.stopPropagation()}
                     onPointerDownCapture={(e) => e.stopPropagation()}
                     className={`fixed z-[100] flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in ${
-                        mode !== 'provider-only' && hoveredProvider ? 'min-w-[320px]' : 'min-w-[192px]'
+                        mode !== "provider-only" && (hoveredProvider || isSearching) ? "min-w-[320px]" : "min-w-[192px]"
                     }`}
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
                 >
+                    {/* Search. Filters every model on every ready provider by
+                        name, so the answer does not depend on which provider
+                        the pointer is over. The provider column narrows with
+                        it, and the model column goes flat while searching. */}
+                    <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 px-3 py-1.5">
+                        <SearchIcon className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
+                        <input
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Escape') setQuery(''); }}
+                            type="search"
+                            placeholder="Search models…"
+                            aria-label="Search models by name"
+                            data-testid="model-picker-search"
+                            className="min-w-0 flex-1 bg-transparent text-ui-dense text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                        />
+                        {isSearching && (
+                            <span className="shrink-0 text-ui-2xs tabular-nums text-zinc-500" data-testid="model-picker-count">
+                                {searchHits.length}
+                            </span>
+                        )}
+                    </div>
                     <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-1.5 text-ui-dense text-zinc-400">
                         {mode !== 'provider-only' ? (
                             <label className="flex cursor-pointer items-center gap-2 hover:text-zinc-200 select-none">
@@ -431,8 +482,16 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
                                 No providers configured
                             </div>
+                        ) : isSearching && readyProviders.every(pr => !pr.models.some(
+                            m => m.toLowerCase().includes(query.trim().toLowerCase()))) ? (
+                            <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
+                                No provider offers “{query.trim()}”
+                            </div>
                         ) : (
-                            readyProviders.map(provider => {
+                            readyProviders
+                                .filter(pr => !isSearching || pr.models.some(
+                                    m => m.toLowerCase().includes(query.trim().toLowerCase())))
+                                .map(provider => {
                                 const isActive = provider.id === hoveredProvider;
                                 const isCurrentProvider = provider.id === currentProviderId;
                                 return (
@@ -464,7 +523,55 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     {/* Model list — materializes only while a provider is
                         hovered, so the flyout reads providers-first (the model
                         column "appears" next to the list on hover). */}
-                    {mode !== 'provider-only' && hoveredProvider && (
+                    {mode !== 'provider-only' && isSearching && (
+                        // Flat across ALL providers — a hit carries the
+                        // provider it came from, because "gpt-4o on openrouter"
+                        // and "gpt-4o on azure" are different choices and the
+                        // trader cannot tell them apart from the name alone.
+                        <div
+                            className="min-w-0 flex-1 min-h-0 overflow-y-auto py-1 custom-scrollbar overscroll-contain"
+                            data-testid="model-picker-results"
+                        >
+                            {searchHits.length === 0 ? (
+                                <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
+                                    No model matches “{query.trim()}”
+                                </div>
+                            ) : (
+                                searchHits.map(({ providerId, model }) => {
+                                    const fullValue = mode === 'provider-model' ? `${providerId}::${model}` : model;
+                                    const isCurrent = mode === 'provider-model'
+                                        ? providerId === currentProviderId && model === currentModelId
+                                        : model === currentModelId;
+                                    const disabled = isDisabled(fullValue);
+                                    return (
+                                        <button
+                                            key={fullValue}
+                                            onClick={() => !disabled && handleSelectModel(providerId, model)}
+                                            disabled={disabled}
+                                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-ui-caption transition-colors ${
+                                                disabled
+                                                    ? 'text-zinc-600 cursor-not-allowed'
+                                                    : isCurrent
+                                                        ? 'text-white bg-zinc-800'
+                                                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                                            }`}
+                                        >
+                                            <span className="min-w-0 flex-1 truncate" title={model}>
+                                                {formatModelDisplayName(model)}
+                                            </span>
+                                            {mode === 'provider-model' && (
+                                                <span className="shrink-0 truncate text-ui-2xs text-zinc-600" title={providerId}>
+                                                    {providerId}
+                                                </span>
+                                            )}
+                                            {isCurrent && <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+                    {!isSearching && mode !== 'provider-only' && hoveredProvider && (
                         <div
                             className="w-56 min-h-0 overflow-y-auto py-1 custom-scrollbar overscroll-contain"
                         >

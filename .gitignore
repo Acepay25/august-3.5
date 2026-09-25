@@ -125,3 +125,6 @@ hybrid-payload-dump.md
 # ZCode's own ignore file — a tool config that mirrors the gitignore pattern
 # list, not project source. It was showing up untracked in every worktree.
 .zcodeignore
+
+# Tool scratch dirs that show up in worktrees. Neither is project source.
+.freebuff/
