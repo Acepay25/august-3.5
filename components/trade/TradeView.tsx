@@ -22,12 +22,11 @@ import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef,
 import { GripVertical, PanelRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message } from '../../types';
-import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData, fetchAllFuturesSymbols, type SymbolMeta } from '../../services/analysis/MarketDataService';
+import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import { loadSessionModelDrawings, saveSessionModelDrawings } from '../../services/trade/chartDrawings';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
-import { baseOf } from '../../utils/symbol';
 import { getActiveUsername } from '../../utils/activeUser';
 import { fmtPrice } from '../../utils/formatters';
 import * as levelWatch from '../../services/trade/levelWatchService';
@@ -37,6 +36,7 @@ import { formatWatchFiredForModel } from '../../services/trade/chartTriggers';
 import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
+import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
@@ -48,9 +48,6 @@ import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
 import StatusPill from '../ui/StatusPill';
 import type { AgentBot } from '../../services/agents/agentRoster';
-
-const FALLBACK_SYMBOLS: SymbolMeta[] = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT']
-    .map(symbol => ({ symbol, baseAsset: baseOf(symbol), lastPrice: 0, changePercent24h: 0, quoteVolume: 0 }));
 
 interface TradeViewProps {
     providers: ProviderConfig[];
@@ -320,9 +317,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // root for one cycle. The hook owns nothing else — App keeps the flag so
     // re-navigating animates again.
     const surfaceEnterClass = useSurfaceEnter(surfaceEnterFrom);
+    // Shared with the Chat surface, which needs the same picker over the same
+    // list — two 60s polls for one exchange answer would be waste.
+    const symbols = useSymbolUniverse();
     const [strip, setStrip] = useState<StripData | null>(null);
     const [nowMs, setNowMs] = useState(() => Date.now());
-    const [symbols, setSymbols] = useState<SymbolMeta[]>(FALLBACK_SYMBOLS);
     const [chartDrawings, setChartDrawings] = useState<ChartDrawing[]>([]);
     /** Shapes the MODEL drew via desk tools — rendered on the chart, never
      *  persisted into the user's drawing file, cleared on symbol change. */
@@ -424,12 +423,20 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     symbolRef.current = symbol;
     const intervalRef = useRef(interval);
     intervalRef.current = interval;
+    // Follow the active session's instrument, and follow it LIVE — not only
+    // when the session id changes. A coin picked in the Chat surface has to
+    // move this chart while it is mounted behind it, or the picker is a lie
+    // the moment you return.
     useEffect(() => {
         const s = chatStore.getSnapshot().sessions.find(x => x.id === chatSnap.activeId);
         if (!s) return;
         if (s.symbol && s.symbol !== symbolRef.current) setSymbol(s.symbol);
         if (s.interval && s.interval !== intervalRef.current) setInterval_(s.interval as ChartInterval);
-    }, [chatSnap.activeId]);
+    }, [
+        chatSnap.activeId,
+        chatSnap.sessions.find(x => x.id === chatSnap.activeId)?.symbol,
+        chatSnap.sessions.find(x => x.id === chatSnap.activeId)?.interval,
+    ]);
     const changeSymbol = useCallback((next: string): void => {
         setSymbol(next);
         chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, symbol: next }));
@@ -439,19 +446,6 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, interval: next }));
     }, []);
 
-    // Dynamic universe: EVERY tradable USDT perpetual (exchangeInfo ∩ 24hr
-    // tickers, ~300+ symbols), one public call, 60s refresh; the static
-    // fallback keeps the picker usable offline.
-    useEffect(() => {
-        let cancelled = false;
-        const load = async (): Promise<void> => {
-            const all = await fetchAllFuturesSymbols();
-            if (!cancelled && all.length > 0) setSymbols(all);
-        };
-        void load();
-        const poll = window.setInterval(() => void load(), 60_000);
-        return () => { cancelled = true; window.clearInterval(poll); };
-    }, []);
 
     // SYMBOL SWITCH: the strip must never print the previous coin's numbers.
     // Null it immediately, then one-shot fetch the NEW coin even while the

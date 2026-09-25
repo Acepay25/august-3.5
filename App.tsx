@@ -2145,6 +2145,18 @@ const App: React.FC = () => {
         [messages],
     );
 
+    /** The instrument the active chat session is bound to. Both surfaces pass
+     *  this into the analysis so a coin picker means something: the pipeline
+     *  otherwise reads the coin out of the prompt TEXT, so selecting ETH and
+     *  typing a question that names no coin would fetch nothing. Text still
+     *  wins when it names one — the picker says where you are looking, not
+     *  what to analyse. */
+    const activeInstrument = useCallback((): { symbol?: string; interval?: string } => {
+        const snap = chatStore.getSnapshot();
+        const s = snap.sessions.find(x => x.id === snap.activeId);
+        return s?.symbol || s?.interval ? { symbol: s.symbol, interval: s.interval } : {};
+    }, []);
+
     const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
         if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
         if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
@@ -2166,6 +2178,7 @@ const App: React.FC = () => {
         return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
             let settled = false;
             handleSendMessage(prompt, images, undefined, {
+                ...activeInstrument(),
                 automation: {
                     automationId: 'trade-chat',
                     conversation,
@@ -3213,13 +3226,18 @@ const App: React.FC = () => {
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
                                     onAnalyze={(prompt, images) => {
+                                        // Same instrument binding as the dock:
+                                        // the session's coin/timeframe is the
+                                        // fallback when the prompt names none.
                                         void handleSendMessage(prompt, images.length
                                             ? images.map(i => ({
                                                 file: new File([], i.name, { type: 'image/png' }),
                                                 dataURL: i.dataURL,
                                                 isLoading: false,
                                             }))
-                                            : undefined);
+                                            : undefined, undefined, {
+                                            ...activeInstrument(),
+                                        });
                                     }}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}

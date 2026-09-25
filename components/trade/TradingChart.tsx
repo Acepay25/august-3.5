@@ -24,7 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Settings } from 'lucide-react';
+import TimeframeBar from './TimeframeBar';
 import {
     createChart,
     CandlestickSeries,
@@ -110,7 +110,7 @@ export const readTfBarSelection = (): ChartInterval[] => {
     } catch { return [...DEFAULT_CHART_INTERVALS]; }
 };
 
-const writeTfBarSelection = (intervals: ChartInterval[]): void => {
+export const writeTfBarSelection = (intervals: ChartInterval[]): void => {
     try { localStorage.setItem(tfBarKey(), JSON.stringify(intervals)); } catch { /* private mode */ }
 };
 
@@ -248,19 +248,6 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     drawingsHiddenRef.current = drawingsHidden;
     /** Live-editing a text note: which drawing id + where its input renders. */
     const [textEdit, setTextEdit] = useState<{ id: string; x: number; y: number } | null>(null);
-    /** The user's chosen timeframe bar (TradingView-style: which intervals
-     *  the bar shows). The ACTIVE interval always rides the bar regardless. */
-    const [tfBar, setTfBar] = useState<ChartInterval[]>(readTfBarSelection);
-    const [tfPickerOpen, setTfPickerOpen] = useState(false);
-    const barIntervals = CHART_INTERVALS.filter(tf => tfBar.includes(tf) || tf === interval);
-    const toggleTfBar = (tf: ChartInterval): void => {
-        if (tf === interval) return; // never hide the one you're looking at
-        setTfBar(prev => {
-            const next = prev.includes(tf) ? prev.filter(x => x !== tf) : [...prev, tf];
-            writeTfBarSelection(next);
-            return next;
-        });
-    };
     const lastTickRef = useRef<number>(Date.now());
     const drawingsRef = useRef<ChartDrawing[]>([]);
     drawingsRef.current = drawings;
@@ -991,51 +978,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="trading-chart">
-            <div className="relative flex shrink-0 flex-wrap items-center gap-0.5 border-b border-white/[0.06] px-2 py-1.5">
-                {barIntervals.map(tf => (
-                    <button
-                        key={tf}
-                        type="button"
-                        onClick={() => onIntervalChange(tf)}
-                        className={`rounded-control px-2 py-1 text-ui-dense font-semibold transition-colors ${
-                            interval === tf ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
-                        }`}
-                    >
-                        {tf}
-                    </button>
-                ))}
-                {/* TradingView-style interval customization: pick which
-                    timeframes the bar shows (the active one is locked in). */}
-                <button type="button" onClick={() => setTfPickerOpen(v => !v)} aria-label="Customize timeframes" aria-expanded={tfPickerOpen}
-                    title="Choose which timeframes show in this bar"
-                    className={`ml-0.5 h-6 w-6 flex items-center justify-center rounded-control transition-colors ${
-                        tfPickerOpen ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
-                    }`}>
-                    <Settings className="h-3.5 w-3.5" />
-                </button>
-                {tfPickerOpen && (
-                    <>
-                        <div className="fixed inset-0 z-20" aria-hidden onClick={() => setTfPickerOpen(false)} />
-                        <div className="absolute left-2 top-9 z-30 w-40 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="tf-picker">
-                            <p className="px-2 py-1 text-ui-2xs uppercase tracking-widest text-zinc-600">Timeframes</p>
-                            <div className="grid grid-cols-2 gap-0.5">
-                                {CHART_INTERVALS.map(tf => {
-                                    const shown = tfBar.includes(tf) || tf === interval;
-                                    return (
-                                        <button key={tf} type="button" onClick={() => toggleTfBar(tf)} disabled={tf === interval}
-                                            aria-pressed={shown} title={tf === interval ? 'The current timeframe always shows' : undefined}
-                                            className={`flex items-center justify-between rounded-lg px-2 py-1 text-ui-dense transition-colors hover:bg-white/[0.06] disabled:opacity-40 ${
-                                                shown ? 'text-zinc-100' : 'text-zinc-500'
-                                            }`}>
-                                            {tf}
-                                            <span aria-hidden>{shown ? <Check className="h-3 w-3 text-cyan-400" /> : null}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </>
-                )}
+            {/* The timeframe bar is shared with the Chat surface, so the customizable
+                set and its persisted selection are one thing rather than two. The chart
+                keeps its own extras as children. */}
+            <TimeframeBar interval={interval} onIntervalChange={onIntervalChange}>
                 {/* Prototype's "Add studies" button, one honest study: the
                     SMA-20 line over the closes. Amber = active, matching the
                     overlay's color so the button and the line agree. */}
@@ -1059,7 +1005,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     <span className={`h-1.5 w-1.5 rounded-full ${status === 'live' ? 'bg-emerald-500' : status === 'loading' ? 'animate-pulse bg-cyan-400' : 'bg-rose-500'}`} aria-label={`chart ${status}`} />
                     <span className="text-ui-xs uppercase tracking-widest text-zinc-600">{symbol} · Binance · {interval}</span>
                 </span>
-            </div>
+            </TimeframeBar>
             <div className="relative min-h-0 flex-1 bg-zinc-950">
                 <ChartToolRail
                     tool={tool}

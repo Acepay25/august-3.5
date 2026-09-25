@@ -663,6 +663,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         /** Slash-mode chip (Deep Research / Visualize). Absent ⇒ the active
          *  composer chip (read from the ref); null-like ⇒ a plain send. */
         composerMode?: 'research' | 'visualize';
+        /** The instrument the SURFACE is currently showing, used only when the
+         *  prompt names no coin. Naming a coin in the text still wins — the
+         *  picker says where you are looking, it does not override what you
+         *  just asked about. */
+        symbol?: string;
+        interval?: string;
     }): Promise<ChatRunOutcome> => {
         const isAutomationRun = !!options?.automation;
         // The mode chip is consumed by exactly one send — and never by
@@ -1026,8 +1032,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const canResume = Boolean(resumeTarget && !resumeTarget.analysis && (resumeTarget.debateTurns?.length || 0) > 0);
 
         // Ensemble without a chart still works — bare greetings just get a
-        // nudge toward including a coin, not a hard block.
-        if (!isAutomationRun && runEnsembleEnabled && imagesToUse.length === 0 && !canResume && !extractSymbolFromPrompt(effectiveInput)) {
+        // nudge toward including a coin, not a hard block. A surface that
+        // ALREADY has an instrument selected is not a bare greeting, so it must
+        // not be nagged about one it is effectively supplying.
+        if (!isAutomationRun && runEnsembleEnabled && imagesToUse.length === 0 && !canResume
+            && !extractSymbolFromPrompt(effectiveInput) && !options?.symbol) {
             toast.warning('Tip: include a coin', 'For a full analysis add a symbol like BTC, SOL or ETH — e.g. “analyze BTC”.');
         }
 
@@ -1113,7 +1122,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // previous analysis (e.g. BTC) must never feed a different coin
         // (e.g. ETH) — the wrong prices/ATR/regime would be injected into the
         // analyst prompts and persisted onto the new trade card.
-        const detectedSymbol = extractSymbolFromPrompt(effectiveInput);
+        // EXPLICIT WINS, then the words, then the instrument the user picked in
+        // the surface. The picker has to reach the analysis or it is decoration:
+        // asking "what is BTC doing?" while ETH is selected must analyse BTC, but
+        // asking a question that names no coin must analyse what the user
+        // selected rather than fetching nothing.
+        const detectedSymbol = extractSymbolFromPrompt(effectiveInput) ?? options?.symbol ?? null;
         const cachedHybridAgeMs = currentHybridData
             ? Date.now() - new Date(currentHybridData.dataTimestamp).getTime()
             : Number.POSITIVE_INFINITY;

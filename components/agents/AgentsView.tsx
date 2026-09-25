@@ -35,13 +35,18 @@
  * reimplementing the round runner.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { useSurfaceMorphIn, type MorphRect } from '../../hooks/useSurfaceMorph';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
+import * as chatStore from '../../services/trade/chatStore';
 import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
+import SymbolPicker from '../trade/SymbolPicker';
+import TimeframeBar from '../trade/TimeframeBar';
+import type { ChartInterval } from '../trade/TradingChart';
+import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
@@ -351,6 +356,24 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // is exactly what the Chart AI dock does. Both behaviours stay reachable;
     // the toggle was a second way to say something the selection already says.
     const [busy, setBusy] = useState(false);
+    // ── The instrument this surface is talking about ──────────────────────
+    // The CHAT SESSION is the shared binding: TradeView already stamps the
+    // session on every symbol/interval change and adopts it back, so writing
+    // here moves the chart, and writing there moves this surface. Choosing a
+    // coin therefore genuinely changes the analysis, not just the label —
+    // App passes the session's instrument into handleSendMessage as the
+    // fallback when the prompt names no coin.
+    const snap = useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot, chatStore.getSnapshot);
+    const activeSession = snap.sessions.find(x => x.id === snap.activeId) ?? snap.sessions[0];
+    const sessionSymbol = activeSession?.symbol ?? 'BTCUSDT';
+    const sessionInterval = (activeSession?.interval ?? '15m') as ChartInterval;
+    const symbols = useSymbolUniverse();
+    const setSessionSymbol = useCallback((next: string): void => {
+        chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, symbol: next }));
+    }, []);
+    const setSessionInterval = useCallback((next: ChartInterval): void => {
+        chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, interval: next }));
+    }, []);
     const [openRoutines, setOpenRoutines] = useState<string | null>(null);
     // Below md the rail is an overlay, not a column — at 320px a permanent
     // 42vw list left no readable transcript.
@@ -754,6 +777,21 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
             {/* ── Main pane ── */}
             <section ref={paneRef} className="flex min-w-0 flex-1 flex-col bg-[#0b0b0a]">
+                {/* The instrument bar. The timeframe row is the SAME component the
+                    chart renders, over the same persisted selection, so a
+                    choice here is the choice there rather than a second
+                    preference that drifts. */}
+                {!activeGroup && (
+                    <div data-testid="chat-instrument-bar" className="shrink-0 border-b border-white/[0.06]">
+                        <TimeframeBar interval={sessionInterval} onIntervalChange={setSessionInterval}>
+                            <SymbolPicker
+                                symbols={symbols}
+                                value={sessionSymbol}
+                                onChange={setSessionSymbol}
+                            />
+                        </TimeframeBar>
+                    </div>
+                )}
                 {activeGroup && renderGroup ? (
                     <div className="flex min-h-0 flex-1 flex-col">{renderGroup(activeGroup)}</div>
                 ) : (
