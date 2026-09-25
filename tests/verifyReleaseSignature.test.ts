@@ -14,10 +14,44 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { decide } from '../scripts/verify-release-signature.cjs';
+import { decide, normalizeOutput } from '../scripts/verify-release-signature.cjs';
 
 const signed = { status: 'Valid', signer: 'CN=Example Corp' };
 const opts = (allowUnsigned: boolean) => ({ allowUnsigned, exeName: 'August Trading Setup 1.0.30.exe' });
+
+describe('reading the signature out of PowerShell output', () => {
+    // The 1.0.31 release printed "of unknown signature status" for an
+    // installer that is plainly NotSigned: the identical command parsed on a
+    // developer machine and not on the GitHub windows runner. The gate still
+    // behaved correctly (unreadable => unsigned => fail closed), but it could
+    // not report what it read, which is not good enough for a gate whose whole
+    // job is to explain itself.
+    const NUL = String.fromCharCode(0);
+    const BOM = String.fromCharCode(0xfeff);
+    const CR = String.fromCharCode(13);
+    const LF = String.fromCharCode(10);
+
+    it('strips a BOM, NUL bytes and CR, keeping the lines parseable', () => {
+        const noisy = BOM + 'STATUS=NotSigned' + CR + LF + NUL + NUL
+            + 'SIGNER=CN=Example' + CR + LF;
+        expect(normalizeOutput(noisy)).toBe('STATUS=NotSigned\nSIGNER=CN=Example\n');
+    });
+
+    it('leaves a clean payload untouched', () => {
+        const clean = 'STATUS=Valid\nSIGNER=CN=Example Corp\n';
+        expect(normalizeOutput(clean)).toBe(clean);
+    });
+
+    it('recovers a real verdict from the noisy form', () => {
+        // The end-to-end claim: after normalizing, the status parses as
+        // NotSigned rather than as the empty string the release saw.
+        const out = normalizeOutput(BOM + 'STATUS=NotSigned' + CR + LF + NUL + 'SIGNER=' + CR + LF);
+        const status = (out.match(/^STATUS=(.*)$/m) || [])[1]?.trim() ?? '';
+        expect(status).toBe('NotSigned');
+        expect(decide({ status, signer: '' }, { allowUnsigned: true, exeName: 'x.exe' }).reason)
+            .toContain('is NotSigned');
+    });
+});
 
 describe('release signature gate', () => {
     it('passes a validly signed installer and names the signer', () => {
