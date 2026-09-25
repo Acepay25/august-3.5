@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { useSurfaceEnter } from '../hooks/useSurfaceEnter';
+import { useSurfaceEnter, SURFACE_ENTER_MS } from '../hooks/useSurfaceEnter';
 
 const css = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
 
@@ -83,6 +83,19 @@ describe('surface enter — a resize, not a slide', () => {
         expect(css).not.toMatch(/@keyframes\s+surfaceEnterFrom/);
     });
 
+    it('the CSS duration and the hook\'s clear timer cannot drift apart', () => {
+        // The class is removed on a timer derived from SURFACE_ENTER_MS. If
+        // the CSS animation is longer, the class comes off mid-flight and the
+        // surface SNAPS to its resting transform — which looks like the old
+        // broken transition rather than a timing bug. This failed silently once
+        // already, when the duration moved 220 → 340ms and the timer did not.
+        const declared = Number(/animation:\s*surfaceGrowFromDock\s+([\d.]+)s/.exec(
+            ruleFor('.surface-enter-right'),
+        )?.[1] ?? NaN);
+        expect(Number.isFinite(declared), 'could not read the CSS duration').toBe(true);
+        expect(Math.round(declared * 1000)).toBe(SURFACE_ENTER_MS);
+    });
+
     it('is covered by the global reduced-motion kill switch', () => {
         // There are SEVERAL `prefers-reduced-motion` blocks in this file — the
         // component-specific ones come first. Only the blanket one matters, and
@@ -123,13 +136,13 @@ describe('useSurfaceEnter', () => {
     it('clears the class after one cycle so a later visit re-animates', () => {
         render(<Probe direction="right" />);
         expect(screen.getByTestId('probe').className).toBe('surface-enter-right');
-        act(() => { vi.advanceTimersByTime(300); });
+        act(() => { vi.advanceTimersByTime(SURFACE_ENTER_MS + 60); });
         expect(screen.getByTestId('probe').className).toBe('');
     });
 
     it('does not re-fire when an unrelated prop changes', () => {
         const { rerender } = render(<Probe direction="right" />);
-        act(() => { vi.advanceTimersByTime(300); });
+        act(() => { vi.advanceTimersByTime(SURFACE_ENTER_MS + 60); });
         expect(screen.getByTestId('probe').className).toBe('');
         rerender(<Probe direction="right" />);
         expect(screen.getByTestId('probe').className).toBe('');
