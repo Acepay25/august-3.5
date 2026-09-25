@@ -83,7 +83,11 @@ describe('useBotMailbox', () => {
         // The persona system prompt was passed (4th arg).
         const sysArg = String(streamQuickResponse.mock.calls[0][3] ?? '');
         expect(sysArg).toContain('Risk Bot');
-        expect(h.result.current.dmActivityCount).toBe(1);
+        // The waitFor above proves the NOTICE ROW was written; `dmActivityCount`
+        // is React state set by that same write, so it lands a render LATER. A
+        // bare assertion here raced that render — passing solo, failing under
+        // load, which is how a green file shows up as flaky in a full run.
+        await waitFor(() => expect(h.result.current.dmActivityCount).toBe(1));
     });
 
     it('strips DM markers from the settled bubble and delivers the next hop', async () => {

@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async () => h.stored),
+    getPreference: vi.fn(async () => h.stored),
+    setPreference: vi.fn(async () => {}),
     setPreferenceObject: vi.fn(async () => {}),
     removePreference: vi.fn(async () => {}),
 }));

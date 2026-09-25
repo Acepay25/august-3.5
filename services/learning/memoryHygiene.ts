@@ -255,21 +255,38 @@ export const runMemoryHygiene = async (
         //    still ranked and still billed against the fixed injection budget.
         //    Always logged — a pass that switches content off has to be
         //    auditable in the Health tab even when the answer was "nothing".
-        const idle = await runSkillIdleSweep(username, { now });
-        result.skillsSuspended = idle.suspended.length;
-        result.skillsRevived = idle.revived.length;
-        result.skillsArchived = idle.archived.length;
-        if (idle.configError) {
-            lines.push(`Idle skill sweep did not run: ${idle.configError}`);
-        } else if (idle.lines.length) {
-            lines.push(...idle.lines);
-        } else {
-            const extra = idle.exempt > 0
-                ? `, ${idle.exempt} exempt as already under a verdict`
-                : '';
-            const suspended = listSuspendedSkills().length;
-            lines.push(`Idle skill sweep: ${idle.examined} skill${idle.examined === 1 ? '' : 's'} inspected`
-                + `${extra} — none newly idle${suspended ? `, ${suspended} still suspended from prompts` : ''}.`);
+        //    The one step that needs the network, and it is NOT the only thing
+        //    left to do: steps 6 and 7 are pure ledger arithmetic over data
+        //    already on disk. An unguarded throw here — a provider that is
+        //    offline for the hour — landed in the pass-wide catch and skipped
+        //    both, so the Health tab lost the veto and lift verdicts over a
+        //    connection error and re-dated the due-stamp on a pass that never
+        //    finished. Guard it like the lift review below: record the failure
+        //    and keep going.
+        let idle;
+        try {
+            idle = await runSkillIdleSweep(username, { now });
+        } catch (e) {
+            lines.push(`Idle skill sweep did not run — ${e instanceof Error ? e.message : String(e)}.`
+                + ' The rest of this pass still ran; suspension/revival re-opens next time it is due.');
+            idle = null;
+        }
+        if (idle) {
+            result.skillsSuspended = idle.suspended.length;
+            result.skillsRevived = idle.revived.length;
+            result.skillsArchived = idle.archived.length;
+            if (idle.configError) {
+                lines.push(`Idle skill sweep did not run: ${idle.configError}`);
+            } else if (idle.lines.length) {
+                lines.push(...idle.lines);
+            } else {
+                const extra = idle.exempt > 0
+                    ? `, ${idle.exempt} exempt as already under a verdict`
+                    : '';
+                const suspended = listSuspendedSkills().length;
+                lines.push(`Idle skill sweep: ${idle.examined} skill${idle.examined === 1 ? '' : 's'} inspected`
+                    + `${extra} — none newly idle${suspended ? `, ${suspended} still suspended from prompts` : ''}.`);
+            }
         }
 
         // 6. Veto retraction. An AVOID skill is the one belief no trade
