@@ -307,7 +307,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
     const [text, setText] = useState('');
-    const [mode, setMode] = useState<'chat' | 'analyze'>('chat');
+    // There is no Chat/Analyze switch any more. What a send RUNS is decided by
+    // what is selected in the rail: a bot answers in its own persona (its own
+    // model, its own memory scope, fast and conversational); nothing selected
+    // runs the full analysis pipeline — the market packet, the ensemble
+    // debate, desk tools, memory injection, the verdict and its levels, which
+    // is exactly what the Chart AI dock does. Both behaviours stay reachable;
+    // the toggle was a second way to say something the selection already says.
     const [busy, setBusy] = useState(false);
     const [openRoutines, setOpenRoutines] = useState<string | null>(null);
     // Below md the rail is an overlay, not a column — at 320px a permanent
@@ -436,11 +442,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         const prompt = text.trim();
         if (!prompt || busy) return;
         setText('');
-        if (mode === 'analyze') { onAnalyze(prompt, attachedImages()); clearAttachments(); return; }
-        if (!activeBot) { onAnalyze(prompt, []); return; }
+        // The branch the toggle used to make explicit. A bot selected → the
+        // bot's own transport; nothing selected → the full analysis pipeline.
+        // A bot turn answers from text, so an attachment is only meaningful on
+        // the analysis path and is dropped rather than silently ignored.
+        if (!activeBot) {
+            await onAnalyze(prompt, attachedImages());
+            clearAttachments();
+            return;
+        }
+        clearAttachments();
         setBusy(true);
         try { await onSendBotTurn(activeBot, prompt); } finally { setBusy(false); }
-    }, [text, busy, mode, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
+    }, [text, busy, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
 
     /** The ⋯/right-click list for a room: pin plus the two roster handlers App
      *  hands in. Pinned rooms gain edit/delete here that the hover icons never
@@ -821,31 +835,21 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     rows={2} placeholder={placeholder} aria-label="Message"
                                     className="w-full resize-none bg-transparent px-1.5 py-1 text-ui-caption leading-5 text-zinc-100 outline-none placeholder:text-zinc-600" />
                                 <div className="mt-1 flex items-center gap-2 px-1">
+                                    {/* Always available now. It used to be gated on
+                                        Analyze mode, which forced the tooltip to
+                                        explain the mode — and the mode is gone,
+                                        chosen by the rail instead. A bot turn
+                                        simply ignores an attachment. */}
                                     <button type="button" onClick={openPicker} data-testid="composer-attach"
-                                        aria-label="Attach image" disabled={mode !== 'analyze'}
-                                        title={mode === 'analyze'
-                                            ? 'Attach an image for this analysis'
-                                            : 'Attach works in Analyze mode — a bot answers from text'}
+                                        aria-label="Attach image"
+                                        title="Attach an image"
                                         className="rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-40 disabled:hover:text-zinc-500">
                                         <Paperclip className="h-3.5 w-3.5" />
                                     </button>
-                                    {/* Deliberately NOT .seg-thumb: that class
-                                        is an absolutely-positioned sliding
-                                        sibling, and on a container it resolves
-                                        against the nearest positioned ancestor
-                                        and stretches to fill the surface. */}
-                                    <div className="flex items-center gap-0.5 rounded-control border border-zinc-800 bg-zinc-950 p-0.5"
-                                        role="group" aria-label="Send mode">
-                                        {(['chat', 'analyze'] as const).map(m => (
-                                            <button key={m} type="button" onClick={() => setMode(m)}
-                                                aria-pressed={mode === m} data-testid={`mode-${m}`}
-                                                className={`rounded-[5px] px-2 py-0.5 text-ui-xs font-semibold capitalize transition-colors ${
-                                                    mode === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-                                                }`}>
-                                                {m}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    {/* The Chat/Analyze segmented toggle is gone.
+                                        The rail already says which of the two you
+                                        want, and a second control for the same
+                                        decision was one more thing to read. */}
                                     {modelPicker}
                                     <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
                                         aria-label="Send" data-testid="composer-send"
