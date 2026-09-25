@@ -79,8 +79,77 @@ describe('TradeChatPanel: renders the ids the bridge looks up', () => {
 
     it('the ensemble bridge may return { text, messageId } so answers carry the App message id', () => {
         expect(panelSrc).toMatch(/Promise<string \| \{ text: string; messageId\?: string \}>/);
-        expect(panelSrc).toMatch(/setAnalysisMessageIds\(prev => \(\{ \.\.\.prev, \[aiEntry\.id\]: analysisMessageId \}\)\)/);
+        // The dock no longer settles the answer row itself — the shared turn
+        // does, and hands the id back through `onMessageId` so the dock can map
+        // the row it created to the App-side message Locate scrolls to.
+        expect(panelSrc).toMatch(/onMessageId: \(entryId, messageId\) => \{/);
+        expect(panelSrc).toMatch(/setAnalysisMessageIds\(prev => \(\{ \.\.\.prev, \[entryId\]: messageId \}\)\)/);
         // App's handleRunAnalysisFromChat actually supplies the id.
         expect(appSrc).toMatch(/messageId: aiMessage\.id,/);
+    });
+});
+
+/**
+ * The Chat surface and the Chart AI dock are one conversation.
+ *
+ * The Agents surface with no bot selected promises the same thing the dock's
+ * "Full analysis" button does, and both call the same pipeline — but only the
+ * dock wrote the transcript. A question asked in Chat ran a full ensemble
+ * debate and left no trace in the session the dock renders, so the two surfaces
+ * looked like separate products.
+ *
+ * The fix is one shared writer (`services/trade/analysisTurn.ts`), not a second
+ * copy: a copy is how they drift again, and the drift is invisible because both
+ * copies look correct alone.
+ */
+describe('Chat and Chart AI share one analysis turn', () => {
+    const agentsSrc = readFileSync('components/agents/AgentsView.tsx', 'utf8');
+    const turnSrc = readFileSync('services/trade/analysisTurn.ts', 'utf8');
+
+    it('the Chat surface writes its analysis into the dock\'s session', () => {
+        expect(agentsSrc).toMatch(/runAnalysisAsChatTurn\(\{/);
+        // The SAME session the dock renders — not a parallel one.
+        expect(agentsSrc).toMatch(/sid: chatStore\.getActiveId\(\)/);
+    });
+
+    it('both surfaces run the pipeline through that one writer', () => {
+        expect(agentsSrc).toMatch(/run: \(\) => onAnalyze\(prompt, images\)/);
+        expect(panelSrc).toMatch(/run: \(\) => onRunAnalysis!/);
+        // And neither re-implements the append/settle bookkeeping.
+        expect(turnSrc).toMatch(/entries: \[\.\.\.s\.entries, userEntry, aiEntry\]/);
+        expect(turnSrc).toMatch(/streaming: false/);
+    });
+
+    it('Chat gets the dock\'s pipeline entry, not a weaker local copy', () => {
+        // The old inline handler `void`ed the pipeline, so a rejection (an
+        // analysis already running, no providers configured) vanished with no
+        // row anywhere. Both surfaces now get a promise they can surface.
+        expect(appSrc).toMatch(/onAnalyze=\{handleRunAnalysisFromAgents\}/);
+        expect(appSrc).not.toMatch(/onAnalyze=\{\(prompt, images\) =>/);
+        expect(turnSrc).toMatch(/ANALYSIS_FAILED_TEXT/);
+    });
+
+    it('Chat runs on the ACTIVE conversation, not the dock\'s private list', () => {
+        // The dock deliberately runs into a private message list because it
+        // renders the answer out of chatStore. The Chat surface renders the
+        // ACTIVE conversation, so handing it the dock's `automation` entry ran
+        // a full debate into a list it never reads: the probe caught it waiting
+        // forever for a reply that had already been written somewhere else.
+        expect(appSrc).toMatch(/const handleRunAnalysisFromAgents = useCallback/);
+        const agentsHandler = appSrc.slice(
+            appSrc.indexOf('const handleRunAnalysisFromAgents'),
+            appSrc.indexOf('const handleForkDebate'),
+        );
+        expect(agentsHandler).toMatch(/onSettled: \(aiMessage\) =>/);
+        expect(agentsHandler).not.toMatch(/automation:/);
+        // And the pipeline's report-only channel must not flip the run into an
+        // automation run, or the rows land in the private list all the same.
+        expect(agentsHandler).not.toMatch(/isAutomationRun/);
+    });
+
+    it('the run slot is always released, including on an aborted run', () => {
+        // An orphaned streaming:true bubble blocked all session persistence
+        // until reload, so the settle must happen on every exit path.
+        expect(turnSrc).toMatch(/finally \{[\s\S]*?chatStore\.endRunOwned\(sid, controller\);/);
     });
 });

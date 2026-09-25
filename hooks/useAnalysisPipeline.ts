@@ -656,6 +656,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             /** Delivered when the run fails (user-safe message). */
             onError: (error: string) => void;
         };
+        /**
+         * Report-only: called once with the settled AI message, and the run
+         * still writes to the ACTIVE conversation. This is deliberately NOT
+         * `automation` — that option routes the run into a private message
+         * list, so a surface rendering the active conversation would watch an
+         * empty thread while a full analysis ran. The Agents surface needs
+         * exactly this: its rows in `messages` AND the verdict text back, so
+         * it can write the same turn into the Chart AI session (see
+         * services/trade/analysisTurn.ts).
+         */
+        onSettled?: (aiMessage: Message) => void;
         /** Continue an interrupted debate from persisted turns. */
         resumeMessageId?: string;
         /** Same-thread ticket follow-up: reuse OCR, skip leftover composer charts. */
@@ -3295,6 +3306,12 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     // Automation run: deliver the completed solo card.
                     if (isAutomationRun) {
                         options?.automation?.onMessage({ userMessage, aiMessage: soloAiMessage });
+                    } else {
+                        // Report-only: the row above went to the ACTIVE
+                        // conversation, and a surface rendering that
+                        // conversation still needs the verdict text to settle
+                        // its own copy in the shared chat session.
+                        options?.onSettled?.(soloAiMessage);
                     }
 
                     // === ThinkingStore: Persist the solo analysis reasoning ===

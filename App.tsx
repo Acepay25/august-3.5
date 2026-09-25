@@ -2209,6 +2209,36 @@ const App: React.FC = () => {
         });
     }, [isAnalysisInProgress, readyProviders, selectedOcrModel, moderatorProviderId, moderatorModel, leverageInput, handleSendMessage]);
 
+    /** The Agents surface's analysis entry — the same promise the dock gets, on
+     *  the NORMAL conversation path. The dock runs into a private message list
+     *  (it renders the answer out of chatStore); the Chat surface renders the
+     *  ACTIVE conversation, so routing it through `automation` left it watching
+     *  an empty thread while a full ensemble debate ran. `onSettled` reports
+     *  the verdict back without moving the run, so this surface ends up with
+     *  its rows in `messages` AND its copy in the shared chat session. */
+    const handleRunAnalysisFromAgents = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
+        if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
+        if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
+        const images: ImageMetadata[] = chatImages.map(img => ({
+            file: new File([], img.name, { type: 'image/png' }),
+            dataURL: img.dataURL,
+            isLoading: false,
+        }));
+        return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
+            let settled = false;
+            handleSendMessage(prompt, images, undefined, {
+                ...activeInstrument(),
+                onSettled: (aiMessage) => {
+                    if (settled) return;
+                    settled = true;
+                    const display = deriveMessageDisplayText(aiMessage);
+                    const summary = (display.displayContent || aiMessage.text || '').trim();
+                    resolve({ text: summary.slice(0, 8000) || 'The analysis completed with no summary.', messageId: aiMessage.id });
+                },
+            });
+        });
+    }, [isAnalysisInProgress, readyProviders, handleSendMessage]);
+
     const handleForkDebate = useCallback((messageId: string, round: number) => {
         const msgs = messagesRef.current;
         const index = msgs.findIndex(m => m.id === messageId);
@@ -3225,20 +3255,7 @@ const App: React.FC = () => {
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
-                                    onAnalyze={(prompt, images) => {
-                                        // Same instrument binding as the dock:
-                                        // the session's coin/timeframe is the
-                                        // fallback when the prompt names none.
-                                        void handleSendMessage(prompt, images.length
-                                            ? images.map(i => ({
-                                                file: new File([], i.name, { type: 'image/png' }),
-                                                dataURL: i.dataURL,
-                                                isLoading: false,
-                                            }))
-                                            : undefined, undefined, {
-                                            ...activeInstrument(),
-                                        });
-                                    }}
+                                    onAnalyze={handleRunAnalysisFromAgents}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
                                     morphFrom={agentsMorphFrom}

@@ -28,11 +28,12 @@
     "electron": "wait-on tcp:3000 && electron .",
     "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
     "electron:build": "npm run build && electron-builder",
-    "electron:release": "npm run build && electron-builder --publish always",
+    "electron:release": "npm run build && electron-builder && node scripts/verify-release-signature.cjs && electron-builder --publish always",
     "e2e": "playwright test",
     "boot-probe": "node scripts/boot-probe.cjs",
     "render-probe": "node scripts/render-probe.cjs",
-    "installer-smoke": "node scripts/installer-smoke.cjs"
+    "installer-smoke": "node scripts/installer-smoke.cjs",
+    "verify:signature": "node scripts/verify-release-signature.cjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",

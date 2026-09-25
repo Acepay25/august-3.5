@@ -19,6 +19,8 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
         if (!Array.isArray(raw)) return [];
         return guard ? raw.filter(guard) : raw;
     }),
+    getPreference: vi.fn(async (key: string) => store[key] ?? null),
+    setPreference: vi.fn(async (key: string, value: unknown) => { store[key] = value; }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => { store[key] = value; }),
     removePreference: vi.fn(async (key: string) => { delete store[key]; }),
 }));
