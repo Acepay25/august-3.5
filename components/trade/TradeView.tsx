@@ -72,6 +72,12 @@ interface TradeViewProps {
      *  answer entry for the gallery's Locate scroll). */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
         Promise<string | { text: string; messageId?: string }>;
+    /** Create a group room, and open the Coach inbox — the two Chat-rail
+     *  actions the dock was missing. Forwarded to `TradeChatPanel`; App owns
+     *  both, the same handlers the Chat rail gets. */
+    onNewGroup?: () => void;
+    onOpenCoach?: () => void;
+    coachCount?: number;
     /** Resolve the analysis message `onRunAnalysis` created, so the dock can
      *  show what its settled verdict was built on. Threaded straight through to
      *  `TradeChatPanel` — the chart surface owns no verdict rendering itself.
@@ -310,7 +316,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
@@ -956,6 +962,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                 onToggleCollapsed={isBelowLg ? undefined : () => { setDockCollapsed(true); setDockExpanded(false); }}
                                 expanded={dockExpanded}
                                 onToggleExpanded={() => setDockExpanded(v => !v)}
+                                onNewGroup={onNewGroup}
+                                onOpenCoach={onOpenCoach}
+                                coachCount={coachCount}
                                 onOpenChat={onOpenChat}
                             />
                         </div>
@@ -969,6 +978,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             onToggleCollapsed={() => setDockCollapsed(false)}
                             expanded={dockExpanded}
                             onToggleExpanded={() => setDockExpanded(v => !v)}
+                            onNewGroup={onNewGroup}
+                            onOpenCoach={onOpenCoach}
+                            coachCount={coachCount}
                         />
                     </div>
                 )}
