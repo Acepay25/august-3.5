@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { Lightbulb } from 'lucide-react';
-import type { LiveEntry } from '../../../services/trade/chatStore';
+import type { ToolAction } from '../../../types/message';
 import { tipForSeed } from '../../../utils/tradingTips';
 import { splitReasoningAroundTools } from '../../../utils/traceText';
 import AnalyzedRow from '../../shared/AnalyzedRow';
@@ -20,8 +20,22 @@ import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
 import ToolActionsRow from '../../chat/ToolActionsRow';
 
+/** The shape this actually reads. The dock passes its `LiveEntry` straight
+ *  in; the Chat surface adapts a pipeline `Message` onto the same fields.
+ *  Widening the prop to the fields rather than to a store type is what lets
+ *  two surfaces render one timeline without either owning the other's model. */
+export interface ChatWorkView {
+    id: string;
+    reasoning?: string;
+    tools: string[];
+    streaming?: boolean;
+    /** The answer text so far — "running" means work with nothing to show yet. */
+    text?: string;
+    actions?: ToolAction[];
+}
+
 export interface ChatWorkTimelineProps {
-    entry: LiveEntry;
+    entry: ChatWorkView;
 }
 
 const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
