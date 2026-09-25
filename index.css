@@ -1432,50 +1432,40 @@ code,
  *   .surface-enter-right → arrived FROM the right (Chat → Chart AI)
  *   .surface-enter-left  → arrived FROM the left  (Chart AI → Chat)
  * Applied by App to the ENTERING surface for one cycle. */
-/* Real travel, not a 28px drift. The distance scales with the viewport so
- * the slide reads the same on a laptop and a wide desk, and the slight scale
- * gives it depth so a surface reads as MOVING into place rather than
- * cross-fading. Opacity resolves early (by 55%) so the motion, not the fade,
- * is what you read — the opposite weighting is what made the first version
- * feel like a fade with a wobble. */
-@keyframes surfaceEnterFromRight {
+/* The Chat surface and the Chart AI dock are the SAME panel at two
+ * sizes, so the transition is a container RESIZE, not two surfaces passing
+ * each other. The arriving surface grows out of the dock's own footprint on
+ * the right and settles to fill the screen; going back, it collapses into
+ * the same edge. One panel, two sizes — which is what it actually is.
+ *
+ * transform-origin 100% 50% anchors that right edge to the dock without
+ * measuring anything at runtime, so it is correct on every surface and costs
+ * nothing. The scale starts at 0.62: enough that the eye reads "growing from
+ * there", not so small that the chart is an unreadable smear for 300ms.
+ * Opacity clears by 40% so the motion carries the transition, not the fade. */
+@keyframes surfaceGrowFromDock {
   from {
     opacity: 0;
-    transform: translateX(clamp(140px, 18vw, 420px)) scale(0.985);
+    transform: scale(0.62);
   }
 
-  55% {
+  40% {
     opacity: 1;
   }
 
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: scale(1);
   }
 }
 
-@keyframes surfaceEnterFromLeft {
-  from {
-    opacity: 0;
-    transform: translateX(calc(-1 * clamp(140px, 18vw, 420px))) scale(0.985);
-  }
-
-  55% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-.surface-enter-right {
-  animation: surfaceEnterFromRight 0.3s var(--ease-snappy) both;
-}
-
+/* Both directions share the one animation now: a resize has no left/right to
+ * it. The class names are kept because App still sets a direction flag, and
+ * because they name the two hops this replaced. */
+.surface-enter-right,
 .surface-enter-left {
-  animation: surfaceEnterFromLeft 0.3s var(--ease-snappy) both;
+  transform-origin: 100% 50%;
+  animation: surfaceGrowFromDock 0.34s var(--ease-snappy) both;
 }
 
 /* Slide up animation for mobile bottom sheet */
