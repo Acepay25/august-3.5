@@ -123,8 +123,11 @@ function decide({ status, signer }, { allowUnsigned, exeName }) {
             ok: true,
             reason: `ALLOW_UNSIGNED_RELEASE=true — ${exeName} is ${
                 status || 'of unknown signature status'}${signer ? '' : ' with no signer certificate'}. `
-                + 'Shipping it means the auto-updater cannot verify what it downloads: no publisherName is '
-                + 'written to app-update.yml, so a tampered installer named like this one would be accepted.',
+                + 'The updater still checks the sha512 published in latest.yml, so download integrity is '
+                + 'covered: a corrupted or truncated file is caught. What is MISSING is authenticity — with '
+                + 'no publisherName there is no publisher identity in the update channel at all, so nothing '
+                + 'binds the installer to us, and anyone able to publish to this repo can ship an update '
+                + 'the app will install.',
         };
     }
     const detail = status === 'NotSigned'
@@ -134,8 +137,10 @@ function decide({ status, signer }, { allowUnsigned, exeName }) {
         ok: false,
         reason: `${detail} Refusing to publish an unsigned installer.\n`
             + '  Why: this release configures no build.publish.publisherName, so electron-updater cannot '
-            + 'check who signed a downloaded update — it returns null and treats that as a pass. An '
-            + 'installer that was modified in transit would install and run with the app\'s full privileges.\n'
+            + 'check WHO published a downloaded update — verifySignature returns null and treats that as a '
+            + 'pass. The sha512 in latest.yml still catches a corrupted download, but integrity is not '
+            + 'authenticity: nothing binds the installer to this project, so anyone who can publish a '
+            + 'release here can ship an update the app will install with full privileges.\n'
             + '  Fix: add a code-signing certificate, then set win.certificateFile (or CSC_LINK) in the '
             + 'build config. electron-builder signs the artifact and writes publisherName from the cert.\n'
             + '  Shipping unsigned on purpose? Re-run with ALLOW_UNSIGNED_RELEASE=true, which accepts the '
