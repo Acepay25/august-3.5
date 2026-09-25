@@ -679,9 +679,19 @@ async function main() {
         const navTo = async (label) => {
             return page.evaluate((name) => {
                 const re = new RegExp(`^${name}`, 'i');
-                const hit = [...document.querySelectorAll('button, a, [role="menuitem"]')]
-                    .find(b => re.test((b.textContent || '').trim())
-                        || re.test(b.getAttribute('aria-label') || ''));
+                const matches = (b) => re.test((b.textContent || '').trim())
+                    || re.test(b.getAttribute('aria-label') || '');
+                // Prefer the navigation menu. A GLOBAL search used to work by
+                // luck, and then stopped: SymbolPicker's trigger is labelled
+                // "Trade symbol", so `navTo('Trade')` on the Chat surface
+                // opened the coin picker instead of navigating. Scope the search
+                // to the menu first, and only fall back to the page when the
+                // menu is not mounted — which is the case this helper exists
+                // to survive, so the fallback stays but is no longer first.
+                const inMenu = [...document.querySelectorAll('#mobile-navigation-menu button, #mobile-navigation-menu a, #mobile-navigation-menu [role="menuitem"]')]
+                    .find(matches);
+                const hit = inMenu
+                    ?? [...document.querySelectorAll('button, a, [role="menuitem"]')].find(matches);
                 if (!hit) return 'not found';
                 hit.click();
                 return 'clicked';
@@ -713,6 +723,11 @@ async function main() {
         let prevSurfaceText = '';
         for (const surface of surfaces) {
             const errorsBefore = pageErrors.length;
+            // Open the menu first: navTo's in-menu search is the correct one,
+            // and the global fallback it falls back to is what a button labelled
+            // "Trade symbol" can hijack.
+            await openMenu();
+            await sleep(400);
             let how = await navTo(surface.label);
             if (how === 'not found') {
                 await openMenu();
@@ -1081,6 +1096,74 @@ async function main() {
             journalHow === 'clicked' && !/No trades logged yet/i.test(journalText),
             journalText.slice(0, 120));
         await sweepSurface('Journal', 12);
+
+        // ── The instrument picker, and the claim it makes ────────────────
+        // A coin/timeframe control is only worth having if it MOVES THE CHART.
+        // Both surfaces bind to the same chat session, so a coin chosen on Chat
+        // must be the coin the chart draws by the time the trader gets there.
+        // Last in the run, on purpose: it hops between surfaces, and an earlier
+        // version placed mid-sweep left the sweep asserting against the wrong
+        // screen.
+        {
+            const goSurface = async (name) => {
+                await page.evaluate(() => {
+                    document.querySelector('button[aria-controls="mobile-navigation-menu"]')?.click();
+                });
+                await sleep(350);
+                return page.evaluate((n) => {
+                    const hit = [...document.querySelectorAll('#mobile-navigation-menu button, #mobile-navigation-menu a')]
+                        .find(b => new RegExp('^' + n, 'i').test((b.textContent || '').trim()));
+                    if (!hit) return 'not found';
+                    hit.click();
+                    return 'clicked';
+                }, name);
+            };
+            const landedChat = await goSurface('Chat');
+            const onChat = await page.locator('[data-testid="agents-view"]')
+                .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+            let picked = null;
+            if (landedChat !== 'clicked' || !onChat) {
+                check('the Chat surface carries an instrument picker', false, `${landedChat}/${onChat}`);
+            } else {
+                const opened = await page.evaluate(() => {
+                    const bar = document.querySelector('[data-testid="chat-instrument-bar"]');
+                    if (!bar) return 'no bar';
+                    const trig = bar.querySelector('[data-testid="symbol-picker-trigger"]');
+                    if (!trig) return 'no trigger';
+                    trig.click();
+                    return 'opened';
+                });
+                if (opened !== 'opened') {
+                    check('the Chat surface carries an instrument picker', false, opened);
+                } else {
+                    await sleep(400);
+                    picked = await page.evaluate(() => {
+                        const rows = [...document.querySelectorAll('[data-testid^="symbol-row-"]')];
+                        const other = rows.find(r => r.getAttribute('aria-selected') !== 'true') || rows[0];
+                        if (!other) return null;
+                        const id = other.getAttribute('data-testid') || '';
+                        other.click();
+                        return id.replace('symbol-row-', '') || null;
+                    });
+                    check('the Chat surface carries an instrument picker', picked !== null, `picked ${picked}`);
+                }
+                // The popover portals to <body> and covers the nav trigger.
+                await page.keyboard.press('Escape');
+                await page.evaluate(() => document.body.click());
+                await sleep(300);
+            }
+            if (picked) {
+                await goSurface('Trade');
+                const onTrade = await page.locator('[data-testid="trade-view"]')
+                    .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+                const shown = onTrade ? await page.evaluate(() => {
+                    const el = document.querySelector('[data-testid="trade-view"]');
+                    return (el?.textContent || '').match(/[A-Z]{2,10}USDT/)?.[0] ?? null;
+                }) : null;
+                check('the coin chosen in Chat is the coin the chart draws',
+                    shown === picked, `chose ${picked}, chart shows ${shown}`);
+            }
+        }
 
         check('zero pageerrors across the whole run', pageErrors.length === 0,
             pageErrors.length ? `\n---\n${pageErrors.join('\n---\n').slice(0, 3000)}` : '');
