@@ -156,10 +156,11 @@ jobs:
       # Build the installer for real, so the signature gate below has the
       # ACTUAL published artifact to judge rather than the --dir build above.
       - name: Build signed Electron installer
+        shell: pwsh
         run: |
-          if [ "${{ steps.win-signing.outputs.present }}" != "true" ]; then
-            echo "::warning::No CSC_LINK secret — this installer will be UNSIGNED and the signature gate below will fail unless the ALLOW_UNSIGNED_RELEASE repository variable is set to 'true'."
-          fi
+          if ("${{ steps.win-signing.outputs.present }}" -ne "true") {
+            Write-Host "::warning::No CSC_LINK secret - this installer will be UNSIGNED and the signature gate below will fail unless the ALLOW_UNSIGNED_RELEASE repository variable is set to 'true'."
+          }
           npx electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
