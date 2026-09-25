@@ -1432,36 +1432,50 @@ code,
  *   .surface-enter-right → arrived FROM the right (Chat → Chart AI)
  *   .surface-enter-left  → arrived FROM the left  (Chart AI → Chat)
  * Applied by App to the ENTERING surface for one cycle. */
+/* Real travel, not a 28px drift. The distance scales with the viewport so
+ * the slide reads the same on a laptop and a wide desk, and the slight scale
+ * gives it depth so a surface reads as MOVING into place rather than
+ * cross-fading. Opacity resolves early (by 55%) so the motion, not the fade,
+ * is what you read — the opposite weighting is what made the first version
+ * feel like a fade with a wobble. */
 @keyframes surfaceEnterFromRight {
   from {
     opacity: 0;
-    transform: translateX(28px);
+    transform: translateX(clamp(140px, 18vw, 420px)) scale(0.985);
+  }
+
+  55% {
+    opacity: 1;
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 
 @keyframes surfaceEnterFromLeft {
   from {
     opacity: 0;
-    transform: translateX(-28px);
+    transform: translateX(calc(-1 * clamp(140px, 18vw, 420px))) scale(0.985);
+  }
+
+  55% {
+    opacity: 1;
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 
 .surface-enter-right {
-  animation: surfaceEnterFromRight 0.22s var(--ease-snappy) both;
+  animation: surfaceEnterFromRight 0.3s var(--ease-snappy) both;
 }
 
 .surface-enter-left {
-  animation: surfaceEnterFromLeft 0.22s var(--ease-snappy) both;
+  animation: surfaceEnterFromLeft 0.3s var(--ease-snappy) both;
 }
 
 /* Slide up animation for mobile bottom sheet */

@@ -24,17 +24,39 @@ describe('surface enter keyframes', () => {
         expect(css).toMatch(/\.surface-enter-left\s*\{[^}]*surfaceEnterFromLeft/);
     });
 
-    it('moves in OPPOSITE directions, and both fade in', () => {
-        const right = css.match(/@keyframes\s+surfaceEnterFromRight\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
-        const left = css.match(/@keyframes\s+surfaceEnterFromLeft\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    it('SLIDES far, in opposite directions, with the fade resolving early', () => {
+        // Capture the whole keyframe body, not just the first block — the
+        // non-greedy pattern this replaces stopped at the first '}' and would
+        // have missed the `to` half entirely.
+        const body = (name: string): string => {
+            const at = css.indexOf(`@keyframes ${name}`);
+            if (at < 0) return '';
+            const open = css.indexOf('{', at);
+            let depth = 0;
+            for (let i = open; i < css.length; i++) {
+                if (css[i] === '{') depth++;
+                else if (css[i] === '}') { depth--; if (depth === 0) return css.slice(open + 1, i); }
+            }
+            return '';
+        };
+        const right = body('surfaceEnterFromRight');
+        const left = body('surfaceEnterFromLeft');
+
         // Chat → Chart AI arrives from the right; Chart AI → Chat from the left.
-        expect(right).toMatch(/translateX\(28px\)/);
-        expect(left).toMatch(/translateX\(-28px\)/);
-        // Both start transparent and land opaque, so the hop reads as a fade.
+        // Viewport-scaled and CLAMPED, so the travel reads the same on a
+        // laptop and a wide desk rather than a fixed handful of pixels.
+        expect(right).toMatch(/translateX\(clamp\(140px, 18vw, 420px\)\)/);
+        expect(left).toMatch(/translateX\(calc\(-1 \* clamp\(140px, 18vw, 420px\)\)\)/);
+        // A SLIDE, not a fade: the slight scale gives the surface depth as it
+        // travels, which is what separates it from a cross-fade.
+        expect(right).toMatch(/scale\(0\.985\)/);
+        expect(left).toMatch(/scale\(0\.985\)/);
+        // Opacity resolves EARLY — the motion is what you read, so a fade
+        // that tracks it linearly reads as a wobble instead.
+        expect(right).toMatch(/55%\s*\{\s*opacity:\s*1/);
+        expect(left).toMatch(/55%\s*\{\s*opacity:\s*1/);
         expect(right).toMatch(/opacity:\s*0/);
-        expect(right).toMatch(/opacity:\s*1/);
         expect(left).toMatch(/opacity:\s*0/);
-        expect(left).toMatch(/opacity:\s*1/);
     });
 
     it('is covered by the global reduced-motion kill switch', () => {
