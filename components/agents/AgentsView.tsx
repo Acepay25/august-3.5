@@ -24,13 +24,12 @@
  * own lean entry and keeps the pipeline's rich `Message` id alongside it
  * (`TradeChatPanel.tsx` → `getAnalysisMessage`).
  *
- *  - Chat mode sends through `runUserBotTurn`, the same bot transport the DM
- *    mailbox uses;
- *  - Analyze mode hands the text to `handleSendMessage` — the real pipeline,
- *    so the ensemble debate, desk tools and memory run exactly as they do from
- *    the dock, and the verdict that comes back is an ordinary message in the
- *    same array, which is why it renders inline here without a second
- *    renderer.
+ *  - a send routes on WHAT IS SELECTED, not on a mode switch (there is no
+ *    switch any more): a bot answers through `runUserBotTurn`, the same
+ *    transport the DM mailbox uses; nothing selected hands the text to
+ *    `handleSendMessage` — the real pipeline, so the ensemble debate, desk
+ *    tools and memory run exactly as they do from the dock, and the verdict
+ *    comes back as an ordinary message in the same array.
  *
  * Rooms delegate to App's existing GroupChatView element rather than
  * reimplementing the round runner.
@@ -42,6 +41,7 @@ import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClos
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { useSurfaceMorphIn, type MorphRect } from '../../hooks/useSurfaceMorph';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
+import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
@@ -130,6 +130,42 @@ const relTime = (iso: string | null | undefined): string => {
     const h = Math.round(m / 60);
     if (h < 24) return `${h}h`;
     return `${Math.round(h / 24)}d`;
+};
+
+/** Adapt a pipeline `Message` onto the shared row view, so this surface and
+ *  the Chart AI dock render one transcript furniture rather than two.
+ *
+ *  Everything here is data the pipeline already wrote: per-seat reasoning and
+ *  thought traces, the tool side-effects, attached images, the analysis. The
+ *  two joins worth naming:
+ *
+ *  - `reasoningProcesses` and `thoughtProcesses` are separate per-provider
+ *    maps, so the traces are joined in provider order rather than guessed at.
+ *  - `liveToolEvents` is keyed by speaker and is nulled when the turn settles
+ *    (`verdictFinalizer.ts`), so it only exists mid-stream; `toolActions` is
+ *    what survives and is what the status rows render.
+ */
+const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowView => {
+    const traces = [
+        ...Object.values(m.reasoningProcesses ?? {}),
+        ...Object.values(m.thoughtProcesses ?? {}),
+    ].filter(t => !!t && t.trim().length > 0);
+    return {
+        id: m.id,
+        role: m.role === MessageRole.USER ? 'user' : 'ai',
+        text: m.text || '',
+        speaker: m.role === MessageRole.USER ? username : (m.botId ? deskName : 'desk'),
+        timeLabel: relTime(m.createdAt),
+        // The solo reply stream sets isStreaming; the ensemble run signals
+        // through isDebating. Both mean "still working", so both drive the
+        // work-in-progress state rather than only the cheap one.
+        streaming: !!(m.isStreaming || m.isDebating),
+        images: m.images,
+        reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
+        toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
+        actions: m.toolActions,
+        analysis: m.analysis,
+    };
 };
 
 /** Time-aware, per the reference's greeting — this surface is otherwise empty
@@ -644,7 +680,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
-                            preview={lastChartMessage ? previewTextFor(lastChartMessage) : 'Ask the desk, or run Analyze for the full pipeline'}
+                            preview={lastChartMessage ? previewTextFor(lastChartMessage) : 'Ask the desk — it runs the full analysis'}
                             time={relTime(lastChartMessage?.createdAt ?? null)} Icon={Sparkles}
                             onClick={() => selectThread({ kind: 'team' })} />
                         {pinnedBots.map(renderBotRow)}
@@ -777,30 +813,22 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             ? botIsolated
                                                 ? `@${activeBot.name} thinks from its own notes only — it is isolated from the shared notebook.`
                                                 : `@${activeBot.name} reads its own notes and the shared notebook on every turn.`
-                                            : 'Pick an agent on the left, or ask the desk directly — Analyze runs the full Chart AI pipeline.'}
+                                            : 'Pick an agent on the left and it answers in its own voice — or ask the desk and the full analysis runs.'}
                                     </p>
                                 </div>
                             ) : (
                                 <div className="chat-column space-y-3 py-4" data-testid="agent-thread">
-                                    {thread.map(m => (
-                                        <div key={m.id} data-testid="agent-message"
-                                            data-message-id={m.id}
-                                            data-role={m.role === MessageRole.USER ? 'user' : 'ai'}
-                                            className={`flex flex-col ${m.role === MessageRole.USER ? 'items-end' : 'items-start'}`}>
-                                            <span className="mb-0.5 font-mono text-ui-2xs uppercase tracking-wider text-zinc-600">
-                                                {m.role === MessageRole.USER ? username : activeBot?.name ?? 'desk'}
-                                                {' · '}{relTime(m.createdAt)}
-                                            </span>
-                                            <div className={`max-w-[85%] rounded-bubble px-3 py-2 text-ui-caption leading-5 ${
-                                                m.role === MessageRole.USER
-                                                    ? 'bg-zinc-800 text-zinc-100'
-                                                    : 'border border-zinc-800/80 bg-zinc-900 text-zinc-200'
-                                            }`}>
-                                                {(m.text || '').trim() || (m.analysis ? 'Analysis' : '…')}
-                                                {m.role !== MessageRole.USER && <InlineVerdict m={m} />}
-                                            </div>
-                                        </div>
-                                    ))}
+                                    {thread.map(m => {
+                                        const isUser = m.role === MessageRole.USER;
+                                        return (
+                                            <ChatTranscriptRow
+                                                key={m.id}
+                                                row={chatRowFrom(m, username, activeBot?.name ?? 'desk')}
+                                            >
+                                                {!isUser && <InlineVerdict m={m} />}
+                                            </ChatTranscriptRow>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -859,7 +887,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 </div>
                             </div>
                             <p className="mx-auto mt-1.5 max-w-3xl text-center text-ui-xs text-zinc-600">
-                                Chat talks to the agent · Analyze runs the full Chart AI pipeline
+                                {/* The switch is gone, so the hint names the
+                                    SELECTION rather than a mode the user
+                                    can no longer see. */}
+                                {activeBot
+                                    ? `@${activeBot.name} answers here`
+                                    : 'No agent selected — the full analysis runs'}
                             </p>
                         </div>
                     </>
