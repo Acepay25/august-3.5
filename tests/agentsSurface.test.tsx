@@ -121,26 +121,35 @@ describe('AgentsView layout', () => {
 });
 
 describe('AgentsView composer', () => {
-    it('Chat mode sends through the bot transport, not the pipeline', async () => {
+    it('a selected bot takes the send, not the pipeline', async () => {
         const onSendBotTurn = vi.fn(async () => true);
+        const onAnalyze = vi.fn();
         const b = bot({ id: 'b1', name: 'Macro' });
         render(<AgentsView {...base} bots={[b]} selection={{ kind: 'bot', botId: 'b1' }}
             messages={[msg({ role: MessageRole.USER, text: 'reading the tape' })]}
-            onSendBotTurn={onSendBotTurn} />);
+            onSendBotTurn={onSendBotTurn} onAnalyze={onAnalyze} />);
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'what about BTC?' } });
         fireEvent.click(screen.getByTestId('composer-send'));
         await waitFor(() => expect(onSendBotTurn).toHaveBeenCalledWith(b, 'what about BTC?'));
-        expect(screen.getByTestId('mode-chat').getAttribute('aria-pressed')).toBe('true');
+        expect(onAnalyze).not.toHaveBeenCalled();
     });
 
-    it('Analyze mode hands the same text to the real pipeline', () => {
+    it('no bot selected sends the same text to the full analysis pipeline', () => {
         const onAnalyze = vi.fn();
-        const b = bot({ id: 'b1' });
-        render(<AgentsView {...base} bots={[b]} selection={{ kind: 'bot', botId: 'b1' }} onAnalyze={onAnalyze} />);
-        fireEvent.click(screen.getByTestId('mode-analyze'));
+        render(<AgentsView {...base} onAnalyze={onAnalyze} />);
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'BTC setup' } });
         fireEvent.click(screen.getByTestId('composer-send'));
         expect(onAnalyze).toHaveBeenCalledWith('BTC setup', []);
+    });
+
+    it('has no Chat/Analyze switch — the rail is the only selector', () => {
+        // The toggle said the same thing the rail already says. A second
+        // control for one decision is one more thing to read, and it was the
+        // reason the attach button had to explain itself.
+        render(<AgentsView {...base} />);
+        expect(screen.queryByTestId('mode-chat')).toBeNull();
+        expect(screen.queryByTestId('mode-analyze')).toBeNull();
+        expect(screen.queryByRole('group', { name: 'Send mode' })).toBeNull();
     });
 
     it('renders an inline verdict from the thread — no second renderer', () => {
@@ -305,18 +314,16 @@ describe('WS-6 rail completeness', () => {
 describe('composer attachments (WS-6)', () => {
     const png = (): File => new File(['pretend-bytes'], 'chart.png', { type: 'image/png' });
 
-    it('offers attach only in Analyze mode', () => {
+    it('offers attach unconditionally now the mode is gone', () => {
         render(<AgentsView {...base} />);
-        expect(screen.getByTestId('composer-attach').hasAttribute('disabled')).toBe(true);
-        expect(screen.getByTestId('composer-attach').getAttribute('title')).toContain('Analyze mode');
-        fireEvent.click(screen.getByTestId('mode-analyze'));
         expect(screen.getByTestId('composer-attach').hasAttribute('disabled')).toBe(false);
+        // The old tooltip had to explain the mode; there is no mode to explain.
+        expect(screen.getByTestId('composer-attach').getAttribute('title')).not.toContain('Analyze mode');
     });
 
     it('reads a picked image into a chip and sends it with the prompt, then clears', async () => {
         const onAnalyze = vi.fn();
         render(<AgentsView {...base} onAnalyze={onAnalyze} />);
-        fireEvent.click(screen.getByTestId('mode-analyze'));
         fireEvent.change(screen.getByTestId('composer-file'), { target: { files: [png()] } });
         await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy());
 
@@ -331,7 +338,6 @@ describe('composer attachments (WS-6)', () => {
 
     it('drops one chip without touching the others', async () => {
         render(<AgentsView {...base} />);
-        fireEvent.click(screen.getByTestId('mode-analyze'));
         fireEvent.change(screen.getByTestId('composer-file'), { target: { files: [png()] } });
         await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy());
         fireEvent.click(screen.getByLabelText('Remove chart.png'));
