@@ -52,7 +52,12 @@ const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
   id: 't1',
   analysis: { coinName: 'BTCUSDT', direction: 'Short', detectedPatternFamily: 'Family A' } as any,
   outcome: TradeOutcome.LOSS,
-  timestamp: '2026-08-09T12:00:00.000Z',
+  // RELATIVE, not a pinned date. This timestamp becomes lastEvidenceAt, and
+  // applyEvidenceDecay halves any skill whose evidence is older than
+  // EVIDENCE_STALE_DAYS (30). A hardcoded 2026-08-09 aged into that window and
+  // quietly turned a promotion test into a decay test — it would redden CI on
+  // its own, with no code change, purely from the calendar.
+  timestamp: new Date(Date.now() - 60_000).toISOString(),
   postMortem: '**Key Lesson:** Wait for the 15m reclaim before entering.',
   ...overrides,
 });

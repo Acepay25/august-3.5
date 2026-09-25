@@ -337,6 +337,12 @@ function providerRequestDetails(request) {
             max_tokens: request.maxTokens ?? 4096,
             temperature: request.temperature ?? 0.7,
         };
+        // Same reasoning-side-channel ask the renderer makes. It lived only
+        // in the renderer, so the PACKAGED APP never sent it: the dock asks
+        // THIS process to build the provider request, so the same seat
+        // returned its thinking on the web and not on the desktop — the
+        // Thinking row simply stayed empty, with no error to explain it.
+        policy.requestReasoningSideChannel(config, body);
         if (request.jsonSchema && request.jsonSchema.schema) {
             // Pre-resolved by the renderer's jsonSchema capability class —
             // apply as-is; the degrade below is the safety net either way.

@@ -53,3 +53,31 @@ describe('calculateSimilarity family scoring (negation-aware)', () => {
         expect(fake).toBeLessThan(100);
     });
 });
+
+/**
+ * Label prefixes are not descriptors. Every family in the app is labelled
+ * "Family A" … "Family Z", so each contains the literal token "family" — and
+ * sharing that word alone made every family relate to every other one. This
+ * predicate backs the strict enforcement matcher, so a "Family A" skill
+ * claimed to cover "Family Z" and a distinct setup looked already handled.
+ */
+describe('familiesRelate ignores label prefixes', () => {
+    it('does not relate two different families on the shared word "family"', () => {
+        expect(familiesRelate('Family Z', 'Family A')).toBe(false);
+    });
+
+    it('still relates the same family', () => {
+        expect(familiesRelate('Family A', 'Family A')).toBe(true);
+        expect(familiesRelate('family a', 'FAMILY-A')).toBe(true);
+    });
+
+    it('still relates families that share a real descriptor', () => {
+        expect(familiesRelate('Family A', 'A')).toBe(true);
+        expect(familiesRelate('breakout retest', 'breakout')).toBe(true);
+    });
+
+    it('does not strip a family genuinely NAMED "family"', () => {
+        // Nothing follows the label word, so the token stays and can match.
+        expect(familiesRelate('family', 'family')).toBe(true);
+    });
+});

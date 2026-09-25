@@ -25,6 +25,7 @@ import {
     claudeThinkingBudgetTokens,
     geminiThinkingParams,
     MIN_EFFECTIVE_THINKING_TOKENS,
+    requestReasoningSideChannel,
 } from '../../shared/providerRequestPolicy.cjs';
 
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
@@ -334,12 +335,14 @@ function deltaVisibleText(delta: { content?: unknown }): string {
     return splitChatContent(delta?.content).text;
 }
 
-function requestReasoningSideChannel(config: ProviderConfig, params: object): void {
-    const host = `${config.baseUrl || ''} ${config.selectedModel || ''}`;
-    if (/openrouter\.ai|deepseek|groq\.com|together\.xyz|fireworks\.ai|siliconflow/i.test(host)) {
-        (params as Record<string, unknown>).include_reasoning = true;
-    }
-}
+// `requestReasoningSideChannel` now lives in shared/providerRequestPolicy.cjs
+// and is imported below. It used to be a private copy HERE, which meant the
+// PACKAGED APP never sent the flag: the dock asks electron/main.cjs to build
+// the provider request, and main.cjs had no idea this existed. The same seat
+// therefore returned its thinking on the web and not on the desktop — the
+// Thinking row simply stayed empty, with no error anywhere to explain it. The
+// shared policy module is the one file the renderer, the vite proxy and
+// electron/main.cjs all import; that is the whole point of it.
 
 /**
  * Extract the chain of thought from an Anthropic-style messages response.
@@ -1516,13 +1519,23 @@ async function* streamViaElectronBridge(
     let wake: (() => void) | null = null;
     let settled = false;
     const notify = (): void => { wake?.(); wake = null; };
+    // Route think-tag bodies to the reasoning channel, exactly as the other
+    // two streaming paths do (`chatCompletionsStream`, `streamViaProxy`). This
+    // bridge did not, so on the PACKAGED APP a reasoning model that leaks
+    // <think> markup inside `content` painted its scratchpad straight into the
+    // visible answer bubble. The settle-time cleanup peeled it back out, which
+    // is why it read as a flicker rather than a failure — but the raw markup
+    // was on screen, and the Thinking row never started its timer.
+    const gate = createThinkingStreamGate();
     const unsubscribe = electronAPI.onProviderChunk?.((chunk) => {
         if (!chunk || chunk.requestId !== requestId) return;
         if (chunk.type === 'reasoning') {
             options?.onReasoning?.(chunk.delta);
             return;
         }
-        queue.push(chunk.delta);
+        const gated = gate.push(chunk.delta);
+        if (gated.thinking.trim()) options?.onReasoning?.(gated.thinking);
+        if (gated.visible) queue.push(gated.visible);
         notify();
     });
     const cancelRequest = (): void => { void electronAPI.cancelProviderChat?.(requestId); };
@@ -1564,6 +1577,13 @@ async function* streamViaElectronBridge(
             yield delta;
         }
         const result = await invoke;
+        // Flush the gate BEFORE the buffered-tail fallback: if the stream
+        // stopped mid-think-block the visible remainder is sitting in the GATE,
+        // not the queue, and yielding result.text on top would double-paint.
+        // Same order the other two streaming paths use.
+        const flushed = gate.flush();
+        if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
+        if (flushed.visible) yield flushed.visible;
         if (!result.ok) {
             const error = new Error(result.message || 'Provider request failed.');
             if (result.status !== undefined) (error as { status?: number }).status = result.status;
