@@ -70,6 +70,13 @@ jobs:
       - name: Probe scripts lint
         run: npx eslint --config scripts/eslint.config.mjs "scripts/*.cjs"
 
+      # Every multi-line `run:` in a WINDOWS job must declare its shell. A step
+      # with no `shell:` is bash on ubuntu and pwsh on windows, so POSIX
+      # conditionals pass in guards.yml and fail in release.yml. That mismatch
+      # killed the 1.0.31 release AFTER every expensive gate had gone green.
+      - name: Workflow steps declare their shell
+        run: node scripts/check-workflow-shells.cjs
+
       # 3. Bundle-size ratchet. The ceiling is a ratchet, not a target: it
       #    fails only on a REGRESSION past the current build, and is meant to
       #    be lowered deliberately as chunks improve.
