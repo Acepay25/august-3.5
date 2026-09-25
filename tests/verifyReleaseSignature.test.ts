@@ -90,7 +90,12 @@ describe('release signature gate', () => {
         const v = decide({ status: 'NotSigned', signer: '' }, opts(true));
         expect(v.ok).toBe(true);
         expect(v.reason).toMatch(/ALLOW_UNSIGNED_RELEASE/);
-        expect(v.reason).toMatch(/cannot verify what it downloads/i);
+        // The published latest.yml carries a sha512, so the updater DOES verify
+        // the download — the gap is authenticity, not integrity. Saying
+        // otherwise would overstate the risk and understate the mitigation.
+        expect(v.reason).toMatch(/sha512 published in latest\.yml/i);
+        expect(v.reason).toMatch(/integrity/i);
+        expect(v.reason).toMatch(/authenticity/i);
     });
 
     it('still fails the override path when the status is untrustworthy, not just unsigned', () => {
