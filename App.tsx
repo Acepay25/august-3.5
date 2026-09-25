@@ -144,7 +144,6 @@ import { PriceAlertService } from './services/ui/PriceAlertService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurface, type AppSurface } from './hooks/useSurface';
-import { captureChartAiRect, type MorphRect } from './hooks/useSurfaceMorph';
 import type { TradeMode } from './components/trade/TradeView';
 import type { NavBadge } from './components/shell/SurfaceMenuList';
 import { Journal } from './components/journal/Journal';
@@ -528,18 +527,21 @@ const App: React.FC = () => {
     /** Nav menu/Alt-shortcut surface selection — the journal route re-runs
      *  openJournal so a fresh entry always resets the tab.
      *
-     *  Leaving Chart for Agents carries the dock's box along so the Agents pane
-     *  grows out of the panel it replaces (hooks/useSurfaceMorph). Every other
-     *  navigation clears it: a stale rect must not replay on an unrelated
-     *  visit, and the morph is one-way by design. */
-    const [agentsMorphFrom, setAgentsMorphFrom] = useState<MorphRect | null>(null);
+     *  The Chart AI ⇄ Chat hop is animated by ONE mechanism now: the
+     *  `.surface-enter-*` keyframe in index.css, a right-pinned translateX
+     *  slide that mirrors the hamburger. It used to run a SECOND animation
+     *  alongside it — hooks/useSurfaceMorph flipped the incoming pane out of
+     *  the dock's measured box with translate + scale. Two animations on one
+     *  element fought each other, and the scale half of both won visually:
+     *  the surface ballooned in place, which is the "pop up on the left" the
+     *  trader kept reporting. Measuring a rect at runtime bought nothing the
+     *  keyframe could not say on its own, so the WAAPI morph is gone rather
+     *  than merely disabled. */
     /** Which edge the NEXT surface should appear to arrive from, for the
      *  Chat ⇄ Chart AI hop. Set on that hop only and consumed once — a stale
-     *  direction would replay on an unrelated visit, the same reason the morph
-     *  rect is cleared on every other navigation. */
+     *  direction would replay on an unrelated visit. */
     const [surfaceEnterFrom, setSurfaceEnterFrom] = useState<'left' | 'right' | null>(null);
     const handleSurfaceSelect = useCallback((next: AppSurface): void => {
-        setAgentsMorphFrom(next === 'agents' && surface === 'trade' ? captureChartAiRect() : null);
         // Chat is reached FROM the chart, so it arrives from the left; the
         // chart is reached FROM Chat, so it arrives from the right. Every
         // other surface pair gets no directional animation at all.
@@ -3148,6 +3150,13 @@ const App: React.FC = () => {
                                     activeUsername={activeUsername ?? undefined}
                                     onTradeModeChange={(m) => { lastRequestedTradeModeRef.current = m; }}
                                     onOpenChat={() => handleSurfaceSelect('agents')}
+                                    /* The same two handlers the Chat rail gets, so
+                                       the dock is the Chat's compact form rather
+                                       than a reduced one: it can open a room and
+                                       the Coach inbox, not just list rooms. */
+                                    onNewGroup={() => setIsNewGroupOpen(true)}
+                                    onOpenCoach={openCoachInLearn}
+                                    coachCount={coachCount}
                                     surfaceEnterFrom={surfaceEnterFrom}
                                     verdict={deskSceneMessage?.analysis}
                                     bots={bots}
@@ -3258,7 +3267,6 @@ const App: React.FC = () => {
                                     onAnalyze={handleRunAnalysisFromAgents}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
-                                    morphFrom={agentsMorphFrom}
                                     surfaceEnterFrom={surfaceEnterFrom}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
                                     lastOpenedMap={threadOpenedMap}

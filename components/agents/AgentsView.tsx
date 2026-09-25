@@ -40,7 +40,6 @@ import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
-import { useSurfaceMorphIn, type MorphRect } from '../../hooks/useSurfaceMorph';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import * as chatStore from '../../services/trade/chatStore';
 import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
@@ -118,9 +117,6 @@ interface AgentsViewProps {
     onOpenInDock?: () => void;
     /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop. */
     surfaceEnterFrom?: SurfaceEnterDirection;
-    /** The box the Chart AI dock occupied when this surface was selected. The
-     *  pane grows out of it (hooks/useSurfaceMorph) instead of replacing it. */
-    morphFrom?: MorphRect | null;
     onHydratePins?: (pins: string[]) => void;
 }
 
@@ -342,7 +338,7 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, onOpenInDock, morphFrom = null, surfaceEnterFrom = null,
+    lastOpenedMap = {}, modelPicker, onOpenInDock, surfaceEnterFrom = null,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
@@ -399,10 +395,10 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const [renameDraft, setRenameDraft] = useState('');
     const scroller = useRef<HTMLDivElement | null>(null);
     const paneRef = useRef<HTMLElement | null>(null);
-    useSurfaceMorphIn(paneRef, morphFrom);
-    // Directional enter for the Chat ⇄ Chart AI hop. Deliberately separate
-    // from the FLIP above: the morph scales the pane out of the dock's old
-    // box, this slides the surface in from the edge it was reached from.
+    // The ONLY animation on this pane for the Chart AI hop: one right-pinned
+    // translateX keyframe that mirrors the hamburger. The WAAPI morph that
+    // used to run alongside it is gone — two animations on one element fought,
+    // and the scale half read as a pop up instead of a slide.
     // App owns the flag so re-navigating animates again.
     const surfaceEnterClass = useSurfaceEnter(surfaceEnterFrom);
     const searchRef = useRef<HTMLInputElement | null>(null);

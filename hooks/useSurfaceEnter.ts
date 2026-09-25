@@ -30,7 +30,7 @@ export type SurfaceEnterDirection = 'left' | 'right' | null;
  *  class is cleared on a timer derived from this, so a mismatch truncates the
  *  animation mid-flight. tests/surfaceEnter.test.tsx asserts the two agree, so
  *  changing one without the other fails a test rather than silently snapping. */
-export const SURFACE_ENTER_MS = 340;
+export const SURFACE_ENTER_MS = 300;
 
 export const useSurfaceEnter = (direction?: SurfaceEnterDirection | null): string => {
     const [className, setClassName] = useState('');
