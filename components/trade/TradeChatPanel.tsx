@@ -191,6 +191,18 @@ interface TradeChatPanelProps {
     onToggleCollapsed?: () => void;
     expanded?: boolean;
     onToggleExpanded?: () => void;
+    /** Create a group room. The dock could already OPEN rooms and create
+     *  bots, but not make a new one — so "groups" in the dock meant
+     *  "the groups that already exist elsewhere". The Chat rail owns
+     *  both, and the dock is meant to be its compact form, not a
+     *  second-class one. */
+    onNewGroup?: () => void;
+    /** Jump to the Coach inbox (Learn → Coach), the same destination
+     *  the Chat rail's Coach pill uses. Absent ⇒ the row is not rendered,
+     *  so the dock never shows a control it cannot honor. */
+    onOpenCoach?: () => void;
+    /** Decisions waiting in the Coach inbox, for the pill count. */
+    coachCount?: number;
     /** Jump straight to the Chat surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
@@ -318,6 +330,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
+    onNewGroup, onOpenCoach, coachCount = 0,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -1628,6 +1641,25 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         New agent <span className="text-zinc-600">· create a roster bot</span>
                                     </button>
+                                    {onNewGroup && (
+                                        <button type="button" onClick={() => { setShowNewMenu(false); onNewGroup(); }}
+                                            data-testid="new-group-option"
+                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            New room <span className="text-zinc-600">· create a group</span>
+                                        </button>
+                                    )}
+                                    {onOpenCoach && (
+                                        <button type="button" onClick={() => { setShowNewMenu(false); onOpenCoach(); }}
+                                            data-testid="dock-coach-option"
+                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            Coach inbox
+                                            {coachCount > 0 && (
+                                                <span className="ml-1 rounded-full bg-amber-500/20 px-1.5 text-ui-2xs tabular-nums text-amber-300">
+                                                    {coachCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                    )}
                                     {renderGroupSurface && groups.length > 0 && groups.slice(0, 6).map(g => (
                                         <button key={g.id} type="button"
                                             onClick={() => { setShowNewMenu(false); const existing = sessions.find(s => s.groupId === g.id); if (existing) { chatStore.setActiveId(existing.id); return; } chatStore.addSession({ kind: 'group', title: g.name, groupId: g.id }); }}
