@@ -39,6 +39,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
+import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { useSurfaceMorphIn, type MorphRect } from '../../hooks/useSurfaceMorph';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import * as chatStore from '../../services/trade/chatStore';
@@ -72,8 +73,12 @@ interface AgentsViewProps {
     onNewGroup: () => void;
     /** Chat mode: the bot's own DM transport (App's mailbox). */
     onSendBotTurn: (bot: AgentBot, prompt: string) => Promise<boolean>;
-    /** Analyze mode: the real Chart AI pipeline (App's handleSendMessage). */
-    onAnalyze: (prompt: string, images: PipelineImage[]) => void;
+    /** The SAME pipeline entry the Chart AI dock runs — not a weaker local copy.
+     *  It resolves to the verdict text (plus the App-side message id the dock's
+     *  Locate button uses) and rejects when a run is already going or no
+     *  provider is configured, so both reasons reach the transcript instead of
+     *  vanishing into a void-ed promise. */
+    onAnalyze: (prompt: string, images: PipelineImage[]) => Promise<AnalysisTurnOutcome>;
     /** App renders the existing room view; this surface only hosts it. */
     renderGroup?: (group: AgentGroup) => React.ReactNode;
     /** Decisions waiting in the Coach inbox — counts the rail's hop pill. */
@@ -506,8 +511,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         // A bot turn answers from text, so an attachment is only meaningful on
         // the analysis path and is dropped rather than silently ignored.
         if (!activeBot) {
-            await onAnalyze(prompt, attachedImages());
+            const images = attachedImages();
             clearAttachments();
+            // The same session the Chart AI dock renders, written by the same
+            // helper — so a question asked here shows up there, with its answer,
+            // instead of running an entire analysis into a void.
+            await runAnalysisAsChatTurn({
+                sid: chatStore.getActiveId(),
+                text: prompt,
+                image: images[0]?.dataURL,
+                run: () => onAnalyze(prompt, images),
+            });
             return;
         }
         clearAttachments();

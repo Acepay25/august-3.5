@@ -326,6 +326,17 @@ export const beginRun = (sid: string, controller: AbortController): void => {
 
 export const getController = (sid: string): AbortController | undefined => controllers.get(sid);
 
+/** End a run ONLY if the store still holds THIS run's controller.
+ *  chatStore keys controllers by session; a second beginRun (a queued harness
+ *  flush racing this run, or a double-submit that slipped through) REPLACES the
+ *  entry — and a blind endRun(sid) would then delete the NEWER run's slot,
+ *  leaving it un-stoppable while the finished one's `busy` ghost lingers.
+ *  Identity check: whoever owns the slot clears the slot. Lives here, beside
+ *  the controller map it reads, so every caller shares one rule. */
+export const endRunOwned = (sid: string, controller: AbortController): void => {
+    if (controllers.get(sid) === controller) endRun(sid);
+};
+
 export const endRun = (sid: string): void => {
     controllers.delete(sid);
     emit();

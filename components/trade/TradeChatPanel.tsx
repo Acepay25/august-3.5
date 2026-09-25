@@ -49,6 +49,7 @@ import { parseTradeProposal, type TradeProposal } from '../../services/trade/pro
 import { parseKeyLevels, type MessageLevelLines } from '../../services/trade/keyLevels';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from '../../services/trade/tradePlanLevels';
+import { runAnalysisAsChatTurn } from '../../services/trade/analysisTurn';
 import * as watchService from '../../services/trade/watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from '../../services/trade/chartTriggers';
 import { phtClock } from '../../utils/timezone';
@@ -813,16 +814,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.mutate(id, fn);
     };
 
-    /** End a run ONLY if the store still holds THIS run's controller.
-     *  chatStore keys controllers by session; a second beginRun (a queued
-     *  harness flush racing this run, or a double-submit that slipped
-     *  through) REPLACES the entry — and a blind endRun(sid) would then
-     *  delete the NEWER run's slot, leaving it un-stoppable while the
-     *  finished one's `busy` ghost lingers. Identity check: whoever owns
-     *  the slot clears the slot. */
-    const endRunOwned = (sid: string, controller: AbortController): void => {
-        if (chatStore.getController(sid) === controller) chatStore.endRun(sid);
-    };
+    /** End a run ONLY if the store still holds THIS run's controller — the rule
+     *  itself lives in chatStore beside the controller map it reads, because a
+     *  queued harness flush racing this run can REPLACE the slot. */
+    const endRunOwned = chatStore.endRunOwned;
 
     /** The fresh code-calculated packet every message rides (fetched ONCE per
      *  send — shared across all panel seats so they argue about the same tape).
@@ -1331,34 +1326,20 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
             .join('');
         const sid = activeId;
-        const userEntry: LiveEntry = { id: newId('u'), role: 'user', text: text + fileNote, tools: [], image: images[0]?.dataURL, at: Date.now() };
-        const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: 'Running the full ensemble analysis — hybrid data pull, debate, verdict…', tools: [], streaming: true, at: Date.now() };
-        mutate(sid, s => ({ ...s, title: titleFromMessage(text), updatedAt: Date.now(), entries: [...s.entries, userEntry, aiEntry] }));
-        const controller = new AbortController();
-        chatStore.beginRun(sid, controller);
-        try {
-            const result = await onRunAnalysis(text + fileNote, images);
-            if (controller.signal.aborted) {
-                // Stopped mid-run: the early return used to skip the settle,
-                // orphaning a streaming:true bubble that then blocked ALL
-                // session persistence until reload.
-                mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, streaming: false, text: e.text || 'The analysis was stopped.' } : e)) }));
-                return;
-            }
+        // The transcript bookkeeping is shared with the Agents surface, which
+        // runs the same pipeline from the same session — see analysisTurn.ts
+        // for why a second copy of this is how the two surfaces drift apart.
+        await runAnalysisAsChatTurn({
+            sid,
+            text: text + fileNote,
+            image: images[0]?.dataURL,
+            run: () => onRunAnalysis!(text + fileNote, images),
             // The bridge may hand back the App-side message id alongside the
             // verdict text — stamp the entry with it so Locate can scroll here.
-            const answer = typeof result === 'string' ? result : result.text;
-            const analysisMessageId = typeof result === 'string' ? undefined : result.messageId;
-            if (analysisMessageId) {
-                setAnalysisMessageIds(prev => ({ ...prev, [aiEntry.id]: analysisMessageId }));
-            }
-            mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, text: answer || 'The analysis produced no summary.', streaming: false } : e)) }));
-        } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            mutate(sid, s => ({ ...s, entries: s.entries.map(e => (e.id === aiEntry.id ? { ...e, text: `The analysis run failed: ${message}`, streaming: false } : e)) }));
-        } finally {
-            endRunOwned(sid, controller);
-        }
+            onMessageId: (entryId, messageId) => {
+                setAnalysisMessageIds(prev => ({ ...prev, [entryId]: messageId }));
+            },
+        });
     }, [activeId, attachments, draft, onRunAnalysis]);
 
     /** Run one queued harness signal (a level-watch price event) as a model
