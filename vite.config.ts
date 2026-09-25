@@ -41,6 +41,7 @@ const SHARED_POLICY_EXPORTS = [
   'ANTHROPIC_DEFAULT_TEMPERATURE',
   'THINKING_BUDGET_FRACTIONS',
   'GEMINI_THINKING_BUDGETS',
+  'requestReasoningSideChannel',
 ];
 
 function sharedProviderPolicyEsmInterop(): any {
