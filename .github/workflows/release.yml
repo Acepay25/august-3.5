@@ -140,7 +140,47 @@ jobs:
         env:
           INSTALLER_SMOKE_EXECUTABLE: dist_electron/win-unpacked/August Trading.exe
 
+      # Code-signing, same presence-bridge pattern as the Android step above
+      # (`secrets` is not available in a step-level `if:`, so presence rides out
+      # on a step output). electron-builder reads CSC_LINK/CSC_KEY_PASSWORD
+      # natively, so no extra step is needed once the secrets exist.
+      - name: Detect Windows signing secrets
+        id: win-signing
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+        run: |
+          if ($env:CSC_LINK) { 'present=true' >> $env:GITHUB_OUTPUT }
+          else { 'present=false' >> $env:GITHUB_OUTPUT }
+
+      # Build the installer for real, so the signature gate below has the
+      # ACTUAL published artifact to judge rather than the --dir build above.
+      - name: Build signed Electron installer
+        run: |
+          if [ "${{ steps.win-signing.outputs.present }}" != "true" ]; then
+            echo "::warning::No CSC_LINK secret — this installer will be UNSIGNED and the signature gate below will fail unless the ALLOW_UNSIGNED_RELEASE repository variable is set to 'true'."
+          fi
+          npx electron-builder --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      # Fail closed on an unsigned build. This release configures no
+      # build.publish.publisherName, so electron-updater's NsisUpdater has
+      # nothing to compare a downloaded installer's signer against, returns
+      # null, and treats that as a pass — the auto-update channel carries no
+      # publisher identity. Shipping unsigned is a deliberate choice, so it
+      # requires the ALLOW_UNSIGNED_RELEASE repo variable rather than being
+      # inherited by omission.
+      - name: Require a signed installer
+        run: node scripts/verify-release-signature.cjs
+        env:
+          ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
+
       - name: Build & publish Electron app
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
