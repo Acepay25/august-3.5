@@ -2,14 +2,18 @@
  * The Chat ⇄ Chart AI surface transition.
  *
  * The mental model: the Chat surface and the Chart AI dock are the SAME panel
- * at two sizes, so the hop is a container RESIZE. The arriving surface grows
- * out of the dock's own footprint on the right and settles to fill the screen;
- * going back, it collapses into the same edge.
+ * at two sizes, so the hop is a container RESIZE — the dock's left edge
+ * travels out to the viewport's left edge, and back. Both surfaces are
+ * right-pinned, so a panel that slides in from the right IS that travel.
  *
- * This replaced an earlier directional slide. It read as two unrelated
- * surfaces passing each other, which was wrong: nothing about it said "one
- * conversation, two sizes". So there is deliberately NO translate here, and
- * the test asserts that.
+ * This is the hamburger's own motion (`.animate-slide-in-left` in index.css),
+ * mirrored. THREE attempts have been rejected as "still the old transition" or
+ * "a pop up on the left": a small directional translate, then a
+ * `transform-origin: 100% 50%` scale. The scale was the real culprit — scaling
+ * a full-width surface makes it balloon in place instead of travelling. A
+ * WAAPI morph (`hooks/useSurfaceMorph`) also ran alongside the keyframe with
+ * its own translate+scale, so two animations fought on one element; it is
+ * deleted, and these tests are the only thing animating this hop.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -50,46 +54,58 @@ const ruleFor = (cls: string): string => {
     return '';
 };
 
-describe('surface enter — a resize, not a slide', () => {
-    it('declares one grow animation, shared by both hop classes', () => {
-        expect(css).toMatch(/@keyframes\s+surfaceGrowFromDock/);
+describe('surface enter — one slide, matching the hamburger', () => {
+    it('declares one slide animation, shared by both hop classes', () => {
+        expect(css).toMatch(/@keyframes\s+surfaceSlideFromRight/);
         // App still sets a direction flag, so both classes are applied — but a
-        // container resize has no left/right to it, so they resolve to the
-        // same animation.
+        // resize has no handedness, so they resolve to the same animation.
         for (const cls of ['.surface-enter-right', '.surface-enter-left']) {
-            expect(ruleFor(cls), cls).toMatch(/surfaceGrowFromDock/);
+            expect(ruleFor(cls), cls).toMatch(/surfaceSlideFromRight/);
         }
     });
 
-    it('grows out of the dock rather than sliding across the screen', () => {
-        const grow = keyframeBody('surfaceGrowFromDock');
-        expect(grow).toMatch(/transform:\s*scale\(0\.62\)/);
-        expect(grow).toMatch(/transform:\s*scale\(1\)/);
-        // The defining property of a RESIZE, and the thing that killed the
-        // old version: a translate is a slide, and a slide reads as two
-        // surfaces passing each other rather than one panel changing size.
-        expect(grow).not.toMatch(/translateX|translate3d|translateY/);
-        // Opacity clears early so the resize carries the transition.
-        expect(grow).toMatch(/40%\s*\{\s*opacity:\s*1/);
+    it('slides in from the RIGHT edge, the mirror of the hamburger', () => {
+        const slide = keyframeBody('surfaceSlideFromRight');
+        // The dock is the right-hand panel, so "expand out of the dock" and
+        // "slide in from the right" are the same motion.
+        expect(slide).toMatch(/transform:\s*translateX\(100%\)/);
+        expect(slide).toMatch(/transform:\s*translateX\(0\)/);
+        // A scale here is what made the surface balloon in place. Pin it.
+        expect(slide).not.toMatch(/scale\(/);
+        expect(slide).not.toMatch(/translateY|translate3d/);
     });
 
-    it('anchors the grow to the dock right edge, so it reads as coming OUT of it', () => {
+    it('carries no transform-origin — a translate does not pivot', () => {
+        // The `transform-origin: 100% 50%` left over from the scale made the
+        // panel look like it was rotating about its edge rather than sliding.
         for (const cls of ['.surface-enter-right', '.surface-enter-left']) {
-            expect(ruleFor(cls), cls).toMatch(/transform-origin:\s*100% 50%/);
+            expect(ruleFor(cls), cls).not.toMatch(/transform-origin/);
         }
     });
 
-    it('the old directional slide is gone, not merely unused', () => {
-        expect(css).not.toMatch(/@keyframes\s+surfaceEnterFrom/);
+    it("matches the hamburger's own motion so they feel like one system", () => {
+        const hamburger = ruleFor('.animate-slide-in-left');
+        // The rule references the keyframe by name; `@keyframes slideInLeft`
+        // is its own block, so assert the two really are the same motion.
+        expect(hamburger).toMatch(/animation:\s*slideInLeft/);
+        expect(keyframeBody('slideInLeft')).toMatch(/translateX\(-100%\)/);
+        const useEaseOut = /ease-out/.test(ruleFor('.surface-enter-right'));
+        expect(useEaseOut, 'the hamburger uses ease-out; the surface hop should too')
+            .toBe(/ease-out/.test(hamburger));
     });
 
-    it('the CSS duration and the hook\'s clear timer cannot drift apart', () => {
+    it('the grow keyframe is gone, not merely unused', () => {
+        expect(css).not.toMatch(/@keyframes\s+surfaceGrowFromDock/);
+        expect(css).not.toMatch(/surfaceGrowFromDock/);
+    });
+
+    it("the CSS duration and the hook's clear timer cannot drift apart", () => {
         // The class is removed on a timer derived from SURFACE_ENTER_MS. If
         // the CSS animation is longer, the class comes off mid-flight and the
         // surface SNAPS to its resting transform — which looks like the old
         // broken transition rather than a timing bug. This failed silently once
         // already, when the duration moved 220 → 340ms and the timer did not.
-        const declared = Number(/animation:\s*surfaceGrowFromDock\s+([\d.]+)s/.exec(
+        const declared = Number(/animation:\s*surfaceSlideFromRight\s+([\d.]+)s/.exec(
             ruleFor('.surface-enter-right'),
         )?.[1] ?? NaN);
         expect(Number.isFinite(declared), 'could not read the CSS duration').toBe(true);

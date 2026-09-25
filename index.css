@@ -1438,34 +1438,36 @@ code,
  * the right and settles to fill the screen; going back, it collapses into
  * the same edge. One panel, two sizes — which is what it actually is.
  *
- * transform-origin 100% 50% anchors that right edge to the dock without
- * measuring anything at runtime, so it is correct on every surface and costs
- * nothing. The scale starts at 0.62: enough that the eye reads "growing from
- * there", not so small that the chart is an unreadable smear for 300ms.
- * Opacity clears by 40% so the motion carries the transition, not the fade. */
-@keyframes surfaceGrowFromDock {
+ * transform-origin 100% 50% anchored that right edge to the dock, and the
+ * surface GREW out of it with a scale. That was the problem: scaling a
+ * full-width surface makes it balloon in place, which reads as a pop up in the
+ * middle of the screen rather than a slide from the dock's edge. Two rejected
+ * attempts are behind this — a small translate, then a pure scale.
+ *
+ * This is now the hamburger's own motion (`.animate-slide-in-left` above): a
+ * translateX reveal pinned to one edge, mirrored. Both surfaces are
+ * right-pinned, so a panel sliding in from the right IS the left edge
+ * travelling — expanding slides it out to the left, collapsing slides it back. */
+@keyframes surfaceSlideFromRight {
   from {
-    opacity: 0;
-    transform: scale(0.62);
-  }
-
-  40% {
-    opacity: 1;
+    opacity: 0.4;
+    transform: translateX(100%);
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateX(0);
   }
 }
 
-/* Both directions share the one animation now: a resize has no left/right to
- * it. The class names are kept because App still sets a direction flag, and
- * because they name the two hops this replaced. */
+/* `transform-origin` is deliberately absent — a translate does not need one,
+ * and leaving a scale's origin behind is what made the old version look like
+ * it was pivoting in place. Both directions share it because a resize has no
+ * handedness; the class names are kept because App still sets a direction
+ * flag and because they name the two hops. */
 .surface-enter-right,
 .surface-enter-left {
-  transform-origin: 100% 50%;
-  animation: surfaceGrowFromDock 0.34s var(--ease-snappy) both;
+  animation: surfaceSlideFromRight 0.3s ease-out both;
 }
 
 /* Slide up animation for mobile bottom sheet */

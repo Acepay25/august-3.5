@@ -430,7 +430,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             placeholder="Search models…"
                             aria-label="Search models by name"
                             data-testid="model-picker-search"
-                            className="min-w-0 flex-1 bg-transparent text-ui-dense text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                            className="min-w-0 flex-1 bg-transparent text-left text-ui-dense text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
                         />
                         {isSearching && (
                             <span className="shrink-0 text-ui-2xs tabular-nums text-zinc-500" data-testid="model-picker-count">
