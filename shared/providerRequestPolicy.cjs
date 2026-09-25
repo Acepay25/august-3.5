@@ -318,6 +318,25 @@ function isLocalBaseUrl(baseUrl) {
     }
 }
 
+/**
+ * Ask a host that can return a separate reasoning channel to do so.
+ *
+ * This lived in the renderer only, so the PACKAGED DESKTOP app never sent it:
+ * the Chat AI dock asks main.cjs to build the provider request, and main.cjs
+ * had no idea the flag existed. The same seat therefore returned its thinking
+ * on the web and not on the desktop — a model behaving differently per runtime,
+ * with the Thinking row silently empty where it should not be.
+ *
+ * It belongs HERE because this is the one module the renderer, the vite dev
+ * proxy and electron/main.cjs all import; that is the whole point of it.
+ */
+function requestReasoningSideChannel(config, params) {
+    const host = `${(config && config.baseUrl) || ''} ${(config && config.selectedModel) || ''}`;
+    if (/openrouter.ai|deepseek|groq.com|together.xyz|fireworks.ai|siliconflow/i.test(host)) {
+        params.include_reasoning = true;
+    }
+}
+
 const PROVIDER_REQUEST_POLICY = {
     isExtendedThinkingModel,
     claudeThinkingBudgetTokens,
@@ -334,6 +353,7 @@ const PROVIDER_REQUEST_POLICY = {
     ANTHROPIC_DEFAULT_TEMPERATURE,
     THINKING_BUDGET_FRACTIONS,
     GEMINI_THINKING_BUDGETS,
+    requestReasoningSideChannel,
 };
 
 // CommonJS export guarded so the SAME file also loads in the browser once

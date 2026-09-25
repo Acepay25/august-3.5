@@ -267,6 +267,30 @@ const hasUsableTimes = (klines: Kline[]): boolean =>
     klines.length > 0 && klines.every(k => !Number.isNaN(utcDayIndex(k)));
 
 /**
+ * Magnitude-aware rounding for PRICE-scale values.
+ *
+ * A fixed 2dp is wrong at both ends of this market. On a sub-$10 perp
+ * `round(0.012)` returns 0.01 — a ~17% error — and on the live picker alone
+ * that is hundreds of symbols. It propagated into EMAs, Bollinger bands,
+ * support/resistance and every stop suggestion: three genuinely distinct swing
+ * lows on a 0.012 coin all collapsed to 0.01, so the ladder rendered three
+ * identical "support" levels as if they were independent evidence.
+ *
+ * 4 significant digits, but never FEWER decimals than the historical 2, so
+ * large prices stay byte-identical to before and only the low end changes.
+ *
+ * This used to live inside `calculateIndicators` and was applied to exactly two
+ * fields (ATR and currentPrice) while every OTHER price field in the file
+ * used a bare 2dp round. That is why the precision looked fixed and was not.
+ */
+const roundPrice = (v: number, sigDigits = 4): number => {
+    if (!Number.isFinite(v) || v === 0) return 0;
+    const magnitude = Math.floor(Math.log10(Math.abs(v)));
+    const decimals = Math.min(12, Math.max(2, sigDigits - 1 - magnitude));
+    return Number(v.toFixed(decimals));
+};
+
+/**
  * Calculate all technical indicators from OHLCV data
  */
 export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
@@ -392,22 +416,7 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
     else if (bullishSignals <= 2) trendStrength = 'bearish';
 
     const round = (v: number, decimals = 2) => Math.round(v * Math.pow(10, decimals)) / Math.pow(10, decimals);
-    /**
-     * Magnitude-aware rounding for price-scale values.
-     *
-     * A fixed 2dp ATR is wrong at both ends of this market: on a sub-$10 perp
-     * `round(0.012)` returned 0.01 — a ~17% error that then propagated into
-     * Monte Carlo sigma, regime sizing and every stop suggestion. Rounding to
-     * 4 significant digits, but never FEWER decimals than the historical 2,
-     * keeps large prices byte-identical to before while restoring precision
-     * where the old fixed scale destroyed it.
-     */
-    const roundPriceScale = (v: number, sigDigits = 4): number => {
-        if (!Number.isFinite(v) || v === 0) return 0;
-        const magnitude = Math.floor(Math.log10(Math.abs(v)));
-        const decimals = Math.min(12, Math.max(2, sigDigits - 1 - magnitude));
-        return Number(v.toFixed(decimals));
-    };
+    const roundPriceScale = roundPrice;
 
     return {
         rsi: {
@@ -424,27 +433,27 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
             trend: macdTrend
         },
         ema: {
-            ema5: round(ema5),
-            ema9: round(ema9),
-            ema13: round(ema13),
-            ema20: round(ema20),
-            ema21: round(ema21),
-            ema50: round(ema50),
-            ema200: round(ema200)
+            ema5: roundPrice(ema5),
+            ema9: roundPrice(ema9),
+            ema13: roundPrice(ema13),
+            ema20: roundPrice(ema20),
+            ema21: roundPrice(ema21),
+            ema50: roundPrice(ema50),
+            ema200: roundPrice(ema200)
         },
         sma: {
-            ma5: round(ma5),
-            ma10: round(ma10),
-            ma20: round(ma20),
-            ma30: round(ma30),
-            ma50: round(ma50),
-            ma60: round(ma60),
-            ma200: round(ma200)
+            ma5: roundPrice(ma5),
+            ma10: roundPrice(ma10),
+            ma20: roundPrice(ma20),
+            ma30: roundPrice(ma30),
+            ma50: roundPrice(ma50),
+            ma60: roundPrice(ma60),
+            ma200: roundPrice(ma200)
         },
         bollingerBands: {
-            upper: round(lastBB.upper),
-            middle: round(lastBB.middle),
-            lower: round(lastBB.lower),
+            upper: roundPrice(lastBB.upper),
+            middle: roundPrice(lastBB.middle),
+            lower: roundPrice(lastBB.lower),
             bandwidth: round(bandwidth),
             percentB: round(percentB)
         },
@@ -523,13 +532,13 @@ export const calculateKeyLevels = (klines: Kline[]): { support: number[]; resist
         .filter(h => h > currentPrice)
         .sort((a, b) => a - b)
         .slice(0, 3)
-        .map(v => Math.round(v * 100) / 100);
+        .map(v => roundPrice(v));
 
     const support = localLows
         .filter(l => l < currentPrice)
         .sort((a, b) => b - a)
         .slice(0, 3)
-        .map(v => Math.round(v * 100) / 100);
+        .map(v => roundPrice(v));
 
     return { support, resistance };
 };
@@ -1186,7 +1195,7 @@ export const calculateRegime = (klines: Kline[]): RegimeAnalysis => {
  * pseudo-session and label the result honestly as `tf-relative`.
  */
 export const calculatePivotPoints = (klines: Kline[]): PivotPoints => {
-    const round = (v: number) => Math.round(v * 100) / 100;
+    const round = roundPrice;
 
     if (klines.length === 0) {
         return { pp: 0, r1: 0, r2: 0, r3: 0, s1: 0, s2: 0, s3: 0, scope: 'tf-relative' };
@@ -1515,7 +1524,7 @@ export const calculateVWAP = (klines: Kline[]): VWAPData => {
         currentPrice > vwap * 1.01 ? 'bullish' :
             currentPrice < vwap * 0.99 ? 'bearish' : 'neutral';
 
-    const round = (v: number) => Math.round(v * 100) / 100;
+    const round = roundPrice;
 
     return {
         vwap: round(vwap),
@@ -1629,7 +1638,7 @@ export const calculateIchimoku = (klines: Kline[]): IchimokuData => {
     else if (bearishPoints >= 4) signal = 'strong_bearish';
     else if (bearishPoints >= 3) signal = 'bearish';
 
-    const round = (v: number) => Math.round(v * 100) / 100;
+    const round = roundPrice;
 
     return {
         tenkanSen: round(tenkanSen),

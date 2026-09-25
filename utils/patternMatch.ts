@@ -12,8 +12,24 @@ const NEGATORS = new Set([
     'fake', 'false', 'failed', 'failure', 'exhausted', 'inverted', 'rejection', 'rejected',
 ]);
 
-const segmentsOf = (value: string): string[] =>
-    value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+/**
+ * Words that NAME a family rather than describe one. The app's own labels are
+ * "Family A" … "Family Z", so every one of them contains the literal token
+ * "family" — which made `familiesRelate('Family Z', 'Family A')` TRUE on the
+ * shared word alone. That is not a near-miss: this same predicate backs the
+ * strict enforcement matcher, so a "Family A" skill claimed to cover
+ * "Family Z" and a distinct setup looked already handled.
+ *
+ * Stripped from the FRONT only, and only while something remains — so a bare
+ * "family" is still comparable, and a family genuinely NAMED "family" keeps it.
+ */
+const LABEL_PREFIXES = new Set(['family', 'pattern', 'setup', 'class', 'type']);
+
+const segmentsOf = (value: string): string[] => {
+    const segs = value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    while (segs.length > 1 && LABEL_PREFIXES.has(segs[0])) segs.shift();
+    return segs;
+};
 
 /**
  * TRUE when two family strings plausibly describe the same setup: they share

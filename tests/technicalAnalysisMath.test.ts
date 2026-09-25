@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     calculateAdvancedVolume,
+    calculateKeyLevels,
     calculateIndicators,
     calculateIchimoku,
     calculatePivotPoints,
@@ -216,5 +217,66 @@ describe('calculateVWAP — session anchor (item 5)', () => {
         expect(v.upperBand1).toBeCloseTo(91 + 27, 0);
         // The old unweighted std: sqrt((81²+81²+9²)/3) = sqrt((6561+6561+81)/3)=sqrt(4401)≈66.3 — clearly different.
         expect(v.upperBand1).not.toBeCloseTo(91 + 66.3, 0);
+    });
+});
+
+/**
+ * Sub-$1 price precision. The live symbol picker returns 527 futures, plenty
+ * of them under a dollar, and a fixed 2dp collapsed all of their price-scale
+ * values onto the same number: a 0.012 coin reported EMA20 = 0.01, a Bollinger
+ * band with upper = middle = lower, and three genuinely distinct swing lows as
+ * three identical "support" levels — which reads as three independent pieces
+ * of evidence when it is one number printed three times.
+ */
+describe('sub-$1 price precision', () => {
+    const cheapSeries = (base: number, n = 60) => Array.from({ length: n }, (_, i) => {
+        const drift = Math.sin(i / 5) * base * 0.05;
+        const c = base + drift;
+        return { time: 1_700_000_000_000 + i * 60_000, open: c, high: c * 1.002, low: c * 0.998, close: c, volume: 1000 };
+    });
+
+    it('does not flatten indicators on a 0.012 coin', () => {
+        const ind = calculateIndicators(cheapSeries(0.012) as never);
+        expect(ind.currentPrice).toBeGreaterThan(0.01);
+        expect(ind.currentPrice).toBeLessThan(0.02);
+        // The bug: a 2dp round sent every one of these to 0.01.
+        expect(ind.ema.ema20).toBeGreaterThan(0);
+        expect(Number(ind.ema.ema20.toFixed(4))).toBeGreaterThan(0);
+        // Bollinger upper/middle/lower must not all be the same number.
+        const { upper, middle, lower } = ind.bollingerBands;
+        expect(new Set([upper, middle, lower]).size).toBeGreaterThan(1);
+        expect(upper).toBeGreaterThan(middle);
+        expect(middle).toBeGreaterThan(lower);
+    });
+
+    it('keeps large prices byte-identical to the old 2dp behaviour', () => {
+        // The ratchet must not move the top of the market: 4 significant
+        // digits with a 2dp floor means a BTC-sized price rounds as before.
+        const ind = calculateIndicators(cheapSeries(84_000) as never);
+        expect(ind.currentPrice).toBe(Math.round(ind.currentPrice * 100) / 100);
+        expect(ind.ema.ema20).toBe(Math.round(ind.ema.ema20 * 100) / 100);
+    });
+
+    it('keeps three distinct swing lows distinct', () => {
+        // An explicit zigzag whose three troughs sit at clearly different
+        // prices, all below the last close. A 2dp round printed all three as
+        // 0.01, so the ladder showed three identical "support" rows — three
+        // pieces of apparent evidence that are one number printed three times.
+        const lows = [0.0100, 0.0107, 0.0114];
+        const bars = [];
+        let k = 0;
+        for (let i = 0; i < 24; i++) {
+            const isTrough = i % 4 === 1;
+            const low = isTrough ? lows[k++ % 3] : 0.0129;
+            const close = isTrough ? 0.0122 : 0.0131;
+            bars.push({
+                time: 1_700_000_000_000 + i * 60_000,
+                open: close, high: 0.0136, low, close, volume: 10,
+            });
+        }
+        const { support } = calculateKeyLevels(bars as never);
+        // Three distinct trough prices, all well under the 0.0131 close.
+        expect(new Set(support).size).toBeGreaterThan(1);
+        expect(support.every(v => v !== 0.01)).toBe(true);
     });
 });

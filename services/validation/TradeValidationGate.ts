@@ -533,7 +533,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         const tradeTypeDetection = detectTradeType(analysis);
 
         return {
-            isValid: errors.length === 0,
+            isValid: errors.length === 0,   // blocking errors only; a scored-criterion FAILURE is a warning + a confidence downgrade, never a silent pass
             originalConfidence,
             adjustedConfidence,
             confidenceWasAdjusted: false,
@@ -607,6 +607,14 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         const alignmentResult = validateTimeframeAlignment(hybridData.confluence, adjustedConfidence);
         if (alignmentResult.warning) {
             warnings.push(alignmentResult.warning);
+        }
+        // `isValid` used to be computed and then thrown away, so a setup with
+        // ZERO aligned timeframes and zero conflicts — that is, no directional
+        // evidence at all — came out "PASSED". The confidence downgrade
+        // landed, so the trade was still guarded; it was the LABEL that lied.
+        // Surface it as a warning, same treatment as the R:R score below.
+        if (!alignmentResult.isValid) {
+            warnings.push('MTF alignment: no aligned timeframe evidence for this direction');
         }
         if (alignmentResult.adjustedConfidence && isLowerConfidence(alignmentResult.adjustedConfidence, adjustedConfidence)) {
             adjustedConfidence = alignmentResult.adjustedConfidence;
@@ -919,12 +927,12 @@ ${patternMatchWarning ? `\n PATTERN MEMORY:\n  ${patternMatchWarning}` : ''}
 
 ───────────────────────────────────────────────────────────────
  FINAL CONFIDENCE: ${adjustedConfidence}${confidenceWasAdjusted ? ` (adjusted from ${originalConfidence})` : ''}
- VALIDATION: ${errors.length === 0 ? 'PASSED' : 'FAILED'}
+ VALIDATION: ${errors.length > 0 ? 'FAILED' : warnings.length > 0 ? 'PASSED WITH WARNINGS' : 'PASSED'}
 ═══════════════════════════════════════════════════════════════
 `.trim();
 
     return {
-        isValid: errors.length === 0,
+        isValid: errors.length === 0,   // blocking errors only; a scored-criterion FAILURE is a warning + a confidence downgrade, never a silent pass
         originalConfidence,
         adjustedConfidence,
         confidenceWasAdjusted,
