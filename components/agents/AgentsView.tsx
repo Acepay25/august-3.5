@@ -37,7 +37,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Sparkles, Timer, Trash2, Users } from 'lucide-react';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Gavel, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
@@ -702,7 +702,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs transition-colors ${
                                 coachCount > 0 ? 'border-amber-500/30 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
                             }`} data-testid="rail-coach">
-                            <Sparkles className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
+                            <Gavel className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
                         </button>
                     )}
                 </div>
@@ -714,7 +714,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
                             preview={lastChartMessage ? previewTextFor(lastChartMessage) : 'Ask the desk — it runs the full analysis'}
-                            time={relTime(lastChartMessage?.createdAt ?? null)} Icon={Sparkles}
+                            time={relTime(lastChartMessage?.createdAt ?? null)} Icon={MessageSquare}
                             onClick={() => selectThread({ kind: 'team' })} />
                         {pinnedBots.map(renderBotRow)}
                         {pinnedGroups.map(g => (
@@ -854,7 +854,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
                             {thread.length === 0 ? (
                                 <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">
-                                    <Sparkles className="mb-3 h-7 w-7 text-zinc-500" />
+                                    <Bot className="mb-3 h-7 w-7 text-zinc-500" />
                                     <h2 className="font-serif text-2xl text-zinc-100">{greeting(username || 'trader')}</h2>
                                     <p className="mt-1 max-w-sm text-ui-sm leading-5 text-zinc-500">
                                         {activeBot

@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { BarChart2, CheckCircle, ChevronDown, Sparkles, TrendingUp } from 'lucide-react';
+import { BarChart2, CheckCircle, ChevronDown, TrendingUp } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AIProvider, LevelProbabilities } from '../../types';
@@ -332,7 +332,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                         {/* Footer Tip */}
                         <div className="text-center py-3">
                             <div className="text-ui-xs text-zinc-600 flex items-center justify-center gap-1.5">
-                                <Sparkles className="h-3 w-3 text-cyan-400" />
+                                <TrendingUp className="h-3 w-3 text-cyan-400" />
                                 <span>Enable Hybrid Intelligence to see live results</span>
                             </div>
                         </div>

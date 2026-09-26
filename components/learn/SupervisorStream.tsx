@@ -16,7 +16,7 @@
 import React from 'react';
 import { useSyncExternalStore } from 'react';
 import {
-    Brain, Gavel, ListChecks, Pause, Play, Search, ShieldCheck, Sparkles, X,
+    Brain, Gavel, ListChecks, Pause, Play, Search, ShieldCheck, X,
 } from 'lucide-react';
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import {
@@ -28,10 +28,10 @@ import type { SupervisorEvent, SupervisorPhase } from '../../services/learning/s
 import { getActiveUsername } from '../../utils/activeUser';
 
 const PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
-    idle: <Sparkles className="h-3.5 w-3.5" />,
+    idle: <ShieldCheck className="h-3.5 w-3.5" />,
     reviewing: <Search className="h-3.5 w-3.5" />,
     verifying: <ShieldCheck className="h-3.5 w-3.5" />,
-    enhancing: <Sparkles className="h-3.5 w-3.5" />,
+    enhancing: <Brain className="h-3.5 w-3.5" />,
     deciding: <Gavel className="h-3.5 w-3.5" />,
     learning: <Brain className="h-3.5 w-3.5" />,
 };

@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Brain, Camera, ChevronDown, Compass, Crosshair, Eye, FileText, History, LayoutGrid, MessageSquare, MoreHorizontal, PanelRightOpen, Plus, Sparkles, TriangleAlert, X, Zap } from 'lucide-react';
+import { Activity, Brain, Camera, ChevronDown, Compass, Crosshair, Eye, FileText, History, LayoutGrid, MessageSquare, MoreHorizontal, PanelRightOpen, Plus, TriangleAlert, X, Zap } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
@@ -254,7 +254,7 @@ const QUICK_PROMPTS: { text: string; Icon: React.FC<{ className?: string }> }[] 
     { text: 'Key levels?', Icon: Crosshair },
     { text: 'What is the bias?', Icon: Compass },
     { text: 'Order-flow pressure?', Icon: Activity },
-    { text: 'Scan chart → skills', Icon: Sparkles },
+    { text: 'Scan chart → skills', Icon: Zap },
 ];
 
 /** Identity of a RUNNING model turn, captured the moment it starts. Every
