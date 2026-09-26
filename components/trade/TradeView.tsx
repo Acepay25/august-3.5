@@ -80,6 +80,7 @@ interface TradeViewProps {
     coachCount?: number;
     /** A bot's existing conversation, so a bot opened in the dock inherits it. */
     botThreadRows?: Message[];
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string) => void;
     /** Resolve the analysis message `onRunAnalysis` created, so the dock can
      *  show what its settled verdict was built on. Threaded straight through to
      *  `TradeChatPanel` — the chart surface owns no verdict rendering itself.
@@ -318,7 +319,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, botThreadRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, botThreadRows, onBotTurnCommit, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
@@ -976,6 +977,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                 onOpenCoach={onOpenCoach}
                                 coachCount={coachCount}
                                 botThreadRows={botThreadRows}
+                                onBotTurnCommit={onBotTurnCommit}
                                 onOpenChat={onOpenChat}
                             />
                         </div>
@@ -993,6 +995,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             onOpenCoach={onOpenCoach}
                             coachCount={coachCount}
                             botThreadRows={botThreadRows}
+                            onBotTurnCommit={onBotTurnCommit}
                         />
                     </div>
                 )}
