@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Sparkles, Wrench, Zap } from 'lucide-react';
+import { CheckCircle, Wrench, Zap } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 /**
@@ -59,7 +59,7 @@ const renderNoteLine = (line: string, i: number): React.ReactNode => {
         return <p key={i} className="font-semibold text-zinc-300 mt-2 first:mt-0">{line}</p>;
     }
 
-    let Icon = Sparkles;
+    let Icon = Zap;
     let iconTone = 'text-cyan-400';
     if (lower.startsWith('fix') || lower.includes('bug') || lower.includes('patch')) {
         Icon = Wrench;
@@ -208,7 +208,7 @@ const UpdateOverlay: React.FC = () => {
                                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)] hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-95"
                                 aria-label={`Install update version ${version}`}
                             >
-                                <Sparkles className="h-4 w-4" />
+                                <Zap className="h-4 w-4" />
                                 Install &amp; Restart
                             </button>
                         </>

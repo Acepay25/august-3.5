@@ -31,7 +31,7 @@ const validationSchemas: Record<string, any> = {
 };
 
 // -- ICONS (lucide-react) --
-import { X, Brain, Zap, Server, AreaChart as AreaChartIcon, Sparkles, Code } from 'lucide-react';
+import { X, Brain, Zap, Server, Target, AreaChart as AreaChartIcon, Code } from 'lucide-react';
 
 const Icons = {
     Close: X,
@@ -39,7 +39,7 @@ const Icons = {
     Zap,
     Server,
     Chart: AreaChartIcon,
-    Sparkles,
+    Target,
     Code,
 };
 
@@ -264,7 +264,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             value={highConfidenceWinRate != null ? `${highConfidenceWinRate}%` : 'No data'}
                             subtitle={highConfidenceWinRate != null ? 'High-confidence outcomes' : 'Log resolved high-confidence trades to calibrate'}
                             accent="zinc"
-                            icon={<Icons.Sparkles className="w-5 h-5" />}
+                            icon={<Icons.Target className="w-5 h-5" />}
                         />
 
                         {/* 1.4 Memory */}
@@ -447,7 +447,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                 <div className="px-8 py-6 flex items-center justify-between bg-zinc-950 z-20">
                     <div className="flex items-center gap-4">
                         <div className="bg-zinc-800 border border-zinc-700 p-2 rounded-xl">
-                            <Icons.Sparkles className="text-zinc-300 w-6 h-6" />
+                            <Icons.Brain className="text-zinc-300 w-6 h-6" />
                         </div>
                         <div>
                             <h1 className="text-xl font-medium text-white tracking-tight">System Intelligence</h1>

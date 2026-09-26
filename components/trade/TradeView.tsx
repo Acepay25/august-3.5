@@ -904,7 +904,12 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     data-testid="trade-chart-pane"
                     className={isBelowLg
                         ? (mode === 'chart' ? 'min-h-0 flex-1' : 'hidden')
-                        : `min-h-[420px] flex-1 lg:min-h-0 lg:min-w-0 ${dockExpanded ? 'lg:w-1/3 lg:flex-none' : ''}`}
+                        /* Expanded, the chart is what GIVES way, and it gives way by
+                         * flexing — never by claiming a fixed third. It used to take
+                         * `lg:w-1/3 lg:flex-none`, which pinned its width while
+                         * refusing to shrink, so the row could only widen past the
+                         * viewport and clip the dock's right edge. */
+                        : 'min-h-[420px] flex-1 lg:min-h-0 lg:min-w-0'}
                 >
                     <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
@@ -924,7 +929,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     `trade-sidebar` is a legacy testid name; renaming it is
                     cosmetic churn against two test files and buys nothing, so
                     it stays. */}
-                {(sidebarOpen || isBelowLg) && (
+                {/* The book is suppressed while the dock is expanded: the row is already
+                 *  chart + dock, and re-adding a fixed 300px column is what made the
+                 *  total exceed the row and clip the transcript. */}
+                {((sidebarOpen && !dockExpanded) || isBelowLg) && (
                     <div
                         data-testid="trade-sidebar"
                         className={isBelowLg
@@ -956,7 +964,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             style={{ '--dock-w': `${dockWidth}px` } as React.CSSProperties}
                             className={isBelowLg
                                 ? (mode === 'ai' ? 'min-h-0 w-full flex-1' : 'hidden')
-                                : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-2/3 xl:!w-3/4' : ''}`}
+                                : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-1/2 xl:!w-7/12' : ''}`}
                         >
                             <TradeChatPanel
                                 {...dockProps}

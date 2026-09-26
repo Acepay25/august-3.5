@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { AlertTriangle, Brain, Wrench, FilePlus2, Sparkles, NotebookPen } from 'lucide-react';
+import { AlertTriangle, Brain, Wrench, FilePlus2, NotebookPen } from 'lucide-react';
 import type { ToolAction } from '../../types/message';
 
 export interface ToolActionsRowProps {
@@ -20,10 +20,10 @@ export interface ToolActionsRowProps {
 const ICON_OK: Record<string, React.ReactNode> = {
     amend_memory: <Brain className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     forge_tool: <Wrench className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    skill_draft: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    skill_ingest: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    propose_skill: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    revise_skill: <Sparkles className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    skill_draft: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    skill_ingest: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    propose_skill: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    revise_skill: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     write_memory_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     notebook_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
     custom: <FilePlus2 className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,

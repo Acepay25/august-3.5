@@ -12,7 +12,7 @@ import React from 'react';
 import {
     ActivityIcon,
     FileTextIcon,
-    SparklesIcon,
+    LayersIcon,
     BotIcon,
 } from '../shared/Icons';
 import { GraduationCap, Inbox, LogOut } from 'lucide-react';
@@ -40,7 +40,7 @@ export const SURFACE_ITEMS: Array<{
 }> = [
     { id: 'trade', label: 'Trade', shortcut: 'Alt+1', Icon: ActivityIcon },
     { id: 'journal', label: 'Journal', shortcut: 'Alt+2', Icon: FileTextIcon },
-    { id: 'studio', label: 'Studio', shortcut: 'Alt+3', Icon: SparklesIcon },
+    { id: 'studio', label: 'Studio', shortcut: 'Alt+3', Icon: LayersIcon },
     // The surface is called Chat; the id stays `agents` because a dozen gates
     // pin it independently of the label (surfaceMenu.test asserts
     // onSelect('agents'), and agents-view / agents-rail / chart-ai-row are

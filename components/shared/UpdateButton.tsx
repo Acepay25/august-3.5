@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, AlertCircle, Download, Loader2, Sparkles } from 'lucide-react';
+import { RefreshCw, AlertCircle, Download, Loader2 } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 import StatusPill from '../ui/StatusPill';
 
@@ -52,7 +52,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-dense font-medium text-emerald-300"
                     title={`Version ${version} is available`}
                 >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Download className="h-3.5 w-3.5" />
                     v{version}
                 </span>
                 <button
@@ -91,7 +91,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95`}
                     aria-label={`Restart to apply version ${version ?? ''}`}
                 >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Download className="h-3.5 w-3.5" />
                     Restart
                 </button>
             </div>
