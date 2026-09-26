@@ -199,7 +199,18 @@ describe('panel seats that pass stay invisible (B2)', () => {
     });
 });
 
-describe('skills index refresh when a growth action lands (B5)', () => {
+/**
+ *  These two drive a scripted async stream through the whole Chart AI panel and
+ *  are the slowest tests in this file. The global 15s budget leaves no headroom
+ *  for them on a loaded four-worker machine, and the failure mode is a timeout
+ *  vitest reports as STACK_TRACE_ERROR -- which reads like a crash and is not
+ *  one. Scoped here, not raised globally: a longer global timeout would also
+ *  mask a genuine hang in a cheap test.
+ *
+ *  Found by scripts/flake-hunt.cjs: three failures in one of six runs, these
+ *  two plus one in tests/trade/tradeView.test.tsx, all the same timeout.
+ */
+describe('skills index refresh when a growth action lands (B5)', { timeout: 45_000 }, () => {
     it('a propose_skill mid-session re-enters the prompt on the next turn', async () => {
         const action = {
             at: new Date().toISOString(), speaker: 'm', tool: 'propose_skill',

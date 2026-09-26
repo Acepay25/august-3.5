@@ -228,7 +228,19 @@ const stubViewport = (width: number): void => {
     });
 };
 
-describe('TradeView mobile 3-mode surface (<lg)', () => {
+/**
+ *  Mounting TradeView pulls in the chart, the order book and the whole Chart AI
+ *  dock. On a four-worker machine that mount is the slowest thing in the suite,
+ *  and the global 15s budget -- tuned for ordinary tests -- is not enough
+ *  headroom for it. Scoped here rather than raised globally: a longer global
+ *  timeout would also mask a genuine hang in a cheap test, and this file is
+ *  the one that actually needs the room.
+ *
+ *  Found by scripts/flake-hunt.cjs, which reproduced it as three failures in
+ *  one of six runs -- these three only -- carrying vitest's STACK_TRACE_ERROR,
+ *  which is its marker for a timeout it cannot format.
+ */
+describe('TradeView mobile 3-mode surface (<lg)', { timeout: 45_000 }, () => {
     const modeKey = () => `august_trade_mode_v1_${getActiveUsername()}`;
     beforeEach(() => {
         localStorage.clear();

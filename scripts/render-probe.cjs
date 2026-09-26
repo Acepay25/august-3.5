@@ -1016,6 +1016,97 @@ async function main() {
             backToChat = await navTo('Chat');
         }
         check('can return to the Chat surface', backToChat === 'clicked', backToChat);
+
+        // ── A turn asked in the DOCK is visible in the Chat surface's bot
+        //    thread. Nothing measured this until now: the probe proved both
+        //    surfaces render, never that a turn CROSSES between them. It is
+        //    easy to break — a composer appending to the chat session instead
+        //    of the conversation — and invisible in every other check, because
+        //    both surfaces look healthy while the exchange has never happened
+        //    anywhere the trader can reach.
+        //
+        //    The menu is opened BEFORE navigating, deliberately. `navTo` falls
+        //    back to a page-wide search when the menu is not mounted, and on
+        //    the Chat surface that search matches SymbolPicker's "Trade
+        //    symbol" trigger — clicking the coin picker and reporting
+        //    'clicked'. Opening the menu first makes the scoped search find
+        //    the real nav item, which is the whole reason that helper scopes
+        //    to the menu before falling back.
+        const HOP_ASK = 'SYNC ACROSS SURFACES probe';
+        let askedInDock = false;
+        {
+            await openMenu();
+            await sleep(400);
+            const toTrade = await navTo('Trade');
+            await sleep(900);
+            // The dock is a lg+ affordance and can be collapsed to a rail.
+            await page.evaluate(() => {
+                const b = [...document.querySelectorAll('button')]
+                    .find(x => x.getAttribute('aria-label') === 'Expand Chart AI');
+                if (b) b.click();
+            });
+            await sleep(600);
+            const opened = await page.evaluate(() => {
+                const menu = [...document.querySelectorAll('button')]
+                    .find(b => b.getAttribute('aria-label') === 'Customization');
+                if (!menu) return 'no customization button';
+                menu.click();
+                return 'menu';
+            });
+            if (opened === 'menu') {
+                await sleep(400);
+                await page.evaluate(() => {
+                    const b = [...document.querySelectorAll('button')].find(x =>
+                        /probe bot/i.test(x.textContent || '') && /as bot/i.test(x.textContent || ''));
+                    if (b) b.click();
+                });
+                await sleep(800);
+                const sent = await page.evaluate((needle) => {
+                    const ta = document.querySelector('textarea');
+                    if (!ta || ta.disabled) return 'no composer';
+                    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
+                        .set.call(ta, needle);
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    const btn = [...document.querySelectorAll('button')].find(b => /send/i.test(
+                        `${b.getAttribute('aria-label') || ''} ${b.title || ''} ${b.textContent || ''}`));
+                    if (!btn) return 'no send button';
+                    if (btn.disabled) return 'send disabled';
+                    btn.click();
+                    return 'clicked';
+                }, HOP_ASK);
+                if (sent === 'clicked') {
+                    await waitStableAnswer(page);
+                    askedInDock = true;
+                }
+                check('a bot turn can be asked in the dock', askedInDock,
+                    `nav=${toTrade} send=${sent}`);
+            } else {
+                check('a bot turn can be asked in the dock', false, `nav=${toTrade} ${opened}`);
+            }
+        }
+
+        if (askedInDock) {
+            await openMenu();
+            await sleep(400);
+            await navTo('Chat');
+            await sleep(900);
+            await page.evaluate(() => {
+                const b = [...document.querySelectorAll('button')]
+                    .find(x => /probe bot/i.test(x.textContent || ''));
+                if (b) b.click();
+            });
+            await sleep(900);
+            const found = await pollFor(async () => {
+                const pane = page.locator('[data-testid="agents-view"]');
+                const t = await pane.innerText();
+                return t.includes(HOP_ASK) ? await pane.locator('[data-testid="agent-message"]').count() : null;
+            }, 8000);
+            check('a turn asked in the dock is visible in the Chat surface',
+                found != null,
+                found == null
+                    ? 'the exchange is not in the bot thread on the Chat surface'
+                    : `${found} rows`);
+        }
         const paneText = await pollFor(async () => {
             const text = await page.locator('[data-testid="agents-view"]').innerText();
             return text.trim().length > 200 ? text : null;
