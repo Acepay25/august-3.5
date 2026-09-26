@@ -206,12 +206,6 @@ interface TradeChatPanelProps {
     onOpenCoach?: () => void;
     /** Decisions waiting in the Coach inbox, for the pill count. */
     coachCount?: number;
-    /** This bot's existing conversation, as the Chat rail renders it. A bot
-     *  opened in the dock is seeded with it, so "Open in Chart AI" carries
-     *  the conversation across instead of opening a blank page. App owns
-     *  `messages`, so the selection lives there and the dock only receives
-     *  the rows. */
-    botThreadFor?: (botId: string) => Message[];
     /** The canonical conversation for the bot this session is bound to,
      *  as rows. LIVE, not a snapshot: App recomputes it whenever
      *  `messages` changes, so a turn said in the Chat surface appears in an
@@ -344,7 +338,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
-    onNewGroup, onOpenCoach, coachCount = 0, botThreadFor, botThreadRows,
+    onNewGroup, onOpenCoach, coachCount = 0, botThreadRows,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -396,55 +390,55 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
     const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
     const isPanel = activeSession.kind === 'panel';
-    /** Create a bot session carrying the conversation the Chat rail already
-     *  has for it. Both entry points (the roster bridge and the dock menu) go
-     *  through here, so a bot cannot end up openable one way with history and
-     *  the other without. */
+    /** A bot session starts EMPTY, and that is correct: a bot's conversation
+     *  belongs to `messages`, which this session renders as a view of
+     *  (`mergeBotConversation`). Seeding the session with a copy of it on open
+     *  is what made the dock's transcript a stale snapshot — the copy could
+     *  never learn anything the canonical store did not already say. */
     const openBotSession = useCallback((botId: string): void => {
-        const history = botThreadFor?.(botId) ?? [];
-        chatStore.addSession({
-            botId,
-            ...(history.length > 0 ? { entries: history.map(liveEntryFromMessage) } : {}),
-        });
-    }, [botThreadFor]);
+        chatStore.addSession({ botId });
+    }, []);
 
     const boundBot = activeSession.botId ? bots.find(b => b.id === activeSession.botId) : undefined;
 
-    // THE STORE CUT, first seam. A bot's conversation has exactly one owner —
-    // App's `messages`, which is what the Journal, the analyses gallery, the
-    // learning loop and the Chat rail all read. This session's `entries` is a
-    // COPY of it, seeded once when the bot was opened, so anything said since
-    // in the other surface simply was not there.
+    // THE STORE CUT. A bot's conversation has exactly one owner — App's
+    // `messages`, which is what the Journal, the analyses gallery, the learning
+    // loop and the Chat rail all read, and what a bot turn is learned from. A
+    // dock session's own `entries` is only a copy, seeded once when the bot was
+    // opened, so anything said since was not there and reopening could not fix
+    // a copy that was already stale.
     //
-    // So for a bot session the transcript IS the canonical conversation, live,
-    // and the only thing taken from `activeSession` is the in-flight row: the
-    // answer currently streaming has no counterpart in `messages` until it
-    // settles. Everything else — history, the trader's own turns, the earlier
-    // answers — comes from the one store that owns them.
+    // For a bot session, the session is therefore a VIEW of the canonical
+    // conversation plus the row that has no counterpart yet: the answer
+    // currently streaming, which joins `messages` only once it settles.
     //
-    // Non-bot sessions are untouched: a solo or panel session is a chart-side
-    // conversation of its own, with its own tool rounds and key levels, and it
-    // has no counterpart to be a view of.
-    const canonicalBotEntries = useMemo<LiveEntry[]>(() => {
-        if (!boundBot || !botThreadRows) return [];
-        return botThreadRows.map(liveEntryFromMessage);
-    }, [boundBot, botThreadRows]);
-    const entries = useMemo<LiveEntry[]>(() => {
-        if (!boundBot) return activeSession.entries;
-        const settled = new Set(canonicalBotEntries.map(e => e.id));
-        // In flight OR settled locally but not yet in the canonical list — the
-        // optimistic user bubble and the streaming answer both qualify.
-        const local = activeSession.entries.filter(e => e.streaming || !settled.has(e.id));
-        const merged = [...canonicalBotEntries];
-        for (const e of local) {
-            // A streaming row for a message the canonical list already has is
-            // the SAME turn settling; replace it rather than double it.
-            const at = merged.findIndex(m => m.id === e.id);
-            if (at >= 0) merged[at] = e;
-            else merged.push(e);
-        }
-        return merged;
-    }, [boundBot, canonicalBotEntries, activeSession.entries]);
+    // ONE merge, used by BOTH the transcript render and the model's own history
+    // below. That is the point: if the trader and the bot could read two
+    // different conversations, the store cut would have moved the split rather
+    // than closed it. Solo and panel sessions pass through untouched — a
+    // chart-side session is a conversation of its own, with its own tool
+    // rounds and key levels, and has no counterpart to be a view of.
+    const mergeBotConversation = useCallback(
+        (bot: AgentBot | undefined, local: LiveEntry[], canonical: Message[] | undefined): LiveEntry[] => {
+            if (!bot || !canonical) return local;
+            const rows: LiveEntry[] = canonical.map(liveEntryFromMessage);
+            const known = new Set(rows.map(e => e.id));
+            for (const e of local) {
+                // A local row whose id is already canonical is the SAME turn
+                // settling — replace it, never append it, or every exchange
+                // appears twice.
+                const at = rows.findIndex(m => m.id === e.id);
+                if (at >= 0) rows[at] = e;
+                else if (e.streaming || !known.has(e.id)) rows.push(e);
+            }
+            return rows;
+        },
+        [],
+    );
+    const entries = useMemo<LiveEntry[]>(
+        () => mergeBotConversation(boundBot, activeSession.entries, botThreadRows),
+        [boundBot, activeSession.entries, botThreadRows, mergeBotConversation],
+    );
     const busy = !!snap.running[activeId];
 
     /** The freshest mark for the levels card's Dist column + "last" divider —
@@ -1164,8 +1158,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         setSessionModel(supervisorCfg);
         // Retry: the model's history is everything BEFORE the retried bubble
         // (its stale answers are gone from the store too).
-        const retryIdx = retryEntry ? session.entries.findIndex(e => e.id === retryEntry.id) : -1;
-        const history = retryIdx >= 0 ? session.entries.slice(0, retryIdx) : session.entries;
+        // The bot answers from the SAME conversation the trader is looking at.
+        // Reading the raw session here is what let a turn said in the Chat
+        // surface reach the trader but never reach the bot: two views of one
+        // conversation, which is the split this merge exists to remove.
+        const conversation = mergeBotConversation(
+            session.botId ? bots.find(b => b.id === session.botId) : undefined,
+            session.entries,
+            botThreadRows,
+        );
+        const retryIdx = retryEntry ? conversation.findIndex(e => e.id === retryEntry.id) : -1;
+        const history = retryIdx >= 0 ? conversation.slice(0, retryIdx) : conversation;
         const imageAttachment = sentAttachments.find(a => a.kind === 'image');
         const fileBlocks = sentAttachments.filter(a => a.kind === 'file')
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
@@ -1408,7 +1411,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             endRunOwned(sid, controller);
             maybeReviewSessions(supervisorCfg);
         }
-    }, [attachments, bots, buildContextBlock, configForSeat, maybeReviewSessions, provider, runSeatTurn, systemPromptFor]);
+    }, [attachments, botThreadRows, bots, buildContextBlock, configForSeat, maybeReviewSessions, mergeBotConversation, provider, runSeatTurn, systemPromptFor]);
 
     /** "Run full analysis" — the ensemble pipeline launched from this chat;
      *  its verdict comes back as an AI entry in the same transcript. */
