@@ -40,6 +40,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Gavel, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from 'lucide-react';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
+import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
 import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import * as chatStore from '../../services/trade/chatStore';
 import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
@@ -941,6 +942,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 {activeBot
                                     ? `@${activeBot.name} answers here`
                                     : 'No agent selected — the full analysis runs'}
+                            </p>
+                            <p className="mt-1.5 text-ui-2xs leading-4 text-zinc-600">
+                                {DISCLAIMER_SHORT}
                             </p>
                         </div>
                     </>
