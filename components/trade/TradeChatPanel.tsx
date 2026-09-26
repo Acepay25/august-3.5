@@ -50,6 +50,7 @@ import { parseKeyLevels, type MessageLevelLines } from '../../services/trade/key
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import { runAnalysisAsChatTurn } from '../../services/trade/analysisTurn';
+import { recordBotTurnOutcome } from '../../services/agents/botLearning';
 import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
 import { liveEntryFromMessage } from '../../services/trade/chatSessions';
 import * as watchService from '../../services/trade/watchService';
@@ -1206,6 +1207,30 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false } : en)) }));
                 endRunOwned(sid, controller);
                 maybeReviewSessions(supervisorCfg);
+                // THE TURN HAS TO TEACH THE BOT. `recordBotTurnOutcome` writes
+                // the lesson into this bot's own memory.md and feeds a closed
+                // bot-authored trade into the shared skills/evidence path. The
+                // mailbox, the group rooms and the automations all call it on
+                // every reply — this dock did not, so asking a bot something
+                // in Chart AI taught it NOTHING, while the same question in
+                // the Chat surface did. A bot's memory was whichever surface
+                // you happened to use, which is not a property anyone would
+                // defend.
+                //
+                // Fire-and-forget on purpose, matching all three siblings: a
+                // failed lesson write must never turn a delivered answer into
+                // a failed turn.
+                const usernameNow = getActiveUsername();
+                if (bot && usernameNow) {
+                    const answered = chatStore.getSnapshot().sessions
+                        .find(x => x.id === sid)?.entries.find(en => en.id === aiEntry.id)?.text ?? '';
+                    if (answered.trim()) {
+                        void recordBotTurnOutcome(bot, text, answered, {
+                            username: usernameNow,
+                            trades,
+                        });
+                    }
+                }
             }
             return;
         }
