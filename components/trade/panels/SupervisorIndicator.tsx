@@ -13,9 +13,12 @@ import { Brain, Eye, Gavel, Search, ShieldCheck, Zap } from 'lucide-react';
 import * as supervisorStore from '../../../services/learning/supervisorStore';
 import type { SupervisorPhase } from '../../../services/learning/supervisorStore';
 
-/** Deliberately no Sparkles: that glyph is the Studio's identity (NavRail), and
- *  this sits in every chat header — two stars that mean different things read
- *  as one feature with two names. */
+/** One glyph per meaning, everywhere.
+ *  This sat in every chat header while a different glyph marked Studio in the
+ *  NavRail — two stars meaning different things read as one feature with two
+ *  names. The app no longer uses that glyph at all, and Studio's identity is
+ *  its own, so the rule that earns its keep here is the general one: a status
+ *  icon must not double as a product marker. */
 const PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
     idle: <Eye className="h-4 w-4" />,
     reviewing: <Search className="h-4 w-4" />,

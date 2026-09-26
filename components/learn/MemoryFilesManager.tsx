@@ -6,7 +6,7 @@ import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { FileText, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
 import { isSkillFile, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
 import {
@@ -509,7 +509,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors text-left"
                         >
                             <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
-                                <Sparkles className="w-4 h-4 text-zinc-400" />
+                                <FileText className="w-4 h-4 text-zinc-400" />
                             </span>
                             <span className="flex-1 min-w-0">
                                 <span className="block text-sm font-medium text-zinc-100 truncate">Suggestions</span>
