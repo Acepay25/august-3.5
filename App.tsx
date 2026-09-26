@@ -2264,6 +2264,41 @@ const App: React.FC = () => {
         return threadForProvider(messages, b.providerId, b.modelId, b.id);
     }, [tradeBotRequest, bots, messages]);
 
+    /** A bot turn asked in the Chart AI dock, committed to the conversation
+     *  that owns it.
+     *
+     *  The dock is a VIEW of `messages` (see mergeBotConversation in the dock),
+     *  and a view cannot write. So the turn had to be committed here, and until
+     *  it was, a question asked in Chart AI produced an answer the Chat
+     *  surface could not see — the trader switched surfaces and found the
+     *  exchange had never happened.
+     *
+     *  Both rows go in, because the dock's composer writes into the chat
+     *  session, not the conversation: unlike the Chat surface, the trader's own
+     *  line is NOT already there waiting to be claimed. The answer is stamped
+     *  `botId` + `modelsUsed`, which is what lets `threadForProvider` claim the
+     *  pair as this bot's thread, and what keeps it out of the desk pane —
+     *  one stamp, both behaviours, and no second opinion about ownership.
+     *
+     *  `answer === undefined` is the trader's question; a string is the settled
+     *  answer. Two calls rather than one, so the question is visible in the
+     *  other surface while it is still being answered.
+     */
+    const commitDockBotTurn = useCallback((bot: AgentBot, prompt: string, answer?: string): void => {
+        const at = new Date().toISOString();
+        const row: Message = answer === undefined
+            ? { id: `dbu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: MessageRole.USER, text: prompt, createdAt: at }
+            : {
+                id: `dba-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                role: MessageRole.AI,
+                text: answer,
+                createdAt: at,
+                modelsUsed: { [bot.providerId]: bot.modelId },
+                botId: bot.id,
+            };
+        updateMessages(prev => [...prev, row], activeConversationId ?? null);
+    }, [updateMessages, activeConversationId]);
+
     const handleForkDebate = useCallback((messageId: string, round: number) => {
         const msgs = messagesRef.current;
         const index = msgs.findIndex(m => m.id === messageId);
@@ -3178,6 +3213,7 @@ const App: React.FC = () => {
                                        than a reduced one: it can open a room and
                                        the Coach inbox, not just list rooms. */
                                     botThreadRows={tradeBotThread}
+                                    onBotTurnCommit={commitDockBotTurn}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openCoachInLearn}
                                     coachCount={coachCount}

@@ -112,3 +112,44 @@ describe('the merge behaves', () => {
         expect(rows[0]).toMatchObject({ id: 'x', role: 'ai', text: 'hi' });
     });
 });
+
+describe('a turn asked in the dock reaches the Chat surface', () => {
+    // A view cannot write. The dock renders `messages` and the Chat surface
+    // renders `messages`, but the dock's composer wrote into its own chat
+    // session — so a question asked in Chart AI produced an answer the other
+    // surface could not see. The trader switched surfaces and found the
+    // exchange had never happened.
+    it('App commits both rows into the conversation that owns them', () => {
+        expect(appSrc).toMatch(/const commitDockBotTurn = useCallback/);
+        expect(appSrc).toMatch(/role: MessageRole\.USER, text: prompt/);
+        expect(appSrc).toMatch(/role: MessageRole\.AI,\s*$/m);
+    });
+
+    it('stamps the answer with botId + modelsUsed, which is what claims it', () => {
+        // One stamp does BOTH jobs: `threadForProvider` claims the pair as this
+        // bot's thread, and `deskThread` keeps it out of the desk pane. A second
+        // opinion about ownership is how these two drift.
+        expect(appSrc).toMatch(/modelsUsed: \{ \[bot\.providerId\]: bot\.modelId \}/);
+        expect(appSrc).toMatch(/botId: bot\.id/);
+    });
+
+    it('commits the question when the turn starts, and the answer when it settles', () => {
+        // Two calls, not one: the question should be visible in the other
+        // surface WHILE it is being answered.
+        expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text\);/);
+        expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text, settledText\);/);
+    });
+
+    it('commits only a REAL answer, never the stop placeholder', () => {
+        // The pending row reads "Running the full ensemble analysis…". Filing
+        // that into the conversation would show the other surface a turn that
+        // never finished, said by a bot that said nothing.
+        expect(panelSrc).toMatch(/if \(settledText\.trim\(\) && !\/\^Running the full ensemble\//);
+    });
+
+    it('fires for a bot session only', () => {
+        // A solo or panel session is not a bot turn and has no bot identity to
+        // commit under.
+        expect(panelSrc).toMatch(/if \(bot\) onBotTurnCommit\?\.\(bot, text\);/);
+    });
+});

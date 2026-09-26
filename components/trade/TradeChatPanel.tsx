@@ -211,6 +211,11 @@ interface TradeChatPanelProps {
      *  `messages` changes, so a turn said in the Chat surface appears in an
      *  already-open dock session without the trader reopening anything. */
     botThreadRows?: Message[];
+    /** Commit a bot turn asked HERE into the canonical conversation.
+     *  `answer === undefined` is the trader's question; a string is the
+     *  settled answer. Fired twice, so the question shows in the other
+     *  surface while it is still being answered. */
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string) => void;
     /** Jump straight to the Chat surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
@@ -338,7 +343,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
-    onNewGroup, onOpenCoach, coachCount = 0, botThreadRows,
+    onNewGroup, onOpenCoach, coachCount = 0, botThreadRows, onBotTurnCommit,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -1224,6 +1229,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // same bot answers at the desk under its name, and one answer
             // claimed by model here and by identity there is two claims.
             mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, speaker: bot?.name ?? `${soloProvider.id}:${soloProvider.selectedModel}` } : en)) }));
+
+            // Commit the QUESTION to the conversation that owns it, so the
+            // Chat surface shows the exchange while it is still being answered
+            // rather than after. The dock's composer writes into the chat
+            // session, not into `messages`, so unlike the Chat surface there is
+            // no trader's row already waiting to be claimed.
+            if (bot) onBotTurnCommit?.(bot, text);
             const userContent: string | ContentPart[] = imageAttachment && canSeeImages
                 ? [{ type: 'text', text: userText }, { type: 'image_url', image_url: { url: imageAttachment.payload } }]
                 : imageAttachment
@@ -1264,6 +1276,16 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 // failed lesson write must never turn a delivered answer into
                 // a failed turn.
                 const usernameNow = getActiveUsername();
+                if (bot) {
+                    const settledText = chatStore.getSnapshot().sessions
+                        .find(x => x.id === sid)?.entries.find(en => en.id === aiEntry.id)?.text ?? '';
+                    // Only a real answer is committed. The stop placeholder and
+                    // the "could not answer" text would put a failed turn into
+                    // the conversation as though the bot had said something.
+                    if (settledText.trim() && !/^Running the full ensemble/.test(settledText)) {
+                        onBotTurnCommit?.(bot, text, settledText);
+                    }
+                }
                 if (bot && usernameNow) {
                     const answered = chatStore.getSnapshot().sessions
                         .find(x => x.id === sid)?.entries.find(en => en.id === aiEntry.id)?.text ?? '';
