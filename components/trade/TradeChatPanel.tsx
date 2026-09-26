@@ -212,6 +212,11 @@ interface TradeChatPanelProps {
      *  `messages`, so the selection lives there and the dock only receives
      *  the rows. */
     botThreadFor?: (botId: string) => Message[];
+    /** The canonical conversation for the bot this session is bound to,
+     *  as rows. LIVE, not a snapshot: App recomputes it whenever
+     *  `messages` changes, so a turn said in the Chat surface appears in an
+     *  already-open dock session without the trader reopening anything. */
+    botThreadRows?: Message[];
     /** Jump straight to the Chat surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
@@ -339,7 +344,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
-    onNewGroup, onOpenCoach, coachCount = 0, botThreadFor,
+    onNewGroup, onOpenCoach, coachCount = 0, botThreadFor, botThreadRows,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -390,7 +395,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const chatLevelsOwnerRef = useRef<string | null>(null);
 
     const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
-    const entries = activeSession.entries;
     const isPanel = activeSession.kind === 'panel';
     /** Create a bot session carrying the conversation the Chat rail already
      *  has for it. Both entry points (the roster bridge and the dock menu) go
@@ -405,6 +409,42 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, [botThreadFor]);
 
     const boundBot = activeSession.botId ? bots.find(b => b.id === activeSession.botId) : undefined;
+
+    // THE STORE CUT, first seam. A bot's conversation has exactly one owner —
+    // App's `messages`, which is what the Journal, the analyses gallery, the
+    // learning loop and the Chat rail all read. This session's `entries` is a
+    // COPY of it, seeded once when the bot was opened, so anything said since
+    // in the other surface simply was not there.
+    //
+    // So for a bot session the transcript IS the canonical conversation, live,
+    // and the only thing taken from `activeSession` is the in-flight row: the
+    // answer currently streaming has no counterpart in `messages` until it
+    // settles. Everything else — history, the trader's own turns, the earlier
+    // answers — comes from the one store that owns them.
+    //
+    // Non-bot sessions are untouched: a solo or panel session is a chart-side
+    // conversation of its own, with its own tool rounds and key levels, and it
+    // has no counterpart to be a view of.
+    const canonicalBotEntries = useMemo<LiveEntry[]>(() => {
+        if (!boundBot || !botThreadRows) return [];
+        return botThreadRows.map(liveEntryFromMessage);
+    }, [boundBot, botThreadRows]);
+    const entries = useMemo<LiveEntry[]>(() => {
+        if (!boundBot) return activeSession.entries;
+        const settled = new Set(canonicalBotEntries.map(e => e.id));
+        // In flight OR settled locally but not yet in the canonical list — the
+        // optimistic user bubble and the streaming answer both qualify.
+        const local = activeSession.entries.filter(e => e.streaming || !settled.has(e.id));
+        const merged = [...canonicalBotEntries];
+        for (const e of local) {
+            // A streaming row for a message the canonical list already has is
+            // the SAME turn settling; replace it rather than double it.
+            const at = merged.findIndex(m => m.id === e.id);
+            if (at >= 0) merged[at] = e;
+            else merged.push(e);
+        }
+        return merged;
+    }, [boundBot, canonicalBotEntries, activeSession.entries]);
     const busy = !!snap.running[activeId];
 
     /** The freshest mark for the levels card's Dist column + "last" divider —
