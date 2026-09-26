@@ -8,6 +8,18 @@ trade journal.
 
 Code lives at the repository root (no `src/` directory).
 
+## What it is not
+
+August Trading **places no trades**. It has no exchange account access, no API
+trading key, and no order-placement code path: every Binance call is a public
+market-data endpoint. It reads, analyses, debates, records and journals — a
+verdict is the model's reading of a chart, never an instruction to an exchange.
+It is not financial advice.
+
+Your journal, notebooks and drawings stay on your machine. When you send a
+message, that message plus the market context for the instrument you are looking
+at is sent to **the AI provider you configured**. See [PRIVACY.md](PRIVACY.md).
+
 ## How it works
 
 ```
