@@ -76,13 +76,14 @@ jobs:
           node-version: 22
           cache: npm
 
+
+      - name: Install dependencies
+        run: npm ci
+
       # Cheap, and the same check Guards runs. It failed the last release only
       # here, after tests, lint, both probes and installer-smoke had passed.
       - name: Workflow steps declare their shell
         run: node scripts/check-workflow-shells.cjs
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Tests
         run: npm run test
