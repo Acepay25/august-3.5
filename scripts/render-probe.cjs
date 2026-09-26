@@ -128,7 +128,42 @@ const waitStableAnswer = async (page) => {
     return false;
 };
 
+/** Wait until the composer is actually able to accept a send.
+ *
+ *  While a run is in flight the dock's send control is a STOP button, not a
+ *  Send button. A probe that looks for "send" the instant the previous answer
+ *  lands finds nothing and reports "no send button" — which reads like a
+ *  missing control, sends you hunting through the composer JSX, and is really
+ *  just "the app is still working". Under load that window is wide enough to
+ *  happen on a healthy build, which is how a green gate started reporting
+ *  failures that had nothing to do with the change under test. */
+async function waitSendable(page, ms) {
+    const timeout = ms || 30000;
+    try {
+        await page.waitForFunction(() => {
+            const ta = document.querySelector('textarea');
+            if (!ta || ta.disabled) return false;
+            return [...document.querySelectorAll('button')].some(b => !b.disabled && /send/i.test(
+                `${b.getAttribute('aria-label') || ''} ${b.title || ''} ${b.textContent || ''}`,
+            ));
+        }, null, { timeout });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function sendInDock(page, text, netIssues = [], expectedAi = 1) {
+    if (!(await waitSendable(page))) {
+        // Say what is actually true, rather than blaming a control that is
+        // present-but-Stop.
+        const stillBusy = await page.evaluate(() => [...document.querySelectorAll('button')]
+            .some(b => /stop/i.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`)));
+        throw new Error(`sendInDock("${text}"): the composer never became sendable within 30s`
+            + (stillBusy
+                ? ' — a run is STILL in flight, so the control is a Stop button, not a Send button.'
+                : ' — no enabled Send button and no Stop button either; the dock may have unmounted.'));
+    }
     const sent = await page.evaluate((needle) => {
         const ta = document.querySelector('textarea');
         if (!ta || ta.disabled) return 'no composer (missing or disabled)';
