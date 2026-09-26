@@ -12,6 +12,7 @@ import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-libra
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreference: vi.fn(async (key: string) => store[key] ?? null),
     getPreferenceArray: vi.fn(async () => []),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => { store[key] = value; }),
     removePreference: vi.fn(async (key: string) => { delete store[key]; }),
