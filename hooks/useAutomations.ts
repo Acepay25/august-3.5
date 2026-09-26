@@ -170,6 +170,15 @@ export const buildAutomationOverrides = (
     };
 };
 
+/** How often the scheduler may persist its "still alive" checkpoint. The tick
+ *  runs every 15s; the checkpoint only feeds catch-up accounting, and
+ *  `getMissedRunCount` answers in whole cron occurrences, so a checkpoint that
+ *  lags by up to a minute cannot invent or lose a run — while writing a
+ *  Preferences blob every 15s around the clock is real I/O (and on native, real
+ *  eviction pressure on the shared origin) for a number that only needs to be
+ *  roughly right. Flushed with force on teardown instead. */
+const LAST_SEEN_FLUSH_MS = 60_000;
+
 export function useAutomations(params: UseAutomationsParams) {
     const { activeUsername, runPipeline, conversationHistory, providerConfigs, isAnalysisInProgress, toast } = params;
 
@@ -199,6 +208,24 @@ export function useAutomations(params: UseAutomationsParams) {
     dmsRef.current = params.onBotRoutineDMs;
     const tradesRef = useRef<(() => LoggedTrade[]) | undefined>(params.trades);
     tradesRef.current = params.trades;
+    // The scheduler lives in an interval that only re-subscribes when the
+    // PROFILE changes (its deps are [activeUsername]), so every value the tick
+    // reads has to come from a ref — otherwise the interval keeps running
+    // against the props of the render that created it. Two bugs that made
+    // visible: the busy-guard at the top of the tick saw a FROZEN
+    // isAnalysisInProgress, so a manual analysis could not block a cron fire and
+    // both wrote into the same conversation; and `runAutomation` resolved the
+    // moderator/analyst configs from the provider list AS IT WAS AT MOUNT
+    // (buildAutomationOverrides + botRoutineSkipReason both take
+    // providerConfigs), so a Settings → Providers edit never reached a
+    // scheduled run. Assigning during render is the convention already used by
+    // every other volatile value above.
+    const analysisBusyRef = useRef(false);
+    analysisBusyRef.current = !!params.isAnalysisInProgress;
+    const runAutomationRef = useRef<(config: AutomationConfig, isCatchUp?: boolean) => Promise<void>>(
+        async () => { /* replaced on first render */ },
+    );
+
     const botsNow = (): AgentBot[] => {
         const src = botsSourceRef.current;
         return typeof src === 'function' ? src() : (src ?? []);
@@ -505,6 +532,12 @@ export function useAutomations(params: UseAutomationsParams) {
         await done;
     }, [params.isAnalysisInProgress, providerConfigs, toast, appendRun, persistConfigs, runPipeline]);
 
+    // The scheduler interval is created once per profile, not once per render,
+    // so it reaches this render's closure through a ref instead of capturing
+    // the one it was created in (see analysisBusyRef above).
+    runAutomationRef.current = runAutomation;
+
+
     // ─── Scheduler: tick loop + catch-up on init ──────────────────────────
     useEffect(() => {
         const username = activeUsername;
@@ -514,6 +547,19 @@ export function useAutomations(params: UseAutomationsParams) {
         }
 
         let cancelled = false;
+
+        // The "scheduler is alive" checkpoint, throttled — see LAST_SEEN_FLUSH_MS.
+        // The caller names the profile THIS scheduler instance owns rather than
+        // reading usernameRef: on a profile switch the teardown flush has to
+        // stamp the clock that is STOPPING, and the ref already points at the
+        // next profile by the time cleanup runs.
+        let lastFlushAt = 0;
+        const touchLastSeen = async (who: string, force = false): Promise<void> => {
+            const now = Date.now();
+            if (!force && now - lastFlushAt < LAST_SEEN_FLUSH_MS) return;
+            lastFlushAt = now;
+            await saveAutomationLastSeen(who, now);
+        };
 
         (async () => {
             const loaded = await loadAutomationConfigs(username);
@@ -529,23 +575,42 @@ export function useAutomations(params: UseAutomationsParams) {
             // Catch-up: replay ticks missed while the app was closed (capped
             // globally at MAX_TOTAL_CATCH_UP — a week of missed hourly runs
             // must not fire 168 times).
+            //
+            // The budget is handed out ROUND ROBIN: one run per automation
+            // before any automation may take a second. Spent in array order, a
+            // flat budget let the first few schedules in the list consume all of
+            // MAX_TOTAL_CATCH_UP while one that was 20 runs behind — and happened
+            // to sit below them — caught up none of it. Same total work, and now
+            // every overdue schedule moves.
             const lastSeen = await loadAutomationLastSeen(username);
             if (lastSeen) {
-                let budget = MAX_TOTAL_CATCH_UP;
-                for (const config of loaded) {
-                    if (cancelled || budget <= 0) break;
-                    if (!config.enabled) continue;
-                    if (config.pauseUntil && config.pauseUntil > Date.now()) continue;
+                const eligible = loaded.filter(c => c.enabled
+                    && !(c.pauseUntil && c.pauseUntil > Date.now()));
+                const stillOwed = new Map<string, number>();
+                for (const config of eligible) {
                     const missed = getMissedRunCount(config, new Date(lastSeen));
-                    const toRun = Math.min(missed, budget);
-                    for (let i = 0; i < toRun; i++) {
+                    if (missed > 0) stillOwed.set(config.id, missed);
+                }
+                let budget = MAX_TOTAL_CATCH_UP;
+                let granted = true;
+                while (!cancelled && granted && budget > 0 && stillOwed.size > 0) {
+                    granted = false;
+                    for (const config of eligible) {
                         if (cancelled || budget <= 0) break;
-                        await runAutomation(config, true);
+                        const owed = stillOwed.get(config.id) ?? 0;
+                        if (owed <= 0) continue;
+                        if (owed === 1) stillOwed.delete(config.id);
+                        else stillOwed.set(config.id, owed - 1);
+                        granted = true;
                         budget--;
+                        // Through the ref: this loop outlives the render that
+                        // created it, and a catch-up run must resolve the same
+                        // live provider configs a live tick run resolves.
+                        await runAutomationRef.current(config, true);
                     }
                 }
             }
-            if (!cancelled) await saveAutomationLastSeen(username, Date.now());
+            if (!cancelled) await touchLastSeen(username, true);
         })();
 
         // Tick every 15s: fire an automation when its cron's next occurrence
@@ -556,9 +621,12 @@ export function useAutomations(params: UseAutomationsParams) {
             if (cancelled) return;
             const usernameNow = usernameRef.current;
             if (!usernameNow) return;
-            await saveAutomationLastSeen(usernameNow, Date.now());
+            await touchLastSeen(usernameNow);
             const now = Date.now();
-            if (inFlightRef.current || params.isAnalysisInProgress) {
+            // The live busy flag, read from a ref: this closure is only as old as
+            // the profile switch, and a manual run started after that is exactly
+            // what this guard exists to yield to.
+            if (inFlightRef.current || analysisBusyRef.current) {
                 // A run that lasts longer than the cron cadence must NOT look
                 // like N missed fires when it finishes: advance every
                 // automation's checkpoint even while one is in flight, or the
@@ -576,7 +644,10 @@ export function useAutomations(params: UseAutomationsParams) {
                     ?? (config.lastRunAt ?? Date.now());
                 if (hasCronFireBetween(config.schedule.cron, new Date(lastCheck), new Date(now))) {
                     lastCheckedRef.current.set(config.id, now);
-                    void runAutomation(config);
+                    // Same reason as the guard above: the provider configs this
+                    // run resolves its moderator/analyst pair from must be the
+                    // current ones, not the ones alive at mount.
+                    void runAutomationRef.current(config);
                     break; // one run per tick
                 }
             }
@@ -585,6 +656,13 @@ export function useAutomations(params: UseAutomationsParams) {
         return () => {
             cancelled = true;
             window.clearInterval(interval);
+            // The tick's checkpoint writes are throttled, so the last minute of
+            // this scheduler's life has no checkpoint yet. Stamp it on the way
+            // out — catch-up accounting reads precisely this number, and after a
+            // hard kill (task manager, crash) the last throttled flush IS the
+            // checkpoint, which is why the throttle only needs to be roughly
+            // right.
+            void touchLastSeen(username, true);
         };
     }, [activeUsername]);
 
