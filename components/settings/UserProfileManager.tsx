@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { BotIcon, UserIcon, UploadIcon, TrashIcon, CloseIcon } from '../shared/Icons';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { DISCLAIMER_FIRST_RUN } from '../../constants/disclaimer';
 
 interface UserProfileManagerProps {
   isVisible: boolean;
@@ -105,7 +106,10 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
               </div>
               <h1 className="text-3xl font-black text-white tracking-tight mb-2">August Trading</h1>
               <p className="text-zinc-400 text-sm font-medium">Advanced Trading Intelligence Terminal</p>
-          </div>
+            </div>
+            <p className="max-w-sm text-center text-ui-2xs leading-4 text-zinc-600">
+              {DISCLAIMER_FIRST_RUN}
+            </p>
 
           <div className="p-8 space-y-8">
              {isBusy && <p role="status" className="text-sm text-zinc-300">{selectedUser ? `Loading profile ${selectedUser}…` : 'Profile operation in progress…'}</p>}

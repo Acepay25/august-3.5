@@ -50,6 +50,7 @@ import { parseKeyLevels, type MessageLevelLines } from '../../services/trade/key
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import { runAnalysisAsChatTurn } from '../../services/trade/analysisTurn';
+import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
 import { liveEntryFromMessage } from '../../services/trade/chatSessions';
 import * as watchService from '../../services/trade/watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from '../../services/trade/chartTriggers';
@@ -2071,7 +2072,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     </div>
                 </div>
                 <p className="mt-2 px-2 text-ui-xs text-zinc-600">
-                    August may make mistakes · analysis, not financial advice
+                    {DISCLAIMER_SHORT}
                 </p>
             </div>
             </>
