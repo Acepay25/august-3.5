@@ -153,6 +153,32 @@ async function waitSendable(page, ms) {
     }
 }
 
+/** Widest element whose right edge sits outside the viewport, if any.
+ *
+ *  Horizontal overflow is invisible in a screenshot and fatal in use: a row
+ *  wider than the window clips whatever is at its right edge. "Expand over
+ *  chart" did exactly that — chart 1/3 + dock 3/4 + a fixed 300px order book is
+ *  1693px of row inside a 1280px window, and the transcript sentence ran off
+ *  the side. Measured here, in a real browser, because no unit test can see a
+ *  box that is 413px too wide. */
+const measureOverflow = async (page) => page.evaluate(() => {
+    const vw = window.innerWidth;
+    const worst = [];
+    for (const el of document.querySelectorAll('body *')) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.right - vw > 2) {
+            worst.push({ over: Math.round(r.right - vw), tag: el.tagName, tid: el.getAttribute('data-testid') || '' });
+        }
+    }
+    worst.sort((a, b) => b.over - a.over);
+    return { vw, scrollW: document.documentElement.scrollWidth, worst: worst.slice(0, 2) };
+});
+
+const overflowIsClean = (m) => m.scrollW <= m.vw + 2 && m.worst.length === 0;
+const overflowWhy = (m) => `vw=${m.vw} scrollW=${m.scrollW}`
+    + (m.worst.length ? ` worst=${JSON.stringify(m.worst[0])}` : '');
+
 async function sendInDock(page, text, netIssues = [], expectedAi = 1) {
     if (!(await waitSendable(page))) {
         // Say what is actually true, rather than blaming a control that is
@@ -518,6 +544,55 @@ async function main() {
             afterThird.user === 3 && afterThird.ai === 3,
             JSON.stringify(afterThird));
         check('trade surface still mounted', afterThird.treeAlive === 1);
+
+        // The expanded dock is the one layout in the app whose widths are
+        // mutually exclusive as roles but ADDITIVE as math (chart fraction +
+        // dock fraction + a fixed order book), so it is the one place a
+        // regression hides. Measured after actually expanding it.
+        const expandBtn = await page.evaluate(() => {
+            const m = [...document.querySelectorAll('button')]
+                .find(b => b.getAttribute('aria-label') === 'Customization');
+            if (!m) return 'no customization button';
+            m.click();
+            return 'opened';
+        });
+        if (expandBtn === 'opened') {
+            const grew = await page.evaluate(() => {
+                const e = [...document.querySelectorAll('button')]
+                    .find(b => /expand over chart/i.test(b.textContent || ''));
+                if (!e) return false;
+                e.click();
+                return true;
+            });
+            if (grew) {
+                await page.waitForTimeout(700);
+                const exp = await measureOverflow(page);
+                check('the expanded Chart AI dock fits the viewport',
+                    overflowIsClean(exp), overflowWhy(exp));
+                // And the chart must survive the expansion as a chart, not a
+                // sliver: it gave way by flexing, so it keeps a real share.
+                const paneW = await page.evaluate(() => {
+                    const p = document.querySelector('[data-testid="trade-chart-pane"]');
+                    return p ? Math.round(p.getBoundingClientRect().width) : 0;
+                });
+                const vw = exp.vw;
+                check('the chart keeps a usable width when the dock is expanded',
+                    paneW >= Math.round(vw * 0.3), `${paneW}px of ${vw}`);
+                await page.evaluate(() => {
+                    const m = [...document.querySelectorAll('button')]
+                        .find(b => b.getAttribute('aria-label') === 'Customization');
+                    if (m) m.click();
+                });
+                await page.waitForTimeout(200);
+                const shrink = await page.evaluate(() => {
+                    const e = [...document.querySelectorAll('button')]
+                        .find(b => /shrink back/i.test(b.textContent || ''));
+                    if (e) e.click();
+                    return !!e;
+                });
+                if (shrink) await page.waitForTimeout(500);
+            }
+        }
 
         // The dock header's primary control is a direct hop to Chat, so the
         // move that a trader makes constantly is one click instead of opening
@@ -1153,6 +1228,10 @@ async function main() {
                     return 'clicked';
                 }, name);
             };
+            const overflow = await measureOverflow(page);
+            check('nothing overflows the viewport horizontally',
+                overflowIsClean(overflow), overflowWhy(overflow));
+
             const landedChat = await goSurface('Chat');
             const onChat = await page.locator('[data-testid="agents-view"]')
                 .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);

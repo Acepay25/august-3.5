@@ -28,7 +28,7 @@ import AutoJournalRulesCard from './AutoJournalRulesCard';
 import type { LearnTab } from '../learn/LearnView';
 import ModelPicker from '../shared/ModelPicker';
 import {
-    User, Users, Bot, FileText, Brain, Sparkles, BookOpen, Database, HardDrive, ShieldCheck,
+    User, Users, Bot, FileText, Brain, BrainCircuit, BookOpen, Database, HardDrive, ShieldCheck,
     Wrench, Eye, Activity, ArrowUpRight, Search, X, ChevronDown, ChevronRight, Layers
 } from 'lucide-react';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
@@ -307,7 +307,7 @@ const NAV_GROUPS: NavGroup[] = [
         title: 'Knowledge',
         entries: [
             { id: 'memory', label: 'Memory', icon: <Brain className={NAV_ICON} />, keywords: 'notebook amendment supervisor profile memory files global' },
-            { id: 'skills', label: 'Skills', icon: <Sparkles className={NAV_ICON} />, keywords: 'forged tool approval candidate library learned' },
+            { id: 'skills', label: 'Skills', icon: <BookOpen className={NAV_ICON} />, keywords: 'forged tool approval candidate library learned' },
             { id: 'strategies', label: 'Playbooks', icon: <BookOpen className={NAV_ICON} />, keywords: 'strategy book pdf upload studio families import' },
         ],
     },
@@ -698,7 +698,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             >
                                                 <div className="flex items-center justify-between w-full">
                                                     <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>
-                                                    <Sparkles className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                                                    <Brain className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
                                                 </div>
                                                 <p className="mt-1.5 text-ui-dense text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
                                             </button>
@@ -742,7 +742,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 }
                                             />
                                             <SettingsRow
-                                                icon={<Sparkles className="h-4 w-4" />}
+                                                icon={<BrainCircuit className="h-4 w-4" />}
                                                 title="Algorithmic pattern insights"
                                                 description="Extract insights with local heuristics alongside AI pattern memory."
                                                 control={
@@ -1056,7 +1056,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             }
                                         />
                                         <SettingsRow
-                                            icon={<Sparkles className="h-4 w-4" />}
+                                            icon={<Activity className="h-4 w-4" />}
                                             title="Desk idle motion"
                                             description="Subtle micro-motion on the pixel seats (breath, cap-tilt, eye-blink while thinking, moderator sway). Turning this off makes the desk perfectly still."
                                             control={
