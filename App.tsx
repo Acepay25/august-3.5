@@ -2275,6 +2275,24 @@ const App: React.FC = () => {
      * renders from, so the copy cannot disagree with the original about which
      * rows belong to this bot.
      */
+    /** The canonical conversation for whichever bot the dock is bound to,
+     *  as rows, recomputed whenever `messages` changes.
+     *
+     *  This is what makes a bot session in the dock a VIEW of the conversation
+     *  rather than a copy taken when it was opened: a turn said in the Chat
+     *  surface lands in an already-open dock session with nothing to click.
+     *
+     *  It rides `tradeBotRequest` — the bot the trader last pushed into the
+     *  dock — rather than the dock's own active session, because App is the
+     *  scope that holds `messages` and re-renders when it changes. */
+    const tradeBotThread = useMemo(() => {
+        const botId = tradeBotRequest?.botId;
+        if (!botId) return [];
+        const b = bots.find(x => x.id === botId);
+        if (!b) return [];
+        return threadForProvider(messages, b.providerId, b.modelId, b.id);
+    }, [tradeBotRequest, bots, messages]);
+
     const runBotTurnAndMirror = useCallback(async (bot: AgentBot, prompt: string): Promise<boolean> => {
         const mailbox = mailboxRef.current;
         if (!mailbox) return false;
@@ -3221,6 +3239,7 @@ const App: React.FC = () => {
                                        than a reduced one: it can open a room and
                                        the Coach inbox, not just list rooms. */
                                     botThreadFor={botThreadFor}
+                                    botThreadRows={tradeBotThread}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openCoachInLearn}
                                     coachCount={coachCount}
