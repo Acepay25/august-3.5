@@ -14,7 +14,8 @@
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
-import type { ToolAction } from '../../types/message';
+import type { Message, ToolAction } from '../../types/message';
+import { MessageRole } from '../../types/enums';
 
 /** One turn in a session. `role` stays 'user' | 'ai' for storage
  *  compatibility; an ai entry may belong to one panel seat (speaker). */
@@ -199,4 +200,46 @@ export const saveSessions = (sessions: ChatSession[]): void => {
     } catch {
         /* quota / private mode — chats stay in memory this session */
     }
+};
+
+/**
+ * One history row, as a transcript entry.
+ *
+ * WHY THIS EXISTS. A bot's conversation lives in App's `messages` (that is what
+ * the Chat rail renders, and what the Journal, the analyses gallery and the
+ * learning loop all read). The Chart AI dock renders a `chatStore` session. So
+ * "Open in Chart AI" used to create an EMPTY session for that bot and quietly
+ * drop the entire conversation the trader had just built — the button implied
+ * continuity and delivered a blank page.
+ *
+ * This converts the Chat rail's rows into the shape the dock stores, so a bot
+ * session opened in the dock can be seeded with the history it should have
+ * inherited. It is a ONE-WAY adoption, deliberately: the dock continues the
+ * conversation with its own richer transport (streaming, desk tools, reasoning
+ * rows, key levels) rather than replaying the Chat's. Fully unifying the two
+ * means one store owning both surfaces, which is a larger change than a
+ * converter — this closes the data loss without pretending to be that.
+ */
+export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
+    const traces = [
+        ...Object.values(m.reasoningProcesses ?? {}),
+        ...Object.values(m.thoughtProcesses ?? {}),
+    ].filter(t => !!t && t.trim().length > 0);
+    const at = m.createdAt ? Date.parse(m.createdAt) : NaN;
+    return {
+        id: m.id,
+        role: m.role === MessageRole.USER ? 'user' : 'ai',
+        text: m.text || '',
+        tools: Object.values(m.liveToolEvents ?? {}).flat(),
+        // Left unset on purpose: the dock stamps the answering seat from the
+        // session's own bot, so a stale name here would fight it.
+        speaker: undefined,
+        reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
+        actions: m.toolActions,
+        image: m.images?.[0],
+        // A row with an unparseable timestamp keeps `at` undefined rather than
+        // stamping it as 0: the memory-attribution window join treats a real
+        // stamp as meaningful and 0 as noise.
+        at: Number.isFinite(at) ? at : undefined,
+    };
 };
