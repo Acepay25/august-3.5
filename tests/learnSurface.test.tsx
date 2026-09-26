@@ -11,6 +11,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreference: vi.fn(async (key: string) => store[key] ?? null),
     getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
         const raw = store[key];
         if (!Array.isArray(raw)) return [];
