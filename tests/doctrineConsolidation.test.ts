@@ -5,12 +5,16 @@ import type { Mock } from 'vitest';
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
+    getPreference: vi.fn(async (key: string) => store[key] ?? null),
     getPreferenceArray: vi.fn(async (key: string, guard?: (item: unknown) => boolean) => {
         const raw = store[key];
         if (!Array.isArray(raw)) return [];
         return guard ? raw.filter(guard) : raw;
     }),
     setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
+        store[key] = value;
+    }),
+    setPreference: vi.fn(async (key: string, value: unknown) => {
         store[key] = value;
     }),
     removePreference: vi.fn(async (key: string) => {
