@@ -97,6 +97,7 @@ import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
+import { liveEntryFromMessage } from './services/trade/chatSessions';
 import { deriveMessageDisplayText } from './utils/messageDisplayText';
 import {
     getBots, getGroups, saveBot, saveGroup, updateBot, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
@@ -2253,6 +2254,59 @@ const App: React.FC = () => {
         return threadForProvider(messages, b.providerId, b.modelId, b.id);
     }, [bots, messages]);
 
+    /**
+     * A bot turn asked in the Chat, mirrored into that bot's Chart AI session.
+     *
+     * WHY HERE AND NOWHERE ELSE. The two surfaces ran different transports and
+     * different stores: the Chat goes through the mailbox (which writes App's
+     * `messages`), the dock through its own streaming send (which writes
+     * `chatStore`). A turn asked in Chat therefore never reached the dock, and
+     * vice versa. The proper fix is one store owning both surfaces, which means
+     * extracting the dock's send machinery out of a 2,000-line component — a
+     * much larger change than this.
+     *
+     * So this does the contained half: the turn still runs through the mailbox
+     * exactly as before, and the resulting rows are COPIED into the bot's dock
+     * session. One place, because App is the only scope that holds the mailbox,
+     * `messagesRef` and `chatStore` at once — and a second implementation is
+     * how these two surfaces drift apart in the first place.
+     *
+     * `threadForProvider` does the claiming, the same function the Chat rail
+     * renders from, so the copy cannot disagree with the original about which
+     * rows belong to this bot.
+     */
+    const runBotTurnAndMirror = useCallback(async (bot: AgentBot, prompt: string): Promise<boolean> => {
+        const mailbox = mailboxRef.current;
+        if (!mailbox) return false;
+        const before = threadForProvider(messagesRef.current, bot.providerId, bot.modelId, bot.id)
+            .map(m => m.id);
+        const known = new Set(before);
+        const ok = await mailbox.runUserBotTurn(bot, prompt);
+        if (!ok) return false;
+
+        const fresh = threadForProvider(messagesRef.current, bot.providerId, bot.modelId, bot.id)
+            .filter(m => !known.has(m.id));
+        if (fresh.length === 0) return true;
+
+        // Find the dock session for this bot, and append what the Chat gained.
+        const snap = chatStore.getSnapshot();
+        const session = snap.sessions.find(s => s.botId === bot.id);
+        if (!session) {
+            // No dock session for this bot yet — opening one adopts the Chat
+            // history through `botThreadFor`, so the turn is not lost.
+            return true;
+        }
+        const have = new Set(session.entries.map(e => e.id));
+        const add = fresh.filter(m => !have.has(m.id)).map(liveEntryFromMessage);
+        if (add.length === 0) return true;
+        chatStore.mutate(session.id, prev => ({
+            ...prev,
+            updatedAt: Date.now(),
+            entries: [...prev.entries, ...add],
+        }));
+        return true;
+    }, []);
+
     const handleForkDebate = useCallback((messageId: string, round: number) => {
         const msgs = messagesRef.current;
         const index = msgs.findIndex(m => m.id === messageId);
@@ -3275,8 +3329,7 @@ const App: React.FC = () => {
                                     }}
                                     onNewBot={() => setIsNewBotOpen(true)}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
-                                    onSendBotTurn={async (bot, prompt) =>
-                                        (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
+                                    onSendBotTurn={runBotTurnAndMirror}
                                     onAnalyze={handleRunAnalysisFromAgents}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
