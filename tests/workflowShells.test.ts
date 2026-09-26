@@ -123,4 +123,36 @@ describe('release.yml states its shells', () => {
         expect(releaseSrc).toMatch(/node scripts\/check-workflow-shells\.cjs/);
         expect(guardsSrc).toMatch(/node scripts\/check-workflow-shells\.cjs/);
     });
-});
+
+    it('the release runs the guard AFTER npm ci, not before it', () => {
+        // This guard needs `js-yaml`, which arrives with node_modules. Run it
+        // before `npm ci` and the release dies with MODULE_NOT_FOUND — which
+        // is what actually happened, and it is an embarrassing way for the
+        // step that exists to prevent exactly this class of failure to prove
+        // the point.
+        const install = releaseSrc.indexOf('run: npm ci');
+        const guard = releaseSrc.indexOf('node scripts/check-workflow-shells.cjs');
+        expect(install, 'release.yml no longer runs npm ci').toBeGreaterThan(-1);
+        expect(guard, 'release.yml no longer runs the shell guard').toBeGreaterThan(-1);
+        expect(guard, 'the shell guard must run after npm ci, not before')
+            .toBeGreaterThan(install);
+    });
+
+    it('every package the guard needs is DECLARED, not inherited by luck', () => {
+        // js-yaml is a real dependency, and the release workflow has to have
+        // installed it before the guard runs. Asserting it is declared catches
+        // the honest version of the bug: a guard that reaches for a package
+        // nobody promised, and works on a machine with a warm node_modules.
+        const script = readFileSync('scripts/check-workflow-shells.cjs', 'utf8');
+        const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+            dependencies?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+        };
+        const required = [...script.matchAll(/require\('([^'][^']*)'\)/g)]
+            .map(m => m[1])
+            .filter(m => !m.startsWith('node:'));
+        for (const name of required) {
+            const declared = pkg.dependencies?.[name] ?? pkg.devDependencies?.[name];
+            expect(declared, `${name} is required by the guard but declared nowhere`).toBeTruthy();
+        }
+    });});
