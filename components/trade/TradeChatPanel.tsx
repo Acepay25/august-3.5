@@ -50,6 +50,7 @@ import { parseKeyLevels, type MessageLevelLines } from '../../services/trade/key
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import { runAnalysisAsChatTurn } from '../../services/trade/analysisTurn';
+import { liveEntryFromMessage } from '../../services/trade/chatSessions';
 import * as watchService from '../../services/trade/watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from '../../services/trade/chartTriggers';
 import { phtClock } from '../../utils/timezone';
@@ -203,6 +204,12 @@ interface TradeChatPanelProps {
     onOpenCoach?: () => void;
     /** Decisions waiting in the Coach inbox, for the pill count. */
     coachCount?: number;
+    /** This bot's existing conversation, as the Chat rail renders it. A bot
+     *  opened in the dock is seeded with it, so "Open in Chart AI" carries
+     *  the conversation across instead of opening a blank page. App owns
+     *  `messages`, so the selection lives there and the dock only receives
+     *  the rows. */
+    botThreadFor?: (botId: string) => Message[];
     /** Jump straight to the Chat surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
@@ -330,7 +337,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     renderGroupSurface, groups = [],
     registerScrollToMessage,
     collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
-    onNewGroup, onOpenCoach, coachCount = 0,
+    onNewGroup, onOpenCoach, coachCount = 0, botThreadFor,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -383,6 +390,18 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
     const entries = activeSession.entries;
     const isPanel = activeSession.kind === 'panel';
+    /** Create a bot session carrying the conversation the Chat rail already
+     *  has for it. Both entry points (the roster bridge and the dock menu) go
+     *  through here, so a bot cannot end up openable one way with history and
+     *  the other without. */
+    const openBotSession = useCallback((botId: string): void => {
+        const history = botThreadFor?.(botId) ?? [];
+        chatStore.addSession({
+            botId,
+            ...(history.length > 0 ? { entries: history.map(liveEntryFromMessage) } : {}),
+        });
+    }, [botThreadFor]);
+
     const boundBot = activeSession.botId ? bots.find(b => b.id === activeSession.botId) : undefined;
     const busy = !!snap.running[activeId];
 
@@ -809,8 +828,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         lastBotRequestRef.current = botSessionRequest.nonce;
         const existing = sessions.find(s => s.botId === botSessionRequest.botId);
         if (existing) { chatStore.setActiveId(existing.id); return; }
-        chatStore.addSession({ botId: botSessionRequest.botId });
-    }, [botSessionRequest, sessions]);
+        openBotSession(botSessionRequest.botId);
+    }, [botSessionRequest, sessions, openBotSession]);
 
     // Group rooms opened from the roster rail.
     const lastGroupRequestRef = useRef(0);
@@ -1437,17 +1456,21 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, [busy, snap.signals, runHarnessTurn, activeId, sessions]);
 
     // ── Session management ──────────────────────────────────────────────────
-    const addSession = useCallback((kind: 'solo' | 'panel' = 'solo', botId?: string): void => {
+    /** `botId` used to be a second parameter here, which made this a THIRD way
+     *  to open a bot — one that silently skipped the history adoption in
+     *  `openBotSession`. Every bot now comes in through that one helper, and
+     *  the parameter is gone rather than merely unused, so it cannot be
+     *  reintroduced by a call site that "just needs a quick session". */
+    const addSession = useCallback((kind: 'solo' | 'panel' = 'solo'): void => {
         // A new session starts bound to the chart + composer state on screen,
         // so coming back to it restores exactly this setup (send re-stamps on
-        // every turn; bot-bound sessions take their model from the bot).
+        // every turn; a bot-bound session takes its model from the bot).
         const id = chatStore.addSession({
             kind,
-            botId,
             symbol,
             interval,
             effort,
-            ...(kind === 'solo' && !botId && selectedChatModel ? { soloModel: selectedChatModel } : {}),
+            ...(kind === 'solo' && selectedChatModel ? { soloModel: selectedChatModel } : {}),
         });
         setShowNewMenu(false);
         if (kind === 'panel') setPanelPickerFor(id);
@@ -1668,7 +1691,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         </button>
                                     ))}
                                     {bots.length > 0 && bots.slice(0, 6).map(b => (
-                                        <button key={b.id} type="button" onClick={() => addSession('solo', b.id)}
+                                        <button key={b.id} type="button" onClick={() => openBotSession(b.id)}
                                             className="block w-full truncate rounded-lg px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
                                             {b.name} <span className="text-zinc-600">· as bot</span>
                                         </button>
@@ -2064,7 +2087,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         const bot: AgentBot = { ...draft, id: `bot-${Date.now()}`, createdAt: new Date().toISOString() };
                         saveBot(bot);
                         setShowNewBot(false);
-                        chatStore.addSession({ botId: bot.id });
+                        // A brand-new bot has no history to adopt, but it goes
+                        // through the same helper so there is exactly ONE way a
+                        // bot session comes into existence.
+                        openBotSession(bot.id);
                     }}
                 />
             )}

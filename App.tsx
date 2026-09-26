@@ -2241,6 +2241,18 @@ const App: React.FC = () => {
         });
     }, [isAnalysisInProgress, readyProviders, handleSendMessage]);
 
+    /** A bot opened in the Chart AI dock inherits the conversation the Chat
+     *  rail already has for it. The SELECTION lives here because `messages`
+     *  lives here, and it is the same `threadForProvider` the rail renders
+     *  from — so both surfaces read one history rather than two guesses at
+     *  one. Without it, "Open in Chart AI" created an empty session and
+     *  silently dropped everything the trader had said to that bot. */
+    const botThreadFor = useCallback((botId: string): Message[] => {
+        const b = bots.find(x => x.id === botId);
+        if (!b) return [];
+        return threadForProvider(messages, b.providerId, b.modelId, b.id);
+    }, [bots, messages]);
+
     const handleForkDebate = useCallback((messageId: string, round: number) => {
         const msgs = messagesRef.current;
         const index = msgs.findIndex(m => m.id === messageId);
@@ -3154,6 +3166,7 @@ const App: React.FC = () => {
                                        the dock is the Chat's compact form rather
                                        than a reduced one: it can open a room and
                                        the Coach inbox, not just list rooms. */
+                                    botThreadFor={botThreadFor}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openCoachInLearn}
                                     coachCount={coachCount}
