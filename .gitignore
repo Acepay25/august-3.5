@@ -128,3 +128,8 @@ hybrid-payload-dump.md
 
 # Tool scratch dirs that show up in worktrees. Neither is project source.
 .freebuff/
+
+# Flake-hunt evidence: per-run vitest JSON, written so a failure survives long
+# enough to be read. Never committed — the whole point is that it is throwaway
+# evidence from a machine under load.
+.flake-hunt/
