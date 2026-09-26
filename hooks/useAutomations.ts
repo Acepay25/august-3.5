@@ -28,6 +28,7 @@ import {
     runUid,
 } from '../services/automation/AutomationService';
 import { parseCron, nextCronTime, hasCronFireBetween } from '../services/automation/cronParser';
+import { planCatchUp } from '../services/automation/catchUpPlanner';
 import type { AgentBot } from '../services/agents/agentRoster';
 import type { DMEnvelope } from '../services/agents/botMailbox';
 import {
@@ -43,7 +44,6 @@ import { streamQuickResponse } from '../services/providers/GenericAnalysisServic
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
 /** Global catch-up budget: at most this many missed runs replay on reopen. */
-const MAX_TOTAL_CATCH_UP = 3;
 
 /** Per-run mode/model overrides (absent fields fall back to global settings). */
 export interface AutomationRunOverrides {
@@ -572,43 +572,20 @@ export function useAutomations(params: UseAutomationsParams) {
                 lastCheckedRef.current.set(config.id, config.lastRunAt ?? Date.now());
             }
 
-            // Catch-up: replay ticks missed while the app was closed (capped
-            // globally at MAX_TOTAL_CATCH_UP — a week of missed hourly runs
-            // must not fire 168 times).
-            //
-            // The budget is handed out ROUND ROBIN: one run per automation
-            // before any automation may take a second. Spent in array order, a
-            // flat budget let the first few schedules in the list consume all of
-            // MAX_TOTAL_CATCH_UP while one that was 20 runs behind — and happened
-            // to sit below them — caught up none of it. Same total work, and now
-            // every overdue schedule moves.
+            // Catch-up: replay ticks missed while the app was closed. The
+            // policy — which schedule is owed what, in what order — lives in
+            // services/automation/catchUpPlanner, because it is a decision
+            // worth testing and was not testable while it was a loop wrapped
+            // around the await that does the work.
             const lastSeen = await loadAutomationLastSeen(username);
-            if (lastSeen) {
-                const eligible = loaded.filter(c => c.enabled
-                    && !(c.pauseUntil && c.pauseUntil > Date.now()));
-                const stillOwed = new Map<string, number>();
-                for (const config of eligible) {
-                    const missed = getMissedRunCount(config, new Date(lastSeen));
-                    if (missed > 0) stillOwed.set(config.id, missed);
-                }
-                let budget = MAX_TOTAL_CATCH_UP;
-                let granted = true;
-                while (!cancelled && granted && budget > 0 && stillOwed.size > 0) {
-                    granted = false;
-                    for (const config of eligible) {
-                        if (cancelled || budget <= 0) break;
-                        const owed = stillOwed.get(config.id) ?? 0;
-                        if (owed <= 0) continue;
-                        if (owed === 1) stillOwed.delete(config.id);
-                        else stillOwed.set(config.id, owed - 1);
-                        granted = true;
-                        budget--;
-                        // Through the ref: this loop outlives the render that
-                        // created it, and a catch-up run must resolve the same
-                        // live provider configs a live tick run resolves.
-                        await runAutomationRef.current(config, true);
-                    }
-                }
+            for (const id of planCatchUp(loaded, { lastSeen, now: Date.now() })) {
+                if (cancelled) break;
+                const config = loaded.find(c => c.id === id);
+                if (!config) continue;
+                // Through the ref: this loop outlives the render that created
+                // it, and a catch-up run must resolve the same live provider
+                // configs a live tick run resolves.
+                await runAutomationRef.current(config, true);
             }
             if (!cancelled) await touchLastSeen(username, true);
         })();
