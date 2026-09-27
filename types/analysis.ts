@@ -213,8 +213,9 @@ export interface TradeAnalysis {
    * Perpetual funding rate (8h, signed — positive = longs pay) snapshotted at
    * analysis time (Batch 7). The card frames it as a carry cost relative to
    * the verdict direction; the journal records what the moderator saw.
+   * `null` = the rate could not be fetched — an outage is not a settled 0%.
    */
-  fundingRate?: number;
+  fundingRate?: number | null;
   /**
    * Plan version: 1 for the original publication, incrementing
    * on each trade-update. A revision is an explicit amendment — the card

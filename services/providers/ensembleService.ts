@@ -2666,6 +2666,13 @@ const conductRealDebateImpl = async function* (
                     }
                 }
                 if (lastConviction) {
+                    // Write the recovered stance into the FINAL round so the
+                    // conviction auction, the fitness-weighted ensemble line
+                    // and the verdict transcript actually see it — their
+                    // inputs are all built from roundTexts, and the System
+                    // notice below reaches only the UI.
+                    roundTexts[name] = roundTexts[name] || {};
+                    roundTexts[name][totalRounds] = `${roundTexts[name][totalRounds] || ''}\nCONVICTION: ${lastConviction.value}`;
                     yield {
                         speaker: 'System',
                         round: noticeRound,
@@ -3163,7 +3170,14 @@ const conductRealDebateImpl = async function* (
         // budget without a satisfaction judgment.
         verdictAddendum.trim() ? verdictAddendum : '',
         marketDataOverride,
-        generateGateReconciliationContext(gateResult ?? null, []),
+        // The REAL roster's results. The hardcoded [] made the
+        // "🚨 CONFIDENCE CONFLICT DETECTED" branch unreachable — the moderator
+        // was told every analyst sat under the cap, even when two seats
+        // printed 90% against a 40% cap, and was never asked to reconcile.
+        generateGateReconciliationContext(
+            gateResult ?? null,
+            debateRoster.map(a => a.result),
+        ),
         // Live-path divergence + calibration: echo-chamber warnings and
         // historical accuracy reach the real debate's moderator.
         // The full roster (original + mid-debate replacements) is used so the
