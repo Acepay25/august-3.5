@@ -3118,6 +3118,10 @@ const conductRealDebateImpl = async function* (
     const providerIdBySeat: Record<string, string | undefined> = {};
     for (const seat of debateRoster) providerIdBySeat[seat.provider.name] = seat.provider.config.id;
 
+    // Computed once — the auction block is a pure regex sweep over every
+    // seat's final text; the ternary below used to build it twice.
+    const convictionAuctionBlock = buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound);
+
     const moderatorPrompt = [
         getPrompt('debate.final_verdict', MODERATOR_FINAL_VERDICT_PROMPT).replace('{{ANALYSTS}}', names.join(', ')),
         // Verdict evidence pack: proactive journal evidence —
@@ -3141,7 +3145,7 @@ const conductRealDebateImpl = async function* (
         // Final-stance divergence summary — recomputed AFTER clarification so
         // the moderator sees where each seat LANDED, not just the openings.
         `\n\n${summarizeFinalPositions(roundTexts, names).block}`,
-        buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound) ? `\n\n${buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound)}` : '',
+        convictionAuctionBlock ? `\n\n${convictionAuctionBlock}` : '',
         // Deterministic ensemble line (Batch 4 d): fitness-weighted log-odds
         // mean of the sealed convictions, plain alpha=1 until ≥50 graded
         // signals per band exist. Scored advisory — never an override.
@@ -3279,49 +3283,55 @@ const conductRealDebateImpl = async function* (
     }
 };
 
-export const conductTwoWayPostMortemDebate = (
+/**
+ * Shared seat shape for the post-mortem debate builders. Each seat owns its
+ * five per-round protocol lines because the seats' roles genuinely differ
+ * between the variants: the third analyst only exists in the three-way
+ * debate, and the second analyst's Round 4/5 lines change when a third seat
+ * can critique before it refines.
+ */
+interface PostMortemDebateSeat {
+    name: string;
+    pm: string;
+    /** One protocol line per round (Rounds 1-5), rendered after `**<name>:**`. */
+    roundLines: readonly [string, string, string, string, string];
+}
+
+/** Round lines for the first seat — identical in the two-way and three-way debates. */
+const POST_MORTEM_FIRST_SEAT_ROUND_LINES: readonly [string, string, string, string, string] = [
+    'Present your hypothesis for the specific technical root cause of this outcome. Was it execution, analysis, or market randomness?',
+    'Cite Pattern Memory (Match/No Match) and Similarity Score if available.',
+    "Answer the 'Why' deeper than surface level.",
+    'Propose the lesson.',
+    'Draft Rule.',
+];
+
+/**
+ * The ONE post-mortem debate prompt. The two- and three-way variants were
+ * ~95% copy-paste; this builder keeps the 5-round protocol, the FINAL REPORT
+ * block, the CONCLUSION format and the crypto-terminology rule exactly as
+ * they shipped. Variant-specific bits arrive as parameters: the debate
+ * title, the seat roster (each with its per-round protocol lines), and which
+ * analyst the attribution example cites (first in two-way, third in three-way).
+ */
+const buildPostMortemDebatePrompt = (
+    seats: readonly PostMortemDebateSeat[],
+    debateTitle: string,
+    attributionExampleName: string,
     originalMessage: Message,
     outcome: TradeOutcome,
-    analyst1PM: string,
-    analyst2PM: string,
-    analyst1Name: string,
-    analyst2Name: string,
-    finalTradeSummary: string | null,
-    moderatorConfig: ProviderConfig,
-    moderatorModel: string,
-    postTradeImageSummaries?: string[],
-    trades?: LoggedTrade[], // NEW: Pass trades for synthesis
-    signal?: AbortSignal, // Cancellation for the moderator stream
-    onReasoning?: (reasoning: string) => void // Captures the moderator's chain of thought (harness-style thinking blocks)
-): AsyncGenerator<string, void, unknown> => {
-
-    const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
-
-    // Build structured pattern memory synthesis
-    let structuredMemoryContext = "";
-    if (trades && trades.length > 0 && originalMessage.analysis) {
-        const setupContext: SetupContext = {
-            coin: originalMessage.analysis.coinName,
-            direction: originalMessage.analysis.direction as 'Long' | 'Short' | 'Neutral',
-            pattern: originalMessage.analysis.marketConditions?.pattern,
-            family: originalMessage.analysis.detectedPatternFamily,
-            confidence: originalMessage.analysis.confidence as 'High' | 'Medium' | 'Low' | 'Avoid',
-        };
-
-        const attributedInsights = loadAttributedInsights();
-        const synthesis = synthesizePatternMemory(setupContext, trades, attributedInsights);
-        structuredMemoryContext = generateSynthesizedPromptInjection(synthesis);
-        console.log('[PostMortem] Generated synthesis with', synthesis.relevantTrades.length, 'similar trades');
-    }
-
-    // Fallback to legacy summary if no synthesis
-    const tradeHistoryContext = structuredMemoryContext ||
-        (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.");
-
+    imageContext: string,
+    tradeHistoryContext: string
+): string => {
+    const seatProtocolLines = (round: number): string =>
+        seats.map(seat => `    **${seat.name}:** ${seat.roundLines[round]}`).join('\n');
+    const postMortemInputs = seats
+        .map(seat => `    **${seat.name} Initial Post-Mortem:** ${truncateTextToTokens(seat.pm, 800)}`)
+        .join('\n');
     const extendedSLZoneContext = getPrompt('postmortem.extended_sl_zone', EXTENDED_SL_ZONE_DEBATE_CONTEXT);
 
-    const moderatorPrompt = `
-    You are a **Master Trading Strategist** conducting a rigorous 5-round post-mortem debate.
+    return `
+    You are a **Master Trading Strategist** conducting a ${debateTitle}.
     Trade outcome: **${outcome}**.
 
     ${extendedSLZoneContext}
@@ -3349,28 +3359,23 @@ export const conductTwoWayPostMortemDebate = (
     <DEBATE_START>
 
     ### **Round 1 — Initial Diagnosis (Root Cause)**
-    **${analyst1Name}:** Present your hypothesis for the specific technical root cause of this outcome. Was it execution, analysis, or market randomness?
-    **${analyst2Name}:** Agree or Disagree. If you disagree, provide your own root cause hypothesis.
+${seatProtocolLines(0)}
 
     ### **Round 2 — Evidence & Pattern Memory Check**
     **Moderator (YOU):** "Does this specific setup match any historical pattern in our Pattern Memory? Cite the Evidence."
-    **${analyst1Name}:** Cite Pattern Memory (Match/No Match) and Similarity Score if available.
-    **${analyst2Name}:** Verify or challenge the citation.
+${seatProtocolLines(1)}
 
     ### **Round 3 — The "Five Whys" (Deep Dive)**
     **Moderator (YOU):** Drill down. "Why did we make this mistake (or success)? Was it the entry? Why was the entry taken? Was it the analysis? Why was the analysis flawed?"
-    **${analyst1Name}:** Answer the 'Why' deeper than surface level.
-    **${analyst2Name}:** Dig even deeper into the behavioral or technical failing.
+${seatProtocolLines(2)}
 
     ### **Round 4 — Lesson Extraction**
     **Moderator (YOU):** "What is the SINGLE most important actionable lesson from this trade?"
-    **${analyst1Name}:** Propose the lesson.
-    **${analyst2Name}:** Refine it to be more precise.
+${seatProtocolLines(3)}
 
     ### **Round 5 — Rule Generation**
     **Moderator (YOU):** "Draft a precise IF/THEN rule to prevent this error (or replicate this success) in the future."
-    **${analyst1Name}:** Draft Rule.
-    **${analyst2Name}:** Optimize the Rule to be mechanical and binary (Yes/No).
+${seatProtocolLines(4)}
 
     End Debate with:
     </DEBATE_END>
@@ -3396,7 +3401,7 @@ export const conductTwoWayPostMortemDebate = (
 
     Key Lesson (WITH ATTRIBUTION)
     Extract one actionable lesson. Attribute it to the analyst who identified it:
-    Example: "[${analyst1Name}]: Should have waited for volume confirmation."
+    Example: "[${attributionExampleName}]: Should have waited for volume confirmation."
 
     Rule Adjustment
     Define one precise IF/THEN rule that can be applied mechanically in future trades.
@@ -3424,12 +3429,105 @@ export const conductTwoWayPostMortemDebate = (
     Actual Outcome: ${outcome}
     Visual Context: ${truncateTextToTokens(imageContext, 1000)}
 
-    **${analyst1Name} Initial Post-Mortem:** ${truncateTextToTokens(analyst1PM, 800)}
-    **${analyst2Name} Initial Post-Mortem:** ${truncateTextToTokens(analyst2PM, 800)}
+${postMortemInputs}
 
     Start with <DEBATE_START> now.`;
+};
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning, undefined, undefined, trades);
+/**
+ * Shared runner behind both exported post-mortem debates: resolves the image
+ * + pattern-memory contexts, builds the one prompt, and streams the moderator.
+ * `structuredMemoryContext` (the two-way synthesis path) takes precedence over
+ * the summary fallback. `streamTrades` forwards journal access for the
+ * arbiter's `recall` desk tool — the two-way debate passes the trade log, the
+ * three-way debate never had it (preserved from the originals).
+ */
+const runPostMortemDebate = (
+    seats: readonly PostMortemDebateSeat[],
+    debateTitle: string,
+    attributionExampleName: string,
+    originalMessage: Message,
+    outcome: TradeOutcome,
+    finalTradeSummary: string | null,
+    moderatorConfig: ProviderConfig,
+    moderatorModel: string,
+    postTradeImageSummaries: string[] | undefined,
+    structuredMemoryContext: string | undefined,
+    streamTrades: LoggedTrade[] | undefined,
+    signal: AbortSignal | undefined,
+    onReasoning: ((reasoning: string) => void) | undefined
+): AsyncGenerator<string, void, unknown> => {
+    const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
+
+    const tradeHistoryContext = structuredMemoryContext ||
+        (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.");
+
+    const moderatorPrompt = buildPostMortemDebatePrompt(seats, debateTitle, attributionExampleName, originalMessage, outcome, imageContext, tradeHistoryContext);
+
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning, undefined, undefined, streamTrades);
+};
+
+export const conductTwoWayPostMortemDebate = (
+    originalMessage: Message,
+    outcome: TradeOutcome,
+    analyst1PM: string,
+    analyst2PM: string,
+    analyst1Name: string,
+    analyst2Name: string,
+    finalTradeSummary: string | null,
+    moderatorConfig: ProviderConfig,
+    moderatorModel: string,
+    postTradeImageSummaries?: string[],
+    trades?: LoggedTrade[], // NEW: Pass trades for synthesis
+    signal?: AbortSignal, // Cancellation for the moderator stream
+    onReasoning?: (reasoning: string) => void // Captures the moderator's chain of thought (harness-style thinking blocks)
+): AsyncGenerator<string, void, unknown> => {
+
+    // Build structured pattern memory synthesis
+    let structuredMemoryContext = "";
+    if (trades && trades.length > 0 && originalMessage.analysis) {
+        const setupContext: SetupContext = {
+            coin: originalMessage.analysis.coinName,
+            direction: originalMessage.analysis.direction as 'Long' | 'Short' | 'Neutral',
+            pattern: originalMessage.analysis.marketConditions?.pattern,
+            family: originalMessage.analysis.detectedPatternFamily,
+            confidence: originalMessage.analysis.confidence as 'High' | 'Medium' | 'Low' | 'Avoid',
+        };
+
+        const attributedInsights = loadAttributedInsights();
+        const synthesis = synthesizePatternMemory(setupContext, trades, attributedInsights);
+        structuredMemoryContext = generateSynthesizedPromptInjection(synthesis);
+        console.log('[PostMortem] Generated synthesis with', synthesis.relevantTrades.length, 'similar trades');
+    }
+
+    return runPostMortemDebate(
+        [
+            { name: analyst1Name, pm: analyst1PM, roundLines: POST_MORTEM_FIRST_SEAT_ROUND_LINES },
+            {
+                name: analyst2Name,
+                pm: analyst2PM,
+                roundLines: [
+                    'Agree or Disagree. If you disagree, provide your own root cause hypothesis.',
+                    'Verify or challenge the citation.',
+                    'Dig even deeper into the behavioral or technical failing.',
+                    'Refine it to be more precise.',
+                    'Optimize the Rule to be mechanical and binary (Yes/No).',
+                ],
+            },
+        ],
+        'rigorous 5-round post-mortem debate',
+        analyst1Name, // the attribution example cites the first analyst
+        originalMessage,
+        outcome,
+        finalTradeSummary,
+        moderatorConfig,
+        moderatorModel,
+        postTradeImageSummaries,
+        structuredMemoryContext, // '' falls back to the summary library block
+        trades, // journal access for the arbiter's recall tool
+        signal,
+        onReasoning
+    );
 };
 
 /**
@@ -3486,126 +3584,43 @@ export const conductThreeWayPostMortemDebate = (
     signal?: AbortSignal, // Cancellation for the moderator stream
     onReasoning?: (reasoning: string) => void // Captures the moderator's chain of thought (harness-style thinking blocks)
 ): AsyncGenerator<string, void, unknown> => {
-
-    const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
-    const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.";
-
-    const extendedSLZoneContext = getPrompt('postmortem.extended_sl_zone', EXTENDED_SL_ZONE_DEBATE_CONTEXT);
-
-    const moderatorPrompt = `
-    You are a **Master Trading Strategist** conducting a rigorous 5-round post-mortem debate with three analysts.  
-    Trade outcome: **${outcome}**.
-
-    ${extendedSLZoneContext}
-
-    **CRYPTO TERMINOLOGY (MANDATORY):**
-    Do NOT use forex terminology like "pips" or "points". 
-    For crypto, always use:
-    - Percentages (%) for price movements and SL/TP distances
-    - Dollar amounts ($) for absolute price levels
-    Example: "SL was 2.5% too tight" NOT "SL was 50 pips too tight"
-
-    Your objective is to uncover the *real technical cause* of the trade outcome using deep market reasoning and **Historical Pattern Analysis**.
-
-    ${tradeHistoryContext}
-
-    **PROBABILITY ASSESSMENT:** Include a prose assessment of the probability that the SL and TP levels would have been hit — no JSON structure.
-
-    ${getPrompt('debate.moderator_authority', MODERATOR_FINAL_AUTHORITY_PROTOCOL)}
-
-    ------------------------------------------
-    DEBATE PROTOCOL (5 ROUNDS)
-    ------------------------------------------
-
-    Begin immediately with:
-    <DEBATE_START>
-
-    ### **Round 1 — Initial Diagnosis (Root Cause)**
-    **${analyst1Name}:** Present your hypothesis for the specific technical root cause of this outcome. Was it execution, analysis, or market randomness?
-    **${analyst2Name}:** Agree or Disagree. If you disagree, provide your own root cause hypothesis.
-    **${analyst3Name}:** Provide a third perspective. Who is closer to the truth?
-
-    ### **Round 2 — Evidence & Pattern Memory Check**
-    **Moderator (YOU):** "Does this specific setup match any historical pattern in our Pattern Memory? Cite the Evidence."
-    **${analyst1Name}:** Cite Pattern Memory (Match/No Match) and Similarity Score if available.
-    **${analyst2Name}:** Verify or challenge the citation.
-    **${analyst3Name}:** Confirm the validity of the historical comparison.
-
-    ### **Round 3 — The "Five Whys" (Deep Dive)**
-    **Moderator (YOU):** Drill down. "Why did we make this mistake (or success)? Was it the entry? Why was the entry taken? Was it the analysis? Why was the analysis flawed?"
-    **${analyst1Name}:** Answer the 'Why' deeper than surface level.
-    **${analyst2Name}:** Dig even deeper into the behavioral or technical failing.
-    **${analyst3Name}:** Identify the fundamental "Root Cause" after multiple layers of 'Why'.
-
-    ### **Round 4 — Lesson Extraction**
-    **Moderator (YOU):** "What is the SINGLE most important actionable lesson from this trade?"
-    **${analyst1Name}:** Propose the lesson.
-    **${analyst2Name}:** Critique the lesson (is it too generic?).
-    **${analyst3Name}:** Refine it to be precise and actionable.
-
-    ### **Round 5 — Rule Generation**
-    **Moderator (YOU):** "Draft a precise IF/THEN rule to prevent this error (or replicate this success) in the future."
-    **${analyst1Name}:** Draft Rule.
-    **${analyst2Name}:** Critique the rule for loopholes.
-    **${analyst3Name}:** Optimize the Rule to be mechanical and binary (Yes/No).
-
-    End Debate with:
-    </DEBATE_END>
-
-    ------------------------------------------
-    FINAL REPORT
-    ------------------------------------------
-
-    Immediately after </DEBATE_END>, output a structured report wrapped in:
-    <FINAL_REPORT_START>
-    ... content ...
-    </FINAL_REPORT_END>
-
-    Report Structure (Follow Exactly):
-
-    Root Cause Analysis
-    Identify the precise technical reason the trade won or failed.
-    Reference exact candle patterns, indicator behavior (RSI/MACD/EMA/Bollinger), and market structure at the decision candle.
-
-    Pattern Memory Alignment
-    State clearly whether this setup matches a known Success or Failure Signature from the Pattern Memory Synthesis.
-    If yes, name the pattern and cite the similarity score. If no, explicitly say "No close historical match."
-
-    Key Lesson (WITH ATTRIBUTION)
-    Extract one actionable lesson. Attribute it to the analyst who identified it:
-    Example: "[${analyst3Name}]: Should have waited for volume confirmation."
-
-    Rule Adjustment
-    Define one precise IF/THEN rule that can be applied mechanically in future trades.
-    Format: IF [exact condition], THEN [exact action]
-
-     CONCLUSION (MANDATORY – END WITH THIS FORMAT)
-
-     CONCLUSION
-
-    • Outcome Summary: WIN or LOSS — one clear sentence
-    • Missed Win Flag: YES/NO — If YES, state "Missed Win due to Tight SL"
-    • Primary Failure/Success Driver: The single most important technical factor
-    • Pattern Confidence Impact: Increase / Maintain / Reduce (state why)
-    • Corrected SL Proposal (if Missed Win):
-      - Original SL: [price]
-      - Optimal SL: [price] (+X% wider)
-      - Rationale: [one-line explanation based on analyst synthesis]
-    • Insight Attribution: Which analyst provided the most valuable insight?
-    • New IF/THEN Rule:
-    IF [exact condition], THEN [exact action]
-
-
-    **INPUT DATA:**
-    Original Analysis: ${truncateTextToTokens(JSON.stringify(originalMessage.analysis), 1500)}
-    Actual Outcome: ${outcome}
-    Visual Context: ${truncateTextToTokens(imageContext, 1000)}
-
-    **${analyst1Name} Initial Post-Mortem:** ${truncateTextToTokens(analyst1PM, 800)}
-    **${analyst2Name} Initial Post-Mortem:** ${truncateTextToTokens(analyst2PM, 800)}
-    **${analyst3Name} Initial Post-Mortem:** ${truncateTextToTokens(analyst3PM, 800)}
-
-    Start with <DEBATE_START> now.`;
-
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning);
+    return runPostMortemDebate(
+        [
+            { name: analyst1Name, pm: analyst1PM, roundLines: POST_MORTEM_FIRST_SEAT_ROUND_LINES },
+            {
+                name: analyst2Name,
+                pm: analyst2PM,
+                roundLines: [
+                    'Agree or Disagree. If you disagree, provide your own root cause hypothesis.',
+                    'Verify or challenge the citation.',
+                    'Dig even deeper into the behavioral or technical failing.',
+                    'Critique the lesson (is it too generic?).',
+                    'Critique the rule for loopholes.',
+                ],
+            },
+            {
+                name: analyst3Name,
+                pm: analyst3PM,
+                roundLines: [
+                    'Provide a third perspective. Who is closer to the truth?',
+                    'Confirm the validity of the historical comparison.',
+                    `Identify the fundamental "Root Cause" after multiple layers of 'Why'.`,
+                    'Refine it to be precise and actionable.',
+                    'Optimize the Rule to be mechanical and binary (Yes/No).',
+                ],
+            },
+        ],
+        'rigorous 5-round post-mortem debate with three analysts',
+        analyst3Name, // the attribution example cites the third analyst
+        originalMessage,
+        outcome,
+        finalTradeSummary,
+        moderatorConfig,
+        moderatorModel,
+        postTradeImageSummaries,
+        undefined, // no pattern-memory synthesis in the three-way debate
+        undefined, // and no journal access for the arbiter (as shipped)
+        signal,
+        onReasoning
+    );
 };

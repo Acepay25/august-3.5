@@ -27,7 +27,12 @@ import * as chatStore from '../services/trade/chatStore';
 import { liveEntryFromMessage } from '../services/trade/chatSessions';
 import { MessageRole, type Message } from '../types';
 
-const panelSrc = readFileSync('components/trade/TradeChatPanel.tsx', 'utf8');
+// The dock feature spans the shell + the extracted chatTurnRunner — the
+// bot-turn commit and merge contracts follow the code into the runner.
+const panelSrc = [
+    readFileSync('components/trade/TradeChatPanel.tsx', 'utf8'),
+    readFileSync('services/trade/chatTurnRunner.ts', 'utf8'),
+].join('\n');
 const appSrc = readFileSync('App.tsx', 'utf8');
 
 const msg = (over: Partial<Message> = {}): Message => ({

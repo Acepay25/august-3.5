@@ -53,7 +53,7 @@ describe('the disclaimer says the true thing', () => {
 
 describe('it is said where people look', () => {
     it('on the Chart AI dock composer', () => {
-        expect(read('components/trade/TradeChatPanel.tsx')).toMatch(/DISCLAIMER_SHORT/);
+        expect(read('components/trade/panels/ChatComposer.tsx')).toMatch(/DISCLAIMER_SHORT/);
     });
 
     it('on the Agents surface, which previously had none', () => {
@@ -69,7 +69,7 @@ describe('it is said where people look', () => {
         // A disclaimer that says two slightly different things on two screens
         // is worse than one said once, clearly.
         for (const f of [
-            'components/trade/TradeChatPanel.tsx',
+            'components/trade/panels/ChatComposer.tsx',
             'components/agents/AgentsView.tsx',
             'components/settings/UserProfileManager.tsx',
         ]) {
