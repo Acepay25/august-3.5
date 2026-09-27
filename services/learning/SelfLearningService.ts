@@ -6,7 +6,7 @@
  */
 
 import { LoggedTrade, TradeOutcome } from '../../types';
-import { ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
+import { ConfidenceLevel } from '../validation/calibrationStore';
 
 /**
  * Personalized learning profile computed from trade history

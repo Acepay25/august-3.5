@@ -1,5 +1,6 @@
 
-import { getBayesianCalibratedConfidence, initializeCalibration, updateGranularCalibration } from '../services/validation/ConfidenceCalibrationService';
+import { getBayesianCalibratedConfidence } from '../services/validation/calibrationPolicy';
+import { initializeCalibration, updateGranularCalibration } from '../services/validation/calibrationStore';
 import { ConfidenceCalibration, TradeOutcome, GranularCalibrationEntry, AIProvider } from '../types';
 import fs from 'fs';
 import path from 'path';
