@@ -1,4 +1,4 @@
-import { Message, TradeAnalysis, TradeOutcome } from '../types';
+import { Message, TradeOutcome } from '../types';
 import { AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
 import { ticketExpiryLine } from './paperPnl';
 import { listSkillDrafts } from './skillDrafts';
@@ -118,6 +118,3 @@ export const collectApprovalItems = (
     }
     return items;
 };
-
-export const isUngroundedAvoid = (analysis?: TradeAnalysis): boolean =>
-    Boolean(analysis?.validationWarnings?.some(w => /Ungrounded/i.test(w)));

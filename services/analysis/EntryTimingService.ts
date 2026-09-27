@@ -508,68 +508,6 @@ function simulateLimitOrder(
     };
 }
 
-// ============================================================================
-// PROMPT INJECTION
-// ============================================================================
-
-export const generateEntryTimingPromptInjection = (result: EntryTimingResult): string => {
-    const emoji = result.score >= 70 ? '' :
-        result.score >= 50 ? '' : '';
-
-    let output = `
-${emoji} **ENTRY TIMING SCORE: ${result.score}/100 (${result.timing.toUpperCase()})**
-
- Component Breakdown:
-- Key Level Proximity: ${result.components.keyLevelProximity}/20
-- Candle Confirmation: ${result.components.candleConfirmation}/20
-- Momentum Alignment: ${result.components.momentumAlignment}/20
-- ATR Distance: ${result.components.atrDistance}/20
-- Volume Confirmation: ${result.components.volumeConfirmation}/20
-`;
-
-    if (result.nearestKeyLevel) {
-        output += `\n Nearest Key Level: ${result.nearestKeyLevel.name} at $${result.nearestKeyLevel.price} (${result.nearestKeyLevel.distance.toFixed(2)}% away)`;
-    }
-
-    if (result.warnings.length > 0) {
-        output += `\n\n Warnings:\n${result.warnings.map(w => `- ${w}`).join('\n')}`;
-    }
-
-    // SUGGESTED BETTER ENTRY (key feature)
-    if (result.suggestedEntry) {
-        const direction = result.suggestedEntry.distanceFromAI < 0 ? 'lower' : 'higher';
-        const sim = result.limitOrderSimulation;
-
-        output += `
-\n **BETTER ENTRY AVAILABLE:**
-Consider entry at **$${result.suggestedEntry.price.toFixed(2)}** (${result.suggestedEntry.reason})
-- Improvement: ${Math.abs(result.suggestedEntry.distanceFromAI).toFixed(2)}% ${direction} than AI.
-`;
-
-        if (sim) {
-            const probIcon = sim.fillProbability > 60 ? '' : sim.fillProbability > 30 ? '' : '';
-            output += `- Fill Probability: ${probIcon} ${sim.fillProbability.toFixed(0)}% (within ${sim.expectedWaitTime}h)
-- FOMO Risk: **${sim.fomoRisk}** (Chance of missing trade completely)`;
-
-            if (sim.fillProbability < 30) {
-                output += `\n **WARNING:** Low probability of fill. You might miss the trade if you wait.`;
-            }
-        }
-    }
-
-    // Entry timing rule
-    output += `\n**ENTRY TIMING RULE:**\n`;
-    if (result.score < 50) {
-        output += ` Entry timing is POOR. ${result.suggestedEntry ? `Consider the suggested entry at $${result.suggestedEntry.price.toFixed(2)} instead.` : 'Consider waiting for better setup.'}`;
-    } else if (result.score < 70) {
-        output += ' Entry timing is ACCEPTABLE but not optimal. Proceed with caution.';
-    } else {
-        output += ' Entry timing is GOOD. Proceed with trade.';
-    }
-
-    return output;
-};
-
 /**
  * Generate a compact warning for TradeValidationGate
  */

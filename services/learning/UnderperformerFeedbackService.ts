@@ -12,7 +12,6 @@ import { AIProvider } from '../../types';
 import {
     getRollingWindowStats,
     getSituationalExpertise,
-    identifyLowestPerformer,
     RollingWindowStats,
     SituationalExpertise
 } from '../backtesting/ModelPerformanceService';
@@ -163,48 +162,6 @@ This notice is injected to recalibrate your analysis approach.
 };
 
 /**
- * Generate moderator warning about underperforming models in debate
- */
-export const generateModeratorUnderperformerWarning = (
-    enabledProviders: AIProvider[]
-): string => {
-    const lowestPerformer = identifyLowestPerformer(enabledProviders);
-
-    if (!lowestPerformer || !lowestPerformer.isSignificantlyWorse) {
-        return '';
-    }
-
-    const stats = getRollingWindowStats(lowestPerformer.provider);
-
-    let warning = `
-⚠️ **MODERATOR ALERT: UNDERPERFORMER DETECTED**
-`;
-
-    warning += `${lowestPerformer.provider.toUpperCase()} is significantly underperforming:
-- Recent Win Rate: ${lowestPerformer.winRate.toFixed(1)}%
-- Recent Losses: ${lowestPerformer.recentLosses} consecutive
-`;
-
-    if (stats.isDemoted) {
-        warning += `- Status: **DEMOTED** (cold streak penalty active)
-`;
-    }
-
-    warning += `
-**Moderator Instructions:**
-1. Scrutinize ${lowestPerformer.provider.toUpperCase()}'s analysis more heavily
-2. Require stronger evidence from this model before accepting its conclusions
-3. Weight this model's opinion LESS in final consensus
-4. If this model disagrees with better-performing models, favor the others
-
-`;
-
-    console.log(`[UnderperformerFeedback] Generated moderator warning for ${lowestPerformer.provider}`);
-
-    return warning;
-};
-
-/**
  * Get underperformer status for all enabled providers
  */
 export const getUnderperformerStatus = (
@@ -221,26 +178,4 @@ export const getUnderperformerStatus = (
         stats: getRollingWindowStats(provider),
         expertise: getSituationalExpertise(provider)
     }));
-};
-
-/**
- * Reset feedback cooldown for a provider (use after significant improvement)
- */
-export const resetFeedbackCooldown = (provider: AIProvider): void => {
-    delete lastFeedbackTime[provider];
-    console.log(`[UnderperformerFeedback] Reset cooldown for ${provider}`);
-};
-
-/**
- * Check if any provider needs feedback and return the feedback if so
- * This is a convenience function for use in AI services
- */
-export const getUnderperformerFeedbackIfNeeded = (
-    provider: AIProvider
-): string | null => {
-    if (!shouldInjectFeedback(provider)) {
-        return null;
-    }
-
-    return generateUnderperformerFeedback(provider);
 };

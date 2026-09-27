@@ -16,6 +16,7 @@ import { fetchOHLCV, fetchOHLCVFromTime, Kline } from '../analysis/MarketDataSer
 // stripped annotations differently ("94500 4h" → 945004), skewing SL/TP math.
 import { parsePrice } from '../../utils/analysisUtils';
 import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions } from './outcomeEngine';
+import type { OutcomeResolution } from './outcomeEngine';
 
 /**
  * Convert timeframe string to milliseconds
@@ -44,6 +45,106 @@ const getIntervalMs = (interval: string): number => {
  */
 const alignToNextIntervalStart = (timestamp: number, intervalMs: number): number => {
     return Math.ceil(timestamp / intervalMs) * intervalMs;
+};
+
+// ─── The hybrid candle ladder (ONE implementation) ─────────────────────────
+// simulateFromAnalysisTime and validateTradeOutcome each hand-rolled the same
+// "fetch the tiers from the analysis moment, then concatenate" loop: walk the
+// tier list, cap each tier at its limit, and start the NEXT tier after the
+// last candle the previous one returned. Two copies of that loop meant a fix
+// to the ladder's start-time arithmetic reached only one of the two verdicts
+// — the simulation and the post-mortem validation of the SAME trade could be
+// computed over different windows.
+//
+// The two callers do NOT use the same ladder, and deliberately so:
+//   · the simulation adds a 5m bridge tier (swing entries need precision
+//     between the 1m scalping window and the 15m medium window),
+//   · validation reads 1m → 15m → 1h only.
+// The ladder is therefore DATA (a tier list), not two hard-coded bodies, so
+// the difference stays visible instead of collapsing into one "unified"
+// constant nobody can account for. Tier order, per-tier limits, and the
+// "an empty tier advances by its own nominal span" rule are unchanged.
+interface KlineTier {
+    timeframe: string;
+    limit: number;
+}
+
+const SIMULATION_KLINE_TIERS: readonly KlineTier[] = [
+    { timeframe: '1m', limit: 500 },   // ~8 hours of precision for scalps
+    { timeframe: '5m', limit: 250 },   // ~20 hours bridge for swing entries
+    { timeframe: '15m', limit: 250 },  // ~2.6 days, medium
+    { timeframe: '1h', limit: 500 },   // ~20 days, extended
+];
+
+const VALIDATION_KLINE_TIERS: readonly KlineTier[] = [
+    { timeframe: '1m', limit: 500 },
+    { timeframe: '15m', limit: 250 },
+    { timeframe: '1h', limit: 500 },
+];
+
+/**
+ * Fetch the hybrid candle window for a trade: every tier in `tiers`, in
+ * order, each starting where the previous tier ended, concatenated into one
+ * chronologically ordered array.
+ *
+ * @returns `counts` is the per-tier `"{n}×{timeframe}"` summary both call
+ * sites log, so neither re-derives it from its own locals.
+ */
+const fetchHybridKlines = async (
+    symbol: string,
+    startTime: number,
+    tiers: readonly KlineTier[],
+): Promise<{ klines: Kline[]; counts: string[] }> => {
+    const klines: Kline[] = [];
+    const counts: string[] = [];
+    let nextStart = startTime;
+    for (const tier of tiers) {
+        const fetched = await fetchOHLCVFromTime(symbol, tier.timeframe, nextStart);
+        const limited = fetched.slice(0, tier.limit);
+        klines.push(...limited);
+        counts.push(`${limited.length}×${tier.timeframe}`);
+        // Continue after the last candle this tier returned. An EMPTY tier
+        // still has to advance the window, or the next fetch re-requests the
+        // same range and the ladder stalls there.
+        nextStart = limited.length > 0
+            ? limited[limited.length - 1].time + getIntervalMs(tier.timeframe)
+            : nextStart + tier.limit * getIntervalMs(tier.timeframe);
+    }
+    return { klines, counts };
+};
+
+// ─── The shared resolution → exit mapping (ONE implementation) ──────────────
+interface MappedExit {
+    kind: 'WIN' | 'LOSS' | 'OPEN';
+    hitTarget: 'NONE' | 'SL' | 'TP1' | 'TP2' | 'TP3';
+    exitPrice: number | undefined;
+    exitTime: string | undefined;
+    exitCandleIndex: number | undefined;
+}
+
+/**
+ * Map the engine's neutral OutcomeResolution onto a caller-neutral exit, so
+ * the simulation and the post-mortem validation cannot disagree about which
+ * target a verdict names.
+ *
+ * The two call sites used to differ in exactly one place: on a LOSS the
+ * simulation hard-coded 'SL' while validation trusted `resolution.hitTarget`.
+ * They agree because outcomeEngine emits 'SL' for EVERY loss — plain stop,
+ * TP1→breakeven, and the 150% zone exit — which is the invariant the
+ * simulation relied on when it hard-coded it. Encoding that invariant here
+ * keeps the shared mapping identical for both callers.
+ */
+const mapResolutionToExit = (resolution: OutcomeResolution): MappedExit => {
+    if (resolution.outcome === 'OPEN' || resolution.outcome === 'INVALID') {
+        return { kind: 'OPEN', hitTarget: 'NONE', exitPrice: undefined, exitTime: undefined, exitCandleIndex: undefined };
+    }
+    return {
+        kind: resolution.outcome,
+        hitTarget: resolution.outcome === 'LOSS' ? 'SL' : resolution.hitTarget,
+        exitPrice: resolution.exitPrice,
+        exitTime: resolution.exitTime,
+        exitCandleIndex: resolution.exitCandleIndex,
+    };
 };
 
 /**
@@ -283,35 +384,12 @@ export const simulateFromAnalysisTime = async (
 
         console.log(`[BacktestingService] Hybrid fetch from ${new Date(alignedStartTime).toISOString()}`);
 
-        // Tier 1: 1-minute candles (500 = ~8 hours precision for scalps)
-        const klines1m = await fetchOHLCVFromTime(symbol, '1m', alignedStartTime);
-        const limited1m = klines1m.slice(0, 500);
+        // The 4-tier ladder (1m → 5m → 15m → 1h) is ONE shared fetch — see
+        // SIMULATION_KLINE_TIERS. Total coverage: ~8 hours + ~20 hours +
+        // ~2.6 days + ~20 days ≈ 24 days.
+        const { klines, counts } = await fetchHybridKlines(symbol, alignedStartTime, SIMULATION_KLINE_TIERS);
 
-        // Tier 2: 5-minute candles (250 = ~20 hours bridge for swing trades)
-        const tier2StartTime = limited1m.length > 0
-            ? limited1m[limited1m.length - 1].time + getIntervalMs('1m')
-            : alignedStartTime + 500 * getIntervalMs('1m');
-        const klines5m = await fetchOHLCVFromTime(symbol, '5m', tier2StartTime);
-        const limited5m = klines5m.slice(0, 250);
-
-        // Tier 3: 15-minute candles (250 = ~2.6 days medium)
-        const tier3StartTime = limited5m.length > 0
-            ? limited5m[limited5m.length - 1].time + getIntervalMs('5m')
-            : tier2StartTime + 250 * getIntervalMs('5m');
-        const klines15m = await fetchOHLCVFromTime(symbol, '15m', tier3StartTime);
-        const limited15m = klines15m.slice(0, 250);
-
-        // Tier 4: 1-hour candles (500 = ~20 days extended)
-        const tier4StartTime = limited15m.length > 0
-            ? limited15m[limited15m.length - 1].time + getIntervalMs('15m')
-            : tier3StartTime + 250 * getIntervalMs('15m');
-        const klines1h = await fetchOHLCVFromTime(symbol, '1h', tier4StartTime);
-        const limited1h = klines1h.slice(0, 500);
-
-        // Merge all tiers (already in chronological order)
-        const klines = [...limited1m, ...limited5m, ...limited15m, ...limited1h];
-
-        console.log(`[BacktestingService] Hybrid data: ${limited1m.length}×1m + ${limited5m.length}×5m + ${limited15m.length}×15m + ${limited1h.length}×1h = ${klines.length} total`);
+        console.log(`[BacktestingService] Hybrid data: ${counts.join(' + ')} = ${klines.length} total`);
 
         // Parse trade parameters - support multiple entries
         const allEntryPrices = (analysis.entryPoints || [])
@@ -508,13 +586,14 @@ export const simulateFromAnalysisTime = async (
         // final (still-forming) candle is excluded from live scans.
         const scan = scanTradeOutcome(klines, triggeredEntryPrice, stopLoss, [tp1, tp2, tp3], isLong, { startIndex: entryTriggeredAtIndex, excludeFormingCandle: true });
         const resolution = resolveOutcomeFromScan(scan);
+        const exit = mapResolutionToExit(resolution);
 
         // Inverted / zero-distance plan — the shared engine refused to score
         // it. Bucket as NOT_TRIGGERED + the rejection reason, EXACTLY like
         // simulateTradeSignal does: mapping it onto the OPEN branch below
         // labelled it ENTERED_OPEN, i.e. a phantom "live position" for a plan
         // that never traded.
-        if (resolution.outcome === 'INVALID') {
+        if (exit.kind === 'OPEN' && resolution.outcome === 'INVALID') {
             const lastCandle = klines[klines.length - 1];
             return {
                 wouldHaveTriggered: false,
@@ -554,18 +633,18 @@ export const simulateFromAnalysisTime = async (
         let hitCandleTime: string | undefined;
         let exitPrice = 0;
 
-        if (resolution.outcome === 'WIN') {
+        if (exit.kind === 'WIN') {
             outcome = 'WIN';
-            hitTarget = resolution.hitTarget;
-            hitCandleIndex = resolution.exitCandleIndex;
-            hitCandleTime = resolution.exitTime;
-            exitPrice = resolution.exitPrice ?? 0;
-        } else if (resolution.outcome === 'LOSS') {
+            hitTarget = exit.hitTarget;
+            hitCandleIndex = exit.exitCandleIndex;
+            hitCandleTime = exit.exitTime;
+            exitPrice = exit.exitPrice ?? 0;
+        } else if (exit.kind === 'LOSS') {
             outcome = 'LOSS';
-            hitTarget = 'SL';
-            hitCandleIndex = resolution.exitCandleIndex;
-            hitCandleTime = resolution.exitTime;
-            exitPrice = resolution.exitPrice ?? 0;
+            hitTarget = exit.hitTarget;
+            hitCandleIndex = exit.exitCandleIndex;
+            hitCandleTime = exit.exitTime;
+            exitPrice = exit.exitPrice ?? 0;
         } else {
             // The shared engine resolved OPEN: the entry filled (this branch
             // only runs after ENTRY CONFIRMED) but neither SL nor TP hit.
@@ -1105,34 +1184,16 @@ export const validateTradeOutcome = async (
     console.log(`[PostMortemValidation] Validating trade outcome for ${symbol} from ${analysisTimestamp}${userOutcome ? ` (user logged: ${userOutcome})` : ''}`);
 
     try {
-        // Use same 3-Tier Hybrid Fetch as backtesting. Start at the next 1m
-        // boundary AFTER the analysis — flooring below it let the candle that
-        // was still forming at analysis time (up to a minute of pre-signal
-        // price action) count toward the verdict.
+        // Use the SAME hybrid fetch as the backtest simulation, one tier list
+        // away (no 5m bridge). Start at the next 1m boundary AFTER the
+        // analysis — flooring below it let the candle that was still forming
+        // at analysis time (up to a minute of pre-signal price action) count
+        // toward the verdict.
         const alignedStartTime = alignToNextIntervalStart(analysisTime, getIntervalMs('1m'));
 
-        // Tier 1: 1-minute candles (500 = ~8 hours precision)
-        const klines1m = await fetchOHLCVFromTime(symbol, '1m', alignedStartTime);
-        const limited1m = klines1m.slice(0, 500);
+        const { klines, counts } = await fetchHybridKlines(symbol, alignedStartTime, VALIDATION_KLINE_TIERS);
 
-        // Tier 2: 15-minute candles (250 = ~2.6 days medium)
-        const tier2StartTime = limited1m.length > 0
-            ? limited1m[limited1m.length - 1].time + getIntervalMs('1m')
-            : alignedStartTime + 500 * getIntervalMs('1m');
-        const klines15m = await fetchOHLCVFromTime(symbol, '15m', tier2StartTime);
-        const limited15m = klines15m.slice(0, 250);
-
-        // Tier 3: 1-hour candles (500 = ~20 days extended)
-        const tier3StartTime = limited15m.length > 0
-            ? limited15m[limited15m.length - 1].time + getIntervalMs('15m')
-            : tier2StartTime + 250 * getIntervalMs('15m');
-        const klines1h = await fetchOHLCVFromTime(symbol, '1h', tier3StartTime);
-        const limited1h = klines1h.slice(0, 500);
-
-        // Merge all tiers
-        const klines = [...limited1m, ...limited15m, ...limited1h];
-
-        console.log(`[PostMortemValidation] Fetched ${limited1m.length}×1m + ${limited15m.length}×15m + ${limited1h.length}×1h = ${klines.length} candles`);
+        console.log(`[PostMortemValidation] Fetched ${counts.join(' + ')} = ${klines.length} candles`);
 
         // Parse trade parameters
         const entryPrice = analysis.entryPoints?.[0]?.price
@@ -1257,6 +1318,7 @@ export const validateTradeOutcome = async (
         // simulateFromAnalysisTime and AutoCaptureService; the user's claim
         // is compared afterwards) ===
         const resolution = resolveOutcomeFromScan(scan);
+        const exit = mapResolutionToExit(resolution);
         let outcome: TradeOutcomeValidation['outcome'] = 'OPEN';
         let hitTarget: TradeOutcomeValidation['hitTarget'] = 'NONE';
         let exitPrice: number | undefined;
@@ -1264,19 +1326,19 @@ export const validateTradeOutcome = async (
         let exitCandleIndex: number | undefined;
         let isMismatch = false;
 
-        if (resolution.outcome === 'WIN') {
+        if (exit.kind === 'WIN') {
             outcome = 'WIN';
-            hitTarget = resolution.hitTarget;
-            exitPrice = resolution.exitPrice;
-            exitTime = resolution.exitTime;
-            exitCandleIndex = resolution.exitCandleIndex;
+            hitTarget = exit.hitTarget;
+            exitPrice = exit.exitPrice;
+            exitTime = exit.exitTime;
+            exitCandleIndex = exit.exitCandleIndex;
             console.log(`[PostMortemValidation] TP hit (${hitTarget})${slTouched ? ' after SL touch (recovery)' : ''} → WIN`);
-        } else if (resolution.outcome === 'LOSS') {
+        } else if (exit.kind === 'LOSS') {
             outcome = 'LOSS';
-            hitTarget = resolution.hitTarget;
-            exitPrice = resolution.exitPrice;
-            exitTime = resolution.exitTime;
-            exitCandleIndex = resolution.exitCandleIndex;
+            hitTarget = exit.hitTarget;
+            exitPrice = exit.exitPrice;
+            exitTime = exit.exitTime;
+            exitCandleIndex = exit.exitCandleIndex;
             console.log(`[PostMortemValidation] ${extendedSlExceeded ? '150% extended SL exceeded' : 'SL touched with no TP'} → LOSS`);
         }
 

@@ -16,19 +16,6 @@ export interface FinComMarker {
 }
 
 /**
- * Lessons extracted from similar historical trades
- * Used by AdaptiveLearningService
- */
-export interface TradeLessons {
-  similarCount: number;
-  winCount: number;
-  lossCount: number;
-  winRate: number;
-  commonFailures: string[];
-  successPatterns: string[];
-}
-
-/**
  * A recurring trading mistake detected from losing trades
  * Used by MistakePatternService
  */
@@ -168,18 +155,4 @@ export interface MemoryFolder {
   name: string;
   /** Lower-order folders are injected first (profile is always first). */
   order: number;
-}
-
-/**
- * Enhanced structured rule with enforceable constraints
- */
-export interface StructuredRule extends LearningRule {
-  constraints?: {
-    minRR?: number;               // Minimum R:R ratio
-    maxRisk?: number;             // Maximum risk percentage
-    requiredConfidence?: string;  // Minimum confidence level
-    requiredTimeframes?: number;  // Minimum number of aligned timeframes
-    stopLossType?: 'Tight' | 'Wide' | 'ATR'; // Required stop loss type
-  };
-  isStrictMode: boolean;            // Whether this rule causes auto-rejection
 }

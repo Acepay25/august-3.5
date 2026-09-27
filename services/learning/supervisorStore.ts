@@ -132,8 +132,6 @@ export const setModelName = (name: string): void => {
     emit();
 };
 
-export const getModelName = (): string => modelName;
-
 export const pushEvent = (ev: Omit<SupervisorEvent, 'id' | 'atMs'>): string => {
     const id = `sv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     events = [...events, { ...ev, id, atMs: Date.now() }].slice(-EVENT_CAP);

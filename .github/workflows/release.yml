@@ -160,17 +160,28 @@ jobs:
           if ($env:CSC_LINK) { 'present=true' >> $env:GITHUB_OUTPUT }
           else { 'present=false' >> $env:GITHUB_OUTPUT }
 
-      # Build the installer for real, so the signature gate below has the
-      # ACTUAL published artifact to judge rather than the --dir build above.
+      # Build the installer ONCE, for real, so the signature gate below judges
+      # the ACTUAL published artifact rather than the --dir build above.
+      #
+      # ONE build, ONE publish. This step used to be followed by
+      # `electron-builder --win --publish` (always), which REBUILT the installer
+      # from scratch and shipped those unverified bytes: the gate had judged
+      # a different file from the one users downloaded. The publish step below
+      # now uploads this exact artifact.
+      #
+      # GH_TOKEN is deliberately NOT passed here (and --publish never is
+      # explicit): before the signature check nothing may be creatable. A build
+      # step holding a token that can create a release is one refactor away
+      # from publishing the unsigned artifact the gate exists to reject.
       - name: Build signed Electron installer
         shell: pwsh
         run: |
           if ("${{ steps.win-signing.outputs.present }}" -ne "true") {
             Write-Host "::warning::No CSC_LINK secret - this installer will be UNSIGNED and the signature gate below will fail unless the ALLOW_UNSIGNED_RELEASE repository variable is set to 'true'."
           }
-          npx electron-builder --win
+          $env:GH_TOKEN = ''
+          npx electron-builder --win --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
@@ -186,9 +197,41 @@ jobs:
         env:
           ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
 
-      - name: Build & publish Electron app
-        run: npx electron-builder --win --publish always
+      # Publish the bytes the gate just passed — NOT a rebuild.
+      #
+      # electron-builder's own publisher always re-runs the build, so shipping
+      # the verified artifact means uploading the files it produced. That is
+      # exactly the set electron-builder's GitHub publisher would have
+      # uploaded: the NSIS Setup exe, its .blockmap, and latest.yml (the
+      # updater's sha512 manifest, which is what makes an unsigned-but-allowed
+      # release still fail closed on a corrupted download). win-unpacked/ and
+      # the builder-*.yml diagnostics are NOT published.
+      - name: Publish the verified installer
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          GH_REPO: ${{ github.repository }}
+          VERIFIED_TAG: ${{ github.ref_name }}
+        run: |
+          $out = 'dist_electron'
+          $assets = @(Get-ChildItem $out -File | Where-Object {
+            $_.Name -match 'Setup .*\.exe$' -or $_.Extension -eq '.blockmap' -or $_.Name -eq 'latest.yml'
+          })
+          $setup = @($assets | Where-Object { $_.Name -match 'Setup .*\.exe$' } | Sort-Object LastWriteTime -Descending)
+          if ($setup.Count -ne 1) {
+            throw "Expected exactly one NSIS Setup installer in $out, found $($setup.Count). Refusing to publish."
+          }
+          if ($assets.Count -eq 0) { throw "No publishable assets in $out." }
+          if (-not (Test-Path (Join-Path $out 'latest.yml'))) {
+            throw 'latest.yml is missing - the auto-updater would have no manifest to check the download against.'
+          }
+          Write-Host "Publishing the artifact the signature gate verified: $($setup[0].Name)"
+          $paths = @($assets | ForEach-Object { $_.FullName })
+          gh release view $env:VERIFIED_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:VERIFIED_TAG @paths --clobber
+          } else {
+            if ($LASTEXITCODE -ne 1) { throw "gh release view failed with exit code $LASTEXITCODE" }
+            gh release create $env:VERIFIED_TAG @paths --verify-tag --title "August Trading $env:VERIFIED_TAG" --notes "Automated release for $env:VERIFIED_TAG. Installer signature verified by scripts/verify-release-signature.cjs before upload."
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Publishing the verified installer failed with exit code $LASTEXITCODE" }

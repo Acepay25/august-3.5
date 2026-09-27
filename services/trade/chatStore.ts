@@ -330,14 +330,6 @@ export const findSessionByEntryId = (entryId: string): string | undefined => {
     return sessions.find(s => s.entries.some(e => e.id === entryId))?.id;
 };
 
-/** Convenience: snapshot of the openTrades ledger for the active session. */
-export const getOpenTrades = (sid?: string): Record<string, OpenTradeRow> => {
-    ensureLoaded();
-    const target = sid ?? activeId;
-    const s = sessions.find(x => x.id === target);
-    return s?.openTrades ? { ...s.openTrades } : {};
-};
-
 // ── Harness signal queue (level-watch price events) ─────────────────────────
 
 /** Queue a `[HARNESS SIGNAL …]` text for the panel to run as a model turn.

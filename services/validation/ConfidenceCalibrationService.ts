@@ -21,7 +21,6 @@ import {
 import {
     MIN_TRADES_FOR_CALIBRATION,
     MIN_TRADES_FOR_PROMPT_DISPLAY,
-    MIN_TRADES_FOR_CALIBRATION_NOTE,
     CALIBRATION_DRIFT_THRESHOLD_PTS,
     DECAY_FACTOR,
     MAX_TRADE_AGE_DAYS
@@ -391,81 +390,6 @@ ${warnings.length > 0 ? `\n**CALIBRATION INSIGHTS:**\n${warnings.join('\n')}\n` 
 };
 
 /**
- * Get a short calibration note for a specific confidence level
- * Used for inline display in trade recommendations
- */
-export const getCalibrationNote = (
-    calibration: ConfidenceCalibration | undefined,
-    confidence: ConfidenceLevel
-): string | null => {
-    if (!calibration) return null;
-
-    const summary = getCalibrationSummary(calibration);
-    const key = confidence.toLowerCase() as 'high' | 'medium' | 'low' | 'avoid';
-    const stats = summary[key];
-
-    if (stats.total < MIN_TRADES_FOR_CALIBRATION_NOTE || stats.winRate === null) {
-        return null;
-    }
-
-    return `Historical "${confidence}": ${stats.winRate}% win rate (n=${stats.total})`;
-};
-
-/**
- * Get recommended confidence adjustment based on calibration
- * Returns null if no adjustment needed, or a suggested level if calibration suggests change
- */
-export const getRecommendedConfidenceAdjustment = (
-    calibration: ConfidenceCalibration | undefined,
-    currentConfidence: ConfidenceLevel,
-    aiProbability: number
-): {
-    suggestedConfidence: ConfidenceLevel | null;
-    reason: string | null
-} => {
-    if (!calibration) {
-        return { suggestedConfidence: null, reason: null };
-    }
-
-    const summary = getCalibrationSummary(calibration);
-    const currentKey = currentConfidence.toLowerCase() as 'high' | 'medium' | 'low' | 'avoid';
-    const currentStats = summary[currentKey];
-
-    if (currentStats.total < 5 || currentStats.winRate === null) {
-        return { suggestedConfidence: null, reason: null };
-    }
-
-    // If AI says "High" but historical high-confidence trades are <50% accurate
-    if (currentConfidence === 'High' && currentStats.winRate < 50) {
-        return {
-            suggestedConfidence: 'Medium',
-            reason: `Historical "High" confidence win rate is only ${currentStats.winRate}% - suggesting downgrade to "Medium"`
-        };
-    }
-
-    // If AI says "High" but probability is much higher than historical accuracy
-    if (currentConfidence === 'High' && aiProbability > currentStats.winRate + 20) {
-        return {
-            suggestedConfidence: 'Medium',
-            reason: `AI probability (${aiProbability}%) is ${aiProbability - currentStats.winRate}% higher than historical accuracy (${currentStats.winRate}%)`
-        };
-    }
-
-    // If "Medium" historically outperforms "High"
-    if (currentConfidence === 'High' &&
-        summary.medium.winRate !== null &&
-        summary.medium.total >= 5 &&
-        summary.medium.winRate > currentStats.winRate + 10) {
-        return {
-            suggestedConfidence: null,
-            reason: `Note: "Medium" confidence trades (${summary.medium.winRate}%) historically outperform "High" (${currentStats.winRate}%)`
-        };
-    }
-
-    return { suggestedConfidence: null, reason: null };
-};
-
-/**
  * Get Bayesian Calibrated Confidence
  * Adjusts raw confidence based on historical provider performance.
  * 
@@ -725,21 +649,6 @@ export const getWinRateByProvider = (
 };
 
 /**
- * Get win rate for a specific trading session
- */
-export const getWinRateBySession = (
-    calibration: ConfidenceCalibration | undefined,
-    session: 'asian' | 'london' | 'new_york' | 'overlap'
-): number | null => {
-    if (!calibration?.granular?.bySession) return null;
-
-    const stats = calibration.granular.bySession[session];
-    if (!stats || stats.total < MIN_TRADES_FOR_CALIBRATION) return null;
-
-    return Math.round((stats.wins / stats.total) * 100);
-};
-
-/**
  * Get win rate for a specific day of the week
  */
 export const getWinRateByDay = (
@@ -921,45 +830,6 @@ If historical accuracy for this specific context is <50%, consider downgrading c
 `;
 };
 
-/**
- * Get the best performing pattern from calibration data
- */
-export const getBestPerformingPatterns = (
-    calibration: ConfidenceCalibration | undefined,
-    limit: number = 3
-): { pattern: string; winRate: number; total: number }[] => {
-    if (!calibration?.granular?.byPattern) return [];
-
-    return Object.entries(calibration.granular.byPattern)
-        .filter(([_, stats]) => stats.total >= MIN_TRADES_FOR_CALIBRATION)
-        .map(([pattern, stats]) => ({
-            pattern,
-            winRate: Math.round((stats.wins / stats.total) * 100),
-            total: stats.total
-        }))
-        .sort((a, b) => b.winRate - a.winRate)
-        .slice(0, limit);
-};
-
-/**
- * Get the worst performing patterns (for warnings)
- */
-export const getWorstPerformingPatterns = (
-    calibration: ConfidenceCalibration | undefined,
-    limit: number = 3
-): { pattern: string; winRate: number; total: number }[] => {
-    if (!calibration?.granular?.byPattern) return [];
-
-    return Object.entries(calibration.granular.byPattern)
-        .filter(([_, stats]) => stats.total >= MIN_TRADES_FOR_CALIBRATION)
-        .map(([pattern, stats]) => ({
-            pattern,
-            winRate: Math.round((stats.wins / stats.total) * 100),
-            total: stats.total
-        }))
-        .sort((a, b) => a.winRate - b.winRate)
-        .slice(0, limit);
-};
 
 // =============================================================================
 // AI-FOCUSED CALIBRATION ENHANCEMENTS
