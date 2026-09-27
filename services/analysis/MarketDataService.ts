@@ -664,9 +664,15 @@ export const fetchFuturesOHLCVFromTime = async (
             return klines;
         } catch (error) {
             console.error(`Failed to fetch Futures OHLCV for ${normalizedSymbol}:`, error);
-            // Fallback to spot API if futures fails
-            console.log(`[MarketDataService] Falling back to SPOT API...`);
-            return fetchOHLCVFromTime(symbol, timeframe, startTime, endTime);
+            // NO silent SPOT fallback. This endpoint feeds OUTCOME
+            // VERIFICATION: scoring a TP/SL hit against spot candles while
+            // the trade was reasoned about perp prices can flip the verdict
+            // on a basis-widening day (the same reason KlineService keys its
+            // degraded spot chain separately). An empty result is honest —
+            // the autopilot reports "cannot verify yet" and retries — while
+            // a spot substitution resolved trades against the wrong
+            // instrument with nothing on screen saying so.
+            return [];
         } finally {
             inFlightOHLCV.delete(cacheKey);
         }
@@ -709,10 +715,14 @@ export const fetchMarketData = async (symbol: string): Promise<MarketData> => {
 };
 
 /**
- * Fetch funding rate for perpetual futures
- * Uses premiumIndex endpoint which is more reliable
+ * Fetch funding rate for perpetual futures.
+ * Uses premiumIndex endpoint which is more reliable.
+ * Returns `null` when the rate is UNAVAILABLE — a failure is not a neutral
+ * read, and 0 is a legitimate funding rate (new pair, funding just settled),
+ * so the two must never share a value: the derivatives digest used to print
+ * "funding 0.0000" as fact during an outage.
  */
-export const fetchFundingRate = async (symbol: string): Promise<number> => {
+export const fetchFundingRate = async (symbol: string): Promise<number | null> => {
     const normalizedSymbol = normalizeSymbol(symbol);
     const cacheKey = `funding_${normalizedSymbol}`;
 
@@ -741,13 +751,18 @@ export const fetchFundingRate = async (symbol: string): Promise<number> => {
         console.log(`[MarketDataService] premiumIndex returned no funding rate, trying fundingRate endpoint...`);
         const fallbackResponse = await robustFuturesFetch(`/fapi/v1/fundingRate?symbol=${normalizedSymbol}&limit=1`);
         const fallbackData = await fallbackResponse.json();
-        const fallbackRate = fallbackData.length > 0 ? parseFloat(fallbackData[0].fundingRate) : 0;
+        const fallbackRate = fallbackData.length > 0 ? parseFloat(fallbackData[0].fundingRate) : NaN;
 
-        setCache(cacheKey, fallbackRate);
-        return fallbackRate;
+        if (!Number.isNaN(fallbackRate)) {
+            setCache(cacheKey, fallbackRate);
+            return fallbackRate;
+        }
+        // Both endpoints answered without a usable rate — unknown, not zero.
+        // (Not cached: `cached !== null` treats a stored null as a miss.)
+        return null;
     } catch (error) {
         console.warn(`Failed to fetch funding rate for ${normalizedSymbol}:`, error);
-        return 0;
+        return null;
     }
 };
 
@@ -1615,7 +1630,8 @@ export const fetchCompleteMarketSnapshot = async (
 ): Promise<{
     marketData: MarketData;
     klines: { '15m': Kline[]; '1h': Kline[]; '4h': Kline[]; '1d': Kline[] };
-    fundingRate: number;
+    /** null = the rate could not be fetched (an outage is not a settled 0%). */
+    fundingRate: number | null;
     availability: {
         marketData: boolean;
         klines: { '15m': boolean; '1h': boolean; '4h': boolean; '1d': boolean };
@@ -1645,7 +1661,7 @@ export const fetchCompleteMarketSnapshot = async (
         fetchFuturesOHLCV(normalizedSymbol, '1h', 300).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchFuturesOHLCV(normalizedSymbol, '4h', 300).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchFuturesOHLCV(normalizedSymbol, '1d', 300).catch(err => { console.warn(`[MarketData] 1d klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchFundingRate(normalizedSymbol).catch(err => { console.warn(`[MarketData] funding rate failed, defaulting to 0:`, err?.message || err); return 0; })
+        fetchFundingRate(normalizedSymbol).catch(err => { console.warn(`[MarketData] funding rate failed, reporting unavailable:`, err?.message || err); return null; })
     ]);
     const marketData = futuresMarket ?? await fetchMarketData(normalizedSymbol);
 
@@ -1666,9 +1682,9 @@ export const fetchCompleteMarketSnapshot = async (
                 '4h': klines4h.length > 0,
                 '1d': klines1d.length > 0
             },
-            // A zero rate can be valid, but the degraded path also returns 0;
-            // label it conservatively so prompts never imply certainty.
-            fundingRate: fundingRate !== 0
+            // A zero rate can be valid; an outage is null. Report certainty
+            // only when the rate actually arrived.
+            fundingRate: fundingRate !== null
         }
     };
 };

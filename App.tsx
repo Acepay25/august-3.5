@@ -125,6 +125,7 @@ import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
 import { useTradeLogging, MAX_TRADE_SUMMARIES } from './hooks/useTradeLogging';
 import { useAnalysisPipeline } from './hooks/useAnalysisPipeline';
+import { ANALYSIS_STOP_TEXT } from './services/trade/analysisTurn';
 import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { useSaveOnUnload } from './hooks/useSaveOnUnload';
@@ -2180,7 +2181,7 @@ const App: React.FC = () => {
         };
         return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
             let settled = false;
-            handleSendMessage(prompt, images, undefined, {
+            void handleSendMessage(prompt, images, undefined, {
                 ...activeInstrument(),
                 automation: {
                     automationId: 'trade-chat',
@@ -2208,6 +2209,22 @@ const App: React.FC = () => {
                         reject(new Error(error));
                     },
                 },
+            }).then((outcome) => {
+                // Settlement guard (mirrors useAutomations'): several of the
+                // pipeline's early exits — cancel, 429, quota, offline
+                // re-queue, parked send, blocked pre-flight — call NO
+                // automation callback. Without settling from the awaited
+                // outcome, one cancelled run left the dock's run guard set
+                // forever and every later full-analysis send in that session
+                // was silently swallowed until reload.
+                if (settled) return;
+                settled = true;
+                if (outcome?.ok) resolve(ANALYSIS_STOP_TEXT);
+                else reject(new Error('the analysis ended without a verdict (rate limit, quota, or a pre-run block)'));
+            }, (error: unknown) => {
+                if (settled) return;
+                settled = true;
+                reject(error instanceof Error ? error : new Error(String(error)));
             });
         });
     }, [isAnalysisInProgress, readyProviders, selectedOcrModel, moderatorProviderId, moderatorModel, leverageInput, handleSendMessage]);
@@ -2229,7 +2246,7 @@ const App: React.FC = () => {
         }));
         return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
             let settled = false;
-            handleSendMessage(prompt, images, undefined, {
+            void handleSendMessage(prompt, images, undefined, {
                 ...activeInstrument(),
                 onSettled: (aiMessage) => {
                     if (settled) return;
@@ -2238,6 +2255,18 @@ const App: React.FC = () => {
                     const summary = (display.displayContent || aiMessage.text || '').trim();
                     resolve({ text: summary.slice(0, 8000) || 'The analysis completed with no summary.', messageId: aiMessage.id });
                 },
+            }).then((outcome) => {
+                // Same settlement guard as the dock wrapper: the pipeline's
+                // callback-less early exits must still settle this promise,
+                // or the Agents surface's run slot leaks until reload.
+                if (settled) return;
+                settled = true;
+                if (outcome?.ok) resolve(ANALYSIS_STOP_TEXT);
+                else reject(new Error('the analysis ended without a verdict (rate limit, quota, or a pre-run block)'));
+            }, (error: unknown) => {
+                if (settled) return;
+                settled = true;
+                reject(error instanceof Error ? error : new Error(String(error)));
             });
         });
     }, [isAnalysisInProgress, readyProviders, handleSendMessage]);
@@ -3489,7 +3518,7 @@ const App: React.FC = () => {
                 </React.Suspense>
             )}
 
-            {/* New Bot / New Group Chat dialogs (Hermes Bot Mode) */}
+            {/* New Bot / New Group Chat dialogs */}
             {isNewBotOpen && (
                 <React.Suspense fallback={null}>
                     <NewBotDialog
