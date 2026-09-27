@@ -6,7 +6,7 @@
  * universe — and can be closed mid-scan (the scan aborts with it).
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, BrainCircuit, Loader2, Minus, Search, X } from 'lucide-react';
 import { runScreenerWithStatus, type ScreenerRow } from '../../services/trade/screener';
@@ -31,6 +31,91 @@ type SortKey = 'volume' | 'movers' | 'rsi' | 'setups';
 // keeps this table's sub-$1 six-decimal precision and pins the locale to
 // en-US like the rest of the desk; visible delta here is trailing ".00" on
 // whole-dollar cells (tabular-nums column was built for it).
+
+/** EMA regime as a semantic chip: the color family is the direction, so
+ *  the column scans without reading the word. Module scope (it captured
+ *  nothing) so the memoized row below can use it. */
+const regimePill = (regime: ScreenerRow['regime']): React.ReactNode => (
+    regime === 'up'
+        ? <StatusPill tone="up" icon={<ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />}>up</StatusPill>
+        : regime === 'down'
+            ? <StatusPill tone="down" icon={<ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />}>down</StatusPill>
+            : <StatusPill tone="neutral" icon={<Minus className="h-2.5 w-2.5" aria-hidden="true" />}>range</StatusPill>
+);
+
+/** The flat, primitive-only view model a row renders from. The scan hands
+ *  out `ScreenerRow` objects that carry a `setups` ARRAY; a memo boundary
+ *  compares props by reference, so a parent render that rebuilds that array
+ *  (or the row object) would miss every time. Everything the row actually
+ *  paints is therefore flattened to strings/numbers here, in a useMemo
+ *  keyed on the sorted list. */
+interface ScreenerRowView {
+    symbol: string;
+    display: string;
+    baseAsset: string;
+    price: number;
+    change24h: number;
+    rsi14: number | null;
+    regime: ScreenerRow['regime'];
+    setupCount: number;
+    setupTitle: string;
+    /** The `title` tooltip: every setup, "Name (side); …". */
+    setupsTitle: string;
+    edge: string;
+}
+
+interface ScreenerRowViewProps extends ScreenerRowView {
+    onSelect: (symbol: string) => void;
+    onLearn: (symbol: string) => void;
+}
+
+/** One table row. Memoized on primitives + two stable callbacks, so typing
+ *  in the filter box re-renders only the rows whose text actually changed
+ *  instead of all ~100 of them (the reason this was extracted: the panel
+ *  keeps the whole scan in memory, and every keystroke used to reconcile
+ *  the entire tbody). */
+const ScreenerRowView = React.memo<ScreenerRowViewProps>(({
+    symbol, display, baseAsset, price, change24h, rsi14, regime,
+    setupCount, setupTitle, setupsTitle, edge, onSelect, onLearn,
+}) => (
+    <tr
+        data-testid={`screener-row-${symbol}`}
+        onClick={() => onSelect(symbol)}
+        className="cursor-pointer border-b border-white/[0.03] transition-colors hover:bg-white/[0.04]"
+    >
+        <td className="px-4 py-1.5">
+            <span className="font-mono font-bold text-zinc-100">{display}</span>
+            <span className="ml-2 text-zinc-600">{baseAsset}</span>
+            <button
+                type="button"
+                data-testid={`screener-learn-${symbol}`}
+                title="Load on the chart and prefill the Chart AI to scan this coin's candles for skills"
+                aria-label={`Learn skills from ${display}`}
+                onClick={ev => { ev.stopPropagation(); onLearn(symbol); }}
+                className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-cyan-300"
+            >
+                <BrainCircuit className="h-3.5 w-3.5" />
+            </button>
+        </td>
+        <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-300">{price > 0 ? fmtPrice(price) : '—'}</td>
+        <td className={`px-3 py-1.5 font-mono tabular-nums ${change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {change24h >= 0 ? '+' : ''}{change24h.toFixed(1)}%
+        </td>
+        <td className={`px-3 py-1.5 font-mono tabular-nums ${rsi14 == null ? 'text-zinc-600' : rsi14 >= 70 ? 'text-rose-400' : rsi14 <= 30 ? 'text-emerald-400' : 'text-zinc-300'}`}>
+            {rsi14 ?? '—'}
+        </td>
+        <td className="px-3 py-1.5">{regimePill(regime)}</td>
+        <td className="px-3 py-1.5">
+            {setupCount > 0
+                ? <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-ui-xs font-semibold text-amber-300" title={setupsTitle}>
+                    {setupCount} · {setupTitle}
+                </span>
+                : <span className="text-zinc-600">—</span>}
+        </td>
+        <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-500">{edge || '—'}</td>
+    </tr>
+));
+ScreenerRowView.displayName = 'ScreenerRowView';
 
 export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onChangeSymbol, trades = [] }) => {
     const [rows, setRows] = useState<ScreenerRow[]>([]);
@@ -94,6 +179,36 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
         return sorted;
     }, [rows, query, setupsOnly, sort]);
 
+    // Flatten the sorted rows to primitives ONCE per scan/filter/sort change,
+    // so a keystroke in the filter box hands React.memo a stable prop set and
+    // only the rows whose text actually changed re-render.
+    const rowViews = useMemo<ScreenerRowView[]>(() => visible.map(r => ({
+        symbol: r.symbol,
+        display: symbolDisplay(r.symbol),
+        baseAsset: r.baseAsset,
+        price: r.price,
+        change24h: r.change24h,
+        rsi14: r.rsi14 ?? null,
+        regime: r.regime,
+        setupCount: r.setups.length,
+        setupTitle: r.setups[0]?.title ?? '',
+        setupsTitle: r.setups.map(s => `${s.title} (${s.side})`).join('; '),
+        edge: r.edge || '',
+    })), [visible]);
+
+    // Stable row callbacks: an inline arrow would be a new reference on every
+    // render and would defeat the row memo entirely.
+    const handleRowSelect = useCallback((rowSymbol: string): void => {
+        onChangeSymbol(rowSymbol);
+        onClose();
+    }, [onChangeSymbol, onClose]);
+
+    const handleRowLearn = useCallback((rowSymbol: string): void => {
+        onChangeSymbol(rowSymbol);
+        window.dispatchEvent(new CustomEvent('august:prefill-chat', { detail: { token: 'scan-chart-skills' } }));
+        onClose();
+    }, [onChangeSymbol, onClose]);
+
     // A11y (it had neither): Escape closes the dialog and Tab stays inside it,
     // with focus returned to whatever opened it on close. Before this the only
     // way out was clicking the X or the backdrop — a keyboard user was stuck.
@@ -132,16 +247,6 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
         <th className={className}>
             <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">{label}</span>
         </th>
-    );
-
-    /** EMA regime as a semantic chip: the color family is the direction, so
-     *  the column scans without reading the word. */
-    const regimePill = (regime: ScreenerRow['regime']): React.ReactNode => (
-        regime === 'up'
-            ? <StatusPill tone="up" icon={<ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />}>up</StatusPill>
-            : regime === 'down'
-                ? <StatusPill tone="down" icon={<ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />}>down</StatusPill>
-                : <StatusPill tone="neutral" icon={<Minus className="h-2.5 w-2.5" aria-hidden="true" />}>range</StatusPill>
     );
 
     return createPortal(
@@ -195,49 +300,13 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                             </tr>
                         </thead>
                         <tbody>
-                            {visible.map(r => (
-                                <tr
+                            {rowViews.map(r => (
+                                <ScreenerRowView
                                     key={r.symbol}
-                                    data-testid={`screener-row-${r.symbol}`}
-                                    onClick={() => { onChangeSymbol(r.symbol); onClose(); }}
-                                    className="cursor-pointer border-b border-white/[0.03] transition-colors hover:bg-white/[0.04]"
-                                >
-                                    <td className="px-4 py-1.5">
-                                        <span className="font-mono font-bold text-zinc-100">{symbolDisplay(r.symbol)}</span>
-                                        <span className="ml-2 text-zinc-600">{r.baseAsset}</span>
-                                        <button
-                                            type="button"
-                                            data-testid={`screener-learn-${r.symbol}`}
-                                            title="Load on the chart and prefill the Chart AI to scan this coin's candles for skills"
-                                            aria-label={`Learn skills from ${symbolDisplay(r.symbol)}`}
-                                            onClick={ev => {
-                                                ev.stopPropagation();
-                                                onChangeSymbol(r.symbol);
-                                                window.dispatchEvent(new CustomEvent('august:prefill-chat', { detail: { token: 'scan-chart-skills' } }));
-                                                onClose();
-                                            }}
-                                            className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-cyan-300"
-                                        >
-                                            <BrainCircuit className="h-3.5 w-3.5" />
-                                        </button>
-                                    </td>
-                                    <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-300">{r.price > 0 ? fmtPrice(r.price) : '—'}</td>
-                                    <td className={`px-3 py-1.5 font-mono tabular-nums ${r.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {r.change24h >= 0 ? '+' : ''}{r.change24h.toFixed(1)}%
-                                    </td>
-                                    <td className={`px-3 py-1.5 font-mono tabular-nums ${r.rsi14 == null ? 'text-zinc-600' : r.rsi14 >= 70 ? 'text-rose-400' : r.rsi14 <= 30 ? 'text-emerald-400' : 'text-zinc-300'}`}>
-                                        {r.rsi14 ?? '—'}
-                                    </td>
-                                    <td className="px-3 py-1.5">{regimePill(r.regime)}</td>
-                                    <td className="px-3 py-1.5">
-                                        {r.setups.length > 0
-                                            ? <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-ui-xs font-semibold text-amber-300" title={r.setups.map(s => `${s.title} (${s.side})`).join('; ')}>
-                                                {r.setups.length} · {r.setups[0].title}
-                                            </span>
-                                            : <span className="text-zinc-600">—</span>}
-                                    </td>
-                                    <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-500">{r.edge || '—'}</td>
-                                </tr>
+                                    {...r}
+                                    onSelect={handleRowSelect}
+                                    onLearn={handleRowLearn}
+                                />
                             ))}
                             {visible.length === 0 && !running && universeFailed && (
                                 <tr><td colSpan={7} className="px-4 py-8 text-center text-ui-dense">

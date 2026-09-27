@@ -1,9 +1,11 @@
 import { TradeAnalysis } from '../types';
 import { HybridDataPacket } from '../services/analysis/HybridIntelligenceService';
+import { parsePrice } from './analysisUtils';
 
 const parseNum = (value?: string): number | undefined => {
-    if (!value) return undefined;
-    const n = Number(String(value).replace(/[$,\s]/g, ''));
+    // Canonical parser (utils/analysisUtils) — NaN → undefined, one price
+    // dialect for every reader of a level string.
+    const n = parsePrice(value ?? '');
     return Number.isFinite(n) ? n : undefined;
 };
 

@@ -15,6 +15,7 @@ import {
 } from '../../services/learning/memoryAmendments';
 import { getMemoryFiles, updateMemoryFile } from '../../services/learning/MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
+import { phtStamp } from '../../utils/timezone';
 
 const StatusBadge: React.FC<{ a: MemoryAmendment }> = ({ a }) => {
     const map: Record<MemoryAmendment['status'], string> = {
@@ -77,7 +78,7 @@ export const AmendmentsInbox: React.FC = () => {
                         <code className="text-ui-sm font-semibold text-zinc-200">{a.fileName}</code>
                         <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-400">{a.kind}</span>
                         <StatusBadge a={a} />
-                        <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{a.proposedBy} · {new Date(a.createdAt).toLocaleString()}</span>
+                        <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{a.proposedBy} · {phtStamp(a.createdAt)}</span>
                     </div>
                     <p className="mt-1.5 text-ui-dense leading-snug text-zinc-400"><span className="text-zinc-600">Reason:</span> {a.reason}</p>
                     <pre className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-zinc-950/60 p-2 text-ui-xs leading-4 text-zinc-300 custom-scrollbar">{a.proposedContent}</pre>

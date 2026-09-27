@@ -20,7 +20,7 @@ import {
   sqliteDeleteUser,
   migrateFromIndexedDB
 } from './SqliteService';
-import { putMessageImages, getConversationImages } from './messageImageStore';
+import { putMessageImages, getConversationImages, deleteMessageImagesForConversations } from './messageImageStore';
 import { runExclusiveWrite } from './SqliteServiceHelpers';
 import {
   isSqliteMigrated,
@@ -254,14 +254,12 @@ const idbSaveUserProfile = async (username: string, data: Partial<Omit<UserProfi
 
     await store.put(updatedProfile);
     await tx.done;
-  });
-};
-
-const idbOverwriteUserProfile = async (profile: UserProfile): Promise<void> => {
-  // Queued too — a concurrent save must not interleave with a restore/import.
-  await runExclusiveWrite(async () => {
-    const db = await initIndexedDB();
-    await db.put(STORE_NAME, profile);
+    // Conversation GC after the write committed (see gcRemovedConversation-
+    // Images): the id diff needs the PREVIOUS stored list, read above.
+    await gcRemovedConversationImages(
+      existingProfile && typeof existingProfile === 'object' ? existingProfile as UserProfile : undefined,
+      updatedProfile
+    );
   });
 };
 
@@ -334,6 +332,7 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
         updatedProfile.createdAt = new Date().toISOString();
       }
       await sqliteSaveUserProfile(updatedProfile);
+      await gcRemovedConversationImages(existing ?? undefined, updatedProfile);
     });
     return;
   }
@@ -347,29 +346,87 @@ export const overwriteUserProfile = async (profile: UserProfile): Promise<void> 
   const profileToSave = await stripMessageImages(profile);
   if (await ensureDbReady()) {
     await runExclusiveWrite(async () => {
+      const previous = await sqliteGetUserProfile(profile.username) ?? undefined;
       await sqliteSaveUserProfile(profileToSave);
+      await gcRemovedConversationImages(previous, profileToSave);
     });
     return;
   }
-  return idbOverwriteUserProfile(profileToSave);
+  await runExclusiveWrite(async () => {
+    const db = await initIndexedDB();
+    const previous = (await db.get(STORE_NAME, profile.username)) as UserProfile | undefined;
+    await db.put(STORE_NAME, profileToSave);
+    await gcRemovedConversationImages(previous, profileToSave);
+  });
+};
+
+/**
+ * GC the side-store image rows of conversations a just-committed save
+ * REMOVED from the profile (delete session / clear all / import-restore /
+ * user reset). A profile save carries the FULL conversation list whenever it
+ * carries one, so an id stored before and absent now is a deleted
+ * conversation — its `convId__msgId` image rows would otherwise leak forever
+ * (the image store has no other delete path). Deleting through the store's
+ * GC also purges the write fingerprints, so a later undo-and-resave re-PUTs
+ * the images instead of short-circuiting against a deleted row. Runs AFTER
+ * the profile write commits: if the save itself failed, nothing is GC'd.
+ */
+const gcRemovedConversationImages = async (
+    previous: UserProfile | undefined,
+    next: { conversations?: UserProfile['conversations'] }
+): Promise<void> => {
+    const previousIds = (previous?.conversations ?? [])
+        .map(c => c?.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (previousIds.length === 0) return;
+    const kept = new Set((next.conversations ?? []).map(c => c?.id).filter(Boolean) as string[]);
+    const orphaned = previousIds.filter(id => !kept.has(id));
+    if (orphaned.length === 0) return;
+    try {
+        await deleteMessageImagesForConversations(orphaned);
+    } catch (err) {
+        console.warn('[dbService] Failed to GC deleted conversations\' message images:', err);
+    }
 };
 
 /**
  * Delete user profile
  */
 export const deleteUserProfile = async (username: string): Promise<void> => {
-  if (await ensureDbReady()) {
-    await sqliteDeleteUser(username);
-    return;
-  }
-  await idbDeleteUserProfile(username);
-  // Clean the reasoning store too (separate IndexedDB database — the
-  // profile delete above cannot reach it; on SQLite, sqliteDeleteUser
-  // already removed the rows and this becomes a harmless no-op).
-  const { deleteThinkingForUser } = await import('./ThinkingStoreService');
-  await deleteThinkingForUser(username).catch(err => {
-    console.warn('[dbService] Failed to delete thinking records:', err);
-  });
+    if (await ensureDbReady()) {
+        // Enumerate the user's conversations BEFORE the profile row is
+        // removed — the image store is keyed by conversation id, and once
+        // the profile is gone nothing can name its rows anymore.
+        let conversationIds: string[] = [];
+        try {
+            conversationIds = ((await sqliteGetUserProfile(username))?.conversations ?? [])
+                .map(c => c?.id)
+                .filter((id): id is string => typeof id === 'string' && id.length > 0);
+        } catch (err) {
+            console.warn('[dbService] Could not enumerate conversations for image GC:', err);
+        }
+        await sqliteDeleteUser(username);
+        await deleteMessageImagesForConversations(conversationIds);
+        return;
+    }
+    let conversationIds: string[] = [];
+    try {
+        conversationIds = ((await idbGetUserProfile(username))?.conversations ?? [])
+            .map(c => c?.id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    } catch (err) {
+        console.warn('[dbService] Could not enumerate conversations for image GC:', err);
+    }
+    await idbDeleteUserProfile(username);
+    // Clean the reasoning store too (separate IndexedDB database — the
+    // profile delete above cannot reach it; on SQLite, sqliteDeleteUser
+    // already removed the rows and this becomes a harmless no-op).
+    const { deleteThinkingForUser } = await import('./ThinkingStoreService');
+    await deleteThinkingForUser(username).catch(err => {
+        console.warn('[dbService] Failed to delete thinking records:', err);
+    });
+    // Same GC for the image side-store (web/IndexedDB path).
+    await deleteMessageImagesForConversations(conversationIds);
 };
 
 /**

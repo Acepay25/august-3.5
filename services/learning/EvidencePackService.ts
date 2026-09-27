@@ -19,6 +19,7 @@ import { findRelevantTrades, calculatePnlR } from './PatternMemorySynthesisServi
 import { evidenceFreshness } from './MemoryRetrievalService';
 import type { MemoryRetrievalQuery } from './MemoryRetrievalService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
+import { baseOf } from '../../utils/symbol';
 import { rootCauseForTrade, shouldAdmitTechnicalStrategyRule } from '../../utils/rootCause';
 import { COMMON_WORDS } from '../../constants/commonWords';
 
@@ -44,8 +45,7 @@ export interface SetupClusterStats {
     worstLesson: string | null;
 }
 
-const coinOf = (t: LoggedTrade): string =>
-    (t.analysis?.coinName || '').toUpperCase().replace(/USDT?$/, '');
+const coinOf = (t: LoggedTrade): string => baseOf(t.analysis?.coinName || '');
 
 /**
  * Cluster stats over the trade log: coin + direction + family + regime.
@@ -58,7 +58,10 @@ export const computeSetupClusterStats = (
     trades: LoggedTrade[],
 ): SetupClusterStats | null => {
     if (!coin || !trades || trades.length === 0) return null;
-    const wantCoin = coin.toUpperCase().replace(/USDT?$/, '');
+    // Canonical base coin on BOTH sides of the comparison (utils/symbol) —
+    // the caller may pass 'BTCUSDT' or a bare 'BTC'; per-trade coin names are
+    // normalized through the same helper below.
+    const wantCoin = baseOf(coin);
     let wins = 0;
     let losses = 0;
     let rSum = 0;
@@ -190,12 +193,12 @@ export const buildRootCausePatternLine = (
     trades: LoggedTrade[],
 ): string => {
     if (!coin || !trades || trades.length === 0) return '';
-    const wantCoin = coin.toUpperCase().replace(/USDT?$/, '');
+    const wantCoin = baseOf(coin);
     const causes = new Map<RootCauseClass, number>();
     let total = 0;
     for (const t of trades) {
         if (t.outcome !== 'LOSS') continue;
-        if ((t.analysis?.coinName || '').toUpperCase().replace(/USDT?$/, '') !== wantCoin) continue;
+        if (baseOf(t.analysis?.coinName || '') !== wantCoin) continue;
         if ((direction === 'Long' || direction === 'Short') && t.analysis?.direction !== direction) continue;
         // Only losses that admit a technical lesson inform an edge pattern.
         const cause = rootCauseForTrade(t);

@@ -193,3 +193,38 @@ describe('chatStore harness signal queue (store-based so hits never drop)', () =
         expect(q[q.length - 1]).toBe('sig-11');
     });
 });
+
+// Memory mirrors trimForStorage (chatSessions): 12 sessions × 60 entries.
+// The live store used to be uncapped, so a long-lived terminal's memory
+// grew while disk stayed flat — the caps keep both honest.
+describe('chatStore memory caps (mirror trimForStorage)', () => {
+    it('addSession keeps at most MAX_SESSIONS sessions, dropping the oldest idle ones', () => {
+        const first = store.getActiveId();
+        for (let i = 0; i < 13; i += 1) store.addSession({ title: `s${i}` });
+        const ids = store.getSnapshot().sessions.map(s => s.id);
+        expect(ids.length).toBe(12);
+        expect(ids).not.toContain(first); // oldest idle evicted
+    });
+
+    it('a session with a live run is not evicted while idle candidates exist', () => {
+        const seeded = store.getSnapshot().sessions.map(s => s.id);
+        const ctrl = new AbortController();
+        store.beginRun(seeded[0], ctrl); // the OLDEST session is running
+        for (let i = 0; i < 13; i += 1) store.addSession({ title: `s${i}` });
+        const ids = store.getSnapshot().sessions.map(s => s.id);
+        expect(ids.length).toBe(12);
+        expect(ids).toContain(seeded[0]); // the running one survives
+        expect(ids).not.toContain(seeded[1]); // its idle neighbor was evicted instead
+    });
+
+    it('mutate keeps at most MAX_ENTRIES entries per session, keeping the most recent', () => {
+        const id = store.getActiveId();
+        for (let i = 0; i < 70; i += 1) {
+            store.mutate(id, s => ({ ...s, entries: [...s.entries, { id: `e${i}`, role: 'user' as const, text: `t${i}`, tools: [] }] }));
+        }
+        const entries = store.getSnapshot().sessions.find(s => s.id === id)?.entries ?? [];
+        expect(entries.length).toBe(60);
+        expect(entries[0].id).toBe('e10'); // the 10 oldest were dropped
+        expect(entries[59].id).toBe('e69');
+    });
+});

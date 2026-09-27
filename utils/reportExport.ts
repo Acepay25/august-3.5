@@ -5,8 +5,9 @@
 
 import { LoggedTrade } from '../types';
 import { TradeOutcome } from '../types';
+import { phtDayKey } from './timezone';
 
-const dateStamp = (): string => new Date().toISOString().slice(0, 10);
+const dateStamp = (): string => phtDayKey();
 
 function downloadBlob(content: string, filename: string, type: string): void {
     const blob = new Blob([content], { type });

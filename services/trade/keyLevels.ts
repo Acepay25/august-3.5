@@ -11,6 +11,8 @@
  * visibility rules are unit-testable.
  */
 
+import { parsePrice as parsePriceCanonical } from '../../utils/analysisUtils';
+
 export type KeyLevelKind = 'resistance' | 'support' | 'vwap' | 'level';
 
 /** One level as the model expressed it. */
@@ -66,8 +68,11 @@ const MAX_CONTEXT = 140;
  *  the transcript, so `clean` cuts from the opening fence to the end. */
 const OPEN_FENCE_RE = /```[ \t]*(?:august-)?key-levels[^\n]*\n?/i;
 
+/** Positive-price read over the CANONICAL parser (utils/analysisUtils) —
+ *  range-aware and annotation-safe, so a chart line uses the same value the
+ *  plan math reads ("3210 - 3220" → midpoint, never "94500 4h" → 945004). */
 const parsePrice = (raw: string): number | null => {
-    const n = parseFloat(raw.replace(/[$,\s]/g, ''));
+    const n = parsePriceCanonical(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
 };
 

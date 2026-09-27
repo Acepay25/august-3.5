@@ -60,6 +60,7 @@ import { runGraveyardSweep, MAX_TOMBSTONES } from './skillGraveyard';
 import { runSkillIdleSweep, listSuspendedSkills } from './skillIdleLifecycle';
 import { notebookWantsCleanup } from './MemoryFilesService';
 import { cleanupIsDue } from '../../utils/memoryBudget';
+import { phtDayKey } from '../../utils/timezone';
 import type { LoggedTrade } from '../../types';
 
 const KEY_PREFIX = 'memory_hygiene_v1_';
@@ -176,7 +177,7 @@ export const runMemoryHygiene = async (
                 kind: 'demote',
                 skillSlug: slug,
                 text: `"${slug}" is confirmed but has no counted evidence since ${
-                    Number.isFinite(evid) ? new Date(evid).toISOString().slice(0, 10) : 'before records began'
+                    Number.isFinite(evid) ? phtDayKey(evid) : 'before records began'
                 } — demote it to candidate until it earns a fresh sample?`,
                 fingerprint: `stale-demote|${slug}`,
             }, username);

@@ -16,6 +16,7 @@ import { plannedRiskReward } from './riskReward';
 import { clipNote } from './harnessMarks';
 import { FAMILY_UI_DATA } from '../constants/models';
 import { CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_RE } from '../constants/debateMarkers';
+import { escapeRegExp } from './escapeRegExp';
 
 // Shared cleaners, re-exported for consumers (autopilot, metrics).
 export { cleanPriceField } from './sanitizers';
@@ -403,6 +404,12 @@ export const formatAnalysisForDisplay = (analysis: any): string => {
  * by import site, silently skewing SL-distance math. Whitespace is preserved
  * so a trailing annotation ("94500 4h") can't glue its digits onto the number
  * (→ 945004).
+ *
+ * THE one price parser: chartData, keyLevels, avoidReason, debateLevels,
+ * disciplineAnalytics, hybridChartDrift, paperPnl, ticketSize and trustSurface
+ * import it directly (verified acyclic — nothing analysisUtils pulls in reads
+ * those files), so no drifted `replace(/[$,\s]/g,'')` copy exists to move into
+ * a separate priceText leaf module.
  */
 export const parsePrice = (priceStr: string): number => {
     if (!priceStr) return NaN;
@@ -544,7 +551,7 @@ export const parseMarkdownTradePlan = (text: string): MarkdownTradePlan | null =
     // "Label: value". Returns the first non-empty value for the label.
     const field = (labels: string[]): string | undefined => {
         for (const label of labels) {
-            const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escaped = escapeRegExp(label);
             // "- **Coin:** value" / "**Coin:** value" / "Coin: value" —
             // the closing bold stars come AFTER the colon in **Coin:**, so
             // optional stars are allowed on both sides of it.
@@ -557,7 +564,7 @@ export const parseMarkdownTradePlan = (text: string): MarkdownTradePlan | null =
     const fields = (labels: string[]): string[] => {
         const outList: string[] = [];
         for (const label of labels) {
-            const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escaped = escapeRegExp(label);
             const re = new RegExp(`(?:^|\\n)\\s*(?:-\\s*)?\\*{0,2}${escaped}\\*{0,2}\\s*[:：]\\s*\\*{0,2}\\s*([^\\n]+)`, 'gi');
             let m: RegExpExecArray | null;
             while ((m = re.exec(text)) !== null) {

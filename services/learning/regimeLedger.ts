@@ -15,6 +15,8 @@
  */
 
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { baseOf } from '../../utils/symbol';
+import { phtDayKey } from '../../utils/timezone';
 
 export type LedgerRegime = 'trending' | 'ranging' | 'volatile' | 'compression';
 
@@ -46,9 +48,10 @@ const REGIMES: LedgerRegime[] = ['trending', 'ranging', 'volatile', 'compression
 const keyFor = (username: string): string =>
     `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
 
-/** Normalize a coin symbol to the ledger's canonical form (BTC, not BTCUSDT). */
-export const normalizeLedgerCoin = (coin: string): string =>
-    (coin || '').toUpperCase().replace(/USDT?$/, '').replace(/USD$/, '').trim();
+/** Normalize a coin symbol to the ledger's canonical form (BTC, not BTCUSDT).
+ *  Canonical base asset (utils/symbol): one anchored, longest-first strip —
+ *  the old double `replace` mapped 'BTCFDUSD' to the corrupt base 'BTCF'. */
+export const normalizeLedgerCoin = (coin: string): string => baseOf(coin || '').trim();
 
 const isLedgerRegime = (v: unknown): v is LedgerRegime =>
     typeof v === 'string' && (REGIMES as string[]).includes(v);
@@ -97,7 +100,9 @@ export const recordRegimeDay = async (
 ): Promise<void> => {
     const coin = normalizeLedgerCoin(day.coin);
     if (!coin || !isLedgerRegime(day.regime)) return;
-    const date = day.date || new Date().toISOString().slice(0, 10);
+    // PHT day key (utils/timezone) — the ledger groups by the trader's day,
+    // not the UTC one.
+    const date = day.date || phtDayKey();
     try {
         const list = (await getPreferenceObject<RegimeDay[]>(keyFor(username))) ?? [];
         const kept = Array.isArray(list)
@@ -121,9 +126,11 @@ export const listLedgerCoins = (): string[] =>
     [...new Set(cache.map(e => e.coin))].sort();
 
 const shiftDays = (isoDate: string, days: number): string => {
+    // Whole-day arithmetic on a midnight-UTC anchor — zone-invariant for fixed
+    // offsets — but the KEY comes from the one helper (a PHT day key).
     const d = new Date(`${isoDate}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() - days);
-    return d.toISOString().slice(0, 10);
+    return phtDayKey(d.getTime());
 };
 
 /**

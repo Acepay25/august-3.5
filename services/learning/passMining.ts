@@ -23,6 +23,7 @@ import type { LoggedTrade } from '../../types';
 import { TradeOutcome } from '../../types/enums';
 import { getPreferenceArray, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';
+import { baseOf } from '../../utils/symbol';
 import type { Kline } from '../../types/message';
 
 /** Match MIN_CLUSTER_FOR_SKILL — three vindicated passes draft a skill. */
@@ -107,7 +108,9 @@ export const resolvePassOutcome = (
 
 /** The {coin|direction|family} fingerprint a correct-pass cluster shares. */
 export const passClusterKey = (r: { coin?: string; direction?: string; family?: string }): string => {
-    const coin = (r.coin || 'GEN').toUpperCase().replace(/USDT?$/, '');
+    // Canonical base coin (utils/symbol) — matches botLearning.setupKey,
+    // which derives its join key through the SAME helper.
+    const coin = baseOf(r.coin || 'GEN');
     const dir = r.direction === 'Long' || r.direction === 'Short' ? r.direction : 'Neutral';
     const fam = r.family || 'any';
     return `${coin}|${dir}|${fam}`;
@@ -241,7 +244,7 @@ export const runPassMiningSweep = async (
     for (const cluster of correctPassClusters(records)) {
         if (cluster.records.every(r => r.drafted)) continue;
         const sample = cluster.records[0];
-        const coin = (sample.coin || 'GEN').toUpperCase().replace(/USDT?$/, '');
+        const coin = baseOf(sample.coin || 'GEN');
         const dir = sample.direction || 'the side';
         const fam = sample.family || 'this setup';
         const crafted = {

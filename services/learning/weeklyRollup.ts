@@ -30,6 +30,7 @@ import { listSkills, MIN_SAMPLE_RETIRE, type SkillMeta } from './SkillMemoryServ
 import { upsertSettledBelief } from './settledBeliefs';
 import { runGeneralizationPass } from './skillGeneralization';
 import { ROLLUP_NOTES_FILE_NAME } from './DoctrineConsolidationService';
+import { phtDayKey } from '../../utils/timezone';
 
 const KEY_PREFIX = 'weekly_rollup_v1_';
 const ROLLUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -120,7 +121,7 @@ export const runWeeklyRollup = async (username: string): Promise<WeeklyRollupRes
             .sort((a, b) => sample(b.meta) - sample(a.meta))
             .slice(0, 10);
         const lines: string[] = [
-            `# Weekly rollup — ${new Date().toISOString().slice(0, 10)}`,
+            `# Weekly rollup — ${phtDayKey()}`,
             '',
         ];
         if (emerging.length > 0) {

@@ -16,6 +16,7 @@ import { fetchAllFuturesSymbols } from '../analysis/MarketDataService';
 import { fetchKlines } from '../analysis/KlineService';
 import { rsiSeries, scanSetups } from './setupScan';
 import { computeSetupClusterStats } from '../learning/EvidencePackService';
+import { baseOf } from '../../utils/symbol';
 import type { Kline } from '../analysis/MarketDataService';
 import type { LoggedTrade } from '../../types/trade';
 
@@ -69,7 +70,9 @@ const regimeOf = (candles: Kline[]): 'up' | 'down' | 'range' => {
 };
 
 const edgeFor = (symbol: string, trades: LoggedTrade[]): string => {
-    const coin = symbol.replace(/USDT$/, '');
+    // Canonical base asset (utils/symbol) — the same form
+    // computeSetupClusterStats normalizes both sides to.
+    const coin = baseOf(symbol);
     try {
         const stats = computeSetupClusterStats(coin, undefined, undefined, trades);
         if (stats && stats.sample > 0) return `${stats.wins}W/${stats.losses}L`;

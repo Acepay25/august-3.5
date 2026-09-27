@@ -2,6 +2,7 @@ import { TradeAnalysis } from '../types';
 import { ConfidenceCalibration } from '../types';
 import { MIN_TRADES_FOR_CALIBRATION } from '../constants/calibrationConstants';
 import { formatModelDisplayName } from './providerUtils';
+import { parsePrice } from './analysisUtils';
 
 /**
  * Decision-quality helpers: explain WHY a setup became Avoid, distinguish
@@ -32,7 +33,10 @@ const cleanWarning = (text: string): string =>
 const resolveRatio = (analysis: Pick<TradeAnalysis, 'rrRatio' | 'entryPoints' | 'stopLoss' | 'takeProfit'>): number | undefined => {
     if (typeof analysis.rrRatio === 'number' && Number.isFinite(analysis.rrRatio)) return analysis.rrRatio;
     const parse = (value?: string): number | undefined => {
-        const n = Number(String(value ?? '').replace(/[$,\s]/g, ''));
+        // Canonical parser (utils/analysisUtils): NaN for non-numeric, so a
+        // missing level yields undefined (the old Number('') === 0 path let a
+        // missing entry read as 0 and skew the risk distance).
+        const n = parsePrice(value ?? '');
         return Number.isFinite(n) ? n : undefined;
     };
     const entry = parse(analysis.entryPoints?.[0]?.price);

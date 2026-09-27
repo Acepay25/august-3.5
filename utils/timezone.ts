@@ -20,11 +20,16 @@ const clockSecFmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: PHT_ZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 });
 const dayFmt = new Intl.DateTimeFormat('en-US', { timeZone: PHT_ZONE, month: 'short', day: 'numeric' });
+const dayYearFmt = new Intl.DateTimeFormat('en-US', { timeZone: PHT_ZONE, month: 'short', day: 'numeric', year: 'numeric' });
 const dayTimeFmt = new Intl.DateTimeFormat('en-US', {
     timeZone: PHT_ZONE, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 });
 const fullFmt = new Intl.DateTimeFormat('en-US', {
     timeZone: PHT_ZONE, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+// en-CA renders the ISO-like 'YYYY-MM-DD' the ledgers group by.
+const phtDayKeyFmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PHT_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
 });
 
 const dateOf = (at: Date | number | string): Date | null => {
@@ -60,6 +65,24 @@ export const phtFullStamp = (at: Date | number | string): string => {
 export const phtDay = (at: Date | number | string): string => {
     const d = dateOf(at);
     return d ? dayFmt.format(d) : '—';
+};
+
+/** 'Sep 11, 2026' — the full date with year (ms/Date/string input), for
+ *  journal rows and backups where a bare 'Sep 11' is ambiguous across years. */
+export const phtDayYear = (at: Date | number | string): string => {
+    const d = dateOf(at);
+    return d ? dayYearFmt.format(d) : '—';
+};
+
+/** 'YYYY-MM-DD' calendar day in Philippine time — the ONE day key every
+ *  ledger, rollup, streak and backup stamp groups by. A UTC slice
+ *  (`toISOString().slice(0, 10)`) shifted each boundary by 8 hours, so the
+ *  same trading evening split across two keys. Accepts epoch MILLISECONDS
+ *  (default now); '' for a non-finite input (never throws, unlike
+ *  toISOString on an invalid date). */
+export const phtDayKey = (ms?: number): string => {
+    const d = ms === undefined ? new Date() : new Date(ms);
+    return Number.isFinite(d.getTime()) ? phtDayKeyFmt.format(d) : '';
 };
 
 /**
