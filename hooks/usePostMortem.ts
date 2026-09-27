@@ -21,6 +21,7 @@ import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '..
 import { lensFromSpeakerName } from '../utils/thinkingLens';
 import { ProviderConfig } from '../types/provider';
 import { conductPostMortem, conductTodayReassessment, writePostMortemMarkdownReport } from '../services/providers/GenericAnalysisService';
+import { buildAutoplaySpeakerRegex } from './analysisPipeline/autoplayParser';
 import { extractPostMortemFinalReport } from '../utils/postMortemReport';
 import { classifyRootCause } from '../utils/rootCause';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
@@ -195,7 +196,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
 
         // model side-effects from this post-mortem (skill draft,
         // evidence skills, AI notebook note) — flushed onto the bubble
-        // as Hermes-style status rows when the run finishes its learning
+        // as status rows when the run finishes its learning
         // passes. Declared outside the try so `finally` can flush it.
         const pmActions: ToolAction[] = [];
         let postMortemSucceeded = true;
@@ -412,17 +413,13 @@ Please investigate this discrepancy in your analysis.
                 // Speaker regex built from the ACTUAL participating providers
                 // (runtime-configured provider names) plus the established
                 // model aliases — the old hardcoded list silently dropped
-                // every analyst turn from custom providers.
-                const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const resultProviderNames = results.map(r => r.provider).filter(Boolean).map(escapeRegExp);
-                const speakerNames = [...new Set([
-                    ...resultProviderNames,
-                    'Gemini', 'DeepSeek', 'Zhipu', 'Groq', 'Groq \\(Alt\\)', 'Groq \\(Alt 2\\)', 'OpenRouter',
-                    'Moderator', 'Master Strategist', 'Claude[^:]*', 'GPT[^:]*', 'Grok[^:]*', 'Mistral[^:]*',
-                    'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'O1[^:]*', 'O3[^:]*', 'O4[^:]*', 'Puter[^:]*'
-                ])].sort((a, b) => b.length - a.length);
-                const speakerPattern = speakerNames.join('|');
-                const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
+                // every analyst turn from custom providers. One shared builder
+                // with the accuracy-mode autoplay parser; the O1/O3/O4
+                // aliases belong to THIS roster only (kept exactly as before).
+                const turnRegex = buildAutoplaySpeakerRegex(
+                    results.map(r => r.provider).filter(Boolean),
+                    ['O1[^:]*', 'O3[^:]*', 'O4[^:]*'],
+                );
 
                 for await (const chunk of debateStream) {
                     // abort the stream if the user switched accounts
