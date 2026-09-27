@@ -7,6 +7,7 @@ import {
   appendRecentOutcome,
   RECENT_WINDOW,
   DECAY_MIN_SAMPLES,
+  DECAY_RECENT_WINRATE,
   type SkillMeta,
 } from '../services/learning/SkillMemoryService';
 
@@ -71,6 +72,17 @@ describe('alpha-decay window', () => {
     expect(recentWindowStats(meta())).toBeNull();
   });
 
+  it('recentWindowStats counts BOTH tokens — a dirty row is not a loss streak', () => {
+    // `length - wins` counted every non-W byte as a loss, so a corrupt
+    // "WLXL" read as 1W/3L: two losses invented out of junk the ledger never
+    // counted, enough on its own to sink a window under the decay bar.
+    expect(recentWindowStats(meta({ recentOutcomes: 'WLXL' }))).toEqual({ wins: 1, losses: 2 });
+    // Junk only, and lower-case: neither invents evidence in either direction.
+    expect(recentWindowStats(meta({ recentOutcomes: 'XXX' }))).toEqual({ wins: 0, losses: 0 });
+    expect(recentWindowStats(meta({ recentOutcomes: 'wl' }))).toEqual({ wins: 1, losses: 1 });
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'XXX' }))).toBe(false);
+  });
+
   it('isDecayed fires only past the sample bar and the win-rate band', () => {
     const good = meta({ kind: 'repeat', recentOutcomes: 'WWWWWWWWWW' });
     expect(isDecayed(good)).toBe(false);
@@ -85,6 +97,30 @@ describe('alpha-decay window', () => {
     expect(isDecayed(avoidDecayed)).toBe(true);
     const avoidFine = meta({ kind: 'avoid', recentOutcomes: 'LLWWLLLLLL' });
     expect(isDecayed(avoidFine)).toBe(false);
+  });
+
+  it('needs TWO consecutive bad slices, not one point estimate', () => {
+    // Sample floor boundary: exactly DECAY_MIN_SAMPLES is judgeable, one
+    // fewer is not.
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'WLLLLLLL' }))).toBe(true);
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'WLLLLLL' }))).toBe(false);
+    // The whole window is 20% on paper, but its FRESHEST 8 sit at 50%: the
+    // skill is coming back. One aggregate point estimate used to bench it
+    // anyway; the decay has to persist to the present to count.
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'LLLLLLWWWW' }))).toBe(false);
+    // Mirror for avoid: 8W/4L overall (decayed by the old rule) whose freshest
+    // 8 are a coin flip.
+    expect(isDecayed(meta({ kind: 'avoid', recentOutcomes: 'WWWWWWWWLLLL' }))).toBe(false);
+    // Both slices under the bar still demotes.
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'LLLLLLLLLL' }))).toBe(true);
+  });
+
+  it('the decay bar is strict — sitting ON it is not decay', () => {
+    // 7W/13L is exactly DECAY_RECENT_WINRATE. The comparison is `<`, so a
+    // window pinned to the bar is not evidence of decay.
+    expect(DECAY_RECENT_WINRATE * 20).toBe(7);
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'W'.repeat(7) + 'L'.repeat(13) }))).toBe(false);
+    expect(isDecayed(meta({ kind: 'repeat', recentOutcomes: 'W'.repeat(6) + 'L'.repeat(14) }))).toBe(true);
   });
 
   it('the window round-trips through serialize/parse and strips junk', () => {

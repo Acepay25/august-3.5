@@ -126,6 +126,7 @@ import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
 import useNetworkStatus from './hooks/useNetworkStatus';
 import { useSupervisorBootstrap } from './hooks/useSupervisorBootstrap';
+import { useLearningHeartbeat } from './hooks/useLearningHeartbeat';
 import { useUIState } from './hooks/useUIState';
 import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
@@ -2781,6 +2782,12 @@ const App: React.FC = () => {
     // WS-2.1: the supervisor's listeners + startup sweep live at App level —
     // a session that never opens the Trade dock still self-governs its queues.
     useSupervisorBootstrap(activeUsername);
+
+    // The four scheduled passes used to fire once, from the profile load, so
+    // they only ran when the app was opened. App level for the same reason as
+    // the supervisor above: the loop belongs to the session, not to whichever
+    // surface happens to be mounted.
+    useLearningHeartbeat(activeUsername, loggedTrades);
 
 
     // F6: best-effort backup when the desktop app closes — the unload flush
