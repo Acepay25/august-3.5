@@ -27,6 +27,7 @@ import {
     MAX_TRADE_AGE_DAYS
 } from '../../constants/calibrationConstants';
 import { getEffectiveSessions } from '../infrastructure/SessionService';
+import { utcDayStart } from './SessionGuardService';
 
 export type ConfidenceLevel = 'High' | 'Medium' | 'Low' | 'Avoid';
 
@@ -595,48 +596,50 @@ export const updateGranularCalibration = (
             return Number.isFinite(t) && t >= granularCutoffMs;
         });
 
-    // Helper to update stats for a dimension
-    const updateDimensionStats = (
-        dimension: { [key: string]: ConfidenceCalibrationStats },
-        key: string | undefined,
-        isWin: boolean
+    // Rebuild every dimension aggregate from the PRUNED entries — never
+    // increment. The increments made byCoin/byPattern/… an all-time tally
+    // while granularEntries aged out at MAX_TRADE_AGE_DAYS, so the same store
+    // answered "90-day reality" (base buckets, rebuilt in updateCalibration)
+    // or "all-time history" (these getters) depending on which one the caller
+    // picked — a coin that was poison a year ago kept subtracting its penalty
+    // forever. One population, one horizon, one truth.
+    const rebuildDimension = (
+        keyOf: (e: GranularCalibrationEntry) => string | undefined
     ): { [key: string]: ConfidenceCalibrationStats } => {
-        if (!key) return dimension;
-
-        const existing = dimension[key] || { wins: 0, losses: 0, total: 0 };
-        return {
-            ...dimension,
-            [key]: {
-                wins: existing.wins + (isWin ? 1 : 0),
-                losses: existing.losses + (isWin ? 0 : 1),
+        const out: { [key: string]: ConfidenceCalibrationStats } = {};
+        for (const e of granularEntries) {
+            const k = keyOf(e);
+            if (!k) continue;
+            const existing = out[k] || { wins: 0, losses: 0, total: 0 };
+            const win = e.outcome === 'WIN';
+            out[k] = {
+                wins: existing.wins + (win ? 1 : 0),
+                losses: existing.losses + (win ? 0 : 1),
                 total: existing.total + 1
-            }
-        };
+            };
+        }
+        return out;
     };
 
-    const isWin = entry.outcome === 'WIN';
-
     // Update each dimension - use fallback empty objects for old data that may not have all properties
-    granular.byCoin = updateDimensionStats(granular.byCoin || {}, entry.coin, isWin);
-    granular.byPattern = updateDimensionStats(granular.byPattern || {}, entry.pattern, isWin);
-    granular.byTimeframe = updateDimensionStats(granular.byTimeframe || {}, entry.timeframe, isWin);
-    granular.byRegime = updateDimensionStats(granular.byRegime || {}, entry.regime, isWin);
+    granular.byCoin = rebuildDimension(e => e.coin);
+    granular.byPattern = rebuildDimension(e => e.pattern);
+    granular.byTimeframe = rebuildDimension(e => e.timeframe);
+    granular.byRegime = rebuildDimension(e => e.regime);
 
     // Update provider dimension
-    if (entry.provider) {
-        const providerKey = entry.provider.toString();
-        granular.byProvider = updateDimensionStats(granular.byProvider || {}, providerKey, isWin);
-    }
+    granular.byProvider = rebuildDimension(e => e.provider?.toString());
 
     // Update session dimension (auto-detect if not provided)
-    const session = entry.session || detectTradingSession(entry.timestamp);
-    granular.bySession = updateDimensionStats(granular.bySession || {}, session, isWin);
+    granular.bySession = rebuildDimension(e => e.session || detectTradingSession(e.timestamp));
 
     // Update Day of Week dimension
-    const date = entry.timestamp ? new Date(entry.timestamp) : new Date();
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = days[date.getUTCDay()];
-    granular.byDayOfWeek = updateDimensionStats(granular.byDayOfWeek || {}, dayName, isWin);
+    granular.byDayOfWeek = rebuildDimension(e => {
+        if (!e.timestamp) return undefined;
+        const d = new Date(e.timestamp);
+        return Number.isNaN(d.getTime()) ? undefined : days[d.getUTCDay()];
+    });
 
     return {
         ...base,
@@ -1198,9 +1201,12 @@ export const getSessionCalibrationState = (
         return defaultState;
     }
 
-    // Get today's start (midnight local time)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Get today's start — UTC midnight, the same day boundary the session
+    // guard and discipline analytics bucket by. Local midnight disagreed with
+    // them for every user west of UTC after 00:00 UTC: a 23:00 EST loss
+    // streak read as "0 losses today" here while the guard's banner said
+    // stand-down.
+    const today = utcDayStart();
 
     // Filter to today's entries
     const todayEntries = calibration.entries.filter(

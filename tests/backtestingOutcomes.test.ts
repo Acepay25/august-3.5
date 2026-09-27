@@ -112,17 +112,22 @@ describe('simulateTradeSignal (lookback walk)', () => {
     expect(result.hitTarget).toBe('SL');
   });
 
-  it('detects a clean TP1 win', async () => {
+  it('detects a TP1 win; later dips back through entry blend the exit (TP1→BE)', async () => {
     scripted1m = [
       [94950, 95100, 94900, 95000], // entry fills
       [95100, 96100, 95050, 96000], // TP1 wicked
-      ...Array.from({ length: 12 }, () => filler),
+      ...Array.from({ length: 12 }, () => filler), // filler low 94400 ≤ entry → BE touch
     ];
 
     const result = await simulateTradeSignal(makeAnalysis(), 'BTCUSDT');
     expect(result.outcome).toBe('WIN');
     expect(result.hitTarget).toBe('TP1');
-    expect(result.priceAtExit).toBe(96000);
+    // Half out at TP1=96000, remainder stopped flat at entry=95000: the
+    // blended exit is the midpoint. The old engine reported the full 96000 —
+    // ~2× the realized R for every such trade.
+    expect(result.priceAtExit).toBe(95500);
+    // The windowed MAE rides along for resolved outcomes.
+    expect(result.maePercent).toBeDefined();
   });
 
   it('guards unparsable stop losses (NaN) as invalid', async () => {
@@ -184,18 +189,19 @@ describe('simulateFromAnalysisTime (hybrid 4-tier walk)', () => {
     expect(result.priceAtExit).toBe(94000);
   });
 
-  it('keeps the recovery WIN when the SL touch and the TP are on different candles', async () => {
+  it('keeps the recovery WIN when the SL touch and the TP are on different candles (exit blended at TP1→BE)', async () => {
     scripted1m = [
       [94950, 95100, 94900, 95000], // entry fills
       [94500, 95000, 93900, 94400], // SL wicked
       [94500, 96100, 94400, 96000], // TP1 hit later — documented recovery
-      ...Array.from({ length: 12 }, () => filler),
+      ...Array.from({ length: 12 }, () => filler), // dips ≤ entry afterwards → BE touch
     ];
 
     const result = await sim(makeAnalysis());
     expect(result.outcome).toBe('WIN');
     expect(result.hitTarget).toBe('TP1');
-    expect(result.priceAtExit).toBe(96000);
+    // (96000 + 95000) / 2 — the remainder exited at the breakeven stop.
+    expect(result.priceAtExit).toBe(95500);
   });
 
   it('reports a plain SL touch with no TP as LOSS (was NOT_TRIGGERED)', async () => {

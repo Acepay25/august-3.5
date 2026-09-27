@@ -340,3 +340,28 @@ describe('stores the app keeps in raw localStorage', () => {
         expect(backup[LEARNING_RULES]).toEqual({ version: 2, rules: [{ id: 'r1' }] });
     });
 });
+
+describe('exportPreferencesData — forged-tool secret redaction', () => {
+    it('strips secret headers from forged tools before backup but keeps the tool', async () => {
+        // toolForge deliberately supports static Authorization headers, so a
+        // user's bearer token otherwise shipped in every exported backup in
+        // plaintext — on the same file where provider keys are correctly
+        // blanked ("no secrets leave the device").
+        prefStore['desk_tools_forged_v1'] = [
+            {
+                id: 'custom_funding',
+                status: 'confirmed',
+                proposal: { name: 'funding', urlTemplate: 'https://api.example.com/{symbol}' },
+                headers: { Authorization: 'Bearer sk-super-secret', 'X-Api-Key': 'tok_123', Accept: 'application/json' },
+            },
+        ];
+        const backup = await exportPreferencesData();
+        const tools = backup['desk_tools_forged_v1'] as Array<Record<string, unknown>>;
+        expect(tools).toHaveLength(1);
+        const headers = tools[0].headers as Record<string, string>;
+        expect(headers.Authorization).toBeUndefined();
+        expect(headers['X-Api-Key']).toBeUndefined();
+        // Non-secret headers survive — the tool still works after restore.
+        expect(headers.Accept).toBe('application/json');
+    });
+});

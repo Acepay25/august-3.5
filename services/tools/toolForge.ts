@@ -352,11 +352,22 @@ export const FORGED_PROPOSAL_EVENT = 'august:forged-proposal';
 /**
  * Propose: validate + store as a CANDIDATE. Throws on invalid proposals —
  * the caller surfaces the errors; nothing invalid is ever stored.
+ *
+ * A re-proposal whose slug collides with a CONFIRMED tool never downgrades
+ * it: models routinely re-propose the same recipe, and the old
+ * filter-out-and-replace deleted the human-approved record (with its usage
+ * stats) and silently undid the approval gate mid-session. The confirmed
+ * tool keeps its place; the new proposal is not stored.
  */
 export const proposeForgedTool = (proposal: ToolForgeProposal, proposedBy?: string): ForgedTool => {
     const v = validateProposal(proposal);
     if (!v.ok) throw new Error(`Invalid tool proposal: ${v.errors.join('; ')}`);
     const id = `custom_${slugify(proposal.name)}`;
+    const existing = load().find(t => t.id === id);
+    if (existing?.status === 'confirmed') {
+        console.warn(`[toolForge] Re-proposal "${proposal.name}" ignored — a confirmed tool already owns the id "${id}". Retire it first to replace it.`);
+        return existing;
+    }
     const items = load().filter(t => t.id !== id);
     const tool: ForgedTool = {
         id,
