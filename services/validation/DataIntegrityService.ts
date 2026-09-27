@@ -7,9 +7,6 @@ import { getUserProfile, saveUserProfile } from '../infrastructure/dbService';
 import { createBackup, getBackups, BackupMetadata } from '../infrastructure/BackupService';
 import { getPreference, setPreference, getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 
-// Current data schema version
-const CURRENT_DATA_VERSION = 1;
-
 /**
  * Data integrity check result
  */
@@ -98,14 +95,6 @@ export const createStartupBackup = async (username: string): Promise<BackupMetad
 };
 
 /**
- * Update the stored trade count
- * Call this after any trade log modification
- */
-export const updateTradeCount = async (username: string, tradeCount: number): Promise<void> => {
-    await setPreference(`${PREF_KEYS.LAST_TRADE_COUNT}_${username}`, String(tradeCount));
-};
-
-/**
  * Get stored data version for migration handling
  */
 export const getDataVersion = async (username: string): Promise<number> => {
@@ -118,14 +107,6 @@ export const getDataVersion = async (username: string): Promise<number> => {
  */
 export const setDataVersion = async (username: string, version: number): Promise<void> => {
     await setPreference(`${PREF_KEYS.DATA_VERSION}_${username}`, String(version));
-};
-
-/**
- * Check if data migration is needed
- */
-export const needsMigration = async (username: string): Promise<boolean> => {
-    const currentVersion = await getDataVersion(username);
-    return currentVersion < CURRENT_DATA_VERSION;
 };
 
 /**
@@ -142,31 +123,6 @@ export const runMigrations = async (username: string): Promise<void> => {
 
     // Future migrations can be added here
     // if (currentVersion < 2) { ... }
-};
-
-/**
- * Get recovery options for a user
- */
-export const getRecoveryOptions = async (username: string): Promise<{
-    hasBackups: boolean;
-    backups: BackupMetadata[];
-    recommendedBackup: BackupMetadata | null;
-}> => {
-    const backups = await getBackups(username);
-
-    // Recommend the backup with the most trades
-    let recommendedBackup: BackupMetadata | null = null;
-    if (backups.length > 0) {
-        recommendedBackup = backups.reduce((best, current) =>
-            current.tradeCount > best.tradeCount ? current : best
-            , backups[0]);
-    }
-
-    return {
-        hasBackups: backups.length > 0,
-        backups,
-        recommendedBackup,
-    };
 };
 
 /**

@@ -25,6 +25,15 @@
  *    keyless local servers (Ollama / LM Studio / llama.cpp) work identically
  *    on web, dev proxy, and the packaged desktop app.
  *  - isLocalBaseUrl — the "keyless = ready" exemption predicate.
+ *  - normalizeProviderUrl — validate + strip the endpoint path suffix off a
+ *    configured baseUrl (six suffixes; the dev proxy used to strip four, so a
+ *    pasted "/v1/messages" base URL normalized differently per transport).
+ *  - fetchFollowingSafeRedirects — the ONE redirect-hop policy: follow
+ *    redirects manually and re-validate every hop against the URL policy, so
+ *    neither the dev proxy nor the main process can be 302'd at an internal
+ *    target. Takes the fetch implementation as a parameter (net.fetch on
+ *    desktop, global fetch in the vite config) because the POLICY is shared
+ *    while the transport is not.
  */
 
 'use strict';
@@ -318,6 +327,125 @@ function isLocalBaseUrl(baseUrl) {
     }
 }
 
+// ─── Base-URL normalization ─────────────────────────────────────────────────
+
+/**
+ * Endpoint path suffixes stripped from a configured baseUrl. A user routinely
+ * pastes the full endpoint they were given ("…/v1/chat/completions"), and the
+ * transports append their own path to the base — so an unstripped suffix
+ * produced "…/chat/completions/chat/completions".
+ *
+ * SIX suffixes, not four: the dev proxy used to strip only the four it
+ * happened to know about, so a baseUrl pasted from an Anthropic-style endpoint
+ * ("/v1/messages"), a bare "/v1/chat" gateway or "/v1/completions" legacy
+ * OpenAI route was normalized DIFFERENTLY per transport — the same saved
+ * provider worked on web and failed on desktop (and vice versa). The list now
+ * lives here, so the two cannot drift again.
+ */
+const PROVIDER_URL_PATH_SUFFIXES = [
+    '/chat/completions',
+    '/messages',
+    '/responses',
+    '/models',
+    '/chat',
+    '/completions',
+];
+
+/**
+ * Validate + normalize a configured provider baseUrl: the host policy above,
+ * no embedded credentials / query / fragment, and the endpoint-path suffix
+ * stripped. Throws with the same user-facing message on every transport
+ * (this text is shown verbatim in Settings → Providers).
+ *
+ * The renderer reaches the same rules through
+ * `utils/providerUrlValidation.ts`, which is the UX layer over this function.
+ *
+ * @param {string} rawUrl
+ * @returns {string} the normalized base URL (no trailing slash)
+ */
+function normalizeProviderUrl(rawUrl) {
+    const parsed = new URL(String(rawUrl || '').trim());
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isPrivateOrLoopbackHost(parsed.hostname))) {
+        throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
+    }
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    for (const suffix of PROVIDER_URL_PATH_SUFFIXES) {
+        if (parsed.pathname.endsWith(suffix)) {
+            parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
+            break;
+        }
+    }
+    return parsed.toString().replace(/\/$/, '');
+}
+
+// ─── Redirect-hop policy ────────────────────────────────────────────────────
+
+/** Cap on manual redirect hops, matching the pre-existing desktop limit. */
+const MAX_REDIRECT_HOPS = 3;
+
+/**
+ * Fetch with redirects followed MANUALLY, re-validating every hop.
+ *
+ * WHY THIS EXISTS. `fetch` follows redirects by default, so the host gate on
+ * the configured endpoint only ever checked the INITIAL url: a configured (or
+ * compromised, or hostile) provider could 302 the caller — on desktop the
+ * MAIN process, which has no CORS confinement — at an internal or plain-HTTP
+ * target and the body still came back. Every hop is therefore re-checked
+ * with isSafeProviderTargetUrl, and the chain is capped.
+ *
+ * WHY IT LIVES HERE and is not duplicated. It was desktop-only: the vite dev
+ * proxy forwarded redirects invisibly, so the dev server and the packaged app
+ * enforced different hop policies for the same request. The hop rule is part
+ * of the provider wire policy, and this module is already imported by all
+ * three transports (renderer via the ESM interop, the dev proxy as a plain
+ * Node import, electron/main.cjs by require). The fetch IMPLEMENTATION is a
+ * parameter because it differs per host — `net.fetch` in the Electron main
+ * process, the global `fetch` in the vite config — while the policy cannot.
+ *
+ * @param {(url: string, init: object) => Promise<any>} fetcher
+ * @param {string} url
+ * @param {object} [init] standard fetch init (method/headers/body/signal)
+ * @returns {Promise<any>} the final, non-redirect response
+ */
+async function fetchFollowingSafeRedirects(fetcher, url, init) {
+    let current = String(url);
+    let method = (init && init.method) || 'GET';
+    let fetchInit = init;
+    for (let hop = 0; ; hop++) {
+        if (!isSafeProviderTargetUrl(current)) {
+            throw new Error('Provider request blocked: the target URL failed the provider URL policy.');
+        }
+        const response = await fetcher(current, { ...fetchInit, redirect: 'manual' });
+        const status = response.status;
+        if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
+            const location = response.headers.get('location');
+            try { if (response.body && response.body.cancel) await response.body.cancel(); } catch { /* already consumed */ }
+            if (!location) return response; // redirect without Location: surface the status as-is
+            if (hop >= MAX_REDIRECT_HOPS) throw new Error('Provider request exceeded the redirect limit.');
+            try {
+                current = new URL(location, current).toString();
+            } catch {
+                throw new Error('Provider request blocked: redirect target is not a valid URL.');
+            }
+            if ((status === 301 || status === 302 || status === 303) && method !== 'GET' && method !== 'HEAD') {
+                // fetch spec: 301/302/303 ALL rewrite a POST into a bodyless
+                // GET (303 unconditionally; 301/302 in every real client and
+                // in both the web fetch and Node's proxy transports). Re-POSTing
+                // the body after a 301/302 is a double-submit class bug.
+                // 307/308 by contrast MUST repeat the method + body.
+                method = 'GET';
+                fetchInit = { ...fetchInit, method: 'GET' };
+                delete fetchInit.body;
+            }
+            continue;
+        }
+        return response;
+    }
+}
+
 /**
  * Ask a host that can return a separate reasoning channel to do so.
  *
@@ -348,6 +476,10 @@ const PROVIDER_REQUEST_POLICY = {
     httpAllowedForHost,
     isSafeProviderTargetUrl,
     isLocalBaseUrl,
+    normalizeProviderUrl,
+    PROVIDER_URL_PATH_SUFFIXES,
+    fetchFollowingSafeRedirects,
+    MAX_REDIRECT_HOPS,
     EXTENDED_THINKING_MODEL_RE,
     MIN_EFFECTIVE_THINKING_TOKENS,
     ANTHROPIC_DEFAULT_TEMPERATURE,

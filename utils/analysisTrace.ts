@@ -10,13 +10,6 @@ export interface AnalysisTraceEvent {
     tone: AnalysisTraceTone;
 }
 
-const formatTime = (value?: string): string | undefined => {
-    if (!value) return undefined;
-    const date = new Date(value);
-    if (!Number.isFinite(date.getTime())) return undefined;
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-};
-
 /**
  * Reconstruct the important observable stages of a run from persisted message
  * data. This is deliberately provider-agnostic: it explains what August
@@ -135,5 +128,3 @@ export const buildAnalysisTrace = (message: Message): AnalysisTraceEvent[] => {
     }
     return events;
 };
-
-export const formatTraceTime = formatTime;

@@ -1,6 +1,11 @@
 /**
  * Benchmark-relative alpha (skill vs tide).
  *
+ * MOVED HERE from utils/ (2026-09-27). utils/ is a LEAF layer — nothing in it
+ * may reach a service — and settlement performs real market-data I/O through
+ * MarketDataService, so this belongs beside the service it calls. The pure
+ * helpers below are unchanged.
+ *
  * A "WIN" that only happened because the whole market ran up is not skill —
  * it is beta. This module measures what every downstream statistic silently
  * assumes: did the call beat simply HOLDING the benchmark (BTC, or ETH for
@@ -10,8 +15,8 @@
  * nothing here re-scores the panel (that is the follow-up the plan defers).
  */
 
-import { fetchOHLCVFromTime, Kline } from '../services/analysis/MarketDataService';
-import type { BenchmarkAlpha } from '../types/trade';
+import { fetchOHLCVFromTime, Kline } from './MarketDataService';
+import type { BenchmarkAlpha } from '../../types/trade';
 
 export type { BenchmarkAlpha };
 

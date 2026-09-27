@@ -8,7 +8,7 @@
 
 import { TradeAnalysis } from '../../types';
 import { parsePrice } from '../../utils/analysisUtils';
-import { BenchmarkAlpha, settleBenchmarkAlpha } from '../../utils/benchmarkAlpha';
+import { BenchmarkAlpha, settleBenchmarkAlpha } from '../analysis/benchmarkAlpha';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
 import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';

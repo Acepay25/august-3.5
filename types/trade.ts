@@ -228,33 +228,3 @@ export interface Conversation {
   moderatorModel: string;        // Moderator model id
   leverage: number;
 }
-
-// Dashboard Statistics for Win Rate Dashboard
-export interface DashboardStats {
-  winRate: number;
-  totalTrades: number;
-  wins: number;
-  losses: number;
-  totalPnL: number;
-  avgWinSize: number;
-  avgLossSize: number;
-  profitFactor: number;
-  currentStreak: { type: 'win' | 'loss'; count: number };
-  bestWinStreak: number;
-  worstLossStreak: number;
-}
-
-export interface TradeContextSummary {
-  tradeId: string;
-  asset: string;
-  direction: string;
-  entry: string;
-  stopLoss: string;
-  takeProfit: string[];
-  outcome: string;
-  leverage: number;
-  aiInsights: Record<string, string>;
-  postMortem?: { reason: string; corrections: string };
-  family?: string;
-  timestamp: string;
-}

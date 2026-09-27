@@ -5,8 +5,8 @@ import {
     computeAlphaPct,
     beatTheTide,
     settleBenchmarkAlpha,
-} from '../utils/benchmarkAlpha';
-import type { BenchmarkAlpha } from '../utils/benchmarkAlpha';
+} from '../services/analysis/benchmarkAlpha';
+import type { BenchmarkAlpha } from '../services/analysis/benchmarkAlpha';
 
 describe('benchmark alpha (skill vs tide)', () => {
     it('picks BTC as the tide for most pairs, ETH for ETH', () => {

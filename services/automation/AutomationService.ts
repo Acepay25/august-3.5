@@ -8,7 +8,7 @@
  * cronParser.ts — this service only persists and reads.
  */
 
-import { getPreferenceArray, getPreferenceObject, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
+import { getPreferenceArray, getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { AutomationConfig, AutomationRun } from '../../types/automation';
 import { nextCronTime, countMissedRuns } from './cronParser';
 
@@ -62,10 +62,6 @@ export const saveAutomationConfigs = async (username: string, configs: Automatio
     await setPreferenceObject(`${CONFIGS_KEY_PREFIX}${username}`, configs);
 };
 
-export const clearAutomationConfigs = async (username: string): Promise<void> => {
-    await removePreference(`${CONFIGS_KEY_PREFIX}${username}`);
-};
-
 // ─── Runs ───────────────────────────────────────────────────────────────────
 
 export const loadAutomationRuns = async (username: string, automationId: string): Promise<AutomationRun[]> => {
@@ -80,10 +76,6 @@ export const loadAutomationRuns = async (username: string, automationId: string)
 export const saveAutomationRuns = async (username: string, automationId: string, runs: AutomationRun[]): Promise<void> => {
     const pruned = runs.slice(0, MAX_RUNS_PER_AUTOMATION);
     await setPreferenceObject(`${RUNS_KEY_PREFIX}${username}_${automationId}`, pruned);
-};
-
-export const clearAutomationRuns = async (username: string, automationId: string): Promise<void> => {
-    await removePreference(`${RUNS_KEY_PREFIX}${username}_${automationId}`);
 };
 
 // ─── Scheduler last-seen (catch-up bookkeeping) ─────────────────────────────

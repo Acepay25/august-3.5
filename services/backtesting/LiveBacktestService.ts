@@ -85,7 +85,6 @@ export interface LiveBacktestResult {
 // =============================================================================
 
 const MIN_MATCHES_FOR_STATS = 3;
-const MIN_MATCHES_FOR_CONFIDENCE = 5;
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -477,81 +476,6 @@ export const calculateExpectedValue = (
 };
 
 /**
- * Generate prompt injection with backtest context
- */
-export const generateBacktestPromptInjection = (result: LiveBacktestResult): string => {
-    if (result.totalMatches < MIN_MATCHES_FOR_STATS) {
-        return `
- **HISTORICAL BACKTEST:**
-Insufficient historical data (${result.totalMatches} similar trades found).
-Unable to provide statistical validation.
-`;
-    }
-
-    const evSign = result.expectedValue >= 0 ? '+' : '';
-    let injection = `
-═══════════════════════════════════════════════════════════════
- **HISTORICAL BACKTEST: SIMILAR SETUPS FOUND**
-═══════════════════════════════════════════════════════════════
-
-**Matched Trades:** ${result.totalMatches} historical trades
-
- **PERFORMANCE SUMMARY:**
-- Win Rate: ${result.winRate.toFixed(1)}%
-- Avg Win: ${result.avgWinPercent.toFixed(2)}%
-- Avg Loss: -${result.avgLossPercent.toFixed(2)}%
-- **Expected Value: ${evSign}${result.expectedValue.toFixed(2)}% per trade**
-`;
-
-    // Regime breakdown
-    if (result.regimeBreakdown.length > 0) {
-        injection += `
- **REGIME BREAKDOWN:**
-`;
-        for (const regime of result.regimeBreakdown) {
-            const marker = result.currentRegimeStats?.regime === regime.regime ? ' ← Current' : '';
-            injection += `- ${regime.regime}: ${regime.winRate.toFixed(0)}% (n=${regime.count})${marker}\n`;
-        }
-    }
-
-    // Warning
-    if (result.warning) {
-        injection += `
-${result.warning}
-`;
-    }
-
-    // Best/worst outcome — only from matches with REAL, non-zero PnL
-    // evidence (nulls are unmeasured and must never read as a ±0% outcome).
-    if (result.matchedTrades.length > 0) {
-        const measurable = result.matchedTrades.filter(
-            (m): m is BacktestMatch & { pnlPercent: number } => m.pnlPercent !== null
-        );
-        const best = measurable
-            .filter(t => t.outcome === 'WIN' && t.pnlPercent > 0)
-            .sort((a, b) => b.pnlPercent - a.pnlPercent)[0];
-        const worst = measurable
-            .filter(t => t.outcome === 'LOSS' && t.pnlPercent < 0)
-            .sort((a, b) => a.pnlPercent - b.pnlPercent)[0];
-
-        if (best) {
-            injection += ` Best Outcome: +${best.pnlPercent.toFixed(1)}% (${best.coin})\n`;
-        }
-        if (worst) {
-            injection += ` Worst Outcome: ${worst.pnlPercent.toFixed(1)}% (${worst.coin})\n`;
-        }
-    }
-
-    injection += `
-═══════════════════════════════════════════════════════════════
-
-**Use this historical data to validate your confidence level.**
-`;
-
-    return injection;
-};
-
-/**
  * Generate summary for UI display
  */
 export const generateBacktestSummary = (result: LiveBacktestResult): string => {
@@ -569,15 +493,4 @@ export const generateBacktestSummary = (result: LiveBacktestResult): string => {
 ${result.regimeBreakdown.map(r => `║ ${r.regime}: ${r.winRate.toFixed(0)}% win rate (${r.count} trades)${r.regime === result.currentRegimeStats?.regime ? ' ←' : ''}        ║`).join('\n')}
 ╚═══════════════════════════════════════════════════════════════╝
 `;
-};
-
-/**
- * Quick check if there's enough historical data for meaningful backtest
- */
-export const hasEnoughHistoricalData = (
-    currentAnalysis: TradeAnalysis,
-    tradeLog: LoggedTrade[]
-): boolean => {
-    const result = backtestSimilarSetups(currentAnalysis, tradeLog);
-    return result.totalMatches >= MIN_MATCHES_FOR_CONFIDENCE;
 };
