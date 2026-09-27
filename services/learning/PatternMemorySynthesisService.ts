@@ -8,6 +8,7 @@
 import { LoggedTrade, AIProvider } from '../../types';
 import { AttributedInsight } from '../../types/learning';
 import { parsePrice } from '../../utils/analysisUtils';
+import { baseOf } from '../../utils/symbol';
 import { familiesRelate } from '../../utils/patternMatch';
 import {
     loadDistilledFacts,
@@ -131,8 +132,10 @@ export function calculateSimilarity(setup: SetupContext, trade: LoggedTrade): nu
 
     // Coin match (highest priority)
     if (setup.coin && analysis?.coinName) {
-        const normCurrent = setup.coin.toUpperCase().replace(/USDT?$/, '');
-        const normTrade = analysis.coinName.toUpperCase().replace(/USDT?$/, '');
+        // Canonical base assets (utils/symbol) — both sides through the SAME
+        // helper so a quote suffix can't split the comparison.
+        const normCurrent = baseOf(setup.coin);
+        const normTrade = baseOf(analysis.coinName);
         if (normCurrent === normTrade) {
             score += SIMILARITY_WEIGHTS.coin;
         }
@@ -359,9 +362,11 @@ export function calculateAggregatedStats(
         if (!t.outcome || t.outcome === 'PENDING' || !t.analysis) return false;
 
         // At least one matching criterion
+        // Canonical base asset (utils/symbol), matching the cluster keys this
+        // service builds at normCurrent/normTrade — the old un-anchored strip
+        // left FDUSD/USDC tails on, splitting one coin's evidence in two.
         const matchesCoin = setup.coin &&
-            t.analysis?.coinName?.toUpperCase().replace(/USDT?$/, '') ===
-            setup.coin.toUpperCase().replace(/USDT?$/, '');
+            baseOf(t.analysis?.coinName || '') === baseOf(setup.coin);
         const matchesFamily = setup.family &&
             t.analysis?.detectedPatternFamily?.toLowerCase().includes(setup.family.toLowerCase());
         const matchesRegime = setup.regime && t.marketRegime === setup.regime;

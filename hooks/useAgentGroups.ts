@@ -1,5 +1,5 @@
 /**
- * useAgentGroups — runs a group ROOM : Hermes
+ * useAgentGroups — runs a group ROOM:
  * group-rounds semantics in-process. Round 1 = the @mentioned members
  * (@everyone/all = fan-out parity with the old single pass); each turn is
  * fed ONLY the room messages newer than what that member last saw; a
@@ -94,7 +94,11 @@ export const useAgentGroups = ({
     const abortRef = useRef<AbortController | null>(null);
 
     const pushActivity = useCallback((entry: Omit<GroupActivityEntry, 'id' | 'at'>) => {
-        setActivity(prev => [...prev, { ...entry, id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: Date.now() }]);
+        // Capped like every other event log in the repo (supervisorStore 80,
+        // debateRunLog 100): a room that runs for hours must not grow the
+        // feed unboundedly — the roster renders a recent-history strip, and
+        // the oldest entries are the first anyone would scroll past anyway.
+        setActivity(prev => [...prev, { ...entry, id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: Date.now() }].slice(-100));
     }, []);
     const pushActivityRef = useRef(pushActivity);
     pushActivityRef.current = pushActivity;
@@ -121,7 +125,7 @@ export const useAgentGroups = ({
             .filter((b): b is AgentBot => Boolean(b));
         if (members.length === 0) return;
 
-        // Round 1 speakers: @mention routing (Hermes's deterministic parse
+        // Round 1 speakers: @mention routing (deterministic parse
         // — name/title/no-space forms + @everyone). No mention = the old
         // fan-out (every member speaks once), which keeps single-pass
         // behavior byte-identical for plain prompts.
@@ -156,7 +160,7 @@ export const useAgentGroups = ({
 
         // The room log: everything said so far. Each member tracks the
         // index it last saw — a turn is fed ONLY the newer entries (this
-        // is what makes multi-round cheap, Hermes group-rounds parity).
+        // is what makes multi-round cheap).
         const room: RoomEntry[] = [{ speaker: ROOM_HUMAN_LABEL, text: trimmed }];
         const lastSeen = new Map<string, number>();
         let turns = 0;

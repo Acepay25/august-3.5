@@ -10,6 +10,8 @@
  * Pure functions: no notebook writes, no LLM, no network.
  */
 
+import { baseOf } from './symbol';
+
 export interface SkillPredictionScope {
     coin?: string;
     family?: string;
@@ -61,7 +63,9 @@ export const defaultPrediction = (scope: SkillPredictionScope): SkillPrediction 
     expectedLiftPts: 10,
     horizonTrades: 10,
     scope: {
-        coin: scope.coin?.toUpperCase().replace(/USDT?$/, ''),
+        // Canonical base coin (utils/symbol) — the stored claim and every
+        // reader of scope.coin normalize through the same helper.
+        coin: scope.coin ? baseOf(scope.coin) : undefined,
         family: scope.family,
         regime: scope.regime,
     },

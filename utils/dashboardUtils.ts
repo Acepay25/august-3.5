@@ -4,6 +4,7 @@
  */
 
 import { LoggedTrade, TradeOutcome } from '../types';
+import { phtDayKey } from './timezone';
 
 export interface OverallStats {
     winRate: number;
@@ -260,7 +261,9 @@ export const calculateRecentTrends = (trades: LoggedTrade[], days: number = 30):
     const dateMap = new Map<string, { wins: number; losses: number }>();
 
     completedTrades.forEach(trade => {
-        const date = new Date(trade.timestamp).toISOString().split('T')[0];
+        // PHT day key (utils/timezone) — the streak/adherence grouping follows
+        // the trader's day, not the UTC one.
+        const date = phtDayKey(new Date(trade.timestamp).getTime());
         const existing = dateMap.get(date) || { wins: 0, losses: 0 };
 
         if (trade.outcome === TradeOutcome.WIN) {

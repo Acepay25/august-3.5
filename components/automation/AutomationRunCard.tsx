@@ -3,6 +3,7 @@ import { AutomationRun } from '../../types/automation';
 import { ChevronDownIcon, LoadingIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import StatusPill from '../ui/StatusPill';
+import { phtStamp } from '../../utils/timezone';
 
 /** Minimal view of the stored hybrid snapshot (HybridDataPacket). */
 interface HybridSnapshot {
@@ -34,7 +35,7 @@ const AutomationRunCard: React.FC<{
 
     const analysis = run.message?.analysis;
     const snapshot = (analysis?.marketSnapshot ?? undefined) as HybridSnapshot | undefined;
-    const time = new Date(run.startedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const time = phtStamp(run.startedAt);
     // a bot-scoped run's message carries persona prose, no analysis —
     // without this the card reads a misleading "Neutral" with an empty bubble.
     const isBotReply = !analysis && !!run.message?.text?.trim();

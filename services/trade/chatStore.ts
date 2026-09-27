@@ -24,6 +24,7 @@
 
 import {
     ChatSession, StoredChatEntry, createSession, loadSessions, saveSessions, storageKey,
+    MAX_SESSIONS, MAX_ENTRIES,
 } from './chatSessions';
 import { getActiveUsername, LAST_ACTIVE_USER_KEY } from '../../utils/activeUser';
 import type { TradeProposal } from './proposedTrade';
@@ -93,6 +94,35 @@ const rebuild = (): void => {
     const running: Record<string, true> = {};
     for (const id of controllers.keys()) running[id] = true;
     snapshot = { sessions, activeId, running, signals: pendingSignals };
+};
+
+// ── Memory caps (mirror trimForStorage) ─────────────────────────────────────
+// chatSessions persists only the last MAX_SESSIONS sessions × MAX_ENTRIES
+// entries (trimForStorage), but the LIVE store used to be uncapped — a
+// long-lived terminal grew its in-memory transcript without bound while disk
+// stayed flat, so memory and disk silently diverged. These two helpers apply
+// the SAME caps to the live state; the transcript therefore never shows rows
+// a reload could not restore.
+
+/** Keep the most-recent MAX_ENTRIES entries — exactly what
+ *  trimForStorage would persist. */
+const capEntries = (entries: LiveEntry[]): LiveEntry[] =>
+    entries.length > MAX_ENTRIES ? entries.slice(-MAX_ENTRIES) : entries;
+
+/** Keep at most MAX_SESSIONS sessions, evicting oldest-first. A session
+ *  with a LIVE RUN is never chosen while idle candidates exist: dropping it
+ *  would orphan a stream still writing into the store (its mutate would land
+ *  on a session no longer in the list). Only when every overflow candidate
+ *  is running does plain oldest-first apply — the cap must hold. */
+const capSessions = (list: LiveSession[]): LiveSession[] => {
+    if (list.length <= MAX_SESSIONS) return list;
+    const overflow = list.length - MAX_SESSIONS;
+    const drop = new Set<number>();
+    for (let i = 0; i < list.length && drop.size < overflow; i += 1) {
+        if (!controllers.has(list[i].id)) drop.add(i);
+    }
+    for (let i = 0; i < list.length && drop.size < overflow; i += 1) drop.add(i);
+    return list.filter((_, i) => !drop.has(i));
 };
 
 const emit = (): void => {
@@ -189,8 +219,8 @@ export const setActiveId = (id: string): void => {
 /** Append a fresh session and (optionally) make it active. Returns its id. */
 export const addSession = (partial: Partial<LiveSession> = {}, activate = true): string => {
     ensureLoaded();
-    const fresh: LiveSession = { ...createSession(), ...partial, entries: partial.entries ?? [] };
-    sessions = [...sessions, fresh];
+    const fresh: LiveSession = { ...createSession(), ...partial, entries: capEntries(partial.entries ?? []) };
+    sessions = capSessions([...sessions, fresh]);
     if (activate) activeId = fresh.id;
     emit();
     return fresh.id;
@@ -216,10 +246,19 @@ export const removeSession = (id: string): string => {
     return activeId;
 };
 
-/** Immutably update one session (entries, title, panel seats…). */
+/** Immutably update one session (entries, title, panel seats…). Entry
+ *  appends ride the MAX_ENTRIES cap here, so EVERY append path (the turn
+ *  runner, addChatSystemEntry, panel seat rounds) stays bounded in memory
+ *  the same way trimForStorage bounds the persisted blob. */
 export const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
     ensureLoaded();
-    sessions = sessions.map(s => (s.id === id ? fn(s) : s));
+    sessions = sessions.map(s => {
+        if (s.id !== id) return s;
+        const next = fn(s);
+        // capEntries is identity-preserving under the cap, so a title/seat-only
+        // update keeps the same entries array reference.
+        return { ...next, entries: capEntries(next.entries) };
+    });
     emit();
 };
 

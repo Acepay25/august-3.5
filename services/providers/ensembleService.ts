@@ -48,6 +48,7 @@ import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../con
 import { archetypeDirectiveLine } from '../../constants/prompts/archetypePrompts';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
+import { escapeRegExp } from '../../utils/escapeRegExp';
 import { extractDebateLevels, formatDebateLevelsTable, summarizeFinalPositions } from '../../utils/debateLevels';
 import {
     buildSeatAliases,
@@ -1309,8 +1310,6 @@ export const buildLivePriceRefreshBlock = (price: number | null | undefined, lab
 import { turnAddressedTo, nearMissReplyTo } from '../../utils/debateReplyTo';
 
 const CLARIFICATION_MARKERS = CLARIFICATION_MARKERS_RE; // single home: constants/debateMarkers
-
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Who is on the Floor this turn — stops models treating harness/Moderator text as a new trader request. */
 const buildFloorOrientation = (opts: {

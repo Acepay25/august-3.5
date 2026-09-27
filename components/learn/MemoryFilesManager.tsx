@@ -8,6 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { FileText, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
+import { phtClock, phtDayKey, phtDayYear, phtStamp } from '../../utils/timezone';
 import { isSkillFile, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
 import {
     initMemoryFiles,
@@ -205,14 +206,14 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
         const inFolder = files.filter(f => f.folderId === folderId && f.name !== SUGGESTIONS_FILE_NAME);
         if (inFolder.length === 0) return 'Empty';
         const latest = inFolder.reduce((a, b) => (a.updatedAt > b.updatedAt ? a : b));
-        const date = new Date(latest.updatedAt);
-        const now = new Date();
-        const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
-        if (date.toDateString() === now.toDateString()) return `Updated today at ${time}`;
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-        if (date.toDateString() === yesterday.toDateString()) return `Updated yesterday at ${time}`;
-        return `Updated ${date.toLocaleDateString()}`;
+        // "Today/yesterday" judged in PHT day keys (utils/timezone) — the
+        // trader's calendar, not the device zone's.
+        const dayKey = phtDayKey(latest.updatedAt);
+        const todayKey = phtDayKey();
+        const yesterdayKey = phtDayKey(Date.now() - 86_400_000); // fixed-offset zone: exactly one day back
+        if (dayKey === todayKey) return `Updated today at ${phtClock(latest.updatedAt)}`;
+        if (dayKey === yesterdayKey) return `Updated yesterday at ${phtClock(latest.updatedAt)}`;
+        return `Updated ${phtDayYear(latest.updatedAt)}`;
     }, [files]);
 
     const handleDeleteFile = useCallback(async (file: MemoryFile) => {
@@ -515,7 +516,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                 <span className="block text-sm font-medium text-zinc-100 truncate">Suggestions</span>
                                 <span className="block text-xs text-zinc-500 mt-0.5 truncate">
                                     {suggestionsFile?.content.trim()
-                                        ? `Updated ${new Date(suggestionsFile.updatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                                        ? `Updated ${phtStamp(suggestionsFile.updatedAt)}`
                                         : 'Memory model review — tap to open'}
                                 </span>
                             </span>

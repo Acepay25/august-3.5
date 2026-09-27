@@ -17,6 +17,7 @@ import { useConfirmDialog } from '../shared/ConfirmDialog';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import MarkdownContent from '../shared/MarkdownContent';
 import { getMemoryFiles, toPatternMemoryMarkdown, patternMemoryStatsFromTrades } from '../../services/learning/MemoryFilesService';
+import { phtDayYear } from '../../utils/timezone';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -154,7 +155,7 @@ const TradeDetailView: React.FC<{
                     <p className="text-sm text-zinc-500 mt-2 mb-8">
                         {safeDirection}
                         {' · '}
-                        {new Date(timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {phtDayYear(timestamp)}
                         {modeBadge}
                     </p>
 
@@ -551,7 +552,7 @@ const TradeLogRowImpl: React.FC<{
                         {isInsight && <span className="text-ui-xs uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
                     <p className="text-xs text-zinc-500 mt-1 truncate tabular-nums">
-                        {direction}{tradeType ? ` · ${tradeType === 'scalp' ? '◆' : '◇'} ${tradeType}` : ''}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
+                        {direction}{tradeType ? ` · ${tradeType === 'scalp' ? '◆' : '◇'} ${tradeType}` : ''}{strategy ? ` · ${strategy}` : ''} · {phtDayYear(timestamp)}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
                         {alphaLabel ? ` · ${alphaLabel}` : ''}
                         {capLabel ? ` · ${capLabel}` : ''}

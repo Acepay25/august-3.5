@@ -83,17 +83,29 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
         void proposalTick;
         return proposalDisposition.get(id);
     };
+    // "Is any LATER entry still streaming?" — the retry/copy chips on a USER
+    // bubble stay hidden while the whole following generation runs (a PANEL
+    // turn streams seat 2 while seat 1 has settled, and a mid-turn retry
+    // could wipe the live room). Computed ONCE per render with a single
+    // reverse pass; the old per-row `entries.slice(i + 1).some(...)` was
+    // O(n²) on every streaming chunk.
+    // (The rows themselves stay unmemoized on purpose: they read the module
+    // proposalDisposition map through the proposalTick counter, so they are
+    // not props-pure — a memo boundary would have to thread module state
+    // through props for no win at the 60-entry cap.)
+    const answerStreamingFlags = React.useMemo<boolean[]>(() => {
+        const flags = new Array<boolean>(entries.length);
+        let seen = false;
+        for (let i = entries.length - 1; i >= 0; i -= 1) {
+            flags[i] = seen;
+            if (entries[i].streaming) seen = true;
+        }
+        return flags;
+    }, [entries]);
     return (
         <>
             {entries.map((e, i) => {
-                // Chips on a USER bubble (retry + copy) only exist once the
-                // generation following that message has stopped — and
-                // "the generation" is EVERY later entry, not just the
-                // adjacent one: a PANEL turn streams seat 2 while seat 1
-                // has already settled, and a retry chip appearing mid-turn
-                // let a click wipe the live room. Same contract as the AI
-                // bubble's copy chip (!streaming).
-                const answerStreaming = entries.slice(i + 1).some(x => x.streaming);
+                const answerStreaming = answerStreamingFlags[i];
                 // Key-levels protocol: the fenced block the model closes an
                 // analysis with renders as the chart-linked card, never as
                 // raw text — and an OPEN (still-streaming) fence is hidden

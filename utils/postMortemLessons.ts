@@ -6,9 +6,9 @@
 
 import { LoggedTrade, TradeOutcome } from '../types';
 import { extractLessonFromPostMortem } from '../services/learning/MemoryFilesService';
+import { baseOf } from './symbol';
 
-const normalizeCoin = (coin?: string): string =>
-    (coin || '').toUpperCase().replace(/USDT?$/, '').trim();
+const normalizeCoin = (coin?: string): string => baseOf(coin || '');
 
 export interface CoinLessonRow {
     date: string;

@@ -789,11 +789,19 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     repaintRef.current = repaint;
 
     // Repaint on state changes and on every pan/zoom the chart performs.
+    // repaint() is read through repaintRef (synced during render, before
+    // effects run) so this effect does NOT depend on the callback's identity:
+    // repaint changes on every pointermove draft update (draft → repaint →
+    // deps), and re-subscribing the range/resize listeners per pointermove
+    // was pure churn during a drag. draft/tool/color repaints are still
+    // driven by the repaintRef being fresh on the next trigger; committed
+    // shapes only use their OWN colors, so a tool/color flip without a draft
+    // paints nothing new.
     useEffect(() => {
-        repaint();
+        repaintRef.current();
         const chart = chartRef.current;
         if (!chart) return;
-        const handler = (): void => repaint();
+        const handler = (): void => repaintRef.current();
         const ts = chart.timeScale();
         // Test mocks may omit the subscription API — painting still works,
         // only pan/zoom repaint is skipped there.
@@ -802,13 +810,23 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         if (sub) sub(handler);
         // jsdom (and older webviews) have no ResizeObserver — painting on
         // pan/zoom still works via the range subscription alone.
-        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => repaint()) : null;
+        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => repaintRef.current()) : null;
         if (ro && hostRef.current) ro.observe(hostRef.current);
         return () => {
             if (unsub) { try { unsub(handler); } catch { /* chart removed */ } }
             ro?.disconnect();
         };
-    }, [repaint, drawings, modelDrawings, status, interval]);
+    }, [drawings, modelDrawings, status, interval]);
+
+    // The in-progress DRAFT preview repaints on every pointermove — but it
+    // must not re-run the subscription effect above (that was the churn:
+    // draft → new repaint identity → listener teardown/re-add per move).
+    // repaint's own closure only changes with draft/tool/color (toScreen is
+    // stable), so this effect fires exactly on preview-relevant changes and
+    // never overlaps the committed-shape triggers above.
+    useEffect(() => {
+        repaint();
+    }, [repaint]);
 
     // ─── Pointer capture on the overlay (only while a tool is active) ───────
     const localPoint = (ev: React.PointerEvent): { x: number; y: number } => {

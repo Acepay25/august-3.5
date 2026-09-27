@@ -11,6 +11,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getUserProfile, saveUserProfile, overwriteUserProfile } from './dbService';
 import { isValidUserProfile } from '../../utils/profileUtils';
+import { phtDayKey } from '../../utils/timezone';
 import { exportPreferencesData, importPreferencesData } from './ExportService';
 import { getAllThinkingRecordsByUser, saveThinkingBatch } from './ThinkingStoreService';
 
@@ -415,7 +416,7 @@ export const exportBackupToFile = async (backupId: string): Promise<void> => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `august_backup_${record.username}_${new Date(record.timestamp).toISOString().split('T')[0]}.json`;
+        a.download = `august_backup_${record.username}_${phtDayKey(Date.parse(record.timestamp))}.json`;
         a.click();
         URL.revokeObjectURL(url);
     } catch (error) {
@@ -596,7 +597,7 @@ export const selectBackupsToDelete = (
     for (const b of auto.slice(MAX_BACKUPS)) {
         const t = stampOf(b);
         if (t >= dailyCutoff) {
-            const key = new Date(t).toISOString().slice(0, 10);
+            const key = phtDayKey(t);
             if (!byDay.has(key)) { byDay.set(key, b.id); keep.add(b.id); }
             continue;
         }
