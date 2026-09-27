@@ -7,7 +7,7 @@ import { APP_VERSION } from '../../constants/version';
 
 // Import services
 import { ReinforcementSignalService, ReinforcementSignal } from '../../services/learning/ReinforcementSignalService';
-import { getCalibrationSummary } from '../../services/validation/ConfidenceCalibrationService';
+import { getCalibrationSummary } from '../../services/validation/calibrationStore';
 import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';

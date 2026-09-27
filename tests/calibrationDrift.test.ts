@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   getCalibrationDrift,
   getConfidenceAccuracy,
+} from '../services/validation/calibrationPolicy';
+import {
   getCalibratedWinRate,
   initializeCalibration,
   updateCalibration,
   updateGranularCalibration,
-} from '../services/validation/ConfidenceCalibrationService';
+} from '../services/validation/calibrationStore';
 import { MAX_TRADE_AGE_DAYS } from '../constants/calibrationConstants';
 import { TradeOutcome } from '../types';
 import type { ConfidenceCalibration, GranularCalibrationEntry } from '../types';

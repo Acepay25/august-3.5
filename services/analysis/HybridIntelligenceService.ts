@@ -78,10 +78,10 @@ import {
     generateCalibrationPromptInjection,
     generateGranularCalibrationPrompt,
     generateEnhancedCalibrationPromptInjection,
-    getProviderAccuracyContext,
-    generateSessionCalibrationPrompt,
-    ConfidenceLevel
-} from '../validation/ConfidenceCalibrationService';
+    generateSessionCalibrationPrompt
+} from '../validation/calibrationPrompts';
+import { getProviderAccuracyContext } from '../validation/calibrationPolicy';
+import { ConfidenceLevel } from '../validation/calibrationStore';
 
 import { generateValidationPromptInjection, generateCorrelationRiskPrompt } from '../validation/AccuracyValidationService';
 import { calculateCorrelationRisk } from './CorrelationRiskService';

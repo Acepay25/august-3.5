@@ -15,7 +15,7 @@ const data = vi.hoisted(() => ({
 vi.mock('../services/learning/ReinforcementSignalService', () => ({
     ReinforcementSignalService: { getAllSignals: vi.fn().mockResolvedValue([]) },
 }));
-vi.mock('../services/validation/ConfidenceCalibrationService', () => ({
+vi.mock('../services/validation/calibrationStore', () => ({
     getCalibrationSummary: (): object => ({ high: { winRate: data.highRate, total: 0 }, totalTrades: 12 }),
 }));
 vi.mock('../services/learning/GlobalLearningService', () => ({ default: { getCalibration: (): object => ({}) } }));
