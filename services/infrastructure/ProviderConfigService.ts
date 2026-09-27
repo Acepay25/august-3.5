@@ -7,7 +7,7 @@ import { ProviderConfig, ApiFormat, parseApiFormat } from '../../types/provider'
 import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import { usesGoogleGeminiDiscovery, googleModelsUrl } from '../../utils/googleGeminiFormat';
-import { isLocalBaseUrl } from '../../shared/providerRequestPolicy.cjs';
+import { isLocalBaseUrl, normalizeProviderUrl } from '../../shared/providerRequestPolicy.cjs';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
@@ -415,22 +415,21 @@ export function parseDiscoveredModelIds(body: unknown): string[] {
     return [...new Set(ids)];
 }
 
+/**
+ * The base URL discovery should probe: validated (throws on a bad URL) and
+ * with the endpoint path suffix stripped.
+ *
+ * The suffix list and the host rules come from the SHARED policy module —
+ * this function used to carry a third inline copy of both, one of the copies
+ * that had drifted (the vite dev proxy stripped four suffixes, this and
+ * electron/main.cjs stripped six, so a base URL pasted from a provider's docs
+ * resolved to a different origin per transport).
+ */
 export function normalizeBaseUrlForModels(rawUrl: string): string {
-    const base = assertValidProviderUrl(rawUrl);
-    let parsed: URL;
-    try {
-        parsed = new URL(base);
-    } catch {
-        return base.replace(/\/+$/, '');
-    }
-    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-    for (const suffix of ['/chat/completions', '/messages', '/responses', '/models', '/chat', '/completions']) {
-        if (parsed.pathname.endsWith(suffix)) {
-            parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
-            break;
-        }
-    }
-    return parsed.toString().replace(/\/$/, '');
+    // assertValidProviderUrl first so the caller gets the specific
+    // "must use HTTPS" / "cannot include credentials" message, as before.
+    assertValidProviderUrl(rawUrl);
+    return normalizeProviderUrl(rawUrl);
 }
 
 function throwDiscoverHttpError(status: number, rawBody: string): never {

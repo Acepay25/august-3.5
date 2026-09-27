@@ -314,7 +314,7 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
     // settings debounce, heartbeat, unload flush) each read the whole profile
     // before writing; without serialization the earlier save's fields could
     // be lost to a stale snapshot, and the SQLite BEGIN/COMMIT could not nest.
-    await runExclusiveWrite(async () => {
+    await runExclusiveWrite(async (permit) => {
       const existing = await sqliteGetUserProfile(username);
       const updatedProfile: UserProfile = {
         username,
@@ -331,7 +331,11 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
       if (!updatedProfile.createdAt) {
         updatedProfile.createdAt = new Date().toISOString();
       }
-      await sqliteSaveUserProfile(updatedProfile);
+      // Pass the permit: sqliteSaveUserProfile holds the write mutex itself,
+      // and re-entering with the permit keeps THIS read-modify-write atomic
+      // instead of deadlocking on a lock we already hold (or splitting into
+      // two separately-locked halves that could interleave).
+      await sqliteSaveUserProfile(updatedProfile, permit);
       await gcRemovedConversationImages(existing ?? undefined, updatedProfile);
     });
     return;
@@ -345,9 +349,9 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
 export const overwriteUserProfile = async (profile: UserProfile): Promise<void> => {
   const profileToSave = await stripMessageImages(profile);
   if (await ensureDbReady()) {
-    await runExclusiveWrite(async () => {
+    await runExclusiveWrite(async (permit) => {
       const previous = await sqliteGetUserProfile(profile.username) ?? undefined;
-      await sqliteSaveUserProfile(profileToSave);
+      await sqliteSaveUserProfile(profileToSave, permit);
       await gcRemovedConversationImages(previous, profileToSave);
     });
     return;
