@@ -84,6 +84,17 @@ export function getDefaultConfigs(): ProviderConfig[] {
 
 // ─── CRUD Operations ────────────────────────────────────────────────────────
 
+// Ciphertexts whose decryption FAILED this session, by provider id. A failed
+// decrypt yields apiKey '' (deliberate — the ciphertext must never ride out
+// as a Bearer token), but the stored ciphertext is still the ONLY copy of the
+// key: if a later read-modify-write save round-tripped that '', it would
+// overwrite the ciphertext irrecoverably and the user would lose every key
+// the OS keyring only TEMPORARILY could not open. saveProviderConfigs
+// re-persists the preserved ciphertext for any entry still carrying the
+// failed-decrypt empty key; a re-entered (non-empty) key encrypts normally
+// and evicts the entry.
+const undecryptableCiphertexts = new Map<string, string>();
+
 /**
  * Load all provider configs. Returns empty array if none configured.
  * API keys are decrypted transparently when the desktop bridge is available.
@@ -109,11 +120,22 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
         const ensembleModels = Array.isArray(config.ensembleModels)
             ? config.ensembleModels.filter((model): model is string => typeof model === 'string' && models.includes(model)).slice(0, 3)
             : undefined;
+        const id = typeof config.id === 'string' ? config.id : `legacy-${Date.now()}`;
+
+        const storedKey = typeof config.apiKey === 'string' ? config.apiKey : '';
+        const decryptedKey = await decryptKey(storedKey);
+        // Record the failure so a later save can re-persist the ciphertext
+        // instead of the empty stand-in (see undecryptableCiphertexts).
+        if (!decryptedKey && isEncrypted(storedKey)) {
+            undecryptableCiphertexts.set(id, storedKey);
+        } else if (decryptedKey) {
+            undecryptableCiphertexts.delete(id);
+        }
 
         return {
-            id: typeof config.id === 'string' ? config.id : `legacy-${Date.now()}`,
+            id,
             name: typeof config.name === 'string' ? config.name : 'Unnamed provider',
-            apiKey: await decryptKey(typeof config.apiKey === 'string' ? config.apiKey : ''),
+            apiKey: decryptedKey,
             baseUrl: typeof config.baseUrl === 'string' ? config.baseUrl : '',
             apiFormat,
             isEnabled: config.isEnabled === true,
@@ -129,8 +151,26 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
  * Persist all provider configs. API keys are encrypted at rest on desktop.
  */
 export async function saveProviderConfigs(configs: ProviderConfig[]): Promise<void> {
-    const encrypted = await Promise.all(configs.map(async c => ({ ...c, apiKey: await encryptKey(c.apiKey || '') })));
+    const encrypted = await Promise.all(configs.map(async c => {
+        // A failed-decrypt provider still carries apiKey '' (see
+        // loadProviderConfigs). Re-persist the ORIGINAL ciphertext rather
+        // than encrypting '' — otherwise any unrelated CRUD op (add a model,
+        // toggle a provider) permanently destroyed the stored key the moment
+        // the OS keyring was briefly unavailable.
+        const preserved = c.apiKey ? undefined : undecryptableCiphertexts.get(c.id);
+        if (preserved !== undefined) return { ...c, apiKey: preserved };
+        const apiKey = await encryptKey(c.apiKey || '');
+        // The key was re-entered (or the provider carries no key) — the
+        // preserved copy is superseded either way.
+        undecryptableCiphertexts.delete(c.id);
+        return { ...c, apiKey };
+    }));
     await setPreferenceObject(STORAGE_KEY, encrypted);
+    // Drop ciphertexts for providers that no longer exist.
+    const savedIds = new Set(encrypted.map(c => c.id));
+    for (const id of undecryptableCiphertexts.keys()) {
+        if (!savedIds.has(id)) undecryptableCiphertexts.delete(id);
+    }
 }
 
 // Serialize read-modify-write cycles. Every CRUD op below reloads the full

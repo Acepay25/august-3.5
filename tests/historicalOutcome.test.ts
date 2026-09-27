@@ -232,12 +232,15 @@ describe('verifyHistoricalOutcome — win/loss detection (Short)', () => {
     scripted1m = [
       [94900, 95100, 94800, 95000], // entry fills (high 95100 >= 95000)
       [94000, 95000, 93900, 94100], // TP1 wicked (low 93900 <= 94000)
-      ...Array.from({ length: 10 }, () => shortFiller),
+      ...Array.from({ length: 10 }, () => shortFiller), // high ≥ entry → BE touch
     ];
 
     const result = await verify(shortAnalysis);
     expect(result.outcome).toBe('TP_HIT');
-    expect(result.priceAtHit).toBe(94000);
+    // (94000 + 95000) / 2 — the remainder exited at the breakeven stop
+    // (shortFiller rises back through entry). The old engine reported the
+    // full TP price, ~2× the realized R.
+    expect(result.priceAtHit).toBe(94500);
   });
 
   it('hard-stops as SL_HIT when the extended zone is breached', async () => {

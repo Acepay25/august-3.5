@@ -50,6 +50,12 @@ vi.mock('../services/learning/GlobalLearningService', () => ({
 vi.mock('../services/backtesting/ModelPerformanceService', () => ({
     trackTradeOutcome: vi.fn(),
     mapRegimeToKey: (v: unknown) => v,
+    getTradeProviders: (trade: { modelsUsed?: Record<string, string>; geminiModelUsed?: string; deepseekModelUsed?: string; groqModelUsed?: string }) =>
+        trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0
+            ? Object.keys(trade.modelsUsed)
+            : [trade.geminiModelUsed, trade.deepseekModelUsed, trade.groqModelUsed].filter((p): p is string => Boolean(p)),
+    creditedWinForAnalyst: (_analysis: unknown, isWin: boolean) => isWin,
+    recordProviderConfidenceCalibration: vi.fn(),
 }));
 vi.mock('../utils/disciplineAnalytics', () => ({
     computeRMultiple: () => undefined,
