@@ -179,4 +179,67 @@ describe('reviewSkillEffectiveness', () => {
         await deleteMemoryFile(candidate.id, 'review-injected');
         await deleteMemoryFile(injected.id, 'review-injected');
     });
+
+    it('flags a win rate the R ledger contradicts — and stays quiet when it agrees', async () => {
+        await initMemoryFiles('review-expectancy');
+        // 7W/3L on +0.1R wins against -1R losses: a 70% hit rate and -0.12R
+        // per trade. Every branch of the review ladder is graded on W/L, so
+        // this is the record it can never see on its own.
+        const bleeding = await skillFile(
+            'skill-expectancy-bad.md',
+            skillContent({
+                status: 'confirmed', kind: 'repeat', wins: 7, losses: 3,
+                netR: -1.2, rSampled: 10,
+            }),
+            'review-expectancy',
+        );
+        const paid = await skillFile(
+            'skill-expectancy-good.md',
+            skillContent({
+                status: 'confirmed', kind: 'repeat', wins: 7, losses: 3,
+                netR: 2.5, rSampled: 10,
+            }),
+            'review-expectancy',
+        );
+        // Mirrored for an avoid rule: it claims the matched setups lose
+        // (3W/7L), and the ledger says they paid +0.2R each.
+        const avoidBleeding = await skillFile(
+            'skill-avoid-expectancy.md',
+            skillContent({
+                status: 'confirmed', kind: 'avoid', wins: 3, losses: 7,
+                netR: 2, rSampled: 10,
+            }),
+            'review-expectancy',
+        );
+        // Unmeasured is not break-even: same bad average, one sample short.
+        const unmeasured = await skillFile(
+            'skill-expectancy-thin.md',
+            skillContent({
+                status: 'confirmed', kind: 'repeat', wins: 7, losses: 3,
+                netR: -1.2, rSampled: 7,
+            }),
+            'review-expectancy',
+        );
+        const review = reviewSkillEffectiveness();
+        const bad = review.find(r => r.fileId === bleeding.id);
+        const ok = review.find(r => r.fileId === paid.id);
+        const avoidBad = review.find(r => r.fileId === avoidBleeding.id);
+        const thin = review.find(r => r.fileId === unmeasured.id);
+
+        expect(bad?.expectancyConflict).toBe(true);
+        expect(bad?.expectancyR).toBeCloseTo(-0.12, 2);
+        expect(bad?.rationale).toContain('believe the R');
+        // A flag annotates the recommendation; it never rewrites it.
+        expect(bad?.recommendation).toBe('keep');
+        expect(ok?.expectancyConflict).toBeUndefined();
+        expect(ok?.expectancyR).toBeCloseTo(0.25, 2);
+        expect(avoidBad?.expectancyConflict).toBe(true);
+        expect(thin?.expectancyConflict).toBeUndefined();
+        expect(thin?.expectancyR).toBeUndefined();
+
+        await deleteMemoryFile(bleeding.id, 'review-expectancy');
+        await deleteMemoryFile(paid.id, 'review-expectancy');
+        await deleteMemoryFile(avoidBleeding.id, 'review-expectancy');
+        await deleteMemoryFile(unmeasured.id, 'review-expectancy');
+    });
 });

@@ -14,14 +14,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Conversation, ImageMetadata, Message, MessageRole } from '../types';
 import { ProviderConfig } from '../types/provider';
 import { AnalystLensConfig, AnalystRole, AccuracySubMode } from '../types';
-import { AutomationConfig, AutomationRun, AutomationModelPick } from '../types/automation';
+import { AutomationConfig, AutomationRun } from '../types/automation';
 import {
     loadAutomationConfigs,
     saveAutomationConfigs,
     loadAutomationRuns,
     saveAutomationRuns,
-    getNextRunAt,
-    getMissedRunCount,
     loadAutomationLastSeen,
     saveAutomationLastSeen,
     uid,
@@ -42,8 +40,6 @@ import { buildBotSharedMemoryContext, recordBotTurnOutcome } from '../services/a
 import type { LoggedTrade } from '../types';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
-
-/** Global catch-up budget: at most this many missed runs replay on reopen. */
 
 /** Per-run mode/model overrides (absent fields fall back to global settings). */
 export interface AutomationRunOverrides {

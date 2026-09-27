@@ -13,6 +13,8 @@
  */
 
 import { MemoryFile } from '../../types/learning';
+import { bytesOf } from '../../utils/memoryBudget';
+import { clearMemoryWriteFailure, recordMemoryWriteFailure } from './MemoryFilesService';
 
 export interface MemoryAmendment {
     id: string;
@@ -50,9 +52,32 @@ const load = (): MemoryAmendment[] => {
     } catch { return []; }
 };
 
+/**
+ * Store the queue, or fail loudly.
+ *
+ * This key shares the origin quota with the notebook blob and every other
+ * localStorage store in the app, so a refusal here is the same "your memory is
+ * not being saved" event the notebook has — and it was the one memory write in
+ * this loop with no owner at all: a bare `catch` that ignored the quota dropped
+ * a model-proposed correction on the floor, and the next `load()` returned the
+ * queue without it, with nothing anywhere saying so.
+ *
+ * So: record it (named, counted, sized — `recordMemoryWriteFailure`), then
+ * rethrow. That is the same contract `proposeAmendment` already has for a
+ * rejected proposal, so no caller's error handling has to learn a new shape:
+ * the model sees it as tool feedback, the inbox shows it, and the health
+ * report leads with it until a write reaches disk again.
+ */
 const save = (items: MemoryAmendment[]): void => {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    try { window.localStorage.setItem(KEY, JSON.stringify(items)); } catch { /* quota — ignore */ }
+    const payload = JSON.stringify(items);
+    try {
+        window.localStorage.setItem(KEY, payload);
+    } catch (e) {
+        recordMemoryWriteFailure(e, 'amendments', bytesOf(payload));
+        throw e;
+    }
+    clearMemoryWriteFailure('amendments');
 };
 
 /** Cap the inbox — the oldest resolved entries fall off. */

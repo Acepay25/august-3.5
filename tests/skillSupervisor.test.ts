@@ -19,7 +19,7 @@ import { streamChatRequest } from '../services/providers/GenericProviderService'
 import * as store from '../services/learning/supervisorStore';
 import {
     runSupervisorPass, setSessionModel, overrideApproveSkill, overrideRejectSkill,
-    MAX_ITEMS_PER_PASS, MAX_ITEMS_PER_SESSION, countPendingSupervision,
+    MAX_ITEMS_PER_PASS, MAX_ITEMS_PER_HOUR, countPendingSupervision,
     getSupervisionSpend, __setSupervisionSpendForTests, overrideVerdict,
 } from '../services/learning/skillSupervisor';
 import { queueSkillDraft, listSkillDrafts, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
@@ -401,12 +401,12 @@ describe('per-session budget (WS-2.4)', () => {
             },
         }, USER);
         verdictJson({ action: 'approve', reason: 'mechanical trigger, falsifiable, not covered' });
-        __setSupervisionSpendForTests(MAX_ITEMS_PER_SESSION);
+        __setSupervisionSpendForTests(MAX_ITEMS_PER_HOUR);
 
         expect(getSupervisionSpend().exhausted).toBe(true);
         expect(await runSupervisorPass(USER)).toBe(0);
         expect(listSkillDrafts(USER)).toHaveLength(1);
-        expect(store.getSnapshot().events.some(e => e.text.includes('Session budget spent'))).toBe(true);
+        expect(store.getSnapshot().events.some(e => e.text.includes('Hourly budget spent'))).toBe(true);
 
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
         expect(listSkillDrafts(USER)).toHaveLength(0);

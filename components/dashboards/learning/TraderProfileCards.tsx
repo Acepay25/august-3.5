@@ -260,8 +260,11 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                             `${Math.round(meta.wins)}/${Math.round(meta.losses)}`,
                             meta.evalVerdict ? `eval:${meta.evalVerdict}` : null,
                             liftPct !== null ? `lift ${liftPct > 0 ? '+' : ''}${liftPct}pp` : null,
+                            // The one record the W/L columns cannot contradict:
+                            // a win rate claiming an edge the R ledger denies.
+                            review?.expectancyConflict ? `expectancy ${review.expectancyR! > 0 ? '+' : ''}${review.expectancyR}R` : null,
                         ].filter(Boolean).join(' · '),
-                        color: review?.recommendation === 'retire' || review?.recommendation === 'demote' || meta.evalVerdict === 'hurts' || (lift?.verdict === 'negative')
+                        color: review?.recommendation === 'retire' || review?.recommendation === 'demote' || meta.evalVerdict === 'hurts' || (lift?.verdict === 'negative') || review?.expectancyConflict === true
                             ? 'text-red-400'
                             : review?.recommendation === 'promote' || lift?.verdict === 'positive'
                                 ? 'text-emerald-400'
