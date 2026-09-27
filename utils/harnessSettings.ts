@@ -120,6 +120,3 @@ export const getSkillLibraryCap = (): number => {
     return Math.min(200, Math.max(5, Math.round(n)));
 };
 
-export const setSkillLibraryCap = (n: number): void => {
-    saveHarnessSettings({ skillLibraryCap: Math.min(200, Math.max(5, Math.round(n))) });
-};

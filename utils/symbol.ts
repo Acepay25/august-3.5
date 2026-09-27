@@ -13,12 +13,12 @@
 
 /** Quote/venue suffixes, LONGEST FIRST so a trailing 'USDT' is never
  *  half-stripped by the shorter 'USD'/'USDS' alternatives. */
-export const QUOTE_SUFFIXES = [
+const QUOTE_SUFFIXES = [
     'FDUSD', 'USDS', 'USDC', 'USDT', 'TUSD', 'BUSD', 'BUSDT', 'USDD', 'PERP', 'USD',
 ] as const;
 
 /** Canonical uppercase symbol with any non-alphanumeric separators removed. */
-export const fullSymbol = (input: string): string =>
+const fullSymbol = (input: string): string =>
     (input ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /**
@@ -62,7 +62,7 @@ export const display = (input: string): string => {
     return s;
 };
 
-export interface ParsedSymbol { full: string; base: string; quote: string }
+interface ParsedSymbol { full: string; base: string; quote: string }
 
 /** One structured read of a symbol for code that needs base + quote together. */
 export const parseSymbol = (input: string): ParsedSymbol => ({

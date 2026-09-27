@@ -128,21 +128,6 @@ const COLD_STREAK_THRESHOLD = 3;     // Consecutive losses before demotion (base
 const COLD_STREAK_PENALTY = 0.5;     // Weight multiplier when on cold streak (50%)
 const UNDERPERFORMER_THRESHOLD = 0.15; // 15% below average to be flagged
 
-// NEW: Recency weighting constants
-const RECENCY_DECAY_FACTOR = 0.92;   // Each older trade is weighted 92% of previous
-const MIN_TRADES_FOR_RECENCY = 5;    // Minimum trades needed for recency calculation
-
-/**
- * Recency-weighted statistics
- */
-export interface RecencyWeightedStats {
-    recencyWeightedWinRate: number;
-    standardWinRate: number;
-    tradesAnalyzed: number;
-    oldestTradeWeight: number;
-    trendDirection: 'improving' | 'declining' | 'stable';
-}
-
 /**
  * Model confidence calibration data
  */
@@ -1182,69 +1167,6 @@ export const syncRollingWindowFromTradeLog = (trades: LoggedTrade[]): void => {
 
     saveRollingWindowData(data);
     console.log('[RollingWindow] Synced from trade log:', data.entries.length, 'entries');
-};
-
-// =============================================================================
-// IMPROVEMENT 1: RECENCY-WEIGHTED WIN RATE
-// =============================================================================
-
-/**
- * Get recency-weighted win rate for a provider
- * Recent trades are weighted more heavily using exponential decay
- */
-export const getRecencyWeightedWinRate = (provider: AIProvider): RecencyWeightedStats => {
-    const data = loadRollingWindowData();
-    const providerEntries = data.entries
-        .filter(e => e.provider === provider)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    if (providerEntries.length < MIN_TRADES_FOR_RECENCY) {
-        return {
-            recencyWeightedWinRate: 0,
-            standardWinRate: 0,
-            tradesAnalyzed: providerEntries.length,
-            oldestTradeWeight: 0,
-            trendDirection: 'stable'
-        };
-    }
-
-    let weightedWins = 0;
-    let totalWeight = 0;
-    let recentWins = 0;
-    let olderWins = 0;
-    const midpoint = Math.floor(providerEntries.length / 2);
-
-    for (let i = 0; i < providerEntries.length; i++) {
-        const weight = Math.pow(RECENCY_DECAY_FACTOR, i);
-        totalWeight += weight;
-        if (providerEntries[i].isWin) {
-            weightedWins += weight;
-            if (i < midpoint) recentWins++;
-            else olderWins++;
-        }
-    }
-
-    const recencyWeightedWinRate = totalWeight > 0 ? (weightedWins / totalWeight) * 100 : 0;
-    const standardWinRate = providerEntries.filter(e => e.isWin).length / providerEntries.length * 100;
-    const oldestTradeWeight = Math.pow(RECENCY_DECAY_FACTOR, providerEntries.length - 1);
-
-    // Determine trend direction
-    const recentWinRate = midpoint > 0 ? (recentWins / midpoint) * 100 : 0;
-    const olderWinRate = (providerEntries.length - midpoint) > 0
-        ? (olderWins / (providerEntries.length - midpoint)) * 100
-        : 0;
-
-    let trendDirection: 'improving' | 'declining' | 'stable' = 'stable';
-    if (recentWinRate > olderWinRate + 10) trendDirection = 'improving';
-    else if (recentWinRate < olderWinRate - 10) trendDirection = 'declining';
-
-    return {
-        recencyWeightedWinRate: Math.round(recencyWeightedWinRate * 10) / 10,
-        standardWinRate: Math.round(standardWinRate * 10) / 10,
-        tradesAnalyzed: providerEntries.length,
-        oldestTradeWeight: Math.round(oldestTradeWeight * 1000) / 1000,
-        trendDirection
-    };
 };
 
 // =============================================================================

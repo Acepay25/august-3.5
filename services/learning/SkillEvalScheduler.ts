@@ -28,7 +28,6 @@ import {
     parseSkillMarkdown,
     isSkillFile,
     skillBody,
-    skillMatchesSetup,
     skillStrictlyMatchesSetup,
     type SkillMeta,
 } from './SkillMemoryService';
@@ -166,17 +165,6 @@ export const runDueSkillEval = async (
         return { ran: false };
     }
 };
-
-/** Exposed for tests / diagnostics. */
-export const findMatchingSetupForSkill = (meta: SkillMeta, trade: LoggedTrade): boolean =>
-    skillMatchesSetup(meta, {
-        coin: trade.analysis?.coinName,
-        direction: trade.analysis?.direction === 'Long' || trade.analysis?.direction === 'Short'
-            ? trade.analysis.direction
-            : undefined,
-        family: trade.analysis?.detectedPatternFamily,
-    });
-
 
 // ─── Default runner (harness-provided, zero user setup) ─────────────────────
 

@@ -12,7 +12,6 @@
 
 import { AccuracySubMode } from './enums';
 import { Message } from './message';
-import { Conversation } from './trade';
 
 /** One analyst slot: a provider + model pair. */
 export interface AutomationModelPick {
@@ -82,10 +81,4 @@ export interface AutomationRun {
     /** The complete AI message: analysis, debate turns, reasoning, models. */
     message?: Message;
     error?: string;
-}
-
-/** Synthetic conversation used to run an automation through the pipeline. */
-export interface AutomationRunContext {
-    automationId: string;
-    conversation: Conversation;
 }

@@ -704,46 +704,6 @@ export const calculateRuinRisk = (
 };
 
 /**
- * Generate UI-friendly summary of Monte Carlo results
- */
-export const generateMonteCarloSummary = (
-    result: MonteCarloResult,
-    ruinRisk?: RuinRiskResult
-): string => {
-    let summary = `
-╔═══════════════════════════════════════════════════════════════╗
-║           MONTE CARLO SIMULATION (${result.simulations} scenarios)           ║
-╠═══════════════════════════════════════════════════════════════╣
-║ Timeframe: ${result.timeframe.padEnd(8)}                                   ║
-║ Win Rate: ${result.winRate.toFixed(1)}% (${result.winCount} / ${result.simulations})              ║
-║ Expected Value: ${result.expectedValue >= 0 ? '+' : ''}${result.expectedValue.toFixed(2)}% per trade                         ║
-╠═══════════════════════════════════════════════════════════════╣
-║ PROBABILITY DISTRIBUTION:                                     ║
-║   TP1 Hit: ${result.probabilities.tp1Hit.toFixed(1)}%                                         ║
-║   TP2 Hit: ${result.probabilities.tp2Hit.toFixed(1)}%                                         ║
-║   TP3 Hit: ${result.probabilities.tp3Hit.toFixed(1)}%                                         ║
-║   SL Hit:  ${result.probabilities.slHit.toFixed(1)}%                                         ║
-╠═══════════════════════════════════════════════════════════════╣
-║ 95% Confidence: ${result.confidenceInterval.lower.toFixed(2)}% to ${result.confidenceInterval.upper.toFixed(2)}%                    ║
-║ Avg Drawdown: ${result.maxDrawdownAvg.toFixed(2)}%                                    ║
-║ Avg Resolution: ${result.timeToOutcomeAvg.toFixed(0)} candles                              ║
-`;
-
-    if (ruinRisk) {
-        summary += `╠═══════════════════════════════════════════════════════════════╣
-║ RUIN RISK (100 trade sequence):                               ║
-║   Prob 25% DD: ${ruinRisk.prob25pctDrawdown.toFixed(1)}%                                       ║
-║   Prob 50% DD: ${ruinRisk.prob50pctDrawdown.toFixed(1)}%                                       ║
-║   Kelly Size:  ${ruinRisk.kellyOptimalSize.toFixed(1)}% of account                          ║
-`;
-    }
-
-    summary += `╚═══════════════════════════════════════════════════════════════╝`;
-
-    return summary;
-};
-
-/**
  * Compact markdown digest for the model (run_monte_carlo desk tool).
  * Labels must match what runSimulation actually computes: the TP/SL buckets
  * are MUTUALLY EXCLUSIVE terminal outcomes (not cumulative touch odds), the

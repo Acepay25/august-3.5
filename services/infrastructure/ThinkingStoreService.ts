@@ -120,18 +120,6 @@ const safeParseAnalysis = (json: string | null | undefined): unknown => {
 // SAVE OPERATIONS
 // =============================================================================
 
-/**
- * Save a single thinking record.
- */
-export const saveThinkingRecord = async (record: ThinkingRecord): Promise<void> => {
-    if (isNativePlatform()) {
-        await saveThinkingRecordSqlite(record);
-    } else {
-        const db = await initIndexedDB();
-        await db.put(STORE_NAME, record);
-    }
-};
-
 // Retention cap: beyond this many records the oldest are pruned so the
 // store doesn't grow unboundedly (every analysis appends ~3-5 records).
 const MAX_THINKING_RECORDS = 5000;
@@ -243,45 +231,6 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
             console.warn('[ThinkingStore] Prune failed:', e);
         }
     }
-};
-
-/**
- * SQLite-specific save (used when db is already available).
- */
-const saveThinkingRecordSqlite = async (record: ThinkingRecord): Promise<void> => {
-    const { getSqliteDb, runExclusiveWrite } = await import('./SqliteServiceHelpers');
-    const db = await getSqliteDb();
-    if (!db) throw new Error('SQLite database not initialized');
-
-    await runExclusiveWrite(async () => {
-        await db.run(`
-            INSERT OR REPLACE INTO thinking_records (
-                id, tradeId, username, provider, role, modelName,
-                reasoning, finalOutput, rawReasoning, messageId,
-                analysisJson, debateTurnIndex, debateTurnSpeaker,
-                confidence, probability, outcome, analystLens, createdAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-            record.id,
-            record.tradeId,
-            record.username,
-            record.provider,
-            record.role,
-            record.modelName || null,
-            record.reasoning,
-            record.finalOutput || null,
-            record.rawReasoning || null,
-            record.messageId || null,
-            record.analysisJson || null,
-            record.debateTurnIndex ?? null,
-            record.debateTurnSpeaker || null,
-            record.confidence || null,
-            record.probability ?? null,
-            record.outcome || null,
-            record.analystLens || null,
-            record.createdAt,
-        ]);
-    });
 };
 
 // =============================================================================
@@ -757,13 +706,6 @@ export const deleteThinkingByTrade = async (tradeId: string, username: string): 
         }
         await tx.done;
     }
-};
-
-/**
- * Generate a unique record ID.
- */
-export const generateThinkingId = (): string => {
-    return `think-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 };
 
 /**

@@ -77,13 +77,6 @@ export const CALIBRATION_MIN_TRADES = 3;
 export const HIGH_CONFIDENCE_MIN_WIN_RATE = 60;
 
 // =============================================================================
-// SL OPTIMIZATION
-// =============================================================================
-
-/** Minimum trades required to calculate SL optimization */
-export const SL_OPTIMIZATION_MIN_TRADES = 5;
-
-// =============================================================================
 // TIMEFRAME ALIGNMENT
 // =============================================================================
 

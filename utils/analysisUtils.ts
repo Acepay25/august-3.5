@@ -1016,10 +1016,6 @@ export const signalDirectionLabel = (direction?: string, confidence?: string): s
     return direction || 'Neutral';
 };
 
-/** Avoid / Neutral: skip the setup; autopilot does not watch for a win or loss. */
-export const isNoTradeSignal = (direction?: string, confidence?: string): boolean =>
-    confidence === 'Avoid' || direction === 'Neutral' || direction === 'Avoid';
-
 export const explainNoTrade = (analysis: { direction?: string; confidence?: string; riskVeto?: string; validationWarnings?: string[] }): string => {
     if (analysis.confidence === 'Avoid') {
         const extra = (analysis.riskVeto || analysis.validationWarnings?.find(Boolean) || '').trim();

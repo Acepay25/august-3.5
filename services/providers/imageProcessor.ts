@@ -1,10 +1,18 @@
-
+/**
+ * imageProcessor — chart-image downscaling + vision summarization.
+ *
+ * MOVED HERE from utils/ (2026-09-27). utils/ is a LEAF layer: nothing in it
+ * may reach a service, because that inversion is what turns a pure helper into
+ * an import cycle. This module calls GenericAnalysisService — a real AI
+ * request per image — so it belongs on the service side of the line, beside
+ * the analysis service that drives it. Behaviour is unchanged.
+ */
 
 import React from 'react';
-import { ImageMetadata } from '../types';
-import { ProviderConfig } from '../types/provider';
-import { summarizeChartImage } from '../services/providers/GenericAnalysisService';
-import { isQuotaError } from './errorUtils';
+import { ImageMetadata } from '../../types';
+import { ProviderConfig } from '../../types/provider';
+import { summarizeChartImage } from './GenericAnalysisService';
+import { isQuotaError } from '../../utils/errorUtils';
 
 /**
  * Downscale an image file to a base64 data URL.
