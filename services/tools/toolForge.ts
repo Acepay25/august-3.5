@@ -309,7 +309,10 @@ export const executeForgedTool = async (
         // the model has been told to act on (see utils/harnessMarks).
         content = neutralizeHarnessNotes(content);
         if (!content.trim()) throw new Error('empty response');
-        if (cacheable) forgedCache.set(cacheKey, { at: Date.now(), content });
+        if (cacheable) {
+            forgedCache.set(cacheKey, { at: Date.now(), content });
+            trimForgedCache();
+        }
         recordForgedUse(name, true);
         return { toolCallId: call.id, name, ok: true, content };
     } catch (err) {
@@ -324,6 +327,24 @@ export const executeForgedTool = async (
 };
 
 const forgedCache = new Map<string, { at: number; content: string }>();
+const FORGED_CACHE_MAX = 50;
+
+/** Expired sweep + insertion-ordered eviction on WRITE — the cache grew
+ *  without bound for the whole session (one entry per tool × arg-combination,
+ *  each up to ~2400 chars) and its read-time TTL check alone never reclaimed
+ *  anything. Not wired into clearDeskToolCache: forged results survive a
+ *  debate change by design. */
+const trimForgedCache = (): void => {
+    const now = Date.now();
+    for (const [key, entry] of forgedCache) {
+        if (now - entry.at >= MAX_TTL_MS) forgedCache.delete(key);
+    }
+    while (forgedCache.size > FORGED_CACHE_MAX) {
+        const oldest = forgedCache.keys().next().value;
+        if (oldest === undefined) break;
+        forgedCache.delete(oldest);
+    }
+};
 
 /** Clear the forged-tool result cache (tests, settings changes). */
 export const clearForgedToolCache = (): void => { forgedCache.clear(); };

@@ -26,6 +26,23 @@ import { Kline } from '../../types';
 const klineCache = new Map<string, { at: number; data: Kline[] }>();
 const klineInFlight = new Map<string, Promise<Kline[]>>();
 const KLINE_CACHE_TTL_MS = 30_000;
+const KLINE_CACHE_MAX = 200;
+
+/** Expired sweep + insertion-ordered eviction on WRITE. The map used to grow
+ *  without bound (one entry per symbol × interval × limit, each up to 1000
+ *  candle objects) across a long-lived desktop session — the same failure
+ *  DeskToolsService's tool cache already caps (TOOL_CACHE_MAX). */
+const trimKlineCache = (): void => {
+    const now = Date.now();
+    for (const [key, entry] of klineCache) {
+        if (now - entry.at >= KLINE_CACHE_TTL_MS) klineCache.delete(key);
+    }
+    while (klineCache.size > KLINE_CACHE_MAX) {
+        const oldest = klineCache.keys().next().value;
+        if (oldest === undefined) break;
+        klineCache.delete(oldest);
+    }
+};
 
 // --- Binance interval mapping ---
 // Binance klines are case-sensitive: daily/weekly are lowercase
@@ -215,6 +232,7 @@ export const fetchKlines = async (
             );
             if (data.length > 0) {
                 klineCache.set(futuresKey, { at: Date.now(), data });
+                trimKlineCache();
                 return data;
             }
             console.warn(
@@ -228,6 +246,7 @@ export const fetchKlines = async (
             // The degraded market gets its OWN key — a later native success
             // must never be served from (or serve) this entry.
             klineCache.set(spotData.length > 0 ? spotKey : failedKey, { at: Date.now(), data: spotData });
+            trimKlineCache();
             return spotData;
         } finally {
             klineInFlight.delete(inFlightKey);

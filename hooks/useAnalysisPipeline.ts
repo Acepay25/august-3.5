@@ -30,7 +30,6 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, parsePrice } from '../utils/analysisUtils';
-import { stripQuoteSuffix } from '../utils/symbol';
 import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
@@ -42,7 +41,6 @@ import { buildModelIdToName, chatModelIdOf, isProviderReady, resolveChatModelSel
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
-import { COMMON_WORDS } from '../constants/commonWords';
 import { archetypeDirectiveLine } from '../constants/prompts/archetypePrompts';
 import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
@@ -445,7 +443,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const liveToolEventsRef = useRef<Record<string, string>>({});
     // persisted model side-effects for the CURRENT run — proposal tools
     // (forge_tool/amend_memory) and custom tools. Reset at run start, merged
-    // into the AI message when it lands (Hermes-style status rows).
+    // into the AI message when it lands (status rows).
     const toolActionsRef = useRef<ToolAction[]>([]);
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
@@ -687,11 +685,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const activeComposerMode = options?.composerMode ?? composerModeRef.current ?? undefined;
         let stopTokenUsage: (() => void) | undefined;
         const tokenByProvider = new Map<string, TokenUsage>();
-        // Automation runs redirect message writes to a private list and mute
-        // the chat UI (loading text, step tracker, hybrid panel).
-        automationSilentRef.current = isAutomationRun;
-        if (isAutomationRun) automationMessagesRef.current = [];
-
         // Run-scoped mode/model overrides — automation runs may specify
         // their own accuracy mode, lens config, analyst picks and moderator
         // (fall back to the global settings when absent).
@@ -1177,6 +1170,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // tried (modelsUsed), so a failed 1:1 bot reply surfaces INSIDE that
         // bot's thread instead of vanishing from the scoped view.
         let casualErrorAttribution: Record<string, string> | undefined;
+        // Automation runs redirect message writes to a private list and mute
+        // the chat UI (loading text, step tracker, hybrid panel). The flag is
+        // set HERE — after every pre-flight early return — not at the top of
+        // the function: an automation that exits early (in-flight park, 429,
+        // no ready provider, blocked roster) used to leave it `true` and mute
+        // the step tracker of the manual run that was concurrently in flight.
+        // The `finally` below resets it, so set+reset are now paired.
+        automationSilentRef.current = isAutomationRun;
+        if (isAutomationRun) automationMessagesRef.current = [];
         try {
             promptLane = beginPromptLane();
             const currentMessages = isAutomationRun
@@ -1447,16 +1449,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
 
             // ========== GATE KEEPER: Two-Stage Gate Scan ==========
-            // Extract symbol from prompt for Gate analysis
-            // Exclude common command words that might be mistaken for symbols
-            const commonWords = COMMON_WORDS;
-            // Match crypto symbols: prioritize those ending in USDT/PERP, then standalone 2-5 letter symbols
-            const symbolMatches = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?|PERP)\b/gi) ||
-                effectiveInput.match(/\b([A-Z]{2,5})\b/gi) || [];
-            const detectedSymbol = symbolMatches
-                .map(m => stripQuoteSuffix(m))
-                .find(s => s.length >= 2 && s.length <= 10 && !commonWords.includes(s));
-            const finalSymbol = detectedSymbol ? `${detectedSymbol}USDT` : null;
+            // The authoritative symbol is the one detected at the top of the
+            // run: extractSymbolFromPrompt (canonical pair extraction), then
+            // the surface's instrument picker. This block used to re-detect
+            // with a case-insensitive scan whose stopword check was
+            // case-SENSITIVE — a lowercase prompt like "what is the plan for
+            // btc today" minted "WHATUSDT" and ran the gate scan on a
+            // nonexistent market — and it shadowed the picker value, which
+            // then never reached the gate scan, the veto ledger or the
+            // coin-lessons block.
+            const finalSymbol = detectedSymbol;
 
             // ========== DECISION REFLECTIONS ==========
             // Feed the user's closed trades + lessons back into the NEXT run
