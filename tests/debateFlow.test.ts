@@ -32,13 +32,72 @@ vi.mock('../services/providers/GenericProviderService', () => ({
 
 import {
   conductDebate,
-  conductRealDebate,
+  conductRealDebate as conductRealDebateObjectForm,
   awaitReplacementWithTimeout,
   buildLivePriceRefreshBlock,
   openingFromResult,
   REAL_DEBATE_RESPONSE_ROUNDS,
 } from '../services/providers/ensembleService';
-import type { RealDebateTurnEvent } from '../services/providers/ensembleService';
+import type { RealDebateOptions, RealDebateTurnEvent } from '../services/providers/ensembleService';
+
+/**
+ * Legacy positional adapter for this suite's 35 pre-object call sites.
+ *
+ * `conductRealDebate` took 38 positional parameters, and the production call
+ * site had to pass runs of `undefined` to reach the options it actually wanted.
+ * It now takes a single `RealDebateOptions` object — that is the ONLY form the
+ * service exports, so production code cannot reach the old shape at all.
+ *
+ * This adapter exists so the debate engine's 48-test suite is not rewritten in
+ * the same PR as the signature change. The old shape is a real hazard —
+ * `hybridContext`, `centralizedSnapshot` and `sessionGuardBlock` are all plain
+ * `string`, and `tradeSummaries` and `similarTrades` are structurally
+ * compatible arrays, so a transposition typechecks and silently asserts the
+ * wrong thing. Keeping that hazard quarantined to ONE place, with the mapping
+ * written out, is strictly better than leaving it available in production or
+ * scattering the conversion across 35 call sites in one sitting.
+ *
+ * Migration is mechanical: move each argument onto its named property from the
+ * table below, drop the `undefined` placeholders, and delete this shim.
+ * `services/providers/ensembleService.ts` carries the authoritative docstrings.
+ */
+/** Old positional order, checked against the interface in BOTH directions:
+ *  `satisfies` rejects a name the interface does not have, and the exported
+ *  constant below is a compile error if a property has no entry here. */
+const LEGACY_PARAM_ORDER = [
+  'analysts', 'userPrompt', 'finalTradeSummary', 'moderatorConfig', 'moderatorModel',
+  'customInstructions', 'monteCarloResults', 'lensConfig', 'analystProviders', 'activeFrameworks',
+  'tradeSummaries', 'gateResult', 'learningContext', 'signal', 'onReasoning', 'onAnalystReasoning',
+  'onSpeakerStatus', 'hybridContext', 'timeoutMs', 'onReplacementRequested', 'replacementTimeoutMs',
+  'getLivePrice', 'getSteeringNotes', 'getSeatSteeringNote', 'shouldDropSeat', 'onRunEvent',
+  'memoryGate', 'resumeState', 'shouldSkipRemaining', 'onToolEvent', 'forceSkipRebuttals',
+  'botByThoughtsKey', 'centralizedSnapshot', 'similarTrades', 'fullTradesForRecall',
+  'seatPersonas', 'sessionGuardBlock', 'opts',
+] as const satisfies readonly (keyof RealDebateOptions)[];
+
+/** Fails to compile the moment `RealDebateOptions` grows a property this
+ *  adapter cannot forward — the failure mode that would otherwise be a
+ *  silently-dropped parameter. */
+type MissingFromAdapter = Exclude<keyof RealDebateOptions, typeof LEGACY_PARAM_ORDER[number]>;
+export const LEGACY_ADAPTER_IS_COMPLETE: MissingFromAdapter extends never ? true : MissingFromAdapter = true;
+
+const conductRealDebate = (
+  ...legacy: unknown[]
+): AsyncGenerator<RealDebateTurnEvent, void, unknown> => {
+  if (legacy.length > LEGACY_PARAM_ORDER.length) {
+    throw new Error(`conductRealDebate: ${legacy.length} positional args, max ${LEGACY_PARAM_ORDER.length}`);
+  }
+  const options: Record<string, unknown> = {};
+  for (let i = 0; i < legacy.length; i += 1) {
+    // The old call sites carried runs of `undefined` purely to skip a slot.
+    if (legacy[i] === undefined) continue;
+    options[LEGACY_PARAM_ORDER[i]] = legacy[i];
+  }
+  // Imported under a different name above precisely so this shim is the one and
+  // only `conductRealDebate` identifier in scope: the legacy shape cannot be
+  // reached from a new call site by accident.
+  return conductRealDebateObjectForm(options as unknown as RealDebateOptions);
+};
 
 const config: ProviderConfig = {
   id: 'prov-a',
@@ -1213,7 +1272,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
       undefined, [], undefined, undefined, undefined, undefined, null, undefined,
       new AbortController().signal,
       undefined, // moderator global onReasoning — intentionally left unset
-      (speaker, reasoning, round) => { perTurn.push({ speaker, round, text: reasoning }); },
+      // Types annotated because the positional shim no longer supplies a
+      // contextual signature (it is `unknown[]` by design).
+      (speaker: string, reasoning: string, round?: number) => { perTurn.push({ speaker, round, text: reasoning }); },
     ));
 
     const moderator = perTurn.filter(r => r.speaker === 'Moderator');
