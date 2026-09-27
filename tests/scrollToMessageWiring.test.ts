@@ -20,7 +20,14 @@ import { readFileSync } from 'fs';
 
 const appSrc = readFileSync('App.tsx', 'utf8');
 const tradeViewSrc = readFileSync('components/trade/TradeView.tsx', 'utf8');
-const panelSrc = readFileSync('components/trade/TradeChatPanel.tsx', 'utf8');
+// The dock feature now spans the shell + the extracted orchestrator/
+// transcript/composer modules — the contract follows the code.
+const panelSrc = [
+    readFileSync('components/trade/TradeChatPanel.tsx', 'utf8'),
+    readFileSync('services/trade/chatTurnRunner.ts', 'utf8'),
+    readFileSync('components/trade/panels/ChatTranscriptList.tsx', 'utf8'),
+    readFileSync('components/trade/panels/ChatComposer.tsx', 'utf8'),
+].join('\n');
 
 describe('App: the dead virtuosoRef is gone', () => {
     it('no virtuoso handle remains in App', () => {

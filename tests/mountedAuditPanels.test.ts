@@ -79,7 +79,9 @@ const MOUNTED: Array<{ symbol: string; from: string; host: string }> = [
 /** Every surface that has to reach the audit block. */
 const AUDIT_HOSTS = [
     'components/agents/AgentsView.tsx',
-    'components/trade/TradeChatPanel.tsx',
+    // The dock's transcript moved to its own module; the audit block moved
+    // with it (the contract follows the code).
+    'components/trade/panels/ChatTranscriptList.tsx',
 ];
 
 const BINDINGS = new Map(SOURCES.map(s => [s.path, bindingsIn(s.text)]));
