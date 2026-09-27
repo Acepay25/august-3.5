@@ -117,6 +117,22 @@ export const simulateTradeSignal = async (
         const candlesToOutcome = resolution.exitCandleIndex !== undefined
             ? Math.max(0, resolution.exitCandleIndex - scan.entryTriggeredAtIndex)
             : 0;
+        // Windowed excursion for RESOLVED outcomes — the scan's maxDrawdown
+        // keeps accruing past the exit (computeTradeExcursions doc), so a WIN
+        // at candle 20 must not report a crash from candle 300. Still-open
+        // trades keep the raw scan value, which is the honest "so far" number.
+        const fillCandle = klines[scan.entryTriggeredAtIndex];
+        const openedExecutable = isLong ? fillCandle.open <= entryPrice : fillCandle.open >= entryPrice;
+        const resolvedExcursions = resolution.exitCandleIndex !== undefined
+            ? computeTradeExcursions(
+                klines,
+                openedExecutable ? scan.entryTriggeredAtIndex : scan.entryTriggeredAtIndex + 1,
+                resolution.exitCandleIndex,
+                entryPrice,
+                isLong,
+            )
+            : undefined;
+        const windowedDrawdown = resolvedExcursions?.maePercent;
 
         // Determine outcome
         let outcome: BacktestResult['outcome'] = 'NOT_TRIGGERED';
@@ -146,9 +162,9 @@ export const simulateTradeSignal = async (
         } else if (hitTarget === 'NONE') {
             details = `Trade triggered at $${entryPrice.toLocaleString()} but neither SL nor TP was hit within ${klines.length - scan.entryTriggeredAtIndex} candles.`;
         } else if (hitTarget === 'SL') {
-            details = `Trade triggered at $${entryPrice.toLocaleString()}, stopped out at $${exitPrice.toLocaleString()} after ${candlesToOutcome} candles. Max drawdown: ${maxDrawdown.toFixed(2)}%`;
+            details = `Trade triggered at $${entryPrice.toLocaleString()}, stopped out at $${exitPrice.toLocaleString()} after ${candlesToOutcome} candles. Max drawdown: ${(windowedDrawdown ?? maxDrawdown).toFixed(2)}%`;
         } else {
-            details = `Trade triggered at $${entryPrice.toLocaleString()}, hit ${hitTarget} at $${exitPrice.toLocaleString()} after ${candlesToOutcome} candles. Max drawdown: ${maxDrawdown.toFixed(2)}%`;
+            details = `Trade triggered at $${entryPrice.toLocaleString()}, hit ${hitTarget} at $${exitPrice.toLocaleString()} after ${candlesToOutcome} candles. Max drawdown: ${(windowedDrawdown ?? maxDrawdown).toFixed(2)}%`;
         }
 
         return {
@@ -156,6 +172,7 @@ export const simulateTradeSignal = async (
             outcome,
             hitTarget,
             maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+            maePercent: windowedDrawdown !== undefined ? Math.round(windowedDrawdown * 100) / 100 : undefined,
             timeToOutcome: candlesToOutcome,
             priceAtExit: exitPrice,
             simulationDetails: details
@@ -556,6 +573,25 @@ export const simulateFromAnalysisTime = async (
             outcome = 'ENTERED_OPEN';
         }
 
+        // Holding-window excursion for RESOLVED outcomes — the scan's
+        // maxDrawdown keeps accruing past the exit (computeTradeExcursions
+        // doc), so resolved displays and the downstream gate decision use the
+        // in-window number; still-open trades keep the raw scan value.
+        const fillCandleForExcursion = klines[entryTriggeredAtIndex];
+        const openedExecutable = isLong
+            ? fillCandleForExcursion.open <= entryPrice
+            : fillCandleForExcursion.open >= entryPrice;
+        const resolvedExcursions = hitCandleIndex !== undefined
+            ? computeTradeExcursions(
+                klines,
+                openedExecutable ? entryTriggeredAtIndex : entryTriggeredAtIndex + 1,
+                hitCandleIndex,
+                entryPrice,
+                isLong,
+            )
+            : undefined;
+        const windowedDrawdown = resolvedExcursions?.maePercent;
+
         // Calculate time to outcome
         let timeToOutcomeReadable: string | undefined;
         if (hitCandleIndex !== undefined && klines[hitCandleIndex]) {
@@ -608,12 +644,12 @@ export const simulateFromAnalysisTime = async (
         } else if (hitTarget === 'SL') {
             details = ` STOP LOSS EXCEEDED | Loss exceeded 150% of original SL distance at candle #${hitCandleIndex} (${timeToOutcomeReadable})\n` +
                 `   Entry: $${entryPrice.toLocaleString()} → Extended SL at: $${exitPrice.toLocaleString()}\n` +
-                `   Max drawdown: ${maxDrawdown.toFixed(2)}%`;
+                `   Max drawdown: ${(windowedDrawdown ?? maxDrawdown).toFixed(2)}%`;
         } else {
             // TP hit - show TPs, and note if SL was touched first
             details = ` TARGETS HIT:\n${tpHits.map(t =>
                 `   • ${t.level}: $${t.price.toLocaleString()} @ candle #${t.candleIndex} (${t.timeAfterAnalysis})`
-            ).join('\n')}\n   Entry: $${entryPrice.toLocaleString()} | Max DD: ${maxDrawdown.toFixed(2)}%`;
+            ).join('\n')}\n   Entry: $${entryPrice.toLocaleString()} | Max DD: ${(windowedDrawdown ?? maxDrawdown).toFixed(2)}%`;
             if (slTouched) {
                 details += `\n\n **NOTE:** Price touched SL ($${stopLoss.toLocaleString()}) but recovered within 150% zone to hit TP.`;
             }
@@ -696,6 +732,7 @@ export const simulateFromAnalysisTime = async (
             outcome,
             hitTarget,
             maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+            maePercent: windowedDrawdown !== undefined ? Math.round(windowedDrawdown * 100) / 100 : undefined,
             timeToOutcome: hitCandleIndex !== undefined ? hitCandleIndex - entryTriggeredAtIndex : 0,
             priceAtExit: exitPrice,
             simulationDetails: details,
@@ -799,8 +836,11 @@ export const batchBacktest = async (
     const noData = results.filter(r => !r.wouldHaveTriggered && isNoDataResult(r)).length;
     const wins = settledTrades.filter(r => r.outcome === 'WIN').length;
     const winRate = settledTrades.length > 0 ? (wins / settledTrades.length) * 100 : 0;
+    // Average the HOLDING-WINDOW drawdown (maePercent) for resolved trades —
+    // the raw scan maxDrawdown keeps accruing past the exit, so averaging it
+    // let a post-exit crash pollute every batch's risk number.
     const avgDrawdown = triggeredTrades.length > 0
-        ? triggeredTrades.reduce((sum, r) => sum + r.maxDrawdown, 0) / triggeredTrades.length
+        ? triggeredTrades.reduce((sum, r) => sum + (r.maePercent ?? r.maxDrawdown), 0) / triggeredTrades.length
         : 0;
 
     // Calculate average R:R for winning trades
@@ -912,10 +952,13 @@ export const validateWithBacktest = async (
         };
     }
 
-    if (result.outcome === 'LOSS' && result.maxDrawdown > 3) {
+    // The windowed MAE, not the scan-wide drawdown: a post-exit crash the
+    // position never lived through must not veto a winning setup's twin.
+    const lossDrawdown = result.maePercent ?? result.maxDrawdown;
+    if (result.outcome === 'LOSS' && lossDrawdown > 3) {
         return {
             shouldTake: false,
-            reason: `Historical backtest shows LOSS with ${result.maxDrawdown.toFixed(1)}% drawdown. Consider adjusting SL.`,
+            reason: `Historical backtest shows LOSS with ${lossDrawdown.toFixed(1)}% drawdown. Consider adjusting SL.`,
             backtestResult: result,
             noData: false
         };
@@ -1362,7 +1405,10 @@ export const validateTradeOutcome = async (
                 `Exit: ${hitTarget} hit at $${exitPrice?.toLocaleString()} (${timeToOutcome})\n` +
                 `P&L: ${pnlPercent !== undefined ? (pnlPercent >= 0 ? '+' : '') + pnlPercent.toFixed(2) : 'N/A'}%\n` +
                 `R:R: ${rrRatio !== undefined ? (rrRatio >= 0 ? '+' : '') + rrRatio.toFixed(2) : 'N/A'}R\n` +
-                `Max Drawdown: ${maxDrawdown.toFixed(2)}%\n` +
+                // Holding-window MAE, not the scan-wide drawdown: the scan keeps
+                // accruing past the exit, so a WIN at candle 20 must not report
+                // a crash from candle 300 as "Max Drawdown".
+                `Max Drawdown: ${(maePercent ?? maxDrawdown).toFixed(2)}%\n` +
                 (tpHits.length > 1 ? `TP Progression: ${tpHits.map(t => t.level).join(' → ')}\n` : '');
 
             // Add note if SL was touched before hitting TP
@@ -1382,7 +1428,7 @@ export const validateTradeOutcome = async (
                 `Original SL: $${stopLoss.toLocaleString()} | Extended SL (150%): $${extendedSlPrice.toLocaleString()}\n` +
                 `P&L: ${pnlPercent !== undefined ? pnlPercent.toFixed(2) : 'N/A'}%\n` +
                 `R:R: ${rrRatio !== undefined ? rrRatio.toFixed(2) : 'N/A'}R\n` +
-                `Max Drawdown: ${maxDrawdown.toFixed(2)}%`;
+                `Max Drawdown: ${(maePercent ?? maxDrawdown).toFixed(2)}%`;
         } else if (outcome === 'OPEN') {
             const lastCandle = klines[klines.length - 1];
             validationSummary = `⏳ **TRADE STILL OPEN**\n` +

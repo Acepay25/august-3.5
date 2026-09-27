@@ -13,7 +13,7 @@
  */
 
 import { LoggedTrade } from '../../types/trade';
-import { TradeOutcome } from '../../types/enums';
+import { TradeOutcome, AIProvider } from '../../types/enums';
 import { DebateTurn } from '../../types/message';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { buildDisciplineAnalytics, effectiveRMultiple } from '../../utils/disciplineAnalytics';
@@ -96,14 +96,18 @@ const tradeLabel = (t: LoggedTrade): string => {
  *  private getTradeProviders; kept local so the stores can't drift). */
 const contributingProviders = (t: LoggedTrade): string[] => {
     if (t.modelsUsed && Object.keys(t.modelsUsed).length > 0) return Object.keys(t.modelsUsed);
+    // AIProvider constants, not ad-hoc strings: 'groq-new'/'groq-alt2' never
+    // matched the enum ids ('groq_new'/'groq_alt2') every other stats surface
+    // joins on, so the same historical trade attributed its model to one
+    // provider id here and another in model performance.
     const legacy: string[] = [];
-    if (t.geminiModelUsed) legacy.push('gemini');
-    if (t.deepseekModelUsed) legacy.push('deepseek');
-    if (t.zhipuModelUsed) legacy.push('zhipu');
-    if (t.groqModelUsed) legacy.push('groq');
-    if (t.groqNewModelUsed) legacy.push('groq-new');
-    if (t.groqAlt2ModelUsed) legacy.push('groq-alt2');
-    if (t.openrouterModelUsed) legacy.push('openrouter');
+    if (t.geminiModelUsed) legacy.push(AIProvider.GEMINI);
+    if (t.deepseekModelUsed) legacy.push(AIProvider.DEEPSEEK);
+    if (t.zhipuModelUsed) legacy.push(AIProvider.ZHIPU);
+    if (t.groqModelUsed) legacy.push(AIProvider.GROQ);
+    if (t.groqNewModelUsed) legacy.push(AIProvider.GROQ_NEW);
+    if (t.groqAlt2ModelUsed) legacy.push(AIProvider.GROQ_ALT2);
+    if (t.openrouterModelUsed) legacy.push(AIProvider.OPENROUTER);
     return legacy;
 };
 

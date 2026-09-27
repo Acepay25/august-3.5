@@ -319,6 +319,24 @@ describe('multi-TP scale-out exit price', () => {
         expect(res.outcome).toBe('WIN');
         expect(res.exitPrice).toBe(105);
     });
+
+    it('blends TP1 with the breakeven stop when the remainder exits flat (TP1→BE)', () => {
+        // Half out at TP1=105, remainder stopped at entry=100: the realized
+        // move per unit is (105-100)/2, NOT the full TP1 move. The old
+        // resolver reported exitPrice 105 — ~2× the realized R.
+        const scan = scanTradeOutcome(candles(T, [
+            [100, 100, 100, 100],  // fill
+            [100, 106, 100, 103],  // TP1 hit → stop to breakeven
+            [103, 104, 100, 101],  // breakeven touched — remainder flat
+        ]), 100, 90, [105, 0, 0], true);
+        expect(scan.tpHits).toHaveLength(1);
+        expect(scan.breakevenHit).toBe(true);
+        expect(scan.breakevenPrice).toBe(100);
+        const res = resolveOutcomeFromScan(scan);
+        expect(res.outcome).toBe('WIN');
+        expect(res.hitTarget).toBe('TP1');
+        expect(res.exitPrice).toBeCloseTo(102.5, 6);
+    });
 });
 
 describe('formatDurationMs', () => {

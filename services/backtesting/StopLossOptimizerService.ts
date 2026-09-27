@@ -147,13 +147,29 @@ export const calculateOptimalSL = (
     const totalWins = tradesWithData.filter(t => t.outcome === TradeOutcome.WIN).length;
     const currentWinRate = totalWins / tradesWithData.length;
     // Derive the realized R:R from the trade log (avg win / avg |loss| PnL),
-    // falling back to 2.0 when there's no PnL data to measure.
-    const pnlVals = tradesWithData
-        .map(t => typeof t.pnlPercent === 'number' ? t.pnlPercent : (typeof t.pnlAmount === 'number' ? t.pnlAmount : NaN))
-        .filter((v): v is number => !Number.isNaN(v));
-    const avgWinPnl = pnlVals.filter(v => v > 0).reduce((a, b) => a + b, 0) / Math.max(1, pnlVals.filter(v => v > 0).length);
-    const avgLossPnl = Math.abs(pnlVals.filter(v => v < 0).reduce((a, b) => a + b, 0)) / Math.max(1, pnlVals.filter(v => v < 0).length);
-    const currentRR = avgLossPnl > 0 ? avgWinPnl / avgLossPnl : 2.0;
+    // falling back to 2.0 when there's no PnL data to measure. `pnlPercent`
+    // is a leveraged ROE percent and `pnlAmount` is dollars — DIFFERENT units
+    // that must never share a mean: pooling them let a +200% autopilot win
+    // dwarf a -$40 hand-entered loss and inflated currentRR by orders of
+    // magnitude, flipping the Kelly recommendation. One unit-pure pool per
+    // field; Kelly compares only against a pool that carries the evidence
+    // (≥2 wins and ≥2 losses in the SAME unit), else the 1.0× baseline holds.
+    const percentVals = tradesWithData
+        .filter(t => typeof t.pnlPercent === 'number')
+        .map(t => t.pnlPercent as number);
+    const dollarVals = tradesWithData
+        .filter(t => typeof t.pnlPercent !== 'number' && typeof t.pnlAmount === 'number')
+        .map(t => t.pnlAmount as number);
+
+    const rrFromPool = (vals: number[]): number | null => {
+        const wins = vals.filter(v => v > 0);
+        const losses = vals.filter(v => v < 0);
+        if (wins.length < 2 || losses.length < 2) return null;
+        const avgWin = wins.reduce((a, b) => a + b, 0) / wins.length;
+        const avgLoss = Math.abs(losses.reduce((a, b) => a + b, 0) / losses.length);
+        return avgLoss > 0 ? avgWin / avgLoss : null;
+    };
+    const currentRR = rrFromPool(percentVals) ?? rrFromPool(dollarVals) ?? 2.0;
 
     // Optimized metrics (If we used wider SL)
     // New wins = Current Wins + Missed Wins

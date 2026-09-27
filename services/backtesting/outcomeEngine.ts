@@ -66,6 +66,9 @@ export interface TradeScanResult {
   breakevenHit: boolean;
   breakevenIndex?: number;
   breakevenTime?: string;
+  /** The breakeven stop price (= entry). resolveOutcomeFromScan blends a
+   *  TP1→breakeven exit as (TP1 + breakeven)/2 instead of full TP1. */
+  breakevenPrice?: number;
   /** Defense-in-depth (Tier-0 #7): the plan's SL/TP ordering violates the
    *  direction even after the sanitizer — the scan is refused outright
    *  (nothing triggered), so an inverted plan can never earn WIN/LOSS. */
@@ -212,6 +215,7 @@ export const scanTradeOutcome = (
           result.breakevenHit = true;
           result.breakevenIndex = i;
           result.breakevenTime = candleTimeStr;
+          result.breakevenPrice = entryPrice;
         }
       } else if (candle.low <= stopLoss) {
         // Track the LATEST touch index, not the first: price can wick the
@@ -257,6 +261,7 @@ export const scanTradeOutcome = (
           result.breakevenHit = true;
           result.breakevenIndex = i;
           result.breakevenTime = candleTimeStr;
+          result.breakevenPrice = entryPrice;
         }
       } else if (candle.high >= stopLoss) {
         // Latest-touch semantics — see the Long branch above.
@@ -323,13 +328,20 @@ export const resolveOutcomeFromScan = (scan: TradeScanResult): OutcomeResolution
     // the last target. Same arithmetic OutcomeAutopilotService already used
     // for its own resolution; the shared engine is the right home so the two
     // cannot disagree about the same trade. A single-TP run is unchanged
-    // (first === last), and so is the TP1→breakeven case, which resolves on
-    // the breakeven branch above with its own exit price.
+    // (first === last); a TP1→breakeven run blends TP1 with the breakeven
+    // stop (= entry), because the remainder exited FLAT there — without the
+    // blend a half-out trade resolves as a full win and ~2× inflates
+    // `realizedR`, the only R the skill ledger accumulates.
     const scaleOutEntryTp = scan.tpHits[0];
-    const blendedExit = scan.tpHits.length > 1
-      && Number.isFinite(scaleOutEntryTp.price) && Number.isFinite(lastTp.price)
-      ? (scaleOutEntryTp.price + lastTp.price) / 2
-      : lastTp.price;
+    const blendedExit =
+      scan.tpHits.length > 1 && Number.isFinite(scaleOutEntryTp.price) && Number.isFinite(lastTp.price)
+        ? (scaleOutEntryTp.price + lastTp.price) / 2
+        : scan.tpHits.length === 1 &&
+            scan.breakevenHit &&
+            typeof scan.breakevenPrice === 'number' &&
+            Number.isFinite(scan.breakevenPrice)
+          ? (scaleOutEntryTp.price + scan.breakevenPrice) / 2
+          : lastTp.price;
     return {
       outcome: 'WIN',
       hitTarget: lastTp.level,
