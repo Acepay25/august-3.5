@@ -26,6 +26,7 @@ import {
     ensureHarnessFoldersUnlocked,
     withNotebookWriteLock,
 } from './MemoryFilesService';
+import { phtDayKey } from '../../utils/timezone';
 
 export const SETTLED_BELIEFS_FILE_NAME = 'settled-beliefs.md';
 
@@ -173,7 +174,7 @@ export const upsertSettledBeliefUnlocked = async (
         beliefs.push({
             slug,
             status: 'settled',
-            added: new Date().toISOString().slice(0, 10),
+            added: phtDayKey(),
             evidenceCount: belief.evidenceCount,
             regime: belief.regime,
             body,

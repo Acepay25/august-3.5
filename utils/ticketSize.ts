@@ -1,4 +1,5 @@
 import { TradeAnalysis } from '../types';
+import { parsePrice } from './analysisUtils';
 
 /** One labeled step in the sizing decision — every multiplier the ticket
  *  applies is recorded with its reason and shown to the user, mirroring the
@@ -75,8 +76,9 @@ export const computeTicketSize = (analysis: TradeAnalysis): TicketSize => {
 };
 
 const parseNum = (value?: string): number | undefined => {
-    if (!value) return undefined;
-    const n = Number(value.replace(/[$,\s]/g, ''));
+    // Canonical parser (utils/analysisUtils) — positive-price read, same
+    // value the pipeline reads from the same level string.
+    const n = parsePrice(value ?? '');
     return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 

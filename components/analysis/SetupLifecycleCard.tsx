@@ -2,6 +2,7 @@ import React from 'react';
 import { TradeAnalysis } from '../../types/analysis';
 import { TradeOutcome } from '../../types/enums';
 import { getSetupLifecycle, SetupLifecycleStage } from '../../utils/setupLifecycle';
+import { phtStamp } from '../../utils/timezone';
 
 interface SetupLifecycleCardProps {
     analysis: TradeAnalysis;
@@ -55,7 +56,7 @@ export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis
 
             <div className="mt-2 text-ui-xs text-zinc-500">
                 <span className="font-semibold text-zinc-400">Next:</span> {lifecycle.nextAction}
-                {lifecycle.expiresAt && !lifecycle.isTerminal && <span className="ml-2">Window ends {new Date(lifecycle.expiresAt).toLocaleString()}</span>}
+                {lifecycle.expiresAt && !lifecycle.isTerminal && <span className="ml-2">Window ends {phtStamp(lifecycle.expiresAt)}</span>}
             </div>
         </section>
     );

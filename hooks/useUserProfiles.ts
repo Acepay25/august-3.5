@@ -3,6 +3,7 @@ import * as dbService from '../services/infrastructure/dbService';
 import { isValidUserProfile } from '../utils/profileUtils';
 import { exportDataAsFile, exportPreferencesData, importPreferencesData } from '../services/infrastructure/ExportService';
 import { clearQueueForUser } from '../services/infrastructure/OfflineQueueService';
+import { phtDayKey } from '../utils/timezone';
 
 export interface UseUserProfilesParams {
     resetAppState: (usernameToSave?: string | null) => Promise<void>;
@@ -125,7 +126,7 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
                 _preferencesBackup: await exportPreferencesData(),
             };
 
-            const filename = `august_backup_${activeUsername}_${new Date().toISOString().split('T')[0]}.json`;
+            const filename = `august_backup_${activeUsername}_${phtDayKey()}.json`;
             const result = await exportDataAsFile(fullBackup, filename);
 
             if (!result.success) {

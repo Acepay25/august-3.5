@@ -6,6 +6,8 @@
 
 import { Kline } from '../analysis/MarketDataService';
 import { TradeAnalysis } from '../../types';
+import { parsePrice as parsePriceCanonical } from '../../utils/analysisUtils';
+import { baseOf } from '../../utils/symbol';
 
 export interface CandlePoint {
     time: number; // unix seconds (lightweight-charts UTCTimestamp)
@@ -39,9 +41,12 @@ export interface ChartLevel {
     dashed: boolean;
 }
 
+/** Positive-price read over the CANONICAL parser (utils/analysisUtils) —
+ *  range-aware ("3210 - 3220" → midpoint) and annotation-safe, so the chart
+ *  overlay reads the same entry value the SL/zone math uses. */
 const parsePrice = (v: string | number | undefined): number | null => {
     if (v === undefined || v === null) return null;
-    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[$,\s]/g, ''));
+    const n = typeof v === 'number' ? v : parsePriceCanonical(String(v));
     return Number.isFinite(n) && n > 0 ? n : null;
 };
 
@@ -52,8 +57,12 @@ const parsePrice = (v: string | number | undefined): number | null => {
  */
 export const verdictLevels = (analysis: TradeAnalysis | null | undefined, symbol: string): ChartLevel[] => {
     if (!analysis) return [];
-    const aCoin = (analysis.coinName || '').toUpperCase().replace(/USD(T|P|C|E)?$/, '');
-    const sCoin = symbol.toUpperCase().replace(/USD(T|P|C|E)?$/, '');
+    // Canonical base assets (utils/symbol). The old un-anchored strip mapped a
+    // bare 'USDC' coinName to '' and dropped the overlay entirely; baseOf
+    // keeps a bare stablecoin whole, and both sides of the comparison now
+    // derive their base through the SAME helper.
+    const aCoin = baseOf(analysis.coinName || '');
+    const sCoin = baseOf(symbol);
     if (!aCoin || aCoin !== sCoin) return [];
     const levels: ChartLevel[] = [];
     const entry = parsePrice(analysis.entryPoints?.[0]?.price);

@@ -32,6 +32,7 @@ const validationSchemas: Record<string, any> = {
 
 // -- ICONS (lucide-react) --
 import { X, Brain, Zap, Server, Target, AreaChart as AreaChartIcon, Code } from 'lucide-react';
+import { phtClockSeconds } from '../../utils/timezone';
 
 const Icons = {
     Close: X,
@@ -215,7 +216,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 </div>
                                 <div className="flex flex-col items-end">
                                     <div className="text-xs text-emerald-500/40 font-mono">Real-time Feedback</div>
-                                    <div className="text-ui-xs text-zinc-500">{signals.length > 0 ? `Last: ${new Date(signals[signals.length - 1].timestamp).toLocaleTimeString()}` : 'Awaiting first resolved trade'}</div>
+                                    <div className="text-ui-xs text-zinc-500">{signals.length > 0 ? `Last: ${phtClockSeconds(signals[signals.length - 1].timestamp)}` : 'Awaiting first resolved trade'}</div>
                                 </div>
                             </div>
                         </ModernCard>

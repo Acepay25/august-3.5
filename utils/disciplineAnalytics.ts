@@ -16,6 +16,7 @@
 import { LoggedTrade } from '../types/trade';
 import { TradeOutcome } from '../types/enums';
 import { rowPnlUsd } from '../services/validation/SessionGuardService';
+import { parsePrice } from './analysisUtils';
 
 export interface DisciplineRow {
     label: string;
@@ -223,8 +224,9 @@ export const computeRMultiple = (
     leverage?: number,
 ): number | undefined => {
     const num = (v?: string): number | undefined => {
-        if (!v) return undefined;
-        const n = Number(v.replace(/[$,\s]/g, ''));
+        // Canonical parser (utils/analysisUtils) — same value the pipeline
+        // reads from these level strings.
+        const n = parsePrice(v ?? '');
         return Number.isFinite(n) && n > 0 ? n : undefined;
     };
     const e = num(entry);

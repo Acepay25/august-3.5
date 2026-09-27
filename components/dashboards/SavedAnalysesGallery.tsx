@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { SavedAnalysis } from '../../types';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { phtStamp } from '../../utils/timezone';
 
 interface SavedAnalysesGalleryProps {
   savedAnalyses: SavedAnalysis[];
@@ -103,7 +104,7 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
                     <span className="block truncate text-xs font-semibold text-zinc-200">{a.coinName || 'Unknown asset'}</span>
                     <span className="block truncate text-ui-xs text-zinc-500">{sa.userPrompt || modelsLabel(sa)}</span>
                   </span>
-                  <span className="shrink-0 text-ui-2xs text-zinc-500">{new Date(sa.timestamp).toLocaleString()}</span>
+                  <span className="shrink-0 text-ui-2xs text-zinc-500">{phtStamp(sa.timestamp)}</span>
                   <span className="shrink-0 text-ui-2xs text-zinc-500">{expanded ? '▾' : '▸'}</span>
                 </button>
                 {expanded && (

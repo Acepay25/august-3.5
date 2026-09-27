@@ -25,15 +25,22 @@ export interface TimeframeBarProps {
 
 const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange, children }) => {
     const [open, setOpen] = useState(false);
-    // The ACTIVE timeframe is always shown, whatever the saved set says.
-    const bar = readTfBarSelection();
+    // The persisted selection is read ONCE on mount (and again on toggle) —
+    // not per render: this bar sits on the chart, which re-renders on every
+    // live tick (~1s), and a localStorage read + JSON.parse per tick is pure
+    // waste. State re-syncs on toggle (see below), the only moment the
+    // selection can actually change.
+    const [bar, setBar] = useState<ChartInterval[]>(() => readTfBarSelection());
     const shownIntervals = CHART_INTERVALS.filter(tf => bar.includes(tf) || tf === interval);
 
     const toggle = (tf: ChartInterval): void => {
-        const next = bar.includes(tf) ? bar.filter(x => x !== tf) : [...bar, tf];
+        // Re-read (not trust the mount-time state): another surface's bar may
+        // have written the key since mount, and the persisted selection is
+        // the source of truth. Then mirror the write into state.
+        const current = readTfBarSelection();
+        const next = current.includes(tf) ? current.filter(x => x !== tf) : [...current, tf];
         writeTfBarSelection(next);
-        // Re-read rather than keep local state: the selection is persisted, so
-        // another surface reading the same key must see it.
+        setBar(next);
         setOpen(false);
     };
 

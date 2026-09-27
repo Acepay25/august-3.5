@@ -7,6 +7,7 @@ import AutomationRunCard, { RunOutcomeConfirm } from './AutomationRunCard';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { getNextRunAt } from '../../services/automation/AutomationService';
 import { humanizeCron } from '../../services/automation/cronParser';
+import { phtClock } from '../../utils/timezone';
 import { Bookmark, Play } from 'lucide-react';
 
 /**
@@ -51,7 +52,7 @@ const AutomationView: React.FC<{
                         return next ? (
                             <span className="text-ui-xs text-zinc-500">
                                 {paused ? 'Paused until ' : 'Next '}
-                                {new Date(paused ? config.pauseUntil! : next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {phtClock(paused ? config.pauseUntil! : next)}
                             </span>
                         ) : null;
                     })()}

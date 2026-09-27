@@ -35,6 +35,8 @@ import {
     extractLessonFromPostMortem,
 } from '../learning/MemoryFilesService';
 import { syncClosedTradeToNotebook, listSkills, stampSkillOrigin } from '../learning/SkillMemoryService';
+import { baseOf } from '../../utils/symbol';
+import { phtDayKey } from '../../utils/timezone';
 import { craftSkillFromPostMortem } from '../learning/SkillCraftService';
 import { gateEvidenceBackedDraft } from '../learning/draftGates';
 import type { CraftedSkill } from '../../schemas/learning';
@@ -190,7 +192,9 @@ const configForBot = async (bot: BotIdentity): Promise<ProviderConfig | null> =>
 /** Mirrors SkillMemoryService's internal cluster key: the closed-trade cluster
  *  a draft's evidence claim is measured against. */
 const setupKey = (t: LoggedTrade): string => [
-    (t.analysis?.coinName || 'GEN').toUpperCase().replace(/USDT?$/, ''),
+    // Canonical base coin (utils/symbol) — matches passMining.passClusterKey,
+    // which derives its key through the SAME helper.
+    baseOf(t.analysis?.coinName || 'GEN'),
     t.analysis?.direction === 'Long' || t.analysis?.direction === 'Short' ? t.analysis.direction : 'Neutral',
     t.analysis?.detectedPatternFamily || t.analysis?.marketConditions?.pattern || 'any',
 ].join('|');
@@ -274,7 +278,7 @@ export const recordBotTurnOutcome = async (
             let folder = findFolderByName(folderName);
             if (!folder) folder = await createMemoryFolder(folderName, opts.username);
             const existing = getMemoryFiles().files.find(f => f.folderId === folder.id && f.name === 'memory.md');
-            const stamp = new Date().toISOString().slice(0, 10);
+            const stamp = phtDayKey();
             const line = `- [${stamp}] ${lesson.slice(0, BOT_LESSON_MAX_CHARS)}`;
             const next = existing
                 ? `${existing.content.trimEnd()}\n${line}`.slice(-BOT_MEMORY_FILE_MAX_CHARS)

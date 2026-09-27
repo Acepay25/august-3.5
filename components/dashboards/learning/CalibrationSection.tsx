@@ -2,6 +2,7 @@
 import React from 'react';
 import type { PersonalizedLearningProfile } from '../../../services/learning/SelfLearningService';
 import { CalibrationBar } from './CalibrationBar';
+import { phtStamp } from '../../../utils/timezone';
 
 /** Where the profile says not to trade, and whether confidence means anything. */
 export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile }> = ({ profile }) => (
@@ -53,7 +54,7 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
 
         {/* Last Updated */}
         <p className="text-ui-xs text-zinc-600 text-center">
-            Last updated: {new Date(profile.lastUpdated).toLocaleString()}
+            Last updated: {phtStamp(profile.lastUpdated)}
         </p>
     </>
 );

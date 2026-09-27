@@ -59,7 +59,10 @@ describe('progress card breakpoint (fix 4)', () => {
 
 describe('slDistancePct plumbed into the Algo probability engine (fix 6a)', () => {
     it('App computes the entry→SL distance and passes it as the 5th arg', () => {
-        expect(appSrc).toMatch(/const slPrice = parsePrice\(msg\.analysis\.stopLoss\);/);
+        // App now reads the level through the canonical parser under its
+        // aliased import (parsePrice as parsePriceCanonical), with an explicit
+        // '' fallback so a missing stopLoss parses to NaN instead of throwing.
+        expect(appSrc).toMatch(/const slPrice = parsePriceCanonical\(msg\.analysis\.stopLoss \|\| ''\);/);
         expect(appSrc).toMatch(/tpPct\.length >= 2 \? tpPct : undefined,\s*slDistancePct\s*\n\s*\);/);
     });
 
