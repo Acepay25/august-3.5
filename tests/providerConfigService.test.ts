@@ -127,6 +127,27 @@ describe('ProviderConfigService', () => {
       expect(loaded[0].apiKey).toBe('sk-plain');
       clearBridge();
     });
+
+    it('a failed decrypt + an unrelated save preserves the stored ciphertext (no key destruction)', async () => {
+      // The destroy chain: load decrypts ALL providers (failed → ''), any
+      // CRUD op then saves the whole list, and encryptKey('') wrote ''. The
+      // read-modify-write must re-persist the ORIGINAL ciphertext instead.
+      setBridge(async () => null);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      store = [makeConfig({ apiKey: 'enc:v1:cipherblob' })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].apiKey).toBe('');
+      await saveProviderConfigs(loaded);
+      expect((store as ProviderConfig[])[0].apiKey).toBe('enc:v1:cipherblob');
+      warn.mockRestore();
+
+      // Re-entering a key once the bridge recovered encrypts normally and
+      // stops preserving the old ciphertext.
+      setBridge(async (plain) => plain);
+      await saveProviderConfigs([{ ...loaded[0], apiKey: 'sk-reentered' }]);
+      expect((store as ProviderConfig[])[0].apiKey).toBe('enc:v1:sk-reentered');
+      clearBridge();
+    });
   });
 
   describe('addCustomProvider / removeCustomProvider', () => {

@@ -590,17 +590,14 @@ export const generateDevilsAdvocateAnalysis = (
 // ============================================================================
 
 /**
- * Checks if the current candle has closed
+ * Checks how far the current candle has developed
  * Warns against entering trades on unclosed candles
  */
 export const checkCandleConfirmation = (
-    dataTimestamp: string,
+    _dataTimestamp: string,
     timeframe: '5m' | '15m' | '1h' | '4h'
 ): CandleConfirmationResult => {
     const now = new Date();
-    const dataTime = new Date(dataTimestamp);
-    const diffMs = now.getTime() - dataTime.getTime();
-    const diffMinutes = diffMs / (1000 * 60);
 
     // Timeframe durations in minutes
     const timeframeDurations: Record<string, number> = {
@@ -611,7 +608,19 @@ export const checkCandleConfirmation = (
     };
 
     const duration = timeframeDurations[timeframe];
-    const minutesRemaining = duration - (diffMinutes % duration);
+
+    // Position INSIDE the current candle, from wall-clock alignment with the
+    // interval boundary (exchange candles bucket on UTC epoch multiples — 4h
+    // bars open 00:00/04:00/08:00… UTC). The old math derived the position
+    // from `dataTimestamp`, which the packet sets to its FETCH time
+    // (HybridIntelligenceService: `dataTimestamp: new Date().toISOString()`),
+    // so the check actually measured "how old is my data packet": a fresh
+    // packet always read "candle just opened" and capped every High verdict
+    // to Medium, while stale data escaped the cap. The packet stamp stays in
+    // the signature (callers pass it) but no longer feeds the math.
+    const durationMs = duration * 60_000;
+    const elapsedMs = now.getTime() % durationMs;
+    const minutesRemaining = (durationMs - elapsedMs) / 60_000;
 
     // Warn if less than 20% of candle remaining (high risk of wick manipulation)
     const percentRemaining = (minutesRemaining / duration) * 100;

@@ -203,11 +203,36 @@ import { ProviderConfig } from '../../types/provider';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 
 const redactPreferenceValue = (key: string, value: unknown): unknown => {
+    if (key === FORGED_TOOLS_PREF_KEY) return redactForgedTools(value);
     if (key !== PREF_KEYS.PROVIDER_CONFIGS || !Array.isArray(value)) return value;
     return value.map((provider: ProviderConfig) => ({
         ...provider,
         apiKey: '',
     }));
+};
+
+/**
+ * Redact secrets from forged desk tools before they leave the device, same
+ * contract as the provider-config redaction above. toolForge deliberately
+ * supports static `Authorization`/`Cookie` headers (its validator only
+ * rejects token-looking values in NON-auth headers), so a user's bearer
+ * token otherwise shipped in every exported backup in plaintext on the same
+ * file where provider keys are correctly blanked. Header NAMES matching the
+ * secret list are dropped entirely — a half-redacted header value would
+ * still fail the remote's auth and invites "just re-add it" edits.
+ */
+const FORGED_TOOLS_PREF_KEY = 'desk_tools_forged_v1';
+const SECRET_HEADER_NAME_RE = /authorization|cookie|api-?key|token/i;
+const redactForgedTools = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return value;
+    return value.map((tool) => {
+        if (!tool || typeof tool !== 'object' || !tool.headers || typeof tool.headers !== 'object') return tool;
+        const headers: Record<string, string> = { ...tool.headers };
+        for (const name of Object.keys(headers)) {
+            if (SECRET_HEADER_NAME_RE.test(name)) delete headers[name];
+        }
+        return { ...tool, headers };
+    });
 };
 
 /**

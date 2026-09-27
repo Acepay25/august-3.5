@@ -1,7 +1,37 @@
-import { describe, expect, it } from 'vitest';
-import { validateMultiTimeframeConfluence, validateRiskReward } from '../services/validation/AccuracyValidationService';
+import { describe, expect, it, vi } from 'vitest';
+import { validateMultiTimeframeConfluence, validateRiskReward, checkCandleConfirmation } from '../services/validation/AccuracyValidationService';
 import { validateTimeframeAlignment, matchPatternMemory } from '../services/validation/TradeValidationGate';
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
+
+describe('checkCandleConfirmation — position inside the CURRENT candle', () => {
+    it('measures candle position, not packet age — a fresh packet is mid-candle, not "just opened"', () => {
+        vi.useFakeTimers();
+        try {
+            // 10:37 UTC = 37 minutes into the 1h candle → confirmed. The old
+            // math derived the position from the packet FETCH time, so a
+            // fresh packet always read "candle just opened" and every High
+            // verdict got capped to Medium.
+            vi.setSystemTime(new Date('2026-09-27T10:37:00.000Z'));
+            const res = checkCandleConfirmation(new Date().toISOString(), '1h');
+            expect(res.isConfirmed).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('an early candle still warns to wait — and the packet stamp is ignored', () => {
+        vi.useFakeTimers();
+        try {
+            vi.setSystemTime(new Date('2026-09-27T10:02:00.000Z'));
+            // A 2020 fetch stamp would once have produced an arbitrary phase.
+            const res = checkCandleConfirmation('2020-01-01T00:00:00.000Z', '1h');
+            expect(res.isConfirmed).toBe(false);
+            expect(res.warning).toContain('just opened');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
 
 describe('accuracy validation confidence policy', () => {
     it('downgrades an ordinary opposing MTF read instead of forcing Avoid', () => {

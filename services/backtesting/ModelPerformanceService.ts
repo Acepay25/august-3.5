@@ -4,6 +4,7 @@
  */
 
 import { AIProvider, LoggedTrade } from '../../types';
+import type { TradeAnalysis } from '../../types/analysis';
 import { clamp100 } from '../../utils/math';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -245,9 +246,13 @@ const ensureProviderEntry = (data: AllModelPerformances, provider: string): Mode
 
 /**
  * Providers that contributed to a trade — dynamic `modelsUsed` keys first,
- * legacy per-provider fields as fallback for historical trades.
+ * legacy per-provider fields as fallback for historical trades. THE one
+ * provider list: every consumer of "who worked on this trade" routes here so
+ * the per-analyst rosters cannot drift (a 3-field copy in useTradeLogging
+ * once gave OpenRouter-only trades credit in the rebuild but none in the
+ * incremental path).
  */
-const getTradeProviders = (trade: LoggedTrade): string[] => {
+export const getTradeProviders = (trade: LoggedTrade): string[] => {
     if (trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0) {
         return Object.keys(trade.modelsUsed);
     }
@@ -260,6 +265,55 @@ const getTradeProviders = (trade: LoggedTrade): string[] => {
     if (trade.groqAlt2ModelUsed) legacy.push(AIProvider.GROQ_ALT2);
     if (trade.openrouterModelUsed) legacy.push(AIProvider.OPENROUTER);
     return legacy;
+};
+
+/**
+ * Per-analyst credit assignment — THE one semantic for "did this analyst's
+ * call win?". The consensus entries record each analyst's OWN directional
+ * call; crediting every model with the moderator's verdict made per-model
+ * accuracy and the dynamic weights pure noise (a bearish analyst was rewarded
+ * for a winning Long). Agreeing analysts get the trade outcome; analysts who
+ * called the OPPOSITE direction get the inverse (their call lost).
+ * trackTradeOutcome (incremental) and syncFromTradeLog (rebuild) BOTH route
+ * through this — when only one did, the same model's weight changed meaning
+ * across every restart.
+ */
+export const creditedWinForAnalyst = (
+    analysis: TradeAnalysis | undefined,
+    isWin: boolean,
+    providerId: string
+): boolean => {
+    const entry = analysis?.analystConsensus?.entries.find(
+        e => e.thoughtsKey === providerId || e.providerId === providerId
+    );
+    const tradeDirection = analysis?.direction;
+    if (entry?.direction && tradeDirection) {
+        const agreed = String(entry.direction).toLowerCase() === String(tradeDirection).toLowerCase();
+        return agreed ? isWin : !isWin;
+    }
+    return isWin;
+};
+
+/**
+ * Recent-trend from the rolling window (last 10), falling back to the all-time
+ * win rate when the window is thin — the one derivation the incremental and
+ * rebuild paths share. The rebuild used to read all-time here, so the same
+ * model could flip improving/declining across a restart.
+ */
+const deriveRecentTrend = (
+    provider: string,
+    overallWinRate: number
+): 'improving' | 'stable' | 'declining' => {
+    const recentEntries = loadRollingWindowData().entries
+        .filter(e => e.provider === provider)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 10);
+    const winRate = recentEntries.length >= 5
+        ? (recentEntries.filter(e => e.isWin).length / recentEntries.length) * 100
+        : overallWinRate;
+    if (winRate > 60) return 'improving';
+    if (winRate < 40) return 'declining';
+    return 'stable';
 };
 
 /** Weight record seeded for the enabled providers (dynamic ids). */
@@ -441,31 +495,7 @@ export const trackTradeOutcome = (
     // Calculate recent trend from the rolling window (last 10 trades), NOT the
     // all-time win rate — a model in a current slump with good history used to
     // be reported 'improving' and handed the +5 weight bonus.
-    const recentEntries = loadRollingWindowData().entries
-        .filter(e => e.provider === provider)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 10);
-    if (recentEntries.length >= 5) {
-        const recentWins = recentEntries.filter(e => e.isWin).length;
-        const recentWinRate = (recentWins / recentEntries.length) * 100;
-        if (recentWinRate > 60) {
-            modelData.recentTrend = 'improving';
-        } else if (recentWinRate < 40) {
-            modelData.recentTrend = 'declining';
-        } else {
-            modelData.recentTrend = 'stable';
-        }
-    } else {
-        // Not enough recent data — fall back to all-time as a rough baseline.
-        const recentWinRate = modelData.overallStats.winRate;
-        if (recentWinRate > 60) {
-            modelData.recentTrend = 'improving';
-        } else if (recentWinRate < 40) {
-            modelData.recentTrend = 'declining';
-        } else {
-            modelData.recentTrend = 'stable';
-        }
-    }
+    modelData.recentTrend = deriveRecentTrend(provider, modelData.overallStats.winRate);
 
     data[provider] = modelData;
     savePerformanceData(data);
@@ -724,35 +754,40 @@ export const syncFromTradeLog = (trades: LoggedTrade[]): void => {
             for (const provider of usedProviders) {
                 const modelData = ensureProviderEntry(data, provider);
 
+                // Same per-analyst credit semantic as the incremental path
+                // (creditedWinForAnalyst). The rebuild used to credit every
+                // provider the raw verdict, so each dissenting analyst's
+                // record flipped meaning on every app restart.
+                const creditedWin = creditedWinForAnalyst(trade.analysis, isWin, provider);
+
                 // Update overall
-                modelData.overallStats = updateStats(modelData.overallStats, isWin);
+                modelData.overallStats = updateStats(modelData.overallStats, creditedWin);
 
                 // Update family
                 const familyKey = mapFamilyToKey(family);
                 if (familyKey) {
-                    modelData.byFamily[familyKey] = updateStats(modelData.byFamily[familyKey], isWin);
+                    modelData.byFamily[familyKey] = updateStats(modelData.byFamily[familyKey], creditedWin);
                 }
 
                 // Update regime
                 const regimeKey = mapRegimeToKey(regime);
-                modelData.byRegime[regimeKey] = updateStats(modelData.byRegime[regimeKey], isWin);
+                modelData.byRegime[regimeKey] = updateStats(modelData.byRegime[regimeKey], creditedWin);
 
                 // Update confidence
                 const confKey = mapConfidenceToKey(confidence);
-                modelData.byConfidence[confKey] = updateStats(modelData.byConfidence[confKey], isWin);
+                modelData.byConfidence[confKey] = updateStats(modelData.byConfidence[confKey], creditedWin);
 
                 modelData.lastUpdated = new Date().toISOString();
             }
         }
     }
 
-    // Calculate trends
+    // Calculate trends from the rolling window — the SAME derivation the
+    // incremental path uses (deriveRecentTrend), not the all-time rate.
     for (const provider of Object.keys(data) as AIProvider[]) {
         const perf = data[provider];
         if (perf.overallStats.total >= 5) {
-            if (perf.overallStats.winRate > 60) perf.recentTrend = 'improving';
-            else if (perf.overallStats.winRate < 40) perf.recentTrend = 'declining';
-            else perf.recentTrend = 'stable';
+            perf.recentTrend = deriveRecentTrend(provider, perf.overallStats.winRate);
         }
     }
 
@@ -1237,6 +1272,37 @@ function migrateLegacyCalibrationKey(): void {
             localStorage.removeItem(PREF_KEYS.CONFIDENCE_CALIBRATION);
         }
     } catch { /* best-effort */ }
+};
+
+/**
+ * Record ONE per-provider confidence-calibration sample: the confidence word
+ * the analysis carried and whether the call won (per-analyst credit). This
+ * store had NO writer anywhere — the Brier summaries on the trader profile
+ * and injected into moderator prompts were frozen at the legacy blob (empty
+ * on fresh installs) while looking live. Called from the trade-log learning
+ * path right next to trackTradeOutcome.
+ */
+export const recordProviderConfidenceCalibration = (
+    provider: string,
+    confidence: string,
+    isWin: boolean
+): void => {
+    const key = confidence.toLowerCase();
+    if (key !== 'high' && key !== 'medium' && key !== 'low') return;
+    const data = loadConfidenceCalibrationData();
+    const buckets = data.providers[provider] || {
+        high: { wins: 0, total: 0 },
+        medium: { wins: 0, total: 0 },
+        low: { wins: 0, total: 0 },
+    };
+    const bucket = buckets[key];
+    buckets[key] = { wins: bucket.wins + (isWin ? 1 : 0), total: bucket.total + 1 };
+    data.providers[provider] = buckets;
+    data.lastUpdated = new Date().toISOString();
+    _confidenceCalibrationCache = data;
+    setPreferenceObject(CONFIDENCE_CALIBRATION_STORAGE_KEY, data).catch(e =>
+        console.warn('[ModelPerformance] Failed to save confidence calibration:', e)
+    );
 };
 
 /**

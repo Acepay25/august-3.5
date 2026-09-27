@@ -84,6 +84,13 @@ export interface BacktestResult {
   outcome: 'WIN' | 'LOSS' | 'NOT_TRIGGERED' | 'ENTERED_OPEN';
   hitTarget: 'TP1' | 'TP2' | 'TP3' | 'SL' | 'NONE';
   maxDrawdown: number;              // % drawdown during trade
+  /**
+   * MAE over the LIVE position window (entry→exit candle), raw price percent.
+   * Present only for resolved outcomes — the scan's `maxDrawdown` keeps
+   * accruing past the exit, so displays and gate decisions prefer this when
+   * a position actually closed.
+   */
+  maePercent?: number;
   timeToOutcome: number;            // Candles until outcome
   priceAtExit: number;
   simulationDetails: string;

@@ -8,7 +8,7 @@ import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { parsePrice } from '../utils/analysisUtils';
-import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/ModelPerformanceService';
+import { trackTradeOutcome, mapRegimeToKey, getTradeProviders, creditedWinForAnalyst, recordProviderConfidenceCalibration } from '../services/backtesting/ModelPerformanceService';
 import { computeRMultiple } from '../utils/disciplineAnalytics';
 import { CaptureJournalTags } from '../types/trade';
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
@@ -118,31 +118,17 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         const analysis = trade.analysis;
         if (!analysis) return;
 
-        // Track per-model performance — dynamic provider ids from modelsUsed,
-        // with legacy per-provider fields as fallback for historical trades.
-        const providers: AIProvider[] = trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0
-            ? Object.keys(trade.modelsUsed)
-            : ([
-                trade.geminiModelUsed ? AIProvider.GEMINI : null,
-                trade.deepseekModelUsed ? AIProvider.DEEPSEEK : null,
-                trade.groqModelUsed ? AIProvider.GROQ : null,
-            ] as (string | null)[]).filter((p): p is string => p !== null);
+        // Track per-model performance. The provider list (getTradeProviders —
+        // dynamic ids first, full 7-field legacy bridge) and the per-analyst
+        // credit semantic (creditedWinForAnalyst) are THE shared ones in
+        // ModelPerformanceService: this hook used to carry a private 3-field
+        // legacy bridge and an inline inversion, so the incremental and
+        // rebuild paths disagreed about the same historical trade.
+        const providers = getTradeProviders(trade);
 
         providers.forEach(p => {
-            // Per-analyst credit assignment: the consensus entries record each
-            // analyst's OWN directional call. Crediting every model with the
-            // moderator's verdict made per-model accuracy and dynamic weights
-            // pure noise (a bearish analyst was rewarded for a winning Long).
-            // Agreeing analysts get the trade outcome; analysts who called the
-            // OPPOSITE direction get the inverse (their call lost).
-            const entry = analysis.analystConsensus?.entries.find(e => e.thoughtsKey === p || e.providerId === p);
-            let creditedWin = isWin;
-            const tradeDirection = trade.analysis?.direction;
-            if (entry?.direction && tradeDirection) {
-                const agreed = String(entry.direction).toLowerCase() === String(tradeDirection).toLowerCase();
-                creditedWin = agreed ? isWin : !isWin;
-            }
-            trackTradeOutcome(p, creditedWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium', {
+            const creditedWin = creditedWinForAnalyst(analysis, isWin, p);
+            trackTradeOutcome(p as AIProvider, creditedWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium', {
                 direction: analysis.direction,
                 // parsePrice handles commas + annotations; the old digit-strip
                 // regex turned "94500 4h" into 945004 in the RL training signal.
@@ -151,6 +137,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 // re-logged/updated trades.
                 id: trade.id,
             });
+            // Per-provider confidence calibration (the Brier summaries): the
+            // store had NO writer, so those numbers were frozen legacy data
+            // that still looked live on the profile and in moderator prompts.
+            recordProviderConfidenceCalibration(p, analysis.confidence || 'Medium', creditedWin);
         });
 
         // Auto-learn from LOSS now lands in the SKILLS system:
@@ -293,12 +283,27 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ),
         };
 
+        // Settled-row dedupe: the row list dedupes by id, but the side-effect
+        // tail below (harness line, notebook evidence, calibration buckets,
+        // confluence, per-model attribution, insights) used to re-run on EVERY
+        // re-log — confirming an autopilot banner after a manual modal log
+        // double-counted the same trade in every stats sink. isDuplicate reads
+        // the ref, and the ref is advanced HERE: the effect sync lags one
+        // commit, which is exactly the window a double-confirm fires in.
+        const isDuplicate = loggedTradesRef.current.some(t => t.id === loggedTrade.id);
+        if (!isDuplicate) {
+            loggedTradesRef.current = [loggedTrade, ...loggedTradesRef.current];
+        }
         setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
         updateMessages(prev => prev.map(m => {
             if (m.id !== message.id) return m;
             const next = { ...m, outcome };
             return m.watched ? appendWatchEpisode(next, 'logged', outcome) : next;
         }));
+
+        // Message chrome (outcome stamp + watch episode) is idempotent and
+        // always applies; everything that ACCUMULATES statistics runs once.
+        if (isDuplicate) return;
 
         // ─── Harness visibility: push a one-shot system entry into the
         //  Chart AI dock's chat session that presented this trade AND add
@@ -344,7 +349,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         const tradeOrigin = botOriginForMessage(message.modelsUsed);
         void syncClosedTradeToNotebook(
             loggedTrade,
-            [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)],
+            // Ref, not the closure: two trades settled in the same render
+            // window must both be visible to the notebook's evidence
+            // clustering (the closure can still hold the pre-log array).
+            [loggedTrade, ...loggedTradesRef.current.filter(t => t.id !== loggedTrade.id)],
             notebookUser,
             tradeOrigin ?? undefined,
         )
@@ -427,7 +435,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // Auto-add to Recent Insights with FIFO enforcement
         void autoAddRecentInsight(loggedTrade);
 
-    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast, autoAddRecentInsight, loggedTrades]);
+    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast, autoAddRecentInsight]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
 
@@ -607,56 +615,12 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             console.warn('[ThinkingStore] Failed to import updateThinkingOutcome:', err);
         }
 
-        // Auto-add to Recent Insights with FIFO enforcement
-        (async () => {
-            setIsInsightGenerating(true);
-            try {
-                // Use the user's preference for Algo vs AI insight generation
-                const summary = insightTextForTrade(loggedTrade)
-                    || await MemoryService.summarizeTrade(
-                        loggedTrade,
-                        memoryModel,
-                        memoryConfig,
-                        useAlgorithmicInsights
-                    );
-                const newSummary = {
-                    id: loggedTrade.id,
-                    summaryText: summary,
-                    timestamp: new Date().toISOString()
-                };
-
-                setTradeSummaries(prev => {
-                    if (prev.some(s => s.id === loggedTrade.id)) return prev;
-                    return [...prev, newSummary].slice(-MAX_TRADE_SUMMARIES);
-                });
-
-                setNewlyAddedInsightIds(prev => new Set(prev).add(loggedTrade.id));
-                const timer = setTimeout(() => {
-                    insightTimersRef.current.delete(timer);
-                    setNewlyAddedInsightIds(prev => {
-                        const next = new Set(prev);
-                        next.delete(loggedTrade.id);
-                        return next;
-                    });
-                }, 3000);
-                insightTimersRef.current.add(timer);
-
-                console.log('[AutoInsight] Entry Not Hit logged to Recent Insights:', loggedTrade.id);
-            } catch (error) {
-                // Surface the failure so the user knows an insight
-                // wasn't created — their trade was still logged successfully.
-                console.error('[AutoInsight] Failed to generate insight:', error);
-                toast.error(
-                    "Insight Generation Failed",
-                    "Your trade was logged, but the AI insight couldn't be generated."
-                );
-            } finally {
-                setIsInsightGenerating(false);
-                // ENTRY_NOT_HIT is a logged trade too — refresh the AI Review.
-                onJournalAutoRefresh?.();
-            }
-        })();
-    }, [activeConversationLeverage, memoryModel, memoryConfig, useAlgorithmicInsights, toast, onJournalAutoRefresh]);
+        // Auto-add to Recent Insights via the SHARED helper. This block used
+        // to be a ~45-line verbatim copy of autoAddRecentInsight (its own
+        // comment above even claimed the block was shared) — any fix to the
+        // FIFO/toast/timer silently missed the ENTRY_NOT_HIT path.
+        void autoAddRecentInsight(loggedTrade);
+    }, [activeConversationLeverage, autoAddRecentInsight]);
 
     // ─── Auto post-mortem on outcome resolution ───────────────────────────
     // When the outcome autopilot resolves a logged trade (WIN / LOSS) the

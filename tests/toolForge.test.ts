@@ -120,6 +120,22 @@ describe('ToolForge — lifecycle: candidate → human approval → confirmed', 
         expect(items[0].proposal.description).toBe('v2');
     });
 
+    it('re-proposing never downgrades a CONFIRMED tool back to candidate', () => {
+        // Models routinely re-propose the same recipe; the old
+        // filter-out-and-replace deleted the human-approved record (and its
+        // usage stats) and silently undid the approval gate mid-session.
+        proposeForgedTool(validProposal({ description: 'approved v1' }));
+        approveForgedTool('custom_funding_history');
+        const returned = proposeForgedTool(validProposal({ description: 're-proposed v2' }), 'model:test');
+        const items = loadForgedTools();
+        expect(items).toHaveLength(1);
+        expect(items[0].status).toBe('confirmed');
+        expect(items[0].proposal.description).toBe('approved v1');
+        expect(returned.status).toBe('confirmed');
+        // The desk keeps offering the confirmed tool.
+        expect(confirmedForgedToolDefinitions()).toHaveLength(1);
+    });
+
     it('retire removes it from the desk set; delete removes it entirely', async () => {
         proposeForgedTool(validProposal());
         approveForgedTool('custom_funding_history');
