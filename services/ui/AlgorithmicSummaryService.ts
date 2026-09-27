@@ -2,7 +2,7 @@
 // Generates trade summaries algorithmically without AI to save tokens
 
 import { LoggedTrade } from '../../types';
-import { detectTradingSession } from '../validation/ConfidenceCalibrationService';
+import { detectTradingSession } from '../validation/calibrationStore';
 
 /**
  * Generates a structured trade summary string algorithmically.

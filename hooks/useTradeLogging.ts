@@ -13,7 +13,7 @@ import { computeRMultiple } from '../utils/disciplineAnalytics';
 import { CaptureJournalTags } from '../types/trade';
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
-import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
+import { ConfidenceLevel } from '../services/validation/calibrationStore';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { botOriginForMessage } from '../services/agents/botLearning';
 import { appendWatchEpisode } from '../utils/watchList';
