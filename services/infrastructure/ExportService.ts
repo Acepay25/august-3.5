@@ -250,6 +250,30 @@ const redactForgedTools = (value: unknown): unknown => {
  *   confidence_calibration        (the legacy key the line above migrates FROM)
  *   confluence_historical_stats   services/analysis/TimeframeConfluenceService.ts:206
  *
+ * The learning loop added eleven more that bypass Preferences the same way,
+ * all of them invisible to a backup before this list knew them. The symbol is
+ * named rather than the line for the ones that move as their module is edited:
+ *   memory_amendments_v1          services/learning/memoryAmendments.ts (KEY)
+ *   august_harness_lessons_v1     services/learning/harnessLessons.ts (STORAGE_KEY)
+ *   session_review_counter_v1     services/learning/sessionSkillReview.ts (COUNTER_KEY)
+ *   session_review_drafted_v1     services/learning/sessionSkillReview.ts (DEDUPE_KEY)
+ *   session_review_open_theses_v1 services/learning/sessionSkillReview.ts (THESIS_CACHE_KEY)
+ *   session_review_resolver_v1    services/learning/sessionSkillReview.ts (RESOLVER_THROTTLE_KEY)
+ *   supervisor_auto_v1_<user>     services/learning/supervisorStore.ts:107
+ *   supervisor_last_run_v1_<user> services/learning/skillSupervisor.ts (LAST_RUN_KEY)
+ *   trader_learning_v1:<user>     services/learning/traderLearner.ts (TOGGLE_KEY)
+ *   trader_learner_counter_v1:<user> services/learning/traderLearner.ts (COUNTER_KEY)
+ *   book_drafts_seeded_v1         services/learning/bookSkillDrafts.ts:177
+ *
+ * Five of those eleven scope with `<ns>:<user>`, not `<ns>_<user>` — the
+ * learning-loop counters build `${KEY}:${username}` — which is why the matcher
+ * below honours both separators.
+ *
+ * `supervisor_auto_v1_<user>` is the sharpest of them: it holds the trader's
+ * "supervisor OFF" CONSENT, whose default is `true`
+ * (supervisorStore.ts:84), so a restore that missed it did not lose a cache —
+ * it silently re-enabled an LLM pass the user had switched off.
+ *
  * On web this is the same store `PreferencesService` falls back to, so nothing
  * notices. On NATIVE they are two different places — Capacitor Preferences is
  * SharedPreferences/UserDefaults — and that broke backups in both directions:
@@ -261,7 +285,10 @@ const redactForgedTools = (value: unknown): unknown => {
  * Deliberately NOT every key: the WebView's storage quota is the one this app
  * has already been bitten by (see utils/memoryBudget), so shadow-copying keys
  * that Preferences genuinely owns would spend eviction-prone bytes on a copy
- * nothing reads.
+ * nothing reads. `tests/exportRawLocalStorage.test.ts` scans the source for
+ * `localStorage.*Item` call sites and fails when a new one lands in neither
+ * this list nor the restore allow-list, which is the only thing that keeps this
+ * paragraph honest as stores are added.
  */
 const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     'profile_memory_v1',
@@ -274,22 +301,52 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     'model_confidence_calibration',
     'confidence_calibration',
     'confluence_historical_stats',
+    'memory_amendments_v1',
+    'august_harness_lessons_v1',
+    'session_review_counter_v1',
+    'session_review_drafted_v1',
+    'session_review_open_theses_v1',
+    'session_review_resolver_v1',
+    'supervisor_auto_v1',
+    'supervisor_last_run_v1',
+    'trader_learning_v1',
+    'trader_learner_counter_v1',
+    'book_drafts_seeded_v1',
 ];
 
-const isRawLocalStorageKey = (key: string): boolean =>
-    RAW_LOCAL_STORAGE_PREFIXES.some(p => key === p || key.startsWith(`${p}_`));
+/**
+ * Is this key owned by a store that talks to `localStorage` directly?
+ *
+ * Exported (narrow, predicate-only) so `tests/exportRawLocalStorage.test.ts`
+ * can assert the invariant against the REAL matcher instead of a second copy
+ * of the list that would drift from it.
+ *
+ * Two scoping conventions are in the tree, so both are honoured: `<ns>_<user>`
+ * (the rosters, the drawing/level/watch stores) and `<ns>:<user>` (the
+ * learning-loop counters, whose writers build `${KEY}:${username}`). Matching
+ * only the first one left every `:`-scoped store exported-but-not-mirrored —
+ * the same mobile data loss as being absent from the list entirely.
+ */
+export const isRawLocalStorageKey = (key: string): boolean =>
+    RAW_LOCAL_STORAGE_PREFIXES.some(p =>
+        key === p || key.startsWith(`${p}_`) || key.startsWith(`${p}:`));
 
 /** The value as its owner would read it, or null when neither store has it. */
 const readSweptValue = async (key: string): Promise<unknown> => {
     // Raw-localStorage owners (profile memory, learning rules, the agent
-    // rosters, the calibration stats) write localStorage DIRECTLY and never
-    // touch Preferences — so on native a Preferences copy of one of these
-    // keys is by definition OLDER: the one-time migration snapshot or the
-    // restore mirror. Reading Preferences first exported that frozen copy
-    // forever while the owner's live bytes sat in localStorage — every
-    // backup after a restore (or after the migration) shipped stale data.
-    // The owner's store wins; Preferences is the fallback for a key whose
-    // only copy is the mirror/legacy one.
+    // rosters, the calibration stats, the learning-loop stores) write
+    // localStorage DIRECTLY and never touch Preferences — so on native a
+    // Preferences copy of one of these keys is by definition OLDER: the
+    // one-time migration (PreferencesService.migrateLocalStorageToPreferences
+    // copies EVERY localStorage key once) or the restore mirror. Reading
+    // Preferences first exported that frozen copy forever while the owner's
+    // live bytes sat in localStorage — every backup after a restore (or after
+    // the migration) shipped stale data. The owner's store wins; Preferences
+    // is the fallback for a key whose only copy is the mirror/legacy one.
+    //
+    // This is the mirror image of the restore side, and it is gated by the SAME
+    // list: a key missing from RAW_LOCAL_STORAGE_PREFIXES does not merely fail
+    // to restore, it exports the wrong bytes.
     if (isRawLocalStorageKey(key)) {
         try {
             const raw = typeof localStorage === 'undefined'
@@ -431,6 +488,12 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'trader_learning_v1',
     'trader_learner_counter_v1',
     'supervisor_auto_v1',
+    // The supervisor's own throttle stamp (skillSupervisor.ts, LAST_RUN_KEY).
+    // Was in NEITHER list: the export sweep found it in localStorage and wrote
+    // it into every backup, then import dropped it as un-allow-listed — a key
+    // the app ships and refuses to take back. Harmless data, but it is the
+    // same shape of bug as the learning stores above: one list, not two.
+    'supervisor_last_run_v1',
     // Self-improvement judge gate + measurement loop (per-user,
     // services/learning/selfImprovement.ts: `learning_judge_gate_v1_<user>`,
     // `learning_measure_v1_<user>`).

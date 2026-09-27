@@ -21,7 +21,7 @@
  *    days-since-edit — and never folded into the stale count.
  */
 
-import { getMemoryFiles, getNotebookSize, getNotebookWriteFailure, type NotebookWriteFailure } from './MemoryFilesService';
+import { getMemoryFiles, getNotebookSize, getNotebookWriteFailure, SCOPE_LABEL, type NotebookWriteFailure } from './MemoryFilesService';
 import { describePressure, type NotebookPressure } from '../../utils/memoryBudget';
 import {
     isSkillFile, parseSkillMarkdown, EVIDENCE_STALE_DAYS, type SkillMeta,
@@ -276,11 +276,19 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
     // question of what the app learned; this one is whether it kept it.
     if (writeFailure) {
         const mb = (writeFailure.bytes / (1024 * 1024)).toFixed(2);
+        const lost = `${writeFailure.streak} write${writeFailure.streak === 1 ? '' : 's'} lost since the last one reached disk.`;
+        // Name the store that actually refused. The amendment queue is small, so
+        // quoting its size would read as a rounding joke — but it is the queue
+        // holding unapproved model corrections, and saying "notebook" there
+        // would point the user at the wrong place to look.
+        const what = writeFailure.scope === 'notebook'
+            ? `the ${mb} MB notebook`
+            : 'the pending amendment queue';
         flags.push(writeFailure.kind === 'quota'
-            ? `NOT SAVING — storage refused the ${mb} MB notebook as full, so learning is living only in this session.`
-                + ` ${writeFailure.streak} write${writeFailure.streak === 1 ? '' : 's'} lost since the last one reached disk. Free space or delete old backups, then export one.`
-            : `NOT SAVING — the notebook write failed (${writeFailure.message}).`
-                + ` ${writeFailure.streak} write${writeFailure.streak === 1 ? '' : 's'} lost since the last one reached disk; everything below is read from memory, not from disk.`);
+            ? `NOT SAVING — storage refused ${what} as full, so learning is living only in this session.`
+                + ` ${lost} Free space or delete old backups, then export one.`
+            : `NOT SAVING — the ${SCOPE_LABEL[writeFailure.scope]} write failed (${writeFailure.message}).`
+                + ` ${lost} Everything below is read from memory, not from disk.`);
     }
     if (queues.supervisorPending > 0) {
         flags.push(`${queues.supervisorPending} item${queues.supervisorPending === 1 ? '' : 's'} waiting on the supervisor.`);

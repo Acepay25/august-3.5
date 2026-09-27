@@ -33,12 +33,14 @@ const StatusBadge: React.FC<{ a: MemoryAmendment }> = ({ a }) => {
 export const AmendmentsInbox: React.FC = () => {
     const [amendments, setAmendments] = React.useState<MemoryAmendment[]>([]);
     const [busyId, setBusyId] = React.useState<string | null>(null);
+    const [saveError, setSaveError] = React.useState<string | null>(null);
 
     const refresh = React.useCallback(() => setAmendments(listAmendments()), []);
     React.useEffect(() => { refresh(); }, [refresh]);
 
     const resolve = async (a: MemoryAmendment, apply: boolean): Promise<void> => {
         setBusyId(a.id);
+        setSaveError(null);
         try {
             if (apply) {
                 const resolved = approveAmendment(a.id);
@@ -57,6 +59,17 @@ export const AmendmentsInbox: React.FC = () => {
                 rejectAmendment(a.id);
             }
             refresh();
+        } catch (e) {
+            // The queue write is recorded and rethrown now, which is what makes
+            // it visible at all — but "visible" to this component means the
+            // trader is told, because the two failure modes land very
+            // differently: a refused quota left the proposal PENDING and
+            // retryable, while an error after approve() already burned the
+            // in-memory status. Say which, rather than claiming it is safe.
+            const quota = /quota|exceed|full/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e));
+            setSaveError(quota
+                ? 'Storage is full, so this was not saved. The proposal is still pending — free space or delete old backups, then try again.'
+                : 'This could not be saved. The failure is recorded on the Memory health card; check it before assuming the change stuck.');
         } finally {
             setBusyId(null);
         }
@@ -67,6 +80,12 @@ export const AmendmentsInbox: React.FC = () => {
 
     return (
         <div className="space-y-2" data-testid="amendments-inbox">
+            {saveError && (
+                <p role="alert" data-testid="amendment-save-error"
+                    className="rounded-lg border border-rose-900/50 bg-rose-950/20 px-3 py-2 text-ui-dense leading-snug text-rose-300">
+                    {saveError}
+                </p>
+            )}
             {amendments.length === 0 && (
                 <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
                     No amendment proposals. Models can propose corrections to your notebook via <code className="text-zinc-400">amend_memory</code>.

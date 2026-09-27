@@ -108,11 +108,22 @@ export interface SkillMeta {
      *  confirmed skill (sequential-evidence gating). Absent ⇒ legacy behavior
      *  (treated as confirmed). */
     evalStreak?: number;
-    /** Matched-but-NOT-injected closed-trade ids (tail-capped). These are the
-     *  CONTROL group for attribution: setups the skill could have influenced
-     *  but provably didn't (no injection record in the window). They never
-     *  enter wins/losses. */
+    /** Matched-but-NOT-injected closed-trade ids (tail-capped at
+     *  CONTROL_ID_TAIL). These are the CONTROL group for attribution:
+     *  setups the skill could have influenced but provably didn't (no
+     *  injection record in the window). They never enter wins/losses. */
     controlIds?: string[];
+    /** Aggregate outcomes of that CONTROL group, counted beside wins/losses
+     *  but never mixed into them. `controlIds` is a tail kept for PROVENANCE;
+     *  these two are the SAMPLE the confirmation CI gate compares against —
+     *  without them the control rate could only be re-derived from a trade
+     *  log that prunes, which is how a control group quietly shrank to one
+     *  trade and every comparison with it became meaningless. Deliberately
+     *  UNcapped and monotonic: a count that stops growing stops being
+     *  evidence. Absent on skills written before this existed — those fall
+     *  back to recounting the ids they still carry. */
+    controlWins?: number;
+    controlLosses?: number;
     /** Counted trade ids whose market regime DIFFERED from the skill's scope
      *  regime (tail-capped). applyEvidenceDecay already discounts these counts;
      *  this list just makes the discount VISIBLE — the dashboard can show "this
@@ -307,6 +318,16 @@ export const DECAY_MIN_SAMPLES = 8;
  *  mirrored above for avoid) is DEMOTED to candidate — decayed, not dead.
  *  Lifetime stats still guard retirement. */
 export const DECAY_RECENT_WINRATE = 0.35;
+/**
+ * Control-group trade ids kept in the frontmatter tail. The ids are
+ * provenance — "which setups did this skill NOT shape" — and the aggregate
+ * `controlWins`/`controlLosses` are the sample the CI gate grades against, so
+ * capping the ids does NOT cap the evidence: the counters are uncapped and
+ * monotonic. The tail exists only to keep the markdown line readable and
+ * parseable, at the same 20 the sibling `overriddenIds`/`crossRegimeIds`
+ * tails use.
+ */
+export const CONTROL_ID_TAIL = 20;
 /**
  * Counted trades a CANDIDATE avoid skill needs before code-side enforcement
  * may size a trade down. Prompt injection already excludes zero-evidence
@@ -557,6 +578,17 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
             const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
             return ids.length > 0 ? ids : undefined;
         })(),
+        // The control group's aggregate sample. Absent means "not counted yet"
+        // (legacy row), NOT zero — controlStatsFrom falls back to recounting
+        // the ids in that case.
+        controlWins: (() => {
+            const n = parseInt(pick('controlWins') || '', 10);
+            return Number.isFinite(n) && n > 0 ? n : undefined;
+        })(),
+        controlLosses: (() => {
+            const n = parseInt(pick('controlLosses') || '', 10);
+            return Number.isFinite(n) && n > 0 ? n : undefined;
+        })(),
         // Injected-but-not-cited (OVERRIDDEN) trade ids.
         overriddenIds: (() => {
             const raw = pick('overriddenIds');
@@ -747,7 +779,13 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.originMessageId ? [`originMessageId: ${meta.originMessageId}`] : []),
         ...(meta.supersededBy ? [`supersededBy: ${meta.supersededBy}`] : []),
         ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
-        ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-20).join(',')}`] : []),
+        ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-CONTROL_ID_TAIL).join(',')}`] : []),
+        // The control group's aggregate sample, written beside the id tail it
+        // is counted from. Only when non-zero: an ABSENT pair is what the
+        // cold-start branch of the CI gate reads as "no control evidence".
+        ...(meta.controlWins || meta.controlLosses
+            ? [`controlWins: ${meta.controlWins ?? 0}`, `controlLosses: ${meta.controlLosses ?? 0}`]
+            : []),
         ...(meta.overriddenIds && meta.overriddenIds.length > 0 ? [`overriddenIds: ${meta.overriddenIds.slice(-20).join(',')}`] : []),
         ...(meta.crossRegimeIds && meta.crossRegimeIds.length > 0 ? [`crossRegimeIds: ${meta.crossRegimeIds.slice(-20).join(',')}`] : []),
         ...(meta.regimeStats ? [`regimeStats: ${JSON.stringify(meta.regimeStats)}`] : []),
@@ -925,39 +963,84 @@ export const confirmationCiGate = (
     return ciGatePasses(meta.kind, f.wins, f.losses, control);
 };
 
-/** Control-group evidence for the CI comparison — the settled
- *  outcomes of the skill's controlIds (matched-but-not-injected trades). */
+/** Control-group evidence for the CI comparison — the settled outcomes of the
+ *  skill's controlIds (matched-but-not-injected trades). Prefers the persisted
+ *  aggregate, which survives the trade log pruning that otherwise shrinks a
+ *  control group to nothing; recounts the ids only for rows written before the
+ *  aggregate existed. Either way the result is a POINT ESTIMATE, so the gate
+ *  itself decides how much of it is worth comparing against. */
 const controlStatsFrom = (
     meta: SkillMeta,
     allTrades?: LoggedTrade[],
 ): { wins: number; losses: number } | undefined => {
+    const wins = meta.controlWins ?? 0;
+    const losses = meta.controlLosses ?? 0;
+    if (wins + losses > 0) return { wins, losses };
     if (!allTrades || !meta.controlIds || meta.controlIds.length === 0) return undefined;
     const ids = new Set(meta.controlIds);
-    let wins = 0, losses = 0;
+    let countedWins = 0, countedLosses = 0;
     for (const t of allTrades) {
         if (!ids.has(t.id)) continue;
-        if (t.outcome === TradeOutcome.WIN) wins += 1;
-        else if (t.outcome === TradeOutcome.LOSS) losses += 1;
+        if (t.outcome === TradeOutcome.WIN) countedWins += 1;
+        else if (t.outcome === TradeOutcome.LOSS) countedLosses += 1;
     }
-    return wins + losses > 0 ? { wins, losses } : undefined;
+    return countedWins + countedLosses > 0 ? { wins: countedWins, losses: countedLosses } : undefined;
+};
+
+/** The alpha-decay window's W/L tokens in order (oldest first), junk dropped.
+ *  The ordered view is what lets decay ask about a SLICE of the window instead
+ *  of only its aggregate. */
+const recentWindowTokens = (meta: SkillMeta): string[] =>
+    (meta.recentOutcomes ?? '').toUpperCase().match(/[WL]/g) ?? [];
+
+/** W/L tallies of a token run. */
+const windowCounts = (tokens: string[]): { wins: number; losses: number } => {
+    let wins = 0, losses = 0;
+    for (const t of tokens) {
+        if (t === 'W') wins += 1;
+        else losses += 1;
+    }
+    return { wins, losses };
 };
 
 /** Win/loss counts inside the alpha-decay window (recentOutcomes).
  *  Null when the skill has no windowed evidence yet. */
 export const recentWindowStats = (meta: SkillMeta): { wins: number; losses: number } | null => {
     if (!meta.recentOutcomes) return null;
-    const wins = (meta.recentOutcomes.match(/W/g) || []).length;
-    const losses = meta.recentOutcomes.length - wins;
-    return { wins, losses };
+    // Count BOTH tokens. `length - wins` counted every non-W byte as a loss, so
+    // a dirty "WLXL" row invented two losses out of junk and could sink a skill
+    // under the decay bar on evidence that was never counted. Writes only go
+    // through appendRecentOutcome today, so this bites legacy/corrupt rows —
+    // which is exactly why the read cannot trust the shape.
+    return windowCounts(recentWindowTokens(meta));
+};
+
+/** One decay slice under the bar, for the skill's kind (repeat: below;
+ *  avoid: above). A point estimate — isDecayed decides how many slices must
+ *  agree before it counts as decay. */
+const decaySliceBad = (kind: SkillKind, wins: number, losses: number): boolean => {
+    const n = wins + losses;
+    if (n <= 0) return false;
+    const wr = wins / n;
+    return kind === 'repeat' ? wr < DECAY_RECENT_WINRATE : wr > 1 - DECAY_RECENT_WINRATE;
 };
 
 /** True when the recent window carries enough samples to judge and has
- *  decayed below the bar for the skill's kind (repeat: below; avoid: above). */
+ *  decayed below the bar for the skill's kind (repeat: below; avoid: above).
+ *
+ *  TWO slices must sit under the bar: the whole retained window AND its most
+ *  recent DECAY_MIN_SAMPLES outcomes. One slice is a bare point estimate — at
+ *  N = 8 a 0.25 win-rate still carries a one-sided 95% upper bound of 0.54,
+ *  which says nothing about a 0.35 edge — and a lone cold patch inside a
+ *  recovering window ('LLLLLLWWWW' is 20% overall but its freshest 8 sit at
+ *  50%) is recovery, not decay. Sequential evidence, the same shape as
+ *  EVAL_DEMOTE_STREAK: one bad sample may not bench a skill, two in a row may. */
 export const isDecayed = (meta: SkillMeta): boolean => {
     const r = recentWindowStats(meta);
     if (!r || r.wins + r.losses < DECAY_MIN_SAMPLES) return false;
-    const wr = r.wins / (r.wins + r.losses);
-    return meta.kind === 'repeat' ? wr < DECAY_RECENT_WINRATE : wr > 1 - DECAY_RECENT_WINRATE;
+    if (!decaySliceBad(meta.kind, r.wins, r.losses)) return false;
+    const fresh = windowCounts(recentWindowTokens(meta).slice(-DECAY_MIN_SAMPLES));
+    return decaySliceBad(meta.kind, fresh.wins, fresh.losses);
 };
 
 /** Append one counted outcome to the alpha-decay window (tail-capped).
@@ -1006,6 +1089,14 @@ export const countTradeOutcome = (meta: SkillMeta, win: boolean, r?: number): vo
 export const EXPECTANCY_MIN_R_SAMPLE = 8;
 
 /**
+ * Win-rate line at which a skill is CLAIMING an edge over a coin flip — and
+ * therefore at which a non-positive expectancy is a conflict rather than just
+ * a losing record. Mirrored for avoid skills: their claim is that the matched
+ * setups lose more often than they win.
+ */
+export const EXPECTANCY_CONFLICT_WINRATE = 0.5;
+
+/**
  * Average R per measured outcome, or undefined when there is nothing honest to
  * report. Callers must render undefined as "not yet measured" — never as 0R.
  */
@@ -1016,6 +1107,52 @@ export const skillExpectancyR = (
     const n = meta.rSampled ?? 0;
     if (n < minSample || typeof meta.netR !== 'number' || !Number.isFinite(meta.netR)) return undefined;
     return Math.round((meta.netR / n) * 100) / 100;
+};
+
+/**
+ * Promotion gate on the R ledger, which the ladder above never consulted: a
+ * skill whose measured outcomes do not pay cannot be CONFIRMED.
+ *
+ * The ladder is graded on win rate, and win rate is precisely what a
+ * small-target / wide-stop bleed fakes — 7 wins of +0.3R against 3 losses of
+ * -0.8R is a 70% record and a -0.03R expectancy. `skillExpectancyR` is
+ * undefined until the ledger holds EXPECTANCY_MIN_R_SAMPLE outcomes, and
+ * undefined means UNMEASURED, not break-even: below that floor the gate
+ * stands aside and the record is graded exactly as it was before R was
+ * persisted. The sign is the skill's own — a repeat rule has to be positive R,
+ * an avoid rule negative — and the comparison is strict, so a flat 0.00R
+ * confirms nothing.
+ *
+ * Promotion only, like the CI: a confirmed skill keeps its tier through
+ * re-derivation and is demoted by the retire band, the eval pin or the decay
+ * window, never by a ledger that has since gone negative mid-session.
+ */
+const expectancySupportsPromotion = (meta: SkillMeta): boolean => {
+    const expectancy = skillExpectancyR(meta);
+    if (expectancy === undefined) return true;
+    return meta.kind === 'repeat' ? expectancy > 0 : expectancy < 0;
+};
+
+/**
+ * The expectancy a skill's win rate CONTRADICTS, or undefined when there is
+ * nothing to contradict. A conflict is a claimed edge refused by measured R:
+ * a repeat rule sitting above a coin flip on non-positive expectancy, or an
+ * avoid rule below one on non-negative expectancy. Below the coin-flip line
+ * the win rate claims nothing, and below EXPECTANCY_MIN_R_SAMPLE the ledger
+ * has nothing honest to say — both return undefined rather than a guess.
+ */
+const expectancyConflictR = (meta: SkillMeta): number | undefined => {
+    const expectancy = skillExpectancyR(meta);
+    if (expectancy === undefined) return undefined;
+    const sample = meta.wins + meta.losses;
+    // Compared on the counts rather than on `hitRate` (a rounded percentage),
+    // so the coin-flip line is exact instead of ±0.5% away.
+    const claimsEdge = meta.kind === 'repeat'
+        ? meta.wins > sample * EXPECTANCY_CONFLICT_WINRATE
+        : meta.wins < sample * (1 - EXPECTANCY_CONFLICT_WINRATE);
+    if (!claimsEdge) return undefined;
+    const onTheWrongSide = meta.kind === 'repeat' ? expectancy <= 0 : expectancy >= 0;
+    return onTheWrongSide ? expectancy : undefined;
 };
 
 const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number }): SkillStatus => {
@@ -1085,12 +1222,13 @@ const deriveStatus = (meta: SkillMeta, control?: { wins: number; losses: number 
         const rawSaysConfirmed = meta.kind === 'repeat'
             ? winRate >= 0.6
             : meta.kind === 'avoid' ? winRate <= 0.4 : false;
-        // Raw threshold is the floor; the Wilson CI is the gate. The gate
-        // applies to PROMOTION only — a skill already confirmed keeps its
-        // status through re-derivation passes (consolidation, merge) and is
-        // demoted by the retire band or the eval override above, never by
-        // retroactive statistics.
-        if (rawSaysConfirmed && !claimUnmet && (meta.status === 'confirmed' || confirmationCiGate(meta, control))) {
+        // Raw threshold is the floor; the Wilson CI and the R ledger are the
+        // gates. The gates apply to PROMOTION only — a skill already confirmed
+        // keeps its status through re-derivation passes (consolidation, merge)
+        // and is demoted by the retire band or the eval override above, never
+        // by retroactive statistics.
+        if (rawSaysConfirmed && !claimUnmet && expectancySupportsPromotion(meta)
+            && (meta.status === 'confirmed' || confirmationCiGate(meta, control))) {
             return 'confirmed';
         }
         return 'candidate';
@@ -1192,7 +1330,17 @@ const applySkillEvidenceUnlocked = async (
             // with outcomes this skill did not shape.
             const control = meta.controlIds ?? [];
             if (!control.includes(trade.id)) {
-                meta.controlIds = [...control, trade.id].slice(-20);
+                meta.controlIds = [...control, trade.id].slice(-CONTROL_ID_TAIL);
+                // The id tail is provenance; THESE are the sample the CI gate
+                // grades against. A tail-capped list can only ever prove
+                // CONTROL_ID_TAIL outcomes however many control trades the
+                // trader actually took, so the aggregate is uncapped and
+                // monotonic — like evidenceCount, and never mixed into the
+                // skill's own wins/losses. Counted inside the same
+                // not-already-recorded guard, so a replayed trade cannot
+                // double-count the baseline it is being measured against.
+                if (trade.outcome === TradeOutcome.WIN) meta.controlWins = (meta.controlWins ?? 0) + 1;
+                else if (trade.outcome === TradeOutcome.LOSS) meta.controlLosses = (meta.controlLosses ?? 0) + 1;
                 meta.modifiedAt = new Date().toISOString();
                 await updateMemoryFileUnlocked(file.id, {
                     content: serializeSkill(meta, titleFromMeta(meta)),
@@ -3043,6 +3191,16 @@ export interface SkillEffectiveness {
     evalVerdict?: SkillMeta['evalVerdict'];
     /** Causal before/after win-rate verdict (when computable). */
     liftVerdict?: 'positive' | 'neutral' | 'negative' | 'insufficient-data';
+    /** Mean realized R per measured outcome — undefined until the ledger holds
+     *  EXPECTANCY_MIN_R_SAMPLE of them (skillExpectancyR), which is "not yet
+     *  measured", never 0. */
+    expectancyR?: number;
+    /** The win rate claims an edge the R ledger contradicts: a repeat skill
+     *  above a coin flip on non-positive expectancy, or an avoid skill below
+     *  one on non-negative expectancy. Annotates the rationale; it never
+     *  rewrites the recommendation on its own — the gate proper lives in
+     *  deriveStatus, and the recommendation is the trader's click. */
+    expectancyConflict?: boolean;
 }
 
 export interface SkillEffectivenessReviewOptions {
@@ -3120,6 +3278,17 @@ export const reviewSkillEffectiveness = (opts: SkillEffectivenessReviewOptions =
                 rationale = `${rationale} Caveat: never actually injected into a prompt since tracking began — its record is co-occurrence, not influence.`;
             }
 
+            // ── Win rate vs the R ledger ──
+            // Every branch above is graded on W/L, so a skill that banks a
+            // small win and pays a bigger one reads as healthy indefinitely.
+            // The R ledger is the only record that can see it, and the review
+            // never looked.
+            const expectancy = skillExpectancyR(meta);
+            const conflictR = expectancyConflictR(meta);
+            if (conflictR !== undefined) {
+                rationale = `${rationale} Win rate claims an edge the R ledger contradicts (${conflictR > 0 ? '+' : ''}${conflictR}R per trade over ${meta.rSampled ?? 0} measured outcomes) — believe the R.`;
+            }
+
             return {
                 fileId: file.id,
                 title,
@@ -3133,6 +3302,8 @@ export const reviewSkillEffectiveness = (opts: SkillEffectivenessReviewOptions =
                 rationale,
                 ...(meta.evalVerdict ? { evalVerdict: meta.evalVerdict } : {}),
                 ...(lift ? { liftVerdict: lift.verdict } : {}),
+                ...(expectancy !== undefined ? { expectancyR: expectancy } : {}),
+                ...(conflictR !== undefined ? { expectancyConflict: true } : {}),
             };
         })
         .filter((s): s is SkillEffectiveness => s !== null)

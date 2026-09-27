@@ -40,6 +40,16 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
     const [report, setReport] = useState<MemoryHealthReport | null>(null);
     const [due, setDue] = useState(false);
     const [running, setRunning] = useState(false);
+    // A read that FAILED is not a read that found nothing. These used to be the
+    // same state — `catch { setReport(null) }` — so a store that could not be
+    // read rendered an indefinite "Reading memory…" spinner, which is the one
+    // display that tells the trader nothing and never resolves. Worse on this
+    // card than anywhere else: the thing it reports on is whether memory is
+    // being saved at all, so a card that cannot report is worse than no card.
+    const [readError, setReadError] = useState<string | null>(null);
+    /** A hygiene pass that failed. The report stays — one failed sweep is not a
+     *  reason to throw away everything the card already knows. */
+    const [hygieneError, setHygieneError] = useState<string | null>(null);
     // The plan asked for a graveyard VIEW; until now the whole store showed up
     // as one number in the queues section.
     const [tombstones, setTombstones] = useState<SkillTombstone[]>([]);
@@ -49,18 +59,53 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
             setReport(await buildMemoryHealthReport(username));
             setDue(await isHygieneDue(username));
             setTombstones(await listTombstones(username));
-        } catch { setReport(null); }
+            setReadError(null);
+        } catch (e) {
+            setReport(null);
+            setReadError(e instanceof Error ? e.message : String(e));
+        }
     }, [username]);
 
     useEffect(() => { void load(); }, [load, refreshKey]);
 
     const runNow = async (): Promise<void> => {
         setRunning(true);
+        setHygieneError(null);
         try {
             await runMemoryHygiene(username, { providerConfigs: await loadProviderConfigs() });
             await load();
+        } catch (e) {
+            // Previously try/finally with no catch: a failed pass rejected out
+            // of the click handler, so the button simply stopped working and
+            // the last report stayed on screen implying the pass had succeeded.
+            setHygieneError(e instanceof Error ? e.message : String(e));
         } finally { setRunning(false); }
     };
+
+    if (readError) {
+        return (
+            <div className="p-4" data-testid="memory-health-error">
+                <div className="flex items-start gap-2 text-ui-dense leading-4 text-rose-300">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                        <p className="font-semibold">Could not read memory health.</p>
+                        {/* The message is the diagnosis — this card exists to say
+                            "learning is not being saved", so the reason it could
+                            not find out is the one thing worth showing. */}
+                        <p className="mt-0.5 text-zinc-500">{readError}</p>
+                        <p className="mt-0.5 text-zinc-600">
+                            Nothing below is missing because it was fine — it was never read.
+                        </p>
+                    </div>
+                </div>
+                <button type="button" onClick={() => { void load(); }}
+                    data-testid="memory-health-retry"
+                    className="mt-2 rounded-control border border-zinc-700 px-2 py-1 text-ui-xs font-semibold text-zinc-300 transition-colors hover:bg-zinc-800">
+                    Try again
+                </button>
+            </div>
+        );
+    }
 
     if (!report) {
         return (
@@ -227,6 +272,18 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                         {running ? 'Running…' : due ? 'Run now' : 'Run again'}
                     </button>
                 </div>
+                {hygieneError && (
+                    <p role="alert" data-testid="memory-hygiene-error"
+                        className="mt-1.5 flex items-start gap-1.5 text-ui-xs leading-4 text-rose-300">
+                        <AlertTriangle className="mt-0.5 h-2.5 w-2.5 shrink-0" />
+                        {/* Deliberately not claiming the pass changed nothing —
+                            a partial run is possible and the log above is the
+                            only record of what it got through. What IS certain
+                            is that the line it would have written never landed,
+                            so the report must not read as if it did. */}
+                        <span>The pass did not finish ({hygieneError}). The summary above is from the previous run, not this one.</span>
+                    </p>
+                )}
                 {report.hygiene.length > 1 && (
                     <ul className="mt-1.5 space-y-0.5 border-t border-zinc-800/80 pt-1.5">
                         {report.hygiene.slice(1, 6).map(l => (
