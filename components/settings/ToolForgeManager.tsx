@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { Check, Trash2, Ban } from 'lucide-react';
-import { ForgedTool, loadForgedTools, approveForgedTool, retireForgedTool, deleteForgedTool, forgedToolStats } from '../../services/tools/toolForge';
+import { ForgedTool, loadForgedTools, approveForgedTool, retireForgedTool, deleteForgedTool, forgedToolStats, FORGED_PROPOSAL_EVENT } from '../../services/tools/toolForge';
 
 const StatusBadge: React.FC<{ tool: ForgedTool }> = ({ tool }) => {
     const map: Record<ForgedTool['status'], string> = {
@@ -22,19 +22,38 @@ const StatusBadge: React.FC<{ tool: ForgedTool }> = ({ tool }) => {
     );
 };
 
+/** Cheap identity guard: loadForgedTools always returns a fresh array, so a
+ *  plain reference compare would never bail. The list only meaningfully
+ *  changes on proposal/approve/retire/delete — id + status + usage stamps
+ *  cover all four (stats drift between renders is accepted: the panel
+ *  re-syncs on the same events and remounts whenever Settings opens). */
+const sameTools = (a: ForgedTool[], b: ForgedTool[]): boolean =>
+    a.length === b.length
+    && a.every((t, i) => t === b[i]
+        || (t.id === b[i].id && t.status === b[i].status && t.uses === b[i].uses && t.updatedAt === b[i].updatedAt));
+
 export const ToolForgeManager: React.FC = () => {
     const [tools, setTools] = React.useState<ForgedTool[]>([]);
 
     React.useEffect(() => {
-        setTools(loadForgedTools());
-        // Proposals can arrive mid-session (a seat calling forge_tool).
-        const t = window.setInterval(() => setTools(loadForgedTools()), 5000);
-        return () => window.clearInterval(t);
+        // Initial load, then re-read only when the forge ANNOUNCES a change
+        // (FORGED_PROPOSAL_EVENT fires per proposal, and the panel's own
+        // actions re-read below) — the old 5s setInterval polled localStorage
+        // + JSON.parse forever while Settings was open, for an event that is
+        // already a push.
+        const sync = (): void => {
+            const next = loadForgedTools();
+            setTools(prev => (sameTools(prev, next) ? prev : next));
+        };
+        sync();
+        window.addEventListener(FORGED_PROPOSAL_EVENT, sync);
+        return () => window.removeEventListener(FORGED_PROPOSAL_EVENT, sync);
     }, []);
 
     const act = (fn: () => void): void => {
         fn();
-        setTools(loadForgedTools());
+        const next = loadForgedTools();
+        setTools(prev => (sameTools(prev, next) ? prev : next));
     };
 
     return (

@@ -2,7 +2,7 @@
  * Compact level snapshot so debate rounds cannot invent a new tape.
  */
 
-import { parseMarkdownTradePlan, parseProseTradePlan } from './analysisUtils';
+import { parseMarkdownTradePlan, parseProseTradePlan, parsePrice } from './analysisUtils';
 
 export interface DebateLevelRow {
     speaker: string;
@@ -88,8 +88,8 @@ export const summarizeFinalPositions = (
     const declared = rows.filter(r => r.direction === 'Long' || r.direction === 'Short');
     const convergedDirection = declared.length >= 2 && declared.every(r => r.direction === declared[0].direction);
     const entries = rows
-        .map(r => Number((r.entry || '').replace(/[$,\s]/g, '')))
-        .filter(n => Number.isFinite(n) && n > 0);
+        .map(r => parsePrice(r.entry || ''))
+        .filter((n): n is number => Number.isFinite(n) && n > 0);
     let entrySpreadPct: number | null = null;
     if (entries.length >= 2) {
         const sorted = [...entries].sort((a, b) => a - b);

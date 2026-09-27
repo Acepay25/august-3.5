@@ -12,27 +12,47 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 const analyzeMock = vi.hoisted(() => vi.fn());
 
-/** The panel opens a real Binance socket on mount; jsdom's Event and undici's do
- *  not agree, and a test must not reach the network. Live data is irrelevant to
- *  what this file asserts (the AI card's rows). */
-class StubSocket {
-    static OPEN = 1;
-    readyState = 1;
-    onopen: (() => void) | null = null;
-    onmessage: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    onclose: (() => void) | null = null;
-    constructor(_url: string) { /* no connection */ }
-    addEventListener(): void { /* no events */ }
-    removeEventListener(): void { /* no events */ }
-    send(): void { /* no traffic */ }
-    close(): void { /* nothing open */ }
-}
+/** The panel renders the app's own `TradingChart` (it used to embed
+ *  TradingView's tv.js, which is unreachable in both shells). jsdom has no
+ *  canvas, so the chart library is stubbed the way every other chart suite
+ *  here does it — this file asserts the AI card, not the candles. */
+vi.mock('lightweight-charts', () => {
+    const series = () => ({ setData: vi.fn(), update: vi.fn(), createPriceLine: vi.fn(), data: () => [] });
+    const chart = () => ({
+        addSeries: vi.fn(series), removeSeries: vi.fn(), applyOptions: vi.fn(),
+        priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
+        timeScale: vi.fn(() => ({ fitContent: vi.fn(), applyOptions: vi.fn() })),
+        resize: vi.fn(), remove: vi.fn(),
+    });
+    return {
+        createChart: vi.fn(chart),
+        CandlestickSeries: { defaultOptions: {} }, HistogramSeries: { defaultOptions: {} }, LineSeries: { defaultOptions: {} },
+    };
+});
+
+/** Live price data is irrelevant to what this file asserts (the AI card's
+ *  rows), and a test must not reach the network — so the transport is
+ *  stubbed at the hook the panel now uses (`useFuturesLiveFeed`, the app's
+ *  one live-feed bundle) instead of hand-stubbing WebSocket. The panel's
+ *  symbol/interval controls still drive it, which is all the wiring this
+ *  suite cares about. */
+vi.mock('../hooks/useFuturesLiveFeed', () => ({
+    useFuturesLiveFeed: () => ({
+        markIndex: { markPrice: 101, indexPrice: 101, fundingRate: 0, nextFundingTime: 0 },
+        ticker: { lastPrice: 101, changePercent24h: 0, quoteVolume24h: 0 },
+        depth: null,
+        kline: null,
+        status: 'live',
+        depthStaleSince: null,
+        depthLive: false,
+        pollSource: 'live',
+    }),
+}));
 
 vi.mock('../services/analysis/AITrendlineService', async () => {
     const real = await import('../services/analysis/AITrendlineService');
@@ -48,6 +68,9 @@ vi.mock('../services/analysis/KlineService', () => ({
         open: 100 + i, high: 102 + i, low: 99 + i, close: 101 + i, volume: 10,
     }))),
     normalizeSymbol: vi.fn((s: string) => s),
+    // `mapBinanceInterval` rides along because the chart and the feed both
+    // route through it now — the panel never calls it directly.
+    mapBinanceInterval: vi.fn((s: string) => s),
 }));
 
 import LiveMarket from '../components/market/LiveMarket';
@@ -80,10 +103,6 @@ const renderMarket = () => render(
 describe('the Live Market AI panel renders the trendlines it paid for', () => {
     beforeEach(() => {
         analyzeMock.mockReset();
-        vi.stubGlobal('WebSocket', StubSocket);
-    });
-    afterEach(() => {
-        vi.unstubAllGlobals();
     });
 
     it('shows a line with the endpoints the adapter produces', async () => {

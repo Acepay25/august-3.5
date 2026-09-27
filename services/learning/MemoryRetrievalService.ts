@@ -24,6 +24,7 @@ import { clipNote } from '../../utils/harnessMarks';
 import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { regimeRankFactor } from '../../utils/regimeSentinel';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
+import { baseOf } from '../../utils/symbol';
 import { normalizeStrategyFamily } from '../../types/strategy';
 import { familyEdgeFactor, matrixSummaryBlock } from './strategyRegimeMatrix';
 import { getMemoryFiles, searchNotebookNotes } from './MemoryFilesService';
@@ -238,8 +239,11 @@ const rankedMatchedSkills = (
 /** Count shared setup dimensions between a skill and the current query. */
 const dimsOverlap = (meta: SkillMeta, query: MemoryRetrievalQuery): number => {
     let n = 0;
-    const coin = (query.coin || '').toUpperCase().replace(/USDT?$/, '');
-    const skillCoin = (meta.coin || '').toUpperCase().replace(/USDT?$/, '');
+    // Canonical base coins (utils/symbol) — query and stored skill meta are
+    // normalized through the SAME helper so the join never splits on a quote
+    // suffix ('BTCUSDT' and 'BTC' are one coin).
+    const coin = baseOf(query.coin || '');
+    const skillCoin = baseOf(meta.coin || '');
     if (coin && skillCoin && coin === skillCoin) n += 1;
     if (query.direction && meta.direction && query.direction === meta.direction) n += 1;
     if ((query.family || query.pattern) && meta.family && (query.family === meta.family)) n += 1;

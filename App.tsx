@@ -43,8 +43,14 @@ import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
 import { useConversationLeverage } from './hooks/useConversationLeverage';
 import { useCatalogReconcile } from './hooks/useCatalogReconcile';
-import AutomationView from './components/automation/AutomationView';
-import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
+// Automations were statically imported, dragging the whole editor into the
+// startup chunk; they render only from the header's automation rows.
+// AutomationEditorModal keeps its own `isVisible` toggling (it must stay
+// mounted across opens per its hooks contract), so it is gated on
+// `editorIsOpen` at the render site — see the Suspense wrapper there.
+const AutomationView = React.lazy(() => import('./components/automation/AutomationView'));
+const AutomationEditorModal = React.lazy(() => import('./components/automation/AutomationEditorModal'));
+import type { ModelOption } from './components/automation/AutomationEditorModal';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 
 // Lazy-load heavy, conditionally-rendered components so the initial
@@ -92,7 +98,7 @@ import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider, formatModelDisplayName, isProviderReady } from './utils/providerUtils';
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
-import { recalculateAnalysisMetrics } from './utils/analysisUtils';
+import { recalculateAnalysisMetrics, parsePrice as parsePriceCanonical } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
@@ -148,7 +154,11 @@ import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurface, type AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
 import type { NavBadge } from './components/shell/SurfaceMenuList';
-import { Journal } from './components/journal/Journal';
+// The Journal pulls recharts + react-virtuoso into its chunk — statically
+// importing it put both on the startup path for a surface most users open
+// after days of logging. Lazy-once like the other surfaces; the deep-link
+// (hash router + openJournal) only mounts it, so Suspense below is enough.
+const Journal = React.lazy(() => import('./components/journal/Journal').then(m => ({ default: m.Journal })));
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
@@ -1203,15 +1213,17 @@ const App: React.FC = () => {
     // dependent hooks render.
     activeUsernameRef.current = activeUsername ?? null;
 
-    const latestHistoricalAnalysis = useMemo(() => {
-        const historical = conversationHistory
+    const homeDashboard = useMemo(() => {
+        // The dashboard early-returns while a run is streaming (messages
+        // present) — so the scan below must live BEHIND that gate: computing
+        // it as a separate memo re-scanned EVERY conversation's messages on
+        // every stream frame (conversationHistory changes identity per chunk)
+        // even though the only consumer renders none of it during a run.
+        if (messages.length > 0 || (conversationHistory.length === 0 && loggedTrades.length === 0)) return undefined;
+        const latestHistoricalAnalysis = conversationHistory
             .flatMap(conversation => conversation.messages || [])
             .filter(message => Boolean(message.analysis))
-            .sort((a, b) => new Date(b.analysis?.createdAt || b.createdAt).getTime() - new Date(a.analysis?.createdAt || a.createdAt).getTime());
-        return historical[0]?.analysis;
-    }, [conversationHistory]);
-    const homeDashboard = useMemo(() => {
-        if (messages.length > 0 || (conversationHistory.length === 0 && loggedTrades.length === 0)) return undefined;
+            .sort((a, b) => new Date(b.analysis?.createdAt || b.createdAt).getTime() - new Date(a.analysis?.createdAt || a.createdAt).getTime())[0]?.analysis;
         return {
             username: activeUsername,
             trades: loggedTrades,
@@ -1227,7 +1239,7 @@ const App: React.FC = () => {
             onOpenLiveMarket: () => setIsLiveMarketVisible(true),
             onOpenSettings: () => setIsSettingsMenuVisible(true),
         };
-    }, [activeUsername, conversationHistory, latestHistoricalAnalysis, loggedTrades, messages.length, openJournal, providerConfigs.length, readyProviders.length, setInput, setIsLiveMarketVisible, setIsSettingsMenuVisible]);
+    }, [activeUsername, conversationHistory, loggedTrades, messages.length, openJournal, providerConfigs.length, readyProviders.length, setInput, setIsLiveMarketVisible, setIsSettingsMenuVisible]);
 
     // Track the previous active user in a ref mutated by this
     // effect itself. (A render-phase read of activeUsernameRef made
@@ -2426,14 +2438,17 @@ const App: React.FC = () => {
                     // distance-aware instead of a fixed step. The entry→SL
                     // distance rides the same math (5th arg) so the engine
                     // can produce a REAL barrier-race stop probability
-                    // instead of the `100 − TP1` upper bound.
-                    const entry = Number(String(msg.analysis.entryPoints?.[0]?.price ?? '').replace(/[$,\s]/g, ''));
-                    const parsePrice = (raw: unknown): number => Number(String(raw ?? '').replace(/[$,\s]/g, ''));
+                    // instead of the `100 − TP1` upper bound. parsePrice is
+                    // the canonical range-aware parser — this file's local
+                    // regex-strip copy yielded NaN on range TPs ("96000 -
+                    // 96500"), silently degrading the engine to its
+                    // fixed-step fallback.
+                    const entry = parsePriceCanonical(msg.analysis.entryPoints?.[0]?.price || '') || 0;
                     const tpPct = (msg.analysis.takeProfit ?? [])
-                        .map(tp => parsePrice(tp.price))
+                        .map(tp => parsePriceCanonical(tp.price || ''))
                         .filter(p => Number.isFinite(p) && Number.isFinite(entry) && entry > 0)
                         .map(p => Math.abs(p - entry) / entry * 100);
-                    const slPrice = parsePrice(msg.analysis.stopLoss);
+                    const slPrice = parsePriceCanonical(msg.analysis.stopLoss || '');
                     const slDistancePct = Number.isFinite(slPrice) && Number.isFinite(entry) && entry > 0 && slPrice !== entry
                         ? Math.abs(slPrice - entry) / entry * 100
                         : undefined;
@@ -2888,7 +2903,15 @@ const App: React.FC = () => {
             />
             <UserProfileManager isVisible={isUserModalOpen} isLoading={isLoading} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} onClose={() => setIsUserModalOpen(false)} />
             <AccuracyModeModal isOpen={showAccuracyModal} onClose={() => setShowAccuracyModal(false)} onConfirm={handleConfirmAccuracyMode} isEnabling={!isAccuracyModeEnabled} />
-            <LiveMarket isVisible={isLiveMarketVisible} onClose={() => setIsLiveMarketVisible(false)} onAnalyze={handleLiveMarketAnalyze} />
+            {/* Mounted only while the overlay is open: LiveMarket now runs the
+                app's shared live feed (a combined futures socket PLUS a kline
+                socket), so leaving the panel mounted-but-hidden would hold two
+                sockets and a REST poller open for the whole session. The panel
+                returns null on !isVisible anyway, so nothing it can see
+                changes — it just stops paying for it while it is closed. */}
+            {isLiveMarketVisible && (
+                <LiveMarket isVisible onClose={() => setIsLiveMarketVisible(false)} onAnalyze={handleLiveMarketAnalyze} />
+            )}
             {dataCaptureCandidate && (
                 <DataCaptureModal
                     message={dataCaptureCandidate.message}
@@ -3005,6 +3028,7 @@ const App: React.FC = () => {
                 if (!config) return null;
                 return (
                     <div className="fixed inset-0 z-[75] bg-zinc-950 animate-fade-in">
+                        <React.Suspense fallback={<SurfaceSkeleton />}>
                         <AutomationView
                             config={config}
                             runs={automations.runsByAutomation[config.id] ?? []}
@@ -3035,27 +3059,39 @@ const App: React.FC = () => {
                                 }
                             }}
                         />
+                        </React.Suspense>
                     </div>
                 );
             })()}
-            <AutomationEditorModal
-                isVisible={editorIsOpen}
-                initial={editingAutomation}
-                modelOptions={automationModelOptions}
-                providers={providerConfigs}
-                bots={bots}
-                onClose={() => automations.setEditor(null)}
-                onSave={(config) => {
-                    void automations.saveAutomation(config);
-                    automations.setEditor(null);
-                }}
-                onDelete={editingAutomation
-                    ? () => {
-                        void automations.deleteAutomation(editingAutomation.id);
-                        automations.setEditor(null);
-                    }
-                    : undefined}
-            />
+            {/* The editor is lazy, so it is gated on editorIsOpen — rendering it
+                unconditionally would fetch the chunk at startup for a modal
+                that opens rarely. Gating remounts it per open, which
+                re-initializes its form state from `initial`: the intended
+                trade-off (discarding unsaved edits on close) and incidentally
+                a fix — the always-mounted version never re-read `initial`, so
+                editing automation A, closing, then opening B showed A's values. */}
+            {editorIsOpen && (
+                <React.Suspense fallback={null}>
+                    <AutomationEditorModal
+                        isVisible={editorIsOpen}
+                        initial={editingAutomation}
+                        modelOptions={automationModelOptions}
+                        providers={providerConfigs}
+                        bots={bots}
+                        onClose={() => automations.setEditor(null)}
+                        onSave={(config) => {
+                            void automations.saveAutomation(config);
+                            automations.setEditor(null);
+                        }}
+                        onDelete={editingAutomation
+                            ? () => {
+                                void automations.deleteAutomation(editingAutomation.id);
+                                automations.setEditor(null);
+                            }
+                            : undefined}
+                    />
+                </React.Suspense>
+            )}
 
 
             <Header
@@ -3258,8 +3294,9 @@ const App: React.FC = () => {
                             </React.Suspense>
                         )}
                         {surface === 'journal' && (
-                            <Journal
-                                isVisible={true}
+                            <React.Suspense fallback={<SurfaceSkeleton />}>
+                                <Journal
+                                    isVisible={true}
                                 onClose={handleCloseJournal}
                                 initialTab={journalTab}
                                 openNonce={journalOpenNonce}
@@ -3301,7 +3338,8 @@ const App: React.FC = () => {
                                 familyWinRates={familyWinRates}
                                 enabledProviders={journalEnabledProviders}
                                 selectedModels={journalSelectedModels}
-                            />
+                                />
+                            </React.Suspense>
                         )}
                         {surface === 'studio' && (
                             <React.Suspense fallback={<SurfaceSkeleton />}>

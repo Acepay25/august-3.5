@@ -1,13 +1,43 @@
+/**
+ * LiveMarket — the market overlay: a live chart, an AI read on it, and the
+ * button that hands the multi-timeframe data block to the chat.
+ *
+ * Port note (2026-09-27). This panel used to embed TradingView's tv.js from
+ * s3.tradingview.com and run its OWN WebSocket + REST-poll price transport
+ * and six private indicator functions. All three were dead or duplicated in
+ * the app's own shells:
+ *   · tv.js is unreachable from both shells — Electron's CSP and the
+ *     Capacitor webviews block the remote script, so the chart area rendered
+ *     an empty <div id="tradingview_widget"> on every real device.
+ *   · the hand-rolled WS+poll (Binance spot, three CORS proxies) is a second
+ *     answer to a question `hooks/useFuturesLiveFeed` already answers, with
+ *     a half-open socket and no stall detection.
+ *   · the private SMA/EMA/RSI/MACD/Bollinger/KDJ/SAR copies were a second
+ *     implementation of `TechnicalAnalysisService`.
+ * The chart is now the app's own `TradingChart` (same instrument, same
+ * lightweight-charts render, same drawings/verdict overlays as the Trade
+ * surface), the price comes from `useFuturesLiveFeed`, and the data block is
+ * built by `services/analysis/marketSnapshot` on top of the canonical
+ * indicators. The UI structure is unchanged — same header, price readout,
+ * connection pill, symbol/interval selects, AI overlay card, insights panel
+ * and Analyze button.
+ *
+ * Because the price now comes from a hook that opens sockets on mount, App
+ * renders this panel only while the overlay is open (it returned null
+ * otherwise anyway). Keep it that way: mounting it hidden would hold two
+ * futures sockets plus a REST poller open for the whole session.
+ */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CloseIcon, ActivityIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
 import { Spinner } from '../ui/Spinner';
 import StatusPill from '../ui/StatusPill';
-import { Kline } from '../../types';
 import { ChartCandle } from '../../types/chart';
-import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
-import { analyzeWithAI, convertToLineData, AITrendlineAnalysis, MarketInsights, TrendlineResult } from '../../services/analysis/AITrendlineService';
+import { analyzeWithAI, convertToLineData, MarketInsights, TrendlineResult } from '../../services/analysis/AITrendlineService';
+import { buildTimeframeSnapshot, formatLiveMarketPrompt, type LiveMarketSnapshot } from '../../services/analysis/marketSnapshot';
 import { fetchKlines } from '../../services/analysis/KlineService';
+import TradingChart, { type ChartInterval } from '../trade/TradingChart';
+import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface LiveMarketProps {
@@ -19,173 +49,23 @@ interface LiveMarketProps {
     isEmbedded?: boolean;
 }
 
-declare global {
-    interface Window {
-        TradingView: any;
-    }
-}
-
 const ASSETS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'PEPEUSDT', 'TAOUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT'];
-const INTERVALS = ['5m', '15m', '1h', '4h'];
+/** The panel's own coarse interval set. A subset of the chart's full
+ *  `CHART_INTERVALS`, so both controls stay valid against one type. */
+const INTERVALS: ChartInterval[] = ['5m', '15m', '1h', '4h'];
 
-// --- Data Engine ---
+/** The timeframes the Analyze button walks. Same four the AI block has
+ *  always carried, and the same four `utils/liveMarketParser` recognises in
+ *  its regex fallback. */
+const ANALYSIS_TIMEFRAMES: ChartInterval[] = ['5m', '15m', '1h', '4h'];
 
-const calculateSMA = (data: number[], period: number): number | null => {
-    if (data.length < period) return null;
-    const slice = data.slice(-period);
-    const sum = slice.reduce((a, b) => a + b, 0);
-    return parseFloat((sum / period).toFixed(2));
-};
-
-const calculateEMA = (data: number[], period: number): number | null => {
-    if (data.length < period) return null;
-    const k = 2 / (period + 1);
-    const seed = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
-    let ema = seed;
-    for (let i = period; i < data.length; i++) {
-        ema = data[i] * k + ema * (1 - k);
-    }
-    return parseFloat(ema.toFixed(2));
-};
-
-const calculateRSI = (data: number[], period: number = 14): number | null => {
-    if (data.length < period + 1) return null;
-    let gains = 0;
-    let losses = 0;
-    for (let i = 1; i <= period; i++) {
-        const diff = data[i] - data[i - 1];
-        if (diff > 0) gains += diff;
-        else losses -= diff;
-    }
-    let avgGain = gains / period;
-    let avgLoss = losses / period;
-
-    for (let i = period + 1; i < data.length; i++) {
-        const diff = data[i] - data[i - 1];
-        if (diff > 0) {
-            avgGain = (avgGain * (period - 1) + diff) / period;
-            avgLoss = (avgLoss * (period - 1)) / period;
-        } else {
-            avgGain = (avgGain * (period - 1)) / period;
-            avgLoss = (avgLoss * (period - 1) - diff) / period;
-        }
-    }
-
-    if (avgLoss === 0) {
-        // If average loss is 0, it usually means price only went up (RSI=100).
-        // However, if avgGain is ALSO 0 (flat market), RSI should be 50 (neutral).
-        return avgGain === 0 ? 50 : 100;
-    }
-
-    const rs = avgGain / avgLoss;
-    return parseFloat((100 - (100 / (1 + rs))).toFixed(2));
-};
-
-const calculateMACD = (data: number[], fast: number = 12, slow: number = 26, signal: number = 9) => {
-    // Require enough history for the EMAs to converge (~2×slow). The old
-    // values[0] seed plus a slow+signal gate displayed still-converging lines.
-    if (data.length < slow * 2) return { dif: null, dea: null, hist: null };
-    const getEMAArray = (values: number[], period: number) => {
-        const k = 2 / (period + 1);
-        const emas = [];
-        // SMA seed — same convention as calculateEMA above. Seeding with
-        // values[0] skews the whole series until it slowly converges.
-        const seed = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
-        let ema = seed;
-        emas.push(ema);
-        for (let i = period; i < values.length; i++) {
-            ema = values[i] * k + ema * (1 - k);
-            emas.push(ema);
-        }
-        return emas;
-    };
-    const emaFast = getEMAArray(data, fast);
-    const emaSlow = getEMAArray(data, slow);
-    // Both series have different lengths after the SMA seed (the fast series
-    // starts earlier) — align on the slow series so indices match.
-    const offset = slow - fast;
-    const difLine = emaSlow.map((s, i) => emaFast[i + offset] - s);
-    const deaLine = getEMAArray(difLine, signal);
-    const currentDif = difLine[difLine.length - 1];
-    const currentDea = deaLine[deaLine.length - 1];
-    // Single histogram convention (DIF − DEA) — matches TechnicalAnalysisService;
-    // the doubled value made the same market show 2× different histograms.
-    const currentHist = currentDif - currentDea;
-    return { dif: parseFloat(currentDif.toFixed(4)), dea: parseFloat(currentDea.toFixed(4)), hist: parseFloat(currentHist.toFixed(4)) };
-};
-
-const calculateBollingerBands = (data: number[], period: number = 20, stdDevMultiplier: number = 2) => {
-    if (data.length < period) return { upper: null, lower: null, mid: null };
-    const mid = calculateSMA(data, period);
-    if (mid === null) return { upper: null, lower: null, mid: null };
-    const slice = data.slice(-period);
-    const variance = slice.reduce((a, b) => a + Math.pow(b - mid, 2), 0) / period;
-    const stdDev = Math.sqrt(variance);
-    return {
-        upper: parseFloat((mid + stdDev * stdDevMultiplier).toFixed(2)),
-        lower: parseFloat((mid - stdDev * stdDevMultiplier).toFixed(2)),
-        mid: mid
-    };
-};
-
-const calculateKDJ = (klines: Kline[]) => {
-    const N = 9;
-    if (klines.length < N) return { k: 50, d: 50, j: 50 };
-    let k = 50;
-    let d = 50;
-    for (let i = 0; i < klines.length; i++) {
-        if (i < N - 1) continue;
-        const periodData = klines.slice(i - N + 1, i + 1);
-        const lows = periodData.map(k => k.low);
-        const highs = periodData.map(k => k.high);
-        const lowestLow = Math.min(...lows);
-        const highestHigh = Math.max(...highs);
-        const close = klines[i].close;
-        let rsv = 50;
-        if (highestHigh !== lowestLow) rsv = ((close - lowestLow) / (highestHigh - lowestLow)) * 100;
-        k = (2 / 3) * k + (1 / 3) * rsv;
-        d = (2 / 3) * d + (1 / 3) * k;
-    }
-    const j = 3 * k - 2 * d;
-    return { k: parseFloat(k.toFixed(2)), d: parseFloat(d.toFixed(2)), j: parseFloat(j.toFixed(2)) };
-};
-
-const calculateSAR = (klines: Kline[], step = 0.02, max = 0.2) => {
-    if (klines.length < 20) return null;
-    let isRising = klines[1].high > klines[0].high;
-    let sar = isRising ? klines[0].low : klines[0].high;
-    let ep = isRising ? klines[0].high : klines[0].low;
-    let af = step;
-    for (let i = 1; i < klines.length; i++) {
-        const prevSar = sar;
-        const prevEp = ep;
-        const low = klines[i].low;
-        const high = klines[i].high;
-        sar = prevSar + af * (prevEp - prevSar);
-        if (isRising) {
-            if (low < sar) { isRising = false; sar = ep; ep = low; af = step; }
-            else { if (high > ep) { ep = high; af = Math.min(af + step, max); } if (i > 1) sar = Math.min(sar, klines[i - 1].low, klines[i - 2].low); }
-        } else {
-            if (high > sar) { isRising = true; sar = ep; ep = high; af = step; }
-            else { if (low < ep) { ep = low; af = Math.min(af + step, max); } if (i > 1) sar = Math.max(sar, klines[i - 1].high, klines[i - 2].high); }
-        }
-    }
-    return parseFloat(sar.toFixed(2));
-};
-
-const identifyCandlePattern = (klines: Kline[]) => {
-    if (klines.length < 2) return "Normal";
-    const current = klines[klines.length - 1];
-    const prev = klines[klines.length - 2];
-    const body = Math.abs(current.close - current.open);
-    const totalRange = current.high - current.low;
-    if (body <= totalRange * 0.1 && totalRange > 0) return "Doji";
-    const isBullish = current.close > current.open;
-    const isPrevBearish = prev.close < prev.open;
-    if (isBullish && isPrevBearish && current.close > prev.open && current.open < prev.close) return "Bullish Engulfing";
-    if (!isBullish && !isPrevBearish && current.close < prev.open && current.open > prev.close) return "Bearish Engulfing";
-    return "Normal";
-};
+/** The price readout's classes. The 300ms colour fade is the tick-flash read
+ *  (see the sanctioned .tick-up/.tick-down pattern); the VALUE animating is
+ *  data, not chrome. Swapped imperatively by the price effect below so a
+ *  1 Hz mark-price stream never re-renders this panel's tree. */
+const PRICE_BASE_CLASS = "font-mono tabular-nums text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300 ease-[var(--ease-snappy)]";
+const PRICE_UP_CLASS = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-emerald-400";
+const PRICE_DOWN_CLASS = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-rose-400";
 
 const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, isEmbedded = false }) => {
     // Esc closes the overlay (was a navigation dead-end).
@@ -194,15 +74,10 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
     // Renamed from `interval` — a state variable named `interval` shadows the
     // global setInterval, making any future bare setInterval(...) call throw
     // "setInterval is not a function".
-    const [chartInterval, setChartInterval] = useState('15m');
+    const [chartInterval, setChartInterval] = useState<ChartInterval>('15m');
 
     const [notification, setNotification] = useState<string | null>(null);
     const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
-
-    const [connectionState, setConnectionState] = useState<{
-        status: 'connecting' | 'connected' | 'reconnecting';
-        source: 'socket' | 'polling';
-    }>({ status: 'connecting', source: 'socket' });
 
     // AI Analysis state for Binance
     const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
@@ -217,14 +92,23 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
     const [isInsightsPanelExpanded, setIsInsightsPanelExpanded] = useState(true);
     const aiAnalysisRequestRef = useRef(0);
 
-    const widgetRef = useRef<HTMLDivElement>(null);
-    const tradingViewWidgetRef = useRef<any>(null);
     const notificationTimeoutRef = useRef<number | null>(null);
-
     const priceDisplayRef = useRef<HTMLSpanElement>(null);
     const lastPriceRef = useRef<number | null>(null);
-
     const isMountedRef = useRef(true);
+
+    // ── Live transport ─────────────────────────────────────────────────────
+    // The app's own futures feed (markPrice@1s + 24h ticker + kline push,
+    // with a REST fallback that arms when the socket goes quiet). Replaces
+    // this panel's private Binance-spot socket + three CORS proxies.
+    const feed = useFuturesLiveFeed(symbol, chartInterval);
+    const live = feed.status === 'live';
+    const markPrice = feed.markIndex?.markPrice ?? null;
+    const lastPrice = feed.ticker?.lastPrice ?? null;
+    // The mark price is the panel's headline number — same reason the chart's
+    // dashed line is labelled 'mark': on a quiet perp the last-trade ticker
+    // sits unchanged for minutes while mark keeps streaming.
+    const currentPrice = markPrice ?? lastPrice;
 
     useEffect(() => {
         isMountedRef.current = true;
@@ -238,71 +122,25 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
         };
     }, []);
 
-    const mapIntervalToTradingView = (appInterval: string): string => {
-        switch (appInterval) {
-            case '5m': return '5';
-            case '15m': return '15';
-            case '1h': return '60';
-            case '4h': return '240';
-            default: return '15';
-        }
-    }
-
-    const initWidget = () => {
-        if (window.TradingView && widgetRef.current) {
-            widgetRef.current.innerHTML = '';
-            // Single data source: the price feed (WebSocket + REST polling) is
-            // Binance-only, so the chart always shows the same market.
-            const chartSymbol = `BINANCE:${symbol}`;
-            tradingViewWidgetRef.current = new window.TradingView.widget({
-                autosize: true,
-                symbol: chartSymbol,
-                interval: mapIntervalToTradingView(chartInterval),
-                timezone: "Etc/UTC",
-                theme: "dark",
-                style: "1",
-                locale: "en",
-                toolbar_bg: "#f1f3f6",
-                enable_publishing: false,
-                allow_symbol_change: true,
-                container_id: "tradingview_widget",
-                studies: ["RSI@tv-basicstudies", "MASimple@tv-basicstudies", "MACD@tv-basicstudies", "BollingerBands@tv-basicstudies"],
-                hide_side_toolbar: false,
-                save_image: true,
-            });
-        }
-    };
-
+    // Price readout. Driven imperatively (rather than as state) so a 1 Hz
+    // mark-price stream repaints one span instead of re-rendering the panel —
+    // the flash direction still needs the previous value, which is what
+    // lastPriceRef carries.
     useEffect(() => {
-        if (isVisible && !window.TradingView) {
-            const existingScript = document.querySelector('script[src*="tradingview"]');
-            if (!existingScript) {
-                const script = document.createElement('script');
-                script.src = 'https://s3.tradingview.com/tv.js';
-                script.async = true;
-                script.onload = initWidget;
-                document.head.appendChild(script);
-            }
-        } else if (isVisible && window.TradingView) {
-            initWidget();
+        const el = priceDisplayRef.current;
+        if (!el) return;
+        if (!isVisible || !Number.isFinite(currentPrice)) {
+            el.textContent = 'Loading...';
+            el.className = PRICE_BASE_CLASS;
+            lastPriceRef.current = null;
+            return;
         }
-
-        return () => {
-            if (tradingViewWidgetRef.current) {
-                try {
-                    if (typeof tradingViewWidgetRef.current.remove === 'function') {
-                        tradingViewWidgetRef.current.remove();
-                    }
-                } catch (e) {
-                    // Widget remove not supported, clear container instead
-                }
-                tradingViewWidgetRef.current = null;
-            }
-            if (widgetRef.current) {
-                widgetRef.current.innerHTML = '';
-            }
-        };
-    }, [isVisible, symbol, chartInterval]);
+        const price = currentPrice as number;
+        const prev = lastPriceRef.current ?? price;
+        el.textContent = `$${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        el.className = price > prev ? PRICE_UP_CLASS : price < prev ? PRICE_DOWN_CLASS : PRICE_BASE_CLASS;
+        lastPriceRef.current = price;
+    }, [isVisible, symbol, currentPrice]);
 
     // AI Analysis for chart
     useEffect(() => {
@@ -355,203 +193,6 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
         const timeout = setTimeout(runAIAnalysis, 500);
         return () => clearTimeout(timeout);
     }, [isVisible, symbol, chartInterval]);
-    useEffect(() => {
-        if (!isVisible) {
-            setConnectionState({ status: 'connecting', source: 'socket' });
-            return;
-        }
-
-        // Initial UI Reset
-        // The price display's 300ms colour fade is the tick-flash read (see the
-        // sanctioned .tick-up/.tick-down pattern); the value animating is data, not chrome.
-        if (priceDisplayRef.current) {
-            priceDisplayRef.current.textContent = 'Loading...';
-            priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300 ease-[var(--ease-snappy)]";
-        }
-        lastPriceRef.current = null;
-
-        let ws: WebSocket | null = null;
-        let pollingInterval: number | null = null;
-        let reconnectTimeout: number | null = null;
-        let retryCount = 0;
-        let isUnmounted = false;
-
-        const updatePriceUI = (price: number) => {
-            if (isUnmounted) return;
-
-            if (priceDisplayRef.current) {
-                const prev = lastPriceRef.current || price;
-
-                requestAnimationFrame(() => {
-                    if (!priceDisplayRef.current) return;
-                    priceDisplayRef.current.textContent = `$${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-
-                    if (price > prev) {
-                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-emerald-400";
-                    } else if (price < prev) {
-                        priceDisplayRef.current.className = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-rose-400";
-                    }
-                    lastPriceRef.current = price;
-                });
-            }
-        };
-
-        const stopPolling = () => {
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
-            }
-        };
-
-        const fetchRestPrice = async () => {
-            const visionUrl = `https://data-api.binance.vision/api/v3/ticker/price?symbol=${symbol}`;
-            const targetUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
-
-            const sources = [
-                { url: visionUrl, isProxy: false },
-                { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}&t=${Date.now()}`, isProxy: true },
-                { url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, isProxy: true },
-            ];
-
-            // Race strategy: Parallel execution to get the first available price
-            const fetchSource = (source: { url: string, isProxy: boolean }): Promise<number> => {
-                return new Promise((resolve, reject) => {
-                    void (async () => {
-                        const controller = new AbortController();
-                        // Shorter timeout for faster failover perception in the race
-                        const timeoutId = window.setTimeout(() => controller.abort(), source.isProxy ? 4000 : 2000);
-
-                        try {
-                            const response = await fetch(source.url, { signal: controller.signal });
-                            window.clearTimeout(timeoutId);
-
-                            if (!response.ok) {
-                                reject(new Error(`Status ${response.status}`));
-                                return;
-                            }
-
-                            const data = await response.json();
-                            if (data.price) {
-                                resolve(parseFloat(data.price));
-                            } else {
-                                reject(new Error("No price data"));
-                            }
-                        } catch (e) {
-                            reject(e);
-                        }
-                    })();
-                });
-            };
-
-            try {
-                // Implement a Promise.any-like race for robustness
-                const promises = sources.map(s => fetchSource(s));
-                const price = await new Promise<number>((resolve, reject) => {
-                    let failureCount = 0;
-                    promises.forEach(p => {
-                        p.then(resolve).catch(() => {
-                            failureCount++;
-                            if (failureCount === promises.length) reject(new Error("All sources failed"));
-                        });
-                    });
-                });
-
-                if (!isUnmounted) {
-                    updatePriceUI(price);
-                    // Only update state to polling if WS is NOT active/open
-                    if (!ws || ws.readyState !== WebSocket.OPEN) {
-                        setConnectionState({ status: 'connected', source: 'polling' });
-                    }
-                }
-            } catch (error) {
-                // Silently fail, we'll try again next tick
-            }
-        };
-
-        const startPolling = () => {
-            if (pollingInterval) return;
-            fetchRestPrice(); // Immediate fetch
-            pollingInterval = window.setInterval(fetchRestPrice, 2000);
-        };
-
-        const connectWs = () => {
-            if (isUnmounted) return;
-
-            // Cleanup old instance
-            if (ws) {
-                ws.onclose = null;
-                ws.close();
-            }
-
-            // Use port 443 for better firewall compatibility
-            const wsSymbol = symbol.toLowerCase();
-            const wsUrl = `wss://stream.binance.com:443/ws/${wsSymbol}@trade`;
-
-            try {
-                ws = new WebSocket(wsUrl);
-
-                ws.onopen = () => {
-                    if (isUnmounted) return;
-                    setConnectionState({ status: 'connected', source: 'socket' });
-                    retryCount = 0;
-                    stopPolling(); // Critical: Stop polling once WS is stable
-                };
-
-                ws.onmessage = (event) => {
-                    if (isUnmounted) return;
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.p) {
-                            updatePriceUI(parseFloat(data.p));
-                            // Ensure status reflects socket is the source
-                            setConnectionState(prev => prev.source === 'socket' ? prev : { status: 'connected', source: 'socket' });
-                        }
-                    } catch (e) { /* intentionally ignored: malformed socket message */ }
-                };
-
-                ws.onclose = () => {
-                    if (isUnmounted) return;
-
-                    // 1. Immediately start polling to maintain data flow
-                    startPolling();
-
-                    // 2. Update status to show we are reconnecting (or falling back)
-                    setConnectionState(prev => ({ ...prev, status: 'reconnecting' }));
-
-                    // 3. Schedule reconnect with backoff (capped at 5s for granular updates)
-                    const delay = Math.min(500 * Math.pow(1.5, retryCount), 5000);
-                    retryCount++;
-                    reconnectTimeout = window.setTimeout(connectWs, delay);
-                };
-
-                ws.onerror = () => {
-                    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-                        ws.close();
-                    }
-                };
-
-            } catch (err) {
-                console.error("WS creation failed:", err);
-                startPolling();
-                reconnectTimeout = window.setTimeout(connectWs, 2000);
-            }
-        };
-
-        // Start Strategy: Race-to-Data
-        setConnectionState({ status: 'connecting', source: 'socket' });
-        startPolling(); // Start HTTP immediately
-        connectWs();    // Start WS concurrently
-
-        return () => {
-            isUnmounted = true;
-            stopPolling();
-            if (ws) {
-                ws.onclose = null;
-                ws.close();
-            }
-            if (reconnectTimeout) clearTimeout(reconnectTimeout);
-        };
-    }, [isVisible, symbol]);
 
     const showNotification = (msg: string) => {
         setNotification(msg);
@@ -565,120 +206,48 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
         }, 5000);
     };
 
-    const handleExtractAndAnalyze = async () => {
+    const handleExtractAndAnalyze = useCallback(async () => {
         if (analysisProgress) return;
 
         setAnalysisProgress('Initializing...');
 
         try {
-            const timeframes = ['5m', '15m', '1h', '4h'];
-            // Structured JSON container
-            const marketData: any = {
-                asset: symbol,
-                timestamp: new Date().toISOString(),
-                timeframes: {}
-            };
-
+            const snapshots: Record<string, LiveMarketSnapshot> = {};
             let validDataCount = 0;
 
-            for (const tf of timeframes) {
+            for (const tf of ANALYSIS_TIMEFRAMES) {
                 setAnalysisProgress(`Analyzing ${tf}...`);
 
                 const klines = await fetchKlines(symbol, tf, 300);
                 if (klines.length < 200) continue;
 
                 validDataCount++;
-
-                const closes = klines.map(k => k.close);
-                const lastClose = closes[closes.length - 1];
-                const volume = klines[klines.length - 1].volume;
-
-                // Calculate standard and short-term RSI
-                const rsi14 = calculateRSI(closes, 14);
-                const rsi2 = calculateRSI(closes, 2);
-                const rsi3 = calculateRSI(closes, 3);
-
-                const sar = calculateSAR(klines);
-                const bb = calculateBollingerBands(closes);
-                const macd = calculateMACD(closes);
-                const kdj = calculateKDJ(klines);
-                const pattern = identifyCandlePattern(klines);
-
-                // Enhanced Detection: Get separate patterns and zones
-                const chartPatterns = detectChartPatterns(klines);
-                const keyZones = detectKeyZones(klines); // New feature
-
-                const ma = {
-                    '5': calculateSMA(closes, 5),
-                    '10': calculateSMA(closes, 10),
-                    '20': calculateSMA(closes, 20),
-                    '30': calculateSMA(closes, 30),
-                    '60': calculateSMA(closes, 60),
-                    '200': calculateSMA(closes, 200)
-                };
-
-                const ema = {
-                    '5': calculateEMA(closes, 5),
-                    '13': calculateEMA(closes, 13),
-                    '20': calculateEMA(closes, 20),
-                    '200': calculateEMA(closes, 200)
-                };
-
-                // Explicit, robust JSON structure for the AI
-                const tfData: any = {
-                    price: lastClose,
-                    trend_indicators: {
-                        candle_pattern: pattern,
-                        ma: ma,
-                        ema: ema,
-                        bollinger: bb,
-                        sar: sar
-                    },
-                    momentum_indicators: {
-                        rsi14: rsi14,
-                        rsi2: rsi2, // Always include if calculated
-                        rsi3: rsi3,
-                        macd: macd,
-                        kdj: kdj,
-                        volume: volume
-                    },
-                    structural_analysis: {
-                        detected_patterns: chartPatterns, // Patterns like Head & Shoulders
-                        key_zones: keyZones // Explicit Support/Resistance arrays
-                    }
-                };
-
-                marketData.timeframes[tf] = tfData;
+                snapshots[tf] = buildTimeframeSnapshot(klines);
             }
 
-            if (validDataCount === 0) throw new Error("Insufficient data fetched. Check network connection.");
-
-            // Output String formatted to look like a raw data block
-            const outputString = `**LIVE MARKET DATA**
-\`\`\`json
-${JSON.stringify(marketData, null, 2)}
-\`\`\`
-
-**INSTRUCTION:**
-1. Parse the JSON above. It contains precise indicators, algorithmic pattern detections, and calculated support/resistance zones.
-2. Use the 'structural_analysis' section to identify the current market structure (Bullish/Bearish patterns).
-3. Use 'key_zones' to find valid entry and stop-loss levels.
-4. Formulate a high-precision strategy based on this data.`;
+            if (validDataCount === 0) throw new Error('Insufficient data fetched. Check network connection.');
 
             setAnalysisProgress('Finalizing...');
             await new Promise(resolve => window.setTimeout(resolve, 300));
 
-            onAnalyze(outputString);
+            onAnalyze(formatLiveMarketPrompt(symbol, snapshots));
 
-        } catch (error: any) {
-            console.error("Analysis extraction failed", error);
-            showNotification(error.message || "Failed to extract market data. Please try again.");
+        } catch (error) {
+            console.error('Analysis extraction failed', error);
+            showNotification((error as Error)?.message || 'Failed to extract market data. Please try again.');
         } finally {
             setAnalysisProgress(null);
         }
-    };
+    }, [analysisProgress, onAnalyze, symbol]);
 
     if (!isVisible) return null;
+
+    /* The transport's own vocabulary, so the pill can never claim a source
+     * the feed is not actually using: 'live' = WS push frames arriving,
+     * 'polling' = the socket is down/quiet and REST is carrying it,
+     * 'connecting' = nothing flowing yet. */
+    const feedLive = feed.status === 'live';
+    const feedPolling = feed.status === 'polling';
 
     return (
         <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={` flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-50 animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
@@ -698,23 +267,17 @@ ${JSON.stringify(marketData, null, 2)}
                             rest of the app means by it. */}
                         <div className="hidden sm:flex">
                             <StatusPill
-                                tone={connectionState.status === 'connected'
-                                    ? (connectionState.source === 'socket' ? 'up' : 'warn')
-                                    : connectionState.status === 'reconnecting' ? 'down' : 'neutral'}
+                                tone={feedLive ? 'up' : feedPolling ? 'warn' : 'neutral'}
                                 kicker
-                                title={connectionState.status === 'connected'
-                                    ? (connectionState.source === 'socket' ? 'Streaming from the exchange socket' : 'Polling over HTTP — the socket is unavailable')
-                                    : connectionState.status === 'reconnecting' ? 'Reconnecting…' : 'No feed'}
+                                title={feedLive
+                                    ? 'Streaming from the exchange socket'
+                                    : feedPolling ? 'Polling over HTTP — the socket is unavailable' : 'No feed yet'}
                                 icon={<span aria-hidden className={`h-2 w-2 rounded-full ${
-                                    connectionState.status === 'connected'
-                                        ? (connectionState.source === 'socket' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse')
-                                        : connectionState.status === 'reconnecting' ? 'bg-rose-500 animate-pulse' : 'bg-zinc-500'
+                                    feedLive ? 'bg-emerald-500 animate-pulse' : feedPolling ? 'bg-amber-500 animate-pulse' : 'bg-zinc-500'
                                 }`} />}
                                 data-testid="market-connection-pill"
                             >
-                                {connectionState.status === 'connected'
-                                    ? (connectionState.source === 'socket' ? 'Live' : 'HTTP')
-                                    : connectionState.status === 'reconnecting' ? '...' : 'Off'}
+                                {feedLive ? 'Live' : feedPolling ? 'HTTP' : '...'}
                             </StatusPill>
                         </div>
                     </div>
@@ -722,9 +285,8 @@ ${JSON.stringify(marketData, null, 2)}
                     {/* Price Display & Close */}
                     <div className="flex items-center gap-2 sm:gap-4">
                         <div className="text-right">
-                            <span className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider block">Current</span>
-                            {/* duration-300 is the tick-flash read; the class is swapped imperatively in the socket effect. */}
-                            <span ref={priceDisplayRef} className="font-mono text-base sm:text-lg font-bold text-zinc-400 transition-colors duration-300 ease-[var(--ease-snappy)]">
+                            <span className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider block">Mark</span>
+                            <span ref={priceDisplayRef} className={PRICE_BASE_CLASS}>
                                 Loading...
                             </span>
                         </div>
@@ -759,11 +321,13 @@ ${JSON.stringify(marketData, null, 2)}
                             </div>
                         </div>
 
-                        {/* Interval Selector */}
+                        {/* Interval Selector — bound to the SAME state the chart's
+                            own timeframe bar drives, so neither control can go
+                            stale relative to the other. */}
                         <div className="relative shrink-0">
                             <select
                                 value={chartInterval}
-                                onChange={(e) => setChartInterval(e.target.value)}
+                                onChange={(e) => setChartInterval(e.target.value as ChartInterval)}
                                 aria-label="Chart interval"
                                 className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
                             >
@@ -778,7 +342,7 @@ ${JSON.stringify(marketData, null, 2)}
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 shrink-0">
                         <button
-                            onClick={handleExtractAndAnalyze}
+                            onClick={() => { void handleExtractAndAnalyze(); }}
                             disabled={!!analysisProgress}
                             className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-[--tw-gradient-from,--tw-gradient-to,transform] duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
                         >
@@ -789,9 +353,21 @@ ${JSON.stringify(marketData, null, 2)}
                 </div>
             </div>
 
-            {/* Chart Container */}
-            <div className="flex-1 min-h-[360px] lg:min-h-[500px] relative bg-zinc-900 overflow-hidden">
-                <div id="tradingview_widget" ref={widgetRef} className="w-full h-full" />
+            {/* Chart Container — the app's own chart, same component the Trade
+                surface renders. Sized by the flex parent so lightweight-charts
+                gets a real box (it measures, it does not self-size). */}
+            <div className="flex-1 min-h-[360px] lg:min-h-[500px] flex flex-col relative bg-zinc-900 overflow-hidden">
+                <div className="min-h-0 flex-1">
+                    <TradingChart
+                        symbol={symbol}
+                        interval={chartInterval}
+                        onIntervalChange={setChartInterval}
+                        live={live}
+                        liveKline={feed.kline}
+                        lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
+                        markPrice={Number.isFinite(markPrice) ? markPrice : null}
+                    />
+                </div>
 
                         {/* AI Analysis Overlay */}
                         {(marketBias !== 'neutral' || isAIAnalyzing || keyLevels.length > 0) && (

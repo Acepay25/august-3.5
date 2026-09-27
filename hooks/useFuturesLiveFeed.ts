@@ -27,6 +27,7 @@ import {
     type LiveMarkIndex, type LiveTicker, type LiveDepth, type LiveKline,
 } from '../services/trade/futuresStreams';
 import { fetchMarkIndex, fetchFuturesTicker24h } from '../services/analysis/MarketDataService';
+import { mapBinanceInterval } from '../services/analysis/KlineService';
 
 export type FeedStatus = 'connecting' | 'live' | 'polling';
 
@@ -67,12 +68,13 @@ const POLL_INTERVAL_MS = 5000;
  *  frames every 1 s keeps the poll dormant via the early-return in armTimer. */
 const POLL_ARM_MS = 2000;
 
-/** kline stream interval names (lowercase Binance form). The multi-day
- *  suffixes must NOT be lowercased — '1M'.toLowerCase() is '1m', which would
- *  silently subscribe the monthly chart to the 1-minute stream. */
-const WS_KLINE: Record<string, string> = { '1D': '1d', '3D': '3d', '1W': '1w', '1M': '1M' };
-export const klineInterval = (appInterval: string): string =>
-    WS_KLINE[appInterval] ?? appInterval.toLowerCase();
+/** kline stream interval names. Delegates to the ONE Binance interval map
+ *  (KlineService.mapBinanceInterval) — same tokens as the REST klines, so the
+ *  multi-day suffixes ('1d','3d','1w', capital '1M') stay exact. The old local
+ *  map's `?? appInterval.toLowerCase()` fallback carried the documented
+ *  '1M'→1m trap for any token missing from it; the canonical map's fallback
+ *  passes the token through UNCHANGED instead of lowercasing it. */
+export const klineInterval = (appInterval: string): string => mapBinanceInterval(appInterval);
 
 export interface FuturesLiveFeed {
     markIndex: LiveMarkIndex | null;

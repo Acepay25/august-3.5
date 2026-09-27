@@ -34,6 +34,7 @@ import {
     type ScanCandle, type HistoricalSetupStat,
 } from '../trade/setupScan';
 import { baseOf } from '../../utils/symbol';
+import { phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
 import { slugifyName } from './MemoryFilesService';
 import { queueSkillDraft } from '../../utils/skillDrafts';
@@ -89,7 +90,7 @@ Rules:
 
 const pct = (v: number): string => `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`;
 const px = (v: number): string => Number(v.toPrecision(5)).toString();
-const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+const day = (ms: number): string => phtDayKey(ms);
 
 /** Zigzag pivots: a bar whose extreme beats all bars within ±k. Newest-last,
  *  capped — the model sees the skeleton of how the chart moved, not every bar. */

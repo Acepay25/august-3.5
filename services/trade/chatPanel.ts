@@ -14,6 +14,7 @@
 
 import type { ChatSession } from './chatSessions';
 import { isPassReply } from '../agents/groupRounds';
+import { escapeRegExp } from '../../utils/escapeRegExp';
 
 export interface PanelSeat {
     /** Stable key: `bot:<botId>` for an agent seat, else `${providerId}:${modelId}`. */
@@ -108,7 +109,7 @@ export const parsePanelMentions = (text: string, seats: PanelSeat[], selfId: str
     const hits: Array<{ at: number; id: string }> = [];
     for (const s of seats) {
         if (s.id === selfId || !s.name) continue;
-        const escaped = s.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escaped = escapeRegExp(s.name);
         const re = new RegExp(`@${escaped}(?![\\p{L}\\p{N}])`, 'giu');
         let m: RegExpExecArray | null;
         while ((m = re.exec(text)) !== null) hits.push({ at: m.index, id: s.id });

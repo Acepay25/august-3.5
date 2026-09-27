@@ -57,7 +57,12 @@ const BINANCE_INTERVALS: Record<string, string> = {
     '1D': '1d', '3D': '3d', '1W': '1w', '1M': '1M',
 };
 
-const mapBinanceInterval = (interval: string): string => BINANCE_INTERVALS[interval] || interval;
+/** App timeframe token → Binance interval. Exported: the kline WEBSOCKET
+ *  stream suffix (useFuturesLiveFeed) subscribes with the SAME tokens, and
+ *  every other caller must go through this instead of `.toLowerCase()` —
+ *  '1M'.toLowerCase() is '1m', which silently turns the monthly chart into a
+ *  1-minute one. Unmapped tokens pass through unchanged. */
+export const mapBinanceInterval = (interval: string): string => BINANCE_INTERVALS[interval] || interval;
 
 // --- Core fetch helper ---
 

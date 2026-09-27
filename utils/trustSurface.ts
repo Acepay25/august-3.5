@@ -8,6 +8,7 @@
  */
 
 import { TradeAnalysis } from '../types';
+import { parsePrice } from './analysisUtils';
 
 // ─── Funding carry-cost ──────────────────────────────────────────────
 
@@ -98,8 +99,10 @@ export const FINANCIAL_ADVICE_DISCLAIMER = 'Analysis, not financial advice — p
 // ─── Plan amendment diff ──────────────────────────────────────────────
 
 const priceOf = (v?: string): number | undefined => {
-    if (!v) return undefined;
-    const n = Number(v.replace(/[$,\s]/g, '').split(/[-–]/)[0]);
+    // Canonical parser (utils/analysisUtils) — range-aware ("3210 - 3220" →
+    // midpoint) and annotation-safe ("94500 - 4h" → 94500), replacing the
+    // split-on-dash copy that read ranges as their first leg.
+    const n = parsePrice(v ?? '');
     return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 

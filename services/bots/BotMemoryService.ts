@@ -1,5 +1,7 @@
 import { getMemoryFiles, slugifyName } from '../learning/MemoryFilesService';
 import { clipNote } from '../../utils/harnessMarks';
+import { baseOf } from '../../utils/symbol';
+import { escapeRegExp } from '../../utils/escapeRegExp';
 import { BOT_MEMORY_PER_AGENT_CHAR_BUDGET } from './botMemoryBudget';
 import { MemoryFile } from '../../types';
 
@@ -98,7 +100,10 @@ export const getBotMemoryContext = (
  */
 const BASELINE_COINS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK'];
 
-const bareCoin = (c: string): string => (c || '').toUpperCase().replace(/USDT?$/, '');
+// Canonical base asset (utils/symbol) — the note-filter vocabulary is base
+// coins ('BTC', not 'BTCUSDT'); baseOf also strips FDUSD/USDC/PERP tails the
+// old un-anchored strip left on.
+const bareCoin = (c: string): string => baseOf(c || '');
 
 const otherCoinPattern = (self: string, knownCoins?: string[]): RegExp | null => {
     const universe = [...BASELINE_COINS, ...(knownCoins ?? []).map(bareCoin)]
@@ -107,7 +112,7 @@ const otherCoinPattern = (self: string, knownCoins?: string[]): RegExp | null =>
     if (universe.length === 0) return null;
     // Symbols arrive from an exchange and from user data, so they are data
     // here, not pattern source.
-    const escaped = [...new Set(universe)].map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const escaped = [...new Set(universe)].map(escapeRegExp);
     return new RegExp(`\\b(${escaped.join('|')})\\b`);
 };
 
@@ -125,7 +130,7 @@ export const filterBotNoteByQuery = (
     const coin = bareCoin(query.coin || '');
     const regime = (query.regime || '').toLowerCase();
     const others = otherCoinPattern(coin, query.knownCoins);
-    const coinRe = coin ? new RegExp(`\\b${coin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`) : null;
+    const coinRe = coin ? new RegExp(`\\b${escapeRegExp(coin)}\\b`) : null;
     const kept = lines.filter(line => {
         const upper = line.toUpperCase();
         // Word boundaries for the queried coin too, not just the others: a bare

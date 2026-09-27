@@ -29,7 +29,7 @@ const BASE_SPEAKER_ALIASES = [
     'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'Puter[^:]*',
 ];
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+import { escapeRegExp } from '../../utils/escapeRegExp';
 
 /**
  * The autoplay turn regex, built from the ACTUAL participating provider

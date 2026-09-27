@@ -25,6 +25,7 @@ import {
     updateMemoryFileUnlocked,
     withNotebookWriteLock,
 } from './MemoryFilesService';
+import { phtDayKey } from '../../utils/timezone';
 
 export const LENS_FOLDER = 'lens';
 export const LENS_FILES: Record<AnalystRole, string> = {
@@ -109,7 +110,7 @@ export const appendLensMemoryLine = async (
         const { files, folders } = getMemoryFiles();
         const folder = folders.find(f => f.name === LENS_FOLDER);
         if (!folder) return;
-        const stamp = new Date().toISOString().slice(0, 10);
+        const stamp = phtDayKey();
         const existing = files.find(f => f.folderId === folder.id && f.name === filename);
         if (existing) {
             // Persist through the unlocked API — mutating the cache object
