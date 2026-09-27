@@ -2497,44 +2497,45 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         ensembleService.setProtocolSeed(
                             `${finalSymbol || 'unknown'}|${enhancedPrompt.slice(0, 200)}|${fulfilledAnalysts.map(a => a.provider.name).join(',')}`,
                         );
-                        debateStream = ensembleService.conductRealDebate(
-                                fulfilledAnalysts.map(a => ({
-                                    provider: a.provider,
-                                    result: a.result,
-                                })),
-                                enhancedPrompt,
-                                finalTradeSummary,
-                                runModeratorConfig,
-                                runModeratorModel,
-                                instructionsToUse,
-                                perAIMC,   // monteCarloResults
-                                runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined, // lensConfig (resolved)
-                                runLensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
-                                activeFrameworks, // playbook
-                                tradeSummaries, // recent insights for pattern matching
-                                capturedGateResult, // Gate result (current run, not stale state)
-                                moderatorLearningContext, // Unified learning context for moderator
-                                currentAbortController.signal, // Cancellation for the moderator stream
-                                (reasoning: string) => {
-                                    // Streamed moderator chain-of-thought accumulates
-                                    // (deltas replace nothing — they append).
-                                    reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                    reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
-                                    thoughtMap.moderator = reasoningMapRef.current.moderator;
-                                    // Push immediately (rAF-coalesced) so the Floor
-                                    // shows the moderator THINKING live — before the
-                                    // first visible text delta lands. Previously this
-                                    // only flushed when a turn text chunk arrived.
-                                    throttledDebateUpdate(
-                                        requestConversationId,
-                                        debateMessageId,
-                                        debateTurnsRef.current,
-                                        thoughtMap,
-                                        reasoningMapRef.current,
-                                        activeDebateSpeakersRef.current, runContractFor(),
-                                    );
+                        debateStream = ensembleService.conductRealDebate({
+                            analysts: fulfilledAnalysts.map(a => ({
+                                provider: a.provider,
+                                result: a.result,
+                            })),
+                            userPrompt: enhancedPrompt,
+                            finalTradeSummary,
+                            moderatorConfig: runModeratorConfig,
+                            moderatorModel: runModeratorModel,
+                            customInstructions: instructionsToUse,
+                            monteCarloResults: perAIMC,
+                            // lensConfig (resolved)
+                            lensConfig: runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined,
+                            analystProviders: runLensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined,
+                            activeFrameworks, // playbook
+                            tradeSummaries, // recent insights for pattern matching
+                            gateResult: capturedGateResult, // current run, not stale state
+                            learningContext: moderatorLearningContext,
+                            signal: currentAbortController.signal, // cancellation for the moderator stream
+                            onReasoning: (reasoning: string) => {
+                                // Streamed moderator chain-of-thought accumulates
+                                // (deltas replace nothing — they append).
+                                reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
+                                thoughtMap.moderator = reasoningMapRef.current.moderator;
+                                // Push immediately (rAF-coalesced) so the Floor
+                                // shows the moderator THINKING live — before the
+                                // first visible text delta lands. Previously this
+                                // only flushed when a turn text chunk arrived.
+                                throttledDebateUpdate(
+                                    requestConversationId,
+                                    debateMessageId,
+                                    debateTurnsRef.current,
+                                    thoughtMap,
+                                    reasoningMapRef.current,
+                                    activeDebateSpeakersRef.current, runContractFor(),
+                                );
                             },
-                            (speaker: string, reasoning: string, round?: number) => {
+                            onAnalystReasoning: (speaker: string, reasoning: string, round?: number) => {
                                 // Rebuttal and clarification reasoning is keyed by speaker
                                 // so the debate chat can show it live. Deltas ACCUMULATE
                                 // (same as the analyst/moderator callbacks) — replacing
@@ -2566,7 +2567,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     );
                                 }
                             },
-                            (speaker: string, round: number, active: boolean) => {
+                            onSpeakerStatus: (speaker: string, round: number, active: boolean) => {
                                 if (active) {
                                     activeDebateSpeakersRef.current[speaker] = round;
                                 } else if (activeDebateSpeakersRef.current[speaker] === round) {
@@ -2583,16 +2584,14 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             },
                             // Full chart/pattern context + user strategies —
                             // the moderator sees the same chart the analysts see.
-                            moderatorContextBundle,
-                            undefined, // timeoutMs (debate budget is engine-defaulted)
-                            requestReplacement,
-                            undefined, // replacementTimeoutMs (engine-defaulted)
+                            hybridContext: moderatorContextBundle,
+                            onReplacementRequested: requestReplacement,
                             // Live-price refresh between rounds: the debate
                             // re-anchors each round on TODAY's price (from the
                             // live feed's cache — zero extra network calls).
                             // Null symbol / unknown price → graceful no-op.
-                            () => (finalSymbol ? PriceAlertService.getCurrentPrice(finalSymbol) ?? null : null),
-                            () => {
+                            getLivePrice: () => (finalSymbol ? PriceAlertService.getCurrentPrice(finalSymbol) ?? null : null),
+                            getSteeringNotes: () => {
                                 const notes = steeringQueueRef.current;
                                 steeringQueueRef.current = [];
                                 setSteeringNotes([]);
@@ -2600,7 +2599,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             },
                             // Per-seat steering: notes addressed to one seat
                             // ("@Technical …") ride only that seat's prompt.
-                            (seatName: string) => {
+                            getSeatSteeringNote: (seatName: string) => {
                                 const note = seatSteeringRef.current[seatName];
                                 if (!note) return '';
                                 delete seatSteeringRef.current[seatName];
@@ -2608,20 +2607,20 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             },
                             // Per-seat stop: benched seats leave at the next
                             // round boundary; the debate continues without them.
-                            (seatName: string) => stoppedSeatsRef.current.has(seatName),
-                            (event) => {
+                            shouldDropSeat: (seatName: string) => stoppedSeatsRef.current.has(seatName),
+                            onRunEvent: (event) => {
                                 debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
                             },
-                            patternMemoryGate || skillVeto
+                            memoryGate: patternMemoryGate || skillVeto
                                 ? { ...(patternMemoryGate ?? {}), skillVeto }
                                 : null,
-                            useResume && resumeTarget ? {
+                            resumeState: useResume && resumeTarget ? {
                                 lastCompletedRound: resumeTarget.debateCheckpoint?.lastCompletedRound
                                     || lastCompletedRound(resumeTarget.debateTurns || [], resumeTarget.debateCheckpoint?.analystNames),
                                 seedRoundTexts: debateTurnsToRoundTexts(resumeTarget.debateTurns || []),
                                 laneDrafts: resumeTarget.debateCheckpoint?.laneDrafts,
                             } : undefined,
-                            () => {
+                            shouldSkipRemaining: () => {
                                 const cap = getHarnessSettings().debateCostCapUsd;
                                 if (cap <= 0) return false;
                                 let spent = 0;
@@ -2643,7 +2642,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // Each line carries a wall-clock prefix
                             // (HH:MM:SS) so the panel rows can render an
                             // elapsed/when stamp per row.
-                            (speaker: string, _round: number, line: string) => {
+                            onToolEvent: (speaker: string, _round: number, line: string) => {
                                 const stamp = new Date().toLocaleTimeString([], { hour12: false });
                                 const stamped = `${stamp} · ${line}`;
                                 const prev = liveToolEventsRef.current[speaker];
@@ -2659,32 +2658,32 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 );
                             },
                             // Risk-only template: straight to the verdict.
-                            runDebateTemplate?.skipToVerdict,
+                            forceSkipRebuttals: runDebateTemplate?.skipToVerdict,
                             botByThoughtsKey,
                             centralizedSnapshot,
-                            lossPrimingRows,
-                            loggedTrades,
+                            similarTrades: lossPrimingRows,
+                            fullTradesForRecall: loggedTrades,
                             // Team-seat personas: seatName → directive, so a
                             // team seat's role/instructions survive into the
                             // rebuttal/clarification/verdict rounds too.
-                            seatPersonasBySeatName,
+                            seatPersonas: seatPersonasBySeatName,
                             // Session-guard facts (Batch 2): the moderator weighs
                             // "trader is at the daily-loss limit" when grading.
-                            formatGuardContextBlock(assessSession(
+                            sessionGuardBlock: formatGuardContextBlock(assessSession(
                                 loggedTrades,
                                 getHarnessSettings().equityUsd,
                                 getSessionGuardConfig(),
                             )),
                             // model side-effects — proposals + custom tools
                             // land on the message as ToolAction status rows.
-                            {
+                            opts: {
                                 onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); },
                                 // Rebuttal rounds otherwise carry no retrieved
                                 // memory at all. Same runId slice as the openings,
                                 // so the per-run holdout applies here too.
                                 rebuttalMemoryContext,
                             },
-                        );
+                        });
                     }
 
                     let fullResponseText = '';

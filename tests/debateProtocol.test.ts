@@ -44,6 +44,7 @@ import {
     getLastDebateProtocol,
     type DebateProtocol,
     type RealDebateTurnEvent,
+    type RealDebateOptions,
 } from '../services/providers/ensembleService';
 
 const config: ProviderConfig = {
@@ -156,19 +157,23 @@ function mockStreams(seatSignals?: AbortSignal[]) {
     });
 }
 
-/** conductRealDebate positional args with the trailing `opts` bag at 38. */
-function debateArgs(analysts: ReturnType<typeof twoAnalysts>, opts?: Record<string, unknown>): any[] {
-    const base: any[] = [analysts, 'Analyze BTCUSDT', null, config, 'model-a'];
-    while (base.length < 37) base.push(undefined);
-    base[37] = opts;
-    return base;
+/** The engine takes ONE options object; the trailing `opts` bag rides on it.
+ *  This used to build a 38-slot positional tuple padded with `undefined` and
+ *  reach it through an `as unknown as` cast — which typechecked happily and
+ *  then bound nothing at runtime. */
+function debateOptions(analysts: ReturnType<typeof twoAnalysts>, opts?: Record<string, unknown>): RealDebateOptions {
+    return {
+        analysts,
+        userPrompt: 'Analyze BTCUSDT',
+        finalTradeSummary: null,
+        moderatorConfig: config,
+        moderatorModel: 'model-a',
+        ...(opts ? { opts: opts as RealDebateOptions['opts'] } : {}),
+    };
 }
 
-/** Positional escape hatch: the real signature is a ~38-parameter chain;
- *  tests spread the padded tuple built by debateArgs(). */
-const conduct = conductRealDebate as unknown as (
-    ...args: any[]
-) => AsyncGenerator<RealDebateTurnEvent, void, unknown>;
+/** No cast needed any more — the engine's real signature is the object form. */
+const conduct = conductRealDebate;
 
 async function collectEvents(gen: AsyncGenerator<RealDebateTurnEvent>): Promise<RealDebateTurnEvent[]> {
     const events: RealDebateTurnEvent[] = [];
@@ -238,9 +243,9 @@ describe('debate protocol — per-debate isolation', () => {
         // first iterated, pipeline-B sets its own seed. The old module-global
         // seed would make BOTH debates hash B's identity.
         setProtocolSeed(seedA);
-        const genA = conduct(...debateArgs(twoAnalysts()));
+        const genA = conduct(debateOptions(twoAnalysts()));
         setProtocolSeed(seedB);
-        const genB = conduct(...debateArgs(twoAnalysts()));
+        const genB = conduct(debateOptions(twoAnalysts()));
 
         await collectEvents(genA);
         // The legacy runStats read happens AFTER A's stream ends: it must
@@ -263,12 +268,12 @@ describe('debate protocol — per-debate isolation', () => {
         expect(seedY).toBeTruthy();
 
         setProtocolSeed(seedX); // legacy pending — must stay untouched
-        const gen = conduct(...debateArgs(twoAnalysts(), { protocolSeed: seedY }));
+        const gen = conduct(debateOptions(twoAnalysts(), { protocolSeed: seedY }));
         await collectEvents(gen);
         expect(getLastDebateProtocol()).toBe(laneOf(seedY));
 
         // The next unseeded-opts debate now gets the still-pending seedX.
-        const gen2 = conduct(...debateArgs(twoAnalysts()));
+        const gen2 = conduct(debateOptions(twoAnalysts()));
         await collectEvents(gen2);
         expect(getLastDebateProtocol()).toBe(laneOf(seedX));
     });
@@ -283,7 +288,7 @@ describe('debate generator — consumer abandonment', () => {
     it('breaking out of the for-await loop aborts the running seat streams', async () => {
         const seatSignals: AbortSignal[] = [];
         mockStreams(seatSignals);
-        const gen = conduct(...debateArgs(twoAnalysts()));
+        const gen = conduct(debateOptions(twoAnalysts()));
         let seen = 0;
         for await (const _event of gen) {
             seen++;
@@ -299,7 +304,7 @@ describe('debate generator — consumer abandonment', () => {
         mockStreams(seatSignals);
         const seed = 'abandon-setup|Analyze BTCUSDT|Analyst One,Analyst Two';
         setProtocolSeed(seed);
-        const gen = conduct(...debateArgs(twoAnalysts()));
+        const gen = conduct(debateOptions(twoAnalysts()));
         let seen = 0;
         for await (const _event of gen) {
             seen++;

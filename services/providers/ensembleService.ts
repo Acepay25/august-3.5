@@ -1617,13 +1617,12 @@ async function streamWithTransientRetry(
  * finishes — normal end, error, or consumer abandonment. Concurrent
  * debates can no longer overwrite each other's attribution mid-run.
  * The public parameter list is the impl's list MINUS the leading box. */
-type DropFirst<T extends readonly unknown[]> = T extends readonly [unknown, ...infer Rest] ? Rest : never;
 export const conductRealDebate = async function* (
-    ...args: DropFirst<Parameters<typeof conductRealDebateImpl>>
+    options: RealDebateOptions,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
     const protocolBox: { value: DebateProtocol } = { value: 'standard' };
     try {
-        yield* conductRealDebateImpl(protocolBox, ...args);
+        yield* conductRealDebateImpl(protocolBox, options);
     } finally {
         // Publish THIS debate's protocol (not whichever debate hashed last)
         // to the legacy runStats side channel.
@@ -1631,107 +1630,139 @@ export const conductRealDebate = async function* (
     }
 };
 
-const conductRealDebateImpl = async function* (
-    /** Call-local out-parameter: the impl records its protocol lane here;
-     *  the exported wrapper publishes it on completion. Never a global. */
-    protocolBox: { value: DebateProtocol },
-    analysts: RealDebateAnalyst[],
-    userPrompt: string,
-    finalTradeSummary: string | null,
-    moderatorConfig: ProviderConfig,
-    moderatorModel: string,
-    customInstructions?: string,
-    monteCarloResults?: { provider: string; result: any }[],
-    lensConfig?: AnalystLensConfig,
-    analystProviders?: string[],
-    activeFrameworks?: string[],
-    tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
-    gateResult?: GateOutput | null,
-    learningContext?: string,
-    signal?: AbortSignal,
-    onReasoning?: (reasoning: string) => void,
-    onAnalystReasoning?: (speaker: string, reasoning: string, round?: number) => void,
-    onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void,
-    hybridContext?: string,
+/**
+ * The real-debate engine's parameters, as one named object.
+ *
+ * This was 38 positional parameters behind a `DropFirst` wrapper, and the one
+ * production call site passed thirteen `undefined`s in a row to reach the
+ * options it actually wanted. That shape has one failure mode and it is
+ * invisible: a transposition binds wrong and the debate still runs, because
+ * every parameter is optional and loosely typed enough that a swap typechecks.
+ *
+ * `DropFirst` existed only to hide `protocolBox` from the public signature; with
+ * a single options object the wrapper no longer needs to re-derive the impl's
+ * parameter list at all, so the two shapes can no longer drift.
+ */
+export interface RealDebateOptions {
+    analysts: RealDebateAnalyst[];
+    userPrompt: string;
+    finalTradeSummary: string | null;
+    moderatorConfig: ProviderConfig;
+    moderatorModel: string;
+    customInstructions?: string;
+    monteCarloResults?: { provider: string; result: any }[];
+    lensConfig?: AnalystLensConfig;
+    analystProviders?: string[];
+    activeFrameworks?: string[];
+    tradeSummaries?: { id: string; summaryText: string; timestamp: string }[];
+    gateResult?: GateOutput | null;
+    learningContext?: string;
+    signal?: AbortSignal;
+    onReasoning?: (reasoning: string) => void;
+    onAnalystReasoning?: (speaker: string, reasoning: string, round?: number) => void;
+    onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void;
+    hybridContext?: string;
     /** Wall-clock budget for the whole debate (rebuttals + clarification
      *  cycles). On expiry the debate skips remaining rounds and proceeds
      *  straight to the moderator verdict. */
-    timeoutMs?: number,
+    timeoutMs?: number;
     /** Mid-debate analyst replacement. Invoked once per analyst that drops
      *  (stream failure) BEFORE the next phase runs; the debate suspends while
      *  the returned promise is pending so the consumer can ask the user for a
      *  fresh provider. Resolve with a fully-formed analyst record to inject it
      *  (it joins the remaining rebuttals/clarifications/verdict), or null to
      *  continue without. The abort signal interrupts the wait. */
-    onReplacementRequested?: (droppedName: string, round: number) => Promise<RealDebateAnalyst | null>,
+    onReplacementRequested?: (droppedName: string, round: number) => Promise<RealDebateAnalyst | null>;
     /** How long the debate waits for the replacement choice (defaults to
      *  DEBATE_REPLACEMENT_WAIT_MS). Test seams pass a small value. */
-    replacementTimeoutMs?: number,
+    replacementTimeoutMs?: number;
     /** Live-price provider invoked at each round boundary (rebuttals,
      *  clarification, verdict). Return TODAY's price or null/undefined when
      *  unknown — the refresh line is then omitted and the debate runs as
      *  before. Analysts re-anchor on the current price between rounds
      *  instead of arguing over a stale snapshot. */
-    getLivePrice?: () => number | null,
+    getLivePrice?: () => number | null;
     /** Drain queued user notes sent while this debate was running. */
-    getSteeringNotes?: () => string,
+    getSteeringNotes?: () => string;
     /** Per-seat steering: a note addressed to ONE seat. Invoked
      *  when that seat's next turn is built; the note rides only its prompt. */
-    getSeatSteeringNote?: (seatName: string) => string,
+    getSeatSteeringNote?: (seatName: string) => string;
     /** Per-seat stop: the user benched this seat. The seat
      *  leaves the roster (existing partial text is purged by the drop path)
      *  and remaining rounds continue without it. */
-    shouldDropSeat?: (seatName: string) => boolean,
+    shouldDropSeat?: (seatName: string) => boolean;
     /** Append-only run log (pipeline persists on the message). */
-    onRunEvent?: (event: DebateRunEvent) => void,
+    onRunEvent?: (event: DebateRunEvent) => void;
     /** Pattern-memory gate for the pre-step waterfall. */
-    memoryGate?: { gateResult?: string; reason?: string; skillVeto?: string } | null,
+    memoryGate?: { gateResult?: string; reason?: string; skillVeto?: string } | null;
     /** Crash-resume: skip completed rounds and seed transcript. */
-    resumeState?: { lastCompletedRound: number; seedRoundTexts?: Record<string, string[]>; laneDrafts?: Record<string, { round: number; text: string }> },
+    resumeState?: { lastCompletedRound: number; seedRoundTexts?: Record<string, string[]>; laneDrafts?: Record<string, { round: number; text: string }> };
     /** When true, skip remaining rebuttals (USD budget). */
-    shouldSkipRemaining?: () => boolean,
+    shouldSkipRemaining?: () => boolean;
     /** Live desk-tool visibility — fires when a seat calls/finishes a tool so
      *  the Floor can show chips instead of a silent bot. */
-    onToolEvent?: (speaker: string, round: number, line: string) => void,
+    onToolEvent?: (speaker: string, round: number, line: string) => void;
     /** Debate template (Risk-only pass): skip rebuttals, straight to verdict. */
-    forceSkipRebuttals?: boolean,
-    botByThoughtsKey?: Record<string, HermesBot>,
+    forceSkipRebuttals?: boolean;
+    botByThoughtsKey?: Record<string, HermesBot>;
     /** Pre-fetched market snapshot injected to all seats to avoid N× tool calls. */
-    centralizedSnapshot?: string,
+    centralizedSnapshot?: string;
     /** This setup's similar closed trades (for loss priming). Compact rows —
      *  outcome/keyLesson only, no full post-mortems. */
-    similarTrades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[],
+    similarTrades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[];
     /** Full closed-trade log — powers the `recall` notebook desk tool. */
-    fullTradesForRecall?: LoggedTrade[],
+    fullTradesForRecall?: LoggedTrade[];
     /** Team-seat personas keyed by seat NAME (useAnalysisPipeline builds
      *  them from the active team's seats). When present, a seat's rebuttal
      *  system prompt is prefixed with its persona so team roles survive
      *  beyond the openings; when absent, behavior is unchanged. */
-    seatPersonas?: Record<string, string>,
+    seatPersonas?: Record<string, string>;
     /** Session-guard state block (Batch 2): deterministic day-P&L/trade-cap/
      *  streak facts the moderator must weigh when grading. Built by
      *  formatGuardContextBlock in the pipeline. */
-    sessionGuardBlock?: string,
+    sessionGuardBlock?: string;
     /** options bag (optional, trailing) — surface callbacks that don't
      *  fit the positional legacy chain. */
     opts?: {
         /** Model side-effects for the transcript: proposal tools
          *  (forge_tool/amend_memory) and file creations, keyed by the seat
          *  that ran them. The pipeline persists them as Message.toolActions. */
-        onToolAction?: (action: import('../../types/message').ToolAction) => void,
+        onToolAction?: (action: import('../../types/message').ToolAction) => void;
         /** PER-DEBATE protocol lane seed — this setup's identity
          *  (symbol + prompt + roster). Preferred over the legacy
          *  setProtocolSeed() global: each concurrent debate carries its own
          *  seed, so lanes can never cross-assign. Unseeded calls deterministically
          *  take the CONTROL lane. */
-        protocolSeed?: string,
+        protocolSeed?: string;
         /** Notebook slice for the rebuttal rounds, built by the pipeline at
          *  stage 'rebuttal' under the SAME runId as the openings (so the
          *  per-run ε-holdout withholds it from control runs too). Absent ⇒
          *  rebuttals run without retrieved memory, as they did before. */
-        rebuttalMemoryContext?: string,
-    },
+        rebuttalMemoryContext?: string;
+    };
+}
+
+const conductRealDebateImpl = async function* (
+    /** Call-local out-parameter: the impl records its protocol lane here;
+     *  the exported wrapper publishes it on completion. Never a global. */
+    protocolBox: { value: DebateProtocol },
+    options: RealDebateOptions,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
+    // Destructured so the ~1,900-line body below is untouched by the signature
+    // change: every bare `analysts` / `userPrompt` / `signal` reference in it
+    // still resolves, and the compiler keeps checking the optionality of each
+    // name against the one interface instead of against a parameter list.
+    const {
+        analysts, userPrompt, finalTradeSummary, moderatorConfig, moderatorModel,
+        customInstructions, monteCarloResults, lensConfig, analystProviders,
+        activeFrameworks, tradeSummaries, gateResult, learningContext, signal,
+        onReasoning, onAnalystReasoning, onSpeakerStatus, hybridContext, timeoutMs,
+        onReplacementRequested, replacementTimeoutMs, getLivePrice, getSteeringNotes,
+        getSeatSteeringNote, shouldDropSeat, onRunEvent, memoryGate, resumeState,
+        shouldSkipRemaining, onToolEvent, forceSkipRebuttals, botByThoughtsKey,
+        centralizedSnapshot, similarTrades, fullTradesForRecall, seatPersonas,
+        sessionGuardBlock, opts,
+    } = options;
 
     if (analysts.length < 2) {
         throw new Error(`Real debate requires at least 2 analysts (${analysts.length} provided).`);
