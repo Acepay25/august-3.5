@@ -390,8 +390,17 @@ export function useAutomations(params: UseAutomationsParams) {
 
     // ─── Execute one run ──────────────────────────────────────────────────
     const runAutomation = useCallback(async (config: AutomationConfig, isCatchUp = false): Promise<void> => {
-        if (inFlightRef.current) return; // one run at a time (manual or automation)
-        if (params.isAnalysisInProgress) return;
+        if (inFlightRef.current) {
+            // A human pressing Run-now during another run gets a receipt, not
+            // a silent no-show (the hook's own doctrine for bot-scoped runs).
+            // Catch-up fires never toast — the scheduler already skipped them.
+            if (!isCatchUp) toast.warning('Run skipped', `"${config.name}" — another automation is still running.`);
+            return;
+        }
+        if (params.isAnalysisInProgress) {
+            if (!isCatchUp) toast.warning('Run skipped', `"${config.name}" — an analysis is already running.`);
+            return;
+        }
         const username = usernameRef.current;
         if (!username || !config.enabled) return;
 

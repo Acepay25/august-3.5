@@ -24,6 +24,7 @@ import {
     fetchRecentLiquidations,
     Kline
 } from './MarketDataService';
+import { DATA_UNAVAILABLE_PREFIX } from '../../utils/harnessMarks';
 
 import {
     calculateIndicators,
@@ -130,7 +131,9 @@ export interface HybridDataPacket {
     };
 
     confluence: ConfluenceResult;
-    fundingRate: number;
+    /** null = the fetch failed — the prompt layer must disclose the gap
+     *  instead of printing a settled 0%. */
+    fundingRate: number | null;
     fundingRateSentiment: 'bullish' | 'bearish' | 'neutral';
     dataTimestamp: string;
     dataQuality?: {
@@ -419,10 +422,15 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         '1d': indicators1d
     });
 
-    // Interpret funding rate
-    const fundingRateSentiment = snapshot.fundingRate > 0.0005 ? 'bullish'
-        : snapshot.fundingRate < -0.0005 ? 'bearish'
-            : 'neutral';
+    // Interpret funding rate. An unavailable rate (`null` — outage, not a
+    // settled 0%) reads as neutral SENTIMENT here but stays `null` in the
+    // packet's fundingRate field so the prompt layer can disclose the gap
+    // instead of printing "funding 0.0000" as fact.
+    const fundingRateValue = snapshot.fundingRate ?? null;
+    const fundingRateSentiment = fundingRateValue === null ? 'neutral'
+        : fundingRateValue > 0.0005 ? 'bullish'
+            : fundingRateValue < -0.0005 ? 'bearish'
+                : 'neutral';
 
     // ========== CALCULATE NEW ENHANCED DATA ==========
 
@@ -839,7 +847,12 @@ export interface HybridInjectionOptions {
 }
 
 export const generateHybridPromptInjection = (data: HybridDataPacket, options?: HybridInjectionOptions): string => {
-    const fundingDisplay = (data.fundingRate * 100).toFixed(4);
+    // null = the fetch failed. The cell says so (canonical sentinel family) —
+    // a fabricated "0.0000%" read as "funding just settled / perfectly
+    // balanced" and the model cited it as fact.
+    const fundingDisplay = data.fundingRate === null
+        ? `${DATA_UNAVAILABLE_PREFIX} no funding data`
+        : (data.fundingRate * 100).toFixed(4);
     // Seconds, not minutes: a 30-second-old packet used to print "Binance · 0m
     // ago", which reads as "fresh" to both the user and the model and hid the
     // one number that settles whether a stated move is real.

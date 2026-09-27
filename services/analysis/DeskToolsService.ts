@@ -51,7 +51,7 @@ import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
 /**
  * Classify a desk-tool result into a persisted model side-effect:
  * proposal tools (forge_tool / amend_memory) and custom_ tools become
- * ToolAction rows the transcript renders Hermes-style. Data lookups stay
+ * ToolAction rows the transcript renders as status rows. Data lookups stay
  * out — they're reads, not changes. ok = the proposal was accepted as a
  * pending candidate; the reject text of both proposal tools starts with
  * `<tool> rejected:`.
@@ -1379,6 +1379,8 @@ async function runDerivatives(symbol: string, signal?: AbortSignal): Promise<str
         symbol,
         price: market.currentPrice,
         change24hPct: market.priceChangePercent24h,
+        // null = the rate could not be fetched — the model must read that as
+        // unknown, not as a settled 0% (a 0 is a legitimate funding rate).
         fundingRate: funding,
         openInterest: derivatives.openInterest,
         openInterestValue: derivatives.openInterestValue,

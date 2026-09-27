@@ -328,17 +328,20 @@ export const detectCrowdedTrade = (
     const warnings: string[] = [];
     let shouldDowngrade = false;
 
-    // Check funding rate
-    if (proposedDirection === 'Long' && hybridData.fundingRate > FUNDING_RATE_WARNING_THRESHOLD) {
-        warnings.push(`High positive funding (${(hybridData.fundingRate * 100).toFixed(3)}%) - Longs are crowded`);
-        if (hybridData.fundingRate > FUNDING_RATE_DOWNGRADE_THRESHOLD) {
+    // Check funding rate. An unavailable rate (null — fetch outage) cannot
+    // signal crowding: skip the check rather than treating the gap as a
+    // neutral 0% (same null-safety the L/S ratio below already had).
+    const fundingRate = hybridData.fundingRate;
+    if (fundingRate !== null && proposedDirection === 'Long' && fundingRate > FUNDING_RATE_WARNING_THRESHOLD) {
+        warnings.push(`High positive funding (${(fundingRate * 100).toFixed(3)}%) - Longs are crowded`);
+        if (fundingRate > FUNDING_RATE_DOWNGRADE_THRESHOLD) {
             shouldDowngrade = true;
         }
     }
 
-    if (proposedDirection === 'Short' && hybridData.fundingRate < -FUNDING_RATE_WARNING_THRESHOLD) {
-        warnings.push(`High negative funding (${(hybridData.fundingRate * 100).toFixed(3)}%) - Shorts are crowded`);
-        if (hybridData.fundingRate < -FUNDING_RATE_DOWNGRADE_THRESHOLD) {
+    if (fundingRate !== null && proposedDirection === 'Short' && fundingRate < -FUNDING_RATE_WARNING_THRESHOLD) {
+        warnings.push(`High negative funding (${(fundingRate * 100).toFixed(3)}%) - Shorts are crowded`);
+        if (fundingRate < -FUNDING_RATE_DOWNGRADE_THRESHOLD) {
             shouldDowngrade = true;
         }
     }

@@ -506,12 +506,13 @@ export const generateDevilsAdvocateAnalysis = (
         overallRiskScore += 20;
     }
 
-    // 4. Check funding rate for crowded trades
-    if (proposedDirection === 'Long' && data.fundingRate > 0.001) {
+    // 4. Check funding rate for crowded trades (null = fetch outage — an
+    // unknown rate cannot signal crowding, and reading it as 0 would be a lie)
+    if (proposedDirection === 'Long' && data.fundingRate !== null && data.fundingRate > 0.001) {
         bearCaseReasons.push(`High positive funding (${(data.fundingRate * 100).toFixed(3)}%) - longs are crowded, funding squeeze risk`);
         overallRiskScore += 10;
     }
-    if (proposedDirection === 'Short' && data.fundingRate < -0.001) {
+    if (proposedDirection === 'Short' && data.fundingRate !== null && data.fundingRate < -0.001) {
         bearCaseReasons.push(`High negative funding (${(data.fundingRate * 100).toFixed(3)}%) - shorts are crowded, squeeze risk`);
         overallRiskScore += 10;
     }

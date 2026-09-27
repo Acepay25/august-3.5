@@ -44,8 +44,9 @@ export const fundingCarryCost = (
 };
 
 /** Direction-agnostic carry note for the debate snapshot (the verdict isn't
- *  known yet, so both sides are stated). */
-export const fundingCarrySnapshotLine = (fundingRate: number | undefined): string => {
+ *  known yet, so both sides are stated). `null`/undefined (fetch outage)
+ *  yields '' — the snapshot's funding table cell already discloses the gap. */
+export const fundingCarrySnapshotLine = (fundingRate: number | null | undefined): string => {
     if (typeof fundingRate !== 'number' || !Number.isFinite(fundingRate)) return '';
     const pct = fundingRate * 100;
     if (pct === 0) return 'Funding 0.0000%/8h — no carry either way.';
