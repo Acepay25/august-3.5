@@ -2930,16 +2930,10 @@ const App: React.FC = () => {
             <SettingsMenu
                 isVisible={isSettingsMenuVisible}
                 onClose={() => setIsSettingsMenuVisible(false)}
-                isLoading={isLoading}
                 onOpenStrategyStudio={() => { setSurface('studio'); setIsSettingsMenuVisible(false); }}
                 onOpenLearn={(tab) => { setLearnTab(tab ?? null); setSurface('learn'); setIsSettingsMenuVisible(false); }}
-                summarizationProvider={summarizationProvider}
-                summarizationModel={summarizationModel}
-                onSetSummarizationProvider={handleSetSummarizationProvider}
-                onSetSummarizationModel={setSummarizationModel}
                 summaryCharLimit={summaryCharLimit}
                 onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
-                onRegenerateSummary={handleRegenerateFinalSummary}
                 useAlgorithmicSummary={useAlgorithmicSummary}
                 onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
                 useAlgorithmicInsights={useAlgorithmicInsights}
@@ -3001,9 +2995,6 @@ const App: React.FC = () => {
                 onOpenJournal={handleOpenJournal}
                 settingsInitialTab={settingsInitialTab}
                 onSettingsInitialTabConsumed={() => setSettingsInitialTab(undefined)}
-                familyWinRates={familyWinRates}
-                enabledProviders={journalEnabledProviders}
-                selectedModels={journalSelectedModels}
             />
             </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />

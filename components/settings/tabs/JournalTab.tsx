@@ -1,0 +1,185 @@
+// TAB: Journal — hub & quick launcher (SettingsMenu "TAB 0").
+//
+// Moved verbatim from the inline IIFE body in SettingsMenu.tsx when the tab
+// bodies became lazily-loaded components. The component binds its single
+// `tab` props object to the name `props`, so the body's `props.` references
+// are the same keys the IIFE closed over — no renames.
+import React from 'react';
+import { Activity, ArrowUpRight, Bot, Brain, BrainCircuit, FileText } from 'lucide-react';
+import { ToggleSwitch } from '../../shared/ToggleSwitch';
+import AutoJournalRulesCard from '../AutoJournalRulesCard';
+import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
+import type { SettingsTabProps } from './types';
+
+export interface JournalTabProps extends SettingsTabProps {
+    onClose: () => void;
+    onOpenJournal?: (tab?: string) => void;
+    useAlgorithmicSummary?: boolean;
+    onToggleAlgorithmicSummary?: (enabled: boolean) => void;
+    useAlgorithmicInsights?: boolean;
+    onToggleAlgorithmicInsights?: (enabled: boolean) => void;
+    summaryCharLimit?: number;
+    onUpdateSummaryCharLimit?: (limit: number) => void;
+}
+
+const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
+    const { onClose, onOpenJournal, onOpenLearn, username } = props;
+    const trades = props.loggedTrades ?? [];
+    const totalTrades = trades.length;
+    const winTrades = trades.filter(t => t.outcome === 'WIN').length;
+    const lossTrades = trades.filter(t => t.outcome === 'LOSS').length;
+    const pendingTrades = trades.filter(t => !t.outcome || t.outcome === 'PENDING' || t.outcome === 'ENTRY_NOT_HIT').length;
+    const decidedTrades = winTrades + lossTrades;
+    const winRate = decidedTrades > 0 ? Math.round((winTrades / decidedTrades) * 100) : 0;
+
+    return (
+        <div className="space-y-5 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <SettingsPageHeader
+                    title="Journal"
+                    description="Review past trades, AI pattern memory, and model performance metrics."
+                />
+                <button
+                    type="button"
+                    onClick={() => {
+                        onClose();
+                        onOpenJournal?.('log');
+                    }}
+                    className="mb-3.5 inline-flex items-center justify-center gap-2 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-semibold text-zinc-200 transition-colors hover:border-white/20 hover:bg-zinc-700 hover:text-zinc-100 active:scale-[0.98]"
+                >
+                    <span>Open Trading Journal</span>
+                    <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+            </div>
+
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Total Logged</span>
+                    <p className="mt-1 font-mono text-xl font-bold text-zinc-100">{totalTrades}</p>
+                </div>
+                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Win Rate</span>
+                    <p className="mt-1 font-mono text-xl font-bold text-emerald-400">{decidedTrades > 0 ? `${winRate}%` : '—'}</p>
+                </div>
+                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Wins / Losses</span>
+                    <p className="mt-1 font-mono text-xl font-bold text-zinc-200">
+                        <span className="text-emerald-400">{winTrades}</span>
+                        <span className="text-zinc-600 mx-1">/</span>
+                        <span className="text-rose-400">{lossTrades}</span>
+                    </p>
+                </div>
+                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
+                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Open / Pending</span>
+                    <p className="mt-1 font-mono text-xl font-bold text-amber-400">{pendingTrades}</p>
+                </div>
+            </div>
+
+            {/* Quick navigation cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                    type="button"
+                    onClick={() => {
+                        onClose();
+                        onOpenJournal?.('log');
+                    }}
+                    className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                >
+                    <div className="flex items-center justify-between w-full">
+                        <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Trade Log</span>
+                        <ArrowUpRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                    </div>
+                    <p className="mt-1.5 text-ui-dense text-zinc-400">View and manage all recorded trades, outcomes, and screenshots.</p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => {
+                        onClose();
+                        onOpenLearn?.('health');
+                    }}
+                    className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                >
+                    <div className="flex items-center justify-between w-full">
+                        <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>
+                        <Brain className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                    </div>
+                    <p className="mt-1.5 text-ui-dense text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => {
+                        onClose();
+                        onOpenJournal?.('models');
+                    }}
+                    className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                >
+                    <div className="flex items-center justify-between w-full">
+                        <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Model Performance</span>
+                        <Bot className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                    </div>
+                    <p className="mt-1.5 text-ui-dense text-zinc-400">Compare win rates and accuracy across different AI providers and models.</p>
+                </button>
+            </div>
+
+            {/* The approvals inbox's standing Always/Never rules: created
+                by one click, enforced on every pinned setup — and with this
+                card, listable and revocable for the first time. */}
+            <AutoJournalRulesCard username={username} />
+
+            {/* Journal Configuration */}
+            <SettingsGroup
+                title="Summaries"
+                description="How the journal writes its own review text."
+            >
+                <SettingsRow
+                    icon={<Activity className="h-4 w-4" />}
+                    title="Algorithmic summary"
+                    description="Instant calculation from the trade ledger instead of a model call."
+                    control={
+                        <ToggleSwitch
+                            checked={props.useAlgorithmicSummary ?? false}
+                            onChange={() => props.onToggleAlgorithmicSummary?.(!props.useAlgorithmicSummary)}
+                            label="Toggle algorithmic summary"
+                        />
+                    }
+                />
+                <SettingsRow
+                    icon={<BrainCircuit className="h-4 w-4" />}
+                    title="Algorithmic pattern insights"
+                    description="Extract insights with local heuristics alongside AI pattern memory."
+                    control={
+                        <ToggleSwitch
+                            checked={props.useAlgorithmicInsights ?? false}
+                            onChange={() => props.onToggleAlgorithmicInsights?.(!props.useAlgorithmicInsights)}
+                            label="Toggle algorithmic pattern insights"
+                        />
+                    }
+                />
+                {props.onUpdateSummaryCharLimit && (
+                    <SettingsRow
+                        icon={<FileText className="h-4 w-4" />}
+                        title="Summary character limit"
+                        description="Maximum length for AI-generated journal review summaries."
+                        control={
+                            <input
+                                type="number"
+                                value={props.summaryCharLimit ?? 1000}
+                                onChange={e => props.onUpdateSummaryCharLimit?.(Number(e.target.value))}
+                                aria-label="Summary character limit"
+                                className="w-24 rounded-control border border-white/[0.08] bg-zinc-900 px-3 py-1.5 text-right font-mono text-xs text-zinc-200 focus:border-cyan-500 focus:outline-none"
+                                min={200}
+                                max={5000}
+                                step={100}
+                            />
+                        }
+                    />
+                )}
+            </SettingsGroup>
+        </div>
+    );
+};
+
+export default JournalTab;

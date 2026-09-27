@@ -28,7 +28,6 @@ import { backtestSimilarSetups, type LiveBacktestResult } from '../services/back
 import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperService';
 
 // Utils
-import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, parsePrice } from '../utils/analysisUtils';
 import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
@@ -37,7 +36,7 @@ import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
-import { buildModelIdToName, chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
+import { chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
@@ -46,6 +45,9 @@ import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
 import { finalizeVerdict } from './analysisPipeline/verdictFinalizer';
+import { buildAutoplaySpeakerRegex, parseAutoplayTranscriptChunk } from './analysisPipeline/autoplayParser';
+import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
+import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
 import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
 
 // ─── Dev-only logging ─────────────────────────────────────────────────────
@@ -53,12 +55,6 @@ import type { PredicateGateResult } from '../services/learning/skillPredicateGat
 // stay clean. console.error / console.warn are kept unconditionally (genuine
 // faults must always surface).
 const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) console.log(...args); };
-
-// ─── Trader Notebook quick-save intent ────────────────────────────────────
-// "Save this to the notebook / write it down in my memory / add this to my
-// notes" — anchored on a memory noun so plain phrases ("note that…",
-// "remember to…") never hijack a normal analysis.
-const NOTEBOOK_SAVE_PATTERN = /\b(save|store|write|add|log|remember|record|put)\b[^\n]{0,60}\b(notebook|memory|journal|diary|notes?)\b|\b(notebook|memory|journal|diary|notes?)\b[^\n]{0,60}\b(save|store|write|add|log|remember|record|put)\b/i;
 
 // Ensemble openings launch each seat this many ms apart. Free-tier gateways
 // dedupe/cache CONCURRENT near-identical requests (the three openings share
@@ -75,13 +71,11 @@ const HYBRID_REUSE_MAX_AGE_MS = 60_000;
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { writeModelNote, extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
+import { extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { threadForProvider } from '../utils/agentThreads';
-import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
-import { toolActionStamp } from '../utils/toolActions';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
@@ -96,7 +90,6 @@ import { applyReplyTo } from '../utils/debateReplyTo';
 import { parseProvisionalVerdict, parsePartialVerdictFields } from '../utils/provisionalVerdict';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
-import { parseStructuredAutoplayTranscript } from '../utils/debateTranscript';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { withFinComMetadata } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
@@ -870,59 +863,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // analysis, just the notebook write + a confirmation message. The
         // model reads the current notebook index and decides skip / append /
         // create (see writeNotebookNoteFromRequest).
-        if (!isAutomationRun && NOTEBOOK_SAVE_PATTERN.test(effectiveInput)) {
-            const provider = memoryConfig || enabledProviders[0]?.config;
-            try {
-                setLoadingMessage('Writing to your notebook…');
-                const username = getActiveUsername();
-                // Give the model something concrete to write about: the most
-                // recent analysis card in this conversation, if any.
-                let notebookContext = '';
-                for (let i = messagesRef.current.length - 1; i >= 0; i--) {
-                    const a = messagesRef.current[i].analysis;
-                    if (a) {
-                        notebookContext = `${a.coinName ?? '?'} ${a.direction ?? '?'} ${a.confidence ?? ''} — ${(a.strategy ?? '').slice(0, 400)}`;
-                        break;
-                    }
-                }
-                const note = provider ? await writeNotebookNoteFromRequest(effectiveInput, notebookContext, provider) : null;
-                const notebookMsgId = `notebook-${Date.now()}`;
-                if (note) {
-                    const file = await writeModelNote(note, username);
-                    updateMessages(prev => [...prev, {
-                        id: notebookMsgId,
-                        role: MessageRole.AI,
-                        text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Memory**.`,
-                        createdAt: new Date().toISOString(),
-                        isDebating: false,
-                        // status row for the model-authored write.
-                        toolActions: [{
-                            at: toolActionStamp(), speaker: 'Coach', tool: 'notebook_note', ok: true,
-                            verb: note.decision === 'append' ? 'appended' : 'created',
-                            label: `${note.folder}/${file.name}`, review: 'Settings → Memory',
-                        }],
-                    }], activeConversationId);
-                } else {
-                    updateMessages(prev => [...prev, {
-                        id: notebookMsgId,
-                        role: MessageRole.AI,
-                        text: `📓 **Notebook: nothing written** — the model found this already covered (or nothing concrete to save). You can still add it manually in **Settings → Memory**.`,
-                        createdAt: new Date().toISOString(),
-                        isDebating: false,
-                    }], activeConversationId);
-                }
-            } catch (quickSaveError) {
-                console.error('[TraderNotebook] Quick-save failed:', quickSaveError);
-                updateMessages(prev => [...prev, {
-                    id: `notebook-err-${Date.now()}`,
-                    role: MessageRole.AI,
-                    text: `📓 **Notebook write failed** — ${(quickSaveError as Error)?.message ?? 'unknown error'}. The diary keeps recording trades automatically; this manual save did not go through.`,
-                    createdAt: new Date().toISOString(),
-                    isDebating: false,
-                }], activeConversationId);
-            } finally {
-                setLoadingMessage(null);
-            }
+        if (!isAutomationRun && isNotebookQuickSaveRequest(effectiveInput)) {
+            await runNotebookQuickSave(effectiveInput, {
+                provider: memoryConfig || enabledProviders[0]?.config,
+                setLoadingMessage,
+                messagesRef,
+                updateMessages,
+                activeConversationId,
+            });
             // The notebook quick-save completed (or reported its own failure
             // in-chat) — this was never an analysis run; consume it.
             return { ok: true };
@@ -2716,139 +2664,17 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     }
 
                     let fullResponseText = '';
-                    // Peel thinking out of a turn BEFORE sanitizing —
-                    // sanitizeAIResponseLight strips <think> tags but keeps
-                    // their bodies, so the split must run first. Used by the
-                    // accuracy-mode autoplay path (the standard path uses
-                    // peelDebateTurn, which also merges streamed CoT).
-                    const peelRawTurn = (raw: string): { text: string; reasoning?: string } => {
-                        const split = splitThinkingFromOutput('', raw);
-                        return {
-                            text: sanitizeAIResponseLight(split.output),
-                            reasoning: split.thinking || undefined,
-                        };
-                    };
                     if (runAccuracyMode) {
                         // ACCURACY MODE — the moderator autoplays the whole
                         // simulated transcript as one stream; parse `Speaker:`
                         // lines out of it with the established regex.
-                        // Updated regex to include Puter model names (Claude, GPT, Grok, etc.) and OpenRouter
-                        const assignedRoleNames = enabledProviders.map(provider => provider.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-                        const speakerNames = [...new Set([
-                            ...assignedRoleNames,
-                            'Gemini', 'DeepSeek', 'Zhipu', 'Groq', 'Groq \\(Alt\\)', 'Groq \\(Alt 2\\)', 'OpenRouter',
-                            'Moderator', 'Master Strategist', 'Claude[^:]*', 'GPT[^:]*', 'Grok[^:]*', 'Mistral[^:]*',
-                            'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'Puter[^:]*'
-                        ])].sort((a, b) => b.length - a.length);
-                        const speakerPattern = speakerNames.join('|');
-                        const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
+                        const turnRegex = buildAutoplaySpeakerRegex(enabledProviders.map(provider => provider.name));
 
                         for await (const chunk of debateStream as AsyncGenerator<string, void, unknown>) {
                             if (!isCurrentRequest()) assertCurrentRequest();
                             fullResponseText += chunk;
 
-                            const startTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?DEBATE_START(?:>|>\*\*|`|\*\* >|>\*_)*/i;
-                            const endTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?\/?(?:DEBATE_END|\/DEBATE_START)(?:>|>\*\*|`|\*\* >|>\*_)*/i;
-
-                            const startMatch = fullResponseText.match(startTagRegex);
-                            let debateContent = '';
-                            let synthesisContent = '';
-
-                            if (startMatch) {
-                                const startIndex = startMatch.index! + startMatch[0].length;
-                                const endMatch = fullResponseText.slice(startIndex).match(endTagRegex);
-                                if (endMatch) {
-                                    debateContent = fullResponseText.slice(startIndex, startIndex + endMatch.index!);
-                                    const endTagLength = endMatch[0].length;
-                                    const contentAfterDebate = fullResponseText.slice(startIndex + endMatch.index! + endTagLength);
-                                    const jsonStart = contentAfterDebate.match(/<JSON_PLAN>|```json/i);
-                                    if (jsonStart) {
-                                        synthesisContent = contentAfterDebate.substring(0, jsonStart.index).trim();
-                                    } else {
-                                        synthesisContent = contentAfterDebate.trim();
-                                    }
-                                } else {
-                                    debateContent = fullResponseText.slice(startIndex);
-                                }
-                            } else {
-                                if (/(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Moderator|Master Strategist).*:/.test(fullResponseText)) {
-                                    const jsonStart = fullResponseText.match(/<JSON_PLAN>|```json/i);
-                                    if (jsonStart) {
-                                        debateContent = fullResponseText.substring(0, jsonStart.index);
-                                    } else {
-                                        debateContent = fullResponseText;
-                                    }
-                                }
-                            }
-
-                            const currentTurns: DebateTurn[] = [];
-                            const structuredTurns = parseStructuredAutoplayTranscript(debateContent);
-                            const matches = structuredTurns.length > 0
-                                ? []
-                                : [...debateContent.matchAll(turnRegex)];
-                            // Autoplayed transcripts carry no explicit rounds —
-                            // derive them: each moderator turn starts a new
-                            // round, so the messenger chat keeps its round
-                            // separators and the final moderator message gets
-                            // the verdict treatment. Prefix-stable: earlier
-                            // turns never change as the stream grows.
-                            let autoplayRound = 0;
-                            const parsedTurns = structuredTurns.length > 0
-                                ? structuredTurns.map(turn => ({
-                                    speaker: turn.speaker,
-                                    round: turn.round,
-                                    text: turn.text,
-                                }))
-                                : matches.map(m => ({
-                                    speaker: m[1].trim(),
-                                    round: undefined,
-                                    text: m[2].trim(),
-                                }));
-                            for (const parsed of parsedTurns) {
-                                let speaker = parsed.speaker.trim();
-                                if (speaker === "Master Strategist") speaker = "Moderator";
-                                speaker = speaker.charAt(0).toUpperCase() + speaker.slice(1);
-                                if (parsed.round !== undefined) autoplayRound = parsed.round;
-                                else if (speaker === 'Moderator') autoplayRound++;
-                                const peeledTurn = peelRawTurn(parsed.text);
-                                currentTurns.push({
-                                    speaker: speaker as DebateTurn['speaker'],
-                                    round: autoplayRound > 0 ? autoplayRound : undefined,
-                                    text: peeledTurn.text,
-                                    reasoning: peeledTurn.reasoning,
-                                });
-                            }
-
-                            // The moderator's verdict prose sits right before
-                            // </DEBATE_END> (no "Speaker:" prefix), so the turn
-                            // regex can't capture it — surface it as the final
-                            // moderator synthesis instead of dropping it.
-                            if (!synthesisContent && structuredTurns.length > 0) {
-                                const lastTurnEnd = debateContent.toLowerCase().lastIndexOf('</turn>');
-                                const trailing = lastTurnEnd >= 0 ? debateContent.slice(lastTurnEnd + '</turn>'.length) : '';
-                                if (trailing.trim()) {
-                                    synthesisContent = trailing.trim();
-                                }
-                            } else if (!synthesisContent && matches.length > 0) {
-                                const lastMatch = matches[matches.length - 1];
-                                const trailing = debateContent.slice((lastMatch.index ?? 0) + lastMatch[0].length);
-                                if (trailing.trim()) {
-                                    synthesisContent = trailing.trim();
-                                }
-                            }
-
-                            if (synthesisContent) {
-                                const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
-                                const lastTurn = currentTurns[currentTurns.length - 1];
-                                if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
-                                    const peeledSynthesis = peelRawTurn(cleanSynthesis);
-                                    currentTurns.push({ speaker: 'Moderator', round: autoplayRound + 1, text: peeledSynthesis.text, reasoning: peeledSynthesis.reasoning });
-                                }
-                            }
-
-                            // Coalesce per-token updates into one per frame.
-                            // REPLY-TO markers become `to` and leave the display text.
-                            const normalizedTurns = currentTurns.map(applyReplyTo);
+                            const normalizedTurns = parseAutoplayTranscriptChunk(fullResponseText, turnRegex);
                             debateTurnsRef.current = normalizedTurns;
                             throttledDebateUpdate(requestConversationId, debateMessageId, normalizedTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
                         }
@@ -3511,41 +3337,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             // Preserve the debate transcript when the debate was interrupted —
             // never wipe a debate that already produced turns. A bare
             // placeholder (no turns yet) is still removed.
-            updateRequestMessages(prev => prev.map(m => {
-                // A live-streaming casual bubble must settle on cancel/error —
-                // keep whatever text already arrived, drop the streaming flag.
-                if (casualMessageId && m.id === casualMessageId) {
-                    if (!m.text.trim()) return null;
-                    return { ...m, isStreaming: false };
-                }
-                if (m.id === ensemblePlaceholder?.id && m.ensembleProgress) {
-                    return {
-                        ...m,
-                        isDebating: false,
-                        activeDebateSpeakers: {},
-                        liveToolEvents: undefined,
-                        text: cancelled ? 'The analysis was cancelled.' : 'The ensemble could not continue before the debate started.',
-                        ensembleProgress: {
-                            ...m.ensembleProgress,
-                            moderator: { status: 'error', error: cancelled ? 'Cancelled by user.' : 'The ensemble could not continue before the debate started.' },
-                        },
-                    };
-                }
-                if (!m.isDebating) return m;
-                if ((m.debateTurns?.length ?? 0) === 0) return null;
-                return {
-                    ...m,
-                    isDebating: false,
-                    activeDebateSpeakers: {},
-                    liveToolEvents: undefined,
-                    replacementOffer: undefined,
-                    // An interrupted verdict may be incomplete — never leave a
-                    // provisional card standing in for a final one.
-                    provisionalAnalysis: undefined,
-                    provisionalPlanFields: undefined,
-                    text: cancelled ? 'The analysis was cancelled.' : 'The debate was interrupted by an error before the moderator could issue a final verdict.',
-                };
-            }).filter((m): m is Message => m !== null));
+            updateRequestMessages(prev => mapRunFailureMessages(prev, { cancelled, casualMessageId, ensemblePlaceholder }));
 
             // User cancels / stale runs get no error bubbles. A deliberate
             // Stop (or a superseded run) is NOT a retryable failure —
@@ -3553,9 +3345,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             // the user with a backoff retry.
             if (cancelled) return { ok: true };
 
+            const failureKind = classifyRunFailure(error);
             // Rate limits first — isQuotaError also claims status === 429, so
             // the dedicated rate-limit path below was previously unreachable.
-            if (error.status === 429 || (error.message && error.message.includes('Too Many Requests'))) {
+            if (failureKind === 'rate-limit') {
                 setIsRateLimited(true);
                 // Auto-clear after a backoff so a later run isn't blocked
                 // forever (the old reset sat behind an early-return guard).
@@ -3571,14 +3364,8 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                 return { ok: false };
             }
 
-            if (isQuotaError(error)) {
-                const quotaModelNames = buildModelIdToName(providerConfigs);
-                let flaggedModel = '';
-                enabledProviders.forEach(p => {
-                    if (error.message.toLowerCase().includes(p.name.toLowerCase()) || error.model === p.model) {
-                        flaggedModel = quotaModelNames[p.model] || p.model;
-                    }
-                });
+            if (failureKind === 'quota') {
+                const flaggedModel = resolveQuotaFlaggedModel(error, providerConfigs, enabledProviders);
                 updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: `Model "${flaggedModel || 'an enabled AI'}" has exceeded its usage quota.` }]);
                 return { ok: false };
             }
@@ -3589,6 +3376,8 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             // username is passed EXPLICITLY at the enqueue site so the item's
             // profile stamp never depends on the queue module's marker being
             // fresh — processQueue replays only the active user's items.
+            // (Kept inline: tests/offlineQueueCompletion.test.ts pins this
+            // enqueue site's shape by source contract.)
             if (typeof navigator !== 'undefined' && !navigator.onLine) {
                 try {
                     await offlineQueue.add({ type: 'analysis', username: getActiveUsername(), payload: { prompt: effectiveInput, images: imagesToUse.map(img => img.dataURL) } });
@@ -3603,8 +3392,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
             // Sanitize the fallback: never leak long key-like tokens (API keys)
             // and cap length so internal SDK errors stay readable but bounded.
-            const rawMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            const safeMessage = rawMessage.replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***').slice(0, 500);
+            const safeMessage = sanitizeFallbackErrorMessage(error instanceof Error ? error.message : "An unknown error occurred.");
             // retryOf lets the error bubble rebuild the exact prompt + charts
             // (the send cleared the composer immediately, so a failure left
             // the user with no way to re-run the same setup).

@@ -25,7 +25,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 
-const panelSrc = readFileSync('components/trade/TradeChatPanel.tsx', 'utf8');
+// The dock's solo-bot settle moved into the chat orchestrator
+// (services/trade/chatTurnRunner.ts, extracted from TradeChatPanel);
+// the contract follows the code that now owns it.
+const panelSrc = readFileSync('services/trade/chatTurnRunner.ts', 'utf8');
 const mailboxSrc = readFileSync('hooks/useBotMailbox.ts', 'utf8');
 const groupsSrc = readFileSync('hooks/useAgentGroups.ts', 'utf8');
 const automationsSrc = readFileSync('hooks/useAutomations.ts', 'utf8');
