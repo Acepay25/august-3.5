@@ -691,7 +691,28 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // ensemble toggle is off.
         const runEnsembleEnabled = isAutomationRun || isEnsembleEnabled;
 
-        const isSummarizing = images.some(img => img.isLoading);
+        // ── Composer + hybrid snapshots ──────────────────────────────────
+        // These three used to be dependencies of this callback, which is the
+        // wrong shape twice over: `input` and `images` change on every
+        // keystroke and attachment, and `currentHybridData` changes on every
+        // hybrid stream frame, so the function identity churned continuously
+        // and took every downstream memo and effect down with it.
+        //
+        // Snapshotted HERE, at the top of the send, rather than read through a
+        // ref (the `composerModeRef` precedent). A ref would be correct for the
+        // composer — it is read before any await — and WRONG for
+        // `currentHybridData`, which is read at the hybrid-reuse decision and
+        // again in the pipeline call, both of which sit AFTER the
+        // `runNotebookQuickSave` await. A ref there would swap the packet
+        // captured when the trader pressed send for whatever the stream had
+        // produced by then, quietly changing which market data reaches the
+        // models. A local captures at exactly the moment the old closure did,
+        // so this is behaviour-identical and the dep array gets smaller.
+        const composerInput = input;
+        const composerImages = images;
+        const hybridAtSend = currentHybridData;
+
+        const isSummarizing = composerImages.some(img => img.isLoading);
 
         if (isAnalysisInProgress || analysisInFlightRef.current) {
             // Drafting stays enabled during a run, but a send attempt while a
@@ -704,7 +725,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // (see the drain effect). Automation runs skip queueing — the
             // scheduler checks the in-flight state itself before firing.
             if (!isAutomationRun) {
-                const draft = typeof customPrompt === 'string' ? customPrompt : input;
+                const draft = typeof customPrompt === 'string' ? customPrompt : composerInput;
                 if (draft.trim()) {
                     const intent = parseComposerIntent(draft.trim());
                     steeringQueueRef.current = [...steeringQueueRef.current, formatComposerSteer(intent) || draft.trim()];
@@ -777,8 +798,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
             effectiveInput = customPrompt;
-        } else if (typeof input === 'string') {
-            effectiveInput = input;
+        } else if (typeof composerInput === 'string') {
+            effectiveInput = composerInput;
         }
         // Debate template marker ([[Scalp check]] etc.) — extract before the
         // composer-intent parse so the marker never reaches the models.
@@ -806,7 +827,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ? (messagesRef.current.find(m => m.id === options.followUpFromMessageId)
                 || messages.find(m => m.id === options.followUpFromMessageId))
             : undefined;
-        const imagesToUse = followSource ? [] : (customImages || images);
+        const imagesToUse = followSource ? [] : (customImages || composerImages);
 
         // Nothing ran: a live loading/summarize state, a rate-limit flag, or
         // an empty payload. A replay hitting this must stay queued (the
@@ -1080,15 +1101,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // asking a question that names no coin must analyse what the user
         // selected rather than fetching nothing.
         const detectedSymbol = extractSymbolFromPrompt(effectiveInput) ?? options?.symbol ?? null;
-        const cachedHybridAgeMs = currentHybridData
-            ? Date.now() - new Date(currentHybridData.dataTimestamp).getTime()
+        const cachedHybridAgeMs = hybridAtSend
+            ? Date.now() - new Date(hybridAtSend.dataTimestamp).getTime()
             : Number.POSITIVE_INFINITY;
-        const cachedHybridData = currentHybridData
+        const cachedHybridData = hybridAtSend
             && detectedSymbol
-            && currentHybridData.symbol === detectedSymbol
+            && hybridAtSend.symbol === detectedSymbol
             && Number.isFinite(cachedHybridAgeMs)
             && cachedHybridAgeMs <= HYBRID_REUSE_MAX_AGE_MS
-            ? currentHybridData
+            ? hybridAtSend
             : null;
         // Hybrid intelligence: automation runs ALWAYS fetch real-time market
         // data (that data IS the point of an automated analysis) — the
@@ -1521,7 +1542,10 @@ ${reflectionBlock}`
                         priorMessageId: options.priorMessageId,
                     } : undefined,
                     freshHybridData,
-                    currentHybridData,
+                    // The send-time snapshot, under the context's own field
+                    // name — the shape is shared with other callers that read
+                    // live state, so only the VALUE here is snapshotted.
+                    currentHybridData: hybridAtSend,
                     bayesianConfidenceCap,
                     loggedTrades,
                     sessionLoggedTrades: loggedTradesRef.current,
@@ -3435,7 +3459,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             // sees a replaced controller and skips this cleanup — the new run
             // owns the state from there on.
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
+    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {
