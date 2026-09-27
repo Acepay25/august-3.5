@@ -91,15 +91,6 @@ export const FAMILY_UI_DATA = [
 ];
 
 /**
- * Human-readable labels for each role (used in UI and debate transcript)
- */
-export const ENSEMBLE_ROLE_LABELS: Record<string, string> = {
-   technical_structure: ' Technical Structure',
-   market_context: ' Market Context',
-   risk_management: ' Risk Management'
-};
-
-/**
  * Maps roles to specific rules that should be injected.
  * Only role-relevant rules are injected to avoid information overload.
  */

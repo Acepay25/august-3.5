@@ -497,22 +497,3 @@ export const getSessionContext = (): SessionContext => {
     }
 };
 
-/**
- * Generate human-readable session summary for AI context
- */
-export const generateSessionSummary = (context: SessionContext): string => {
-    const warningsText = context.warnings.length > 0
-        ? `\n- Warnings: ${context.warnings.join('; ')}`
-        : '';
-
-    return `
-📅 **SESSION CONTEXT:**
-- Current: ${context.sessionName}
-- Session Time: ${context.sessionStart} - ${context.sessionEnd} UTC
-- Time in Session: ${context.minutesIntoSession} min | Until End: ${context.minutesToSessionEnd} min
-- Kill Zone Active: ${context.isKillZone ? `YES (${context.killZoneType})` : 'No'}
-- Volatility Expectation: ${context.volatilityExpectation.toUpperCase()}
-- Trading Condition: ${context.suggestedAction.toUpperCase()}
-- Day: ${context.dayOfWeek}${context.isWeekend ? ' (WEEKEND)' : ''}${warningsText}
-`.trim();
-};

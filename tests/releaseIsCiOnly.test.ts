@@ -26,6 +26,7 @@ import { execFileSync } from 'child_process';
 const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string; scripts: Record<string, string> };
 const scripts = pkg.scripts;
 const releaseSrc = readFileSync('.github/workflows/release.yml', 'utf8');
+const gateIndex = () => releaseSrc.indexOf('verify-release-signature.cjs');
 
 describe('releases are built by CI only', () => {
     it('no npm script can publish', () => {
@@ -88,7 +89,7 @@ describe('the release workflow is the builder', () => {
     });
 
     it('publishes only after the gates', () => {
-        const publish = releaseSrc.indexOf('--publish always');
+        const publish = releaseSrc.indexOf('gh release upload');
         expect(publish).toBeGreaterThan(-1);
         // The signature gate must come BEFORE the publish step, or the gate is
         // decoration.
@@ -100,6 +101,32 @@ describe('the release workflow is the builder', () => {
         const smoke = releaseSrc.indexOf('installer-smoke');
         expect(smoke).toBeGreaterThan(-1);
         expect(smoke).toBeLessThan(publish);
+    });
+
+    it('publishes the artifact the signature gate verified — no rebuild in between', () => {
+        // The gate used to judge build A while `--publish always` shipped a
+        // freshly rebuilt build B, so the signature check never described the
+        // bytes users downloaded. No step may run the builder after the gate.
+        const after = releaseSrc.slice(gateIndex());
+        const rebuilds = after
+            .split('\n')
+            .filter(line => /^\s*(npx\s+)?electron-builder\b/.test(line));
+        expect(rebuilds, `a rebuild runs after the signature gate: ${rebuilds.join(' ')}`).toEqual([]);
+        // And no `electron-builder --publish` anywhere: publishing is an
+        // upload of the verified files, the only way to ship the exact bytes
+        // the gate read.
+        expect(releaseSrc).not.toMatch(/--publish always/);
+    });
+
+    it('cannot publish before the signature check (no token on the pre-gate build)', () => {
+        expect(releaseSrc).toMatch(/--publish never/);
+        // GH_TOKEN is explicitly cleared inside the pre-gate build step, so
+        // even a future electron-builder default cannot reach the network.
+        expect(releaseSrc).toMatch(/\$env:GH_TOKEN = ''/);
+        // And the only step that is GIVEN a token is the post-gate upload.
+        const token = releaseSrc.indexOf('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+        expect(token).toBeGreaterThan(-1);
+        expect(token).toBeGreaterThan(gateIndex());
     });
 
     it('checks the tag against package.json before anything expensive', () => {

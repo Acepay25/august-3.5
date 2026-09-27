@@ -35,8 +35,6 @@ import { getRegimeSummary, listLedgerCoins } from './regimeLedger';
 const DOCTRINE_EVERY_N_TRADES = 15;
 /** How many recent closed trades the rewrite sees (older evidence is already distilled). */
 const DOCTRINE_WINDOW_TRADES = 60;
-/** Max share of existing doctrine bullets the rewrite may drop per pass. */
-export const DOCTRINE_MAX_REVISE_SHARE = 1 / 3;
 /** Hard cap on doctrine length — it is injected on every analysis. */
 const MAX_DOCTRINE_CHARS = 1800;
 /** Per-lens notebook budget fed to the doctrine rewriter (each of 3 seats). */

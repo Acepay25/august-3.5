@@ -4,7 +4,7 @@ import { ImageMetadata, Message } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import ImagePreview from '../shared/ImagePreview';
 import { UploadIcon, LoadingIcon, UpdateIcon } from '../shared/Icons';
-import { processImagesForSummarization } from '../../utils/imageProcessor';
+import { processImagesForSummarization } from '../../services/providers/imageProcessor';
 
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';

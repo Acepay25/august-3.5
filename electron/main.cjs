@@ -155,27 +155,17 @@ const activeProviderRequests = new Map();
 // PROVIDER TRANSPORT — main-process requests avoid renderer CORS restrictions
 // =============================================================================
 
-function normalizeProviderUrl(url) {
-    const parsed = new URL(String(url || '').trim());
-    // HTTPS-only for remote hosts; plain HTTP only for loopback/RFC1918/
-    // link-local — the SAME predicate the renderer + dev proxy use. The old
-    // desktop-only localhost rule rejected saved LAN setups (e.g.
-    // http://192.168.x:11434) that worked fine on web.
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && policy.isPrivateOrLoopbackHost(parsed.hostname))) {
-        throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
-    }
-    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-        throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
-    }
-    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-    for (const suffix of ['/chat/completions', '/messages', '/responses', '/models', '/chat', '/completions']) {
-        if (parsed.pathname.endsWith(suffix)) {
-            parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
-            break;
-        }
-    }
-    return parsed.toString().replace(/\/$/, '');
-}
+/**
+ * Validate + normalize a configured provider baseUrl. The rules live in
+ * shared/providerRequestPolicy.cjs — the SAME module the renderer and the
+ * vite dev proxy use. Desktop used to carry a third inline copy, and the
+ * dev proxy a fourth that stripped only four endpoint path suffixes, so a
+ * baseUrl pasted straight from a provider's docs normalized DIFFERENTLY per
+ * transport (the same saved provider worked on one runtime and 404'd on the
+ * other). The old desktop-only localhost HTTP rule also rejected saved LAN
+ * setups (e.g. http://192.168.x:11434) that worked fine on web.
+ */
+const normalizeProviderUrl = (url) => policy.normalizeProviderUrl(url);
 
 function getDiscoveryCandidateUrls(baseUrl, isGemini, apiKey) {
     if (isGemini) {
@@ -221,54 +211,23 @@ function discoverProviderDetails(config) {
 // Wall-clock budget for one main-process provider request (headers OR body
 // phase), matching the browser's stream budget (STREAM_TIMEOUT_MS 300s).
 const PROVIDER_REQUEST_TIMEOUT_MS = 300000;
-const MAX_REDIRECT_HOPS = 3;
 
 /**
- * net.fetch wrapper with redirect:'manual' + re-validation of EVERY Location
- * hop against the shared provider-URL policy (SSRF). net.fetch follows
- * redirects by default, so the HTTPS+host gate on the configured endpoint
- * only ever checked the INITIAL URL: a malicious/compromised provider could
- * 302 the main process (which has no CORS confinement) to internal or
- * plain-HTTP targets and the body still returned to the renderer. Each hop
- * now passes policy.isSafeProviderTargetUrl, and the chain is capped at
- * MAX_REDIRECT_HOPS.
+ * net.fetch wrapper: redirect:'manual' + re-validation of EVERY Location hop
+ * against the shared provider-URL policy (SSRF). net.fetch follows redirects
+ * by default, so the HTTPS+host gate on the configured endpoint only ever
+ * checked the INITIAL URL: a malicious/compromised provider could 302 the
+ * main process (which has no CORS confinement) to internal or plain-HTTP
+ * targets and the body still returned to the renderer.
+ *
+ * The hop-walking itself now lives in shared/providerRequestPolicy.cjs as
+ * `fetchFollowingSafeRedirects`, because this policy is not desktop-only: the
+ * vite dev proxy used a plain `fetch`, which follows redirects silently, so
+ * the same request was checked against one hop policy on desktop and another
+ * on localhost. The policy is shared; only the fetch implementation differs,
+ * which is why the shared function takes it as a parameter.
  */
-async function fetchUpstream(url, init) {
-    let current = String(url);
-    let method = init?.method || 'GET';
-    let fetchInit = init;
-    for (let hop = 0; ; hop++) {
-        if (!policy.isSafeProviderTargetUrl(current)) {
-            throw new Error('Provider request blocked: the target URL failed the provider URL policy.');
-        }
-        const response = await net.fetch(current, { ...fetchInit, redirect: 'manual' });
-        const status = response.status;
-        if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
-            const location = response.headers.get('location');
-            try { if (response.body?.cancel) await response.body.cancel(); } catch { /* already consumed */ }
-            if (!location) return response; // redirect without Location: surface the status as-is
-            if (hop >= MAX_REDIRECT_HOPS) throw new Error('Provider request exceeded the redirect limit.');
-            try {
-                current = new URL(location, current).toString();
-            } catch {
-                throw new Error('Provider request blocked: redirect target is not a valid URL.');
-            }
-            if ((status === 301 || status === 302 || status === 303) && method !== 'GET' && method !== 'HEAD') {
-                // fetch spec: 301/302/303 ALL rewrite a POST into a bodyless
-                // GET (303 unconditionally; 301/302 in every real client and
-                // in both the web fetch and Node's proxy transports). The old
-                // 303-only handling re-POSTed the body after a 301/302 — a
-                // double-submit class bug and a divergence from the web/proxy
-                // paths. 307/308 by contrast MUST repeat the method + body.
-                method = 'GET';
-                fetchInit = { ...fetchInit, method: 'GET' };
-                delete fetchInit.body;
-            }
-            continue;
-        }
-        return response;
-    }
-}
+const fetchUpstream = (url, init) => policy.fetchFollowingSafeRedirects(net.fetch, url, init);
 
 async function sendDiscoverRequest(config) {
     const { urls, headers } = discoverProviderDetails(config);
@@ -666,6 +625,21 @@ async function consumeProviderStream(response, request, sender) {
             const out = parser.push(chunkText);
             out.events.forEach(emit);
             if (out.done) { terminal = true; break; }
+        }
+        if (!terminal) {
+            // Trailing decode() with no `{stream:true}`: TextDecoder holds back
+            // an INCOMPLETE multi-byte sequence at the end of the body. Any
+            // final character whose bytes straddled the last chunk boundary (a
+            // 3-byte '€', an emoji — very common as the last character of a
+            // model reply) stayed in the decoder's buffer and was never pushed
+            // to the parser, so the painted text and the accumulated answer
+            // were both missing it. Flushing here is what makes the last
+            // character appear; parser.finish() below still runs either way.
+            const tail = decoder.decode();
+            if (tail) {
+                raw += tail;
+                parser.push(tail).events.forEach(emit);
+            }
         }
     } finally {
         try { await reader.cancel(); } catch { /* already closed */ }

@@ -201,6 +201,7 @@ export const canShare = async (): Promise<boolean> => {
 import { getAllKeys, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './PreferencesService';
 import { ProviderConfig } from '../../types/provider';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
+import { saveProviderConfigs } from './ProviderConfigService';
 
 const redactPreferenceValue = (key: string, value: unknown): unknown => {
     if (key === FORGED_TOOLS_PREF_KEY) return redactForgedTools(value);
@@ -631,7 +632,21 @@ export const importPreferencesData = async (
             if (key === PREF_KEYS.PROVIDER_CONFIGS && Array.isArray(value)) {
                 const existing = await getPreferenceObject<ProviderConfig[]>(key) || [];
                 const { merged, dropped, grafted, reentry } = await mergeProviderConfigsForImport(value, existing);
-                await setPreferenceObject(key, merged);
+                // Through ProviderConfigService, NOT a raw setPreferenceObject:
+                // API keys are encrypted at rest on desktop (Electron safeStorage
+                // → OS keychain), and only that service knows the `enc:v1:`
+                // convention. Writing the merged list directly left a restored
+                // backup key in PLAINTEXT in Preferences until some later CRUD
+                // save happened to re-encrypt it — a window in which the live
+                // key sat unencrypted on disk.
+                //
+                // The hardening above is unaffected: `existing` is read raw
+                // (ciphertext), a grafted key therefore IS the live ciphertext,
+                // and saveProviderConfigs' encryptKey passes an already-prefixed
+                // value through untouched; a plaintext key it receives is
+                // encrypted normally. The endpoint-mismatch rules that decide
+                // WHETHER a key survives are unchanged.
+                await saveProviderConfigs(merged);
                 report.keysWritten += 1;
                 report.providersImported = merged.length;
                 report.providersDropped = dropped;

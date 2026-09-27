@@ -5,7 +5,7 @@
  * (`import { BotIcon, CloseIcon } from '../shared/Icons'`) continue to work.
  */
 import React from 'react';
-import { Loader2, Bookmark, type LucideProps } from 'lucide-react';
+import { Loader2, type LucideProps } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Direct re-exports: lucide icon → legacy name
@@ -85,7 +85,3 @@ export const LoadingIcon: React.FC<LucideProps> = (props) => (
   <Loader2 {...props} className={`animate-spin ${props.className ?? ''}`} />
 );
 
-/** Filled/solid bookmark — lucide Bookmark with fill applied. */
-export const BookmarkSolidIcon: React.FC<LucideProps> = (props) => (
-  <Bookmark {...props} fill="currentColor" />
-);

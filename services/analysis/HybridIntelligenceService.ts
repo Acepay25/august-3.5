@@ -92,7 +92,6 @@ import {
 import {
     runSimulation,
     runSimulationAsync,
-    generateMonteCarloPromptInjection,
     MonteCarloResult,
     SimulationConfig
 } from './MonteCarloService';
@@ -1155,30 +1154,6 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
 };
 
 /**
- * Try to extract symbol and fetch hybrid data from a user prompt
- * Returns null if no symbol found or data fetch fails
- */
-export const tryFetchHybridDataFromPrompt = async (
-    prompt: string
-): Promise<{ data: HybridDataPacket; promptInjection: string } | null> => {
-    const symbol = extractSymbolFromPrompt(prompt);
-
-    if (!symbol) {
-        console.log('[HybridIntelligence] No symbol detected in prompt');
-        return null;
-    }
-
-    try {
-        const data = await fetchHybridData(symbol);
-        const promptInjection = generateHybridPromptInjection(data);
-        return { data, promptInjection };
-    } catch (error) {
-        console.error(`[HybridIntelligence] Failed to fetch data for ${symbol}:`, error);
-        return null;
-    }
-};
-
-/**
  * Generate enhanced AI prompt injection with calibration data
  * Includes validation protocol, historical accuracy data, and accuracy enhancement prompts
  * 
@@ -1513,11 +1488,3 @@ const buildMonteCarloConfig = (
             marketRegime: hybridData.regime?.regime
         };
     };
-
-/**
- * Generate Monte Carlo prompt injection for AI context
- * Use this to add simulation results to AI prompts
- */
-export const getMonteCarloInjection = (result: MonteCarloResult): string => {
-    return generateMonteCarloPromptInjection(result);
-};

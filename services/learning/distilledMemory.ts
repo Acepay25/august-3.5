@@ -310,19 +310,6 @@ export const mergeDistilledFact = (incoming: AttributedInsight): AttributedInsig
     return finalFact;
 };
 
-export const deleteDistilledFact = (id: string): Promise<void> =>
-    withNotebookWriteLock(async () => {
-        const username = activeUsername();
-        pendingWrites.delete(id);
-        resetDistilledCache();
-        const folderId = distilledFolderId();
-        if (!folderId) return;
-        const existing = getMemoryFiles().files.find(
-            f => f.folderId === folderId && parseFact(f)?.id === id
-        );
-        if (existing) await deleteMemoryFileUnlocked(existing.id, username);
-    });
-
 /** Test/tooling hook: resolves once every scheduled fact write has landed. */
 export const flushDistilledWrites = (): Promise<void> => withNotebookWriteLock(() => Promise.resolve());
 

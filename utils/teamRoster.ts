@@ -1,9 +1,12 @@
 /**
- * teamRoster — the single source of "who is on the Team". Both the
- * composer's Talk-to count/mention chips and the rail's Team row
- * derive from this, so the team is always the LIVE ensemble
- * configuration (lens roles when lenses are on, otherwise the three
- * configured experts) — never a hardcoded list.
+ * teamRoster — seat SHAPE and render slots for the Team, not the roster
+ * itself. `TEAM_MAX_SEATS` is the live bound the analysis pipeline enforces;
+ * `buildTeamRoster` / `teamSlots` render seat identity for the UI.
+ *
+ * It is NOT the single source of "who is on the Team": that is
+ * services/agents/agentRoster (AgentTeam), which owns the persisted seat
+ * lists the composer's Talk-to chips and the rail's Team row read. These
+ * helpers only shape and cap what that store hands them.
  *
  * Team sends route through the full harness (ensemble debate + hybrid
  * intelligence + trade log + learning memory); this roster describes

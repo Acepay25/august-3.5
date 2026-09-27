@@ -11,7 +11,7 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
-import { setSqliteDb, runExclusiveWrite } from './SqliteServiceHelpers';
+import { setSqliteDb, runExclusiveWrite, WritePermit } from './SqliteServiceHelpers';
 // Dynamic import inside migrateFromIndexedDB would be cleaner, but the
 // thinking store's save path dynamically imports SqliteServiceHelpers — a
 // static import here is safe (no cycle: ThinkingStoreService never imports
@@ -41,7 +41,19 @@ const safeParseJson = (json: string | null | undefined, fallback: any): any => {
 
 // Database configuration
 const DB_NAME = 'futuresai_db';
-const DB_VERSION = 5;
+/**
+ * VERSION PASSED TO createConnection — NOT this app's schema version.
+ *
+ * The real schema is versioned by the `schema_migrations` table below, which
+ * currently gates through v7 (thinking_records.pnlAmount/pnlPercent,
+ * analystLens, …). This number is only the version the SQLite plugin records
+ * on the connection it opens; bumping it does NOT migrate anything and must
+ * NOT be "fixed" to 7 — the plugin treats a version change on an EXISTING
+ * database as an upgrade request and runs its own upgrade path, which knows
+ * nothing about our ALTER TABLE migration list. Schema changes belong in
+ * schema_migrations (add a new runMigrations block there).
+ */
+const PLUGIN_CONNECTION_VERSION = 5;
 
 // SQLite connection singleton
 let sqliteConnection: SQLiteConnection | null = null;
@@ -99,7 +111,7 @@ export const initSqlite = async (): Promise<boolean> => {
                 DB_NAME,
                 false,
                 'no-encryption',
-                DB_VERSION,
+                PLUGIN_CONNECTION_VERSION,
                 false
             );
         }
@@ -531,7 +543,27 @@ const deleteAbsentRows = async (
     }
 };
 
-export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void> => {
+/**
+ * Save a user profile (upsert). ALWAYS takes the write mutex itself — the
+ * BEGIN below cannot nest on the shared connection, so correctness used to
+ * depend on every caller remembering to wrap the call. Callers that already
+ * hold the mutex (dbService's read-modify-write, the IndexedDB migration)
+ * pass the `permit` they were issued, which re-enters inline instead of
+ * deadlocking on the queue they are themselves holding.
+ */
+export const sqliteSaveUserProfile = (
+    profile: UserProfile,
+    permit?: WritePermit,
+): Promise<void> => runExclusiveWrite(
+    () => saveUserProfileUnlocked(profile),
+    permit,
+);
+
+/**
+ * The body of {@link sqliteSaveUserProfile}. MUST be called with the write
+ * mutex held — use the wrapper above, or pass the holder's permit.
+ */
+const saveUserProfileUnlocked = async (profile: UserProfile): Promise<void> => {
     if (!db) throw new Error('Database not initialized');
 
     const now = new Date().toISOString();
@@ -539,8 +571,9 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
     // Wrap all writes in a single transaction for performance.
     // Without this, each INSERT is a separate native-bridge round trip
     // (100 trades + 20 conversations = 120+ sequential awaits).
-    // Callers serialize via runExclusiveWrite (dbService), so BEGIN can no
-    // longer collide with another open transaction on this connection.
+    // The wrapper above holds the write mutex for the whole transaction, so
+    // BEGIN can no longer collide with another open transaction on this
+    // connection.
     await db.execute('BEGIN TRANSACTION');
     let transactionOpen = true;
     try {
@@ -974,11 +1007,11 @@ export const migrateFromIndexedDB = async (
             // Get from IndexedDB
             const profile = await getUserProfile(username);
             if (profile) {
-                // Serialized like every other writer — the migration opens
-                // BEGIN/COMMIT on the shared connection.
-                await runExclusiveWrite(async () => {
-                    await sqliteSaveUserProfile(profile);
-                });
+                // sqliteSaveUserProfile takes the write mutex itself (the
+                // BEGIN/COMMIT runs on the shared connection) — this call site
+                // must NOT wrap it in a second runExclusiveWrite, which would
+                // queue the save behind a lock the migration itself holds.
+                await sqliteSaveUserProfile(profile);
                 totalTrades += profile.tradeLog?.length || 0;
                 console.log(`[SqliteService] Migrated user ${username} with ${profile.tradeLog?.length || 0} trades`);
             }

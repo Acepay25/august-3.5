@@ -65,6 +65,3 @@ export const summarizeChecklist = (
     total: items.length,
 });
 
-/** True when every item was checked — the strict adherence signal. */
-export const checklistFullyDone = (done: number | undefined, total: number | undefined): boolean =>
-    typeof done === 'number' && typeof total === 'number' && total > 0 && done >= total;

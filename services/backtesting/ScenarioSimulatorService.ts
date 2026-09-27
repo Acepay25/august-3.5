@@ -449,24 +449,3 @@ export function extractConfigFromAnalysis(
 // parsePrice imported from utils/analysisUtils — canonical version handles
 // ranges ("3050 - 3060"), "to" ranges, and trailing annotations ("94500 4h").
 
-/**
- * Run complete scenario analysis
- */
-export async function analyzeScenario(
-    config: ScenarioConfig,
-    loggedTrades: LoggedTrade[],
-    runMonteCarlo: boolean = true
-): Promise<ScenarioResult> {
-    const metrics = calculateMetrics(config);
-    const historicalMatches = findHistoricalMatches(config, loggedTrades);
-    const monteCarlo = runMonteCarlo ? await runScenarioMonteCarlo(config) : null;
-    const suggestions = generateSuggestions(config, metrics, historicalMatches);
-
-    return {
-        config,
-        metrics,
-        monteCarlo,
-        historicalMatches,
-        suggestions,
-    };
-}

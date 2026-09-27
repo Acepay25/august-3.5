@@ -782,23 +782,3 @@ const findLastManualAnalysis = async (
     return null;
 };
 
-/** Default analyst + moderator picks: first ready providers' selected models. */
-export const defaultAutomationModels = (providerConfigs: ProviderConfig[]): {
-    analystModels: AutomationModelPick[];
-    moderatorModel: AutomationModelPick;
-} => {
-    const ready = providerConfigs.filter(p => p.isEnabled && p.apiKey.trim().length > 0 && (p.models.length > 0 || !!p.selectedModel));
-    const pick = (index: number): AutomationModelPick | null => {
-        const provider = ready[index % Math.max(1, ready.length)];
-        if (!provider) return null;
-        const modelId = provider.selectedModel || provider.models[0];
-        return modelId ? { providerId: provider.id, modelId } : null;
-    };
-    const analystModels: AutomationModelPick[] = [];
-    for (let i = 0; i < Math.min(3, Math.max(1, ready.length)); i++) {
-        const p = pick(i);
-        if (p && !analystModels.some(m => m.providerId === p.providerId && m.modelId === p.modelId)) analystModels.push(p);
-    }
-    const moderator = pick(0) ?? analystModels[0] ?? { providerId: '', modelId: '' };
-    return { analystModels, moderatorModel: moderator };
-};

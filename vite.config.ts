@@ -14,7 +14,9 @@ import {
 import {
   anthropicThinkingFields,
   geminiThinkingParams,
-  isPrivateOrLoopbackHost,
+  isLocalBaseUrl,
+  normalizeProviderUrl,
+  fetchFollowingSafeRedirects,
 } from './shared/providerRequestPolicy.cjs';
 
 // shared/providerRequestPolicy.cjs is the single wire-policy source for the
@@ -36,6 +38,7 @@ const SHARED_POLICY_EXPORTS = [
   'httpAllowedForHost',
   'isSafeProviderTargetUrl',
   'isLocalBaseUrl',
+  'normalizeProviderUrl',
   'EXTENDED_THINKING_MODEL_RE',
   'MIN_EFFECTIVE_THINKING_TOKENS',
   'ANTHROPIC_DEFAULT_TEMPERATURE',
@@ -74,25 +77,13 @@ function devProviderProxy() {
           for await (const chunk of req) chunks.push(Buffer.from(chunk));
           const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
           const config = request?.config || {};
-          const parsed = new URL(String(config.baseUrl || '').trim());
-          // HTTPS by default; plain HTTP only for loopback / RFC1918 / link-local
-          // hosts (Ollama & friends on the LAN) — the SAME predicate the
-          // renderer's providerUrlValidation and electron/main.cjs now use
-          // (shared/providerRequestPolicy.cjs is the single source).
-          if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isPrivateOrLoopbackHost(parsed.hostname))) {
-            throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
-          }
-          if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-            throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
-          }
-          parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-          for (const suffix of ['/chat/completions', '/messages', '/responses', '/models']) {
-            if (parsed.pathname.endsWith(suffix)) {
-              parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
-              break;
-            }
-          }
-          const baseUrl = parsed.toString().replace(/\/$/, '');
+          // Base-URL policy is the SHARED one (HTTPS/private-LAN host rule, no
+          // credentials/query/fragment, endpoint-path suffix stripped). The
+          // proxy used to carry its own copy, which stripped only FOUR path
+          // suffixes where the desktop stripped six — so the same saved
+          // provider normalized differently per transport and worked on one
+          // runtime and not the other.
+          const baseUrl = normalizeProviderUrl(config?.baseUrl);
           const apiKey = String(config.apiKey || '').trim();
           if (request.discover) {
             const isGemini = usesGoogleGeminiDiscovery(baseUrl, config.apiFormat);
@@ -118,7 +109,7 @@ function devProviderProxy() {
               } else {
                 candidateUrls.push(`${baseUrl}/v1/models`);
               }
-              if (isPrivateOrLoopbackHost(parsed.hostname)) {
+              if (isLocalBaseUrl(baseUrl)) {
                 candidateUrls.push(`${baseUrl.replace(/\/v1$/, '')}/api/tags`);
               }
             }
@@ -129,7 +120,7 @@ function devProviderProxy() {
 
             for (const discoverUrl of [...new Set(candidateUrls)]) {
               try {
-                const upstream = await fetch(discoverUrl, {
+                const upstream = await fetchFollowingSafeRedirects(fetch, discoverUrl, {
                   method: 'GET',
                   headers: discoverHeaders,
                   signal: AbortSignal.timeout(15000),
@@ -267,14 +258,14 @@ function devProviderProxy() {
           // headers, e.g. opencode). The renderer parses the SSE events.
           if (request.stream) {
             const streamBody: Record<string, unknown> = { ...body, stream: true, stream_options: { include_usage: true } };
-            let sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(streamBody), signal: AbortSignal.timeout(300000) });
+            let sse = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(streamBody), signal: AbortSignal.timeout(300000) });
             if (!sse.ok && (request.jsonMode || request.jsonSchema) && (sse.status === 400 || sse.status === 422) && streamBody.response_format) {
               const fallbackBody = { ...streamBody };
               stepDownResponseFormat(fallbackBody, request.jsonMode);
-              sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
+              sse = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
               if (!sse.ok && (sse.status === 400 || sse.status === 422) && fallbackBody.response_format) {
                 delete fallbackBody.response_format;
-                sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
+                sse = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
               }
             }
             if (!sse.ok || !sse.body) {
@@ -311,14 +302,14 @@ function devProviderProxy() {
             res.end();
             return;
           }
-          let upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
+          let upstream = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
           if (!upstream.ok && (request.jsonMode || request.jsonSchema) && (upstream.status === 400 || upstream.status === 422) && body.response_format) {
             const fallbackBody = { ...body };
             stepDownResponseFormat(fallbackBody, request.jsonMode);
-            upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+            upstream = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
             if (!upstream.ok && (upstream.status === 400 || upstream.status === 422) && fallbackBody.response_format) {
               delete fallbackBody.response_format;
-              upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+              upstream = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
             }
           }
           let text = await upstream.text();
@@ -333,7 +324,7 @@ function devProviderProxy() {
               if (!content && !reasoning) {
                 const fallbackBody = { ...body };
                 delete fallbackBody.response_format;
-                upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+                upstream = await fetchFollowingSafeRedirects(fetch, url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
                 text = await upstream.text();
               }
             } catch { /* non-JSON output is handled by the client parser */ }

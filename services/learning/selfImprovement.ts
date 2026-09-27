@@ -378,28 +378,6 @@ export const measureFingerprints = async (
     return revisionProposals;
 };
 
-export const loadLearningMetrics = async (username: string): Promise<{
-    drafts: number;
-    open: number;
-    resolved: number;
-    recurred: number;
-    demoteSuggestions: number;
-}> => {
-    const m = await loadMeasurements(username);
-    const demoteFp = new Set<string>();
-    try {
-        const raw = await getPreferenceObject<string[]>(`${DRAFTS_KEY}:${username}`);
-        (raw ?? []).forEach(k => { if (k.includes('|demote|')) demoteFp.add(k); });
-    } catch { /* ignore */ }
-    return {
-        drafts: m.filter(x => x.skillSlug).length,
-        open: m.filter(x => x.skillSlug && !x.resolvedAt).length,
-        resolved: m.filter(x => x.resolvedAt).length,
-        recurred: m.reduce((s, x) => s + x.recurredAfterInstall, 0),
-        demoteSuggestions: demoteFp.size,
-    };
-};
-
 // ─── The pass: A → B → (judge gate) → D → E ─────────────────────────────────
 
 export interface SelfImprovementResult {
