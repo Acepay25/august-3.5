@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { detectTradingSession } from '../services/validation/ConfidenceCalibrationService';
+import { detectTradingSession } from '../services/validation/calibrationStore';
 import { getEffectiveSessions } from '../services/infrastructure/SessionService';
 
 const iso = (s: string): string => new Date(s).toISOString();

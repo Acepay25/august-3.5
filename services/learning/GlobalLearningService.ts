@@ -5,7 +5,7 @@ import {
     initializeCalibration,
     updateGranularCalibration,
     updateCalibration
-} from '../validation/ConfidenceCalibrationService';
+} from '../validation/calibrationStore';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 
 const LEARNING_STATE_FILE = 'learning_state.json';

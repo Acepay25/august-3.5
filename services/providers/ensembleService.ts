@@ -98,7 +98,8 @@ import {
 import { generateWeightedVotingContext } from '../backtesting/ModelPerformanceService';
 import type { GateOutput } from '../validation/GateKeeperService';
 import GlobalLearningService from '../learning/GlobalLearningService';
-import { getBayesianCalibratedConfidence, ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
+import { getBayesianCalibratedConfidence } from '../validation/calibrationPolicy';
+import { ConfidenceLevel } from '../validation/calibrationStore';
 import { ConfidenceCalibration } from '../../types';
 import { HARNESS_TIMEFRAME_LABEL } from '../../constants/harnessDataContract';
 import {
