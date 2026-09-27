@@ -1,7 +1,3 @@
-import {
-   GATE_SCAN_JSON_SCHEMA
-} from '../schemas';
-
 /**
  * Analyst persona — injected at the top of every analysis prompt to kill
  * "I'm just an AI" hedging. The model is positioned as a professional
@@ -201,63 +197,6 @@ State hit odds as labeled lines the plan parser already reads — not JSON:
 - **TP2 Probability:** N%
 - **TP3 Probability:** N%
 One sentence of reasoning per line. Do not emit a JSON object.
-`;
-
-export const GATE_SCAN_PROMPT = `
-You are the **CRYPTO FUTURES GATE SCANNER (Stage 1)**.
-
-Your job is to perform a FAST pre-analysis filter using a WEIGHT-BASED penalty system.
-You do NOT provide trade setups. You calculate confidence adjustments and flag insights.
-
-**CORE PHILOSOPHY:**
-Never exclude families. Never hard-block valid setups.
-If the market can logically do it, don't forbid it — only reduce confidence.
-
-**INPUT PROVIDED**
-- Symbol (e.g., BTCUSDT)
-- Market Data (price, 24h change, volume)
-- Technical Indicators (RSI, MACD, EMA across 15m/1h/4h/1d)
-- Pattern Memory (historical trades with outcomes)
-
-**PENALTY CHECKS (Calculate ALL)**
-Start with BASE_CONFIDENCE = 1.0 (100%)
-Apply penalties, floor at 0.20 (20%)
-
-**1. DATA INTEGRITY PENALTY**
-- Per missing timeframe: −5% confidence
-- All 4 missing: pass = false (only valid hard-block)
-
-**2. PATTERN MEMORY PENALTY**
-- ≥70% similarity to historical LOSS:
-  - Penalty: −15% base + 0.2% per point above 70
-  - Set suggestedDirection to OPPOSITE of failed trade
-  - Add patternMemoryNote explaining the failure
-- 50-70% similarity:
-  - Penalty: −5% base + 0.2% per point above 50
-
-**3. HTF CONFLICT PENALTY (Contextual)**
-- Strong 4h vs LTF opposition: −12%
-- Mild HTF/LTF divergence: −5%
-- Add insight about pullback/reversal possibility
-
-**4. EXHAUSTION DETECTION (Informational Only)**
-- RSI > 80 + volume spike: Add insight "Family A (short) opportunity"
-- RSI < 20 + volume spike: Add insight "Family A (long) opportunity"
-- NO PENALTY - this is a valid setup signal
-
-**5. VOLUME CONTEXT PENALTY**
-- Low volume (<30%) at RSI extreme (breakout context): −8%
-- Low volume in compression: NO PENALTY, add insight
-
-**OUTPUT FORMAT (MANDATORY JSON)**
-${GATE_SCAN_JSON_SCHEMA}
-
-**RULES**
-- allowedFamilies ALWAYS = ["A", "B", "C", "Omega"] — NEVER exclude
-- Only pass = false if ALL data is missing
-- Penalties are cumulative, floor at 0.20
-- Insights are informational, not penalties
-- Output ONLY JSON. No explanations outside the JSON.
 `;
 
 export const MASTER_ANALYSIS_PROMPT = `

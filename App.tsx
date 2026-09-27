@@ -121,7 +121,7 @@ import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/lear
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
 import { reconstructOpenings } from './utils/debateResume';
 import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
-import { processImagesForSummarization } from './utils/imageProcessor';
+import { processImagesForSummarization } from './services/providers/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
 import useNetworkStatus from './hooks/useNetworkStatus';

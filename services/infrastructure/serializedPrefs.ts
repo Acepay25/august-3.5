@@ -40,5 +40,3 @@ export const withSerializedPref = <T>(key: string, task: () => Promise<T>): Prom
     return run;
 };
 
-/** Test helper / diagnostics: whether a queue currently exists for a key. */
-export const hasSerializedPrefQueue = (key: string): boolean => chains.has(key);
