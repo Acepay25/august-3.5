@@ -303,17 +303,32 @@ const superviseAmendment = async (
         store.setDecision(eventId, { verdict: 'skipped', reason: 'Review did not complete — the amendment stays for the human.', atMs: Date.now() });
         return;
     }
-    if (verdict.action === 'reject') {
-        rejectAmendment(amendment.id);
-    } else {
-        const resolved = approveAmendment(amendment.id);
-        const file = getMemoryFiles().files.find(f => f.id === amendment.fileId);
-        if (resolved && file) {
-            const next = amendment.kind === 'supersede'
-                ? `${file.content}\n\n## Correction (${resolved.resolvedAt})\n\n${amendment.proposedContent}`
-                : amendment.proposedContent;
-            await updateMemoryFile(amendment.fileId, { content: next }, username);
+    // A refused queue write is recorded and rethrown by `memoryAmendments` —
+    // that is what stops a dropped correction being silent. But this is the
+    // middle of a supervisor RUN, and letting it escape would abandon every
+    // remaining item in the queue and leave this one with no decision at all.
+    // So the failure keeps its owner (the health report leads with it) and the
+    // item keeps an honest outcome: still pending, still the human's call.
+    try {
+        if (verdict.action === 'reject') {
+            rejectAmendment(amendment.id);
+        } else {
+            const resolved = approveAmendment(amendment.id);
+            const file = getMemoryFiles().files.find(f => f.id === amendment.fileId);
+            if (resolved && file) {
+                const next = amendment.kind === 'supersede'
+                    ? `${file.content}\n\n## Correction (${resolved.resolvedAt})\n\n${amendment.proposedContent}`
+                    : amendment.proposedContent;
+                await updateMemoryFile(amendment.fileId, { content: next }, username);
+            }
         }
+    } catch (e) {
+        store.setDecision(eventId, {
+            verdict: 'skipped',
+            reason: `Could not save the resolution (${e instanceof Error ? e.message : String(e)}) — the amendment stays for you.`,
+            atMs: Date.now(),
+        });
+        return;
     }
     store.setDecision(eventId, {
         verdict: verdict.action === 'reject' ? 'rejected' : verdict.action === 'enhance' ? 'enhanced' : 'approved',
@@ -440,24 +455,55 @@ let passInFlight = false;
  *  stalled queue with better optics. */
 export const MAX_ITEMS_PER_PASS = 12;
 
-/** The session ceiling the plan asked for (WS-2.4), mirroring
- *  MAX_AUTO_EVALS_PER_SESSION: a pass cap alone is not a budget, because the
- *  debounce + chat nudges can start a fresh 12-call pass indefinitely. A
- *  HUMAN pressing Run bypasses this ceiling — that is an instruction, not the
- *  model spending itself into a corner. */
-export const MAX_ITEMS_PER_SESSION = 40;
-let sessionHandled = 0;
+/** The hourly ceiling the plan asked for as a session cap (WS-2.4): a pass cap
+ *  alone is not a budget, because the debounce + chat nudges can start a fresh
+ *  12-call pass indefinitely. A HUMAN pressing Run bypasses it — that is an
+ *  instruction, not the model spending itself into a corner.
+ *
+ *  It is a WINDOW, not a lifetime total, and that distinction is the whole fix.
+ *  The old `sessionHandled` was a module counter with no reset, so the 40th
+ *  item ever supervised in an app lifetime disabled supervision PERMANENTLY —
+ *  a days-long session stopped learning and reported itself as a spent budget.
+ *  With `useLearningHeartbeat` now waking the loop every 15 minutes, a lifetime
+ *  total would have become a ten-hour fuse. What a cost ceiling is for is
+ *  bounding the RATE of spend; how much has been spent since launch bounds
+ *  nothing a user can act on. */
+export const MAX_ITEMS_PER_HOUR = 40;
+export const SUPERVISION_WINDOW_MS = 60 * 60 * 1000;
+
+/** When each supervised item was taken, inside the current window. Bounded by
+ *  MAX_ITEMS_PER_HOUR in steady state, so it cannot grow without limit. */
+let handledAt: number[] = [];
+
+/** Drop what has aged out, re-anchoring the array so the prune is paid by the
+ *  pass that crossed the boundary rather than by every read after it. */
+const windowedSpend = (now: number): number[] => {
+    const kept = handledAt.filter(t => now - t < SUPERVISION_WINDOW_MS);
+    if (kept.length !== handledAt.length) handledAt = kept;
+    return kept;
+};
+
+const spendInWindow = (): number => windowedSpend(Date.now()).length;
+
+const recordSpend = (): void => {
+    const now = Date.now();
+    windowedSpend(now);
+    handledAt.push(now);
+};
 
 /** What the UI shows so the ceiling is a visible state, not a silent stall. */
-export const getSupervisionSpend = (): { spent: number; sessionCap: number; exhausted: boolean } => ({
-    spent: sessionHandled,
-    sessionCap: MAX_ITEMS_PER_SESSION,
-    exhausted: sessionHandled >= MAX_ITEMS_PER_SESSION,
-});
+export const getSupervisionSpend = (): { spent: number; windowCap: number; exhausted: boolean } => {
+    const spent = spendInWindow();
+    return { spent, windowCap: MAX_ITEMS_PER_HOUR, exhausted: spent >= MAX_ITEMS_PER_HOUR };
+};
 
-/** Test seam: the counter is module state on purpose — it spans every pass in
- *  one app lifetime — so a suite that needs a deterministic number sets it. */
-export const __setSupervisionSpendForTests = (n: number): void => { sessionHandled = n; };
+/** Test seam: the window is module state on purpose — it spans every pass in
+ *  one app lifetime — so a suite that needs a deterministic number seeds it
+ *  with back-dated entries rather than counting forward from zero. */
+export const __setSupervisionSpendForTests = (n: number): void => {
+    const now = Date.now();
+    handledAt = Array.from({ length: n }, (_, i) => now - i * 1000);
+};
 
 /** How many items the supervisor would take if it were unbounded. The four
  *  queues, counted exactly the way the pass walks them — so the UI's "N items
@@ -487,46 +533,46 @@ export const runSupervisorPass = async (username = getActiveUsername(), opts: { 
         store.setModelName(formatModelDisplayName(config.selectedModel));
         let handled = 0;
         let capped = false;
-        let sessionCapped = false;
+        let windowCapped = false;
         /** Stop taking new items once a call budget is spent. An item already
          *  in flight still finishes. */
         const spent = (): boolean => {
             if (handled >= MAX_ITEMS_PER_PASS) { capped = true; return true; }
-            if (!opts.manual && sessionHandled >= MAX_ITEMS_PER_SESSION) { sessionCapped = true; return true; }
+            if (!opts.manual && spendInWindow() >= MAX_ITEMS_PER_HOUR) { windowCapped = true; return true; }
             return false;
         };
         for (const draft of listSkillDrafts(username)) {
             if (controller.signal.aborted || spent()) break;
             await superviseSkillDraft(draft, config, username);
             handled += 1;
-            sessionHandled += 1;
+            recordSpend();
         }
         for (const tool of loadForgedTools().filter(t => t.status === 'candidate')) {
             if (controller.signal.aborted || spent()) break;
             await superviseToolCandidate(tool, config);
             handled += 1;
-            sessionHandled += 1;
+            recordSpend();
         }
         for (const amendment of listAmendments('pending')) {
             if (controller.signal.aborted || spent()) break;
             await superviseAmendment(amendment, config, username);
             handled += 1;
-            sessionHandled += 1;
+            recordSpend();
         }
         for (const proposal of listLearningProposals(username).filter(p => APPLYABLE_PROPOSALS.has(p.kind))) {
             if (controller.signal.aborted || spent()) break;
             await superviseLearningProposal(proposal, config, username);
             handled += 1;
-            sessionHandled += 1;
+            recordSpend();
         }
         const stillWaiting = countPendingSupervision(username);
         store.setPending(stillWaiting);
         if (controller.signal.aborted) {
             store.pushEvent({ phase: 'deciding', text: 'Supervision stopped — remaining items stay for the human.' });
-        } else if (sessionCapped) {
+        } else if (windowCapped) {
             store.pushEvent({
                 phase: 'deciding',
-                text: `Session budget spent (${MAX_ITEMS_PER_SESSION} supervised items) — ${stillWaiting} still queued. Press Run to take more now.`,
+                text: `Hourly budget spent (${MAX_ITEMS_PER_HOUR} supervised items) — ${stillWaiting} still queued. Press Run to take more now.`,
             });
         } else if (capped) {
             store.pushEvent({
@@ -623,8 +669,15 @@ export const overrideVerdict = async (
         if (accepted) retireForgedTool(ev.itemId);
         else approveForgedTool(ev.itemId);
     } else if (ev.itemKind === 'amendment') {
-        if (accepted) rejectAmendment(ev.itemId);
-        else approveAmendment(ev.itemId);
+        // Recorded + rethrown by the store. A failed override must not report
+        // itself as a successful one, and `false` is already what the panel
+        // renders as "nothing changed".
+        try {
+            if (accepted) rejectAmendment(ev.itemId);
+            else approveAmendment(ev.itemId);
+        } catch {
+            return false;
+        }
     } else if (ev.itemKind === 'proposal') {
         if (accepted) return false;
         const queued = ev.itemSnapshot as LearningProposal | undefined;

@@ -183,7 +183,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                 {/* A per-pass call budget means a backlog can legitimately
                     survive a sweep — so the count rides the bar, not a tooltip. */}
                 <span className="ml-auto truncate font-mono text-ui-2xs text-zinc-600"
-                    title={`${spend.spent}/${spend.sessionCap} supervised this session`}
+                    title={`${spend.spent}/${spend.windowCap} supervised in the last hour`}
                     data-testid="supervisor-status">
                     {snap.running
                         ? snap.activity || 'supervising…'

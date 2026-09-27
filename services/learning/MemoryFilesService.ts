@@ -250,8 +250,7 @@ const persist = async (username: string): Promise<void> => {
         recordWriteFailure(e);
         throw e;
     }
-    lastWriteFailure = null;
-    writeFailureStreak = 0;
+    clearMemoryWriteFailure('notebook');
     if (persistSilentDepth === 0) {
         memoryChangeListeners.forEach(handler => handler(owner));
     }
@@ -274,6 +273,20 @@ const persist = async (username: string): Promise<void> => {
  * memory report. Deliberately NOT retried or auto-shrunk — nothing in this
  * store is safe to evict to make room (see the budget's rule).
  */
+/**
+ * Which store refused the write. The notebook blob and the pending-amendment
+ * queue are different keys in the SAME origin, so a quota refusal in either
+ * means the same thing to the user — but the bytes and the name in the report
+ * have to be the ones that actually failed, or the report is describing a
+ * store that was fine.
+ */
+export type MemoryWriteScope = 'notebook' | 'amendments';
+
+export const SCOPE_LABEL: Record<MemoryWriteScope, string> = {
+    notebook: 'notebook',
+    amendments: 'amendment queue',
+};
+
 export interface NotebookWriteFailure {
     atMs: number;
     /** `quota` when the store refused the blob for size — the one the user can
@@ -284,10 +297,15 @@ export interface NotebookWriteFailure {
     bytes: number;
     /** Consecutive failures since the last write that reached disk. */
     streak: number;
+    /** The store that refused. See `MemoryWriteScope`. */
+    scope: MemoryWriteScope;
 }
 
-let lastWriteFailure: NotebookWriteFailure | null = null;
-let writeFailureStreak = 0;
+/** Per-scope, and deliberately not one global: the amendment queue reaching
+ *  disk says nothing about whether the notebook blob did, so a success in one
+ *  must never clear a failure still standing in the other. */
+const writeFailures: Partial<Record<MemoryWriteScope, NotebookWriteFailure>> = {};
+const writeFailureStreaks: Partial<Record<MemoryWriteScope, number>> = {};
 
 /** Refused-for-size is the actionable case, and each engine spells it
  *  differently: the DOMException name on Chromium/WebKit, a message on
@@ -300,27 +318,61 @@ const isQuotaFailure = (e: unknown): boolean => {
     return QUOTA_SIGNATURES.some(s => hay.includes(s));
 };
 
-const recordWriteFailure = (e: unknown): void => {
-    const now = Date.now();
-    writeFailureStreak += 1;
+/**
+ * Record a memory write the storage layer refused, and say which store it was.
+ *
+ * Public because the notebook is not the only store that can silently lose a
+ * write: `memoryAmendments` keeps the pending model-correction queue in its own
+ * localStorage key, and a quota refusal there loses the same thing the notebook
+ * refusal loses — a model-proposed correction the trader never gets to approve.
+ * AGENTS.md forbids a swallow-and-continue around a memory write, and that rule
+ * is about the failure having an owner, not about which key it was written to.
+ *
+ * Recording is NOT the caller's job to forget: it rethrows, so this only ever
+ * adds a record next to an error already on its way up.
+ */
+export const recordMemoryWriteFailure = (e: unknown, scope: MemoryWriteScope, bytes: number): void => {
+    const streak = (writeFailureStreaks[scope] ?? 0) + 1;
+    writeFailureStreaks[scope] = streak;
     const message = e instanceof Error ? e.message : String(e);
-    lastWriteFailure = {
-        atMs: now,
+    const failure: NotebookWriteFailure = {
+        atMs: Date.now(),
         kind: isQuotaFailure(e) ? 'quota' : 'error',
         message: message.slice(0, 200),
-        bytes: notebookSize?.bytes ?? 0,
-        streak: writeFailureStreak,
+        bytes,
+        streak,
+        scope,
     };
+    writeFailures[scope] = failure;
     console.error(
-        `[MemoryFiles] Notebook write FAILED (${lastWriteFailure.kind}, ${lastWriteFailure.streak} in a row)`
+        `[MemoryFiles] ${SCOPE_LABEL[scope]} write FAILED (${failure.kind}, ${streak} in a row)`
         + ` — the trader's memory is NOT being saved:`,
         e,
     );
 };
 
-/** The last notebook write the storage layer refused, or null when writes are
- *  reaching disk (including when nothing has been written yet). */
-export const getNotebookWriteFailure = (): NotebookWriteFailure | null => lastWriteFailure;
+/** This scope reached disk again, so its streak is over. Scoped on purpose. */
+export const clearMemoryWriteFailure = (scope: MemoryWriteScope): void => {
+    delete writeFailures[scope];
+    writeFailureStreaks[scope] = 0;
+};
+
+/** The notebook's own write failure, from `persist`. */
+const recordWriteFailure = (e: unknown): void => {
+    recordMemoryWriteFailure(e, 'notebook', notebookSize?.bytes ?? 0);
+};
+
+/** The most recent memory write any store had refused, or null when writes are
+ *  reaching disk (including when nothing has been written yet). Most recent
+ *  rather than "worst" because the count a user can act on is the one still
+ *  happening; each scope's own streak is preserved in the record it returns. */
+export const getNotebookWriteFailure = (): NotebookWriteFailure | null => {
+    let latest: NotebookWriteFailure | null = null;
+    for (const failure of Object.values(writeFailures)) {
+        if (failure && (!latest || failure.atMs > latest.atMs)) latest = failure;
+    }
+    return latest;
+};
 
 
 /**
