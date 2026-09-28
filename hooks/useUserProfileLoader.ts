@@ -49,7 +49,7 @@ import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
 import { getFirstReadyProvider } from '../utils/providerUtils';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
-import type { Message, Conversation, LoggedTrade, CustomInstructionsMap, AccuracySubMode, TradeSummary } from '../types';
+import type { Message, Conversation, LoggedTrade, CustomInstructionsMap, AccuracySubMode, TradeSummary, UserProfile } from '../types';
 import type { ProviderConfig } from '../types/provider';
 
 export interface UseUserProfileLoaderArgs {
@@ -153,6 +153,102 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
     // captured seq is no longer current, so a superseded load can never
     // stampede the outgoing profile's data into the incoming one's state.
     const loadSeqRef = useRef(0);
+
+    /**
+     * Everything a loaded profile owns, in one place.
+     *
+     * These ~30 writes used to be inline in `loadUserData`, split across a
+     * hundred lines and interleaved with side effects that are NOT profile
+     * application (the weekly/monthly/hygiene passes, the learning-rule
+     * migration, the startup backup). That made two questions impossible to
+     * answer by reading the loader: "what does a profile switch actually
+     * overwrite?" (all of this, plus nothing else) and "which of these runs
+     * before the first await?" (the answer must be none of them — a write
+     * that lands after an await can be stamped onto the NEXT profile, which
+     * is what `loadSeqRef` exists to prevent).
+     *
+     * So this is a pure application step: it reads `profile` and calls
+     * setters, and it returns nothing. Everything sequenced around it — the
+     * scheduled passes, the rule migration, the backup — stays in
+     * `loadUserData`, where the ordering is still visible.
+     */
+    const applyLoadedProfile = useCallback((profile: UserProfile): void => {
+        setSavedAnalyses(profile.savedAnalyses || []);
+        setTradeSummaries((profile.tradeSummaries || []).slice(-MAX_TRADE_SUMMARIES));
+        setFinalTradeSummary(profile.finalTradeSummary || null);
+        setGlobalMemory(profile.globalMemory);
+        setActiveFrameworks(profile.settings?.activeFrameworks || DEFAULT_FRAMEWORKS);
+        setSummaryCharLimit(profile.settings?.summaryCharLimit || 4000);
+
+        const firstReadyProvider = getFirstReadyProvider(providerConfigs);
+        setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
+        setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
+        setVisionModel(profile.settings?.visionModel || '');
+        setUseAlgorithmicSummary(profile.settings?.useAlgorithmicSummary ?? false);
+        setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
+        setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
+        setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? false);
+        setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
+        setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
+
+        // Legacy: `customInstructions` used to be three plain strings and is
+        // now a map of titled entries. One legacy shape, one migration — and
+        // the three branches all end in the same setter, so the default below
+        // is the "nothing stored" answer rather than a fourth case.
+        const loadedInstructions = profile.settings?.customInstructions;
+        const defaultMap: CustomInstructionsMap = { general: [], accuracyOriginal: [], accuracyPure: [] };
+
+        if (loadedInstructions) {
+            if (typeof (loadedInstructions as any).general === 'string') {
+                const legacyGeneral = (loadedInstructions as any).general;
+                const legacyOriginal = (loadedInstructions as any).accuracyOriginal;
+                const legacyPure = (loadedInstructions as any).accuracyPure;
+
+                if (legacyGeneral) defaultMap.general.push({ id: 'migrated-gen', title: 'Legacy General', content: legacyGeneral, isActive: true });
+                if (legacyOriginal) defaultMap.accuracyOriginal.push({ id: 'migrated-orig', title: 'Legacy Accuracy', content: legacyOriginal, isActive: true });
+                if (legacyPure) defaultMap.accuracyPure.push({ id: 'migrated-pure', title: 'Legacy Pure', content: legacyPure, isActive: true });
+
+                setCustomInstructions(defaultMap);
+            } else {
+                setCustomInstructions({
+                    general: loadedInstructions.general || [],
+                    accuracyOriginal: loadedInstructions.accuracyOriginal || [],
+                    accuracyPure: loadedInstructions.accuracyPure || [],
+                });
+            }
+        } else {
+            setCustomInstructions(defaultMap);
+        }
+
+        setIsPlaybookEnabledInPureAI(profile.settings?.isPlaybookEnabledInPureAI ?? false);
+        setIsFamiliesEnabledInPureAI(profile.settings?.isFamiliesEnabledInPureAI ?? false);
+        setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
+        setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
+
+        persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
+        setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
+        setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
+        setIsUpdateAutoCapturing(profile.settings?.isUpdateAutoCapturing ?? false);
+        setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
+        setConfidenceCalibration(profile.settings?.confidenceCalibration);
+
+        const loadedMemoryConfig = providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null;
+        setMemoryConfig(loadedMemoryConfig);
+        setMemoryModel(profile.settings?.memoryModel || loadedMemoryConfig?.selectedModel || getFirstReadyProvider(providerConfigs)?.selectedModel || '');
+
+        setInsightKnowledgeBase(profile.insightKnowledgeBase);
+    }, [
+        providerConfigs, ensembleModelCount, persistedEnsembleModeRef,
+        setSavedAnalyses, setTradeSummaries, setFinalTradeSummary, setGlobalMemory,
+        setActiveFrameworks, setSummaryCharLimit, setSummarizationProvider,
+        setSummarizationModel, setVisionModel, setUseAlgorithmicSummary,
+        setUseAlgorithmicInsights, setIsGlobalMemoryEnabled, setIsStrategiesEnabled,
+        setIsAccuracyModeEnabled, setAccuracySubMode, setCustomInstructions,
+        setIsPlaybookEnabledInPureAI, setIsFamiliesEnabledInPureAI,
+        setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled, setIsEnsembleEnabled,
+        setIsAutoCapturing, setIsUpdateAutoCapturing, setIsEntryNotHitCapturing,
+        setConfidenceCalibration, setMemoryConfig, setMemoryModel, setInsightKnowledgeBase,
+    ]);
 
     const resetAppState = useCallback(async (usernameToSave?: string | null) => {
         handleCancelAnalysis();
@@ -379,66 +475,8 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                     console.warn('[MemoryHygiene] boot pass failed:', e instanceof Error ? e.message : e);
                 });
 
-                setSavedAnalyses(profile.savedAnalyses || []);
-                setTradeSummaries((profile.tradeSummaries || []).slice(-MAX_TRADE_SUMMARIES));
-                setFinalTradeSummary(profile.finalTradeSummary || null);
-                setGlobalMemory(profile.globalMemory);
-                setActiveFrameworks(profile.settings?.activeFrameworks || DEFAULT_FRAMEWORKS);
-                setSummaryCharLimit(profile.settings?.summaryCharLimit || 4000);
-
-                const firstReadyProvider = getFirstReadyProvider(providerConfigs);
-                setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
-                setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
-                setVisionModel(profile.settings?.visionModel || '');
-                setUseAlgorithmicSummary(profile.settings?.useAlgorithmicSummary ?? false);
-                setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
-                setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
-                setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? false);
-                setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
-                setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
-
-                const loadedInstructions = profile.settings?.customInstructions;
-                const defaultMap: CustomInstructionsMap = { general: [], accuracyOriginal: [], accuracyPure: [] };
-
-                if (loadedInstructions) {
-                    if (typeof (loadedInstructions as any).general === 'string') {
-                        const legacyGeneral = (loadedInstructions as any).general;
-                        const legacyOriginal = (loadedInstructions as any).accuracyOriginal;
-                        const legacyPure = (loadedInstructions as any).accuracyPure;
-
-                        if (legacyGeneral) defaultMap.general.push({ id: 'migrated-gen', title: 'Legacy General', content: legacyGeneral, isActive: true });
-                        if (legacyOriginal) defaultMap.accuracyOriginal.push({ id: 'migrated-orig', title: 'Legacy Accuracy', content: legacyOriginal, isActive: true });
-                        if (legacyPure) defaultMap.accuracyPure.push({ id: 'migrated-pure', title: 'Legacy Pure', content: legacyPure, isActive: true });
-
-                        setCustomInstructions(defaultMap);
-                    } else {
-                        setCustomInstructions({
-                            general: loadedInstructions.general || [],
-                            accuracyOriginal: loadedInstructions.accuracyOriginal || [],
-                            accuracyPure: loadedInstructions.accuracyPure || [],
-                        });
-                    }
-                } else {
-                    setCustomInstructions(defaultMap);
-                }
-
-                setIsPlaybookEnabledInPureAI(profile.settings?.isPlaybookEnabledInPureAI ?? false);
-                setIsFamiliesEnabledInPureAI(profile.settings?.isFamiliesEnabledInPureAI ?? false);
-                setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
-                setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
-
-                persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
-                setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
-                setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
-                setIsUpdateAutoCapturing(profile.settings?.isUpdateAutoCapturing ?? false);
-                setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
-                setConfidenceCalibration(profile.settings?.confidenceCalibration);
-
-                const loadedMemoryConfig = providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null;
-                setMemoryConfig(loadedMemoryConfig);
-                setMemoryModel(profile.settings?.memoryModel || loadedMemoryConfig?.selectedModel || getFirstReadyProvider(providerConfigs)?.selectedModel || '');
-
-                setInsightKnowledgeBase(profile.insightKnowledgeBase);
+                // Every profile-owned field, in one call — see applyLoadedProfile.
+                applyLoadedProfile(profile);
 
                 if (profile.learningRules && (profile.learningRules.rules?.length ?? 0) > 0) {
                     const localRules = storageService.loadLearningRules();
@@ -516,23 +554,17 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 + 'Your previous session is unchanged — try again, or restore from a backup in Settings → Data.',
             );        }
     }, [
-        ensembleModelCount, ensembleModelSelection, handleCancelAnalysis,
+        // 31 of these used to be listed individually and are now reached only
+        // through `applyLoadedProfile`, which carries them itself. Listing them
+        // here again would be a comment about an implementation that is one
+        // call away — and would be wrong the day someone moves a setter.
+        applyLoadedProfile,
+        ensembleModelSelection, handleCancelAnalysis,
         handleSetEnsembleModelSelection, handleSetLensConfig,
-        invalidatePostMortemRuns, lensConfig, persistedEnsembleModeRef,
-        providerConfigs, resetAppState, setActiveConversationId,
-        setActiveFrameworks, setActiveUsername, setAccuracySubMode,
-        setAutopilotResolutions, setConfidenceCalibration, setConversationHistory,
-        setCustomInstructions, setFinalTradeSummary, setGlobalMemory,
-        setInsightKnowledgeBase, setIsAccuracyModeEnabled,
-        setIsAutoCapturing, setIsEnsembleEnabled, setIsEntryNotHitCapturing,
-        setIsFamiliesEnabledInPureAI, setIsGlobalMemoryEnabled,
-        setIsHybridIntelligenceEnabled, setIsLoading, setIsMemoryEnabledInPureAI,
-        setIsPlaybookEnabledInPureAI, setIsStrategiesEnabled,
-        setIsUpdateAutoCapturing, setIsUserModalOpen, setLoggedTrades,
-        setMemoryConfig, setMemoryModel, setSavedAnalyses,
-        setSummarizationModel, setSummarizationProvider, setSummaryCharLimit,
-        setTradeSummaries, setUseAlgorithmicInsights, setUseAlgorithmicSummary,
-        setVisionModel, toast, profileReadyRef,
+        invalidatePostMortemRuns, lensConfig,
+        resetAppState, setActiveConversationId, setActiveUsername,
+        setAutopilotResolutions, setConversationHistory, setIsLoading,
+        setIsUserModalOpen, setLoggedTrades, toast, profileReadyRef,
     ]);
 
     // The workspace scan is a MOUNT-ONLY bootstrap. It must never re-run when
