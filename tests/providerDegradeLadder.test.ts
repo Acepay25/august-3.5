@@ -183,7 +183,7 @@ describe('response-format / tools degrade ladder', () => {
         createMock.mockReset();
         createMock.mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(400)).mockResolvedValue(okBody);
         try { await sendChatRequest(config(), [{ role: 'user', content: 'hi' }], { jsonMode: true, tools }); } catch { /* below */ }
-        console.log('LADDER-DIAG-A', JSON.stringify(record()));
+        console.log('LADDER-DIAG-A', JSON.stringify({ toolsLenAtStart: tools.length, toolsJson: JSON.stringify(tools), ladder: record() }));
         expect(true).toBe(true);
     });
 
@@ -196,7 +196,7 @@ describe('response-format / tools degrade ladder', () => {
                 jsonMode: true, jsonSchema: { name: 'x', schema: { type: 'object' } }, tools,
             });
         } catch { /* below */ }
-        console.log('LADDER-DIAG-B', JSON.stringify(record()));
+        console.log('LADDER-DIAG-B', JSON.stringify({ toolsLenAtStart: tools.length, toolsJson: JSON.stringify(tools), ladder: record() }));
         expect(true).toBe(true);
     });
 
@@ -205,7 +205,7 @@ describe('response-format / tools degrade ladder', () => {
         createMock.mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(400))
             .mockRejectedValueOnce(httpError(400));
         try { await sendChatRequest(config(), [{ role: 'user', content: 'hi' }], { jsonMode: true, tools }); } catch { /* below */ }
-        console.log('LADDER-DIAG-C', JSON.stringify(record()));
+        console.log('LADDER-DIAG-C', JSON.stringify({ toolsLenAtStart: tools.length, toolsJson: JSON.stringify(tools), ladder: record() }));
         expect(true).toBe(true);
     });
 });
