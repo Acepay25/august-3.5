@@ -18,6 +18,18 @@
  *
  * The numbered section banners (1–6) are the pre-split file's own numbering; 7
  * and 8 travelled with the prompt builders.
+ *
+ * PUBLIC SURFACE IS EXACTLY WHAT IS CONSUMED. `getBayesianConfidenceAdjustment`
+ * is called by the prompt layer, so it is exported. The five decision TYPES
+ * (`CalibrationDrift`, `BayesianAdjustment`, `SessionCalibrationState`,
+ * `DangerousCombination`, `ProviderAccuracyContext`) and `getCalibrationDrift`
+ * are named by nothing outside this file — they are this module's return
+ * shapes, so they stay declared but are no longer exported. In the old
+ * single-file layout every symbol had to be reachable by name, which is how a
+ * public surface grows to describe a file rather than a feature.
+ * `getConfidenceAccuracy` was a second spelling of `getCalibrationDrift(...).status`
+ * and was called by nothing at all; it is deleted rather than un-exported,
+ * because un-exporting dead code only hides it from the compiler.
  */
 
 import { ConfidenceCalibration, AIProvider } from '../../types';
@@ -49,7 +61,7 @@ import {
 } from './calibrationStore';
 
 /** Drift verdict for one analysis: declared probability vs historical reality. */
-export interface CalibrationDrift {
+interface CalibrationDrift {
     status: 'accurate' | 'overconfident' | 'underconfident' | 'insufficient_data';
     /** The AI's declared probability for this trade (%), or NaN-ish input as-is. */
     declared: number;
@@ -60,13 +72,6 @@ export interface CalibrationDrift {
     /** Number of logged outcomes behind `actual`. */
     sampleSize: number;
 }
-
-export const getConfidenceAccuracy = (
-    calibration: ConfidenceCalibration | undefined,
-    confidence: ConfidenceLevel,
-    aiProbability: number
-): 'accurate' | 'overconfident' | 'underconfident' | 'insufficient_data' =>
-    getCalibrationDrift(calibration, confidence, aiProbability).status;
 
 /**
  * Full calibration-drift signal for a single analysis: compares the AI's
@@ -185,7 +190,7 @@ export const getBayesianCalibratedConfidence = (
 // 1. STREAK DETECTION & PENALTY SYSTEM
 // =============================================================================
 
-export interface StreakInfo {
+interface StreakInfo {
     currentStreak: number;           // Positive = wins, negative = losses
     streakType: 'hot' | 'cold' | 'neutral';
     streakLength: number;            // Absolute length
@@ -284,7 +289,7 @@ Do not let winning streak lead to overconfidence or larger position sizes.`;
 // 2. BAYESIAN CONFIDENCE ADJUSTMENT
 // =============================================================================
 
-export interface BayesianAdjustment {
+interface BayesianAdjustment {
     posteriorWinRate: number;        // Bayesian-adjusted win rate (0-100)
     credibleInterval: { lower: number; upper: number };
     uncertainty: 'low' | 'medium' | 'high';
@@ -370,7 +375,7 @@ Consider downgrading confidence or improving trade selection for this confidence
 // 3. SESSION-BASED REAL-TIME CALIBRATION
 // =============================================================================
 
-export interface SessionCalibrationState {
+interface SessionCalibrationState {
     todayWins: number;
     todayLosses: number;
     todayTotal: number;
@@ -481,7 +486,7 @@ Exercise standard caution. Monitor for deteriorating conditions.`;
 // 4. DYNAMIC CONFIDENCE PENALTY CALCULATION
 // =============================================================================
 
-export interface CalibrationPenalty {
+interface CalibrationPenalty {
     basePenalty: number;             // From win rate vs expected
     streakPenalty: number;           // From cold streak
     sessionPenalty: number;          // From poor session
@@ -624,7 +629,7 @@ export const calculateCalibrationPenalty = (
 // 5. CROSS-DIMENSIONAL CORRELATION DETECTION
 // =============================================================================
 
-export interface DangerousCombination {
+interface DangerousCombination {
     isDangerous: boolean;
     combination: string;
     historicalWinRate: number;
@@ -724,7 +729,7 @@ This specific combination of factors has historically performed poorly.`
 // 6. PROVIDER ACCURACY ROUTING
 // =============================================================================
 
-export interface ProviderAccuracyContext {
+interface ProviderAccuracyContext {
     rankings: { provider: string; winRate: number; sampleSize: number }[];
     mostAccurate: string | null;
     leastAccurate: string | null;

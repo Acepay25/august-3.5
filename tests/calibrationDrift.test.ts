@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   getCalibrationDrift,
-  getConfidenceAccuracy,
 } from '../services/validation/calibrationPolicy';
 import {
   getCalibratedWinRate,
@@ -80,14 +79,14 @@ describe('getCalibrationDrift', () => {
     expect(getCalibrationDrift(cal, 'High', Number.NaN).status).toBe('insufficient_data');
   });
 
-  it('keeps getConfidenceAccuracy behavior via delegation', () => {
-    const hot = calibrationWith('high', 6, 10); // 60% historical
-    expect(getConfidenceAccuracy(hot, 'High', 75)).toBe('overconfident');
-    expect(getConfidenceAccuracy(hot, 'High', 65)).toBe('accurate');
-    expect(getConfidenceAccuracy(hot, 'High', 45)).toBe('underconfident');
-    expect(getConfidenceAccuracy(undefined, 'High', 75)).toBe('insufficient_data');
-    expect(getConfidenceAccuracy(calibrationWith('high', 3, 5), 'High', 75)).toBe('insufficient_data');
-  });
+  // The `getConfidenceAccuracy(cal, c, p).status` alias used to live here with
+  // a suite pinning that it delegated here. It was deleted instead: it had no
+  // caller in the app, and every status it asserted is asserted above against
+  // the function that actually computes it — overconfident (the threshold
+  // case), accurate, underconfident, and both insufficient_data paths (no
+  // calibration at all, and a sample below the minimum). One spelling of the
+  // verdict, one set of assertions, instead of a second name kept alive only
+  // by a test of the second name.
 });
 
 const entry = (over: Partial<GranularCalibrationEntry> & { timestamp: string }): GranularCalibrationEntry => ({

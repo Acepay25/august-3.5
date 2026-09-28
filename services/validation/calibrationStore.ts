@@ -18,6 +18,15 @@
  * the policy placement would have forced a store → policy back-edge and broken
  * the one-way rule. It reads no calibration state of its own; it is the
  * DST-aware clock the session buckets are built from.
+ *
+ * PUBLIC SURFACE IS EXACTLY WHAT IS CONSUMED. Several helpers here are used
+ * only by the layers above — that is a real internal API of the calibration
+ * feature, not cruft, and those stay exported. But anything this module calls
+ * ONLY ITSELF is not exported: `initializeGranularCalibration` is reached only
+ * from `updateGranularCalibration` in this file, so the `export` was an
+ * accident of the old single-file layout, where every symbol in one module had
+ * to be reachable by name. A symbol with no caller outside its own file is a
+ * promise nobody can check. Re-export one only when a real caller exists.
  */
 
 import {
@@ -31,7 +40,6 @@ import {
 } from '../../types';
 import {
     MIN_TRADES_FOR_CALIBRATION,
-    DECAY_FACTOR,
     MAX_TRADE_AGE_DAYS
 } from '../../constants/calibrationConstants';
 import { getEffectiveSessions } from '../infrastructure/SessionService';
@@ -136,58 +144,6 @@ export const getCalibratedWinRate = (
 };
 
 /**
- * Calculate calibrated win rate with time decay weighting.
- * Recent trades are weighted more heavily than older trades.
- * Uses exponential decay: weight = DECAY_FACTOR ^ days_ago
- * 
- * @param calibration - Calibration data with entries
- * @param confidence - Confidence level to check
- * @returns Win rate as percentage (0-100), or null if insufficient data
- */
-export const getCalibratedWinRateWithDecay = (
-    calibration: ConfidenceCalibration | undefined,
-    confidence: ConfidenceLevel
-): number | null => {
-    if (!calibration || !calibration.entries || calibration.entries.length === 0) {
-        // Fall back to simple win rate if no entries available
-        return getCalibratedWinRate(calibration, confidence);
-    }
-
-    // Filter entries for this confidence level
-    const relevantEntries = calibration.entries.filter(
-        e => e.confidence === confidence
-    );
-
-    // Require minimum entries for statistical significance
-    if (relevantEntries.length < MIN_TRADES_FOR_CALIBRATION) {
-        return getCalibratedWinRate(calibration, confidence);
-    }
-
-    const now = new Date();
-    let weightedWins = 0;
-    let totalWeight = 0;
-
-    for (const entry of relevantEntries) {
-        const entryDate = new Date(entry.timestamp);
-        // Clamp at 0: a future-dated entry (clock skew) would otherwise get a
-        // negative daysAgo → DECAY_FACTOR^-n > 1 weight, inflating its influence.
-        const daysAgo = Math.max(0, Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24)));
-
-        // Calculate weight using exponential decay
-        const weight = Math.pow(DECAY_FACTOR, daysAgo);
-
-        totalWeight += weight;
-        if (entry.outcome === 'WIN') {
-            weightedWins += weight;
-        }
-    }
-
-    if (totalWeight === 0) return null;
-
-    return Math.round((weightedWins / totalWeight) * 100);
-};
-
-/**
  * Get sample size for a confidence level
  */
 export const getSampleSize = (
@@ -249,7 +205,7 @@ export const getCalibrationSummary = (
 /**
  * Initialize empty granular calibration structure
  */
-export const initializeGranularCalibration = (): GranularCalibration => ({
+const initializeGranularCalibration = (): GranularCalibration => ({
     byCoin: {},
     byPattern: {},
     byTimeframe: {},

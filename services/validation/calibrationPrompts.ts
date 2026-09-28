@@ -11,6 +11,11 @@
  *     calibrationPrompts → calibrationPolicy → calibrationStore
  *
  * The numbered section banners (7–8) are the pre-split file's own numbering.
+ *
+ * `getVolatilityAdjustedPrompt` is the exception to "every export returns
+ * prompt text" and is deliberately NOT exported: it is called only by
+ * `generateEnhancedCalibrationPromptInjection` in this file. Re-export it when
+ * something outside the calibration feature actually asks for it.
  */
 
 import { ConfidenceCalibration, AIProvider } from '../../types';
@@ -257,7 +262,7 @@ If historical accuracy for this specific context is <50%, consider downgrading c
 /**
  * Generate volatility-aware calibration prompt based on historical performance in different regimes.
  */
-export const getVolatilityAdjustedPrompt = (
+const getVolatilityAdjustedPrompt = (
     calibration: ConfidenceCalibration | undefined,
     currentRegime: 'trending' | 'ranging' | 'volatile'
 ): string => {
