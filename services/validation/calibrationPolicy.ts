@@ -20,16 +20,28 @@
  * and 8 travelled with the prompt builders.
  *
  * PUBLIC SURFACE IS EXACTLY WHAT IS CONSUMED. `getBayesianConfidenceAdjustment`
- * is called by the prompt layer, so it is exported. The five decision TYPES
- * (`CalibrationDrift`, `BayesianAdjustment`, `SessionCalibrationState`,
- * `DangerousCombination`, `ProviderAccuracyContext`) and `getCalibrationDrift`
- * are named by nothing outside this file — they are this module's return
- * shapes, so they stay declared but are no longer exported. In the old
- * single-file layout every symbol had to be reachable by name, which is how a
- * public surface grows to describe a file rather than a feature.
- * `getConfidenceAccuracy` was a second spelling of `getCalibrationDrift(...).status`
- * and was called by nothing at all; it is deleted rather than un-exported,
- * because un-exporting dead code only hides it from the compiler.
+ * is called by the prompt layer, so it stays exported, and so do the
+ * `getWinRateBy*`-style reads the prompt layer shares with the store.
+ *
+ * The seven decision TYPES — `CalibrationDrift`, `StreakInfo`,
+ * `BayesianAdjustment`, `SessionCalibrationState`, `CalibrationPenalty`,
+ * `DangerousCombination`, `ProviderAccuracyContext` — are named by nothing
+ * outside this file. They are this module's return shapes, so they stay
+ * DECLARED (a function cannot return an anonymous type) but are no longer
+ * exported. In the old single-file layout every symbol had to be reachable by
+ * name, which is how a public surface grows to describe a file rather than a
+ * feature.
+ *
+ * `getCalibrationDrift` is the deliberate exception: it is a TEST SEAM. The
+ * calibration suites drive it directly to pin the overconfident / accurate /
+ * underconfident / insufficient_data verdicts, so it stays exported even
+ * though no app code calls it.
+ *
+ * `getConfidenceAccuracy` was a second spelling of
+ * `getCalibrationDrift(...).status`, called by nothing at all. It is deleted
+ * rather than un-exported, because un-exporting dead code only hides it from
+ * the compiler — and its one caller was a test asserting that the alias
+ * delegated, so nothing lost its coverage when it went.
  */
 
 import { ConfidenceCalibration, AIProvider } from '../../types';
