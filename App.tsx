@@ -5,11 +5,9 @@ import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 // Apply the user's persisted idle-motion preference to <body> on app
 // startup so the desk view mounts with the correct class.
 reapplyIdleMotionClass();
-import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade } from './types';
+import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, SavedAnalysis, LoggedTrade } from './types';
 import * as ensembleService from './services/providers/ensembleService';
-import { generateFinalSummary } from './services/providers/GenericAnalysisService';
-import * as dbService from './services/infrastructure/dbService';
-import { subscribeMemoryFilesChanged, syncPatternMemory } from './services/learning/MemoryFilesService';
+import { subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { useUserProfileLoader } from './hooks/useUserProfileLoader';
 import { useTradeJournalActions } from './hooks/useTradeJournalActions';
@@ -23,7 +21,6 @@ import * as chatStore from './services/trade/chatStore';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
-import { defaultToolsForRole } from './types/bot';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
 
@@ -37,11 +34,10 @@ import { useConfirmDialog } from './components/shared/ConfirmDialog';
 import { Header } from './components/shared/Header';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
-import { useJournalUI, type JournalUIState } from './hooks/useJournalUI';
+import { useJournalUI } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
 import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
-import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 // Automations were statically imported, dragging the whole editor into the
 // startup chunk; they render only from the header's automation rows.
 // AutomationEditorModal keeps its own `isVisible` toggling (it must stay
@@ -50,7 +46,7 @@ import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 const AutomationView = React.lazy(() => import('./components/automation/AutomationView'));
 const AutomationEditorModal = React.lazy(() => import('./components/automation/AutomationEditorModal'));
 import type { ModelOption } from './components/automation/AutomationEditorModal';
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CloseIcon } from './components/shared/Icons';
+import { ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 
 // Lazy-load heavy, conditionally-rendered components so the initial
 // bundle stays small. Previously the entire app was one ~1.73 MB chunk.
@@ -95,19 +91,16 @@ import ModelPicker from './components/shared/ModelPicker';
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
-import { getFirstReadyProvider, formatModelDisplayName, isProviderReady } from './utils/providerUtils';
-import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
-import { recalculateAnalysisMetrics, parsePrice as parsePriceCanonical } from './utils/analysisUtils';
-import { parseAppHash, serializeAppHash } from './utils/appHash';
-import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
+import { isProviderReady } from './utils/providerUtils';
+import { createNewConversation, DEFAULT_LEVERAGE } from './utils/conversationUtils';
+import { parsePrice as parsePriceCanonical } from './utils/analysisUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
-import { type ThreadSelection, threadForProvider, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from './utils/agentThreads';
-import { liveEntryFromMessage } from './services/trade/chatSessions';
+import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
 import { deriveMessageDisplayText } from './utils/messageDisplayText';
 import {
-    getBots, getGroups, saveBot, saveGroup, updateBot, updateGroup, removeBot, removeGroup, subscribeAgentRoster,
-    findBotById, groupDisplayName, newId,
-    type AgentBot, type AgentGroup,
+    getBots, updateBot, 
+    groupDisplayName, 
+    type AgentBot,
 } from './services/agents/agentRoster';
 import { useAgentGroups } from './hooks/useAgentGroups';
 import { useBotMailbox, type UseBotMailboxResult } from './hooks/useBotMailbox';
@@ -117,8 +110,6 @@ import { readBotSystemMarkdown, readBotMemoryMarkdown } from './services/bots/Bo
 import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, type SkillDraft } from './utils/skillDrafts';
 import { listLearningProposals } from './utils/learningQueue';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
-import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
-import { reconstructOpenings } from './utils/debateResume';
 import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
 import { processImagesForSummarization } from './services/providers/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
@@ -129,27 +120,20 @@ import { useLearningHeartbeat } from './hooks/useLearningHeartbeat';
 import { useUIState } from './hooks/useUIState';
 import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
-import { useTradeLogging, MAX_TRADE_SUMMARIES } from './hooks/useTradeLogging';
+import { useTradeLogging } from './hooks/useTradeLogging';
 import { useAnalysisPipeline } from './hooks/useAnalysisPipeline';
 import { ANALYSIS_STOP_TEXT } from './services/trade/analysisTurn';
 import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
-import { useSaveOnUnload } from './hooks/useSaveOnUnload';
 import { offlineQueue } from './services/infrastructure/OfflineQueueService';
-import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
-import { getPreference, setPreference, removePreference, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './services/infrastructure/PreferencesService';
+import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
-import * as MemoryService from './services/learning/MemoryService';
-import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
-import { saveLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
-import { isProviderOnCooldown, providerCooldownRemainingMs, getProviderHealth } from './services/infrastructure/ProviderHealthService';
+import { loadLastModeratorPick, saveLastModeratorPick } from './services/ui/AnalystLensService';
+import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
 import { assessSession } from './services/validation/SessionGuardService';
 import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
 import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
-import { storageService } from './services/infrastructure/StorageService';
-import { PriceAlertService } from './services/ui/PriceAlertService';
-import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurfaceRouter } from './hooks/useSurfaceRouter';
 import type { AppSurface } from './hooks/useSurface';
@@ -161,7 +145,6 @@ import type { NavBadge } from './components/shell/SurfaceMenuList';
 // (hash router + openJournal) only mounts it, so Suspense below is enough.
 const Journal = React.lazy(() => import('./components/journal/Journal').then(m => ({ default: m.Journal })));
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
-import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
 
 /**
