@@ -977,40 +977,42 @@ ${result.comparisonBlock}
 
     // ─── Return ───────────────────────────────────────────────────────────
 
+    // The surface below is EXACTLY what App.tsx consumes. It used to be 42
+    // names wide, 13 of which App destructured and never referenced again —
+    // a binding is a contract, and a contract nobody reads is a second thing to
+    // keep correct every time a handler is renamed or a state field moves.
+    // `tests/hookDestructureHygiene.test.ts` fails the build if a name is bound
+    // here and not used, so the surface cannot quietly regrow.
     return {
         // State values and setters
         loggedTrades, setLoggedTrades,
         savedAnalyses, setSavedAnalyses,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
-        skipCandidate, setSkipCandidate,
         updateCandidate, setUpdateCandidate,
         simulatorCandidate, setSimulatorCandidate,
-        skipReason, setSkipReason,
-        correctedEntry, setCorrectedEntry,
         dataCaptureCandidate, setDataCaptureCandidate,
         entryNotHitCandidate, setEntryNotHitCandidate,
         newlyAddedInsightIds, setNewlyAddedInsightIds,
         // Handler functions
+        // `logTradeWithFeedback` and `logEntryNotHitTrade` are NOT bound in
+        // App.tsx — the Journal auto-review and logged-trade harness suites
+        // drive them straight off this hook's return. They are a deliberate
+        // test seam, which is why the dead-binding test below scans the
+        // DESTRUCTURE (App's contract) and not this return object.
         logTradeWithFeedback,
-        autoLearnFromOutcome,
+        logEntryNotHitTrade,
         confirmAutopilotOutcome,
         confirmAutopilotEntryNotHit,
         handleDataCaptureUpload,
         handleDataCaptureAuto,
         handleDataCaptureSkip,
         handleInitiateLogTrade,
-        handleInitiateSkipTrade,
-        handleConfirmSkipTrade,
-        logEntryNotHitTrade,
         handleEntryNotHitAutoCapture,
         handleEntryNotHitUpload,
         handleEntryNotHitSkip,
-        handleInitiateUpdateTrade,
-        handleInitiateSimulator,
         handleConfirmUpdateTrade,
         handleUpdateAutoCapture,
-        calculateTimeDifference,
         // Outcome-resolution harness visibility: drops the trade from the
         // chat session's openTrades ledger, pushes a close-message into the
         // dock, and auto-runs the post-mortem. Surfaced for the autopilot
