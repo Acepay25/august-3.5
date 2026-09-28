@@ -32,72 +32,13 @@ vi.mock('../services/providers/GenericProviderService', () => ({
 
 import {
   conductDebate,
-  conductRealDebate as conductRealDebateObjectForm,
+  conductRealDebate,
   awaitReplacementWithTimeout,
   buildLivePriceRefreshBlock,
   openingFromResult,
   REAL_DEBATE_RESPONSE_ROUNDS,
 } from '../services/providers/ensembleService';
-import type { RealDebateOptions, RealDebateTurnEvent } from '../services/providers/ensembleService';
-
-/**
- * Legacy positional adapter for this suite's 35 pre-object call sites.
- *
- * `conductRealDebate` took 38 positional parameters, and the production call
- * site had to pass runs of `undefined` to reach the options it actually wanted.
- * It now takes a single `RealDebateOptions` object — that is the ONLY form the
- * service exports, so production code cannot reach the old shape at all.
- *
- * This adapter exists so the debate engine's 48-test suite is not rewritten in
- * the same PR as the signature change. The old shape is a real hazard —
- * `hybridContext`, `centralizedSnapshot` and `sessionGuardBlock` are all plain
- * `string`, and `tradeSummaries` and `similarTrades` are structurally
- * compatible arrays, so a transposition typechecks and silently asserts the
- * wrong thing. Keeping that hazard quarantined to ONE place, with the mapping
- * written out, is strictly better than leaving it available in production or
- * scattering the conversion across 35 call sites in one sitting.
- *
- * Migration is mechanical: move each argument onto its named property from the
- * table below, drop the `undefined` placeholders, and delete this shim.
- * `services/providers/ensembleService.ts` carries the authoritative docstrings.
- */
-/** Old positional order, checked against the interface in BOTH directions:
- *  `satisfies` rejects a name the interface does not have, and the exported
- *  constant below is a compile error if a property has no entry here. */
-const LEGACY_PARAM_ORDER = [
-  'analysts', 'userPrompt', 'finalTradeSummary', 'moderatorConfig', 'moderatorModel',
-  'customInstructions', 'monteCarloResults', 'lensConfig', 'analystProviders', 'activeFrameworks',
-  'tradeSummaries', 'gateResult', 'learningContext', 'signal', 'onReasoning', 'onAnalystReasoning',
-  'onSpeakerStatus', 'hybridContext', 'timeoutMs', 'onReplacementRequested', 'replacementTimeoutMs',
-  'getLivePrice', 'getSteeringNotes', 'getSeatSteeringNote', 'shouldDropSeat', 'onRunEvent',
-  'memoryGate', 'resumeState', 'shouldSkipRemaining', 'onToolEvent', 'forceSkipRebuttals',
-  'botByThoughtsKey', 'centralizedSnapshot', 'similarTrades', 'fullTradesForRecall',
-  'seatPersonas', 'sessionGuardBlock', 'opts',
-] as const satisfies readonly (keyof RealDebateOptions)[];
-
-/** Fails to compile the moment `RealDebateOptions` grows a property this
- *  adapter cannot forward — the failure mode that would otherwise be a
- *  silently-dropped parameter. */
-type MissingFromAdapter = Exclude<keyof RealDebateOptions, typeof LEGACY_PARAM_ORDER[number]>;
-export const LEGACY_ADAPTER_IS_COMPLETE: MissingFromAdapter extends never ? true : MissingFromAdapter = true;
-
-const conductRealDebate = (
-  ...legacy: unknown[]
-): AsyncGenerator<RealDebateTurnEvent, void, unknown> => {
-  if (legacy.length > LEGACY_PARAM_ORDER.length) {
-    throw new Error(`conductRealDebate: ${legacy.length} positional args, max ${LEGACY_PARAM_ORDER.length}`);
-  }
-  const options: Record<string, unknown> = {};
-  for (let i = 0; i < legacy.length; i += 1) {
-    // The old call sites carried runs of `undefined` purely to skip a slot.
-    if (legacy[i] === undefined) continue;
-    options[LEGACY_PARAM_ORDER[i]] = legacy[i];
-  }
-  // Imported under a different name above precisely so this shim is the one and
-  // only `conductRealDebate` identifier in scope: the legacy shape cannot be
-  // reached from a new call site by accident.
-  return conductRealDebateObjectForm(options as unknown as RealDebateOptions);
-};
+import type { RealDebateTurnEvent } from '../services/providers/ensembleService';
 
 const config: ProviderConfig = {
   id: 'prov-a',
@@ -266,13 +207,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
   it('emits opening statements with zero API calls, then parallel rebuttal rounds and the moderator verdict', async () => {
     const calls = mockStreams();
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    }));
     // Round 1 = the two opening statements — and they must have been emitted
     // before any provider call happened (no extra API calls for round 1).
     const round1 = events.filter(e => e.round === 1);
@@ -339,11 +283,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
       provider: { config: { ...config, id, name, models: [model], selectedModel: model }, name, model, thoughtsKey: `${id}:${model}` },
       result: { thoughtProcess: `${name} internal thinking`, finalOutput: `${name} opening statement: long bias on breakout.`, analysis },
     });
-    const events = await collectEvents(conductRealDebate(
-      [alignedAnalyst('prov-a', 'Analyst One', 'model-a'), alignedAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-    ));
+    const events = await collectEvents(conductRealDebate({
+      analysts: [alignedAnalyst('prov-a', 'Analyst One', 'model-a'), alignedAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // Openings identically long with spread 0 → tight-alignment shortcut
     // trims one rebuttal round AND the routing call is skipped (no
@@ -357,25 +303,18 @@ describe('conductRealDebate (real inter-model debate)', () => {
   it('team seat personas prefix the rebuttal system prompt (role survives beyond the openings)', async () => {
     const calls = mockStreams();
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    await collectEvents(conductRealDebate(
+    await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-      // onReasoning, onAnalystReasoning, onSpeakerStatus (15–17), then
-      // hybridContext, timeoutMs, onReplacementRequested, replacementTimeoutMs,
-      // getLivePrice, getSteeringNotes, getSeatSteeringNote, shouldDropSeat,
-      // onRunEvent, memoryGate, resumeState, shouldSkipRemaining, onToolEvent,
-      // forceSkipRebuttals, botByThoughtsKey, centralizedSnapshot,
-      // similarTrades, fullTradesForRecall (18–35) — all default:
-      undefined, undefined, undefined,
-      undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, undefined, undefined, undefined, undefined, undefined,
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
       // seatPersonas: keyed by seat name, as useAnalysisPipeline passes them.
-      { 'Analyst Two': 'You are the RISK & EXECUTION SPECIALIST. Stress-test every trade.' },
-    ));
+      seatPersonas: { 'Analyst Two': 'You are the RISK & EXECUTION SPECIALIST. Stress-test every trade.' },
+    }));
 
     // Seat Two's persona rides its rebuttal system prompt…
     const seatTwoRebuttal = calls.find(c => isFloorSeat(c.system, 'Analyst Two'))!;
@@ -415,13 +354,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
       yield `rebuttal-r${round}`;
     });
 
-    const gen = conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    );
+    const gen = conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    });
 
     // Drain (manual iteration — a for-await break would close the generator)
     // until the fast seat's Round 2 rebuttal has fully arrived.
@@ -479,11 +421,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
     });
 
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // Analyst Two still got its opening statement; the moderator verdict still arrives.
     expect(events.some(e => e.speaker === 'Analyst Two' && e.round === 1)).toBe(true);
@@ -498,13 +442,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
     });
 
     const controller = new AbortController();
-    const gen = conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      controller.signal,
-    );
+    const gen = conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: controller.signal,
+    });
 
     // Consume the free opening statements, then abort before the rebuttals.
     const first = await gen.next();
@@ -515,11 +462,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
   });
 
   it('requires at least two analysts', async () => {
-    await expect(collectEvents(conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-    ))).rejects.toThrow('at least 2 analysts');
+    await expect(collectEvents(conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }))).rejects.toThrow('at least 2 analysts');
   });
 
   it('calls the moderator SEPARATELY even when the same model is also an analyst', async () => {
@@ -545,11 +494,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
     // Moderator uses model-b — the SAME model as Analyst Two.
     const moderatorConfig = { ...config, selectedModel: 'model-b' };
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, moderatorConfig, 'model-b',
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig,
+      moderatorModel: 'model-b',
+    }));
 
     // 2 rebuttal rounds × 2 analysts + clarification questions + verdict.
     const moderatorCalls = calls.filter(c =>
@@ -593,11 +544,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
     });
 
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // The moderator makes a first attempt (which errors) and a compact
     // retry — both are moderator-system calls; the pre-rebuttal routing
@@ -623,11 +576,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
     });
 
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // The generator completes without throwing; the error marker is visible so
     // the pipeline can fall back to a clear message instead of a silent dead end.
@@ -691,7 +646,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('runs one clarification cycle, then reaches the verdict after satisfaction', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // +1 for the pre-rebuttal moderator routing call.
     expect(calls.length).toBe(10);
@@ -703,7 +664,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('tells each analyst they are answering the Moderator, not a new trader request', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
-    await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     const one = calls.find(c => c.system.includes('CLARIFICATION ANSWER') && isFloorSeat(c.system, 'Analyst One'))!;
     const two = calls.find(c => c.system.includes('CLARIFICATION ANSWER') && isFloorSeat(c.system, 'Analyst Two'))!;
@@ -724,14 +691,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('injects the live price refresh into rebuttal, clarification answer and verdict prompts', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>']);
-    await collectEvents(conductRealDebate(
-      clarificationAnalysts(),
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, () => 62500, // replacementTimeoutMs, getLivePrice
-    ));
+    await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      getLivePrice: () => 62500, // TODAY's price at each round boundary
+    }));
 
     // Rebuttal rounds: every analyst re-anchors on TODAY's price.
     const rebuttals = calls.filter(c => c.system.includes('ENSEMBLE DEBATE PARTICIPANT'));
@@ -755,14 +724,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('omits the live price refresh when no live price is available', async () => {
     const calls = mockStreams();
-    await collectEvents(conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, () => null, // replacementTimeoutMs, getLivePrice: unknown → no refresh anywhere
-    ));
+    await collectEvents(conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      getLivePrice: () => null, // unknown → no refresh anywhere
+    }));
 
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) {
@@ -782,7 +753,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('runs a second clarification cycle after one unsatisfied judgment', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>']);
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // +1 for the pre-rebuttal moderator routing call.
     expect(calls.length).toBe(14);
@@ -794,7 +771,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
       '<CLARIFICATION_UNSATISFIED>',
       '<CLARIFICATION_UNSATISFIED>',
     ]);
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // +1 for the pre-rebuttal moderator routing call.
     expect(calls.length).toBe(17);
@@ -804,7 +787,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('short-circuits clarification when the moderator has no questions', async () => {
     const calls = scriptedClarificationStreams([], { done: true });
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // +1 for the pre-rebuttal moderator routing call.
     expect(calls.length).toBe(7);
@@ -814,7 +803,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('drops an analyst after a failed clarification answer and continues', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>'], { failAnswer: 'Analyst Two' });
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     expect(events.some(event => event.speaker === 'Analyst One' && event.round === 5)).toBe(true);
     expect(events.some(event => event.speaker === 'Analyst Two' && event.round === 5)).toBe(false);
@@ -824,7 +819,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('skips clarification after a questions-call failure', async () => {
     const calls = scriptedClarificationStreams([], { failQuestion: true });
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // +1 for the pre-rebuttal moderator routing call.
     expect(calls.length).toBe(7);
@@ -833,7 +834,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   it('treats a judgment failure as satisfied', async () => {
     const calls = scriptedClarificationStreams([], { failJudgment: true });
-    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // +1 for the pre-rebuttal moderator routing call.
     expect(calls.length).toBe(10);
@@ -843,25 +850,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
   it('reports active speaker status around clarification and verdict streams', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
     const statuses: Array<{ speaker: string; round: number; active: boolean }> = [];
-    await collectEvents(conductRealDebate(
-      clarificationAnalysts(),
-      'Analyze BTCUSDT',
-      null,
-      config,
-      'model-a',
-      undefined,
-      [],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      (speaker: string, round: number, active: boolean) => statuses.push({ speaker, round, active }),
-    ));
+    await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      onSpeakerStatus: (speaker, round, active) => statuses.push({ speaker, round, active }),
+    }));
 
     expect(statuses).toContainEqual({ speaker: 'Moderator', round: 4, active: true });
     expect(statuses).toContainEqual({ speaker: 'Moderator', round: 4, active: false });
@@ -903,7 +901,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
       }
     });
 
-    const events = await collectEvents(conductRealDebate(threeAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: threeAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // Round 1 = three opening statements, before any provider call happened.
     expect(events.filter(e => e.round === 1).map(e => e.speaker)).toEqual(['Analyst One', 'Analyst Two', 'Analyst Three']);
@@ -950,7 +954,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
       }
     });
 
-    const events = await collectEvents(conductRealDebate(threeAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: threeAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // Clarification: moderator questions (round 4), three parallel answers
     // (round 5), satisfied judgment, verdict (round 6).
@@ -994,7 +1004,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
       yield 'rebuttal';
     });
 
-    const events = await collectEvents(conductRealDebate(threeAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+    const events = await collectEvents(conductRealDebate({
+      analysts: threeAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }));
 
     // Analyst Three still got its opening statement, then dropped out: it
     // never produces a rebuttal and is not called again.
@@ -1057,15 +1073,18 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const onReplacementRequested = vi.fn().mockResolvedValue(replacement);
     replacementDropStreams('Analyst Two');
 
-    const events = await collectEvents(conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-      undefined, undefined, undefined, undefined, undefined,
-      onReplacementRequested, 2000,
-    ));
+    const events = await collectEvents(conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+      onReplacementRequested,
+      replacementTimeoutMs: 2000,
+    }));
 
     // The callback fired once, with the dropped analyst and the drop round.
     expect(onReplacementRequested).toHaveBeenCalledTimes(1);
@@ -1091,15 +1110,18 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const onReplacementRequested = vi.fn().mockResolvedValue(null);
     replacementDropStreams('Analyst Two');
 
-    const events = await collectEvents(conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-      undefined, undefined, undefined, undefined, undefined,
-      onReplacementRequested, 2000,
-    ));
+    const events = await collectEvents(conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+      onReplacementRequested,
+      replacementTimeoutMs: 2000,
+    }));
 
     expect(onReplacementRequested).toHaveBeenCalledTimes(1);
     // No replacement ever speaks; only the survivor rebuts in round 3.
@@ -1115,15 +1137,18 @@ describe('conductRealDebate (real inter-model debate)', () => {
       () => new Promise(resolve => { pendingReplacement.resolve = resolve; }),
     );
     const { calls } = replacementDropStreams('Analyst Two');
-    const gen = conductRealDebate(
-      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-      undefined, undefined, undefined, undefined, undefined,
-      onReplacementRequested, 2000,
-    );
+    const gen = conductRealDebate({
+      analysts: [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+      onReplacementRequested,
+      replacementTimeoutMs: 2000,
+    });
 
     // Drain until the System drop notice appears (round-2 pump is complete).
     const events: RealDebateTurnEvent[] = [];
@@ -1165,15 +1190,18 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const onReplacementRequested = vi.fn().mockResolvedValue(realAnalyst('prov-c', 'Analyst Three', 'model-c'));
     scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>'], { failAnswer: 'Analyst Two' });
 
-    const events = await collectEvents(conductRealDebate(
-      clarificationAnalysts(),
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-      undefined, undefined, undefined, undefined, undefined,
-      onReplacementRequested, 2000,
-    ));
+    const events = await collectEvents(conductRealDebate({
+      analysts: clarificationAnalysts(),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+      onReplacementRequested,
+      replacementTimeoutMs: 2000,
+    }));
 
     // Analyst Two dropped during the answers (round 5); the replacement was
     // offered at that round and joined.
@@ -1220,13 +1248,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
       { ...realAnalyst('prov-a', 'Analyst One', 'model-a'), result: { thoughtProcess: scratchpad, finalOutput: '', analysis } },
       realAnalyst('prov-b', 'Analyst Two', 'model-b'),
     ];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    }));
     const oneOpening = events.find(e => e.speaker === 'Analyst One' && e.round === 1);
     expect(oneOpening).toBeDefined();
     expect(oneOpening!.text).toContain('Long the reclaim');
@@ -1265,17 +1296,18 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
     const perTurn: { speaker: string; round?: number; text: string }[] = [];
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    await collectEvents(conductRealDebate(
+    await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-      undefined, // moderator global onReasoning — intentionally left unset
-      // Types annotated because the positional shim no longer supplies a
-      // contextual signature (it is `unknown[]` by design).
-      (speaker: string, reasoning: string, round?: number) => { perTurn.push({ speaker, round, text: reasoning }); },
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+      // onReasoning (the moderator's global channel) is intentionally left unset.
+      onAnalystReasoning: (speaker, reasoning, round) => { perTurn.push({ speaker, round, text: reasoning }); },
+    }));
 
     const moderator = perTurn.filter(r => r.speaker === 'Moderator');
     expect(moderator.some(r => r.text.includes('thinking about what to ask'))).toBe(true);
@@ -1391,11 +1423,13 @@ describe('truncation windows (verdict tally)', () => {
     });
 
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    await expect(collectEvents(conductRealDebate(
+    await expect(collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-    ))).rejects.toMatchObject({ name: 'AbortError' });
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+    }))).rejects.toMatchObject({ name: 'AbortError' });
 
     // The finally closed the window: a later unrelated call must not land in
     // the aborted run's tally (pre-fix the window stayed open and swallowed it).
@@ -1505,13 +1539,16 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
     });
 
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    }));
 
     // Round 2: 2 calls, both 429, both retried (4 calls). Round 3: 2 successful calls.
     // Total 6 — the retry doubled round 2 but neither analyst dropped.
@@ -1564,13 +1601,16 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
     });
 
     const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
-    const events = await collectEvents(conductRealDebate(
+    const events = await collectEvents(conductRealDebate({
       analysts,
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    ));
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    }));
 
     // No retry for the mid-stream failure: Analyst One's rebuttal was called
     // exactly once, Analyst Two's once (round 2), then round 3 only has Two.
@@ -1646,13 +1686,16 @@ describe('conductRealDebate — lens pods at 6 seats', () => {
       return 'pod position: hold the long, dissent noted';
     });
 
-    const events = await collectPodEvents(conductRealDebate(
-      [1, 2, 3, 4, 5, 6].map(seatAnalyst),
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    ));
+    const events = await collectPodEvents(conductRealDebate({
+      analysts: [1, 2, 3, 4, 5, 6].map(seatAnalyst),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    }));
 
     // Pod assignment (round-robin, no lenses): macro[1,4] tech[2,5] risk[3,6]
     // → representatives Seat 1/2/3 (roster order, cold trust store).
@@ -1704,13 +1747,16 @@ describe('conductRealDebate — lens pods at 6 seats', () => {
       yield 'rebuttal';
     });
     sendMock.mockImplementation(async () => 'pod');
-    const events = await collectPodEvents(conductRealDebate(
-      [1, 2, 3, 4, 5].map(seatAnalyst),
-      'Analyze BTCUSDT',
-      null, config, 'model-a',
-      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
-      new AbortController().signal,
-    ));
+    const events = await collectPodEvents(conductRealDebate({
+      analysts: [1, 2, 3, 4, 5].map(seatAnalyst),
+      userPrompt: 'Analyze BTCUSDT',
+      finalTradeSummary: null,
+      moderatorConfig: config,
+      moderatorModel: 'model-a',
+      monteCarloResults: [],
+      gateResult: null,
+      signal: new AbortController().signal,
+    }));
     expect(events.some(e => e.text?.includes('Lens pods:'))).toBe(false);
     expect(sendMock).not.toHaveBeenCalled();
   });
