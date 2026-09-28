@@ -540,14 +540,31 @@ const App: React.FC = () => {
     type StartPostMortem = ReturnType<typeof usePostMortem>['startPostMortemAnalysis'];
     const handleSendMessageRef = useRef<SendMessage | null>(null);
     const startPostMortemAnalysisRef = useRef<StartPostMortem | null>(null);
-    const stableHandleSendMessage = useCallback<SendMessage>(
-        (...args) => handleSendMessageRef.current?.(...args) as ReturnType<SendMessage>,
-        [],
-    );
-    const stableStartPostMortem = useCallback<StartPostMortem>(
-        (...args) => startPostMortemAnalysisRef.current?.(...args) as ReturnType<StartPostMortem>,
-        [],
-    );
+    const stableHandleSendMessage = useCallback<SendMessage>((...args) => {
+        const send = handleSendMessageRef.current;
+        // The ref is written during render, further down, on purpose: both
+        // functions are declared hundreds of lines after the hooks that need
+        // them. So the only way to arrive here with nothing wired is a caller
+        // that fires DURING the same render pass — a bug in that caller.
+        //
+        // Say so, rather than `current?.(...)` behind an `as`. Optional chaining
+        // here returns `undefined` typed as the pipeline's real result, so the
+        // failure surfaces much later as a confusing property-of-undefined
+        // crash in a caller that looks blameless. Throwing costs one branch and
+        // removes the cast entirely — the return type is now genuinely the
+        // hook's, with nothing asserting otherwise.
+        if (!send) {
+            throw new Error('handleSendMessage was called before the analysis pipeline was wired');
+        }
+        return send(...args);
+    }, []);
+    const stableStartPostMortem = useCallback<StartPostMortem>((...args) => {
+        const start = startPostMortemAnalysisRef.current;
+        if (!start) {
+            throw new Error('startPostMortemAnalysis was called before the post-mortem hook was wired');
+        }
+        return start(...args);
+    }, []);
 
     // ─── Journal auto-refresh ────────────────────────────────────────────
     // Every logged trade (WIN/LOSS/ENTRY_NOT_HIT) re-runs the AI Review
