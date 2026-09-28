@@ -212,12 +212,12 @@ const App: React.FC = () => {
         showMismatchModal, setShowMismatchModal,
         isVisionDataVisible, setIsVisionDataVisible,
         showAccuracyModal, setShowAccuracyModal,
-        showScrollDown, setShowScrollDown,
-        showScrollUp, setShowScrollUp,
+
+
         isLoading, setIsLoading,
         isHybridLoading, setIsHybridLoading,
         isCalculatingAIProbabilities, setIsCalculatingAIProbabilities,
-        isPostMortemTypingComplete, setIsPostMortemTypingComplete,
+ setIsPostMortemTypingComplete,
         isAnalysisInProgress, setIsAnalysisInProgress,
         isPostMortemInProgress, setIsPostMortemInProgress,
         isSummaryInProgress, setIsSummaryInProgress,
@@ -259,7 +259,7 @@ const App: React.FC = () => {
         readyProviders,
         modelIdToName,
         ocrModelIdToName,
-        providerNameToId,
+
         handleUpdateProvider,
         handleAddCustomProvider,
         handleRemoveProvider,
@@ -287,7 +287,7 @@ const App: React.FC = () => {
         updateMessages, updateActiveConversation,
         selectedOcrModel,
         moderatorProviderId, moderatorModel,
-        handleSetVisionModel,
+
         handleSetSelectedOcrModel,
         handleSetModeratorProvider: setConversationModeratorProvider,
         handleSetModeratorModel: setConversationModeratorModel,
@@ -440,7 +440,7 @@ const App: React.FC = () => {
     // #/journal/learning bookmark, which is why it is called after that.
     const {
         surface, setSurface,
-        journalTab, setJournalTab,
+        journalTab,
         journalFocusTradeId, setJournalFocusTradeId,
         journalOpenNonce,
         surfaceEnterFrom, setSurfaceEnterFrom,
@@ -519,9 +519,9 @@ const App: React.FC = () => {
     const {
         selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
-        copiedMessageId, setCopiedMessageId,
-        expandedPostMortemImages, setExpandedPostMortemImages,
-        expandedPostMortems, setExpandedPostMortems,
+ setCopiedMessageId,
+
+ setExpandedPostMortems,
         postMortemCandidate, setPostMortemCandidate,
     } = useJournalUI();
 
@@ -570,38 +570,29 @@ const App: React.FC = () => {
     }, []);
 
     // Trade logging state and handlers (extracted to hooks/useTradeLogging.ts)
+    // Bound names here are a contract: every one is used, and a test enforces
+    // it. Thirteen dead bindings were removed when this surface shrank.
     const {
         loggedTrades, setLoggedTrades,
         savedAnalyses, setSavedAnalyses,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
-        skipCandidate, setSkipCandidate,
         updateCandidate, setUpdateCandidate,
         simulatorCandidate, setSimulatorCandidate,
-        skipReason, setSkipReason,
-        correctedEntry, setCorrectedEntry,
         dataCaptureCandidate, setDataCaptureCandidate,
         entryNotHitCandidate, setEntryNotHitCandidate,
         newlyAddedInsightIds, setNewlyAddedInsightIds,
-        logTradeWithFeedback,
-        autoLearnFromOutcome,
         confirmAutopilotOutcome,
         confirmAutopilotEntryNotHit,
         handleDataCaptureUpload,
         handleDataCaptureAuto,
         handleDataCaptureSkip,
         handleInitiateLogTrade,
-        handleInitiateSkipTrade,
-        handleConfirmSkipTrade,
-        logEntryNotHitTrade,
         handleEntryNotHitAutoCapture,
         handleEntryNotHitUpload,
         handleEntryNotHitSkip,
-        handleInitiateUpdateTrade,
-        handleInitiateSimulator,
         handleConfirmUpdateTrade,
         handleUpdateAutoCapture,
-        calculateTimeDifference,
     } = useTradeLogging({
         messages,
         messagesRef,
@@ -745,24 +736,24 @@ const App: React.FC = () => {
     // Analysis pipeline state, refs, and handlers (extracted to hooks/useAnalysisPipeline.ts)
     const {
         input, setInput,
-        composerMode, setComposerMode,
+
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        currentVisionData, setCurrentVisionData,
-        isDeepAnalysis, setIsDeepAnalysis,
-        analysisAbortController,
-        initAnalysisSteps, startStep, completeStep, failStep, addSubStep,
+        currentVisionData,
+
+
+        initAnalysisSteps, startStep, completeStep,
         handleSendMessage,
         handleCancelAnalysis,
         handleClearChat,
-        handleDeleteMessages,
-        getActiveCustomInstructions,
-        handleReplacementChoice,
-        steeringNotes,
-        handleRemoveSteeringNote,
+
+
+
+
+
         handleSteerSeat,
-        handleStopSeat,
+
     } = useAnalysisPipeline({
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
         providerConfigs: readyProviders,
@@ -853,16 +844,16 @@ const App: React.FC = () => {
 
     // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
     const {
-        mismatchData, setMismatchData,
+        mismatchData,
         typingMessageState, setTypingMessageState,
-        livePostMortemThoughts, setLivePostMortemThoughts,
+        livePostMortemThoughts,
         startPostMortemAnalysis,
         invalidatePostMortemRuns,
-        handleRetryPostMortem,
+
         handleAllPostMortemTypingComplete,
         handleMismatchResolution,
-        todayReassessmentInFlight,
-        startTodayReassessment,
+
+
     } = usePostMortem({
         messages,
         activeConversationId,
@@ -1453,7 +1444,7 @@ const App: React.FC = () => {
     const {
         comparePrimary,
         compareSecondary,
-        handleCompareAnalysis,
+
         handlePickSecondary,
         closeCompare,
     } = useCompareRuns(messages);
@@ -1571,8 +1562,8 @@ const App: React.FC = () => {
         handleSetLensConfig,
         handleConfirmAccuracyMode,
         handleSetEnsembleModelSelection,
-        handleSetCustomEnsemblePrompt,
-        handleSetCustomLensPrompts,
+
+
     } = useLensAndEnsembleConfig({
         setConversationModeratorProvider, setConversationModeratorModel,
         moderatorProviderId, moderatorModel, updateActiveConversation,
@@ -1713,13 +1704,13 @@ const App: React.FC = () => {
     // Conversation housekeeping (extracted to hooks/useConversationHousekeeping.ts):
     // create/load/delete sessions, edit user messages, Ctrl+N + "/" shortcuts.
     const {
-        handleClearAllConversations,
+
         handleNewConversation,
         handleLoadConversation,
-        handleDeleteConversations,
+
         handleDeleteConversationFromSidebar,
         handleDeleteSelectedConversations,
-        handleEditUserMessage,
+
     } = useConversationHousekeeping({
         conversationHistory, setConversationHistory,
         activeConversation, activeConversationId, setActiveConversationId,
@@ -1755,7 +1746,7 @@ const App: React.FC = () => {
         handleToggleWatch,
         watchedSignals,
         watchOpenR,
-        handleFollowUpTicket,
+
         handleOpenWatchedSignal,
         handleConfirmAutopilot,
         runWatchListAction,
