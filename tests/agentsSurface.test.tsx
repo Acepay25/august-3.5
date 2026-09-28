@@ -314,6 +314,21 @@ describe('WS-6 rail completeness', () => {
 describe('composer attachments (WS-6)', () => {
     const png = (): File => new File(['pretend-bytes'], 'chart.png', { type: 'image/png' });
 
+    /**
+     * Picking a file reads it through a real `FileReader`, so "the chip
+     * appeared" is an EVENTUAL state, not a latency claim — but the default
+     * `waitFor` timeout is one second, which is exactly a latency budget.
+     *
+     * These three assertions were therefore timing-dependent, not
+     * correctness-dependent: they passed in isolation and failed intermittently
+     * when the whole suite ran under the coverage instrumenter on a loaded
+     * machine. That is how a 48-test file failed a CI run twice while the
+     * product code was never wrong. The generous timeout keeps the assertion
+     * about WHAT must eventually be true; it does not stop failing when the
+     * chip never arrives.
+     */
+    const EVENTUALLY = { timeout: 5_000 };
+
     it('offers attach unconditionally now the mode is gone', () => {
         render(<AgentsView {...base} />);
         expect(screen.getByTestId('composer-attach').hasAttribute('disabled')).toBe(false);
@@ -325,21 +340,21 @@ describe('composer attachments (WS-6)', () => {
         const onAnalyze = vi.fn();
         render(<AgentsView {...base} onAnalyze={onAnalyze} />);
         fireEvent.change(screen.getByTestId('composer-file'), { target: { files: [png()] } });
-        await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy());
+        await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy(), EVENTUALLY);
 
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'look at this tape' } });
         fireEvent.click(screen.getByTestId('composer-send'));
         await waitFor(() => expect(onAnalyze).toHaveBeenCalledWith(
             'look at this tape',
             [{ name: 'chart.png', dataURL: expect.stringMatching(/^data:image\/png/) }],
-        ));
-        await waitFor(() => expect(screen.queryByTestId('composer-attachments')).toBeNull());
+        ), EVENTUALLY);
+        await waitFor(() => expect(screen.queryByTestId('composer-attachments')).toBeNull(), EVENTUALLY);
     });
 
     it('drops one chip without touching the others', async () => {
         render(<AgentsView {...base} />);
         fireEvent.change(screen.getByTestId('composer-file'), { target: { files: [png()] } });
-        await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy());
+        await waitFor(() => expect(screen.getByTestId('composer-attachments')).toBeTruthy(), EVENTUALLY);
         fireEvent.click(screen.getByLabelText('Remove chart.png'));
         expect(screen.queryByTestId('composer-attachments')).toBeNull();
     });
