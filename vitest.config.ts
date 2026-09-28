@@ -20,6 +20,29 @@ export default defineConfig({
     // teardown of a large suite occasionally exceeds it — the file itself always
     // passes. 30s gives generous headroom without delaying failure detection.
     teardownTimeout: 30000,
+    // Different class of flake from the two above, and the one that actually
+    // took a run red: `EnvironmentTeardownError: [vitest-worker]: Closing rpc
+    // while "onUserConsoleLog" was pending`. Vitest intercepts console.* and
+    // forwards every call from the worker to the main process over RPC so the
+    // reporter can group it under the test title. When a test file is heavy
+    // enough (agentsSurface: 48 tests, ~30s) a console call can still be in
+    // flight when the forks pool tears the worker down, and the channel closes
+    // mid-message. It is reported as an unhandled error, so it FAILS the step
+    // even though every assertion passed — PR #39 went red on 4,165 passing
+    // tests for this reason, and it reproduces on unmodified HEAD, so it is not
+    // caused by whatever changed.
+    //
+    // Raising a timeout cannot fix it: the message is not a timeout, it is a
+    // message in flight. The fix is to stop routing console output through a
+    // channel that can close under it — with interception off the worker writes
+    // straight to the process stdout and there is no RPC hop to race.
+    //
+    // This hides nothing. Assertion failures, unhandled rejections and
+    // timeouts all still fail the run exactly as before; the only thing lost
+    // is the reporter's per-test grouping of console output, which on this
+    // suite is overwhelmingly expected-failure noise ([RealDebate] …,
+    // [AutoCapture] …) that nobody reads per-test.
+    disableConsoleIntercept: true,
     // Same class of flake, per-test: with ~210 files, heavy jsdom suites
     // (DeskScene/room portals) run at the edge of the default
     // 5s timeout when a worker draws a long queue — solo runs pass, full
