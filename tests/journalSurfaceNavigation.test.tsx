@@ -28,6 +28,13 @@ import type { Conversation } from '../types';
 
 const appSrc = readFileSync('App.tsx', 'utf8');
 const headerSrc = readFileSync('components/shared/Header.tsx', 'utf8');
+/** The routing state itself moved out of App into `useSurfaceRouter` (handoff
+ *  2.1). The CONTRACT is unchanged — only its address moved — so the scans are
+ *  split by owner rather than rewritten: App still owns the call sites (the
+ *  palette row, the deep link, the <Journal> props), and the hook owns the
+ *  state transitions they drive. Asserting only on App.tsx would now pass
+ *  vacuously for half of them. */
+const routerSrc = readFileSync('hooks/useSurfaceRouter.ts', 'utf8');
 
 // jsdom lacks matchMedia (Sidebar/Header internals query it in some paths).
 const installMatchMedia = (): void => {
@@ -118,12 +125,14 @@ describe('App journal routing (source contract)', () => {
     });
 
     it('palette "Open Journal" routes to the journal surface via openJournal', () => {
+        // The palette row stays a call site in App; the transition it drives
+        // (setSurface('journal')) now lives in the router.
         expect(appSrc).toMatch(/label: 'Open Journal',[\s\S]{0,80}run: \(\) => openJournal\(\)/);
-        expect(appSrc).toMatch(/setSurface\('journal'\)/);
+        expect(routerSrc).toMatch(/setSurface\('journal'\)/);
     });
 
     it('the #/journal hash restore routes to the journal surface', () => {
-        expect(appSrc).toMatch(/route\.view === 'journal'\) \{[\s\S]{0,120}setSurface\('journal'\)/);
+        expect(routerSrc).toMatch(/route\.view === 'journal'\) \{[\s\S]{0,120}setSurface\('journal'\)/);
     });
 
     it('the reasoning deep link routes to the journal surface Think tab', () => {
@@ -131,11 +140,14 @@ describe('App journal routing (source contract)', () => {
     });
 
     it('the hash serializer depends on isApprovalInboxVisible (stale-URL fix)', () => {
-        expect(appSrc).toMatch(/serializeAppHash\(route\)[\s\S]{0,400}\[surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible\]/);
+        expect(routerSrc).toMatch(/serializeAppHash\(route\)[\s\S]{0,400}\[surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible\]/);
     });
 
     it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {
         expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
-        expect(appSrc).toMatch(/if \(next === 'journal'\) \{\s*openJournal\(\);/);
+        expect(routerSrc).toMatch(/if \(next === 'journal'\) \{\s*openJournal\(\);/);
+        // …and App must be reading both back OFF the hook, not keeping a
+        // private copy — a second surface state is how they would diverge.
+        expect(appSrc).toMatch(/const \{[\s\S]{0,400}openJournal, handleSurfaceSelect,[\s\S]{0,40}\} = useSurfaceRouter\(/);
     });
 });
