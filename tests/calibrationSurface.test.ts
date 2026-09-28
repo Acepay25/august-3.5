@@ -74,6 +74,41 @@ const exportsOf = (): { name: string; where: string; path: string }[] => {
 };
 
 /**
+ * Strip comments, so PROSE cannot satisfy the guard.
+ *
+ * These three modules carry long explanatory headers that name each other's
+ * symbols constantly. Left in, a one-line sentence like "see
+ * `getSessionAccuracyComparison`" would be enough to make a genuinely orphaned
+ * export look consumed — a guard that can be satisfied by a sentence is a
+ * guard nobody re-checks. The sibling `hookDestructureHygiene` guard was
+ * rewritten for exactly this reason; leaving it unfixed here was an
+ * inconsistency between two guards written minutes apart.
+ *
+ * Strings are not special-cased. Treating string contents as code is the
+ * mirror-image false negative — a prompt that quotes a symbol name would
+ * satisfy the guard — and neither is fully closable without a TypeScript AST.
+ * That residual weakness is the reason this file is a test and not a lint
+ * rule; the trade is recorded here rather than left to be discovered.
+ */
+const stripComments = (src: string): string => {
+    let out = '';
+    let inBlock = false;
+    for (const line of src.split(/\r?\n/)) {
+        let s = line;
+        if (inBlock) {
+            const close = s.indexOf('*/');
+            if (close === -1) { out += '\n'; continue; }
+            s = s.slice(close + 2);
+            inBlock = false;
+        }
+        s = s.replace(/\/\*[\s\S]*?\*\//g, ' ');
+        s = s.replace(/\/\/.*$/, '');
+        out += `${s}\n`;
+    }
+    return out;
+};
+
+/**
  * Every identifier named by each file, in ONE pass.
  *
  * Per-FILE, not one global set: an export is only orphaned if no file OTHER
@@ -92,7 +127,7 @@ const exportsOf = (): { name: string; where: string; path: string }[] => {
  */
 const IDENTIFIERS_BY_FILE = new Map<string, Set<string>>(CONSUMERS.map(p => [
     p.replace(/\\/g, '/'),
-    new Set([...readFileSync(p, 'utf8').matchAll(/[A-Za-z_$][\w$]*/g)].map(m => m[0])),
+    new Set([...stripComments(readFileSync(p, 'utf8')).matchAll(/[A-Za-z_$][\w$]*/g)].map(m => m[0])),
 ]));
 
 const DECLARING_MODULES = new Set(MODULES.map(m => join(FEATURE_DIR, m).replace(/\\/g, '/')));
