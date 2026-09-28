@@ -16,7 +16,7 @@ import {
     updateModelInProvider,
     getReadyProviders,
 } from '../services/infrastructure/ProviderConfigService';
-import { findProviderById } from '../utils/providerUtils';
+import { findProviderById, buildModelIdToName, buildProviderNameToId } from '../utils/providerUtils';
 
 export function useProviderConfigs() {
     const [configs, setConfigs] = useState<ProviderConfig[]>([]);
@@ -93,10 +93,28 @@ export function useProviderConfigs() {
     // Get a specific provider config by ID
     const getProviderById = useCallback((id: string) => findProviderById(configs, id), [configs]);
 
+    // The two display/lookup maps, derived from `configs` and therefore owned
+    // HERE rather than computed by the caller. This is not tidiness: every
+    // dropdown, lens role and model tooltip in the app resolves a name or an id
+    // through these, and while they were `useMemo`s in App.tsx the thing that
+    // keeps them honest — the catalog they are derived from — was in a
+    // different file, with nothing making the two move together. Co-locating
+    // them makes a stale map structurally impossible rather than merely
+    // unlikely, and removes two memos from a 3,500-line component.
+    const modelIdToName = useMemo(() => buildModelIdToName(configs), [configs]);
+    // Vision models are just provider models now, so one map serves both. The
+    // alias is kept because the OCR call sites read better saying `ocr…`.
+    const ocrModelIdToName = modelIdToName;
+    // Debate speaker names -> provider ids (for lens roles and model tooltips)
+    const providerNameToId = useMemo(() => buildProviderNameToId(configs), [configs]);
+
     return {
         configs,
         isLoaded,
         readyProviders,
+        modelIdToName,
+        ocrModelIdToName,
+        providerNameToId,
         handleUpdateProvider,
         handleAddCustomProvider,
         handleRemoveProvider,
