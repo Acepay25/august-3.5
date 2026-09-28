@@ -96,7 +96,7 @@ import ModelPicker from './components/shared/ModelPicker';
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
-import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider, formatModelDisplayName, isProviderReady } from './utils/providerUtils';
+import { getFirstReadyProvider, formatModelDisplayName, isProviderReady } from './utils/providerUtils';
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics, parsePrice as parsePriceCanonical } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
@@ -251,11 +251,15 @@ const App: React.FC = () => {
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
     const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
 
-    // Provider configuration (API keys, base URLs, custom providers)
+    // Provider configuration (API keys, base URLs, custom providers), plus the
+    // display/lookup maps derived from that catalog — see useProviderConfigs.
     const {
         configs: providerConfigs,
         isLoaded: providerConfigsLoaded,
         readyProviders,
+        modelIdToName,
+        ocrModelIdToName,
+        providerNameToId,
         handleUpdateProvider,
         handleAddCustomProvider,
         handleRemoveProvider,
@@ -270,13 +274,10 @@ const App: React.FC = () => {
     // a quiet boot + 6h sweep merges freshly discovered ids per provider.
     const { refreshNow: refreshModelCatalog } = useModelCatalogRefresh(providerConfigs, handleUpdateProvider);
 
-    // Dynamic model display map built from configured providers.
-    // Replaces the legacy static modelIdToName / ocrModelIdToName constants —
-    // vision models are just provider models now, so one map serves both.
-    const modelIdToName = useMemo(() => buildModelIdToName(providerConfigs), [providerConfigs]);
-    const ocrModelIdToName = modelIdToName;
-    // Debate speaker names → provider ids (for lens roles and model tooltips)
-    const providerNameToId = useMemo(() => buildProviderNameToId(providerConfigs), [providerConfigs]);
+    // Dynamic model display map + speaker-name→provider-id map come from
+    // `useProviderConfigs` above, because they are derived from the catalog it
+    // owns. Co-locating them there is what makes a stale map impossible rather
+    // than merely unlikely.
 
     // Conversation state, derived values, and handlers (extracted to hooks/useConversations.ts)
     const {
@@ -526,10 +527,27 @@ const App: React.FC = () => {
 
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
-    const handleSendMessageRef = useRef<(...args: any[]) => any>(null!);
-    const startPostMortemAnalysisRef = useRef<(...args: any[]) => any>(null!);
-    const stableHandleSendMessage = useCallback((...args: any[]) => handleSendMessageRef.current(...args), []);
-    const stableStartPostMortem = useCallback((...args: any[]) => startPostMortemAnalysisRef.current(...args), []);
+    //
+    // Typed from the hooks that DEFINE the functions rather than as
+    // `(...args: any[]) => any`. The indirection is still needed — the send
+    // path and the post-mortem entry point are declared hundreds of lines
+    // below these hooks are called — but the bridge no longer erases the
+    // signature: if `handleSendMessage` gains or reorders a parameter, this
+    // wrapper stops compiling instead of forwarding the wrong argument at
+    // runtime. Deriving from `ReturnType<typeof hook>` also means the two
+    // cannot drift apart by hand.
+    type SendMessage = ReturnType<typeof useAnalysisPipeline>['handleSendMessage'];
+    type StartPostMortem = ReturnType<typeof usePostMortem>['startPostMortemAnalysis'];
+    const handleSendMessageRef = useRef<SendMessage | null>(null);
+    const startPostMortemAnalysisRef = useRef<StartPostMortem | null>(null);
+    const stableHandleSendMessage = useCallback<SendMessage>(
+        (...args) => handleSendMessageRef.current?.(...args) as ReturnType<SendMessage>,
+        [],
+    );
+    const stableStartPostMortem = useCallback<StartPostMortem>(
+        (...args) => startPostMortemAnalysisRef.current?.(...args) as ReturnType<StartPostMortem>,
+        [],
+    );
 
     // ─── Journal auto-refresh ────────────────────────────────────────────
     // Every logged trade (WIN/LOSS/ENTRY_NOT_HIT) re-runs the AI Review
