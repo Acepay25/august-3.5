@@ -103,8 +103,10 @@ export interface ConfidenceCalibration {
   avoid: ConfidenceCalibrationStats;
   lastUpdated?: string;
   /**
-   * Individual timestamped entries for time-decay calibration.
-   * Used by getCalibratedWinRateWithDecay() to weight recent trades more heavily.
+   * Individual timestamped entries, the raw history behind the buckets above.
+   * Kept so `updateCalibration` can prune entries past MAX_TRADE_AGE_DAYS
+   * instead of letting a months-old record keep a provider reading as
+   * calibrated forever.
    */
   entries?: CalibrationEntry[];
   /**
