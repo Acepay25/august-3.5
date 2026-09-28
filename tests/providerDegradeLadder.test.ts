@@ -133,6 +133,45 @@ describe('response-format / tools degrade ladder', () => {
         expect(bodyOf(1).tools).toBeUndefined();
     });
 
+    it('a request with no tools gets no tools rung — nothing to drop is not a rung', async () => {
+        // The plain `jsonMode` shape, and the most common one in the app: every
+        // JSON call that is not a desk-tool seat. The ladder must offer
+        // json_object, then no response_format, and STOP.
+        //
+        // Every mock here REJECTS, so the ladder is walked to exhaustion and
+        // the call count IS the rung count. Queueing a single 400 and letting
+        // the second body succeed would prove nothing: the run would end at rung
+        // 2 whether or not two phantom rungs were queued behind it.
+        createMock.mockReset();
+        createMock.mockRejectedValue(httpError(400));
+        await expect(
+            sendChatRequest(config(), [{ role: 'user', content: 'hi' }], { jsonMode: true }),
+        ).rejects.toThrow();
+        // Two rungs: `response_format` is the only thing there is to drop.
+        expect(createMock).toHaveBeenCalledTimes(2);
+        expect(bodyOf(0).response_format).toEqual({ type: 'json_object' });
+        expect(bodyOf(1).response_format).toBeUndefined();
+        // No phantom tools rung: the second body never carried tools, so
+        // removing them is not a degradation.
+        expect(bodyOf(1).tools).toBeUndefined();
+        expect(bodyOf(1).tool_choice).toBeUndefined();
+    });
+
+    it('a request with nothing to degrade is asked exactly once', async () => {
+        // Plain text: no jsonMode, no schema, no tools. There is no body to try
+        // a second time, so a refusal must not be retried against a variant of
+        // the same request. Exhausting the ladder makes the call count the
+        // proof.
+        createMock.mockReset();
+        createMock.mockRejectedValue(httpError(400));
+        await expect(
+            sendChatRequest(config(), [{ role: 'user', content: 'hi' }], {}),
+        ).rejects.toThrow();
+        expect(createMock).toHaveBeenCalledTimes(1);
+        expect(bodyOf(0).response_format).toBeUndefined();
+        expect(bodyOf(0).tools).toBeUndefined();
+    });
+
     it('gives up after the last rung and reports the refusal it was given', async () => {
         createMock.mockReset();
         createMock
