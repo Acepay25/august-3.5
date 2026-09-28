@@ -1,9 +1,8 @@
 /**
- * BotFace — Hermes-Bot-Mode-style geometric avatar faces: a colored
+ * BotFace — geometric avatar faces: a colored
  * shape with two eyes that follow a deterministic (shape × color)
- * grid. This is the identity mark for named bots, copied directly
- * from the Hermes reference: 7 shapes × 10 colors, "face follows the
- * name" when Auto, eyes blink while the bot is working.
+ * grid. This is the identity mark for named bots: 7 shapes × 10 colors,
+ * "face follows the name" when Auto, eyes blink while the bot is working.
  */
 
 import React from 'react';
@@ -53,7 +52,7 @@ export const resolveFace = (face: BotFaceSpec | 'auto' | undefined, name: string
     (!face || face === 'auto') ? faceForName(name) : face;
 
 /** The 10 built-in faces shown in the New Bot picker (one per hue,
- *  shapes varied — the Hermes "Auto + face grid" row). */
+ *  shapes varied — the "Auto + face grid" row). */
 export const BUILTIN_FACES: BotFaceSpec[] = FACE_HUES.map((hue, i) => ({
     shape: FACE_SHAPES[(i * 3) % FACE_SHAPES.length],
     hue,
@@ -82,7 +81,7 @@ export interface BotFaceProps {
     name: string;
     /** Pixel size of the square avatar (default 40). */
     size?: number;
-    /** Blink the eyes (Hermes: eyes scan while the bot works). */
+    /** Blink the eyes while the bot works. */
     working?: boolean;
     /** A custom uploaded image — clipped to the face's shape. When set,
      *  `face.shape` picks the silhouette and the hue is unused. */

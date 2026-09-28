@@ -343,7 +343,7 @@ export interface Message {
    *  outcome — the human-Brier vs ensemble-Brier anti-automation display. */
   userPriorCall?: UserPriorCall;
   /** Persisted model side-effects: proposal tools and file
-   *  creations this run produced, for the Hermes-style status rows on
+   *  creations this run produced, for the status rows on
    *  the bubble ("Saved to memory · N entries", "⚠ Memory write noted").
    *  Append-only; capped by the pipeline. */
   toolActions?: ToolAction[];
@@ -384,7 +384,7 @@ export interface DebateRunEvent {
 
 /**
  * One model side-effect on a run — the persisted counterpart of the
- * Hermes-style transcript status rows ("Saved to memory · 6 entries",
+ * transcript status rows ("Saved to memory · 6 entries",
  * "⚠ Memory write noted · 7 items"). Proposal-class actions
  * (forge_tool / amend_memory) and file creations persist here so the
  * transcript can show what the models CHANGED, not just what they said.

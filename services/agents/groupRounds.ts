@@ -1,5 +1,5 @@
 /**
- * Group room rounds  — the pure half of Hermes
+ * Group room rounds — the pure half of
  * group-rounds semantics: bounded round-robin where the NEXT speakers are
  * chosen by a deterministic @mention parse (no LLM router), "(pass)" is a
  * first-class outcome, an all-pass round settles the room, and each turn
@@ -11,7 +11,7 @@ import type { AgentBot } from './agentRoster';
 import { botHandle, resolveRosterHandle } from './botMailbox';
 import { seatHasPersona, seatPersonaPrompt } from './seatPersonas';
 
-/** Max rounds per send (Hermes group-rounds parity). */
+/** Max rounds per send. */
 export const ROOM_ROUND_CAP = 3;
 /** Max model turns per send — the storm budget. */
 export const ROOM_TURN_CAP = 12;

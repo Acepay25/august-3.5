@@ -12,7 +12,7 @@
  * a thesis that won → a `repeat` skill, one that lost → an `avoid` skill.
  *
  * It is deliberately conservative and human-gated, matching the app's existing
- * governance and the Hermes write-approval pattern:
+ * governance and the write-approval pattern:
  *   • it only ever QUEUES DRAFTS (utils/skillDrafts) into the approval inbox —
  *     nothing enters the live library without the trader approving it;
  *   • it skips theses still unresolved (no win/loss yet) and ones already

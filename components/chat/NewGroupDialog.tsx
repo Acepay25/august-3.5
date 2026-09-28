@@ -1,5 +1,5 @@
 /**
- * NewGroupDialog — the Hermes "New Group Chat" dialog: pick two or
+ * NewGroupDialog — the "New Group Chat" dialog: pick two or
  * more bots; the room fans one prompt out to every member with an
  * activity feed (@name to direct, @everyone for all). In edit mode it is
  * Group Settings: membership AND each member's debate role (General

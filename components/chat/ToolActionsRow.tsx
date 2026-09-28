@@ -1,5 +1,5 @@
 /**
- * ToolActionsRow — Hermes-style transcript status rows for model
+ * ToolActionsRow — transcript status rows for model
  * side-effects. When a seat proposes a tool (forge_tool), amends
  * memory (amend_memory), or runs a custom tool, the run persists
  * ToolAction entries and this renders them as one-line status rows
@@ -76,7 +76,7 @@ interface Group {
 
 export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
     if (!actions.length) return null;
-    // Group by tool+ok — one row per class, Hermes-style ("N items").
+    // Group by tool+ok — one row per class ("N items").
     const groups = new Map<string, Group>();
     for (const a of actions) {
         const key = `${a.tool}::${a.ok ? 'ok' : 'fail'}`;

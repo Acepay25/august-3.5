@@ -8,7 +8,7 @@ vi.mock('lucide-react', () => ({
     Lightbulb: () => <span data-testid="lightbulb-icon" />,
 }));
 
-describe('ReasoningRow (ZCode/MiniMax reference style)', () => {
+describe('ReasoningRow (wrapping tip reference style)', () => {
     it('renders nothing for empty thinking', () => {
         const { container } = render(<ReasoningRow thinking="   " />);
         expect(container.querySelector('.reasoning-row')).toBeNull();
@@ -37,7 +37,7 @@ describe('ReasoningRow (ZCode/MiniMax reference style)', () => {
         expect(document.querySelector('.reasoning-row')?.textContent).not.toContain('**');
     });
 
-    it('running: wrapping Tip line (MiniMax style) + live duration, NO ticker, stays closed', async () => {
+    it('running: wrapping Tip line + live duration, NO ticker, stays closed', async () => {
         const { container } = render(<ReasoningRow thinking={'step one\nstep two\nstep three'} running />);
         const row = container.querySelector('.reasoning-row');
         expect(row?.getAttribute('data-state')).toBe('running');

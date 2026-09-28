@@ -44,7 +44,7 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     const hasWork = reasoning.trim().length > 0 || entry.tools.length > 0;
     const hasActions = !!(entry.actions && entry.actions.length > 0);
     if (!hasWork && !hasActions) {
-        // Nothing yet: the MiniMax waiting tip covers
+        // Nothing yet: the waiting tip covers
         // the silent first moments of a turn.
         return running ? (
             <p className="flex items-start gap-1.5 text-ui-dense leading-5 text-zinc-500" data-testid="thinking-placeholder">

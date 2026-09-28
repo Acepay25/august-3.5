@@ -3,8 +3,8 @@ import { filterBotNoteByQuery, botMemoryFolderName } from '../services/bots/BotM
 import { clipNote, findClipIn } from '../utils/harnessMarks';
 
 /**
- * The three defects in the bot-note reader, all found by reading
- * hermes-agent's profile layer against our own:
+ * The three defects in the bot-note reader, all found by auditing the
+ * bot profile layer against our own:
  *
  *   1. "another coin's lesson" was decided by a HARDCODED list of nine majors,
  *      so on any other symbol the filter matched nothing and every line passed

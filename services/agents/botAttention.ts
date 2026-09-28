@@ -1,5 +1,5 @@
 /**
- * Bot attention classes  — Hermes's
+ * Bot attention classes — the
  * BOT_ATTENTION_HINTS pattern: when a bot cannot do its job, the roster
  * row says WHY with a one-line fix hint, instead of the user discovering
  * it through a silent failure. Pure classification over data the app

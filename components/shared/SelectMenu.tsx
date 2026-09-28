@@ -1,5 +1,5 @@
 /**
- * SelectMenu — the reference-styled dropdown (Hermes/Zed vocabulary):
+ * SelectMenu — the reference-styled dropdown:
  * a bare trigger (label + chevron, no boxed chrome) opening a flat list
  * of rows — 13px text, py-2 px-3, selection by background fill (no border,
  * no accent color), a check glyph on the current row, optional right-aligned

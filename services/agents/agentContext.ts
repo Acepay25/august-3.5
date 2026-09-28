@@ -10,10 +10,10 @@
  * different things in two places while carrying the same name, which reads to
  * the trader as two different agents wearing one label.
  *
- * The lesson taken from hermes-agent's profile loader: make the resolution
- * target explicit rather than letting a surface fall back to whatever it
- * happens to have in scope. Their own regression test calls that whole failure
- * a bug class — a profile that loads from the ambient home instead of its own.
+ * Make the resolution target explicit rather than letting a surface fall
+ * back to whatever it happens to have in scope. Loading a profile from the
+ * ambient home instead of its own directory is a bug class — and it is the
+ * kind of bug class that stays fixed only because a regression test names it.
  */
 
 import { getBotMemoryContext } from '../bots/BotMemoryService';

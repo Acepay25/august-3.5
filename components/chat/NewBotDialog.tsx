@@ -1,5 +1,5 @@
 /**
- * NewBotDialog — the Hermes "New Bot" dialog, copied: big avatar
+ * NewBotDialog — the "New Bot" dialog: big avatar
  * preview, face picker (Auto + the 10 built-in faces, our pixel
  * avatars on a second tab), Randomize with a "face follows the name"
  * hint, Name / Title / Description fields, and the provider+model

@@ -25,8 +25,8 @@
  * that is only rebuilt when its own trigger fires, so blanking it would leave a
  * hole in the prompt until that event. So the response to pressure is to
  * REFUSE GROWTH from the unbounded writers and tell a human precisely where the
- * bytes are, never to evict silently. That is the same intent MiniMax Code's
- * between-caps trigger serves — act before the hard cap — adapted to a system
+ * bytes are, never to evict silently. That is the same intent a between-caps
+ * trigger serves — act before the hard cap — adapted to a system
  * where destruction is off the table.
  */
 

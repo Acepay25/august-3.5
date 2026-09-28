@@ -90,7 +90,7 @@ Deconstruct the Context: The levels snapshot restates Entry 63694 SL 63420 TP1 6
         expect(split.output).not.toMatch(/THINKING/i);
     });
 
-    it('strips Hermes-style think tags out of the answer', () => {
+    it('strips think tags out of the answer', () => {
         const split = splitThinkingFromOutput(
             '',
             '<think>Weigh HTF vs LTF.</think>\nShort the failed sweep.',
