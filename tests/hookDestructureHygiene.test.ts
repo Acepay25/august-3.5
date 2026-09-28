@@ -53,7 +53,13 @@ const bindings = (): Binding[] => {
         for (let j = open + 1; j < i; j++) {
             for (const name of LINES[j].split(',')) {
                 const clean = name.replace(/\/\/.*$/, '').trim();
-                if (/^[A-Za-z_$][\w$]*$/.test(clean)) {
+                // `key: localName` binds `localName`, not `key`. Matching only
+                // bare identifiers used to skip renamed bindings entirely, so
+                // they were never policed at all.
+                const renamed = clean.match(/^[A-Za-z_$][\w$]*\s*:\s*([A-Za-z_$][\w$]*)$/);
+                if (renamed) {
+                    found.push({ hook: `use${hook}`, name: renamed[1], line: j + 1 });
+                } else if (/^[A-Za-z_$][\w$]*$/.test(clean)) {
                     found.push({ hook: `use${hook}`, name: clean, line: j + 1 });
                 }
             }
@@ -62,13 +68,44 @@ const bindings = (): Binding[] => {
     return found;
 };
 
-/** How often the identifier appears in App.tsx outside its own binding line. */
+/**
+ * App.tsx with comments removed, so a name mentioned ONLY in prose does not
+ * count as a use.
+ *
+ * This was a false negative, not a theoretical one: a comment such as
+ * `// see setJournalTab` is enough to make a genuinely dead binding look live,
+ * and a guard that can be satisfied by a sentence is a guard that will be.
+ * Both `//` line comments and `/* *\/` block comments are stripped, because
+ * App.tsx carries long explanatory ones that name hooks constantly.
+ */
+const CODE_LINES: string[] = (() => {
+    const out: string[] = [];
+    let inBlock = false;
+    for (const line of LINES) {
+        let s = line;
+        if (inBlock) {
+            const close = s.indexOf('*/');
+            if (close === -1) { out.push(''); continue; }
+            s = s.slice(close + 2);
+            inBlock = false;
+        }
+        // Strings are not special-cased: App.tsx's template literals and
+        // prompt text could in principle contain a hook's name, and counting
+        // that as a use is the same kind of false negative.
+        s = s.replace(/\/\*[\s\S]*?\*\//g, ' ');
+        s = s.replace(/\/\/.*$/, '');
+        out.push(s);
+    }
+    return out;
+})();
+
+/** How often the identifier appears in App.tsx code, outside its binding line. */
 const usesElsewhere = (name: string, bindingLine: number): number => {
     const re = new RegExp(`\\b${name}\\b`, 'g');
     let count = 0;
-    for (let i = 0; i < LINES.length; i++) {
+    for (let i = 0; i < CODE_LINES.length; i++) {
         if (i + 1 === bindingLine) continue;
-        count += (LINES[i].match(re) || []).length;
+        count += (CODE_LINES[i].match(re) || []).length;
     }
     return count;
 };
