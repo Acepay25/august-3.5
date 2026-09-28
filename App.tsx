@@ -912,9 +912,7 @@ const App: React.FC = () => {
         invalidatePostMortemRuns();
     }, [handleCancelAnalysis, invalidatePostMortemRuns]);
 
-    // ... (Rest of existing hooks/functions) ...
-    const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);
-    const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
+    const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);    const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
     const isImageUploadDisabled = isAnalysisInProgress || isPostMortemInProgress;
     const isSummarizing = images.some(img => img.isLoading);
     // The Send button must never look active when no provider can actually
@@ -923,7 +921,6 @@ const App: React.FC = () => {
     const isAnyProviderEnabled = readyProviders.length > 0;
 
     const familyWinRates = useMemo(() => {
-        // ... (same implementation) ...
         const stats: Record<string, { total: number; wins: number; winRate: number }> = {
             'Family A': { total: 0, wins: 0, winRate: 0 },
             'Family B': { total: 0, wins: 0, winRate: 0 },
