@@ -163,49 +163,4 @@ describe('response-format / tools degrade ladder', () => {
         // contract and is pinned by its own suite.)
         expect(createMock).toHaveBeenCalledTimes(1);
     });
-
-    // ── TEMPORARY DIAGNOSTIC ────────────────────────────────────────────────
-    // Three of the rung tests above fail in CI but pass on Node 22 AND Node 24,
-    // single-file and in the full parallel suite, with and without coverage.
-    // The only remaining difference from CI is the platform.
-    //
-    // Rather than guess, these record WHAT THE LADDER ACTUALLY OFFERED and
-    // print it. Console output is not intercepted (see vitest.config.ts), so
-    // these lines land in the CI log verbatim. The failing assertion on its own
-    // says only "3 times, but got 2" — it does not say which rung vanished.
-    // Delete this block once the cause is fixed.
-    const record = (): unknown[] => createMock.mock.calls.map((c, i) => {
-        const b = c[0] as { response_format?: { type?: string }; tools?: unknown };
-        return { n: i, rf: b?.response_format?.type ?? null, tools: b?.tools ? 'yes' : 'no' };
-    });
-
-    it('DIAG A: jsonMode + tools, two 400s then ok', async () => {
-        createMock.mockReset();
-        createMock.mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(400)).mockResolvedValue(okBody);
-        try { await sendChatRequest(config(), [{ role: 'user', content: 'hi' }], { jsonMode: true, tools }); } catch { /* below */ }
-        console.log('LADDER-DIAG-A', JSON.stringify({ toolsLenAtStart: tools.length, toolsJson: JSON.stringify(tools), ladder: record() }));
-        expect(true).toBe(true);
-    });
-
-    it('DIAG B: json_schema + tools, 400/422/400 then ok', async () => {
-        createMock.mockReset();
-        createMock.mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(422))
-            .mockRejectedValueOnce(httpError(400)).mockResolvedValue(okBody);
-        try {
-            await sendChatRequest(config(), [{ role: 'user', content: 'hi' }], {
-                jsonMode: true, jsonSchema: { name: 'x', schema: { type: 'object' } }, tools,
-            });
-        } catch { /* below */ }
-        console.log('LADDER-DIAG-B', JSON.stringify({ toolsLenAtStart: tools.length, toolsJson: JSON.stringify(tools), ladder: record() }));
-        expect(true).toBe(true);
-    });
-
-    it('DIAG C: jsonMode + tools, three 400s then give up', async () => {
-        createMock.mockReset();
-        createMock.mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(400))
-            .mockRejectedValueOnce(httpError(400));
-        try { await sendChatRequest(config(), [{ role: 'user', content: 'hi' }], { jsonMode: true, tools }); } catch { /* below */ }
-        console.log('LADDER-DIAG-C', JSON.stringify({ toolsLenAtStart: tools.length, toolsJson: JSON.stringify(tools), ladder: record() }));
-        expect(true).toBe(true);
-    });
 });
