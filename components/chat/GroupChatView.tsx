@@ -1,5 +1,5 @@
 /**
- * GroupChatView — the Hermes group-chat screen, copied: header with
+ * GroupChatView — the group-chat screen: header with
  * stacked member faces + the member-name title + "N bots", a
  * collapsible Activity feed ("You sent a message / X is working… /
  * ✓ X replied / ○ X passed" with relative stamps), prompt threads

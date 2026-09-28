@@ -6,7 +6,7 @@
  * drains them: deliver a DM → run the target bot's turn (persona + notes +
  * teammate protocol over its own thread history) → parse its reply for
  * [[dm:@…]] markers → deliver the next hop or wake the sender with a
- * "replied to your DM" notice. Serial per target (Hermes's per-profile
+ * "replied to your DM" notice. Serial per target (a per-profile
  * lock), TTL at drain time, global rate budget, hop cap.
  */
 
@@ -100,7 +100,7 @@ export const useBotMailbox = ({
     bots, providerConfigs, username, messagesRef, appendMessage, patchMessage,
     hybridEnabled = false, loggedTradesRef,
 }: UseBotMailboxArgs): UseBotMailboxResult => {
-    // Per-target serial queues (Hermes's per-profile lock, in-memory).
+    // Per-target serial queues (a per-profile lock, in-memory).
     const queues = useRef<Map<string, DMEnvelope[]>>(new Map());
     const busy = useRef<Set<string>>(new Set());
     const rate = useRef<number[]>([]);

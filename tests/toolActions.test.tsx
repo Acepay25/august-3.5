@@ -104,7 +104,7 @@ describe('toolActionFromResult (proposal classification)', () => {
     });
 });
 
-describe('ToolActionsRow (Hermes-style status rows)', () => {
+describe('ToolActionsRow (status rows)', () => {
     it('groups by tool with a count chip and the review location', () => {
         render(
             <ToolActionsRow

@@ -94,4 +94,5 @@ on `v*` tags (`.github/workflows/release.yml`).
 
 ## License
 
-MIT.
+MIT — see [`LICENSE`](LICENSE). Bundled third-party material (e.g. the committed
+Gradle wrapper JAR) is credited in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

@@ -1,5 +1,5 @@
 /**
- * agentRoster — named bots and group chats, Hermes-Bot-Mode style.
+ * agentRoster — named bots and group chats.
  * A bot is a named teammate bound to one provider model ("select a
  * model in a provider"); it has its own face, title, description and
  * 1:1 chat. A group binds several bots into a room where one prompt
@@ -172,7 +172,7 @@ export const setActiveTeamId = (id: string | null): void => {
     notify();
 };
 
-/** Default display name for a group: member names joined (Hermes-style). */
+/** Default display name for a group: member names joined. */
 export const groupDisplayName = (group: AgentGroup, bots: AgentBot[]): string => {
     if (group.name) return group.name;
     const names = group.memberIds

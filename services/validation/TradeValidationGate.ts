@@ -29,6 +29,7 @@ import {
     DevilsAdvocateResult
 } from './AccuracyValidationService';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
+import { baseOf } from '../../utils/symbol';
 import { TradeAnalysis, ConfidenceCalibration, LoggedTrade, TradeOutcome, AIProvider } from '../../types';
 import {
     getCalibrationSummary,
@@ -208,7 +209,9 @@ export const validateAnalysisOutput = (analysis: TradeAnalysis): string[] => {
  * the quote suffix, mirroring the skill matchers ('BTCUSDT' → 'BTC').
  */
 const normalizePatternCoin = (coin: string | undefined): string =>
-    (coin || '').toUpperCase().replace(/USDT?$/, '');
+    // Canonical base asset (utils/symbol) — the form the skill matchers and
+    // the pattern-memory cluster keys all normalize to.
+    baseOf(coin || '');
 
 /**
  * Compares current setup to historical losses to identify similar failing patterns.

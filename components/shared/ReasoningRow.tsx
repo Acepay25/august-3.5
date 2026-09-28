@@ -24,7 +24,7 @@ const EXPAND_PREVIEW_CHARS = 600;
 /**
  * Collapsible thinking row, built on a native `<details>` so it stays a
  * toggle in EVERY state — clicking always expands/collapses the thinking.
- *   · RUNNING + collapsed = a MiniMax-style tip line: a dim glyph, `Tip: …`
+ *   · RUNNING + collapsed = a wrapping tip line: a dim glyph, `Tip: …`
  *     rotating every ~5s (every third slot a habit from the trader's own
  *     learned memory), the text wrapping naturally, plus a live duration
  *     tick. No scrolling ticker — raw trace never previews (models lean on
@@ -141,7 +141,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                     <Brain className="reasoning-row-glyph" aria-hidden="true" />
                 )}
                 {rawTip ? (
-                    // MiniMax-style tip: wraps naturally, never truncated.
+                    // Wrapping tip: wraps naturally, never truncated.
                     <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
                         Tip: {rawTip}
                     </span>

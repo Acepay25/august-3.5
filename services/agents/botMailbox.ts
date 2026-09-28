@@ -1,37 +1,34 @@
 /**
- * Bot Mailbox  — teammate DMs, Hermes Bot Mode style.
+ * Bot Mailbox — teammate DMs.
  *
- * Hermes runs its bots as separate gateway processes and needs a socket
- * relay; august's bots are IN-PROCESS — same message array, same provider
- * configs — so the whole relay layer collapses to this file: a per-target
- * queue with TTL semantics plus the pure logic (roster validation,
+ * Bots here are IN-PROCESS — same message array, same provider configs — so
+ * there is no socket relay: the whole layer collapses to this file, a
+ * per-target queue with TTL semantics plus the pure logic (roster validation,
  * attribution, the teammate protocol text, the DM marker grammar).
  *
- * The contract copied from Hermes (tools/bot_mode_dm.py):
+ * The DM contract:
  *   • DMs are TEXTING: validate the target against the live roster, prefix
  *     the sender's attribution server-side (never trust the model's own
  *     prefix), ack immediately, and the reply WAKES the sender later.
- *   • A busy target queues (Hermes: file lock + turn_wait); an envelope
+ *   • A busy target queues (a per-target lock + turn_wait); an envelope
  *     older than the TTL is refused at drain time, not delivered as a
- *     zombie (Hermes: envelope_ttl_seconds = 900).
+ *     zombie.
  *   • Containment: the protocol section is injected ONLY into bot threads
  *     — never Team debates, never Coach, never post-mortems.
  *   • Loop guard: a DM chain carries a hop count; replies past the cap
- *     become notices instead of new turns (august addition — Hermes caps
- *     group rounds instead; a cap on either axis is mandatory).
+ *     become notices instead of new turns. A cap on either axis is mandatory.
  *
  * The transport is the message array itself: threads are DERIVED views
  * (threadForProvider), so appending a user-role DM + an AI reply attributed
  * to the target's (providerId, modelId) lands both in the target's thread
- * no matter which thread is open. Name-as-identity, no pointers — the same
- * invariant Hermes converged on after five incident waves.
+ * no matter which thread is open. Name-as-identity, no pointers.
  */
 
 import type { AgentBot } from './agentRoster';
 import type { Message } from '../../types';
 import { MessageRole } from '../../types/enums';
 
-/** Hermes parity: an envelope this old is refused at drain time. */
+/** An envelope this old is refused at drain time. */
 export const DM_ENVELOPE_TTL_MS = 15 * 60_000;
 /** A DM chain deeper than this stops auto-running; the text becomes a
  *  plain notice in the target thread instead. */
@@ -54,7 +51,7 @@ export interface DMMark {
 }
 
 /** Collapse a display name to its mention handle: lowercase, alphanumerics
- *  only (Hermes matches name, title, and collapsed no-space forms). */
+ *  only (matches name, title, and collapsed no-space forms). */
 export const botHandle = (name: string): string =>
     name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -122,7 +119,7 @@ export const dmEnvelopeText = (
 };
 
 /** The wake-up notice delivered into the SENDER's thread when the target
- *  replies — the completion-notification shape Hermes uses. */
+ * replies — the completion-notification shape. */
 export const dmReplyNoticeText = (targetName: string, reply: string): string =>
     `↩ ${targetName} replied to your DM: ${reply}`;
 
@@ -216,7 +213,7 @@ export const botIsReachable = (
 /**
  * Validate an outgoing DM against the roster. Pure — the caller turns a
  * refusal into a notice in the sender's thread (fail VISIBLE, never
- * silently drop: a lost DM is the bug class Hermes's #93091 fixed).
+ * silently drop: a lost DM is the bug class to design against).
  */
 export const validateDM = (
     bots: AgentBot[],
