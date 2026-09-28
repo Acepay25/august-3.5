@@ -41,7 +41,6 @@ import { useJournalUI, type JournalUIState } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
 import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
-import { useConversationLeverage } from './hooks/useConversationLeverage';
 import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 // Automations were statically imported, dragging the whole editor into the
 // startup chunk; they render only from the header's automation rows.
@@ -636,11 +635,11 @@ const App: React.FC = () => {
     });
 
     const [leverageInput, setLeverageInput] = useState<string>(String(DEFAULT_LEVERAGE));
-    const { handleLeverageChange, handleLeverageBlur, handlePresetLeverage } = useConversationLeverage({
-        leverageInput,
-        setLeverageInput,
-        updateActiveConversation,
-    });
+    // The three leverage handlers useConversationLeverage used to return are
+    // gone: nothing called them. The state stays — the composer and the desk
+    // both bind to it — but the hook is pure derivation with no effects, so
+    // calling it bought nothing. @typescript-eslint/no-unused-vars had been
+    // reporting all three at this line for the life of the file.
     // (i/n) progress for the manual insight-generation loops (App only shows
     // a boolean spinner otherwise; a 50-trade rewrite runs for minutes).
     const [insightProgress, setInsightProgress] = useState<{ done: number; total: number } | null>(null);

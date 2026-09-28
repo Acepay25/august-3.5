@@ -101,13 +101,20 @@ export default tseslint.config(
     rules: {
       // Relax rules that would produce too many errors initially.
       //
-      // WARNING RATCHET: `npm run lint` runs with --max-warnings 1020, the
-      // count this repo stands at today (lowered from 1022 when SettingsMenu's
-      // dead 16-prop journal interface went away, taking two `any` props with
-      // it). Warnings are tolerated but COUNTED —
-      // adding a new one fails CI. Lower the number in package.json as you
-      // pay them down; never raise it to go green. `npm run lint:loose` lists
-      // them without the cap for a local cleanup pass.
+      // WARNING RATCHET: `npm run lint` runs with --max-warnings 949 in
+      // package.json. The number must EQUAL the warning count on a clean main,
+      // because the cap is only a ratchet if it actually binds.
+      //
+      // It did not, for a long time: the cap sat at 1020 while the tree stood
+      // at 949, so 71 warnings could be added and CI would still pass. That is
+      // why `tests/hookDestructureHygiene.test.ts` had to exist — the repo was
+      // hand-rolling a dead-binding guard because the installed AST rule that
+      // already does the job was gated by a cap with slack in it. The guard was
+      // removed when the cap was corrected.
+      //
+      // Re-measure on a clean checkout after touching this file, and LOWER the
+      // number when you pay warnings down; never raise it to go green.
+      // `npm run lint:loose` lists them without the cap for a cleanup pass.
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'off', // App uses console extensively; migrate to logger incrementally
