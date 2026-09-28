@@ -2,6 +2,50 @@
 
 Plain-English log of change rounds. Newest first.
 
+## Every provider refusal now has a rung that can actually be reached, and the lint gate finally bites
+
+- **The degrade ladder had a real bug, and only CI could see it.** When a
+  gateway refuses a request, `GenericProviderService` walks a ladder of
+  progressively simpler bodies: `json_schema` → `json_object` → no
+  `response_format` → no `tools`. The tools rung was gated on whatever rung
+  happened to be built most recently, so whether a tools-free body was ever
+  offered depended on evaluation order rather than on whether the request
+  still carried tools. On CI the ladder simply stopped one rung early and
+  every plain desk-tool call failed after one retry. It passed on every
+  developer's machine, on every Node version, in every test configuration —
+  so the fix was to instrument the test and let CI report what it actually
+  sent, rather than to guess. Each rung is now derived from the step it
+  follows and appended only when it differs from the body before it.
+- **Two rungs that must not exist are now pinned.** A request with no tools
+  gets no tools rung, and a request with nothing to degrade is asked exactly
+  once — both proven by exhausting the ladder so the call count *is* the rung
+  count.
+- **The lint warning ratchet was not enforcing anything.** `eslint.config.js`
+  claimed `--max-warnings 1020` meant "adding a new one fails CI". The cap sat
+  71 above the tree's real count, so that many new warnings passed unnoticed.
+  The cap now equals the count (889), and a hand-rolled test that had been
+  written to catch dead bindings — badly, with a blind spot that missed real
+  ones — was deleted in favour of the installed rule that does the job
+  properly.
+- **App.tsx no longer imports 58 names it never used**, and the 28 unused
+  local declarations left in it are documented rather than bulk-deleted:
+  removing a `useMemo`/`useCallback` means deciding whether its initialiser is
+  a computation or a subscription.
+- **The learning loop can no longer lose data quietly.** Notebook writes
+  surface their failure through one shared accessor, the supervisor counts
+  work per hour rather than per session, and skill-promotion statistics use
+  two-sided Wilson bounds with a minimum sample.
+- **A test seam and a fragile comment are gone.** `conductRealDebate` takes
+  an options object everywhere — the positional adapter that only existed to
+  avoid rewriting the suite has been deleted — and the calibration modules
+  publish only what is actually consumed, with a guard that fails if they
+  stop.
+- **Migrated the provider and profile state onto the hooks that own it**, so
+  derived values can no longer drift from the data they are derived from, and
+  the two late-bound run bridges carry their real signatures instead of
+  `any` and a cast that could return `undefined`.
+- **The repo is now MIT-licensed with a tracked `LICENSE` and
+  `THIRD_PARTY_NOTICES.md`.**
 ## Future price paths, a finished screener shortcut, and tool-call markup that can no longer leak into chat
 
 - **The model can show possible future prices.** A new `project_future_price`
