@@ -34,13 +34,6 @@ export const CALIBRATION_DRIFT_THRESHOLD_PTS = 10;
 // ============================================================================
 
 /**
- * Exponential decay factor for time-weighted calibration.
- * A trade from 30 days ago will have weight: 0.95^30 ≈ 21.5%
- * A trade from 7 days ago will have weight: 0.95^7 ≈ 69.8%
- */
-export const DECAY_FACTOR = 0.95;
-
-/**
  * Maximum age in days to consider a trade for calibration.
  * Trades older than this are excluded from decay calculations.
  */
