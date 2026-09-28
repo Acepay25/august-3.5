@@ -323,6 +323,23 @@ Optional build-time variables:
   Do not reintroduce a model-shaped claim: it deleted the trader's own answers
   from the one pane that shows them (they were claimed into a bot thread that
   never displayed them). `tests/deskThreadClaims.test.ts` pins both directions.
+- **Writing a ref during render is a load-bearing idiom here, not a mistake.**
+  `ref.current = value` on its own line inside a component body is deliberate
+  and appears in many hooks (`composerModeRef`, `tradesRef`, `activeUsernameRef`).
+  It exists because an effect runs too late: a hook called LATER in the same
+  render, or a callback that fires before the next effect pass, must already see
+  the new value. The alternative — a `useEffect` — publishes it one commit late.
+  Two rules make it safe:
+  - **Never write a ref during render to something a concurrent render could
+    tear.** These are all derived from committed state or `sessionStorage`, not
+    from props mid-transition. A ref written from props is a React "don't do
+    this" — it will not survive concurrent features.
+  - **Two writers to one ref is sometimes correct and always needs a comment.**
+    `App.tsx`'s `activeUsernameRef` is written twice on purpose: once from
+    `sessionStorage` at declaration (the only value available to `usePostMortem`,
+    which is called before `activeUsername` is destructured) and once from the
+    canonical state later. Each serves a different set of readers. Before
+    "de-duplicating" one, check what is CALLED between the two lines.
 - React 19 strict mode; TypeScript strict
 - Electron shell in `electron/` (custom `app://` protocol for production, safeStorage,
   auto-updater); Capacitor config for mobile

@@ -152,7 +152,8 @@ import { storageService } from './services/infrastructure/StorageService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
-import { useSurface, type AppSurface } from './hooks/useSurface';
+import { useSurfaceRouter } from './hooks/useSurfaceRouter';
+import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
 import type { NavBadge } from './components/shell/SurfaceMenuList';
 // The Journal pulls recharts + react-virtuoso into its chunk — statically
@@ -234,7 +235,6 @@ const App: React.FC = () => {
     /** Background-jobs drawer (status-stack pattern). */
     const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
     const [seatOverridesBot, setSeatOverridesBot] = useState<AgentBot | null>(null);
-    const applyingHashRef = useRef(false);
 
     // Lazy-on-demand: only mount the legacy StrategySearch + Analytics side
     // panels once the user opens them at least once. They stay mounted
@@ -426,15 +426,31 @@ const App: React.FC = () => {
         });
         return new Set(identities).size === identities.length;
     }, [lensConfig, missingAnalystRoles, readyProviders]);
-    // Top-level surfaces chosen from the header's hamburger menu
-    // (hooks/useSurface.ts). The trade surface is home.
-    const { surface, setSurface } = useSurface();
     /** Set when another surface asks to open Learn on a SPECIFIC tab
      *  (Settings → "Open the notebook"). LearnView reports it consumed
      *  (onInitialTabConsumed), so it navigates exactly once and the user's own
      *  last tab survives the next mount — same contract as journalTab. */
     const [learnTab, setLearnTab] = useState<LearnTab | null>(null);
     const learnTabConsumed = useCallback(() => setLearnTab(null), []);
+
+    // Surface + URL routing, the journal deep-link and the surface-enter
+    // direction — one self-contained cluster, lifted out of this component
+    // (handoff 2.1). It owns `useSurface` and needs `setLearnTab` for the
+    // #/journal/learning bookmark, which is why it is called after that.
+    const {
+        surface, setSurface,
+        journalTab, setJournalTab,
+        journalFocusTradeId, setJournalFocusTradeId,
+        journalOpenNonce,
+        surfaceEnterFrom, setSurfaceEnterFrom,
+        openJournal, handleSurfaceSelect,
+    } = useSurfaceRouter({
+        isSettingsMenuVisible, setIsSettingsMenuVisible,
+        isLiveMarketVisible, setIsLiveMarketVisible,
+        isWatchListVisible, setIsWatchListVisible,
+        isApprovalInboxVisible, setIsApprovalInboxVisible,
+        setLearnTab,
+    });
     // The trade surface's collapsible left panel: the order book, opened and
     // closed from the toggle in the Chart's own market row. Persisted so the
     // layout survives reloads like the dock width.
@@ -508,134 +524,6 @@ const App: React.FC = () => {
         postMortemCandidate, setPostMortemCandidate,
     } = useJournalUI();
 
-    // ─── Hash router (URL ↔ surfaces/overlays) ─────────────────────────────
-    // The journal is a SURFACE, so #/journal routes to it; the remaining
-    // hash views (#/market, #/settings, #/watch) are overlays stacked on top
-    // of whatever surface is showing. Deep-link state the embedded Journal
-    // consumes: the tab (initialTab) and, for the Think-tab reasoning deep
-    // link, the focused trade id (initialTradeId).
-    const [journalTab, setJournalTab] = useState<JournalUIState['tab']>('log');
-    const [journalFocusTradeId, setJournalFocusTradeId] = useState<string | undefined>(undefined);
-    /** Monotonic counter bumped on EVERY openJournal. The mounted Journal and
-     *  its ReasoningDashboard key their deep-link effects on this nonce instead
-     *  of value-diffing their props: a second "View reasoning" for the SAME
-     *  tab/trade while the journal is already open changed no value and was
-     *  silently dropped (id-dedup) or applied late. */
-    const [journalOpenNonce, setJournalOpenNonce] = useState(0);
-    /** The single "open the journal" entry point for every affordance:
-     *  command palette, mobile drawer, Header action, home dashboard,
-     *  reasoning deep-link and the #/journal hash. */
-    const openJournal = useCallback((tab: JournalUIState['tab'] = 'log', focusTradeId?: string): void => {
-        setJournalTab(tab);
-        setJournalFocusTradeId(focusTradeId);
-        setJournalOpenNonce(n => n + 1);
-        // Overlays sit above surfaces — close them so the journal actually
-        // lands visible.
-        setIsSettingsMenuVisible(false);
-        setIsLiveMarketVisible(false);
-        setIsWatchListVisible(false);
-        setIsApprovalInboxVisible(false);
-        setSurface('journal');
-    }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
-    /** Nav menu/Alt-shortcut surface selection — the journal route re-runs
-     *  openJournal so a fresh entry always resets the tab.
-     *
-     *  The Chart AI ⇄ Chat hop is animated by ONE mechanism now: the
-     *  `.surface-enter-*` keyframe in index.css, a right-pinned translateX
-     *  slide that mirrors the hamburger. It used to run a SECOND animation
-     *  alongside it — hooks/useSurfaceMorph flipped the incoming pane out of
-     *  the dock's measured box with translate + scale. Two animations on one
-     *  element fought each other, and the scale half of both won visually:
-     *  the surface ballooned in place, which is the "pop up on the left" the
-     *  trader kept reporting. Measuring a rect at runtime bought nothing the
-     *  keyframe could not say on its own, so the WAAPI morph is gone rather
-     *  than merely disabled. */
-    /** Which edge the NEXT surface should appear to arrive from, for the
-     *  Chat ⇄ Chart AI hop. Set on that hop only and consumed once — a stale
-     *  direction would replay on an unrelated visit. */
-    const [surfaceEnterFrom, setSurfaceEnterFrom] = useState<'left' | 'right' | null>(null);
-    const handleSurfaceSelect = useCallback((next: AppSurface): void => {
-        // Chat is reached FROM the chart, so it arrives from the left; the
-        // chart is reached FROM Chat, so it arrives from the right. Every
-        // other surface pair gets no directional animation at all.
-        setSurfaceEnterFrom(
-            (next === 'agents' && surface === 'trade') ? 'left'
-                : (next === 'trade' && surface === 'agents') ? 'right'
-                    : null,
-        );
-        if (next === 'journal') {
-            openJournal();
-            return;
-        }
-        setSurface(next);
-    }, [openJournal, setSurface, surface]);
-
-    useEffect(() => {
-        const apply = (): void => {
-            const route = parseAppHash(window.location.hash);
-            applyingHashRef.current = true;
-            if (route.view === 'journal' && route.tab === 'learning') {
-                // WS-5.1: the Journal's old "Learn" tab moved onto the Learn
-                // surface, so a bookmarked #/journal/learning lands where the
-                // content actually lives now rather than a deleted tab.
-                setLearnTab('health');
-                setSurface('learn');
-                setIsSettingsMenuVisible(false);
-                setIsLiveMarketVisible(false);
-                setIsWatchListVisible(false);
-            } else if (route.view === 'journal') {
-                setJournalTab(route.tab || 'log');
-                setSurface('journal');
-                setIsSettingsMenuVisible(false);
-                setIsLiveMarketVisible(false);
-                setIsWatchListVisible(false);
-            } else if (route.view === 'market') {
-                setIsLiveMarketVisible(true);
-                setIsSettingsMenuVisible(false);
-                setIsWatchListVisible(false);
-            } else if (route.view === 'settings') {
-                setIsSettingsMenuVisible(true);
-                setIsLiveMarketVisible(false);
-                setIsWatchListVisible(false);
-            } else if (route.view === 'watch') {
-                setIsWatchListVisible(true);
-                setIsSettingsMenuVisible(false);
-                setIsLiveMarketVisible(false);
-            } else if (window.location.hash) {
-                setIsSettingsMenuVisible(false);
-                setIsLiveMarketVisible(false);
-                setIsWatchListVisible(false);
-            }
-            queueMicrotask(() => { applyingHashRef.current = false; });
-        };
-        apply();
-        window.addEventListener('hashchange', apply);
-        return () => window.removeEventListener('hashchange', apply);
-    }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
-
-    useEffect(() => {
-        if (applyingHashRef.current) return;
-        // Overlay precedence: the topmost visible overlay owns the URL (it
-        // covers the surface). #/journal mirrors the deep-link tab so
-        // #/journal/reasoning round-trips.
-        const route = isSettingsMenuVisible
-            ? { view: 'settings' as const }
-            : isLiveMarketVisible
-                ? { view: 'market' as const }
-                : isWatchListVisible || isApprovalInboxVisible
-                    ? { view: 'watch' as const }
-                    : surface === 'journal'
-                        ? { view: 'journal' as const, tab: journalTab }
-                        : { view: 'chat' as const };
-        if (route.view === 'chat' && !window.location.hash) return;
-        const next = serializeAppHash(route);
-        if (window.location.hash !== next) {
-            history.replaceState(null, '', next);
-        }
-        // isApprovalInboxVisible is READ by the route computation (watch
-        // precedence) — it was missing from the deps, so opening the inbox
-        // left a stale URL.
-    }, [surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible]);
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
     const handleSendMessageRef = useRef<(...args: any[]) => any>(null!);
@@ -919,10 +807,22 @@ const App: React.FC = () => {
     // destructures activeUsername — can observe user switches and cancel
     // in-flight post-mortem work that would otherwise clobber the new user.
     //
-    // The ref is written to during render from sessionStorage (the same
-    // source of truth loadUserData uses at line 726), and usePostMortem
-    // watches it for changes. We ALSO update it via the effect below once
-    // activeUsername is destructured, so both paths agree.
+    // THE REF HAS TWO WRITERS, and both are load-bearing — this looked like a
+    // duplicate and is not:
+    //
+    //   1. HERE, from sessionStorage. `usePostMortem` is called below, BEFORE
+    //      `useUserProfiles` destructures `activeUsername`, so this write is
+    //      the only thing that makes the ref current for that hook — without
+    //      it usePostMortem reads the PREVIOUS render's value on every render,
+    //      i.e. one render stale, and its run-staleness checks fire against
+    //      the wrong user.
+    //   2. After `activeUsername` is destructured, from that state. Every
+    //      later reader uses this one, because the state is the canonical
+    //      source (sessionStorage is only where it was last mirrored).
+    //
+    // Deleting either one is a bug, not a cleanup. The ordering cannot simply
+    // be reversed: `activeUsername` does not exist yet at the point this hook
+    // is called, which is the entire reason the ref exists.
     const activeUsernameRef = useRef<string | null>(sessionStorage.getItem('activeUsername'));
     activeUsernameRef.current = sessionStorage.getItem('activeUsername') || null;
 
@@ -1209,9 +1109,9 @@ const App: React.FC = () => {
         : undefined;
     const editorIsOpen = automations.editor !== null;
 
-    // Keep the activeUsernameRef (read by usePostMortem's run-staleness
-    // checks) in sync with the canonical activeUsername state before
-    // dependent hooks render.
+    // Second of the two activeUsernameRef writers (see the declaration for why
+    // both exist and what each one serves). This one is the canonical value:
+    // every hook called from here down reads it.
     activeUsernameRef.current = activeUsername ?? null;
 
     const homeDashboard = useMemo(() => {
