@@ -22,26 +22,38 @@ export default defineConfig({
     teardownTimeout: 30000,
     // Different class of flake from the two above, and the one that actually
     // took a run red: `EnvironmentTeardownError: [vitest-worker]: Closing rpc
-    // while "onUserConsoleLog" was pending`. Vitest intercepts console.* and
-    // forwards every call from the worker to the main process over RPC so the
-    // reporter can group it under the test title. When a test file is heavy
-    // enough (agentsSurface: 48 tests, ~30s) a console call can still be in
-    // flight when the forks pool tears the worker down, and the channel closes
-    // mid-message. It is reported as an unhandled error, so it FAILS the step
-    // even though every assertion passed — PR #39 went red on 4,165 passing
-    // tests for this reason, and it reproduces on unmodified HEAD, so it is not
-    // caused by whatever changed.
+    // while "onUserConsoleLog" was pending`. It is reported as an unhandled
+    // error, so it FAILS the step even though every assertion passed — PR #39
+    // went red on 4,165 passing tests, and it reproduced on unmodified HEAD, so
+    // it was not caused by whatever changed.
     //
-    // Raising a timeout cannot fix it: the message is not a timeout, it is a
-    // message in flight. The fix is to stop routing console output through a
-    // channel that can close under it — with interception off the worker writes
-    // straight to the process stdout and there is no RPC hop to race.
+    // WHAT IS ESTABLISHED: vitest intercepts console.* and forwards each call
+    // from the worker to the main process over RPC so the reporter can group it
+    // under the test title. A message still on that wire when the forks pool
+    // tears the worker down closes the channel mid-message. Raising a timeout
+    // cannot help — this is not a timeout, it is a message already in flight.
+    // Turning interception off removes the RPC hop, so there is nothing to close
+    // under it.
     //
-    // This hides nothing. Assertion failures, unhandled rejections and
-    // timeouts all still fail the run exactly as before; the only thing lost
-    // is the reporter's per-test grouping of console output, which on this
-    // suite is overwhelmingly expected-failure noise ([RealDebate] …,
-    // [AutoCapture] …) that nobody reads per-test.
+    // VERIFIED, with the flag both on and off: a failing assertion still fails
+    // the run, and an unhandled rejection still fails the run. The only
+    // behavioural difference is reporting format — console output loses the
+    // reporter's per-test grouping, which on this suite is overwhelmingly
+    // expected-failure noise ([RealDebate] …, [AutoCapture] …). Note that
+    // `console.error` never failed the run in either configuration; that is
+    // stock Vitest behaviour, not a consequence of this flag.
+    //
+    // NOT ESTABLISHED, and deliberately not claimed: WHICH file leaked the
+    // call. The original comment blamed agentsSurface for emitting console
+    // output across a ~30s run; measured, that file emits zero console lines,
+    // solo and under the coverage instrumenter, and the error could not be
+    // reproduced locally at all. It is CI- and load-dependent, and no leaking
+    // file has been identified.
+    //
+    // So this is a fix for a failure mode whose trigger is still unexplained,
+    // not a fix for a diagnosed leak. If a teardown race ever reappears, REMOVE
+    // THIS FLAG FIRST while investigating — it would be concealing the symptom,
+    // and the real console output would be the clue.
     disableConsoleIntercept: true,
     // Same class of flake, per-test: with ~210 files, heavy jsdom suites
     // (DeskScene/room portals) run at the edge of the default
