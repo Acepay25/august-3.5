@@ -558,6 +558,71 @@ const degradeResponseFormatOnce = (params: Record<string, unknown>, jsonMode?: b
     else delete params.response_format;
 };
 
+/**
+ * The ordered request bodies to try under a 400/422: the original, then each
+ * degradation that actually changes the request — `json_schema` → `json_object`
+ * → no `response_format` → no `tools`.
+ *
+ * Walked as a ladder rather than nested try/catch, because nesting strands a
+ * rung behind a guard that stops holding partway down: the plain
+ * `jsonMode` + `tools` shape (every desk-tool seat) has its `response_format`
+ * deleted by the FIRST step, so a tools rung written inside
+ * "…&& fallbackParams.response_format" is unreachable exactly where it is
+ * needed. One rule reaches every rung: this body was refused, try the next.
+ *
+ * Steps that would send the same body again are dropped, so a healthy gateway —
+ * and any request with nothing left to drop — still issues exactly one call.
+ */
+const buildDegradeLadder = (
+    params: Record<string, unknown>,
+    options?: ChatRequestOptions,
+): Record<string, unknown>[] => {
+    const steps: Record<string, unknown>[] = [{ ...params }];
+    const tail = (): Record<string, unknown> => steps[steps.length - 1];
+
+    // A rung is appended only if it is a DIFFERENT request from the one before
+    // it. Comparing serialised content rather than reference identity is what
+    // makes that true: two steps are the same request if they would put the
+    // same body on the wire, whatever objects they were built from.
+    const pushIfDifferent = (candidate: Record<string, unknown>): void => {
+        if (JSON.stringify(candidate) !== JSON.stringify(tail())) steps.push(candidate);
+    };
+
+    // Each rung below is derived from the step it follows, and the degradation
+    // is applied to a CLONE that is only ever appended. The previous version
+    // read `last()` inside the guard as well as the builder, so whether a rung
+    // existed depended on which rung happened to be last — an evaluation-order
+    // coupling, not a statement about the request. Deriving the guards from the
+    // clone removes that coupling: a rung now exists because the request still
+    // carries the thing being dropped, and for no other reason.
+    if (options?.jsonMode || options?.jsonSchema) {
+        // json_schema falls back to json_object; anything else is removed.
+        const softened = { ...tail() };
+        degradeResponseFormatOnce(softened, options.jsonMode);
+        pushIfDifferent(softened);
+
+        // Then `response_format` goes entirely.
+        const unformatted = { ...tail() };
+        if (unformatted.response_format !== undefined) {
+            delete unformatted.response_format;
+            pushIfDifferent(unformatted);
+        }
+    }
+
+    // Finally the tools. Every desk-tool seat reaches this line, and it is the
+    // rung a nested try/catch strands exactly where it is needed — the
+    // jsonMode+tools body has already lost its `response_format` above, so a
+    // tools rung written inside "…&& fallbackParams.response_format" is
+    // unreachable.
+    const toolless = { ...tail() };
+    if (toolless.tools !== undefined) {
+        delete toolless.tools;
+        delete toolless.tool_choice;
+        pushIfDifferent(toolless);
+    }
+    return steps;
+};
+
 // ─── Timeout & Retry Helpers ────────────────────────────────────────────────
 
 /** Abort a request if it exceeds this wall-clock duration (per attempt). */
@@ -606,36 +671,26 @@ async function chatCompletionsTurn(
     }
     requestReasoningSideChannel(config, params);
     applyReasoningToChatParams(config, params as unknown as Record<string, unknown>, options);
-    let response: OpenAI.Chat.Completions.ChatCompletion;
-    try {
-        response = await client.chat.completions.create(params, { signal: withTimeoutSignal(options?.signal) });
-    } catch (error: any) {
-        if ((options?.jsonMode || options?.jsonSchema) && (error?.status === 400 || error?.status === 422)) {
-            // Degrade chain: json_schema → json_object → no response_format.
-            // A gateway that rejects the constrained format must still
-            // answer — the pipeline never blocks on an optional hardening.
-            const fallbackParams = { ...params } as Record<string, unknown>;
-            degradeResponseFormatOnce(fallbackParams, options?.jsonMode);
-            try {
-                response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
-            } catch (second: any) {
-                if ((second?.status === 400 || second?.status === 422) && fallbackParams.response_format) {
-                    delete fallbackParams.response_format;
-                    response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
-                } else {
-                    throw second;
-                }
-            }
-        } else if (options?.tools?.length && (error?.status === 400 || error?.status === 422)) {
-            // Gateway rejects tools — retry without them so the text-protocol fallback can run.
-            const fallbackParams = { ...params } as Record<string, unknown>;
-            delete fallbackParams.tools;
-            delete fallbackParams.tool_choice;
-            response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
-        } else {
-            throw error;
+    // A gateway may refuse the constrained response_format, the tools, or both.
+    // Walk the ladder of progressively less ambitious bodies instead of nesting
+    // one fallback inside another's branch — see buildDegradeLadder for why
+    // nesting strands the tools rung exactly where a desk-tool seat needs it.
+    // Only a 400/422 ("this body was refused") advances it: 429s, 5xx and
+    // network faults propagate untouched so withRetry keeps owning them, and a
+    // healthy gateway still issues exactly one request.
+    const ladder = buildDegradeLadder(params as unknown as Record<string, unknown>, options);
+    let response: OpenAI.Chat.Completions.ChatCompletion | undefined;
+    let refusal: unknown;
+    for (const body of ladder) {
+        try {
+            response = await client.chat.completions.create(body as any, { signal: withTimeoutSignal(options?.signal) });
+            break;
+        } catch (error: any) {
+            if (error?.status !== 400 && error?.status !== 422) throw error;
+            refusal = error;
         }
     }
+    if (!response) throw refusal ?? new Error('Provider request failed');
     const message = response.choices[0]?.message as any;
     const splitContent = splitChatContent(message?.content);
     const reasoning = [
