@@ -101,7 +101,7 @@ export default tseslint.config(
     rules: {
       // Relax rules that would produce too many errors initially.
       //
-      // WARNING RATCHET: `npm run lint` runs with --max-warnings 949 in
+      // WARNING RATCHET: `npm run lint` runs with --max-warnings 889 in
       // package.json. The number must EQUAL the warning count on a clean main,
       // because the cap is only a ratchet if it actually binds.
       //
@@ -111,6 +111,15 @@ export default tseslint.config(
       // hand-rolling a dead-binding guard because the installed AST rule that
       // already does the job was gated by a cap with slack in it. The guard was
       // removed when the cap was corrected.
+      //
+      // 949 -> 889: the first cleanup the corrected ratchet made safe. It
+      // removed 58 unused imports from App.tsx, whose real dependency surface
+      // was 58 names wider than anything in the file actually used. 28 unused
+      // LOCAL declarations remain there and are deliberately NOT swept in: each
+      // is a whole `useMemo`/`useCallback`/`useState` statement whose
+      // initialiser has to be read before deciding whether removing it removes
+      // a computation or a subscription. Pay those down as their files are
+      // touched, not in a bulk pass.
       //
       // Re-measure on a clean checkout after touching this file, and LOWER the
       // number when you pay warnings down; never raise it to go green.
