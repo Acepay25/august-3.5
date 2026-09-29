@@ -7,9 +7,8 @@ export interface DetectedPattern {
     confidence: number; // 0 to 1
     description: string;
     significance: string;
-    /** Pivot extremes the pattern actually rests on — the weakest of its two
-     *  lines, since a triangle is only as valid as its least-touched edge.
-     *  MEASURED, not asserted: see countTouchesOnLine. */
+    /** Measured touches on the line the pattern rests on — see
+     *  countTouchesOnLine. MEASURED, not asserted. */
     touches: number;
     /**
      * The pivots this pattern rests on, in data space.
@@ -24,6 +23,17 @@ export interface DetectedPattern {
      * placed without the model guessing which bar it was.
      */
     anchors?: PatternAnchor[];
+    /**
+     * The line the pattern actually rests on — the two points whose touches
+     * were counted. For a head-and-shoulders that is the neckline, for a
+     * double top the resistance, for a triangle the flat edge.
+     *
+     * Separate from `anchors` because anchors are every pivot, and a triangle
+     * groups them BY SIDE — joining its first anchor to its last would draw a
+     * line from a high to a low that nobody described. This is the claim, and
+     * it is what `draw_detected` draws.
+     */
+    line?: { a: PatternAnchor; b: PatternAnchor };
 }
 
 export interface PatternAnchor {
@@ -99,6 +109,10 @@ const anchorsOf = (klines: Kline[], pivots: { price: number; index: number }[]):
     pivots
         .filter(p => klines[p.index] !== undefined)
         .map(p => ({ price: p.price, index: p.index, time: klines[p.index]!.time }));
+
+/** One pivot as a drawable anchor. */
+const anchorOf = (klines: Kline[], p: { price: number; index: number }): PatternAnchor =>
+    ({ price: p.price, index: p.index, time: klines[p.index]?.time ?? 0 });
 
 /**
  * The three-touch rule: two pivots define a line, but they do not *confirm*
@@ -211,6 +225,8 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 // whose touches decide whether this is a setup or an assumption.
                 touches: countTouchesOnLine(klines, ls, rs, TOUCH_TOL_PCT, 'high'),
                 anchors: anchorsOf(klines, [ls, head, rs]),
+                // The neckline: shoulder to shoulder.
+                line: { a: anchorOf(klines, ls), b: anchorOf(klines, rs) },
             });
         }
     }
@@ -232,6 +248,7 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 significance: 'Major Bullish Reversal',
                 touches: countTouchesOnLine(klines, ls, rs, TOUCH_TOL_PCT, 'low'),
                 anchors: anchorsOf(klines, [ls, head, rs]),
+                line: { a: anchorOf(klines, ls), b: anchorOf(klines, rs) },
             });
         }
     }
@@ -256,6 +273,7 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 // "confirmed" on the strength of the detection alone.
                 touches: countTouchesOnLine(klines, peak1, peak2, TOUCH_TOL_PCT, 'high'),
                 anchors: anchorsOf(klines, [peak1, peak2]),
+                line: { a: anchorOf(klines, peak1), b: anchorOf(klines, peak2) },
             });
         }
     }
@@ -276,6 +294,7 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 significance: 'Bullish Reversal',
                 touches: countTouchesOnLine(klines, trough1, trough2, TOUCH_TOL_PCT, 'low'),
                 anchors: anchorsOf(klines, [trough1, trough2]),
+                line: { a: anchorOf(klines, trough1), b: anchorOf(klines, trough2) },
             });
         }
     }
@@ -326,9 +345,10 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 confidence: 0.75,
                 description: 'Flat resistance with higher lows.',
                 significance: 'Bullish Continuation',
-                // The claim is the flat ceiling.
+                // The claim is the flat ceiling, so that is the line.
                 touches: topTouches,
                 anchors: triAnchors,
+                line: { a: anchorOf(klines, hp[0]), b: anchorOf(klines, hp[2]) },
             });
         } else if (lowerHighs && flatLows) {
             patterns.push({
@@ -337,9 +357,10 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 confidence: 0.75,
                 description: 'Flat support with lower highs.',
                 significance: 'Bearish Continuation',
-                // The claim is the flat floor.
+                // The claim is the flat floor, so that is the line.
                 touches: baseTouches,
                 anchors: triAnchors,
+                line: { a: anchorOf(klines, lp[0]), b: anchorOf(klines, lp[2]) },
             });
         } else if (lowerHighs && higherLows) {
              patterns.push({
@@ -348,9 +369,13 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
                 confidence: 0.7,
                 description: 'Price coiling with lower highs and higher lows.',
                 significance: 'Breakout Imminent',
-                // No flat edge — both lines carry it, so the weaker decides.
+                // No flat edge — both lines carry it, so the weaker decides,
+                // and the line reported is that same weaker edge.
                 touches: Math.min(topTouches, baseTouches),
                 anchors: triAnchors,
+                line: topTouches <= baseTouches
+                    ? { a: anchorOf(klines, hp[0]), b: anchorOf(klines, hp[2]) }
+                    : { a: anchorOf(klines, lp[0]), b: anchorOf(klines, lp[2]) },
             });
         }
     }
