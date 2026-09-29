@@ -391,12 +391,30 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 : 'Cleared the model\'s own drawings from the chart (the user\'s shapes were kept).');
         }
         if (!addModelDrawings) return receipt(false, `${name}: no chart is attached to this session.`);
+        // Whether a drawn shape is actually ON SCREEN. repaint() clips to the
+        // plot rect, so a price outside the visible scale is discarded
+        // silently and a trend anchored past the window never appears — and the
+        // receipt used to say "The user sees it now" either way. The model was
+        // told its work landed, and had no way to learn otherwise.
+        const vis = snap?.visibleRange ?? null;
+        const inView = (p: number): boolean =>
+            vis ? p >= vis.priceLow && p <= vis.priceHigh : true;
+        /** Only claims visibility when it is known; never guesses either way. */
+        const visibility = (drawings2: { points: { p: number }[] }[]): string => {
+            if (!vis) return '';
+            const off = drawings2.filter(d => !d.points.every(pt => inView(pt.p)));
+            if (off.length === 0) return ' The user sees these now.';
+            if (off.length === drawings2.length) {
+                return ` WARNING: every price is OUTSIDE the visible range ${Math.round(vis.priceLow)}–${Math.round(vis.priceHigh)} — repaint() clips there, so the user will NOT see this until the chart is scrolled or zoomed out.`;
+            }
+            return ` WARNING: ${off.length} of ${drawings2.length} shapes fall outside the visible range ${Math.round(vis.priceLow)}–${Math.round(vis.priceHigh)} and will be clipped until the user scrolls or zooms out.`;
+        };
         if (name === 'mark_trade_levels') {
             const { drawings, error } = drawingsFromLevelTool(args, { drawnPrice });
             if (error) return receipt(false, `mark_trade_levels rejected: ${error}`);
             addModelDrawings(drawings, turn);
             const listed = drawings.map(d => `${d.label} ${d.points[0].p}`).join(', ');
-            return receipt(true, `Marked on the chart: ${listed}. The user sees these lines now.${canvasNote}`);
+            return receipt(true, `Marked on the chart: ${listed}.${visibility(drawings)}${canvasNote}`);
         }
         // draw_on_chart — resolve bars-ago anchors against the newest candle.
         const lastBarTime = snap && snap.candles.length > 0
@@ -407,7 +425,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         addModelDrawings(drawings, turn);
         const d = drawings[0];
         const described = describeDrawingsForModel([d]).split('\n').slice(1).join(' ').trim();
-        return receipt(true, `Drew on the chart: ${described || d.kind}. The user sees it now.${canvasNote}`);
+        return receipt(true, `Drew on the chart: ${described || d.kind}.${visibility([d])}${canvasNote}`);
     };
 
     /** The fresh code-calculated packet every message rides (fetched ONCE per

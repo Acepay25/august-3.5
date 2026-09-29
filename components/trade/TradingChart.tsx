@@ -149,6 +149,32 @@ export interface ChartSnapshot {
     drawings: ChartDrawing[];
     /** Shapes the model itself drew via desk tools (not persisted). */
     modelDrawings: ChartDrawing[];
+    /**
+     * What the user can actually SEE, in data space — the price and time
+     * window currently on screen, plus how many bars are loaded.
+     *
+     * This exists because `repaint()` clips every shape to the plot rect
+     * (ctx.rect(0, 0, plotW, plotH)). A price outside the visible scale
+     * projects outside that rect and is silently discarded, and a trend whose
+     * anchor sits past the visible window never appears at all. The model was
+     * told "The user sees it now" with no way to learn otherwise.
+     *
+     * It is also what makes the model's own instructions checkable: without a
+     * visible window, "a swing high from 300 bars ago" is simply not
+     * expressible, because there was no bar index or timestamp in the snapshot
+     * to name it by.
+     *
+     * null until the chart has fitted a range.
+     */
+    visibleRange?: {
+        priceLow: number;
+        priceHigh: number;
+        timeLow: number;
+        timeHigh: number;
+        /** Bars loaded in the series, vs bars currently visible. */
+        barsLoaded: number;
+        barsVisible: number;
+    } | null;
     capturedAt: number;
 }
 
@@ -356,6 +382,45 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     // Tracks symbol flips inside the data-lifecycle effect below (it also
     // re-runs on `live` toggles, which must NOT blank the chart).
     const dataSymbolRef = useRef(symbol);
+
+    /**
+     * The window the user is actually looking at, read from the live chart.
+     *
+     * Derived defensively: every accessor can throw or return null if the
+     * series is mid-teardown (symbol switch, unmount), and a snapshot that
+     * throws would take the whole chat turn down with it. Anything unreadable
+     * comes back null, which the receipt reads as "cannot vouch for it" rather
+     * than as "definitely visible".
+     */
+    const readVisibleRange = (): ChartSnapshot['visibleRange'] => {
+        try {
+            const chart = chartRef.current;
+            const series = candlesRef.current;
+            const host = hostRef.current;
+            if (!chart || !series || !host) return null;
+            const lr = chart.timeScale().getVisibleLogicalRange();
+            if (!lr) return null;
+            // The clip rect is (0, 0, plotW, plotH) with plotH = h - 28, so
+            // y=0 is the top of the visible price band and y=plotH the bottom.
+            // coordinateToPrice is the direction that maps pixels -> price;
+            // priceToCoordinate would answer the opposite question.
+            const plotH = Math.max(0, host.clientHeight - 28);
+            if (plotH <= 0) return null;
+            const top = series.coordinateToPrice(0);
+            const bottom = series.coordinateToPrice(plotH);
+            if (top === null || bottom === null || !Number.isFinite(top) || !Number.isFinite(bottom)) return null;
+            return {
+                priceLow: Math.min(top, bottom),
+                priceHigh: Math.max(top, bottom),
+                timeLow: (Number(lr.from) || 0) * 60,
+                timeHigh: (Number(lr.to) || 0) * 60,
+                barsLoaded: (series.data() ?? []).length,
+                barsVisible: Math.max(0, Math.round(Number(lr.to) - Number(lr.from))),
+            };
+        } catch {
+            return null;
+        }
+    };
     useEffect(() => {
         // Symbol switch: drop the PREVIOUS coin's artifacts immediately —
         // candles, volume and the mark price line — so no stale price prints
@@ -984,6 +1049,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     ],
                     drawings: drawingsRef.current,
                     modelDrawings: modelDrawingsRef.current,
+                    visibleRange: readVisibleRange(),
                     capturedAt: Date.now(),
                 };
             },
