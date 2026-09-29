@@ -337,6 +337,15 @@ const TOOL_BUDGETS: Record<string, number> = {
     get_market_packet: 6000,
     run_screener: 4000,
     get_all_timeframes: 8000,
+    // 60 OHLCV rows are ~64 chars each on a six-figure instrument, so 60 rows
+    // is ~3.8k BEFORE the order-book block, the drawing notes and the header.
+    // At the 2400 default the tool lost roughly 23 of the 60 candles it
+    // advertises, on every call, with nothing marking the loss — the seat
+    // believed it was reading a full chart. 8000 holds the whole read.
+    // A seat that still overflows gets a spill receipt naming
+    // read_tool_output, which is only offered to seats that can call it
+    // (see spillReceiptAllowed).
+    get_chart_view: 8000,
 };
 
 /**
@@ -1263,7 +1272,7 @@ You can call live tools before you speak — opening analysis, rebuttal, clarifi
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
 The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
-BEFORE YOU NAME A SHAPE: a pattern, a trendline, a swing high/low, "higher lows", a triangle or a broken structure requires \`get_chart_view\` (or \`get_all_timeframes\` to compare frames) on this turn. The market packet you are shown carries EIGHT candles per timeframe plus code-calculated summaries of the rest — eight printed rows are not a chart, and a shape described from them is invented, not read. If you have not called the tool, either call it or say "inferred from the 8 rows shown" and give it no confidence. Naming \`draw_on_chart\` or \`mark_trade_levels\` is how a level becomes something the trader can see: pass the exact prices you are citing, never restated ones.
+BEFORE YOU NAME A SHAPE: a pattern, a trendline, a swing high/low, "higher lows", a triangle or a broken structure requires \`get_chart_view\` (or \`get_all_timeframes\` to compare frames) on this turn. The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call the tool; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. Naming \`draw_on_chart\` or \`mark_trade_levels\` is how a level becomes something the trader can see: pass the exact prices you are citing, never restated ones.
 run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;

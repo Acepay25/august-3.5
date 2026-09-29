@@ -107,6 +107,12 @@ const TRADE_TOOLS = [
     // Collaboration memory: this environment's MEMORY.md analogue — the model
     // maintains durable facts about the USER (index always loaded, bodies on demand).
     'remember', 'read_memory', 'forget',
+    // Read-back for a clipped tool result. Without this the dock had no way to
+    // recover a truncated result AND spillReceiptAllowed() suppressed the
+    // receipt that would have named the loss, so a clipped chart read was a
+    // dead end: the seat could not even learn it was holding part of a chart.
+    // Anything that can be clipped must be able to be re-read.
+    'read_tool_output',
 ];
 
 /** Cap on attached text file bulk handed to the prompt. */
