@@ -11,6 +11,7 @@
 
 import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
+import { priceArgError, usablePrice } from './tradePlanLevels';
 
 export type DrawKind = 'trend' | 'hline' | 'ray' | 'rect' | 'brush' | 'fib' | 'text';
 
@@ -233,9 +234,19 @@ export const drawingFromChartTool = (
     const kind = kindMap[kindRaw];
     if (!kind) return { drawings: [], error: `unknown kind "${kindRaw}" — use hline, trend, ray, zone, fib or text` };
 
-    const prices = Array.isArray(args.prices) ? args.prices.map(p => Number(p)).filter(p => Number.isFinite(p)) : [];
+    // One rule, shared: `Number.isFinite` is not enough, because 0 and -1 are
+    // both finite and neither is a price. This used to accept them, producing
+    // a line at zero and an unconditional "Drew on the chart" receipt for a
+    // shape that cannot exist. See priceArgError in tradePlanLevels.
+    const rawPrices = Array.isArray(args.prices) ? args.prices : [];
     const need = kind === 'hline' || kind === 'text' ? 1 : 2;
-    if (prices.length < need) return { drawings: [], error: `${kind} needs ${need} price(s) in "prices"` };
+    if (rawPrices.length < need) return { drawings: [], error: `${kind} needs ${need} price(s) in "prices"` };
+    const prices: number[] = [];
+    for (let i = 0; i < need; i++) {
+        const bad = priceArgError(rawPrices[i], `prices[${i}]`);
+        if (bad) return { drawings: [], error: bad };
+        prices.push(Number(rawPrices[i]));
+    }
 
     const barAt = (barsAgo: number): number => Math.round(ctx.lastBarTime - barsAgo * ctx.barSeconds);
     const start = Number.isFinite(Number(args.startBarsAgo)) ? Math.max(0, Number(args.startBarsAgo)) : DEFAULT_START_BARS_AGO;
@@ -261,14 +272,34 @@ export const drawingsFromLevelTool = (
     args: { entry?: unknown; stopLoss?: unknown; takeProfits?: unknown },
     ctx?: { drawnPrice?: number | null },
 ): { drawings: ChartDrawing[]; error?: string } => {
-    const num = (v: unknown): number | null => {
-        const n = typeof v === 'number' ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-    };
+    const num = (v: unknown): number | null => usablePrice(v);
     const entry = num(args.entry);
     const stop = num(args.stopLoss);
-    const tps = Array.isArray(args.takeProfits) ? args.takeProfits.map(num).filter((n): n is number => n !== null).slice(0, 5) : [];
-    if (entry === null) return { drawings: [], error: 'entry price is required' };
+    // Same rule as draw_on_chart, named per field so the model is told which
+    // level is wrong. takeProfits is filtered rather than rejected wholesale
+    // because a model that emits one bad target alongside two good ones should
+    // still get those two drawn.
+    const tps = (Array.isArray(args.takeProfits) ? args.takeProfits : [])
+        .map((raw, i) => {
+            const bad = priceArgError(raw, `takeProfits[${i}]`);
+            if (bad) return null;
+            return Number(raw);
+        })
+        .filter((n): n is number => n !== null)
+        .slice(0, 5);
+    if (entry === null) {
+        // Two different failures, and the model needs to be told which. A
+        // missing entry is a required-field problem ("you forgot it"); an
+        // entry of 0 is a value problem ("that cannot be a price"). Collapsing
+        // them loses the distinction, and "entry must be a number" for an
+        // absent field reads as if something malformed was sent rather than
+        // nothing at all.
+        const absent = args.entry === undefined || args.entry === null || args.entry === '';
+        return {
+            drawings: [],
+            error: absent ? 'entry price is required' : priceArgError(args.entry, 'entry') ?? 'entry price is required',
+        };
+    }
     if (stop === null && tps.length === 0) return { drawings: [], error: 'provide stopLoss and/or takeProfits' };
 
     const drawnPrice = finiteNum(ctx?.drawnPrice ?? undefined) ?? undefined;
