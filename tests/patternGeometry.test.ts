@@ -49,8 +49,24 @@ const throughPivots = (anchors: number[], legs?: number[]): Kline[] => {
  *  and exactly two pivots to draw it from. */
 const DOUBLE_TOP = throughPivots([100, 130, 110, 130.5, 128], [SEG, SEG, SEG, 6]);
 /** Lower highs 150/140/133 against higher lows 110/120/126: a symmetrical
- *  triangle with three touches on each edge. */
+ *  triangle. Its top line is reached only AT its defining pivots — price
+ *  dives well below it between them — so the honest count is two, and the
+ *  shape is an ASSUMPTION. (The old comment here claimed "three touches on
+ *  each edge"; that was the hard-coded literal, not the geometry.) */
 const COILING = throughPivots([100, 150, 110, 140, 120, 133, 126, 131]);
+/** A flat 150 ceiling revisited three times over rising lows 120/130/140: the
+ *  flat edge is genuinely touched three times, so this one MEASURES as
+ *  confirmed.
+ *
+ *  The trailing 145 leg is load-bearing, not decoration. findPivots ignores the
+ *  first `leftBars` and last `rightBars` bars, so a zigzag's opening low and
+ *  closing low are never pivots — a seven-anchor shape yields EITHER three
+ *  interior highs and two lows, or the reverse, and never both, so the
+ *  triangle branch (which needs three of each) would not run at all. The
+ *  eighth anchor moves the counts into the interior. Without a fixture like
+ *  this the "confirmed" branch had no coverage once counts became
+ *  measurements. */
+const RESISTED = throughPivots([110, 150, 120, 150, 130, 150, 140, 145]);
 
 describe('detectChartPatterns — geometry', () => {
     it('finds the double top across two equal swing highs', () => {
@@ -77,17 +93,32 @@ describe('the three-touch rule', () => {
         const doubleTop = detectChartPatterns(DOUBLE_TOP).find(p => p.name === 'Double Top');
         const triangle = detectChartPatterns(COILING).find(p => p.name === 'Symmetrical Triangle');
         expect(doubleTop?.touches).toBe(2);
-        expect(triangle?.touches).toBe(3);
+        // MEASURED, and the answer is two. Between its defining pivots the
+        // coiling price sits far below the top line, so the line was only ever
+        // reached twice. This test used to expect 3 — which was possible only
+        // because every branch returned the literal 3 the moment the shape
+        // matched, and so could never have told the two cases apart.
+        expect(triangle?.touches).toBe(2);
+        // A line the market really did defend three times measures three.
+        const resisted = detectChartPatterns(RESISTED).find(p => p.name === 'Ascending Triangle');
+        expect(resisted?.touches).toBe(3);
     });
 
     it('labels a two-touch line an assumption and a three-touch line confirmed', () => {
         const [doubleTop] = detectChartPatterns(DOUBLE_TOP);
-        const [triangle] = detectChartPatterns(COILING);
-        // The discrimination is the point: both carry a hand-set confidence,
-        // so without this a 0.8 double top outranks a 0.7 triangle that has
-        // actually been touched a third time.
+        const [coiling] = detectChartPatterns(COILING);
+        const [resisted] = detectChartPatterns(RESISTED);
+        // The discrimination is the point: confidence is hand-set, so a 0.8
+        // double top would otherwise outrank a shape that was actually
+        // touched a third time. Both of these are now MEASURED counts, so the
+        // two cases below are genuinely different geometry rather than two
+        // literals that happened to differ.
         expect(patternStatus(doubleTop)).toBe('assumption');
-        expect(patternStatus(triangle)).toBe('confirmed');
+        // The coiling triangle's top line is reached only at its own pivots,
+        // so it is an ASSUMPTION — it used to be reported "confirmed" on the
+        // strength of a literal.
+        expect(patternStatus(coiling)).toBe('assumption');
+        expect(patternStatus(resisted)).toBe('confirmed');
     });
 
     it('does not call a shape confirmed by its own confidence number', () => {
@@ -96,5 +127,22 @@ describe('the three-touch rule', () => {
         const [doubleTop] = detectChartPatterns(DOUBLE_TOP);
         expect(doubleTop.confidence).toBeGreaterThan(0.7);
         expect(patternStatus(doubleTop)).toBe('assumption');
+    });
+
+    it('carries the anchors the shape rests on, in data space', () => {
+        // The model could not draw a structure the code had already found,
+        // because the pivots were computed and then thrown away into a
+        // formatted sentence.
+        const [doubleTop] = detectChartPatterns(DOUBLE_TOP);
+        expect(doubleTop.anchors?.length).toBe(2);
+        for (const a of doubleTop.anchors ?? []) {
+            expect(Number.isFinite(a.price)).toBe(true);
+            expect(Number.isFinite(a.index)).toBe(true);
+            // A time is what makes the anchor placeable without guessing which
+            // bar it was.
+            expect(Number.isFinite(a.time)).toBe(true);
+        }
+        const [resisted] = detectChartPatterns(RESISTED);
+        expect(resisted.anchors?.length).toBeGreaterThanOrEqual(6);
     });
 });
