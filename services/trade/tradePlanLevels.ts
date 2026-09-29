@@ -46,6 +46,35 @@ export interface LevelHit {
     at: number;
 }
 
+/**
+ * The ONE rule for "is this a number we can put on a chart".
+ *
+ * Every path that turns a model-supplied number into a price on the user's
+ * live chart, a watch trigger, or a plan level goes through here. There is no
+ * second copy: the drawing tools used to accept any finite number, so `0` and
+ * `-5` became a line at zero and the caller was told "Drew on the chart" —
+ * a success receipt for something that cannot exist.
+ *
+ * `Number.isFinite` alone is not enough. Zero is finite. So is -1. Both are
+ * finite, and both are not prices.
+ *
+ * Returns the rejection reason, or null when the value is usable. `field` is
+ * used in the message so a four-price `prices: []` array says WHICH one is
+ * wrong, rather than the model re-guessing all of them.
+ */
+export const priceArgError = (raw: unknown, field = 'price'): string | null => {
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) return `${field} must be a number`;
+    if (n <= 0) return `${field} must be a positive number`;
+    return null;
+};
+
+/** Coerce a model-supplied value to a usable price, or null if it is not one. */
+export const usablePrice = (raw: unknown): number | null => {
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 /** One row per watchable level, ids stable for the plan's whole life. */
 export const buildPlanLevels = (p: WatchPlan): PlanLevel[] => {
     const levels: PlanLevel[] = [
