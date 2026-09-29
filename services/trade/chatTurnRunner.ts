@@ -115,6 +115,40 @@ const TRADE_TOOLS = [
     'read_tool_output',
 ];
 
+/** An image the composer attached to this turn, in the shape the runner needs. */
+type ScreenshotAttachment = { kind: string; payload: string };
+
+/**
+ * Attach a screenshot to a turn — or say plainly that this seat cannot see it.
+ *
+ * This lives in ONE place because the two callers used to disagree, and the
+ * disagreement was invisible from the outside. The solo path built a real
+ * `image_url` part. The panel path built a plain string and dropped the
+ * attachment entirely, while offering the user the same camera button. So in a
+ * multi-seat panel — the app's headline mode — the user clicked the camera,
+ * saw the screenshot in their own bubble, and every seat answered blind. No
+ * error, no notice, and every measurement you would naturally take (button
+ * enabled, bubble renders, model replies) is identical across both states.
+ *
+ * The fallback is not decoration either: a seat that cannot see images must
+ * be told, or it invents a confident read of a chart it never received. A
+ * panel can mix vision and text-only seats, so this is decided PER SEAT.
+ */
+export const userContentWithImage = (
+    text: string,
+    attachment: ScreenshotAttachment | undefined,
+    selectedModel: string,
+): string | ContentPart[] => {
+    if (!attachment) return text;
+    if (isVisionModel(selectedModel)) {
+        return [
+            { type: 'text', text },
+            { type: 'image_url', image_url: { url: attachment.payload } },
+        ];
+    }
+    return `${text}\n\n[The user attached a chart screenshot but this model cannot see images.]`;
+};
+
 /** Cap on attached text file bulk handed to the prompt. */
 const MAX_FILE_CHARS = 200_000;
 
@@ -706,7 +740,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 ? (configForSeat(bot.providerId, bot.modelId) ?? provider)
                 : provider;
             const systemPrompt = systemPromptFor(bot);
-            const canSeeImages = isVisionModel(soloProvider.selectedModel);
+            const userContent = userContentWithImage(userText, imageAttachment, soloProvider.selectedModel);
             // Solo answers carry the seat label, so returning to a session
             // shows who said each line (the renderer the panel seats already
             // use). A bot-bound session names the AGENT, not the slug: the
@@ -720,11 +754,6 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // session, not into `messages`, so unlike the Chat surface there is
             // no trader's row already waiting to be claimed.
             if (bot) onBotTurnCommit?.(bot, text);
-            const userContent: string | ContentPart[] = imageAttachment && canSeeImages
-                ? [{ type: 'text', text: userText }, { type: 'image_url', image_url: { url: imageAttachment.payload } }]
-                : imageAttachment
-                    ? `${userText}\n\n[The user attached a chart screenshot but this model cannot see images.]`
-                    : userText;
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
                 ...history.slice(-10).flatMap(e =>
@@ -855,9 +884,16 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // still has to know it is one voice among N on this chart, which
                 // the roster persona alone never says.
                 const panelMandate = `You are "${seat.name}" on a ${seats.length}-seat chart panel. Seats: ${seats.map(x => x.name).join(', ')}.`;
+                // The panel used to pass a bare string here and drop the
+                // screenshot on the floor: the user attached a chart, saw it
+                // in their own bubble, and every seat answered without it.
+                // Decided per seat, because a panel can mix vision and
+                // text-only models, and a seat that cannot see the image is
+                // told so rather than left to invent a read of it.
+                const seatContent = userContentWithImage(userMsg, imageAttachment, seatConfig.selectedModel);
                 const messages: ChatMessage[] = [
                     { role: 'system', content: systemPromptFor(seatBot, panelMandate) },
-                    { role: 'user', content: userMsg },
+                    { role: 'user', content: seatContent },
                 ];
                 let full = '';
                 let seatFailed = false;
