@@ -16,6 +16,7 @@
 
 import { phtClock } from '../../utils/timezone';
 import { baseOf, quoteOf } from '../../utils/symbol';
+import { priceArgError } from './tradePlanLevels';
 
 /** Canonical full futures symbol from a model-supplied one ('BTC' → 'BTCUSDT',
  *  'BTC/USDT' → 'BTCUSDT', 'BTCUSDT' unchanged) — the utils/symbol doctrine
@@ -82,8 +83,10 @@ export const parsePriceWatch = (args: Record<string, unknown>, defaults: {
     symbol: string; makeId: () => string; nowMs: number;
 }): { watch?: PriceWatch; error?: string } => {
     const priceRaw = typeof args.price === 'number' ? args.price : Number(args.price);
-    if (!Number.isFinite(priceRaw) || priceRaw <= 0) return { error: 'price must be a positive number' };
-    const condition = args.condition === 'below' ? 'below' : args.condition === 'above' ? 'above' : null;
+    // The shared rule, not a third copy: the drawing tools took any finite
+    // number, so 0 became a watch trigger at a price that cannot exist.
+    const badPrice = priceArgError(priceRaw, 'price');
+    if (badPrice) return { error: badPrice };    const condition = args.condition === 'below' ? 'below' : args.condition === 'above' ? 'above' : null;
     if (!condition) return { error: 'condition must be "above" or "below"' };
     const minutesRaw = args.expiresInMinutes !== undefined ? Number(args.expiresInMinutes) : 720;
     const minutes = Number.isFinite(minutesRaw) && minutesRaw > 0 ? Math.min(minutesRaw, 7 * 24 * 60) : 720;
