@@ -772,10 +772,24 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // session, not into `messages`, so unlike the Chat surface there is
             // no trader's row already waiting to be claimed.
             if (bot) onBotTurnCommit?.(bot, text);
+            // History carries its images. The user attached a chart two turns
+            // ago and asked "what about that pattern?" — the screenshot was
+            // stored on the entry all along (StoredChatEntry.image, which is why
+            // RETRY could recover it), but the history rebuild read e.text
+            // alone, so the follow-up was answered blind by a model that had
+            // just been shown the chart. Rebuilt through the same helper as the
+            // live turn, so a prior image is re-sent as a real part and a
+            // text-only seat is told it is there rather than not knowing.
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
-                ...history.slice(-10).flatMap(e =>
-                    e.text.trim() ? [{ role: e.role === 'user' ? 'user' : 'assistant', content: e.text } as ChatMessage] : []),
+                ...history.slice(-10).flatMap(e => {
+                    if (!e.text.trim() && !e.image) return [];
+                    const role = e.role === 'user' ? 'user' : 'assistant';
+                    const content = e.role === 'user' && e.image
+                        ? userContentWithImage(e.text, { kind: 'image', payload: e.image }, soloProvider.selectedModel)
+                        : e.text;
+                    return [{ role, content } as ChatMessage];
+                }),
                 { role: 'user', content: userContent },
             ];
             try {
