@@ -8,13 +8,14 @@
  */
 
 import { phtFullStamp, phtStamp } from '../../utils/timezone';
+import { clipNote } from '../../utils/harnessMarks';
+import { charsForTokens, windowBudgetTokens } from '../../utils/tokenEstimate';
 
 export interface TradeChatContextInput {
     symbol: string;
     interval: string;
     /** generateHybridPromptInjection output (code-calculated packet markdown). */
-    packetMarkdown: string;
-    /** Epoch ms of the fetch — stamped so the model knows how fresh it is. */
+    packetMarkdown: string;    /** Epoch ms of the fetch — stamped so the model knows how fresh it is. */
     fetchedAtMs: number;
     /** The user's drawings on this chart (shape list; '' text when none). */
     drawingsDescription?: string;
@@ -35,7 +36,21 @@ export interface TradeChatContextInput {
      *  updated live by the kline websocket). Stamped onto the packet so its
      *  REST-snapshot candle rows can't contradict what the user watches. */
     formingCandle?: FormingCandle | null;
+    /** The seat's context window, when the caller knows it. Sizing the packet
+     *  budget against the REAL window is the point — a 1M-window seat and a
+     *  32k one should not be sent the same packet. */
+    contextWindowTokens?: number;
 }
+
+/**
+ * How much of the model's window the per-message packet may occupy.
+ *
+ * A fraction, not a flat number, so a small-window seat is not handed a packet
+ * designed for a large one. The absolute cap is the guard for big windows,
+ * which is why both feed `windowBudgetTokens` — it takes the smaller.
+ */
+const PACKET_WINDOW_FRACTION = 0.10;
+const PACKET_TOKEN_CAP = 6_000;
 
 /** One OHLC candle — the shape the canvas snapshot carries. */
 export interface FormingCandle {
@@ -63,9 +78,25 @@ export const formatFormingCandleLine = (candle: FormingCandle, interval?: string
     return `[LIVE CANDLE — the forming ${ivl}candle on the chart right now: O ${fmtPx(candle.open)} H ${fmtPx(candle.high)} L ${fmtPx(candle.low)} C ${fmtPx(candle.close)} (kline websocket, live). The packet's ${last}candle row is a REST snapshot — this one is current.]`;
 };
 
-export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetchedAtMs, drawingsDescription, onScreenDescription, plansDescription, liveMarkPrice, formingCandle }: TradeChatContextInput): string => {
+export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetchedAtMs, drawingsDescription, onScreenDescription, plansDescription, liveMarkPrice, formingCandle, contextWindowTokens }: TradeChatContextInput): string => {
     const when = phtFullStamp(fetchedAtMs);
-    const packet = (packetMarkdown || '').trim() || '(packet unavailable — the live fetch failed; say so and call the desk tools instead of guessing)';
+    const rawPacket = (packetMarkdown || '').trim() || '(packet unavailable — the live fetch failed; say so and call the desk tools instead of guessing)';
+    // The packet is the only unbounded section here, and it is the one this
+    // block was previously concatenating with no cap at all — routine charts
+    // rode 8-12k chars into EVERY message, including one-word questions.
+    //
+    // Clipped HERE rather than head-slicing the assembled block. The read
+    // rules (the PRICES freshness note and both tool paragraphs) are the TAIL
+    // of that assembly, and a head-slice eats exactly them: the same failure
+    // already shipped once inside generateHybridPromptInjection, where the SMC
+    // block was moved up for this reason and the read rules were not.
+    const rawTotal = rawPacket.length;
+    const room = charsForTokens(
+        windowBudgetTokens(PACKET_WINDOW_FRACTION, PACKET_TOKEN_CAP, contextWindowTokens)
+    );
+    const packet = rawTotal > room
+        ? `${rawPacket.slice(0, room).trimEnd()}\n${clipNote({ source: 'market packet', kept: room, total: rawTotal, guidance: 'the summaries past this point were withheld by the size cap, NOT absent — call get_market_packet or get_chart_view for the full picture' })}`
+        : rawPacket;
     const stamp = typeof liveMarkPrice === 'number' && Number.isFinite(liveMarkPrice) && liveMarkPrice > 0
         ? formatLiveMarkStamp(liveMarkPrice)
         : '';
