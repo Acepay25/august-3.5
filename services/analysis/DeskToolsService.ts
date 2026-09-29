@@ -8,6 +8,7 @@
 import type { ProviderConfig } from '../../types/provider';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import { baseOf } from '../../utils/symbol';
+import { phtStamp } from '../../utils/timezone';
 import type { FinishReason } from '../../utils/finishReason';
 import { truncatesOutput } from '../../utils/finishReason';
 import { fenceUntrusted } from '../../utils/untrusted';
@@ -1466,9 +1467,17 @@ async function runPriceSnapshot(symbol: string, interval: string): Promise<strin
 /** Timeframes the compendium covers, low → high. */
 const ALL_TIMEFRAMES = ['5m', '15m', '1h', '4h', '1d'] as const;
 
-/** Compact OHLCV row: "09-11 13:45 O77100 H77190 L77050 C77150 V312". */
+/**
+ * Compact OHLCV row: "Sep 11 21:45 O77100 H77190 L77050 C77150 V312".
+ *
+ * Philippine time, because every other candle the model is shown is PHT — the
+ * [ON SCREEN] block and the drawing notes both go through phtStamp. This row
+ * used to be `toISOString().slice(5, 16)`, i.e. UTC, so a single message
+ * carried the same bar at two clocks eight hours apart, and the model had no
+ * way to reconcile them. `k.time` is unix SECONDS; phtStamp wants millis.
+ */
 const compactCandleRow = (k: { time: number; open: number; high: number; low: number; close: number; volume: number }): string => {
-    const stamp = new Date(k.time).toISOString().slice(5, 16).replace('T', ' ');
+    const stamp = phtStamp(k.time * 1000);
     const r = (v: number): number => (v >= 1000 ? Math.round(v) : Number(v.toFixed(v >= 1 ? 2 : 4)));
     return `${stamp} O${r(k.open)} H${r(k.high)} L${r(k.low)} C${r(k.close)} V${Math.round(k.volume)}`;
 };
@@ -1501,7 +1510,7 @@ async function runAllTimeframes(symbol: string, liveMark?: number | null): Promi
         ? liveMark : null;
     const markNow = canvasMark ?? restMark;
     const head: string[] = [
-        `ALL-TIMEFRAME COMPENDIUM — ${symbol} · fetched ${new Date().toISOString().slice(11, 19)} UTC`,
+        `ALL-TIMEFRAME COMPENDIUM — ${symbol} · fetched ${phtStamp(Date.now())} PHT (UTC+8)`,
         markNow !== null
             ? `Mark ${markNow}${canvasMark !== null ? ' (live from the chart feed)' : ' (REST)'} · Index ${mi?.indexPrice ?? '—'} · Funding ${mi ? `${(mi.lastFundingRate * 100).toFixed(4)}%` : '—'}`
             : 'Mark/Index unavailable',
@@ -1981,7 +1990,10 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     break;
                 }
                 const rows = klines.map(k =>
-                    `${new Date(k.time).toISOString().slice(5, 16)} O${k.open} H${k.high} L${k.low} C${k.close} V${k.volume}`,
+                    // PHT, like every other candle the model is shown — see
+                // compactCandleRow. This row used to be UTC, which put the same
+                // bar at two clocks in one message.
+                `${phtStamp(k.time * 1000)} O${k.open} H${k.high} L${k.low} C${k.close} V${k.volume}`,
                 ).join('\n');
                 // The book column the user watches — condensed to the levels
                 // they can actually see, not the raw 100-row ladder.
