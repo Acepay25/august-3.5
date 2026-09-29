@@ -462,7 +462,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const drawingsDescription = describeDrawingsForModel(allDrawings, { priceNow: liveMarkPrice, nowMs: Date.now() });
         const cached = packetCache.get(symbol);
         if (cached && Date.now() - cached.atMs < PACKET_CACHE_MS) {
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: cached.markdown, fetchedAtMs: cached.atMs, drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
+            return buildTradeChatContext({ symbol, interval, contextWindowTokens: provider?.contextWindowTokens, packetMarkdown: cached.markdown, fetchedAtMs: cached.atMs, drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         }
         try {
             const packet = await fetchHybridData(symbol);
@@ -470,9 +470,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             const atMs = Date.now();
             setContextAt(atMs);
             packetCache.set(symbol, { markdown, atMs });
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: markdown, fetchedAtMs: atMs, drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
+            return buildTradeChatContext({ symbol, interval, contextWindowTokens: provider?.contextWindowTokens, packetMarkdown: markdown, fetchedAtMs: atMs, drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         } catch {
-            return buildTradeChatContext({ symbol, interval, packetMarkdown: '', fetchedAtMs: Date.now(), drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
+            return buildTradeChatContext({ symbol, interval, contextWindowTokens: provider?.contextWindowTokens, packetMarkdown: '', fetchedAtMs: Date.now(), drawingsDescription, onScreenDescription: onScreen, plansDescription: plansBlock, liveMarkPrice, formingCandle });
         }
     };
 
