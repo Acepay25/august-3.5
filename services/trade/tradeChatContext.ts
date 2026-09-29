@@ -92,6 +92,14 @@ export const describeChartSnapshotForModel = (snap: {
     markPrice: number | null;
     levels: { label: string; price: number }[];
     capturedAt: number;
+    visibleRange?: {
+        priceLow: number;
+        priceHigh: number;
+        timeLow: number;
+        timeHigh: number;
+        barsLoaded: number;
+        barsVisible: number;
+    } | null;
 }): string => {
     if (!snap || snap.candles.length === 0) return '';
     // Candle stamps in Philippine time — the model quotes the clock the user
@@ -99,15 +107,28 @@ export const describeChartSnapshotForModel = (snap: {
     const rows = snap.candles.map(c =>
         `${phtStamp(c.time * 1000)} O${c.open} H${c.high} L${c.low} C${c.close}`,
     ).join('\n');
+    // The window the canvas is showing. Without it the model is asked to name
+    // shapes against 30 painted candles while the chart holds 1000 bars and no
+    // bar index or timestamp was ever given — so "the swing high from 300 bars
+    // ago" is not merely discouraged, it is UNEXPRESSIBLE. This also tells it
+    // where the renderer clips, which is the same clip the draw receipt now
+    // reports honestly.
+    const vis = snap.visibleRange
+        ? [
+            `Visible window: ${Math.round(snap.visibleRange.priceLow)}–${Math.round(snap.visibleRange.priceHigh)} (price scale) · ${snap.visibleRange.barsVisible} of ${snap.visibleRange.barsLoaded} loaded bars on screen`,
+            'Anything drawn outside that price range is clipped by the renderer and will NOT appear until the user scrolls or zooms out.',
+        ].join('\n')
+        : '';
     const head = [
         `[ON SCREEN — what the canvas is literally displaying right now]`,
         `Live mark shown on the chart: ${snap.markPrice ?? '—'}`,
         snap.levels.length > 0
             ? `Level lines drawn: ${snap.levels.map(l => `${l.label} ${l.price}`).join(' · ')}`
             : 'No verdict level lines are drawn on the chart right now.',
+        vis,
         `Last ${snap.candles.length} painted candles (oldest→newest, times in Philippine time UTC+8):`,
         rows,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
     return head;
 };
 
