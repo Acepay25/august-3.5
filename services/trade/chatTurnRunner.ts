@@ -32,7 +32,7 @@ import { streamChatWithDeskTools, type DeskToolCall, type DeskToolResult } from 
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
-    describeDrawingsForModel, drawingFromChartTool, drawingsFromLevelTool, type ChartDrawing,
+    describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
 } from './chartDrawings';
 import { parseTradeProposal } from './proposedTrade';
 import * as levelWatch from './levelWatchService';
@@ -101,7 +101,7 @@ const TRADE_TOOLS = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill',
     'amend_memory', 'forge_tool', 'scan_chart_skills',
     // Chart-action set: the model draws on the live chart (levels, lines).
-    'draw_on_chart', 'mark_trade_levels', 'clear_chart_drawings', 'present_trade',
+    'draw_on_chart', 'draw_detected', 'mark_trade_levels', 'clear_chart_drawings', 'present_trade',
     // Watch/schedule harness: real-time price triggers + time wake-ups.
     'watch_price', 'wake_me', 'cancel_watch',
     // Collaboration memory: this environment's MEMORY.md analogue — the model
@@ -273,7 +273,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
      *  ITS OWN session even after the user switched away. */
     const executePanelTool = async (call: DeskToolCall, turn: PanelTurnContext): Promise<DeskToolResult | null> => {
         const name = call.name;
-        if (name !== 'draw_on_chart' && name !== 'mark_trade_levels' && name !== 'clear_chart_drawings'
+        if (name !== 'draw_on_chart' && name !== 'draw_detected' && name !== 'mark_trade_levels' && name !== 'clear_chart_drawings'
             && name !== 'present_trade' && name !== 'watch_price' && name !== 'wake_me' && name !== 'cancel_watch') return null;
         const args = call.arguments ?? {};
         const receipt = (ok: boolean, content: string): DeskToolResult => ({ toolCallId: call.id, name, ok, content });
@@ -415,6 +415,45 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             addModelDrawings(drawings, turn);
             const listed = drawings.map(d => `${d.label} ${d.points[0].p}`).join(', ');
             return receipt(true, `Marked on the chart: ${listed}.${visibility(drawings)}${canvasNote}`);
+        }
+        // draw_detected — the model NAMES the structure, the detector's own
+        // anchors place it. This removes the round trip where a pattern reached
+        // the model as the sentence "Shoulders at ~62150.00" and the model
+        // passed 62150 back as a price, so the level was wrong by construction
+        // whenever the read or the restatement lost a digit. Nothing could
+        // catch that, because the drawing and the pattern were never related.
+        if (name === 'draw_detected') {
+            const wanted = String(args.pattern ?? '').trim().toLowerCase();
+            if (!wanted) return receipt(false, 'draw_detected rejected: "pattern" is required — name a structure from the packet geometry table.');
+            let packet;
+            try {
+                packet = await fetchHybridData(symbol);
+            } catch (e) {
+                return receipt(false, `draw_detected could not reach the detector: ${e instanceof Error ? e.message : 'fetch failed'}. Draw it by hand with draw_on_chart instead.`);
+            }
+            const perTf = packet?.chartPatterns ?? {};
+            const available = Object.entries(perTf).flatMap(([tf, list]) =>
+                (list ?? []).map(p => ({ tf, p }))
+            );
+            if (available.length === 0) {
+                return receipt(false, 'draw_detected: the detector found no structures on this chart right now. Nothing to draw.');
+            }
+            const hit = available.find(({ p }) => p.name.toLowerCase() === wanted)
+                ?? available.find(({ p }) => p.name.toLowerCase().includes(wanted));
+            if (!hit) {
+                const names = [...new Set(available.map(({ p }) => p.name))].join(', ');
+                return receipt(false, `draw_detected: no structure named "${args.pattern}". The detector currently sees: ${names}.`);
+            }
+            const { drawings, error } = drawingsFromDetectedPattern(hit.p, { drawnPrice });
+            if (error) return receipt(false, `draw_detected rejected: ${error}`);
+            addModelDrawings(drawings, turn);
+            const confirmed = hit.p.touches >= 3;
+            return receipt(
+                true,
+                `Drew the detected ${hit.p.name} (${hit.tf}) at the measured anchors: ${drawings.map(x => x.points.map(pt => pt.p).join('→')).join(', ')}. `
+                + `The market reached that line ${hit.p.touches} time${hit.p.touches === 1 ? '' : 's'} — ${confirmed ? 'confirmed' : 'NOT confirmed; treat it as an assumption, not a setup'}.`
+                + `${visibility(drawings)}${canvasNote}`
+            );
         }
         // draw_on_chart — resolve bars-ago anchors against the newest candle.
         const lastBarTime = snap && snap.candles.length > 0
