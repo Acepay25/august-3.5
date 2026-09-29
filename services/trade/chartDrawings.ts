@@ -12,6 +12,7 @@
 import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
 import { priceArgError, usablePrice } from './tradePlanLevels';
+import type { PatternAnchor } from '../../utils/patternDetection';
 
 export type DrawKind = 'trend' | 'hline' | 'ray' | 'rect' | 'brush' | 'fib' | 'text';
 
@@ -311,6 +312,80 @@ export const drawingsFromLevelTool = (
     tps.forEach((tp, i) => drawings.push(mk(tp, `TP${i + 1}`, MODEL_COLOR_NAMES.amber)));
     return { drawings };
 };
+
+/**
+ * Turn a DETECTED pattern into drawings, from the anchors the detector already
+ * computed.
+ *
+ * This exists to remove a whole class of error rather than to add a feature.
+ * The model was asked to name a structure and then to place it: it read
+ * "Shoulders at ~62150.00" out of a sentence and passed 62150 back as a price.
+ * When it was slightly wrong — and it was, whenever the pattern was far enough
+ * back or the round trip lost a digit — the level was wrong by construction
+ * and nothing could detect it, because the drawing and the pattern were never
+ * related.
+ *
+ * Here the model picks WHICH structure ("the head and shoulders") and the code
+ * decides where it goes, from the same {price, time} the touch count was
+ * measured on. The two cannot disagree, because there is only one of them.
+ *
+ * `line` (the edge whose touches were counted) is preferred over the raw
+ * anchor list: a triangle groups its anchors BY SIDE, so first-to-last across
+ * that list would draw a line from a high to a low that nobody described.
+ *
+ * Pure: no canvas, no React, so the conversion is unit-testable.
+ */
+export const drawingsFromDetectedPattern = (
+    pattern: {
+        name: string;
+        touches: number;
+        anchors?: PatternAnchor[];
+        line?: { a: PatternAnchor; b: PatternAnchor };
+    },
+    ctx?: { drawnPrice?: number | null },
+): { drawings: ChartDrawing[]; error?: string } => {
+    const pair = pattern.line
+        ? [pattern.line.a, pattern.line.b]
+        : (pattern.anchors && pattern.anchors.length >= 2
+            ? [pattern.anchors[0], pattern.anchors[pattern.anchors.length - 1]]
+            : null);
+    if (!pair) {
+        return {
+            drawings: [],
+            error: `"${pattern.name}" has no drawable line — the detector found the shape but kept no anchors. Re-run the scan, or place it by hand with draw_on_chart.`,
+        };
+    }
+    const drawnPrice = finiteNum(ctx?.drawnPrice ?? undefined) ?? undefined;
+    const label = `${pattern.name} · ${pattern.touches} touch${pattern.touches === 1 ? '' : 'es'}`;
+    // A confirmed shape is drawn in emerald and an unconfirmed one in sky, so
+    // the confidence is legible on the chart itself rather than only in the
+    // receipt. This is the same measured/asserted distinction the axis already
+    // carries for verdict levels.
+    const color = pattern.touches >= TOUCHES_TO_CONFIRM_FOR_DRAWING
+        ? MODEL_COLOR_NAMES.emerald
+        : MODEL_COLOR_NAMES.sky;
+    const mkPoint = (a: PatternAnchor): DrawPoint => ({ t: a.time, p: a.price });
+    // A flat edge (the same price at both ends) is a LEVEL, not a line — a
+    // near-zero-slope "trend" is a 1px smudge nobody can aim at.
+    const flat = Math.abs(pair[1].price - pair[0].price) / Math.max(1e-9, pair[0].price) < 0.0005;
+    const kind: DrawKind = flat ? 'hline' : 'trend';
+    return {
+        drawings: [{
+            id: createDrawingId(),
+            kind,
+            points: flat ? [mkPoint(pair[0])] : [mkPoint(pair[0]), mkPoint(pair[1])],
+            color,
+            createdAt: Date.now(),
+            label,
+            drawnPrice,
+        }],
+    };
+};
+
+/** The touch count at which a drawn pattern is coloured as confirmed. Mirrors
+ *  patternStatus' threshold; kept here so this pure module does not have to
+ *  import the detector. */
+const TOUCHES_TO_CONFIRM_FOR_DRAWING = 3;
 
 /** Minimum anchors per kind — guards against junk shapes reaching storage. */
 export const pointsForKind = (kind: DrawKind, points: DrawPoint[]): DrawPoint[] | null => {

@@ -1157,6 +1157,22 @@ export const CHART_ACTION_TOOL_DEFS: DeskToolDefinition[] = [
     {
         type: 'function',
         function: {
+            name: 'draw_detected',
+            description:
+                'Draw a structure the detector already found on THIS chart, at the exact price the code measured. Name the pattern exactly as it appears in the market packet\'s geometry table; the detector\'s own anchors place it. Prefer this over draw_on_chart whenever the shape is already in that table — the level cannot be a digit out, because you never state it. Returns what was drawn and whether the market actually respected that line.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    pattern: { type: 'string', description: 'Pattern name from the packet geometry table, e.g. "Head and Shoulders" or "Ascending Triangle".' },
+                },
+                required: ['pattern'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'mark_trade_levels',
             description:
                 'Mark a full trade plan on the chart: Entry (sky), Stop Loss (rose) and 1-5 Take Profits (amber) as labeled horizontal lines the user can see. Use this instead of three draw_on_chart calls when presenting a setup.',
