@@ -197,6 +197,25 @@ jobs:
         env:
           ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
 
+      # The updater's manifest must name a file that exists.
+      #
+      # This sat missing between v1.0.33 and v1.1.0, and v1.1.0 shipped it broken:
+      # `latest.yml` read `August-Trading-Setup-1.1.0.exe` beside an artifact
+      # named `August.Trading.Setup.1.1.0.exe`. Nothing above noticed — the
+      # publish step only counts `Setup *.exe` matches, and a dot-named file
+      # counts the same as a hyphen-named one. The release looked perfect on the
+      # run that produced it, and every auto-update 404'd with a bare
+      # `Cannot download "<url>"` on a user's machine.
+      #
+      # Root cause: `artifactName` was unset, so the manifest's name and the
+      # packager's name were decided in two different places. `package.json` now
+      # pins `artifactName`; this step makes sure the two agree before a single
+      # byte is uploaded. It reads `latest.yml` and the `.exe` from the SAME
+      # directory the publish step below reads, because checking them apart is
+      # how this got shipped.
+      - name: The updater manifest names a real installer
+        run: node scripts/check-update-manifest.cjs dist_electron
+
       # Publish the bytes the gate just passed — NOT a rebuild.
       #
       # electron-builder's own publisher always re-runs the build, so shipping
