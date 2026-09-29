@@ -923,13 +923,21 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         const geo = data.chartPatterns?.[tf] ?? [];
         for (const p of [...geo].sort((a, b) => b.confidence - a.confidence).slice(0, 2)) {
             const assumption = patternStatus(p) === 'assumption';
+            // The anchors are the pivots the detector actually used. Printing
+            // them turns the row from a sentence about a shape into something
+            // the model can act on — and draw_detected can act on it for them,
+            // instead of the model restating a price from memory and being
+            // slightly wrong.
+            const anchorText = p.anchors && p.anchors.length > 0
+                ? ` · anchors ${p.anchors.map(a => a.price.toFixed(2)).join(' / ')}`
+                : '';
             patternRows.push([
                 tf,
                 p.name,
                 p.type,
                 `${(p.confidence * 100).toFixed(0)}%`,
                 '—',
-                `geometry (${p.touches} touches) · ${p.description}${assumption ? ' · ASSUMPTION, not a setup: this line has no third touch' : ''}`,
+                `geometry (${p.touches} touches${assumption ? ', UNCONFIRMED' : ', confirmed'})${anchorText} · ${p.description}${assumption ? ' · ASSUMPTION, not a setup: this line has no third touch' : ''}`,
             ]);
         }
     }
