@@ -124,6 +124,9 @@ export const calculateEntryTimingScore = (
     components.keyLevelProximity = keyLevelResult.score;
     if (keyLevelResult.warning) warnings.push(keyLevelResult.warning);
 
+    // 1b. STOP / TARGET LOCATION — warnings only, no points. See the function.
+    warnings.push(...checkPlanLevelLocations(analysis, keyLevels));
+
     // 2. CANDLE CONFIRMATION (0-20 points)
     const candleResult = checkCandleConfirmation(hybridData, direction);
     components.candleConfirmation = candleResult.score;
@@ -283,6 +286,79 @@ function checkKeyLevelProximity(entryPrice: number, levels: KeyLevel[]) {
     }
 
     return { score, warning, nearestLevel };
+}
+
+/**
+ * Are the stop and the targets sitting anywhere real?
+ *
+ * Only the ENTRY was ever checked for proximity to structure, and it was worth
+ * 20 of 100 points. The stop and the targets - the two numbers that decide the
+ * entire P&L of the plan - got no location check at all, so a take-profit far
+ * outside the range the market has actually traded was scored exactly like one
+ * sitting on a measured level. A TP beyond the 200-bar high is almost always
+ * invented rather than read, and nothing here could see it.
+ *
+ * Reported as WARNINGS rather than points on purpose. This scorer is advisory
+ * and its weighting is a judgement already made elsewhere; quietly re-splitting
+ * 100 points would change every score in the app without anyone deciding to.
+ * The warning surfaces in the same list the entry's does, so the plan reads as
+ * ungrounded rather than as quietly wrong.
+ *
+ * Reuses MAX_KEY_LEVEL_DISTANCE, so "far" means the same thing here as it does
+ * for the entry rather than introducing a fourth threshold.
+ */
+function checkPlanLevelLocations(
+    analysis: TradeAnalysis,
+    levels: KeyLevel[],
+): string[] {
+    if (levels.length === 0) return [];
+    const isLong = analysis.direction === 'Long';
+    const isShort = analysis.direction === 'Short';
+    if (!isLong && !isShort) return [];
+    const out: string[] = [];
+
+    // For a Long the stop belongs near SUPPORT and targets near RESISTANCE; a
+    // Short is the mirror. Checking the pairing is what makes this a location
+    // check rather than a second "is it near something" test.
+    const nearestOf = (price: number, want: 'support' | 'resistance') => {
+        let best: KeyLevel | null = null;
+        let min = Infinity;
+        for (const l of levels) {
+            if (l.type !== want) continue;
+            const d = Math.abs((price - l.price) / price) * 100;
+            if (d < min) { min = d; best = l; }
+        }
+        return { distance: min, level: best };
+    };
+
+    const stop = parsePrice(analysis.stopLoss || '');
+    if (stop !== null && stop > 0) {
+        const { distance, level } = nearestOf(stop, 'support');
+        if (Number.isFinite(distance) && distance > MAX_KEY_LEVEL_DISTANCE) {
+            out.push(
+                `${isLong ? 'Stop loss' : 'Stop loss'} ${stop} sits ${distance.toFixed(2)}% from the nearest `
+                + `${isLong ? 'support' : 'resistance'}${level ? ` (${level.name})` : ''} — outside any structure the chart has actually traded. `
+                + 'It is placed in empty air, so the plan resolves on a level with no market memory.'
+            );
+        }
+    }
+
+    const tps = (analysis.takeProfit ?? [])
+        .map(tp => parsePrice(tp.price || ''))
+        .filter((p): p is number => p !== null && p > 0)
+        .slice(0, 3);
+    tps.forEach((tp, i) => {
+        const { distance, level } = nearestOf(tp, 'resistance');
+        if (Number.isFinite(distance) && distance > MAX_KEY_LEVEL_DISTANCE) {
+            out.push(
+                `TP${i + 1} ${tp} sits ${distance.toFixed(2)}% from the nearest `
+                + `${isLong ? 'resistance' : 'support'}${level ? ` (${level.name})` : ''} — beyond the range the market has actually traded. `
+                + 'A target out there is more likely invented than read.'
+            );
+        }
+    });
+
+    return out;
 }
 
 function checkCandleConfirmation(data: HybridDataPacket, direction: string | undefined) {
