@@ -25,7 +25,7 @@ import { TradeAnalysis, LoggedTrade, Message } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
-import { loadSessionModelDrawings, saveSessionModelDrawings } from '../../services/trade/chartDrawings';
+import { loadSessionModelDrawings, saveSessionModelDrawings, MAX_DRAWINGS_PER_SYMBOL } from '../../services/trade/chartDrawings';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { getActiveUsername } from '../../utils/activeUser';
 import { fmtPrice } from '../../utils/formatters';
@@ -680,11 +680,16 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             && loadedBucketRef.current === `${turn.sid}:${turn.symbol}`);
     const addModelDrawings = useCallback((drawings: ChartDrawing[], turn?: PanelTurnContext): void => {
         if (isViewTurn(turn)) {
-            setModelDrawings(prev => [...prev, ...drawings].slice(-60));
+            // The SAME cap persistence uses. This was a hardcoded 60 against
+            // MAX_DRAWINGS_PER_SYMBOL's 40, so the view accepted twenty more
+            // shapes than the store could keep and the user watched them
+            // disappear on reload — the chart quietly disagreed with itself.
+            // One number, imported, so the two cannot drift again.
+            setModelDrawings(prev => [...prev, ...drawings].slice(-MAX_DRAWINGS_PER_SYMBOL));
             return;
         }
         const t = turn as PanelTurnContext;
-        const merged = [...loadSessionModelDrawings(t.sid, t.symbol), ...drawings].slice(-60);
+        const merged = [...loadSessionModelDrawings(t.sid, t.symbol), ...drawings].slice(-MAX_DRAWINGS_PER_SYMBOL);
         saveSessionModelDrawings(t.sid, t.symbol, merged);
     }, []);
     const clearModelDrawings = useCallback((turn?: PanelTurnContext): void => {
