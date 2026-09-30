@@ -37,6 +37,7 @@ import { analyzeWithAI, convertToLineData, MarketInsights, TrendlineResult } fro
 import { buildTimeframeSnapshot, formatLiveMarketPrompt, type LiveMarketSnapshot } from '../../services/analysis/marketSnapshot';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import TradingChart, { type ChartInterval } from '../trade/TradingChart';
+import { MODEL_COLOR_NAMES, type ChartDrawing } from '../../services/trade/chartDrawings';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -89,6 +90,8 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
      *  panel already pays for the call, but until now the array was only ever
      *  console.logged — the work was bought and thrown away. */
     const [trendlines, setTrendlines] = useState<TrendlineResult[]>([]);
+// The same trendlines, as drawable shapes. See the setTrendlineDrawings call.
+const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
     const [isInsightsPanelExpanded, setIsInsightsPanelExpanded] = useState(true);
     const aiAnalysisRequestRef = useRef(0);
 
@@ -181,6 +184,29 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                     setKeyLevels(analysis.keyLevels);
                     setMarketInsights(analysis.insights);
                     setTrendlines(analysis.trendlines);
+                    // Put the trendlines ON the chart. They used to exist only
+                    // as a list of price ranges in the side panel, under a
+                    // comment claiming the row "cannot drift from what the
+                    // chart format would have drawn" — and nothing drew them,
+                    // so the claim described an aspiration. The service
+                    // already returns DATA-SPACE endpoints, so this is the
+                    // conversion the comment always assumed, and the chart's
+                    // own visibility rules (this surface has no chat, so
+                    // repaint() clips these exactly as it clips the dock's)
+                    // now apply to them like any other shape.
+                    setTrendlineDrawings(
+                        analysis.trendlines.map((line, i) => ({
+                            id: `ai-tl-${i}-${line.startTime}`,
+                            kind: 'trend' as const,
+                            points: [
+                                { t: line.startTime, p: line.startPrice },
+                                { t: line.endTime, p: line.endPrice },
+                            ],
+                            color: (MODEL_COLOR_NAMES as Record<string, string>)[line.type] ?? MODEL_COLOR_NAMES.sky,
+                            createdAt: Date.now(),
+                            label: line.label || line.type,
+                        }))
+                    );
                 }
             } catch (error) {
                 console.warn('[Binance AI] Analysis failed:', error);
@@ -366,6 +392,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                         liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
                         markPrice={Number.isFinite(markPrice) ? markPrice : null}
+                        modelDrawings={trendlineDrawings}
                     />
                 </div>
 
@@ -410,9 +437,9 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
                                     </div>
                                 )}
 
-                                {/* AI Trendlines — endpoints via the service's own
-                                    adapter, so the row cannot drift from what the
-                                    chart format would have drawn. */}
+                                {/* AI Trendlines - the price range per line. The SHAPES themselves are on
+                                    the chart above (modelDrawings); this row is the readable
+                                    summary of the same numbers, not a second copy of them. */}
                                 {!isAIAnalyzing && trendlines.length > 0 && (
                                     <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2" data-testid="ai-trendlines">
                                         <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">Trendlines</span>
