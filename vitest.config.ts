@@ -54,7 +54,16 @@ export default defineConfig({
     // not a fix for a diagnosed leak. If a teardown race ever reappears, REMOVE
     // THIS FLAG FIRST while investigating — it would be concealing the symptom,
     // and the real console output would be the clue.
-    disableConsoleIntercept: true,
+    //
+    // ESCAPE HATCH, because "unexplained" should not mean "unreachable". Set
+    // VITEST_CONSOLE_INTERCEPT=1 to turn interception BACK ON and reproduce the
+    // race with the reporter's per-test grouping intact — that grouping is what
+    // names the offending file, and losing it is what made this undiagnosable in
+    // the first place. The `guards` workflow runs that as a non-blocking
+    // diagnostic job, so an occurrence produces its own evidence instead of
+    // waiting for someone to remember. Default stays OFF: the gate must not
+    // depend on an intermittent race not firing.
+    disableConsoleIntercept: process.env.VITEST_CONSOLE_INTERCEPT !== '1',
     // Same class of flake, per-test: with ~210 files, heavy jsdom suites
     // (DeskScene/room portals) run at the edge of the default
     // 5s timeout when a worker draws a long queue — solo runs pass, full
