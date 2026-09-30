@@ -35,6 +35,7 @@ import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
 } from './chartDrawings';
 import { parseTradeProposal } from './proposedTrade';
+import { scoreDrawnLevel, levelAccuracy, describeLevelAccuracyForModel } from './tradePlanLevels';
 import * as levelWatch from './levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from './tradePlanLevels';
 import { runAnalysisAsChatTurn } from './analysisTurn';
@@ -409,6 +410,26 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             }
             return ` WARNING: ${off.length} of ${drawings2.length} shapes fall outside the visible range ${Math.round(vis.priceLow)}–${Math.round(vis.priceHigh)} and will be clipped until the user scrolls or zooms out.`;
         };
+        // How the model's OWN earlier levels have done. A seat could put twenty
+        // levels on this chart and every one would be unmeasured forever, so a
+        // model that draws nonsense and one that draws structure were
+        // indistinguishable — and the model never learned which it was. This
+        // closes that loop on the receipt it already receives.
+        const drawnLevelStanding = (s: ChartSnapshot | null): string => {
+            if (!s) return '';
+            const hlines = (s.modelDrawings ?? []).filter(
+                (x) => x.kind === 'hline' && x.points.length > 0,
+            );
+            if (hlines.length === 0) return '';
+            const scores = hlines.map((x) =>
+                scoreDrawnLevel(x.points[0].p, s.candles, x.createdAt / 1000),
+            );
+            // Silence while nothing is judgeable: a standing score over two
+            // fresh bars is noise, and a model that learns to trust it would
+            // be learning a habit, not a fact.
+            if (levelAccuracy(scores).judged === 0) return '';
+            return ` ${describeLevelAccuracyForModel(scores)}`;
+        };
         if (name === 'mark_trade_levels') {
             const { drawings, error } = drawingsFromLevelTool(args, { drawnPrice });
             if (error) return receipt(false, `mark_trade_levels rejected: ${error}`);
@@ -464,7 +485,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         addModelDrawings(drawings, turn);
         const d = drawings[0];
         const described = describeDrawingsForModel([d]).split('\n').slice(1).join(' ').trim();
-        return receipt(true, `Drew on the chart: ${described || d.kind}.${visibility([d])}${canvasNote}`);
+        return receipt(true, `Drew on the chart: ${described || d.kind}.${visibility([d])}${drawnLevelStanding(snap)}${canvasNote}`);
     };
 
     /** The fresh code-calculated packet every message rides (fetched ONCE per
