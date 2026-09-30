@@ -118,6 +118,104 @@ export const detectLevelHits = (
         .map(l => ({ levelId: l.id, kind: l.kind, label: l.label, price: l.price, hitPrice: price, at }));
 };
 
+// ── DRAWN LEVELS ─────────────────────────────────────────────────────────────
+// Everything above grades a plan's levels against a LIVE tick. What was
+// missing is the question the app never asked of the shapes the MODEL draws:
+// a seat can put twenty levels on a chart and every one of them is unmeasured
+// forever. Nothing scores whether price ever reached them, so a model that
+// draws nonsense and a model that draws structure are indistinguishable - and
+// the user has no way to learn which one they are talking to.
+//
+// Pure functions over a candle series. WHEN to run them is a service's
+// problem; what "reached" means belongs beside the code that already owns that
+// question, not inside a component.
+
+/** How a model-drawn level fared once the market had time to reach it. */
+export type DrawnLevelVerdict = 'untouched' | 'touched' | 'pending';
+
+export interface DrawnLevelScore {
+    verdict: DrawnLevelVerdict;
+    /** Closest the market came, in percent of the level's price. 0 = touched. */
+    missPct: number;
+    /** Bars examined since the shape was drawn. */
+    barsSince: number;
+}
+
+/**
+ * Did the market reach a price the model drew?
+ *
+ * Scored against each BAR'S RANGE, not its close, because a level can be
+ * traded through intrabar and a close-only test would report a level the
+ * market plainly reached as untouched. Same lesson the touch detector above
+ * encodes: a print on the far side fires however fast the market moved. The
+ * bar's range must SPAN the level - a bar that merely traded on the far side
+ * of it is not a touch, or a level the market had already walked past would
+ * read as reached forever.
+ *
+ * `drawnAtSeconds` restricts the scan to bars at or after the shape was drawn.
+ * Scanning history the model could already see when it chose the price would
+ * let it claim credit for a level that only worked afterwards, or bury a bad
+ * one under a swing from before it drew anything.
+ *
+ * 'pending' when there are not yet enough bars to judge: a level drawn two
+ * minutes ago has not had a fair test, and calling that 'untouched' is the
+ * same failure pointed the other way.
+ */
+export const scoreDrawnLevel = (
+    levelPrice: number,
+    candles: { time: number; high: number; low: number }[],
+    drawnAtSeconds: number,
+    minBars = 3,
+): DrawnLevelScore => {
+    if (!Number.isFinite(levelPrice) || levelPrice <= 0) {
+        return { verdict: 'untouched', missPct: Infinity, barsSince: 0 };
+    }
+    const after = candles.filter(c => c.time >= drawnAtSeconds);
+    if (after.length < minBars) {
+        return { verdict: 'pending', missPct: Infinity, barsSince: after.length };
+    }
+    let miss = Infinity;
+    for (const c of after) {
+        // The bar's range must SPAN the level. Testing `low <= level` alone
+        // would call any bar that traded below it a touch, including one that
+        // never came near from the other side — which is how a level the
+        // market had already walked past reads as "reached" forever.
+        if (c.high >= levelPrice && c.low <= levelPrice) { miss = 0; break; }
+        // Perpendicular gap from the level to the bar's range, as a percent.
+        // Whichever side the bar sits on, the gap is how far away the NEAREST
+        // edge is — not how far the far edge is, which would let a wide bar
+        // that never came close report a smaller miss than a narrow one that
+        // nearly touched.
+        miss = Math.min(miss, (Math.max(levelPrice - c.high, c.low - levelPrice) / levelPrice) * 100);
+    }
+    const missPct = Math.max(0, Math.abs(miss));
+    return { verdict: missPct === 0 ? 'touched' : 'untouched', missPct, barsSince: after.length };
+};
+
+/** The headline number: what share of the model's drawn levels got reached. */
+export const levelAccuracy = (scores: DrawnLevelScore[]): {
+    reached: number;
+    judged: number;
+    ratio: number | null;
+} => {
+    const judged = scores.filter(s => s.verdict !== 'pending');
+    const reached = judged.filter(s => s.verdict === 'touched').length;
+    // null rather than 0 when nothing has been judged: "0% of nothing" reads
+    // as a failure of the model when it is a failure of the sample.
+    return { reached, judged: judged.length, ratio: judged.length === 0 ? null : reached / judged.length };
+};
+
+/** For the model: one line saying how its own drawn levels have done. */
+export const describeLevelAccuracyForModel = (scores: DrawnLevelScore[]): string => {
+    const { reached, judged, ratio } = levelAccuracy(scores);
+    if (judged === 0) {
+        return 'No drawn level has been on the chart long enough to judge — say nothing about their accuracy yet.';
+    }
+    return `Of your ${judged} judged level(s) on this chart, price reached ${reached} `
+        + `(${(ratio! * 100).toFixed(0)}%). Treat a level you drew as a hypothesis, not a fact: `
+        + 'levels price never came back to were not read from the chart.';
+};
+
 /**
  * Stale-plan guard: levels to latch SILENTLY at arm time. If the market is
  * already through the stop or a target when the plan is armed, the plan is
