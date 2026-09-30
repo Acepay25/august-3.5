@@ -89,6 +89,22 @@ export interface TradeAnalysis {
   stopLossPercentage?: string;
   originalStopLossPercentage?: string;
   takeProfit: TakeProfitTarget[];
+  /**
+   * The model's stop/targets came back on the WRONG SIDE of its entry and were
+   * mirrored into a valid plan by the schema (utils/levelOrder).
+   *
+   * Set for the lifetime of the analysis and read by the accuracy writers,
+   * which must NOT credit such a plan to the model: the outcome belongs to a
+   * plan the model never proposed, so crediting it lets a model that
+   * consistently inverts its side score as though it were right.
+   *
+   * This lived only on the zod schema and was therefore unreachable from
+   * application code — which is exactly why a mirrored plan flowed into the
+   * model-performance and Brier ledgers as if it were the model's own.
+   */
+  levelsCorrected?: boolean;
+  /** Human-readable repairs, one per mirrored/re-sorted level. */
+  levelFixes?: string[];
   marketConditions: MarketConditions;
   historicalCorrelation: string;
   createdAt?: string; // Timestamp for when the analysis was generated

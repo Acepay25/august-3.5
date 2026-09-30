@@ -124,7 +124,23 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // ModelPerformanceService: this hook used to carry a private 3-field
         // legacy bridge and an inline inversion, so the incremental and
         // rebuild paths disagreed about the same historical trade.
-        const providers = getTradeProviders(trade);
+        //
+        // A plan whose levels were MIRRORED is not this model's plan. The
+        // schema repairs an inverted stop or target by reflecting it across the
+        // entry (schemas/tradeAnalysis.ts -> utils/levelOrder), because that
+        // preserves the stated risk/reward magnitudes for a mistyped number.
+        // The outcome of a plan the model never proposed says NOTHING about its
+        // reading, so crediting it here would let a model that consistently
+        // gets its side backwards score as if it were right — the mirror hides
+        // the error and the ledger records the corrected plan. `levelsCorrected`
+        // was already being set and stored; nothing ever READ it, which is what
+        // let this pass.
+        //
+        // The trade still reaches the journal — the user took it, and hiding it
+        // would be its own lie. It just does not train the model, and the
+        // correction stays visible in the analysis the journal renders.
+        const levelsMirrored = analysis.levelsCorrected === true;
+        const providers = levelsMirrored ? [] : getTradeProviders(trade);
 
         providers.forEach(p => {
             const creditedWin = creditedWinForAnalyst(analysis, isWin, p);
@@ -385,7 +401,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         }
 
         // Update confidence calibration
-        if (message.analysis?.confidence) {
+        // The same exclusion for the Brier calibration ledger. A mirrored
+        // plan's outcome would otherwise enter the confidence-vs-outcome
+        // statistics, which are the numbers that tell the user how well this
+        // seat's confidence tracks reality.
+        if (message.analysis?.confidence && !message.analysis.levelsCorrected) {
             const confidence = message.analysis.confidence as ConfidenceLevel;
             const coin = message.analysis.coinName ||
                 (message.text?.match(/\b([A-Z]{2,10}USDT?)\b/)?.[1]) || undefined;
