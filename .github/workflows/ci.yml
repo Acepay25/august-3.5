@@ -72,3 +72,71 @@ jobs:
       # condition its own flake note warns about.
       - name: Render probe (rendered rows, inert controls, zero pageerrors)
         run: npm run render-probe
+
+  # ── DIAGNOSTIC ONLY, NEVER A GATE ─────────────────────────────────────────
+  # The teardown race this hunts is INTERMITTENT and load-dependent: it took
+  # PR #39 red on 4,165 passing tests, could not be reproduced locally in any
+  # configuration, and no leaking file has ever been identified. `verify` above
+  # sidesteps it with `disableConsoleIntercept`, which removes the RPC hop the
+  # race closes — at the cost of losing the reporter's per-test console
+  # grouping, which is precisely the evidence that would name the culprit.
+  #
+  # So this runs the suite with interception ON and lets it fail. `continue-on-
+  # error` is load-bearing and must stay: a diagnostic that can go red turns
+  # an intermittent flake into a flaky build, and the gate must never depend on
+  # the race not firing. When it DOES fire, the uploaded log is the first real
+  # evidence of which file leaks — which is what four comment revisions and
+  # several subagents could not establish.
+  teardown-race-hunt:
+    runs-on: ubuntu-latest
+    # MUST stay true. A diagnostic job that can go red turns an intermittent
+    # flake into a flaky build, and the gate would then depend on the race not
+    # firing — the one thing nobody can promise. This is what
+    # tests/teardownRaceDiagnosable.test.ts caught once already: a killed shell
+    # left the line removed and the job silently blocking.
+    continue-on-error: true
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Suite with console interception ON (hunt the teardown race)
+        id: hunt
+        continue-on-error: true
+        env:
+          VITEST_CONSOLE_INTERCEPT: '1'
+        run: npm run test 2>&1 | tee teardown-race.log
+
+      # The point of the job: not the exit code, the NAME. A race that names a
+      # file is worth more than any number of clean runs.
+      - name: Which file leaked, if any
+        if: always()
+        run: |
+          if [ -f teardown-race.log ]; then
+            {
+              echo "### EnvironmentTeardownError occurrences"
+              grep -n "EnvironmentTeardownError\|Closing rpc while" teardown-race.log | head -40 || echo "(none)"
+              echo
+              echo "### Files that reported an unhandled error"
+              grep -nE "^ FAIL |Unhandled Error|Errors +[1-9]" teardown-race.log | head -40 || echo "(none)"
+            } >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+
+      - name: Upload the raw log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: teardown-race-log
+          path: teardown-race.log
+          if-no-files-found: ignore
+          retention-days: 14
