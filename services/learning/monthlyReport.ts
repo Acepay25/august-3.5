@@ -16,6 +16,9 @@ import { LoggedTrade } from '../../types/trade';
 import { TradeOutcome, AIProvider } from '../../types/enums';
 import { DebateTurn } from '../../types/message';
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+// The review minimum is ONE rule for both review periods. See the note at its
+// declaration before giving this module a second number of its own.
+import { MIN_CLOSED_TRADES_FOR_REVIEW } from './weeklyReview';
 import { buildDisciplineAnalytics, effectiveRMultiple } from '../../utils/disciplineAnalytics';
 import { rowPnlUsd } from '../validation/SessionGuardService';
 import { computeEnsembleLine, SeatConviction } from '../providers/debateScience';
@@ -26,7 +29,6 @@ import { getRecentMemoryInjections, type MemoryInjectionRecord } from './MemoryI
 
 const KEY_PREFIX = 'monthly_report_v1_';
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-const MIN_CLOSED_TRADES = 3;
 /** Minimum Brier sample before a seat gets graded (thin rows are noise). */
 const MIN_BRIER_SAMPLE = 3;
 
@@ -316,7 +318,7 @@ export const runMonthlyReport = async (
         injections = await getRecentMemoryInjections(username);
     } catch { /* economics omission must not block the card */ }
     const card = buildMonthReport(trades, now, injections);
-    if (card.whatHappened.closed < MIN_CLOSED_TRADES) return null;
+    if (card.whatHappened.closed < MIN_CLOSED_TRADES_FOR_REVIEW) return null;
     await setPreferenceObject(keyFor(username), card);
     return card;
 };
