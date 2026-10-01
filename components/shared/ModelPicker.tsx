@@ -18,6 +18,7 @@ import {
 } from '../../utils/providerUtils';
 import { ChevronRightIcon, ChevronDownIcon, CheckIcon } from './Icons';
 import { RotateCw, Check, Search as SearchIcon } from 'lucide-react';
+import { FLYOUT_VIEWPORT_MARGIN } from './flyoutLayout';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
  *  re-positioned with the flyout's real size before the first paint). */
@@ -34,7 +35,9 @@ interface FlyoutPos {
     maxHeight: number;
 }
 
-const VIEWPORT_MARGIN = 8;
+// Shared: see flyoutLayout.ts. Two dropdowns at different distances from
+// the screen edge is a visible inconsistency, not just a duplicated number.
+const VIEWPORT_MARGIN = FLYOUT_VIEWPORT_MARGIN;
 const FLYOUT_GAP = 4;
 const FLYOUT_MAX_H = 360;
 const FLYOUT_MIN_H = 140;
