@@ -480,12 +480,12 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const lastBarTime = snap && snap.candles.length > 0
             ? snap.candles[snap.candles.length - 1].time
             : Math.floor(Date.now() / 1000);
-        const { drawings, error } = drawingFromChartTool(args, { lastBarTime, barSeconds: intervalSeconds(turn.interval as never), drawnPrice });
+        const { drawings, error, note } = drawingFromChartTool(args, { lastBarTime, barSeconds: intervalSeconds(turn.interval as never), drawnPrice, klines: snap?.candles });
         if (error) return receipt(false, `draw_on_chart rejected: ${error}`);
         addModelDrawings(drawings, turn);
         const d = drawings[0];
         const described = describeDrawingsForModel([d]).split('\n').slice(1).join(' ').trim();
-        return receipt(true, `Drew on the chart: ${described || d.kind}.${visibility([d])}${drawnLevelStanding(snap)}${canvasNote}`);
+        return receipt(true, `Drew on the chart: ${described || d.kind}.${note || ''}${visibility([d])}${drawnLevelStanding(snap)}${canvasNote}`);
     };
 
     /** The fresh code-calculated packet every message rides (fetched ONCE per
