@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { codeOf } from "./helpers/sourceCode";
 
 /**
  * The chart must not disagree with itself across a reload.
@@ -51,8 +52,13 @@ describe("the live drawing cap and the stored cap are one number", () => {
 
 describe("types/chart.ts no longer describes a live dependency as dead", () => {
   it("does not claim createChart was never called", async () => {
-    const fs = await import("node:fs");
-    const src = fs.readFileSync("types/chart.ts", "utf8");
+    const src = codeOf("types/chart.ts");
+    // Scanned as CODE, not raw text. Both banned phrases are English, so a
+    // raw scan would also fire on a comment explaining that the old comment
+    // used to claim the library "was never called" — which is exactly what a
+    // future maintainer documenting this fix would write. This repo has hit
+    // that four separate times; the guard must not be the reason documenting
+    // it is impossible.
     expect(src).not.toMatch(/was never called/);
     expect(src).not.toMatch(/dead dependency can be dropped/);
   });
