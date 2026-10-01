@@ -22,6 +22,15 @@ Plain-English log of change rounds. Newest first.
   session, and silent until there is something judgeable — a 0% badge on an
   empty sample would blame the model for a level the market never had a chance
   to reach.
+- **A price written with a comma is now readable by the drawing tools.** Three
+  modules implemented "is this a usable price" and one of them used a plain
+  `Number()`, which cannot read `69,000`. So a model writing
+  `prices: ["69,000"]` was told *"prices[0] must be a positive number"* — a
+  message that never mentions the comma, so the model had no way to guess and
+  kept emitting the same string. The same level was accepted by the chart
+  verdict overlay and the key-level loader, so it could be drawn on one surface
+  and rejected on another. The drawing tools now read prices the way the rest of
+  the app already did.
 - **Versioned separately from the v1.2.0 release, deliberately.** main carried two
   features that v1.2.0 did not, while `package.json` still read `1.2.0` — so a
   rebuild would have produced `August-Trading-Setup-1.2.0.exe` with different
