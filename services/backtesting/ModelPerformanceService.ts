@@ -124,7 +124,19 @@ const CONFIDENCE_CALIBRATION_STORAGE_KEY = 'model_confidence_calibration';
 
 // Configuration constants
 const ROLLING_WINDOW_SIZE = 20;      // Number of recent trades to track
-const COLD_STREAK_THRESHOLD = 3;     // Consecutive losses before demotion (base threshold)
+/**
+ * Consecutive losses that count as a cold streak.
+ *
+ * EXPORTED, and used by UnderperformerFeedbackService — which already imported
+ * this module and then re-declared the same rule locally. Two independent
+ * definitions of one business rule is how they drift: today both read 3, and
+ * changing only the feedback trigger to 4 would have made "feedback fires" and
+ * "the model is demoted" silently disagree, with nothing pointing at the seam.
+ *
+ * Same failure shape as the v1.1.0 updater (artifactName vs the manifest) and
+ * the v1.2.0 version (the tag vs package.json): one fact, two decision points.
+ */
+export const COLD_STREAK_THRESHOLD = 3;
 const COLD_STREAK_PENALTY = 0.5;     // Weight multiplier when on cold streak (50%)
 const UNDERPERFORMER_THRESHOLD = 0.15; // 15% below average to be flagged
 
