@@ -13,6 +13,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
 import { priceArgError, usablePrice } from './tradePlanLevels';
 import type { PatternAnchor } from '../../utils/patternDetection';
+import { snapPriceToStructure } from '../../utils/patternDetection';
 
 export type DrawKind = 'trend' | 'hline' | 'ray' | 'rect' | 'brush' | 'fib' | 'text';
 
@@ -219,6 +220,11 @@ const DEFAULT_START_BARS_AGO = 40;
  * newest candle) + `barSeconds` re-anchor them onto the real axis. Pure so
  * the conversion is unit-testable.
  */
+/** Past this gap the level is far enough from price that the model was not
+ *  reading the current market. Generous on purpose - see the draw site.
+ */
+export const PRICE_ALREADY_PAST_PCT = 2;
+
 export const drawingFromChartTool = (
     args: {
         kind?: unknown;
@@ -228,8 +234,8 @@ export const drawingFromChartTool = (
         color?: unknown;
         label?: unknown;
     },
-    ctx: { lastBarTime: number; barSeconds: number; drawnPrice?: number | null },
-): { drawings: ChartDrawing[]; error?: string } => {
+    ctx: { lastBarTime: number; barSeconds: number; drawnPrice?: number | null; klines?: readonly { high: number; low: number }[] },
+): { drawings: ChartDrawing[]; error?: string; note?: string } => {
     const kindRaw = typeof args.kind === 'string' ? args.kind : '';
     const kindMap: Record<string, DrawKind> = { hline: 'hline', horizontal: 'hline', trend: 'trend', trendline: 'trend', line: 'trend', ray: 'ray', zone: 'rect', rect: 'rect', rectangle: 'rect', fib: 'fib', retracement: 'fib', 'fib-retracement': 'fib', text: 'text', note: 'text', annotation: 'text' };
     const kind = kindMap[kindRaw];
@@ -262,7 +268,42 @@ export const drawingFromChartTool = (
         ? [{ t: barAt(end), p: prices[0] }]
         : [{ t: barAt(start), p: prices[0] }, { t: barAt(end), p: prices[1] }];
 
-    return { drawings: [{ id: createDrawingId(), kind, points, color, createdAt: Date.now(), label, drawnPrice: finiteNum(ctx.drawnPrice ?? undefined) ?? undefined }] };
+    // Snap-to-structure, and the warning that price is already through it.
+    //
+    // A seat reading "support at 62150" off a chart that printed 62147.3 is not
+    // wrong by a trading decision, it is wrong by a transcription - it cannot
+    // see the digits. So the code measures the level: the model supplies
+    // intent, the chart supplies the price. Only hlines are snapped; a trend or
+    // zone needs BOTH anchors to keep its slope, and moving one end of a line
+    // to a nearby swing would tilt it rather than correct it.
+    let snapNote = '';
+    let throughNote = '';
+    if (kind === 'hline') {
+        const drawn = finiteNum(ctx.drawnPrice);
+        if (drawn !== null && ctx.klines && ctx.klines.length > 0) {
+            const snapped = snapPriceToStructure(prices[0], ctx.klines);
+            if (snapped.snapped) {
+                snapNote = ` (snapped to the swing at ${snapped.price}, ${Math.abs(((snapped.price - prices[0]) / prices[0]) * 100).toFixed(2)}% from your ${prices[0]})`;
+                points[0].p = snapped.price;
+            }
+            // Price is already well past the level, so whatever the model was reading is
+            // not where price is. This does NOT claim the level is wrong - a
+            // target far above is normal, and a broken level is how a model
+            // discovers it is wrong - so it states the gap and lets the model
+            // decide. Deliberately a generous 2%: a level the market is sitting
+            // on needs no comment, and warning on the ordinary case would train
+            // the model to ignore the receipt.
+            const gapPct = Math.abs((points[0].p - drawn) / drawn) * 100;
+            if (gapPct > PRICE_ALREADY_PAST_PCT) {
+                throughNote = ` NOTE: price is ${drawn}, ${gapPct.toFixed(1)}% ${drawn < points[0].p ? 'above' : 'below'} your level at ${points[0].p}. If you meant a level price is currently holding, this is not it.`;
+            }
+        }
+    }
+
+    return {
+        drawings: [{ id: createDrawingId(), kind, points, color, createdAt: Date.now(), label, drawnPrice: finiteNum(ctx.drawnPrice ?? undefined) ?? undefined }],
+        note: `${snapNote}${throughNote}`,
+    };
 };
 
 /**

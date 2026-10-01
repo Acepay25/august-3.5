@@ -130,11 +130,27 @@ export interface KeyZones {
     resistance: number[];
 }
 
+/** A swing the detector found, in data space. `index` is a bar offset into
+ *  the array the detector was given, so it must be read against THAT array. */
+export interface Pivot {
+    price: number;
+    index: number;
+}
+
 // Helper to find local pivots (highs and lows)
 // A pivot high is a bar higher than 'n' bars to the left and 'n' bars to the right
-const findPivots = (klines: Kline[], leftBars: number = 5, rightBars: number = 2) => {
-    const highs: { price: number; index: number }[] = [];
-    const lows: { price: number; index: number }[] = [];
+//
+// EXPORTED (was module-private) so a level the model names can be snapped onto
+// the swing it was describing. The whole point of draw_detected was that a model
+// restating a price from memory is a digit out; this extends the same idea to
+// an arbitrary hline, and it needs the pivots the detector already computes
+// instead of a second swing finder that would find different ones.
+// Reads only .high and .low, so it takes that subset rather than a full Kline —
+// which is what lets the chart snapshot's narrower candle shape feed it without
+// a cast.
+export const findPivots = (klines: readonly { high: number; low: number }[], leftBars: number = 5, rightBars: number = 2) => {
+    const highs: Pivot[] = [];
+    const lows: Pivot[] = [];
 
     for (let i = leftBars; i < klines.length - rightBars; i++) {
         const current = klines[i];
@@ -381,4 +397,57 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
     }
 
     return patterns;
+};
+
+/** How far a named price may sit from a swing and still be treated as naming
+ *  that swing. 0.3% is the same ballpark as the touch tolerance the detector
+ *  already uses, so "near" means the same thing throughout this module. */
+export const SNAP_TOLERANCE_PCT = 0.3;
+
+/**
+ * Snap a price the model NAMED onto the swing it was describing.
+ *
+ * A seat reading "support at 62150" off a chart that printed 62147.3 is not
+ * wrong by a trading decision — it is wrong by a transcription. The model cannot
+ * see the digits, so it can only ever be approximately right, and the gap
+ * between "approximately" and "exactly" is what makes a level miss by a tick
+ * and read as an unrespected line.
+ *
+ * So the code measures the level instead. The model supplies intent — "support
+ * here" — and the chart supplies the price.
+ *
+ * Returns the original price untouched when nothing is within tolerance. That
+ * is the important case: a level the market genuinely has no structure at
+ * should stay where the model put it rather than being snapped onto whatever
+ * happens to be nearest. Snapping is for recovering a transcription, not for
+ * inventing a level the chart does not support.
+ */
+export const snapPriceToStructure = (
+    price: number,
+    // Deliberately the subset this actually reads rather than Kline: the chart
+    // snapshot's candles are a narrower shape than the full Kline, and widening
+    // the input to force a match would have meant either a cast or carrying
+    // fields nobody here touches. A Kline satisfies this; so does a snapshot
+    // candle.
+    klines: readonly { high: number; low: number }[],
+    tolerancePct: number = SNAP_TOLERANCE_PCT,
+    pivotOptions: { leftBars?: number; rightBars?: number } = {},
+): { price: number; snapped: boolean; pivot: Pivot | null } => {
+    if (!Number.isFinite(price) || price <= 0 || klines.length === 0) {
+        return { price, snapped: false, pivot: null };
+    }
+    const { highs, lows } = findPivots(
+        klines,
+        pivotOptions.leftBars ?? 5,
+        pivotOptions.rightBars ?? 2,
+    );
+    let best: Pivot | null = null;
+    let bestPct = Infinity;
+    for (const p of [...highs, ...lows]) {
+        const pct = Math.abs((p.price - price) / price) * 100;
+        if (pct <= tolerancePct && pct < bestPct) { bestPct = pct; best = p; }
+    }
+    // No swing nearby: keep the model's number and say so, rather than snapping.
+    if (!best) return { price, snapped: false, pivot: null };
+    return { price: best.price, snapped: true, pivot: best };
 };
