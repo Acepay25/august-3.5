@@ -2,6 +2,56 @@
 
 Plain-English log of change rounds. Newest first.
 
+## The model is told the truth about what it can see, and every level it draws is finally measured
+
+Sixteen rounds, and one theme running through almost all of them: **something asserted a
+fact the code did not hold.**
+
+- **The chart no longer tells the model its drawing landed when it did not.** The renderer
+  clips every shape to the plot rect, so a price outside the visible scale was discarded
+  silently and a trend anchored past the window never appeared — and the receipt said "the
+  user sees it now" either way. `ChartSnapshot` now carries the visible window, printed in
+  `[ON SCREEN]`, and the receipt names the range when a shape is clipped.
+- **A screenshot reaches the seats.** The camera button was offered in every mode and the
+  user saw the image in their own bubble — but only the solo path sent it. In a multi-seat
+  panel every seat answered blind, with no error and no notice. Follow-up turns lose it
+  too, fixed through the same shared helper.
+- **One clock.** Three candle sites in the desk tools printed UTC while the packet and the
+  drawing notes beside them printed Philippine time, so one message carried the same bar at
+  two clocks eight hours apart.
+- **A price that cannot exist is refused, not drawn.** The drawing tools filtered on
+  `Number.isFinite`, which is not a price test — zero and -1 both passed, and the caller
+  reported success for a shape the user would never see.
+- **Patterns are measured, not asserted.** `patternStatus()` returned "confirmed" on the
+  strength of a literal: every branch returned `touches: 3` the moment the shape matched,
+  so the three-touch rule was never a claim at all. Touches are now counted against the
+  candles, and patterns carry the anchors the detector already computed.
+- **New `draw_detected` tool.** The model names a structure and the detector's own anchors
+  place it, so the level cannot be a digit out — the round trip where a pattern reached the
+  model as the sentence "Shoulders at ~62150.00" and came back as a price is gone.
+- **The levels the model draws are finally scored.** A seat could put twenty levels on a
+  chart and every one was unmeasured forever. They are now scored against the candles since
+  they were drawn, and the model is told its own standing: a hypothesis, not a fact.
+- **A plan the code mirrored no longer trains the model.** An inverted stop or target was
+  repaired by reflecting it across the entry, and the result was scored as though the model
+  had proposed it — so a model that consistently got its side backwards scored as right. The
+  repair was invisible: the flag existed on the schema and was read by nothing.
+- **The stop and the targets get a location check.** Only the entry was ever measured
+  against chart structure. A take-profit far outside the range the market had actually
+  traded scored exactly like one on a measured level.
+- **The per-message context block is bounded**, against the seat's real context window,
+  clipping the packet rather than head-slicing the block — which would have eaten the read
+  rules, the same defect that already shipped once inside the packet builder.
+- **The AI trendlines are on the chart.** They existed only as a list of price ranges, under
+  a comment claiming the row "cannot drift from what the chart format would have drawn".
+  Nothing drew them.
+- **The warning ratchet actually binds.** It sat 71 above the tree's real count, so 71 new
+  warnings passed silently. Correcting it let 58 unused imports out of `App.tsx` and
+  retired a hand-rolled guard that had a blind spot — it missed three dead bindings that the
+  installed rule reported.
+- **The updater manifest now matches the installer.** `latest.yml` named a file that did
+  not exist, so every auto-update 404'd. `artifactName` is pinned and release.yml now fails
+  before uploading if the two disagree.
 ## Every provider refusal now has a rung that can actually be reached, and the lint gate finally bites
 
 - **The degrade ladder had a real bug, and only CI could see it.** When a
