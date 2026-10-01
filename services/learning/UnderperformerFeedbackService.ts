@@ -13,13 +13,17 @@ import {
     getRollingWindowStats,
     getSituationalExpertise,
     RollingWindowStats,
-    SituationalExpertise
+    SituationalExpertise,
+    COLD_STREAK_THRESHOLD
 } from '../backtesting/ModelPerformanceService';
 
 // Configuration
 const MIN_TRADES_FOR_FEEDBACK = 5;        // Minimum trades before injecting feedback
 const WIN_RATE_THRESHOLD = 45;            // Below this win rate triggers feedback
-const COLD_STREAK_THRESHOLD = 3;          // Consecutive losses to trigger feedback
+// COLD_STREAK_THRESHOLD is NOT declared here — it is the one from
+// ModelPerformanceService, imported above. It used to be a second local copy
+// reading 3; two definitions of "how many losses is a cold streak" would let
+// the feedback trigger and the demotion rule drift apart unnoticed.
 const FEEDBACK_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes between feedbacks
 
 // Track last feedback injection per provider
