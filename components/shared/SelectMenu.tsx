@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckIcon, ChevronDownIcon } from './Icons';
+import { FLYOUT_VIEWPORT_MARGIN } from './flyoutLayout';
 
 export interface SelectOption {
     value: string;
@@ -53,7 +54,9 @@ const isSections = (
 ): opts is SelectSection[] =>
     opts.length > 0 && Array.isArray((opts[0] as SelectSection).options);
 
-const VIEWPORT_MARGIN = 8;
+// Shared: see flyoutLayout.ts. Two dropdowns at different distances from
+// the screen edge is a visible inconsistency, not just a duplicated number.
+const VIEWPORT_MARGIN = FLYOUT_VIEWPORT_MARGIN;
 const GAP = 4;
 
 const SelectMenuInner: React.FC<SelectMenuProps> = ({
