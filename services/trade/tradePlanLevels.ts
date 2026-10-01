@@ -15,6 +15,9 @@
  */
 
 import { phtClock } from '../../utils/timezone';
+// The canonical price reader. The drawing tools were the one place that used a
+// bare Number(), which is why "69,000" parsed everywhere else and not here.
+import { parsePrice } from '../../utils/analysisUtils';
 
 export interface PlanLevel {
     /** Stable id the model quotes back: `${planId}:ENTRY|:SL|:TP1..N`. */
@@ -63,15 +66,29 @@ export interface LevelHit {
  * wrong, rather than the model re-guessing all of them.
  */
 export const priceArgError = (raw: unknown, field = 'price'): string | null => {
-    const n = typeof raw === 'number' ? raw : Number(raw);
-    if (!Number.isFinite(n)) return `${field} must be a number`;
-    if (n <= 0) return `${field} must be a positive number`;
+    const n = usablePrice(raw);
+    if (n === null) return `${field} must be a positive number`;
     return null;
 };
 
-/** Coerce a model-supplied value to a usable price, or null if it is not one. */
+/**
+ * Coerce a model-supplied value to a usable price, or null if it is not one.
+ *
+ * The same rule as `chartData.parsePrice` and `keyLevels.parsePrice` — finite
+ * and greater than zero — but it was implemented with a plain `Number()`,
+ * while those two route strings through `analysisUtils.parsePrice`. That made
+ * the drawing tools the only price reader in the app that could not read
+ * "69,000": the verdict overlay and the key-level loader both accept it, and a
+ * model told "prices[0] must be a positive number" about a perfectly ordinary
+ * number has no way to guess that the comma was the problem.
+ *
+ * Numbers still take the fast path, so this stays cheap on the common case and
+ * accepts a real numeric price exactly as before.
+ */
 export const usablePrice = (raw: unknown): number | null => {
-    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : null;
+    if (typeof raw !== 'string') return null;
+    const n = parsePrice(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
 };
 
