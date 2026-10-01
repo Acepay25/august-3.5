@@ -1270,10 +1270,22 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
     return newAnalysis;
 };
 
+/**
+ * The one token→character ratio in this file.
+ *
+ * `truncateTextToTokens` and `truncateJsonSafely` each declared their own
+ * `const CHARS_PER_TOKEN = 4`. Same fact, twice, in the same module — and the
+ * consequence was sharper than a duplication usually is: `truncateJsonSafely`
+ * FALLS BACK to `truncateTextToTokens` when its input is not parseable JSON,
+ * so one and the same string could be cut to two different budgets depending
+ * only on whether it happened to parse. Retuning the ratio would have made
+ * that divergence appear for no reason anyone could see.
+ */
+const CHARS_PER_TOKEN = 4;
+
 // Safe default: 4000 tokens (approx 16k chars) is generally safe for Groq/Llama inputs
 export const truncateTextToTokens = (text: string, maxTokens: number = 4000): string => {
     if (!text) return "";
-    const CHARS_PER_TOKEN = 4;
     const maxChars = maxTokens * CHARS_PER_TOKEN;
 
     if (text.length <= maxChars) return text;
@@ -1303,7 +1315,6 @@ export const truncateTextToTokens = (text: string, maxTokens: number = 4000): st
  */
 export const truncateJsonSafely = (jsonText: string, maxTokens: number = 4000): string => {
     if (!jsonText) return "";
-    const CHARS_PER_TOKEN = 4;
     const maxChars = maxTokens * CHARS_PER_TOKEN;
 
     if (jsonText.length <= maxChars) return jsonText;
