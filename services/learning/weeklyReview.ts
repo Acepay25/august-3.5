@@ -23,7 +23,21 @@ import { ProviderConfig } from '../../types/provider';
 
 const KEY_PREFIX = 'weekly_review_v1_';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const MIN_CLOSED_TRADES = 3;
+
+/**
+ * Closed trades before a review card is worth generating.
+ *
+ * EXPORTED and used by monthlyReport, which declared the same rule as its own
+ * private copy. Two review periods that disagree about how much evidence a
+ * review needs would show the trader a weekly card one week and a monthly card
+ * the next from the same three trades, with nothing to explain the difference.
+ *
+ * They are the same number today and are meant to be: a review is a review. If
+ * a monthly review ever genuinely wants a higher bar, give it its own named
+ * constant and say why in a comment - do not quietly re-point this one, which
+ * would move the weekly review with it.
+ */
+export const MIN_CLOSED_TRADES_FOR_REVIEW = 3;
 
 export interface WeeklyReviewDigest {
     /** ISO timestamp of the week this digest covers (its end). */
@@ -118,7 +132,7 @@ export const runWeeklyReview = async (
     now = Date.now(),
 ): Promise<WeeklyReviewDigest | null> => {
     const stats = buildWeekStats(trades, now);
-    if (stats.closed < MIN_CLOSED_TRADES) return null;
+    if (stats.closed < MIN_CLOSED_TRADES_FOR_REVIEW) return null;
     const provider = getFirstReadyProvider(providerConfigs);
     if (!provider) return null;
     try {
