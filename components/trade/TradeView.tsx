@@ -21,7 +21,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GripVertical, PanelRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { ProviderConfig } from '../../types/provider';
-import { TradeAnalysis, LoggedTrade, Message } from '../../types';
+import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
@@ -41,6 +41,7 @@ import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurf
 import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
+import { LevelAccuracyBadge } from './LevelAccuracyBadge';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel from './TradeChatPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
@@ -335,6 +336,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     /** Shapes the MODEL drew via desk tools — rendered on the chart, never
      *  persisted into the user's drawing file, cleared on symbol change. */
     const [modelDrawings, setModelDrawings] = useState<ChartDrawing[]>([]);
+    /** Candles for scoring the model's own drawn levels. The chart fetches the
+     *  same series and KlineService caches for 30s, so this is a cache read,
+     *  not a second network call. 200 bars so a level drawn earlier has
+     *  enough history to have been judged. */
+    const [levelCandles, setLevelCandles] = useState<Kline[]>([]);
     /** The `<sid>:<symbol>` bucket modelDrawings CURRENTLY holds. A turn may
      *  only merge into React state when its bucket matches this stamp — a
      *  stream-chunk tool call landing between a session-switch store emit
@@ -557,6 +563,12 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         // blanket wipe that made "what the AI drew" vanish on the next coin.
         loadedBucketRef.current = `${chatSnap.activeId}:${symbol}`;
         setModelDrawings(loadSessionModelDrawings(chatSnap.activeId, symbol));
+    // Cached, and re-fetched whenever the bucket or coin changes. A failure
+    // leaves the list empty, which makes the badge render nothing rather than
+    // a wrong percentage.
+    void fetchKlines(symbol, toKlineInterval(interval), 200)
+        .then(setLevelCandles)
+        .catch(() => setLevelCandles([]));
     }, [symbol, chatSnap.activeId]);
 
     // Persist the model's shapes under the CURRENT coin+session whenever they
@@ -925,6 +937,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         onDrawingsChange={setChartDrawings}
                         modelDrawings={modelDrawings}
                         onRemoveModelShape={removeModelShape} />
+                    <LevelAccuracyBadge
+                        drawings={modelDrawings}
+                        candles={levelCandles}
+                        className="absolute top-2 right-2 z-10 bg-zinc-900/90 border border-white/10 rounded px-2 py-1" />
                 </div>
                 {/* The order book sits BETWEEN the chart and the AI dock, not
                     to the chart's left. The chart is the primary object on this
