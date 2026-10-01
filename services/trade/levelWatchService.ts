@@ -67,11 +67,28 @@ const MAX_LATCHED = 200;
  *  set was memory-only). */
 const ARMS_KEY_PREFIX = 'trade_level_arms_v1';
 const MAX_ARMS = 10;
-/** Per-symbol REST throttle for armed-but-not-visible symbols — the visible
- *  chart feed refreshes its symbol ~1s, so in practice only off-view symbols
- *  go stale and get polled (a quiet/unmounted chart degrades to polled too).
- *  Same 5s cadence as watchService's cross-symbol poll. */
-const PRICE_POLL_INTERVAL_MS = 5_000;
+/**
+ * Per-symbol REST throttle for a watch whose price feed is not refreshing —
+ * the visible chart feed refreshes its symbol ~1s, so in practice only
+ * off-view symbols go stale and get polled (a quiet/unmounted chart degrades
+ * to polled too).
+ *
+ * EXPORTED, and imported by watchService, which had its own copy reading 5_000.
+ * Both services answer the same question — "is this symbol's price fresh, and
+ * is a poll already in flight?" — with near-identical code against the same
+ * `priceBySymbol` map and the same `pollInFlight` guard, down to the identical
+ * `// feed is fresh` comment. The old note here said "Same 5s cadence as
+ * watchService's cross-symbol poll", which is the invariant written as PROSE:
+ * true on the day it was written, and a silent drift the moment either file was
+ * edited. An import cannot rot that way.
+ *
+ * Only the interval is shared. The two services still keep their own throttle
+ * LOOPS, because one walks armed trade plans and the other walks price
+ * watches — different inputs, different latching. Collapsing those is a larger
+ * change than the duplication is currently worth, and is named here so it is a
+ * decision rather than an oversight.
+ */
+export const PRICE_POLL_INTERVAL_MS = 5_000;
 
 const hitsKey = (user: string): string => `${HITS_KEY_PREFIX}_${user}`;
 const armsKey = (user: string): string => `${ARMS_KEY_PREFIX}_${user}`;
