@@ -2,7 +2,34 @@
 
 Plain-English log of change rounds. Newest first.
 
-## The model is told the truth about what it can see, and every level it draws is finally measured
+## v1.3.0 — The model names the structure, the code measures the price
+
+- **A level the model draws is snapped onto the swing it was describing.** A seat
+  reading "support at 62150" off a chart that printed 62147.3 is not wrong by a
+  trading decision — it is wrong by a transcription. It cannot see the digits.
+  Prices within 0.3% of a real swing now move onto it; a price with no swing
+  nearby is left exactly where the model put it, because snapping onto whatever
+  happens to be nearest would invent structure the chart does not have. Only
+  horizontal levels snap — a trendline needs both anchors to keep its slope.
+  `findPivots` is now shared with the pattern detector instead of the snaps
+  using a second swing finder that would find different ones.
+- **The receipt tells the model when price is already well past the level it
+  just drew** — stating the gap, and deliberately not calling the level invalid,
+  because a broken level is how a model discovers it was wrong.
+- **The level-accuracy number is on screen, not just in the seat's receipt.**
+  "This model draws levels the market ignores" is something you can only fix by
+  changing model, and you cannot know that without seeing the figure. Shown per
+  session, and silent until there is something judgeable — a 0% badge on an
+  empty sample would blame the model for a level the market never had a chance
+  to reach.
+- **Versioned separately from the v1.2.0 release, deliberately.** main carried two
+  features that v1.2.0 did not, while `package.json` still read `1.2.0` — so a
+  rebuild would have produced `August-Trading-Setup-1.2.0.exe` with different
+  bytes than the published asset of that name, and no user would ever be offered
+  it, because the updater only moves between versions. The changelog now carries
+  the version it describes, and a test fails if it does not match `package.json`.
+
+## v1.2.0 — The model is told the truth about what it can see, and every level it draws is finally measured
 
 Sixteen rounds, and one theme running through almost all of them: **something asserted a
 fact the code did not hold.**
