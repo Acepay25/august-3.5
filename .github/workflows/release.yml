@@ -233,18 +233,43 @@ jobs:
           VERIFIED_TAG: ${{ github.ref_name }}
         run: |
           $out = 'dist_electron'
-          $assets = @(Get-ChildItem $out -File | Where-Object {
-            $_.Name -match 'Setup .*\.exe$' -or $_.Extension -eq '.blockmap' -or $_.Name -eq 'latest.yml'
-          })
-          $setup = @($assets | Where-Object { $_.Name -match 'Setup .*\.exe$' } | Sort-Object LastWriteTime -Descending)
-          if ($setup.Count -ne 1) {
-            throw "Expected exactly one NSIS Setup installer in $out, found $($setup.Count). Refusing to publish."
-          }
-          if ($assets.Count -eq 0) { throw "No publishable assets in $out." }
-          if (-not (Test-Path (Join-Path $out 'latest.yml'))) {
+          # Select by WHAT THE MANIFEST NAMES, not by a filename pattern.
+          #
+          # This used to match `'Setup .*\.exe$'`, which hard-codes a separator
+          # and so silently stopped matching the moment the artifact name
+          # changed shape: it found ZERO installers and refused to publish,
+          # rather than publishing the wrong thing. That is the same class of
+          # bug as the one `check-update-manifest` exists to catch — three
+          # places deciding the filename by pattern instead of one declaring
+          # it. latest.yml is the single source of truth: the updater requests
+          # exactly what it names, so that is exactly what gets uploaded.
+          $manifest = Join-Path $out 'latest.yml'
+          if (-not (Test-Path $manifest)) {
             throw 'latest.yml is missing - the auto-updater would have no manifest to check the download against.'
           }
-          Write-Host "Publishing the artifact the signature gate verified: $($setup[0].Name)"
+          $named = @(Select-String -Path $manifest -Pattern '^\s*(?:path|url):\s*[''"]?([^''"\s]+)' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value })
+          $setupNames = @($named | Where-Object { $_ -like '*.exe' })
+          if ($setupNames.Count -ne 1) {
+            throw "latest.yml names $($setupNames.Count) installer(s) (expected 1): $($setupNames -join ', '). Refusing to publish."
+          }
+          $assets = @()
+          foreach ($n in $named) {
+            $p = Join-Path $out $n
+            if (-not (Test-Path $p)) { throw "latest.yml names '$n' but it is not in $out. Refusing to publish." }
+            $assets += Get-Item $p
+            $bm = "$n.blockmap"
+            if (Test-Path (Join-Path $out $bm)) { $assets += Get-Item (Join-Path $out $bm) }
+          }
+          if ($assets.Count -eq 0) { throw "No publishable assets in $out." }
+          # latest.yml itself rides along: the updater fetches it to learn what
+          # to download, so uploading the installer without it would rebuild
+          # exactly the v1.1.0 failure from the other direction.
+          $manifestItem = Get-Item $manifest
+          if (-not ($assets.FullName -contains $manifestItem.FullName)) {
+            $assets += $manifestItem
+          }
+          Write-Host "Publishing the artifact the signature gate verified: $($setupNames -join ', ')"
           $paths = @($assets | ForEach-Object { $_.FullName })
           gh release view $env:VERIFIED_TAG *> $null
           if ($LASTEXITCODE -eq 0) {
