@@ -34,8 +34,12 @@ const MAX_WATCHES = 10;
  *  apart and the REST poll refreshes non-visible symbols every ~5s. Beyond
  *  this window a cached print is worse than none (the cross-symbol gate). */
 const PRICE_MAX_AGE_MS = 10_000;
-/** Per-symbol REST throttle for armed-but-not-visible symbols. */
-const PRICE_POLL_INTERVAL_MS = 5_000;
+/** Per-symbol REST throttle for armed-but-not-visible symbols. Shared with
+ *  levelWatchService: both ask the same "is this symbol's price fresh, and is a
+ *  poll already in flight?" question, and two copies of the number is how the
+ *  two services end up polling a chart at two different rates. The loops stay
+ *  local — one walks price watches, the other armed trade plans. */
+import { PRICE_POLL_INTERVAL_MS } from './levelWatchService';
 
 const storageKey = (user: string): string => `${WATCHES_KEY_PREFIX}_${user}`;
 
