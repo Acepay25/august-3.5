@@ -137,7 +137,13 @@ const ROLLING_WINDOW_SIZE = 20;      // Number of recent trades to track
  * the v1.2.0 version (the tag vs package.json): one fact, two decision points.
  */
 export const COLD_STREAK_THRESHOLD = 3;
-const COLD_STREAK_PENALTY = 0.5;     // Weight multiplier when on cold streak (50%)
+// MULTIPLICATIVE: score *= this halves a model's weight on a cold streak.
+// Renamed from COLD_STREAK_PENALTY, which it shared with providerFitness
+// where the same name meant an ADDITIVE per-loss win-rate penalty of 0.05.
+// Different operations, different units, identical name - so a refactor of one
+// would have been applied to the other. This completes the consolidation of the
+// cold-streak rule, whose THRESHOLD was also duplicated.
+const COLD_STREAK_SCORE_MULTIPLIER = 0.5;
 const UNDERPERFORMER_THRESHOLD = 0.15; // 15% below average to be flagged
 
 /**
@@ -1080,7 +1086,7 @@ export const calculateDynamicWeightsEnhanced = (
 
         // COLD STREAK PENALTY - significant reduction
         if (rollingStats.isDemoted) {
-            score *= COLD_STREAK_PENALTY; // 50% reduction
+            score *= COLD_STREAK_SCORE_MULTIPLIER; // 50% reduction
             console.log(`[DynamicWeights] ${provider} demoted: ${rollingStats.demotedReason}`);
         }
 
