@@ -27,7 +27,11 @@ export const MIN_FITNESS_SAMPLES = 5;
 /** Non-neutral scores at/below this demote the provider from auto-rosters. */
 export const FITNESS_FILTER_THRESHOLD = 0.3;
 /** Each consecutive recent loss shaves this off the outcome component. */
-const COLD_STREAK_PENALTY = 0.05;
+// ADDITIVE: subtracted from win rate PER counted loss. Renamed from
+// COLD_STREAK_PENALTY, which ModelPerformanceService also used - but for a
+// MULTIPLICATIVE 0.5 factor. Same name, two different operations in two
+// different units; see that file for the matching note.
+const COLD_STREAK_WIN_RATE_PENALTY = 0.05;
 /** Cold-streak penalty saturates here (4 losses). */
 const MAX_COUNTED_COLD_STREAK = 4;
 /** Weight of outcome performance vs. preflight process quality. */
@@ -133,7 +137,7 @@ export const getProviderFitness = async (
     }
 
     const outcome = clamp01(
-        (winRate ?? 0.5) - Math.min(coldStreak, MAX_COUNTED_COLD_STREAK) * COLD_STREAK_PENALTY,
+        (winRate ?? 0.5) - Math.min(coldStreak, MAX_COUNTED_COLD_STREAK) * COLD_STREAK_WIN_RATE_PENALTY,
     );
     // Preflight quality is neutral (0.5) until the gate has data — providers
     // are never punished for a gate that has not watched them yet.
