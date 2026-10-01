@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { codeOf } from "./helpers/sourceCode";
 
 /**
  * The draw receipt must not claim the user can see a shape that was clipped.
@@ -74,8 +75,13 @@ describe("the draw receipt tells the truth about visibility", () => {
   });
 
   it("the OLD unconditional receipt is gone from the source", async () => {
-    const fs = await import("node:fs");
-    const src = fs.readFileSync("services/trade/chatTurnRunner.ts", "utf8");
+    // Scanned as CODE, not raw text. `chatTurnRunner.ts` still QUOTES the old
+    // sentence — in a comment explaining that it was a lie — and it survives
+    // only because the banned patterns carry a trailing period the comment
+    // does not. That is one character of luck between a correct explanatory
+    // comment and a red suite. The ban is about the receipt STRING, so it is
+    // asserted against code.
+    const src = codeOf("services/trade/chatTurnRunner.ts");
     // This is the exact lie the fix removes.
     expect(src).not.toMatch(/The user sees these lines now\./);
     expect(src).not.toMatch(/The user sees it now\./);
