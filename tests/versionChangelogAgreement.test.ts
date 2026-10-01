@@ -21,6 +21,18 @@ import { describe, it, expect } from "vitest";
  * invariant that is checkable without a round trip: the top changelog entry
  * names the version in package.json. A feature landing without a version bump
  * therefore fails here, which is the moment it is cheapest to catch.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO — written after it was mistaken for more
+ * than it is. It does not check that the entry DESCRIBES everything since the
+ * last release, and it cannot: doing that offline would need a changelog format
+ * strict enough to machine-check coverage, which is a worse trade than the bug.
+ *
+ * So the v1.3.0 entry sat describing three features while a fourth — a
+ * user-facing price-parsing fix, the one where `69,000` was refused as an
+ * invalid price — shipped under that version unmentioned. This suite stayed
+ * green the whole time. Finding that meant reading the entry against the merge
+ * log, not running a test, and no assertion here should ever be cited as
+ * evidence that the changelog is complete.
  */
 
 import { readFileSync } from "node:fs";
