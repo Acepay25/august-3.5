@@ -46,15 +46,38 @@ describe('PriceAlertService feed tracking', () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     // The polling loop hits the normalized symbol (BTC → BTCUSDT) in ONE
-    // batched request (the old loop fetched once per symbol sequentially).
+    // batched request (the old loop fetched once per symbol sequentially),
+    // timed so a stalled exchange cannot outlive the tick waiting on it.
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.binance.com/api/v3/ticker/price?symbols=["BTCUSDT"]',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     // The tick populated the shared price cache AND fanned out to subscribers
     // (the price-level consumers evaluate crossings on this one feed).
     expect(svc.getCurrentPrice('BTCUSDT')).toBe(100.5);
     expect(ticks).toEqual([['BTCUSDT', 100.5]]);
     unsubscribe();
+  });
+
+  it('never runs two polls at once when the exchange hangs', async () => {
+    // The body is async inside setInterval. Without an in-flight guard, a
+    // blocked or geo-fenced exchange stacked a new hanging request on every
+    // 10s tick for the whole session, and late responses could then land out
+    // of order and overwrite a fresher tick.
+    const pending: { release: ((v: { ok: boolean; json: () => Promise<unknown> }) => void) | null } = { release: null };
+    fetchMock.mockImplementation(() => new Promise(resolve => { pending.release = resolve; }));
+
+    expect(svc.trackSymbol('BTC')).toBe(true);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    pending.release?.({ ok: true, json: async () => ({ symbol: 'BTCUSDT', price: '99.5' }) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(svc.getCurrentPrice('BTCUSDT')).toBe(99.5);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('dedupes an unchanged price: the same tick fans out once, a change fans out again', async () => {

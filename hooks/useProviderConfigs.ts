@@ -30,6 +30,18 @@ export function useProviderConfigs() {
                 setConfigs(loaded);
                 setIsLoaded(true);
             }
+        }, error => {
+            // A rejecting read used to leave isLoaded false FOREVER, and every
+            // boot step gated on it (BotRegistry seeding, team sync) then
+            // silently never ran while the app looked healthy — index.tsx
+            // preventDefaults unhandled rejections, so nothing surfaced either.
+            // Degrade to "no providers configured", which the composer and
+            // Health tab already render honestly.
+            console.error('[Providers] Could not read provider settings — starting with none configured:', error);
+            if (mounted) {
+                setConfigs([]);
+                setIsLoaded(true);
+            }
         });
         return () => { mounted = false; };
     }, []);
