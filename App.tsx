@@ -851,6 +851,7 @@ const App: React.FC = () => {
 
         handleAllPostMortemTypingComplete,
         handleMismatchResolution,
+        handleRetryPostMortem,
 
 
     } = usePostMortem({
@@ -3310,6 +3311,7 @@ const App: React.FC = () => {
                                     onEditSeatOverrides={setSeatOverridesBot}
                                     onOpenCoach={openCoachInLearn}
                                     onDeleteGroup={deleteGroup}
+                                    onRetryPostMortem={handleRetryPostMortem}
                                     onEditGroup={groupId => {
                                         const target = groups.find(g => g.id === groupId);
                                         if (!target) return;

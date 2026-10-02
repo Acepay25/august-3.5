@@ -186,8 +186,20 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             // toggle look like it did nothing.
             if (enabling && isSkillFile(file)) {
                 const meta = parseSkillMarkdown(file.content);
-                if (meta?.suspendedAt) {
+                if (meta?.suspendedAt || meta?.disabledByUser) {
                     meta.suspendedAt = undefined;
+                    meta.disabledByUser = undefined;
+                    patch = { ...patch, content: serializeSkill(meta, titleFromMeta(meta)) };
+                }
+            } else if (!enabling && isSkillFile(file)) {
+                // The mirror of the above: `enabled: false` on the file is
+                // derived state, so a switch-off had nowhere to live and the
+                // next closed trade re-derived it to true — the trader's veto
+                // reverting on its own. Record the intent in the frontmatter
+                // that skillEnabledFlag actually reads.
+                const meta = parseSkillMarkdown(file.content);
+                if (meta) {
+                    meta.disabledByUser = true;
                     patch = { ...patch, content: serializeSkill(meta, titleFromMeta(meta)) };
                 }
             }

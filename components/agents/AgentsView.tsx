@@ -93,6 +93,10 @@ interface AgentsViewProps {
     onDeleteBot?: (botId: string) => void;
     onDeleteGroup?: (groupId: string) => void;
     onEditGroup?: (groupId: string) => void;
+    /** Re-runs a post-mortem that failed. The failed candidate is stamped on
+     *  the message, so the row only has to name itself. Absent on surfaces
+     *  that never run post-mortems — the CTA then does not render. */
+    onRetryPostMortem?: (messageId: string) => void;
     /** WS-3.4: what each bot has learned — lessons, skills authored, evidence.
      *  Shown on the active bot's header and as a row badge. */
     botStats?: BotLearningStat[];
@@ -172,6 +176,9 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
         actions: m.toolActions,
         analysis: m.analysis,
+        // The harness stamps the failed candidate on the message when a
+        // post-mortem throws; the row exposes it so the CTA can offer the re-run.
+        postMortemFailed: !!m.postMortemFailedCandidate,
     };
 };
 
@@ -340,7 +347,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, onOpenInDock, surfaceEnterFrom = null,
-    attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
+    attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
     botStats,
     providerReady = false,
     onRenameBot,
@@ -873,6 +880,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             <ChatTranscriptRow
                                                 key={m.id}
                                                 row={chatRowFrom(m, username, activeBot?.name ?? 'desk')}
+                                                onRetry={onRetryPostMortem ? () => onRetryPostMortem(m.id) : undefined}
                                             >
                                                 {!isUser && <InlineVerdict m={m} />}
                                             </ChatTranscriptRow>

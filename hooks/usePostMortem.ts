@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
-import { Message, MessageRole, TradeOutcome, LoggedTrade, DebateTurn, LiveThoughts, TradeSummary, GlobalMemory, AnalysisStep, TodayReassessment } from '../types';
+import { Message, MessageRole, TradeOutcome, LoggedTrade, DebateTurn, LiveThoughts, TradeSummary, GlobalMemory, AnalysisStep } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { validateTradeOutcome, TradeOutcomeValidation } from '../services/backtesting/BacktestingService';
 import { sanitizeAIResponse } from '../utils/sanitizers';
@@ -20,12 +20,13 @@ import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { lensFromSpeakerName } from '../utils/thinkingLens';
 import { ProviderConfig } from '../types/provider';
-import { conductPostMortem, conductTodayReassessment, writePostMortemMarkdownReport } from '../services/providers/GenericAnalysisService';
+import { conductPostMortem, writePostMortemMarkdownReport } from '../services/providers/GenericAnalysisService';
 import { buildAutoplaySpeakerRegex } from './analysisPipeline/autoplayParser';
 import { extractPostMortemFinalReport } from '../utils/postMortemReport';
 import { classifyRootCause } from '../utils/rootCause';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
+import { recordLensMemoryFromTrade } from '../services/learning/lensMemoryRecord';
 import { getActiveUsername } from '../utils/activeUser';
 
 export interface UsePostMortemParams {
@@ -105,8 +106,6 @@ export const usePostMortem = (params: UsePostMortemParams) => {
     const [mismatchData, setMismatchData] = useState<{ candidate: PostMortemCandidate; validation: TradeOutcomeValidation } | null>(null);
     const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
     const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({});
-    /** Post-mortem message id currently running a "what would I do today?" re-assessment. */
-    const [todayReassessmentInFlight, setTodayReassessmentInFlight] = useState<string | null>(null);
 
     // ─── Cancellation guard for in-flight post-mortem work ──────────
     // When the user switches accounts, any async post-mortem analysis still
@@ -147,8 +146,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
 
     // ─── Main Analysis Function ───────────────────────────────────────────
     const startPostMortemAnalysis = async (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[], resolvedValidation?: TradeOutcomeValidation) => {
-        // Bump the run id BEFORE aborting (same rule startTodayReassessment
-        // already follows): a second post-mortem supersedes any in-flight
+        // Bump the run id BEFORE aborting: a second post-mortem supersedes any in-flight
         // one, and the abandoned run must see a STALE id in its catch/
         // finally so it discards silently. Without the bump the aborted run
         // keeps the same id as the new one, isRunStale stays false, and it
@@ -647,6 +645,17 @@ Please investigate this discrepancy in your analysis.
                         return updated.slice(-MAX_TRADE_SUMMARIES);
                     });
 
+                    // Per-lens seat memory: THIS is where each seat's own
+                    // record gets its writer. The lens files have always been
+                    // read and injected ("MY LENS MEMORY" into every Lens seat,
+                    // and folded into the doctrine rewrite) but nothing ever
+                    // wrote them, so the block was permanently empty. One line
+                    // per CLOSED, SCORED trade — not per run, or the file
+                    // becomes noise the seat learns to skim. Best-effort like
+                    // every other side-effect here.
+                    recordLensMemoryFromTrade(tradeToUpdate, { username: getActiveUsername() })
+                        .catch(err => console.warn('[PostMortem] Lens memory write failed:', err));
+
                     const insightConfig = memoryConfig ?? moderatorConfig;
                     if (insightConfig) {
                         const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory);
@@ -947,99 +956,6 @@ Please investigate this discrepancy in your analysis.
         await startPostMortemAnalysis(updatedCandidate, undefined, undefined, finalValidation);
     };
 
-    /**
-     * "What would I do today?" — re-assesses a closed trade's setup against
-     * the CURRENT market price, answering forward-looking whether the setup
-     * would still be a valid trade today (hindsight known, verdict fresh).
-     * Rides the post-mortem run-id/abort guards so account/conversation
-     * switches cancel it like any other post-mortem work.
-     */
-    const startTodayReassessment = async (messageId: string): Promise<void> => {
-        if (todayReassessmentInFlight) return;
-
-        // Synchronous validation FIRST — never abort other post-mortem work
-        // for a request that cannot run.
-        const msgs = messagesRef.current;
-        const pmIndex = msgs.findIndex(m => m.id === messageId);
-        const pmMessage = pmIndex >= 0 ? msgs[pmIndex] : undefined;
-        if (!pmMessage?.isPostMortem) return;
-
-        // The original analysis card is the nearest preceding message with one.
-        let card: Message | undefined;
-        for (let i = pmIndex - 1; i >= 0; i--) {
-            if (msgs[i].analysis) { card = msgs[i]; break; }
-        }
-        if (!card?.analysis) {
-            console.warn('[TodayReassessment] No source analysis found for post-mortem', messageId);
-            return;
-        }
-
-        const provider = providerConfigs.find(c => c.isEnabled && c.apiKey && c.selectedModel);
-        if (!provider) {
-            console.warn('[TodayReassessment] No enabled provider configured');
-            return;
-        }
-
-        // Bump the run id BEFORE aborting so the aborted post-mortem run's
-        // catch/finally see a stale id and discard SILENTLY — without the
-        // bump it would write "Post-Mortem Failed" + postMortemFailedCandidate
-        // over its partial transcript. The bump precedes the capture so THIS
-        // run stays current (isRunStale uses the fresh id).
-        postMortemRunIdRef.current += 1;
-        const myRunId = postMortemRunIdRef.current;
-        postMortemAbortControllerRef.current?.abort();
-        const currentAbortController = new AbortController();
-        postMortemAbortControllerRef.current = currentAbortController;
-        // The aborted run's stale finally skips UI cleanup — close the
-        // streaming overlay explicitly so it can't stay up after the takeover.
-        setIsPostMortemInProgress(false);
-        setIsLivePostMortemVisible(false);
-        setLoadingMessage(null);
-
-        // Claim the slot before the first await — a double-click must not
-        // start two fetches (the second would abort the first).
-        setTodayReassessmentInFlight(messageId);
-
-        // Live price: cached socket price first, else a fresh ticker fetch.
-        let currentPrice = 0;
-        const symbol = normalizeSymbol(card.analysis.coinName || '');
-        if (symbol) {
-            try {
-                currentPrice = PriceAlertService.getCurrentPrice(symbol) ?? (await fetchMarketData(symbol)).currentPrice;
-            } catch (e) {
-                console.warn('[TodayReassessment] Price fetch failed — reasoning from levels only:', e);
-            }
-        }
-
-        try {
-            const { verdict, text } = await conductTodayReassessment(provider, {
-                analysis: card.analysis,
-                postMortem: pmMessage.postMortem || pmMessage.text || '',
-                outcome: card.outcome ?? pmMessage.outcome,
-                currentPrice,
-                signal: currentAbortController.signal,
-            });
-            if (isRunStale(myRunId)) return;
-            const reassessment: TodayReassessment = {
-                verdict,
-                text,
-                price: currentPrice,
-                createdAt: new Date().toISOString(),
-            };
-            updateMessages(
-                prev => prev.map(m => m.id === messageId ? { ...m, todayReassessment: reassessment } : m),
-                activeConversationId,
-            );
-        } catch (e: any) {
-            if (isRunStale(myRunId) || e?.name === 'AbortError') return;
-            console.error('[TodayReassessment] Failed:', e);
-        } finally {
-            // Unconditional — a stale run must still release the in-flight
-            // slot, or the button stays disabled until the app reloads.
-            setTodayReassessmentInFlight(prev => (prev === messageId ? null : prev));
-        }
-    };
-
     return {
         // State
         mismatchData,
@@ -1048,12 +964,8 @@ Please investigate this discrepancy in your analysis.
         setTypingMessageState,
         livePostMortemThoughts,
         setLivePostMortemThoughts,
-        todayReassessmentInFlight,
-        setTodayReassessmentInFlight,
-
         // Functions
         startPostMortemAnalysis,
-        startTodayReassessment,
         invalidatePostMortemRuns,
         handleRetryPostMortem,
         handleAllPostMortemTypingComplete,

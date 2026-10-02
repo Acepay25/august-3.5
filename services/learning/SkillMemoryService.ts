@@ -250,6 +250,12 @@ export interface SkillMeta {
      *  cannot carry this — a user-retired skill is also disabled — and the
      *  archive stage has to tell the two apart. */
     suspendedAt?: string;
+    /** The trader turned this skill OFF in the notebook. `enabled` on the
+     *  notebook file is DERIVED from status + suspendedAt by skillEnabledFlag,
+     *  so a hand-off had no meta counterpart and the next attribution write
+     *  recomputed it to true — silently re-injecting a vetoed skill within
+     *  days. This is the meta half of that intent. */
+    disabledByUser?: boolean;
     /** Timeframe the skill was proven/drafted on (e.g. '15m', '4h'). Optional
      *  so legacy and chat-authored skills stay valid; the chart scan stamps it
      *  so a reader knows which tape a pattern was earned on. */
@@ -641,6 +647,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         lastEvidenceAt: pick('lastEvidenceAt'),
         lastMatchedAt: pick('lastMatchedAt'),
         suspendedAt: pick('suspendedAt'),
+        disabledByUser: pick('disabledByUser') === 'true' || undefined,
         previousVersion,
         // Temporal ledger: JSON array in frontmatter.
         history: (() => {
@@ -666,7 +673,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
  * next closed trade.
  */
 export const skillEnabledFlag = (meta: SkillMeta): boolean =>
-    meta.status !== 'retired' && !meta.suspendedAt;
+    meta.status !== 'retired' && !meta.suspendedAt && !meta.disabledByUser;
 
 export const setSkillStatus = async (fileId: string, status: SkillStatus, username?: string): Promise<void> => {
     const file = getMemoryFiles().files.find(f => f.id === fileId);
@@ -678,6 +685,9 @@ export const setSkillStatus = async (fileId: string, status: SkillStatus, userna
     // suspension, or `skillEnabledFlag` would keep it out and the click would
     // silently do nothing.
     if (status !== 'retired') meta.suspendedAt = undefined;
+    // Same reasoning for the user's own off-switch: a manual status change is
+    // the trader saying "use this one", so it must also lift their veto.
+    if (status !== 'retired') meta.disabledByUser = undefined;
     stampStatusTransition(meta, status, status === 'retired' ? 'user-veto' : 'manual');
     meta.status = status;
     await updateMemoryFileUnlocked(fileId, {
@@ -770,6 +780,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
         ...(meta.lastMatchedAt ? [`lastMatchedAt: ${meta.lastMatchedAt}`] : []),
         ...(meta.suspendedAt ? [`suspendedAt: ${meta.suspendedAt}`] : []),
+        ...(meta.disabledByUser ? ['disabledByUser: true'] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
         ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),
