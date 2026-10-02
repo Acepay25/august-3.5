@@ -107,7 +107,7 @@ const TRADE_TOOLS = [
     // Market-wide discovery: grade the whole top-volume universe at once.
     'run_screener', 'run_monte_carlo',
     // Growth set: the model edits its own memory, skills and tools from here.
-    'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill',
+    'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool', 'scan_chart_skills',
     // Chart-action set: the model draws on the live chart (levels, lines).
     'draw_on_chart', 'draw_detected', 'mark_trade_levels', 'clear_chart_drawings', 'present_trade',

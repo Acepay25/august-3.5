@@ -80,6 +80,11 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     { id: 'lens', name: 'lens', order: 6 },
     { id: 'settled-beliefs', name: 'settled-beliefs', order: 7 },
     { id: 'distilled', name: 'distilled', order: 8 },
+    // Strategy plans (strategies/*.md). Lives in the SAME notebook blob as
+    // everything else on purpose: a second persistence path would need a
+    // second backup/export namespace, and a namespace nothing writes is a
+    // phantom row in every backup the app takes.
+    { id: 'strategies', name: 'strategies', order: 9 },
 ];
 
 const SEED_FILES: Omit<MemoryFile, 'id' | 'createdAt' | 'updatedAt'>[] = [
