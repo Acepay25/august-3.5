@@ -563,13 +563,21 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         // blanket wipe that made "what the AI drew" vanish on the next coin.
         loadedBucketRef.current = `${chatSnap.activeId}:${symbol}`;
         setModelDrawings(loadSessionModelDrawings(chatSnap.activeId, symbol));
-    // Cached, and re-fetched whenever the bucket or coin changes. A failure
-    // leaves the list empty, which makes the badge render nothing rather than
-    // a wrong percentage.
-    void fetchKlines(symbol, toKlineInterval(interval), 200)
-        .then(setLevelCandles)
-        .catch(() => setLevelCandles([]));
     }, [symbol, chatSnap.activeId]);
+
+    // Level-accuracy scoring needs THIS coin's bars at THIS timeframe. The
+    // fetch used to ride the symbol-switch effect above with two holes: no
+    // `interval` dep (a timeframe change never re-fetched) and no cancel (a
+    // slow BTC response could land after the switch and overwrite the new
+    // coin's candles, whose 30s cache usually resolves first). Either way the
+    // badge printed a hit rate measured against a different market's bars.
+    useEffect(() => {
+        let cancelled = false;
+        void fetchKlines(symbol, toKlineInterval(interval), 200)
+            .then(candles => { if (!cancelled) setLevelCandles(candles); })
+            .catch(() => { if (!cancelled) setLevelCandles([]); });
+        return () => { cancelled = true; };
+    }, [symbol, interval]);
 
     // Persist the model's shapes under the CURRENT coin+session whenever they
     // change (adds, erases, clear). Keyed on modelDrawings ONLY — not symbol —
@@ -728,6 +736,17 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         const t = turn as PanelTurnContext;
         saveSessionModelDrawings(t.sid, t.symbol, []);
     }, []);
+
+    // TradeChatPanel is React.memo'd, and the spread below compares props
+    // individually — so an inline arrow here re-renders a 1,100-line panel on
+    // every market tick regardless of everything else being stable. The dock
+    // toggles read nothing but the setters, so they can be permanently stable.
+    const collapseDock = useCallback(() => {
+        setDockCollapsed(true);
+        setDockExpanded(false);
+    }, []);
+    const expandDock = useCallback(() => setDockCollapsed(false), []);
+    const toggleDockExpanded = useCallback(() => setDockExpanded(v => !v), []);
 
     const dockProps = {
         symbol,
@@ -991,9 +1010,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             <TradeChatPanel
                                 {...dockProps}
                                 collapsed={false}
-                                onToggleCollapsed={isBelowLg ? undefined : () => { setDockCollapsed(true); setDockExpanded(false); }}
+                                onToggleCollapsed={isBelowLg ? undefined : collapseDock}
                                 expanded={dockExpanded}
-                                onToggleExpanded={() => setDockExpanded(v => !v)}
+                                onToggleExpanded={toggleDockExpanded}
                                 onNewGroup={onNewGroup}
                                 onOpenCoach={onOpenCoach}
                                 coachCount={coachCount}
@@ -1009,9 +1028,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         <TradeChatPanel
                             {...dockProps}
                             collapsed
-                            onToggleCollapsed={() => setDockCollapsed(false)}
+                            onToggleCollapsed={expandDock}
                             expanded={dockExpanded}
-                            onToggleExpanded={() => setDockExpanded(v => !v)}
+                            onToggleExpanded={toggleDockExpanded}
                             onNewGroup={onNewGroup}
                             onOpenCoach={onOpenCoach}
                             coachCount={coachCount}

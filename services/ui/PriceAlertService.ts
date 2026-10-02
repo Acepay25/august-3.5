@@ -398,7 +398,13 @@ class PriceAlertServiceClass {
      * instead of one sequential fetch per symbol.
      */
     private startPolling(): void {
+        // One request at a time. The body is async inside setInterval, so a
+        // stalled or geo-blocked exchange used to spawn a fresh hanging fetch
+        // every 10s for the whole session — and responses could land out of
+        // order, letting an older tick overwrite a newer one in acceptTick.
+        let inFlight = false;
         this.pollingInterval = setInterval(async () => {
+            if (inFlight) return;
             if (this.isPaused) return;
             // WS healthy AND its stream covers every needed symbol → the
             // socket is the feed; skip the poll. An OPEN-but-stale stream
@@ -410,9 +416,14 @@ class PriceAlertServiceClass {
             ])];
             if (symbols.length === 0) return;
 
+            inFlight = true;
             try {
                 const query = symbols.map(s => `"${s}"`).join(',');
-                const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=[${query}]`);
+                // Timed below the 10s cadence so a stalled exchange cannot
+                // outlive the tick that is waiting on it.
+                const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=[${query}]`, {
+                    signal: AbortSignal.timeout(9000),
+                });
                 if (!response.ok) return;
                 const data = await response.json();
                 const rows = Array.isArray(data) ? data : [data];
@@ -423,6 +434,8 @@ class PriceAlertServiceClass {
                 }
             } catch (e) {
                 console.error(`[PriceAlertService] Batched poll error (${symbols.length} symbols):`, e);
+            } finally {
+                inFlight = false;
             }
         }, 10000); // Poll every 10 seconds
     }

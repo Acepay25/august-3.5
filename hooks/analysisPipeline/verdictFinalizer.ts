@@ -656,6 +656,10 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
             modelId: a.modelId,
             tokens: (a.promptTokens ?? 0) + (a.completionTokens ?? 0) || Math.round((a.charsOut ?? 0) / 4),
         })),
+    }).catch(error => {
+        // Fire-and-forget, but a quota rejection here was surfacing as an
+        // unhandled rejection, which index.tsx swallows.
+        console.error('[SessionUsage] Could not record run usage:', error);
     });
 
     // Apply the message update. The hook's applyUpdate routes through

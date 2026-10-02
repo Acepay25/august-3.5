@@ -34,7 +34,7 @@ import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeCha
 import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
 } from './chartDrawings';
-import { parseTradeProposal } from './proposedTrade';
+import { parseTradeProposal, computeRrRatio } from './proposedTrade';
 import { scoreDrawnLevel, levelAccuracy, describeLevelAccuracyForModel } from './tradePlanLevels';
 import * as levelWatch from './levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from './tradePlanLevels';
@@ -96,6 +96,14 @@ const TRADE_TOOLS = [
     'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',
     'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
     'project_future_price',
+    // On-demand indicator studies (RSI/MACD/ADX/OBV/Ichimoku/structure/…).
+    // The dock is where a trader asks "what does the 4h RSI say about this
+    // setup?", and without this the dock could not ask — the studies only
+    // reached the model inside the analysis packet.
+    'get_indicators',
+    // Search past analysis sessions. A docked conversation is exactly where
+    // "what did I conclude about BTC last week?" gets asked.
+    'recall_chat',
     // Market-wide discovery: grade the whole top-volume universe at once.
     'run_screener', 'run_monte_carlo',
     // Growth set: the model edits its own memory, skills and tools from here.
@@ -369,8 +377,13 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // session": the card must land in this run's transcript even if
             // the user switched sessions mid-stream.
             if (turn.entryId) chatStore.mutate(turn.sid, s => ({ ...s, entries: s.entries.map(e => (e.id === turn.entryId ? { ...e, proposal } : e)) }));
-            const rr = proposal.takeProfits.length && Math.abs(proposal.entry - proposal.stopLoss) > 0
-                ? (Math.abs(proposal.takeProfits[0] - proposal.entry) / Math.abs(proposal.entry - proposal.stopLoss)).toFixed(1) : '—';
+            // Planned R:R comes from utils/riskReward — the nearest target, not
+            // whatever the model happened to list first. Reading takeProfits[0]
+            // here made the receipt disagree with the card and the journal on
+            // any plan whose targets came back out of order, and the model then
+            // repeated the receipt's number to the trader.
+            const ratio = computeRrRatio(proposal);
+            const rr = ratio > 0 ? ratio.toFixed(1) : '—';
             const levelIds = [`${proposal.planId}:ENTRY`, `${proposal.planId}:SL`,
                 ...proposal.takeProfits.map((_, i) => `${proposal.planId}:TP${i + 1}`)];
             // Only reachable on the VIEWED canvas (crossCanvas ⇒ armPrice is

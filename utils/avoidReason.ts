@@ -3,6 +3,7 @@ import { ConfidenceCalibration } from '../types';
 import { MIN_TRADES_FOR_CALIBRATION } from '../constants/calibrationConstants';
 import { formatModelDisplayName } from './providerUtils';
 import { parsePrice } from './analysisUtils';
+import { plannedRiskReward } from './riskReward';
 
 /**
  * Decision-quality helpers: explain WHY a setup became Avoid, distinguish
@@ -29,7 +30,7 @@ const HARD_WARNING_PATTERN = /HARD VALIDATION|GATE VETO|HARD BLOCK|UNGROUNDED|in
 const cleanWarning = (text: string): string =>
     text.replace(/^\s+/, '').replace(/^⚠️\s*/u, '').replace(/^🚫\s*/u, '').trim();
 
-/** R:R from the declared value, falling back to entry/SL/TP1 when unset. */
+/** R:R from the declared value, falling back to entry/SL and the NEAREST target. */
 const resolveRatio = (analysis: Pick<TradeAnalysis, 'rrRatio' | 'entryPoints' | 'stopLoss' | 'takeProfit'>): number | undefined => {
     if (typeof analysis.rrRatio === 'number' && Number.isFinite(analysis.rrRatio)) return analysis.rrRatio;
     const parse = (value?: string): number | undefined => {
@@ -41,11 +42,17 @@ const resolveRatio = (analysis: Pick<TradeAnalysis, 'rrRatio' | 'entryPoints' | 
     };
     const entry = parse(analysis.entryPoints?.[0]?.price);
     const sl = parse(analysis.stopLoss);
-    const tp = parse(analysis.takeProfit?.[0]?.price);
-    if (entry === undefined || sl === undefined || tp === undefined) return undefined;
-    const risk = Math.abs(entry - sl);
-    if (risk <= 0) return undefined;
-    return Math.abs(tp - entry) / risk;
+    if (entry === undefined || sl === undefined) return undefined;
+    // Nearest target to entry, not takeProfit by ARRAY ORDER — the single
+    // planned-R:R definition in utils/riskReward. A model that lists its
+    // targets out of order used to make this report the farthest target as the
+    // nearest, so the floor check below passed a plan the card called 1:4.
+    const ratio = plannedRiskReward({
+        entry,
+        stopLoss: sl,
+        takeProfits: (analysis.takeProfit ?? []).map(tp => parse(tp.price) ?? null),
+    });
+    return ratio > 0 ? ratio : undefined;
 };
 
 export const classifyAvoidBasis = (

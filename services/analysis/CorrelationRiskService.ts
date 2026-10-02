@@ -21,6 +21,10 @@ const DOMINANCE_CACHE_TTL = 300000; // 5 minutes
 let btcLevelsCache: { support: number[]; resistance: number[]; timestamp: number } | null = null;
 const LEVELS_CACHE_TTL = 60000; // 1 minute
 
+/** Both CoinGecko calls are decorative inputs to a risk score — a stall must
+ *  cost the analysis seconds, not the provider stream's 300s ceiling. */
+const COINGECKO_TIMEOUT_MS = 8000;
+
 /**
  * Fetch BTC dominance from CoinGecko (free, no API key required)
  */
@@ -33,7 +37,11 @@ export const fetchBTCDominance = async (): Promise<number> => {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/global', {
             method: 'GET',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json' },
+            // Caller runs this inside the per-analysis fetch fan-out, so an
+            // un-timed CoinGecko stall held the whole analysis until the
+            // provider stream's own 300s cap.
+            signal: AbortSignal.timeout(COINGECKO_TIMEOUT_MS),
         });
 
         if (!response.ok) {
@@ -136,7 +144,9 @@ export const detectBTCMajorLevels = async (): Promise<{
  */
 export const getBTCDominanceTrend = async (): Promise<'rising' | 'falling' | 'stable'> => {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/global');
+        const response = await fetch('https://api.coingecko.com/api/v3/global', {
+            signal: AbortSignal.timeout(COINGECKO_TIMEOUT_MS),
+        });
         if (!response.ok) return 'stable';
 
         const data = await response.json();
