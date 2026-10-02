@@ -1683,6 +1683,16 @@ const TA_GROUP_TO_KEYS: Record<string, keyof typeof import('./taLibrary').TA_STU
     taOverlays: 'overlays',
 };
 
+/** Bars per year for an interval. Crypto runs 365 days, so annualisation
+ *  follows the bar size: 1d -> 365, 4h -> 2190, 15m -> 35040, 5m -> 105120.
+ *  Applying one factor to every timeframe made historical volatility mean
+ *  nothing at all on anything but the daily. */
+const periodsPerYearForInterval = (interval: string): number => {
+    const minutes: Record<string, number> = { '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440 };
+    const m = minutes[interval] ?? 60;
+    return Math.round((365 * 24 * 60) / m);
+};
+
 /**
  * get_indicators — on-demand technical studies for any symbol/timeframe.
  *
@@ -1781,7 +1791,22 @@ async function runIndicators(symbol: string, interval: string, groups: string[])
                 const taKey = TA_GROUP_TO_KEYS[group];
                 if (!taKey) break;
                 const { TA_STUDIES } = await import('./taLibrary');
-                out[group] = TA_STUDIES[taKey].run(klines);
+                const result = TA_STUDIES[taKey].run(klines);
+                // Historical volatility is ANNUALISED, so the same 365 applied
+                // to 5m bars and to daily bars is not a small error — it is a
+                // meaningless number. The study returns the bare reading; the
+                // tool labels it with the factor it used, so the model can see
+                // what the number actually is.
+                if (taKey === 'volatility' && result && typeof result === 'object') {
+                    const v = result as Record<string, unknown>;
+                    const hv = v.historicalVolatility;
+                    if (typeof hv === 'number') {
+                        v.historicalVolatilityAnnualization = periodsPerYearForInterval(tf);
+                        v.historicalVolatilityNote =
+                            `annualised from the ${tf} window (x${periodsPerYearForInterval(tf)}); a single-period stdev is ${(hv / Math.sqrt(periodsPerYearForInterval(tf))).toFixed(2)}`;
+                    }
+                }
+                out[group] = result;
                 break;
             }
         }

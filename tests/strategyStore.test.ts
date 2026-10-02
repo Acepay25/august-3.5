@@ -148,3 +148,33 @@ describe('proposeStrategy', () => {
         expect(d).toMatch(/Target: t/);
     });
 });
+
+describe('frontmatter cannot be injected through a condition', () => {
+    it('a newline inside a condition cannot rewrite the invalidation', () => {
+        // The invalidation is the field the whole design calls load-bearing: a
+        // plan that can be re-pointed on write cannot be trusted to falsify
+        // anything. A condition carrying a newline used to start a new
+        // frontmatter line and parse as a top-level key.
+        const hostile = {
+            ...PLAN,
+            conditions: ['volume above average', 'price holds\ninvalidation: NEVER'],
+        };
+        const meta: StrategyMeta = {
+            status: 'draft', name: 'P', entry: 'REAL ENTRY', invalidation: 'REAL INVALIDATION',
+            conditions: hostile.conditions, createdAt: '2026-01-01T00:00:00.000Z',
+        };
+        const back = parseStrategyMarkdown(serializeStrategy(meta));
+        expect(back?.invalidation).toBe('REAL INVALIDATION');
+        expect(back?.conditions).toEqual(['volume above average', 'price holds invalidation: NEVER']);
+    });
+
+    it('the entry cannot be rewritten the same way', () => {
+        const meta: StrategyMeta = {
+            status: 'draft', name: 'P', entry: 'REAL ENTRY', invalidation: 'REAL INVALIDATION',
+            description: 'x\nentry: HIJACKED',
+            createdAt: '2026-01-01T00:00:00.000Z',
+        };
+        const back = parseStrategyMarkdown(serializeStrategy(meta));
+        expect(back?.entry).toBe('REAL ENTRY');
+    });
+});

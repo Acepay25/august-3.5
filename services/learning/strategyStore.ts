@@ -79,7 +79,12 @@ const pickList = (raw: string | undefined, cap = 8): string[] | undefined => {
 };
 
 const listLine = (items: string[] | undefined): string =>
-    (items ?? []).map(i => `  ${LIST_PREFIX}${i}`).join('\n');
+    (items ?? [])
+        // A newline inside an item would start a new frontmatter line, so a
+        // condition containing one could inject `invalidation:` and REWRITE the
+        // plan's load-bearing field on the next parse. Flatten instead.
+        .map(i => `  ${LIST_PREFIX}${i.replace(/\s*[\r\n]+\s*/g, ' ').trim()}`)
+        .join('\n');
 
 /** Parse a strategies/*.md file. Returns null when the plan is unusable. */
 export function parseStrategyMarkdown(content: string): StrategyMeta | null {
