@@ -348,6 +348,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
      *  into the OLD bucket's state and persist that composite under the new
      *  key (audit R6 #12). Off-stamp turns go through load-merge-save. */
     const loadedBucketRef = useRef('');
+    // The session+symbol the VISIBLE model drawings were loaded from. The
+    // persist effect checks it before writing, so a coin switch can never save
+    // the previous coin's shapes under the new coin's key.
+    const drawingsClaimedRef = useRef('');
     const chartHandleRef = useRef<ChartHandle | null>(null);
     const [dockWidth, setDockWidth] = useState<number>(readDockWidth);
     const [dockCollapsed, setDockCollapsed] = useState(false);
@@ -563,6 +567,13 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         // blanket wipe that made "what the AI drew" vanish on the next coin.
         loadedBucketRef.current = `${chatSnap.activeId}:${symbol}`;
         setModelDrawings(drawingsControl('model', chatSnap.activeId, symbol).list());
+        // The persist effect below keys on modelDrawings alone, so it could
+        // re-save the PREVIOUS coin's array under the NEW coin's key whenever
+        // the new list was reference-equal (both empty is the common case) and
+        // some unrelated state change re-ran the effect first. Claim the bucket
+        // in the same commit that loads it, so a save can only ever target the
+        // bucket the visible list came from.
+        drawingsClaimedRef.current = `${chatSnap.activeId}:${symbol}`;
     }, [symbol, chatSnap.activeId]);
 
     // Level-accuracy scoring needs THIS coin's bars at THIS timeframe. The
@@ -585,7 +596,14 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // previous coin's shapes under the new coin's key.
     useEffect(() => {
         const sid = chatStore.getActiveId();
-        if (sid) drawingsControl('model', sid, symbolRef.current).replace(modelDrawings);
+        // Only write the bucket the visible list was actually loaded from. A
+        // coin switch that produces a reference-equal list (both empty) skips
+        // the setState re-render, so a save triggered by any other state change
+        // in that window would otherwise persist the OLD coin's shapes under
+        // the NEW coin's key.
+        if (sid && drawingsClaimedRef.current === `${sid}:${symbolRef.current}`) {
+            drawingsControl('model', sid, symbolRef.current).replace(modelDrawings);
+        }
     }, [modelDrawings]);
 
     // 1s tick for the funding countdown.
