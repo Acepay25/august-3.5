@@ -111,7 +111,8 @@ ancestor and inflates to fill the surface.
 
 ## Verification
 
-- [ ] `npm run lint` — errors only; warnings are tolerated by design.
+- [ ] `npm run lint` — errors are zero and warnings are capped by a ratchet
+      (`--max-warnings 889`); adding a warning fails the gate.
 - [ ] `npm run typecheck && npm run test && npm run build`.
 - [ ] **Look at it in a browser.** jsdom cannot see an inflated pill, a clipped
       column, or a layout that only breaks at 800px — the Electron floor. Every

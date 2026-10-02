@@ -369,6 +369,90 @@ const TOOL_BUDGETS: Record<string, number> = {
 export const spillReceiptAllowed = (allowedTools?: string[]): boolean =>
     !allowedTools || allowedTools.length === 0 || allowedTools.includes('read_tool_output');
 
+/**
+ * Cut `body` to at most `visible` characters without breaking it.
+ *
+ * A raw `slice` can land mid-object and hand the model syntactically broken
+ * JSON — the one outcome it cannot recover from, because it cannot tell a
+ * clipped result from a broken one, so it never re-reads the rest. The
+ * order-book path avoids this by down-sampling its own arrays before the cap
+ * is applied; every other tool that outgrows the cap reaches here, so for a
+ * JSON object we shed whole top-level fields and trim arrays, recording what
+ * went in `_omitted` and the notice in `_clip`. Non-reshapable payloads keep
+ * the long-standing text cut, and the caller appends the notice after.
+ */
+function clipWithinBudget(body: string, visible: number, noteText: string): string {
+    if (body.length <= visible) return body;
+    if (visible <= 0) return '';
+    try {
+        const parsed = JSON.parse(body) as unknown;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const obj = { ...(parsed as Record<string, unknown>) };
+            const dropped: Record<string, number> = { ...(obj._omitted as Record<string, number> | undefined ?? {}) };
+            // Track "we actually changed the shape" explicitly. Comparing the
+            // shaped string against a re-serialization of the object we just
+            // mutated used to decide this, which was true for the wrong reason.
+            let changed = false;
+            let shaped = JSON.stringify(obj, null, 2);
+            while (shaped.length > visible) {
+                const keys = Object.keys(obj).filter(k => k !== '_omitted');
+                if (keys.length === 0) break;
+                if (keys.length === 1) {
+                    // Last field standing. Halve its largest array before
+                    // dropping it — the study the model asked for is the whole
+                    // point of the call, and the spill receipt pages the rest
+                    // anyway, so a degraded answer beats an empty one.
+                    const only = keys[0];
+                    const holder = obj[only];
+                    if (holder && typeof holder === 'object' && !Array.isArray(holder)) {
+                        const record = holder as Record<string, unknown>;
+                        const arrKey = Object.keys(record)
+                            .filter(k => Array.isArray(record[k]) && (record[k] as unknown[]).length > 1)
+                            .sort((a, b) => (record[b] as unknown[]).length - (record[a] as unknown[]).length)[0];
+                        if (arrKey) {
+                            const arr = [...(record[arrKey] as unknown[])];
+                            const keep = Math.ceil(arr.length / 2);
+                            dropped[`${only}.${arrKey}`] = arr.length - keep;
+                            arr.length = keep;
+                            record[arrKey] = arr;
+                            changed = true;
+                            shaped = JSON.stringify({ ...obj, _omitted: dropped }, null, 2);
+                            continue;
+                        }
+                    }
+                }
+                // Drop the SMALLEST field: the payload is almost always the
+                // biggest key (that is why the result overflowed), and the
+                // small metadata around it (symbol, interval, bars) is what
+                // gives way.
+                let smallest = keys[0];
+                for (const k of keys) {
+                    if (JSON.stringify(obj[k] ?? null).length < JSON.stringify(obj[smallest] ?? null).length) smallest = k;
+                }
+                dropped[smallest] = JSON.stringify(obj[smallest] ?? null).length;
+                delete obj[smallest];
+                changed = true;
+                shaped = JSON.stringify({ ...obj, _omitted: dropped }, null, 2);
+            }
+            // Only take the shape-preserving result when it actually reshaped
+            // something. If the object is one huge scalar — `{"blob": "…"}` —
+            // there is nothing to reshape, and the honest clip is the raw cut
+            // plus the trailing notice the caller appends, which is the
+            // long-standing contract for that case.
+            if (changed) {
+                const withNote: Record<string, unknown> = { ...obj, _clip: noteText, _omitted: dropped };
+                const finalJson = JSON.stringify(withNote, null, 2);
+                if (finalJson.length <= visible) return finalJson;
+            }
+        }
+    } catch {
+        // Not a JSON object — fall through to the line-boundary cut.
+    }
+    const head = body.slice(0, visible);
+    const lastBreak = head.lastIndexOf('\n');
+    return lastBreak > 0 ? head.slice(0, lastBreak) : head;
+}
+
 export const budgetToolContent = (
     name: string,
     content: string,
@@ -448,9 +532,16 @@ export const budgetToolContent = (
         // Carve the notice out of the cap instead of appending past it: callers
         // size `tailReserve` so their own stamps survive inside the budget, and
         // a trailer that overflowed the cap would defeat exactly that.
-        let visible = cap - note(cap).length;
-        if (visible < 0) visible = 0;
-        out = `${out.slice(0, visible)}${note(visible)}`;
+        const visible = Math.max(0, cap - note(cap).length);
+        const clipped = clipWithinBudget(out, visible, note(visible).slice(1));
+        // The clip is parseable JSON when the clipper could reshape it (it
+        // carries the notice as `_clip`); otherwise it is a text body and gets
+        // the notice as a trailer. Decide by whether it PARSES, not by its
+        // first character — a raw cut of a JSON payload also starts with `{`.
+        const isJson = (() => {
+            try { JSON.parse(clipped); return true; } catch { return false; }
+        })();
+        out = isJson ? clipped : `${clipped}${note(visible)}`;
         if (out.length > cap) {
             // Degenerate cap (tiny budget, large reserve): keep the size
             // promise over the message.
@@ -477,6 +568,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_btc_context: 'BTC context',
     get_session_context: 'session',
     get_price_snapshot: 'price snapshot',
+    get_indicators: 'indicators',
     read_tool_output: 'stored result',
     get_market_packet: 'hybrid packet',
     get_all_timeframes: 'all-timeframe compendium',
@@ -550,6 +642,15 @@ const rawToolDigest = (name: string, content: string): string => {
         if (name === 'get_price_snapshot') {
             const price = parsed.lastPrice ?? parsed.price ?? parsed.close;
             return price != null ? `price ${Number(price).toLocaleString()}` : 'ok';
+        }
+        if (name === 'get_indicators') {
+            // Compact Floor-chip line: timeframe + which studies ran, with the
+            // one number a reader actually scans for (RSI14) when core is in.
+            const studies = Object.keys(parsed).filter(k =>
+                k !== 'symbol' && k !== 'interval' && k !== 'bars' && k !== 'error');
+            if (studies.length === 0) return typeof parsed.error === 'string' ? String(parsed.error) : 'ok';
+            const rsi = (parsed.core as { rsi?: { rsi14?: number } } | undefined)?.rsi?.rsi14;
+            return `${parsed.interval ?? ''} · ${studies.join(', ')}${typeof rsi === 'number' ? ` · RSI ${Math.round(rsi)}` : ''}`;
         }
         if (name === 'get_setup_history_stats') {
             const sample = typeof parsed.sample === 'number' ? parsed.sample : 0;
@@ -958,6 +1059,32 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                         description: 'Candle interval. Default 1h.',
                     },
                 },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_indicators',
+            description:
+                'On-demand technical studies for one symbol/timeframe. Ask for a named study when you need a read the hybrid snapshot does not carry (e.g. "is OBV diverging?", "what does Ichimoku say?"). The hybrid snapshot already includes the core set — do not request "core" to repeat it.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
+                    interval: {
+                        type: 'string',
+                        enum: ['5m', '15m', '1h', '4h', '1d'],
+                        description: 'Candle interval. Default 1h.',
+                    },
+                    studies: {
+                        type: 'array',
+                        items: { type: 'string', enum: ['core', 'momentum', 'regime', 'volume', 'vwap', 'ichimoku', 'structure'] },
+                        description: 'Which studies to compute. "momentum"=ROC/momentum score/divergence, "regime"=ADX + trend-vs-reversion, "volume"=OBV/CVD/volume profile, "vwap", "ichimoku", "structure"=nearest support/resistance + daily pivots + Fibonacci + psychological levels. Request more than one when you need a combined read.',
+                    },
+                },
+                required: ['studies'],
                 additionalProperties: false,
             },
         },
@@ -1480,6 +1607,122 @@ async function runPriceSnapshot(symbol: string, interval: string): Promise<strin
     }, null, 2);
 }
 
+/**
+ * The indicator studies the model can request by name. Each maps to a function
+ * that already exists in TechnicalAnalysisService — this is a menu over built
+ * capability, not new maths. `core` is the classic set; the rest are the
+ * structural/flow studies the hybrid snapshot does not carry.
+ */
+const INDICATOR_GROUPS = {
+    core: 'RSI, MACD, EMA/SMA stack, Bollinger Bands, Stochastic, ATR, trend strength',
+    momentum: 'Rate of change, momentum score/acceleration, RSI + MACD divergence',
+    regime: 'ADX/+DI/-DI, market regime, trend-following vs mean-reversion bias',
+    volume: 'OBV trend + divergence, cumulative volume delta, relative volume, volume profile',
+    vwap: 'Session/window VWAP, standard-deviation bands, price position vs VWAP',
+    ichimoku: 'Ichimoku Kinko Hyo: tenkan/kijun, cloud top-bottom, price vs cloud, TK cross',
+    structure: 'Nearest support/resistance + daily pivots + Fibonacci + psychological levels',
+} as const;
+
+type IndicatorGroup = keyof typeof INDICATOR_GROUPS;
+
+/**
+ * get_indicators — on-demand technical studies for any symbol/timeframe.
+ *
+ * Until now indicators only reached the model baked into the hybrid snapshot,
+ * so it could read what was already computed but could never ASK for a study
+ * (e.g. "what does Ichimoku say here?", "is OBV diverging?"). Every function
+ * below already existed and is unit-tested; this only makes them callable.
+ */
+async function runIndicators(symbol: string, interval: string, groups: string[]): Promise<string> {
+    const tf = (['5m', '15m', '1h', '4h', '1d'].includes(interval) ? interval : '1h') as '5m' | '15m' | '1h' | '4h' | '1d';
+    const all = groups.filter((g): g is IndicatorGroup => Object.hasOwn(INDICATOR_GROUPS, g));
+    if (all.length === 0) {
+        return JSON.stringify({
+            error: 'unknown or missing "studies"',
+            available: Object.entries(INDICATOR_GROUPS).map(([id, covers]) => ({ id, covers })),
+        });
+    }
+    // Bound the REQUEST, not the response. Each study is a few hundred to two
+    // thousand pretty-printed characters, so past three the payload no longer
+    // fits the result budget and the clipper has to throw whole studies away —
+    // the model then pays for a call and reads an answer missing what it
+    // asked for. Naming what was not run is better than that.
+    const MAX_STUDIES_PER_CALL = 3;
+    const asked = all.slice(0, MAX_STUDIES_PER_CALL);
+    const notRun = all.slice(MAX_STUDIES_PER_CALL);
+    // Structural studies need history; 250 bars covers Ichimoku's 52 plus the
+    // volume-profile and pivot lookbacks in one round trip.
+    const klines = await fetchFuturesOHLCV(symbol, tf, 250);
+    if (!klines || klines.length < 30) {
+        return JSON.stringify({ symbol, interval: tf, error: `not enough candles (${klines?.length ?? 0}) to compute these studies` });
+    }
+    const T = await import('./TechnicalAnalysisService');
+    const out: Record<string, unknown> = { symbol, interval: tf, bars: klines.length };
+    if (notRun.length > 0) {
+        out.notRun = { studies: notRun, reason: `at most ${MAX_STUDIES_PER_CALL} studies per call — call again for the rest` };
+    }
+
+    for (const group of asked) {
+        switch (group) {
+            case 'core':
+                out.core = T.calculateIndicators(klines);
+                break;
+            case 'momentum':
+                out.momentum = T.calculateMomentum(klines);
+                break;
+            case 'regime':
+                out.regime = T.calculateRegime(klines);
+                break;
+            case 'volume':
+                out.volume = T.calculateAdvancedVolume(klines);
+                break;
+            case 'vwap':
+                out.vwap = T.calculateVWAP(klines);
+                break;
+            case 'ichimoku':
+                out.ichimoku = T.calculateIchimoku(klines);
+                break;
+            case 'structure': {
+                // calculateConfluenceScore is deliberately absent: it compares
+                // the SAME indicator across MULTIPLE timeframes (it takes a
+                // {timeframe: TechnicalIndicators} map), which is what the
+                // hybrid packet's confluence figure already is. A single-TF
+                // tool cannot call it honestly, so it does not pretend to.
+                //
+                // The enhanced key levels ALREADY carry pivots, fib levels and
+                // psychological levels (see KeyLevelsEnhanced), so adding them
+                // again as siblings was both duplication and what pushed this
+                // study past the result budget. It returns the nearest few per
+                // side, which is the whole decision surface.
+                const enhanced = T.calculateEnhancedKeyLevels(klines, tf);
+                const lastClose = klines[klines.length - 1].close;
+                // One line per level: "price (source, strength, N touches)".
+                // The raw objects carry a type/timeframe/touchCount per level
+                // that put this study past the result budget on its own; a seat
+                // reads levels as PRICES, so that is what it gets.
+                const level = (l: { price: number; source: string; strength: number; touchCount: number }): string =>
+                    `${l.price} (${l.source}, ${Math.round(l.strength)}%${l.touchCount > 1 ? `, ${l.touchCount} touches` : ''})`;
+                const byProximity = (arr: typeof enhanced.support) =>
+                    [...arr].sort((a, b) => Math.abs(a.price - lastClose) - Math.abs(b.price - lastClose));
+                out.structure = {
+                    support: byProximity(enhanced.support).slice(0, 4).map(level),
+                    resistance: byProximity(enhanced.resistance).slice(0, 4).map(level),
+                    pivots: enhanced.pivotPoints,
+                    // The 0.5 and 0.618 extensions are the ones a setup is
+                    // actually reasoned against; the full six are one
+                    // desk-tool read away if the seat needs them.
+                    fib: enhanced.fibLevels.levels
+                        .filter(f => f.ratio === '0.5' || f.ratio === '0.618')
+                        .map(f => `${f.ratio}: ${f.price}`),
+                    psychological: enhanced.psychologicalLevels.slice(0, 3),
+                };
+                break;
+            }
+        }
+    }
+    return JSON.stringify(out, null, 2);
+}
+
 /** Timeframes the compendium covers, low → high. */
 const ALL_TIMEFRAMES = ['5m', '15m', '1h', '4h', '1d'] as const;
 
@@ -1625,6 +1868,7 @@ const MARKET_TOOLS = new Set([
     'get_derivatives',
     'get_liquidations',
     'get_price_snapshot',
+    'get_indicators',
     'get_btc_context',
     'scan_setups',
     'scan_chart_skills',
@@ -2107,6 +2351,16 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     asString(call.arguments.interval, '1h'),
                 );
                 break;
+            case 'get_indicators': {
+                const raw = (call.arguments as { studies?: unknown })?.studies;
+                const studies = Array.isArray(raw) ? raw.filter((s): s is string => typeof s === 'string') : [];
+                content = await runIndicators(
+                    asSymbol(call.arguments.symbol, fallback),
+                    asString(call.arguments.interval, '1h'),
+                    studies,
+                );
+                break;
+            }
             case 'recall':
                 content = handleRecallTool(
                     { topic: asString(call.arguments.topic) },

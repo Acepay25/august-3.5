@@ -61,13 +61,14 @@ npm run dev             # dev server on port 3000
 npm run build           # tsc --noEmit && vite build
 npm run typecheck       # tsc --noEmit
 npm run test            # vitest run
-npm run lint            # eslint (errors only)
+npm run lint            # eslint, warnings capped by a ratchet (--max-warnings 889)
 npm run electron:dev    # Vite dev server + Electron window
 npm run electron:build  # Windows installer
 ```
 
-CI runs `tsc`, `vitest`, `vite build`, then `electron-builder --publish always`
-on `v*` tags (`.github/workflows/release.yml`).
+CI runs `tsc`, `vitest`, `vite build`, then on `v*` tags
+`.github/workflows/release.yml` builds once (`--publish never`), verifies the
+installer, and only then uploads the signed bytes with `gh release upload`.
 
 ## Layout
 
