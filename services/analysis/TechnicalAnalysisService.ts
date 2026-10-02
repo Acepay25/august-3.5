@@ -293,7 +293,65 @@ const roundPrice = (v: number, sigDigits = 4): number => {
 /**
  * Calculate all technical indicators from OHLCV data
  */
+/**
+ * Memo for calculateIndicators.
+ *
+ * Every indicator below is a PURE function of the passed klines, and the whole
+ * block reads one value out of a full-length series (e.g. `EMA.calculate(...)
+ * .pop()` computes all N bars to return the last one). On a 1,000-bar window
+ * that is 20+ full series computed per call — on the render path, and again on
+ * every desk-tool round. The result is identical for identical input, so cache
+ * it whole rather than instrumenting each indicator: one key, one store, and
+ * the whole cost disappears for the repeated calls, which is the common case
+ * (the chart re-reads the same closed bars while the user talks).
+ *
+ * The key fingerprints the WHOLE series, not just the last bar, so an in-place
+ * history correction (a vendor revising an earlier candle) misses the cache
+ * instead of serving a stale reading. Bounded LRU: an app left open all day
+ * across many symbols must not grow this without limit.
+ */
+const INDICATOR_CACHE_MAX = 24;
+const indicatorCache = new Map<string, TechnicalIndicators>();
+
+/** Cheap order-sensitive fingerprint of the window that decides the output. */
+const indicatorFingerprint = (klines: Kline[]): string => {
+    let h1 = 0x811c9dc5;
+    let h2 = 0x01000193;
+    for (const k of klines) {
+        // mix the fields that move every indicator; FNV-style, no allocation.
+        h1 = Math.imul(h1 ^ (k.close * 1000 | 0), 0x01000193) >>> 0;
+        h2 = Math.imul(h2 ^ (k.high * 1000 | 0) ^ Math.imul(k.low * 1000 | 0, 31) ^ (k.volume * 10 | 0), 0x85ebca6b) >>> 0;
+    }
+    return `${klines.length}:${klines[0]?.time ?? 0}:${klines[klines.length - 1]?.time ?? 0}:${h1.toString(36)}:${h2.toString(36)}`;
+};
+
+export const clearIndicatorCache = (): void => {
+    indicatorCache.clear();
+};
+
 export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
+    const key = indicatorFingerprint(klines);
+    const hit = indicatorCache.get(key);
+    if (hit) {
+        // Refresh recency: delete+set moves this key to the end, so the LRU
+        // order below reflects actual use.
+        indicatorCache.delete(key);
+        indicatorCache.set(key, hit);
+        return hit;
+    }
+
+    const computed = computeIndicators(klines);
+    if (indicatorCache.size >= INDICATOR_CACHE_MAX) {
+        // Map preserves insertion order; the first key is the least recently used.
+        const oldest = indicatorCache.keys().next();
+        if (!oldest.done) indicatorCache.delete(oldest.value);
+    }
+    indicatorCache.set(key, computed);
+    return computed;
+};
+
+/** The actual maths. Separated so the memo above is the only entry point. */
+const computeIndicators = (klines: Kline[]): TechnicalIndicators => {
     const closes = klines.map(k => k.close);
     const highs = klines.map(k => k.high);
     const lows = klines.map(k => k.low);

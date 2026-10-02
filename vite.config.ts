@@ -486,7 +486,15 @@ export default defineConfig(() => {
             // also catches react-markdown / react-virtuoso / react-* cousins
             // and drags them into the eager vendor chunk. Match the package
             // dir boundary instead.
-            if (/node_modules\/(?:react|react-dom|scheduler)(?:\/|$)/.test(id) || id.includes('node_modules/react-virtuoso')) {
+            //
+            // react-virtuoso was re-added to this chunk by hand after that
+            // boundary fix, which undid it for exactly one dependency: its
+            // ONLY importer app-wide is components/journal/TradeLog.tsx,
+            // reached through the lazy Journal surface — so ~150 KB of a
+            // screen that is not open at boot sat in the modulepreloaded
+            // eager set. Recharts has the same react dependency and is not
+            // force-grouped, so the graph is proven fine without it.
+            if (/node_modules\/(?:react|react-dom|scheduler)(?:\/|$)/.test(id)) {
               return 'vendor-react';
             }
             if (id.includes('node_modules/openai')) return 'vendor-ai';

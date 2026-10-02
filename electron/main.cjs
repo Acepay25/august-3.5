@@ -955,6 +955,11 @@ async function createWindow() {
         ...(saved.x !== undefined && saved.y !== undefined ? { x: saved.x, y: saved.y } : {}),
         // Don't show the frame until the first paint is ready — otherwise a
         // blank/white window flashes on launch (the audit flagged this).
+        // `show: false` alone does not fix it: the window's own background is
+        // Electron's default white, so anything that paints behind the
+        // renderer — the 4s fail-safe show, a failed load — still shows white.
+        // This is the page color from index.css.
+        backgroundColor: '#0b0b0a',
         show: false,
         // Keep renderer timers/rAF at full rate when the window is hidden or
         // occluded. Electron throttles backgrounded renderers to ~1 timer/min
