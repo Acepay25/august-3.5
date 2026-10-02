@@ -13,6 +13,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProviderConfig } from '../types/provider';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const { streamMock, ohlcvMock } = vi.hoisted(() => ({
     streamMock: vi.fn(),
@@ -209,5 +211,30 @@ describe('get_indicators', () => {
         ohlcvMock.mockImplementation(async () => candles.slice(0, 5));
         const parsed = parseToolResult(await callTool('get_indicators', { studies: ['core'] }));
         expect(parsed.error).toMatch(/not enough candles/);
+    });
+});
+
+describe('the wider study catalogue reaches the model', () => {
+    // This block needs its own setup: the describe above resets ohlcvMock in
+    // its beforeEach, and without one here the tool fetches nothing.
+    beforeEach(() => {
+        streamMock.mockReset();
+        ohlcvMock.mockReset();
+        ohlcvMock.mockImplementation(async () => candles);
+        clearDeskToolCache();
+    });
+
+    it('a ta* group returns its studies', async () => {
+        const parsed = parseToolResult(await callTool('get_indicators', { studies: ['taTrend'] }));
+        expect(pick(parsed, 'taTrend.aroon.up')).toBeTypeOf('number');
+        expect(pick(parsed, 'taTrend.vortex.viPlus')).toBeTypeOf('number');
+    });
+
+    it('the ta* groups are advertised, so the model knows they exist', () => {
+        // A group the tool never names is a group the model never asks for.
+        const src = readFileSync(resolve(__dirname, '../services/analysis/DeskToolsService.ts'), 'utf8');
+        for (const g of ['taAverages', 'taBands', 'taOscillators', 'taTrend', 'taVolatility', 'taVolumeFlow', 'taOverlays']) {
+            expect(src, g).toContain(g);
+        }
     });
 });
