@@ -15,7 +15,18 @@ import { priceArgError, usablePrice } from './tradePlanLevels';
 import type { PatternAnchor } from '../../utils/patternDetection';
 import { snapPriceToStructure } from '../../utils/patternDetection';
 
-export type DrawKind = 'trend' | 'hline' | 'ray' | 'rect' | 'brush' | 'fib' | 'text';
+/**
+ * DrawKind — what a shape can be.
+ *
+ * The first seven (trend/hline/ray/rect/brush/fib/text) are the user's tool
+ * rail. `channel`, `arrow` and `measured_move` are the shapes a seat actually
+ * asks for when it is annotating a setup: a band to say "this is the range",
+ * an arrow to point at a level, and a measured move to state the risk and the
+ * reward on the chart rather than only in prose.
+ */
+export type DrawKind =
+    | 'trend' | 'hline' | 'ray' | 'rect' | 'brush' | 'fib' | 'text'
+    | 'channel' | 'arrow' | 'measured_move';
 
 /** One anchor point in data space: t = unix seconds, p = price. */
 export interface DrawPoint { t: number; p: number }
@@ -43,7 +54,7 @@ export interface ChartDrawing {
 export const MAX_DRAWINGS_PER_SYMBOL = 40;
 export const MAX_POINTS_PER_DRAWING = 200;
 
-const KINDS: readonly string[] = ['trend', 'hline', 'ray', 'rect', 'brush', 'fib', 'text'];
+const KINDS: readonly string[] = ['trend', 'hline', 'ray', 'rect', 'brush', 'fib', 'text', 'channel', 'arrow', 'measured_move'];
 
 /** Fibonacci retracement ratios drawn between a fib's two anchors. */
 export const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
@@ -237,17 +248,49 @@ export const drawingFromChartTool = (
     ctx: { lastBarTime: number; barSeconds: number; drawnPrice?: number | null; klines?: readonly { high: number; low: number }[] },
 ): { drawings: ChartDrawing[]; error?: string; note?: string } => {
     const kindRaw = typeof args.kind === 'string' ? args.kind : '';
-    const kindMap: Record<string, DrawKind> = { hline: 'hline', horizontal: 'hline', trend: 'trend', trendline: 'trend', line: 'trend', ray: 'ray', zone: 'rect', rect: 'rect', rectangle: 'rect', fib: 'fib', retracement: 'fib', 'fib-retracement': 'fib', text: 'text', note: 'text', annotation: 'text' };
-    const kind = kindMap[kindRaw];
-    if (!kind) return { drawings: [], error: `unknown kind "${kindRaw}" — use hline, trend, ray, zone, fib or text` };
+    const kindMap: Record<string, DrawKind> = {
+        hline: 'hline', horizontal: 'hline', level: 'hline',
+        trend: 'trend', trendline: 'trend', line: 'trend', diagonal: 'trend',
+        ray: 'ray',
+        zone: 'rect', rect: 'rect', rectangle: 'rect', box: 'rect',
+        fib: 'fib', retracement: 'fib', 'fib-retracement': 'fib',
+        text: 'text', note: 'text', annotation: 'text',
+        // A band between two parallel lines, e.g. a support/resistance range.
+        channel: 'channel', range: 'channel', band: 'channel', corridor: 'channel',
+        // A directed pointer at a level ("the close is here").
+        arrow: 'arrow', pointer: 'arrow', marker: 'arrow',
+        // The TradingView measured move: entry → stop (risk) and entry → first
+        // target (reward), labelled with both distances.
+        measured_move: 'measured_move', 'measured-move': 'measured_move',
+        measuredmove: 'measured_move', riskreward: 'measured_move',
+        'risk-reward': 'measured_move', rr: 'measured_move',
+    };
+    const kind = kindMap[kindRaw.toLowerCase().replace(/\s+/g, '_')] ?? kindMap[kindRaw];
+    if (!kind) {
+        return {
+            drawings: [],
+            error: `unknown kind "${kindRaw}" — use hline, trend, ray, rect/zone, channel, fib, arrow, measured_move or text`,
+        };
+    }
 
     // One rule, shared: `Number.isFinite` is not enough, because 0 and -1 are
     // both finite and neither is a price. This used to accept them, producing
     // a line at zero and an unconditional "Drew on the chart" receipt for a
     // shape that cannot exist. See priceArgError in tradePlanLevels.
     const rawPrices = Array.isArray(args.prices) ? args.prices : [];
-    const need = kind === 'hline' || kind === 'text' ? 1 : 2;
-    if (rawPrices.length < need) return { drawings: [], error: `${kind} needs ${need} price(s) in "prices"` };
+    // hline/text are a single level; measured_move is entry + stop + target;
+    // everything else is two anchors.
+    const need = kind === 'hline' || kind === 'text' ? 1
+        : kind === 'measured_move' ? 3
+            : 2;
+    if (rawPrices.length < need) {
+        return {
+            drawings: [],
+            error: kind === 'measured_move'
+                ? 'measured_move needs 3 prices in "prices": [entry, stop, firstTarget]'
+                : `${kind} needs ${need} price(s) in "prices"`,
+        };
+    }
     const prices: number[] = [];
     for (let i = 0; i < need; i++) {
         const bad = priceArgError(rawPrices[i], `prices[${i}]`);
@@ -258,7 +301,12 @@ export const drawingFromChartTool = (
     const barAt = (barsAgo: number): number => Math.round(ctx.lastBarTime - barsAgo * ctx.barSeconds);
     const start = Number.isFinite(Number(args.startBarsAgo)) ? Math.max(0, Number(args.startBarsAgo)) : DEFAULT_START_BARS_AGO;
     const end = Number.isFinite(Number(args.endBarsAgo)) ? Math.max(0, Number(args.endBarsAgo)) : 0;
-    if (kind !== 'hline' && kind !== 'text' && start <= end) return { drawings: [], error: 'startBarsAgo must be greater than endBarsAgo (start is the older anchor)' };
+    // A measured move is a vertical stack at one bar, so it has no start/end
+    // ordering to violate; every other two-anchor shape needs one.
+    const needsOrdering = kind !== 'hline' && kind !== 'text' && kind !== 'measured_move';
+    if (needsOrdering && start <= end) {
+        return { drawings: [], error: 'startBarsAgo must be greater than endBarsAgo (start is the older anchor)' };
+    }
 
     const colorName = typeof args.color === 'string' && args.color in MODEL_COLOR_NAMES ? args.color as ModelColorName : 'sky';
     const color = MODEL_COLOR_NAMES[colorName];
@@ -266,7 +314,16 @@ export const drawingFromChartTool = (
 
     const points: DrawPoint[] = kind === 'hline' || kind === 'text'
         ? [{ t: barAt(end), p: prices[0] }]
-        : [{ t: barAt(start), p: prices[0] }, { t: barAt(end), p: prices[1] }];
+        : kind === 'measured_move'
+            // Entry, stop and first target all read as three points on the
+            // same bar: the measured move is a vertical stack at one moment,
+            // not a shape spanning time.
+            ? [
+                { t: barAt(end), p: prices[0] },
+                { t: barAt(end), p: prices[1] },
+                { t: barAt(end), p: prices[2] },
+            ]
+            : [{ t: barAt(start), p: prices[0] }, { t: barAt(end), p: prices[1] }];
 
     // Snap-to-structure, and the warning that price is already through it.
     //
@@ -432,7 +489,11 @@ const TOUCHES_TO_CONFIRM_FOR_DRAWING = 3;
 export const pointsForKind = (kind: DrawKind, points: DrawPoint[]): DrawPoint[] | null => {
     if (kind === 'hline' || kind === 'text') return points.length >= 1 ? [points[0]] : null;
     if (kind === 'trend' || kind === 'ray') return points.length >= 2 ? points.slice(0, 2) : null;
-    if (kind === 'rect' || kind === 'fib') return points.length >= 2 ? points.slice(0, 2) : null;
+    if (kind === 'rect' || kind === 'fib' || kind === 'channel' || kind === 'arrow') {
+        return points.length >= 2 ? points.slice(0, 2) : null;
+    }
+    // Three anchors on one bar: entry, stop, first target.
+    if (kind === 'measured_move') return points.length >= 3 ? points.slice(0, 3) : null;
     if (kind === 'brush') return points.length >= 2 ? points.slice(0, MAX_POINTS_PER_DRAWING) : null;
     return null;
 };
@@ -533,6 +594,25 @@ export const describeDrawingsForModel = (
                 const high = Math.max(a.p, b.p);
                 const low = Math.min(a.p, b.p);
                 return `- fibonacci retracement${tag} from ${fmt(low)} to ${fmt(high)}, levels at ${FIB_RATIOS.map(r => `${(r * 100).toFixed(1)}%`).join('/')}, spans ${spanName(Math.abs(b.t - a.t))}${suffix}`;
+            }
+            case 'channel': {
+                const [a, b] = d.points;
+                const rising = b.p > a.p;
+                return `- ${rising ? 'rising' : 'falling'} channel${tag} running from ${fmt(a.p)} (${stamp(a.t)}) to ${fmt(b.p)} (${stamp(b.t)}), spans ${spanName(Math.abs(b.t - a.t))}${suffix}`;
+            }
+            case 'arrow': {
+                const [a, b] = d.points;
+                const up = b.p > a.p;
+                return `- arrow${tag} pointing ${up ? 'up' : 'down'} from ${fmt(a.p)} (${stamp(a.t)}) to ${fmt(b.p)} (${stamp(b.t)})${suffix}`;
+            }
+            case 'measured_move': {
+                const [entry, stop, target] = d.points;
+                const risk = Math.abs(entry.p - stop.p);
+                const reward = Math.abs(target.p - entry.p);
+                const ratio = risk > 0 ? reward / risk : 0;
+                const fmtPct = (from: number, to: number): string =>
+                    (entry.p > 0 ? ` ${(((to - from) / from) * 100).toFixed(2)}%` : '');
+                return `- measured move${tag}: entry ${fmt(entry.p)}, stop ${fmt(stop.p)} (risk ${fmt(risk)}${fmtPct(entry.p, stop.p)}), first target ${fmt(target.p)} (reward ${fmt(reward)}${fmtPct(entry.p, target.p)}), ${ratio.toFixed(2)}:1${suffix}`;
             }
             case 'text':
                 return `- text note${tag} at price ${fmt(d.points[0].p)} (${stamp(d.points[0].t)})${d.label ? `: ${d.label}` : ''}${suffix}`;

@@ -25,7 +25,7 @@ import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
 import { verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
-import { loadSessionModelDrawings, saveSessionModelDrawings, MAX_DRAWINGS_PER_SYMBOL } from '../../services/trade/chartDrawings';
+import { drawingsControl, capDrawings } from '../../services/trade/drawingsControl';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { getActiveUsername } from '../../utils/activeUser';
 import { fmtPrice } from '../../utils/formatters';
@@ -562,7 +562,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         // so the model's lines survive a coin switch — instead of the old
         // blanket wipe that made "what the AI drew" vanish on the next coin.
         loadedBucketRef.current = `${chatSnap.activeId}:${symbol}`;
-        setModelDrawings(loadSessionModelDrawings(chatSnap.activeId, symbol));
+        setModelDrawings(drawingsControl('model', chatSnap.activeId, symbol).list());
     }, [symbol, chatSnap.activeId]);
 
     // Level-accuracy scoring needs THIS coin's bars at THIS timeframe. The
@@ -585,7 +585,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // previous coin's shapes under the new coin's key.
     useEffect(() => {
         const sid = chatStore.getActiveId();
-        if (sid) saveSessionModelDrawings(sid, symbolRef.current, modelDrawings);
+        if (sid) drawingsControl('model', sid, symbolRef.current).replace(modelDrawings);
     }, [modelDrawings]);
 
     // 1s tick for the funding countdown.
@@ -700,17 +700,15 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             && loadedBucketRef.current === `${turn.sid}:${turn.symbol}`);
     const addModelDrawings = useCallback((drawings: ChartDrawing[], turn?: PanelTurnContext): void => {
         if (isViewTurn(turn)) {
-            // The SAME cap persistence uses. This was a hardcoded 60 against
-            // MAX_DRAWINGS_PER_SYMBOL's 40, so the view accepted twenty more
-            // shapes than the store could keep and the user watched them
-            // disappear on reload — the chart quietly disagreed with itself.
-            // One number, imported, so the two cannot drift again.
-            setModelDrawings(prev => [...prev, ...drawings].slice(-MAX_DRAWINGS_PER_SYMBOL));
+            // The SAME cap the store applies, via capDrawings — it used to be
+            // a hardcoded 60 against the store's 40, so the view accepted
+            // twenty more shapes than storage could keep and the user watched
+            // them vanish on reload. One number, applied in both places.
+            setModelDrawings(prev => capDrawings([...prev, ...drawings]));
             return;
         }
         const t = turn as PanelTurnContext;
-        const merged = [...loadSessionModelDrawings(t.sid, t.symbol), ...drawings].slice(-MAX_DRAWINGS_PER_SYMBOL);
-        saveSessionModelDrawings(t.sid, t.symbol, merged);
+        drawingsControl('model', t.sid, t.symbol).add(drawings);
     }, []);
     const clearModelDrawings = useCallback((turn?: PanelTurnContext): void => {
         if (isViewTurn(turn)) {
@@ -718,7 +716,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             return;
         }
         const t = turn as PanelTurnContext;
-        saveSessionModelDrawings(t.sid, t.symbol, []);
+        drawingsControl('model', t.sid, t.symbol).clear();
     }, []);
     // Erasing one of the model's shapes (the chart's eraser routes it here);
     // the persist effect re-saves the coin's model bucket minus this shape.
@@ -734,7 +732,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         // Off-view 'all': only the model bucket is ours to clear — the user's
         // own strokes belong to the canvas the user is looking at.
         const t = turn as PanelTurnContext;
-        saveSessionModelDrawings(t.sid, t.symbol, []);
+        drawingsControl('model', t.sid, t.symbol).clear();
     }, []);
 
     // TradeChatPanel is React.memo'd, and the spread below compares props
