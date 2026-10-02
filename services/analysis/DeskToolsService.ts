@@ -59,11 +59,11 @@ import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
  */
 export const toolActionFromResult = (name: string, ok: boolean, content: string, speaker: string): ToolAction | null => {
     const isProposal = name === 'forge_tool' || name === 'amend_memory' || name === 'propose_skill' || name === 'revise_skill' || name === 'write_memory_note'
-        || name === 'remember' || name === 'forget';
+        || name === 'remember' || name === 'forget' || name === 'propose_strategy';
     const isCustom = name.startsWith('custom_');
     if (!isProposal && !isCustom) return null;
     const at = new Date().toISOString();
-    const verbFor = (tool: string): string => (tool === 'forge_tool' || tool === 'propose_skill' || tool === 'revise_skill' ? 'proposed' : tool === 'amend_memory' ? 'amended' : tool === 'forget' ? 'removed' : tool === 'remember' ? 'saved' : 'created');
+    const verbFor = (tool: string): string => (tool === 'forge_tool' || tool === 'propose_skill' || tool === 'revise_skill' || tool === 'propose_strategy' ? 'proposed' : tool === 'amend_memory' ? 'amended' : tool === 'forget' ? 'removed' : tool === 'remember' ? 'saved' : 'created');
     if (!ok) {
         return { at, speaker, tool: name, ok: false, verb: verbFor(name), label: 'rejected', review: '' };
     }
@@ -83,6 +83,11 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
         } else if (name === 'propose_skill') {
             label = String(parsed.skill ?? 'skill');
             review = 'the Coach inbox';
+        } else if (name === 'propose_strategy') {
+            // A plan is saved as a draft file, so the trader should be told
+            // WHERE it went — otherwise a model can quietly fill the notebook.
+            label = String(parsed.strategy ?? 'strategy');
+            review = 'Settings → Strategies (draft — not active until you activate it)';
         } else if (name === 'revise_skill') {
             label = String(parsed.skill ?? 'skill');
             review = 'Settings → Skills';
@@ -108,6 +113,7 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
 /** Proposals + custom tools, for the loop's per-result classification. */
 const isActionableToolResult = (r: DeskToolResult): boolean =>
     r.name === 'forge_tool' || r.name === 'amend_memory' || r.name === 'propose_skill' || r.name === 'revise_skill' || r.name === 'write_memory_note'
+        || r.name === 'propose_strategy'
     || r.name === 'remember' || r.name === 'forget'
     || r.name.startsWith('custom_');
 
@@ -579,6 +585,7 @@ const TOOL_LABELS: Record<string, string> = {
     write_memory_note: 'memory note',
     get_notebook_map: 'notebook map',
     propose_skill: 'skill proposal',
+    propose_strategy: 'strategy plan',
     revise_skill: 'skill revision',
     recall: 'notebook recall',
     get_setup_history_stats: 'setup history',
@@ -862,6 +869,37 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
     {
         type: 'function',
         function: {
+            name: 'propose_strategy',
+            description:
+                'Propose a named TRADE PLAN (a strategy): how to get in, what makes it wrong, and the levels and size. '
+                + 'A skill says WHEN to act; a strategy says HOW. Use this when the same setup keeps coming up and its '
+                + 'entry/stop/target should be ONE shared plan rather than restated in every skill. Lands as a draft the '
+                + 'human activates; a plan with no invalidation is refused, because a plan that cannot be proven wrong '
+                + 'can never be retired by evidence.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Short strategy name, e.g. "Liquidity-sweep reclaim"' },
+                    description: { type: 'string', description: 'One sentence: what this plan is for' },
+                    entry: { type: 'string', description: 'How to enter — a price, a zone, or a condition (not a number you cannot see)' },
+                    invalidation: { type: 'string', description: 'What would prove the setup wrong — required' },
+                    stop: { type: 'string', description: 'The protective level' },
+                    target: { type: 'string', description: 'The first objective' },
+                    sizing: { type: 'string', description: 'Risk budget or size rule, e.g. "0.5% of equity"' },
+                    conditions: { type: 'string', description: 'JSON array of what must be true for this to be tradable now' },
+                    coin: { type: 'string', description: 'Coin scope (e.g. BTC) or empty for any market' },
+                    direction: { type: 'string', enum: ['Long', 'Short', 'Neutral'], description: 'Plan direction' },
+                    family: { type: 'string', description: 'Pattern family this plan is for' },
+                    timeframe: { type: 'string', description: 'Timeframe the plan was reasoned on, e.g. "15m"' },
+                },
+                required: ['name', 'entry', 'invalidation'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'revise_skill',
             description:
                 'Propose an IMPROVEMENT to an existing skill (narrow its trigger, sharpen its action, fix a '
@@ -1080,8 +1118,8 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     },
                     studies: {
                         type: 'array',
-                        items: { type: 'string', enum: ['core', 'momentum', 'regime', 'volume', 'vwap', 'ichimoku', 'structure'] },
-                        description: 'Which studies to compute. "momentum"=ROC/momentum score/divergence, "regime"=ADX + trend-vs-reversion, "volume"=OBV/CVD/volume profile, "vwap", "ichimoku", "structure"=nearest support/resistance + daily pivots + Fibonacci + psychological levels. Request more than one when you need a combined read.',
+                        items: { type: 'string', enum: ['core', 'momentum', 'regime', 'volume', 'vwap', 'ichimoku', 'structure', 'taAverages', 'taBands', 'taOscillators', 'taTrend', 'taVolatility', 'taVolumeFlow', 'taOverlays'] },
+                        description: 'Which studies to compute (up to 3 per call). "momentum"=ROC/momentum score/divergence, "regime"=ADX + trend-vs-reversion, "volume"=OBV/CVD/volume profile, "vwap", "ichimoku", "structure"=nearest support/resistance + daily pivots + Fibonacci + psychological levels. The "ta*" groups are the wider study catalogue: "taAverages"=HMA/ZLEMA/VIDYA/ALMA/LSMA/DEMA/TEMA/KAMA/VWMA, "taBands"=Donchian/SuperTrend/Kroll/Alligator, "taOscillators"=PPO/CMO/Connors RSI/Fisher/TSI/SMI/Schaff/Coppock/DPO/Ultimate/Elder Ray/TTM Squeeze, "taTrend"=Aroon/Vortex, "taVolatility"=historical vol/Chaikins vol/Mass/Ulcer/Choppiness, "taVolumeFlow"=Chaikin Oscillator/EoM/Klinger/PVI-NVI/PVT/VFI, "taOverlays"=pivots/ZigZag/Fractals.',
                     },
                 },
                 required: ['studies'],
@@ -1265,13 +1303,13 @@ export const CHART_ACTION_TOOL_DEFS: DeskToolDefinition[] = [
         function: {
             name: 'draw_on_chart',
             description:
-                'Draw on the user\'s live chart — the same drawing tools the user has: horizontal line (level), trendline, ray, supply/demand zone, a fibonacci retracement (two anchors), or a text note. Anchors are PRICES plus "bars ago" offsets from the newest candle (startBarsAgo is the OLDER anchor). The shape appears on the chart immediately and the user sees it.',
+                'Draw on the user\'s live chart — the same drawing tools the user has: horizontal line (level), trendline, ray, supply/demand zone, a parallel CHANNEL (a band for a range), a fibonacci retracement, an ARROW pointing at a level, a MEASURED_MOVE (entry → stop → first target, labelled with the risk, the reward and the resulting ratio), or a text note. Anchors are PRICES plus "bars ago" offsets from the newest candle (startBarsAgo is the OLDER anchor). The shape appears on the chart immediately and the user sees it.',
             parameters: {
                 type: 'object',
                 properties: {
-                    kind: { type: 'string', description: 'hline | trend | ray | zone | fib | text', enum: ['hline', 'trend', 'ray', 'zone', 'fib', 'text'] },
-                    prices: { type: 'array', items: { type: 'number' }, description: 'One price for hline/text; two prices (start→end) for trend/ray/zone/fib.' },
-                    startBarsAgo: { type: 'number', description: 'Bars back from now for the OLDER anchor (default 40).' },
+                    kind: { type: 'string', description: 'hline | trend | ray | zone | channel | fib | arrow | measured_move | text', enum: ['hline', 'trend', 'ray', 'zone', 'channel', 'fib', 'arrow', 'measured_move', 'text'] },
+                    prices: { type: 'array', items: { type: 'number' }, description: 'One price for hline/text; two (start→end) for trend/ray/zone/channel/fib/arrow; THREE (entry, stop, firstTarget) for measured_move.' },
+                    startBarsAgo: { type: 'number', description: 'Bars back from now for the OLDER anchor (default 40). Ignored for measured_move, which stacks on one bar.' },
                     endBarsAgo: { type: 'number', description: 'Bars back for the NEWER anchor (default 0 = now).' },
                     color: { type: 'string', description: 'emerald | rose | amber | sky | violet (default sky).', enum: ['emerald', 'rose', 'amber', 'sky', 'violet'] },
                     label: { type: 'string', description: 'Short label shown on the shape, e.g. "range high".' },
@@ -1621,9 +1659,29 @@ const INDICATOR_GROUPS = {
     vwap: 'Session/window VWAP, standard-deviation bands, price position vs VWAP',
     ichimoku: 'Ichimoku Kinko Hyo: tenkan/kijun, cloud top-bottom, price vs cloud, TK cross',
     structure: 'Nearest support/resistance + daily pivots + Fibonacci + psychological levels',
+    // The studies from the taLibrary catalogue that the bundled library does
+    // not already cover — grouped the way that catalogue is.
+    taAverages: 'HMA, ZLEMA, VIDYA, ALMA, LSMA, DEMA, TEMA, KAMA, VWMA — lag-free and adaptive averages',
+    taBands: 'Donchian channel, SuperTrend, Chande Kroll Stop, Williams Alligator',
+    taOscillators: 'PPO, CMO, Connors RSI, Fisher, TSI, SMI, Schaff, Coppock, DPO, Ultimate, RVI, Elder Ray, TTM Squeeze',
+    taTrend: 'Aroon and Vortex — directional strength and directional movement',
+    taVolatility: 'Historical volatility, Chaikin volatility, Mass Index, Ulcer Index, Choppiness Index',
+    taVolumeFlow: 'Chaikin Oscillator, Ease of Movement, Klinger, PVI/NVI, PVT, Volume/Pct Oscillator, VFI',
+    taOverlays: 'Pivot points, ZigZag swing point, Williams Fractal — levels and structure you can act on',
 } as const;
 
 type IndicatorGroup = keyof typeof INDICATOR_GROUPS;
+
+/** The taLibrary catalogue groups, mapped onto the tool's `ta*` ids. */
+const TA_GROUP_TO_KEYS: Record<string, keyof typeof import('./taLibrary').TA_STUDIES> = {
+    taAverages: 'averages',
+    taBands: 'bands',
+    taOscillators: 'oscillators',
+    taTrend: 'trend',
+    taVolatility: 'volatility',
+    taVolumeFlow: 'volumeflow',
+    taOverlays: 'overlays',
+};
 
 /**
  * get_indicators — on-demand technical studies for any symbol/timeframe.
@@ -1716,6 +1774,14 @@ async function runIndicators(symbol: string, interval: string, groups: string[])
                         .map(f => `${f.ratio}: ${f.price}`),
                     psychological: enhanced.psychologicalLevels.slice(0, 3),
                 };
+                break;
+            }
+            default: {
+                // The taLibrary catalogue groups (taAverages, taBands, ...).
+                const taKey = TA_GROUP_TO_KEYS[group];
+                if (!taKey) break;
+                const { TA_STUDIES } = await import('./taLibrary');
+                out[group] = TA_STUDIES[taKey].run(klines);
                 break;
             }
         }
@@ -2154,6 +2220,49 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     content = JSON.stringify({ proposed: true, id: draft.id, skill: crafted.name, note: 'Pending draft queued for human approval in the Coach inbox. The skill does nothing until a human allows it.' });
                 } catch (err) {
                     return rejectedResult(call, `propose_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'propose_strategy': {
+                // A model-authored TRADE PLAN. Written as a draft to the
+                // notebook's strategies/ folder — the same blob as skills, so
+                // it rides the existing backup/export instead of creating a
+                // second namespace. Draft status means nothing acts on it
+                // until a human activates it.
+                try {
+                    const { proposeStrategy } = await import('../../services/learning/strategyStore');
+                    let conditions: unknown = call.arguments.conditions;
+                    if (typeof conditions === 'string') {
+                        try { conditions = JSON.parse(conditions); } catch { conditions = [conditions]; }
+                    }
+                    if (!Array.isArray(conditions)) conditions = conditions ? [String(conditions)] : [];
+                    const result = await proposeStrategy({
+                        name: asString(call.arguments.name),
+                        description: asString(call.arguments.description) || undefined,
+                        entry: asString(call.arguments.entry),
+                        invalidation: asString(call.arguments.invalidation),
+                        stop: asString(call.arguments.stop) || undefined,
+                        target: asString(call.arguments.target) || undefined,
+                        sizing: asString(call.arguments.sizing) || undefined,
+                        conditions: (conditions as string[]).map(String).filter(Boolean).slice(0, 8),
+                        coin: asString(call.arguments.coin) || undefined,
+                        direction: asString(call.arguments.direction) || undefined,
+                        family: asString(call.arguments.family) || undefined,
+                        timeframe: asString(call.arguments.timeframe) || undefined,
+                    });
+                    if (!result.ok) {
+                        return rejectedResult(call, `propose_strategy rejected: ${result.error}. Tell the user what a complete plan needs.`);
+                    }
+                    content = JSON.stringify({
+                        proposed: true,
+                        strategy: result.slug,
+                        status: 'draft',
+                        note: result.created
+                            ? 'Draft saved. Nothing acts on it until the human activates it.'
+                            : 'Existing plan revised in place (its record was kept).',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `propose_strategy rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }
