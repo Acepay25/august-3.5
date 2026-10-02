@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TradeAnalysis } from '../types';
 import { TradeOutcome } from '../types';
 
+// The processor's final act is recalculateAnalysisMetrics, and this suite used
+// to stub it with identity — which quietly excused the suite from the one
+// thing that could drop the fields it asserts on (the re-parse inside it).
+// The spy now CALLS THROUGH, so :259-298 exercise the real boundary.
+const real = vi.hoisted(() => ({
+    recalculateAnalysisMetrics: null as null | ((analysis: TradeAnalysis, leverage: number) => TradeAnalysis),
+}));
+
 const mocks = vi.hoisted(() => ({
     runValidationGate: vi.fn(),
     applyNotebookSkillsToAnalysis: vi.fn((analysis: TradeAnalysis) => analysis),
@@ -63,7 +71,7 @@ const mocks = vi.hoisted(() => ({
         postLossCooldownMin: 240,
         tradeRiskPercent: 1,
     })),
-    recalculateAnalysisMetrics: vi.fn((analysis: TradeAnalysis) => analysis),
+    recalculateAnalysisMetrics: vi.fn((analysis: TradeAnalysis, _leverage: number) => analysis),
 }));
 
 vi.mock('../services/validation/TradeValidationGate', () => ({
@@ -87,6 +95,7 @@ vi.mock('../services/validation/SessionGuardService', () => ({ assessSession: mo
 vi.mock('../utils/harnessSettings', () => ({ getHarnessSettings: mocks.getHarnessSettings }));
 vi.mock('../utils/analysisUtils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../utils/analysisUtils')>();
+    real.recalculateAnalysisMetrics = actual.recalculateAnalysisMetrics;
     return {
         ...actual,
         recalculateAnalysisMetrics: mocks.recalculateAnalysisMetrics,
@@ -202,7 +211,9 @@ describe('processAnalysisResult', () => {
         mocks.enforceUngroundedLevels.mockImplementation((analysis: TradeAnalysis) => analysis);
         mocks.applyHybridChartDrift.mockImplementation((analysis: TradeAnalysis) => analysis);
         mocks.runValidationGate.mockReturnValue(validationOutput());
-        mocks.recalculateAnalysisMetrics.mockImplementation((analysis: TradeAnalysis) => analysis);
+        mocks.recalculateAnalysisMetrics.mockImplementation(
+            (analysis: TradeAnalysis, leverage: number) => real.recalculateAnalysisMetrics!(analysis, leverage),
+        );
     });
 
     it('preserves update metadata, gate veto, validation, callbacks, enrichment, sizing, and final metrics', () => {

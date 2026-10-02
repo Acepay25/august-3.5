@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { recalculateAnalysisMetrics, leveragedMovePercent, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade, isBindingMarkdownPlan, extractModeratorThinking } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
+import type { TradeAnalysis } from '../types';
+
+/** A deliberately partial row: these tests are about what the function does
+ *  with an analysis that is missing most of its fields. */
+const partialAnalysis = (overrides: Record<string, unknown>) => overrides as unknown as TradeAnalysis;
 
 describe('analysisUtils', () => {
   describe('parseMarkdownTradePlan (the ONLY moderator output contract — no JSON)', () => {
@@ -376,18 +381,56 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       expect(result.keyLevels).toEqual({ support: [], resistance: [] });
     });
 
-    it('returns an object with the expected shape for minimal input', () => {
-      const result = recalculateAnalysisMetrics(
-        { coinName: 'BTC', direction: 'bullish' } as any,
-        5
-      );
+    it('carries a minimal row through and never throws on missing arrays', () => {
+      // Recalculation is not the boundary parser: it does not fabricate the
+      // default shape, and a stored row missing entryPoints/takeProfit must
+      // come back unchanged instead of throwing inside a profile-load loop.
+      const result = recalculateAnalysisMetrics(partialAnalysis({ coinName: 'BTC', direction: 'Long' }), 5);
       expect(result.coinName).toBe('BTC');
-      expect(result.direction).toBe('Long'); // 'bullish' maps to Long
+      expect(result.direction).toBe('Long');
       expect(Array.isArray(result.entryPoints)).toBe(true);
       expect(Array.isArray(result.takeProfit)).toBe(true);
-      expect(result.marketConditions).toBeTypeOf('object');
-      expect(result.marketConditions.prices).toBeTypeOf('object');
-      expect(typeof result.createdAt).toBe('string');
+      expect(recalculateAnalysisMetrics(partialAnalysis({ coinName: 'BTC', direction: 'Long', takeProfit: undefined }), 5).takeProfit).toEqual([]);
+    });
+
+    // Legacy vocabulary ('bullish' → Long) is the BOUNDARY parser's job and is
+    // pinned in tests/tradeAnalysisSchema.test.ts. Recalculating display math
+    // must not double as a re-parse: it used to rebuild the object from the
+    // schema's field list, which deleted the risk veto and the sizing ticket
+    // attached after the boundary, and re-derived confidence from probability
+    // — silently undoing a gate cap one step before the render.
+    it('carries app-owned fields and adjustments through untouched', () => {
+      const enriched = {
+        coinName: 'BTC',
+        direction: 'Long',
+        confidence: 'Low',
+        probability: 71,
+        entryPoints: [{ price: '100', percentage: '1' }],
+        stopLoss: '90',
+        takeProfit: [{ price: '120', percentage: '2' }],
+        riskVeto: 'GATE VETO: insufficient data',
+        positionSize: { line: '0.100 BTC · $100 risk', riskUsd: 100, fraction: 1, label: 'full' },
+        sessionGuard: { level: 'warning', summary: 'Day P&L -$120' },
+        kellyAdvisory: 'Kelly f*=10.0%',
+        fundingRate: 0.0001,
+        planVersion: 4,
+        amendsMessageId: 'msg-1',
+        planDiff: 'stopLoss 85 -> 90',
+        levelsCorrected: true,
+        levelFixes: ['takeProfit[0] was below entry'],
+      };
+      const result = recalculateAnalysisMetrics(partialAnalysis(enriched), 10);
+      expect(result.confidence).toBe('Low');
+      expect(result.riskVeto).toBe('GATE VETO: insufficient data');
+      expect(result.positionSize).toEqual(enriched.positionSize);
+      expect(result.sessionGuard).toEqual(enriched.sessionGuard);
+      expect(result.kellyAdvisory).toBe('Kelly f*=10.0%');
+      expect(result.fundingRate).toBe(0.0001);
+      expect(result.planVersion).toBe(4);
+      expect(result.amendsMessageId).toBe('msg-1');
+      expect(result.planDiff).toBe('stopLoss 85 -> 90');
+      expect(result.levelsCorrected).toBe(true);
+      expect(result.levelFixes).toEqual(['takeProfit[0] was below entry']);
     });
 
     it('recalculates leveraged SL/TP percentages and R:R ratio', () => {

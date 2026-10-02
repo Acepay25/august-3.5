@@ -489,3 +489,51 @@ describe('CoercedTradeAnalysisSchema — object/bare price coercion (B9)', () =>
     expect(result.takeProfit).toEqual([]);
   });
 });
+
+describe('boundary preserves app-owned fields (re-parse safety)', () => {
+  // The pipeline attaches these AFTER the first parse — the risk veto, the
+  // sizing ticket, the amendment trail — and an enriched object is parsed
+  // again on other paths (verdict finalizer, imported rows). z.object strips
+  // unknown keys, so a field the app owns has to be declared and forwarded or
+  // a re-parse deletes it quietly. This is the guard for that.
+  it('forwards the veto, sizing, session guard, funding and amendment fields', () => {
+    const result = parseTradeAnalysis(rawAnalysis({
+      riskVeto: 'GATE VETO: insufficient data',
+      positionSize: { line: '0.100 BTC · $100 risk', riskUsd: 100, fraction: 1, label: 'full' },
+      sessionGuard: { level: 'warning', summary: 'Day P&L -$120' },
+      kellyAdvisory: 'Kelly f*=10.0%',
+      fundingRate: 0.0001,
+      planVersion: 4,
+      amendsMessageId: 'msg-1',
+      planDiff: 'stopLoss 85 -> 90',
+    }));
+    expect(result.riskVeto).toBe('GATE VETO: insufficient data');
+    expect(result.positionSize?.riskUsd).toBe(100);
+    expect(result.sessionGuard?.level).toBe('warning');
+    expect(result.kellyAdvisory).toBe('Kelly f*=10.0%');
+    expect(result.fundingRate).toBe(0.0001);
+    expect(result.planVersion).toBe(4);
+    expect(result.amendsMessageId).toBe('msg-1');
+    expect(result.planDiff).toBe('stopLoss 85 -> 90');
+  });
+
+  it('keeps an unavailable funding rate as null, not a settled 0%', () => {
+    expect(parseTradeAnalysis(rawAnalysis({ fundingRate: null })).fundingRate).toBeNull();
+  });
+
+  it('carries the mirror-repair flag so a repaired plan stays flagged', () => {
+    // A row whose levels were already mirrored re-parses with CLEAN geometry,
+    // so the ordering gate cannot re-derive the flag. Without a forward, the
+    // journal would credit the analyst for a plan the sanitizer inverted.
+    const repaired = parseTradeAnalysis(rawAnalysis({
+      direction: 'Long',
+      entryPoints: [{ price: '100' }],
+      stopLoss: '90',
+      takeProfit: [{ price: '120' }],
+      levelsCorrected: true,
+      levelFixes: ['takeProfit[0] was below entry'],
+    }));
+    expect(repaired.levelsCorrected).toBe(true);
+    expect(repaired.levelFixes).toEqual(['takeProfit[0] was below entry']);
+  });
+});
