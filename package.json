@@ -25,7 +25,7 @@
     "lint:loose": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
-    "typecheck:electron": "node --check electron/main.cjs && node --check electron/preload.cjs",
+    "typecheck:electron": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/sseParser.cjs",
     "electron": "wait-on tcp:3000 && electron .",
     "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
     "electron:build": "npm run build && electron-builder",

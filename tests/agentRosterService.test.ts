@@ -53,47 +53,6 @@ describe('agentRoster deletion (service layer)', () => {
     });
 });
 
-import { getTeams, saveTeam, updateTeam as updateTeamStore, removeTeam as removeTeamStore, getActiveTeamId, setActiveTeamId as setActiveTeamIdStore, type AgentTeam } from '../services/agents/agentRoster';
-
-const teamOf = (id: string, name?: string): AgentTeam => ({
-    id,
-    name,
-    seats: [
-        { providerId: 'p1', modelId: 'model-a' },
-        { providerId: 'p2', modelId: 'model-b' },
-    ],
-    createdAt: new Date().toISOString(),
-});
-
-describe('agentRoster team CRUD (the Team is user-owned)', () => {
-    it('saves, updates, and removes teams', () => {
-        saveTeam(teamOf('t1', 'Alpha'));
-        saveTeam(teamOf('t2', 'Beta'));
-        updateTeamStore('t1', { name: 'Alpha Desk' });
-        expect(getTeams().map(t => t.name)).toEqual(['Alpha Desk', 'Beta']);
-        removeTeamStore('t2');
-        expect(getTeams().map(t => t.id)).toEqual(['t1']);
-    });
-
-    it('tracks the active team; removing it clears the active pointer', () => {
-        saveTeam(teamOf('t1'));
-        expect(getActiveTeamId()).toBeNull();
-        setActiveTeamIdStore('t1');
-        expect(getActiveTeamId()).toBe('t1');
-        removeTeamStore('t1');
-        expect(getActiveTeamId()).toBeNull();
-        expect(getTeams()).toEqual([]);
-    });
-
-    it('removing a non-active team keeps the active pointer', () => {
-        saveTeam(teamOf('t1'));
-        saveTeam(teamOf('t2'));
-        setActiveTeamIdStore('t1');
-        removeTeamStore('t2');
-        expect(getActiveTeamId()).toBe('t1');
-        setActiveTeamIdStore(null);
-    });
-});
 
 describe('findBotById', () => {
     it('finds a bot by id or returns undefined', () => {

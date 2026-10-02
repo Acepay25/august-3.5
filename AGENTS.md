@@ -47,16 +47,24 @@ npm run render-probe        # drive the running app in Chromium; assert rendered
 npm run installer-smoke     # drive the PACKAGED exe; the strongest gate here
 npm run electron:dev        # Vite dev server + Electron window
 npm run electron:build      # Build + package Windows installer
-npm run electron:release    # Build + publish GitHub release (via release.yml on tag push)
+npm run electron:release    # REFUSES locally and explains how to release. CI-only
+                            # on purpose: a local --publish skips every gate
+                            # and ships the artifact users install. See
+                            # release.yml — it builds, verifies, then publishes
+                            # the signed bytes itself.
 ```
 
 ### What each gate does NOT catch
 
-`tsconfig.json` excludes `electron/`, so **`npm run typecheck` never reads the
-main process or preload** — a syntax break in `electron/main.cjs` passes tsc,
-passes `vitest` (no test imports the shell), and only fails when a user launches
-the packaged app. Run `npm run typecheck:electron` (wired into both CI and the
-release gate) or `node --check` the file directly after editing it.
+`tsconfig.json` lists only `**/*.ts` and `**/*.tsx` in `include`, so
+**`npm run typecheck` does not read the main process or preload** — a syntax
+break in `electron/main.cjs` passes tsc, passes `vitest`, and only fails when a
+user launches the packaged app. (`electron/` is not in `exclude`; it is out only
+because the include globs don't match `.cjs`. One shell file DOES reach tsc —
+`tests/sseParser.test.ts` imports `electron/sseParser.cjs` and `allowJs` is on —
+so the three files are not equally unchecked.) Run `npm run typecheck:electron`
+(wired into both CI and the release gate) or `node --check` the file directly
+after editing it.
 
 **Unit tests cannot see the transcript.** `tests/` mounts components in jsdom, so
 a defect that only shows when a LIST of messages renders — a row dropped after
@@ -77,8 +85,11 @@ the full suite it reports blank surfaces that the app was seconds from filling.
 CI (`.github/workflows/ci.yml`) runs `tsc`, `vitest`, `eslint`, the Playwright
 smoke suite, `vite build`, `boot-probe` and `render-probe`. The release gate
 (`.github/workflows/release.yml`) runs the same static + probe chain, adds
-`installer-smoke` on the packaged exe, and only then builds and publishes —
-`electron-builder --publish always` fires on a `v*` tag push. `render-probe` sits
+`installer-smoke` on the packaged exe, and only then builds and publishes.
+A `v*` tag push runs `release.yml`, which builds ONCE with
+`--publish never`, verifies the installer, and only then uploads the
+manifest-named bytes with `gh release upload --clobber` (one build, one
+publish, `GH_TOKEN` blanked during the signing gate). `render-probe` sits
 in both because it is the only gate that can see a rendered row: unit tests
 mount components in jsdom and cannot see a transcript drop one message out of a
 list. Steps run sequentially, so it never measures a surface while a build is

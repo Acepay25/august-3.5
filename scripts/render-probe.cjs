@@ -468,12 +468,17 @@ async function main() {
 
     try {
         if (!(await waitForServer(BASE))) {
+            // exitCode + return, never process.exit(): exiting here skips the
+            // finally that kills the dev server + mock provider, orphaning them
+            // on their ports. Same trap in the catch below.
             console.error('RENDER PROBE FAIL: no vite preview on', BASE, '\n', out);
-            process.exit(1);
+            process.exitCode = 1;
+            return;
         }
         if (!(await waitForServer(`http://127.0.0.1:${MOCK_PORT}/models`))) {
             console.error('RENDER PROBE FAIL: mock provider never came up');
-            process.exit(1);
+            process.exitCode = 1;
+            return;
         }
 
         const browser = await chromium.launch({ headless: true });
@@ -1087,24 +1092,47 @@ async function main() {
 
         if (askedInDock) {
             await openMenu();
-            await sleep(400);
+            // Wait for the dock turn to be committed before switching surfaces.
+            // A fixed sleep here raced the store write, and the failure it
+            // produced was reported against the WRONG surface — "not in the bot
+            // thread on the Chat surface" — for a turn that had not yet landed
+            // in the dock at all. Two defects are now distinguished: the dock
+            // never took it, or the Chat surface never showed it.
+            const landedInDock = await pollFor(async () => {
+                const text = await page.locator('[data-testid="trade-chat-panel"], [data-testid="trade-dock"]').first().innerText();
+                return text.includes(HOP_ASK) ? true : null;
+            }, 15000);
+            check('a turn asked in the dock shows in the dock', landedInDock != null,
+                landedInDock == null ? 'the dock never rendered the turn' : 'rendered');
+
             await navTo('Chat');
-            await sleep(900);
-            await page.evaluate(() => {
-                const b = [...document.querySelectorAll('button')]
-                    .find(x => /probe bot/i.test(x.textContent || ''));
-                if (b) b.click();
-            });
-            await sleep(900);
-            const found = await pollFor(async () => {
+            await pollFor(async () => {
+                const visible = await page.locator('[data-testid="agents-view"]').count();
+                return visible > 0 ? true : null;
+            }, 8000);
+            // The bot row click: the thread must be OPEN before asserting on its
+            // contents, and the button may not be there yet on a slow render.
+            const openedBot = await pollFor(async () => {
+                const clicked = await page.evaluate(() => {
+                    const b = [...document.querySelectorAll('button')]
+                        .find(x => /probe bot/i.test(x.textContent || ''));
+                    if (!b) return false;
+                    b.click();
+                    return true;
+                });
+                return clicked ? true : null;
+            }, 8000);
+            const found = openedBot == null ? null : await pollFor(async () => {
                 const pane = page.locator('[data-testid="agents-view"]');
                 const t = await pane.innerText();
                 return t.includes(HOP_ASK) ? await pane.locator('[data-testid="agent-message"]').count() : null;
-            }, 8000);
+            }, 15000);
             check('a turn asked in the dock is visible in the Chat surface',
                 found != null,
                 found == null
-                    ? 'the exchange is not in the bot thread on the Chat surface'
+                    ? (openedBot == null
+                        ? 'the bot row was never available on the Chat surface'
+                        : 'the dock turn never appeared in the bot thread')
                     : `${found} rows`);
         }
         const paneText = await pollFor(async () => {
@@ -1377,8 +1405,14 @@ async function main() {
         await Promise.allSettled(pendingShots);
         await browser.close();
     } catch (err) {
+        // Do NOT process.exit() here: this catch runs BEFORE the finally below,
+        // so exiting would orphan the vite dev server and the mock provider.
+        // They then hold port 3000 / the mock port and break the next run.
+        // (boot-probe.cjs documents the same trap.) Set the code and return —
+        // finally still runs and kills the children.
         console.error('RENDER PROBE FAIL (driver):', err);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
     } finally {
         if (server) server.kill('SIGTERM');
         mock.kill('SIGTERM');

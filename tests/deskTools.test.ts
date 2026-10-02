@@ -40,6 +40,7 @@ describe('DeskToolsService', () => {
             'get_chart_view',
             'get_session_context',
             'get_price_snapshot',
+            'get_indicators',
             'get_setup_history_stats',
             'recall',
             'recall_chat',
