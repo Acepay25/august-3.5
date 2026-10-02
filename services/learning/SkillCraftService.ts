@@ -24,6 +24,13 @@ KIND:
 
 IF/THEN must be mechanical (price, candle close, level, volume, regime). No vibes.
 
+A skill may be JUST a rule (when X, avoid / take it only when Y) or a full
+STRATEGY. When the post-mortem supports a complete trade plan, state it in the
+"strategy" object so the app can build a ticket from it — entry, stop, target,
+sizing, and the conditions that must hold. Use plain price/level/condition
+language, not numbers you invented. Omit "strategy" entirely when the lesson
+is only "do not take this".
+
 Output ONLY JSON:
 {
   "name": "short kebab-or-title (max 8 words)",
@@ -36,6 +43,14 @@ Output ONLY JSON:
   "approval": "when a human must confirm (size, new coin, conflicting skill)",
   "ifCondition": "IF clause without the word IF",
   "thenAction": "THEN clause without the word THEN",
+  "strategy": {
+    "entry": "price / zone / condition to enter",
+    "invalidation": "what voids the setup",
+    "stop": "protective level",
+    "target": "first objective",
+    "sizing": "risk budget or size rule",
+    "conditions": ["must be true to trade this now"]
+  },
   "predicate": ${JSON.stringify(PREDICATE_GRAMMAR_HINT)}
 }`;
 
@@ -45,10 +60,24 @@ export const formatCraftedSkillBody = (skill: CraftedSkill): string => [
     '**What I do:**',
     ...skill.steps.map((s, i) => `${i + 1}. ${s}`),
     `**How I know it still holds:** ${skill.validate}`,
+    // The structured plan, when the craft carried one. A skill that is more
+    // than a rule has to SHOW the plan, or the fields die in the schema and
+    // the next seat never sees them.
+    ...(skill.strategy ? ([
+        '**My plan:**',
+        ...(skill.strategy.entry ? [`- Entry: ${skill.strategy.entry}`] : []),
+        ...(skill.strategy.invalidation ? [`- Invalidation: ${skill.strategy.invalidation}`] : []),
+        ...(skill.strategy.stop ? [`- Stop: ${skill.strategy.stop}`] : []),
+        ...(skill.strategy.target ? [`- Target: ${skill.strategy.target}`] : []),
+        ...(skill.strategy.sizing ? [`- Size: ${skill.strategy.sizing}`] : []),
+        ...(skill.strategy.conditions?.length
+            ? [`- Requires: ${skill.strategy.conditions.join('; ')}`]
+            : []),
+    ]) : []),
     `**What I hand back:** ${skill.output}`,
     `**When I ask a human:** ${skill.approval}`,
     `**My rule:** when ${skill.ifCondition}, I ${skill.thenAction}`,
-].join('\n');
+].filter(Boolean).join('\n');
 
 export const craftSkillFromPostMortem = async (
     trade: LoggedTrade,
@@ -88,6 +117,9 @@ Rules:
 - The IF must become MORE specific (add a filter the losing trades violated).
 - The THEN must stay mechanical (price, candle close, level, volume, regime).
 - Preserve what still works; change only what the losses falsified.
+- If the current skill carries a "strategy" plan (entry/stop/target/sizing),
+  keep it and tighten it against the losses — a refinement must not silently
+  drop the plan.
 
 Output ONLY JSON with the same shape:
 {
@@ -101,6 +133,14 @@ Output ONLY JSON with the same shape:
   "approval": "when a human must confirm",
   "ifCondition": "tightened IF clause without the word IF",
   "thenAction": "corrected THEN clause without the word THEN",
+  "strategy": {
+    "entry": "price / zone / condition to enter",
+    "invalidation": "what voids the setup",
+    "stop": "protective level",
+    "target": "first objective",
+    "sizing": "risk budget or size rule",
+    "conditions": ["must be true to trade this now"]
+  },
   "predicate": ${JSON.stringify(PREDICATE_GRAMMAR_HINT)}
 }`;
 

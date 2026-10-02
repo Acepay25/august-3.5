@@ -26,6 +26,7 @@ describe('DeskToolsService', () => {
             'read_memory',
             'forget',
             'propose_skill',
+            'propose_strategy',
             'revise_skill',
             // Redeems the `ta-…` receipt a clipped tool result carries; without
             // it a seat is told the rest exists and given no way to get it.

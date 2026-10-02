@@ -130,6 +130,29 @@ export const CraftedSkillSchema = z.object({
   // post-mortem/verdict authors stay valid.
   timeframe: z.string().max(12).optional(),
   source: z.string().max(24).optional(),
+  // STRUCTURED STRATEGY — beyond the IF/THEN rule.
+  //
+  // A skill used to be only a trigger and an action, so "create a strategy"
+  // had nowhere to land: the entry, stop, target, sizing and invalidation the
+  // model believed in had to be prose inside `steps`, which nothing can read
+  // back or check. These are OPTIONAL (a pure avoid-rule has no entry) and
+  // free-form on purpose — a price, a level reference, or a condition. What
+  // matters is that the model states a complete trade plan in fields the app
+  // can show, so a proposed strategy is a real ticket rather than a sentence.
+  strategy: z.object({
+    /** How to get in: a price, a zone, or a condition. */
+    entry: z.string().max(120).optional(),
+    /** Where it is wrong: a price or a condition that voids the setup. */
+    invalidation: z.string().max(120).optional(),
+    /** The protective level. */
+    stop: z.string().max(60).optional(),
+    /** The first objective. */
+    target: z.string().max(60).optional(),
+    /** Risk budget or sizing rule ("0.5% of equity", "half size"). */
+    sizing: z.string().max(120).optional(),
+    /** What must be true for this strategy to be tradable at all right now. */
+    conditions: z.array(z.string().max(120)).max(6).default([]),
+  }).partial().optional(),
   // Birth certificate: the falsifiable claim the skill must
   // pre-register. Optional at the schema edge (legacy crafts + refinements
   // carry none) — the persistence layer fills a deterministic default so
