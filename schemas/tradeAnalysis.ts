@@ -499,6 +499,24 @@ export const CoercedTradeAnalysisSchema = z.object({
   invalidationCriteria: z.any().optional(),
   analystConsensus: z.any().optional(),
   recommendationContract: z.any().optional(),
+  // App-owned fields attached by the pipeline AFTER the first parse
+  // (analysisResultProcessor) and re-read when a stored row is re-parsed
+  // (leverage change, journal edit, profile load). Listed here so the strip
+  // below cannot silently delete the risk veto, the sizing ticket or the
+  // amendment trail; forwarded with a shape guard in applySemanticFixups.
+  riskVeto: z.any().optional(),
+  positionSize: z.any().optional(),
+  sessionGuard: z.any().optional(),
+  kellyAdvisory: z.any().optional(),
+  fundingRate: z.any().optional(),
+  planVersion: z.any().optional(),
+  amendsMessageId: z.any().optional(),
+  planDiff: z.any().optional(),
+  // Declared on the STRICT TradeAnalysisSchema above, but this lenient one is
+  // the live parser — without its own copy the ordering gate's repair flag is
+  // stripped before applySemanticFixups can carry it forward.
+  levelsCorrected: z.any().optional(),
+  levelFixes: z.any().optional(),
 });
 
 export type CoercedTradeAnalysis = z.infer<typeof CoercedTradeAnalysisSchema>;
@@ -650,6 +668,13 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): SanitizedTradeAn
     verdictReview: raw.verdictReview,
     validityDurationMinutes: raw.validityDurationMinutes,
     levelCitations: Array.isArray(raw.levelCitations) ? raw.levelCitations : undefined,
+    // The ordering gate below re-derives this from the levels it is handed, so
+    // a row whose levels were ALREADY mirrored would re-parse as un-flagged —
+    // and the journal would credit the analyst for a plan the sanitizer
+    // inverted. Carry the prior verdict forward; a fresh violation still sets
+    // it to true.
+    levelsCorrected: raw.levelsCorrected,
+    levelFixes: Array.isArray(raw.levelFixes) ? raw.levelFixes : undefined,
   };
 
   // ── Probability normalization + confidence derivation (coupled) ──
@@ -844,6 +869,21 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): SanitizedTradeAn
   if (raw.recommendationContract && typeof raw.recommendationContract === 'object') {
     analysis.recommendationContract = raw.recommendationContract as TradeAnalysis['recommendationContract'];
   }
+  if (typeof raw.riskVeto === 'string') analysis.riskVeto = raw.riskVeto;
+  if (raw.positionSize && typeof raw.positionSize === 'object') {
+    analysis.positionSize = raw.positionSize as TradeAnalysis['positionSize'];
+  }
+  if (raw.sessionGuard && typeof raw.sessionGuard === 'object') {
+    analysis.sessionGuard = raw.sessionGuard as TradeAnalysis['sessionGuard'];
+  }
+  if (typeof raw.kellyAdvisory === 'string') analysis.kellyAdvisory = raw.kellyAdvisory;
+  // null is a fetched-but-unavailable rate, not a settled 0% — both must survive.
+  if (typeof raw.fundingRate === 'number' || raw.fundingRate === null) {
+    analysis.fundingRate = raw.fundingRate;
+  }
+  if (typeof raw.planVersion === 'number') analysis.planVersion = raw.planVersion;
+  if (typeof raw.amendsMessageId === 'string') analysis.amendsMessageId = raw.amendsMessageId;
+  if (typeof raw.planDiff === 'string') analysis.planDiff = raw.planDiff;
 
   return analysis;
 };

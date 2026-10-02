@@ -1167,8 +1167,20 @@ export const leveragedMovePercent = (
 export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: number): TradeAnalysis => {
     if (!analysis) return sanitizeTradeAnalysis(null);
 
-    const safeAnalysis = sanitizeTradeAnalysis(analysis);
-    const newAnalysis = JSON.parse(JSON.stringify(safeAnalysis));
+    // This recomputes DISPLAY MATH on an analysis the pipeline has already
+    // parsed, gated and adjusted. Re-parsing it here rebuilt the object from
+    // the schema's field list, which silently deleted the app-owned fields
+    // attached after the boundary (riskVeto, positionSize, sessionGuard, the
+    // plan-amendment trail) and re-derived confidence from probability —
+    // undoing a gate cap or a soft-Avoid rescue one step before the render.
+    // Boundary parsing belongs at the model edge (see analysisResultProcessor
+    // :321); this stays a clone.
+    const newAnalysis = JSON.parse(JSON.stringify(analysis)) as TradeAnalysis;
+    // The boundary parser used to guarantee these shapes; a clone does not,
+    // and the math below maps over them. A stored row missing one must degrade
+    // to "nothing to recalculate", not throw inside a profile-load loop.
+    if (!Array.isArray(newAnalysis.entryPoints)) newAnalysis.entryPoints = [];
+    if (!Array.isArray(newAnalysis.takeProfit)) newAnalysis.takeProfit = [];
 
     // Get Base Entry Price
     const entryPriceStr = newAnalysis.entryPoints?.[0]?.price;
