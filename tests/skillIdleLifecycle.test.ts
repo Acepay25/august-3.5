@@ -363,6 +363,16 @@ describe('enabled flag: one source of truth', () => {
         expect(skillEnabledFlag(skill({ status: 'retired', suspendedAt: ago(1) }))).toBe(false);
     });
 
+    it('keeps a skill the trader switched off switched off', () => {
+        // `enabled` on the notebook file is DERIVED, so a hand-off had nowhere
+        // to live: the next closed trade or weekly hygiene pass recomputed it
+        // to true and the trader's veto reverted on its own. The intent now
+        // lives in the frontmatter this flag actually reads.
+        expect(skillEnabledFlag(skill({ disabledByUser: true }))).toBe(false);
+        // ...and turning it back on by hand clears the veto (see the toggle).
+        expect(skillEnabledFlag(skill())).toBe(true);
+    });
+
     /** The trap this feature nearly walked into: the CONTROL and OVERRIDDEN
      *  attribution branches rewrite the file with `enabled` recomputed from
      *  `status`, which would un-suspend a skill the first time its trigger
