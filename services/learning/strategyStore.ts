@@ -185,6 +185,35 @@ export const strategySlug = (name: string): string =>
 export const isStrategyFile = (file: { folderId: string; name: string }): boolean =>
     file.name.endsWith('.md');
 
+/** Whether a plan's frontmatter marks it live. A DRAFT is not guidance: it is
+ *  an unapproved proposal, and presenting it to a seat as a plan it should
+ *  follow is the same defect as an unwritten lens file — worse, because it
+ *  looks authoritative. Only `active` reaches the model. */
+const statusOf = (content: string): StrategyStatus => {
+    const m = content.match(/^status:\s*(draft|active|retired)\s*$/mi)?.[1];
+    return m === 'active' || m === 'retired' ? m : 'draft';
+};
+
+/** The plans a seat may act on: active, not retired. */
+export const listActiveStrategies = (): StrategyMeta[] =>
+    listStrategies().filter(s => s.status === 'active');
+
+/** The block a seat reads: the ACTIVE plans, or '' when there are none. */
+export const activeStrategiesBlock = (max = 3): string => {
+    const active = listActiveStrategies();
+    if (active.length === 0) return '';
+    const shown = active.slice(0, max);
+    const lines = [
+        `**ACTIVE STRATEGIES** (${active.length}) — named trade plans the trader has activated. A skill may reference one; when a skill's rule matches an active strategy, follow the strategy's levels and sizing.`,
+        '',
+        ...shown.map(describeStrategy),
+    ];
+    if (active.length > shown.length) {
+        lines.push(`(+${active.length - shown.length} more)`);
+    }
+    return lines.join('\n');
+};
+
 const strategyFolder = (): { id: string } | undefined =>
     getMemoryFiles().folders.find(f => f.name === STRATEGY_FOLDER);
 

@@ -28,6 +28,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 import {
     proposeStrategy, getStrategy, listStrategies, setStrategyStatus,
     parseStrategyMarkdown, serializeStrategy, strategySlug, describeStrategy,
+    activeStrategiesBlock, listActiveStrategies,
     strategyProposalError, STRATEGY_FOLDER, type StrategyMeta,
 } from '../services/learning/strategyStore';
 import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
@@ -176,5 +177,32 @@ describe('frontmatter cannot be injected through a condition', () => {
         };
         const back = parseStrategyMarkdown(serializeStrategy(meta));
         expect(back?.entry).toBe('REAL ENTRY');
+    });
+});
+
+describe('only ACTIVE plans reach the model', () => {
+    beforeEach(async () => { store = {}; await initMemoryFiles(U); });
+
+    it('a draft is invisible to a seat — it is an unapproved proposal', async () => {
+        await proposeStrategy(PLAN, U);
+        const slug = strategySlug(PLAN.name);
+        expect(listStrategies()).toHaveLength(1);
+        // Reading it as guidance is the defect: a plan the trader has not
+        // activated must not be something the desk follows.
+        expect(activeStrategiesBlock()).toBe('');
+        await setStrategyStatus(slug, 'active', U);
+        expect(activeStrategiesBlock()).toContain(PLAN.entry);
+        await setStrategyStatus(slug, 'retired', U);
+        expect(activeStrategiesBlock()).toBe('');
+    });
+
+    it('the injected block states the plan the seat should follow', async () => {
+        await proposeStrategy(PLAN, U);
+        await setStrategyStatus(strategySlug(PLAN.name), 'active', U);
+        const block = activeStrategiesBlock();
+        expect(block).toContain('ACTIVE STRATEGIES');
+        expect(block).toMatch(/Entry: above the reclaim candle high/);
+        expect(block).toMatch(/Invalidation: close back below the swept low/);
+        expect(block).toMatch(/Requires: volume above average/);
     });
 });

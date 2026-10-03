@@ -39,6 +39,9 @@ permissions:
 jobs:
   guards:
     runs-on: ubuntu-latest
+    # A hung step (a probe waiting on a browser, an npm install) would otherwise
+    # hold a runner for the 6h default.
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
