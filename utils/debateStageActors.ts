@@ -1,19 +1,48 @@
 /**
- * Shared builder for the debate-floor actor list.
+ * The debate floor's actor model: one seat's projected state, the directed
+ * addressing edges between seats, and the derivations that build both from a
+ * Message.
  *
- * Both the in-transcript DebateStage (MessageItem) and the opt-in DeskScene
- * overlay project the SAME debate state, so they must derive their actors the
- * exact same way. This module owns that derivation; MessageItem and App both
- * call it rather than each keeping a copy that could drift.
- *
- * The shared module also exposes the small `exchanges` and `convictions`
- * derivations the in-transcript DebateStage and the DeskScene both need,
- * so the room and the transcript never disagree about who replied to whom
- * or what each seat's sealed conviction was.
+ * The opt-in DeskScene overlay and the settled transcript read the SAME debate
+ * state, so they must derive it the same way. This module owns that derivation
+ * rather than leaving a copy in each caller that could drift — the room and the
+ * transcript never disagree about who replied to whom, or what each seat's
+ * sealed conviction was.
  */
 
 import type { Message, DebateTurn } from '../types';
-import type { DebateStageActor, DebateExchange } from '../components/analysis/DebateStage';
+
+export interface DebateStageActor {
+    id: string;
+    name: string;
+    toneKey?: string;
+    live?: boolean;
+    thinking?: boolean;
+    speaking?: boolean;
+    thought?: string;
+    /** Newest lines of the seat's live turn — the floor shows the debate,
+     *  not just "thinking…" animations. */
+    speech?: string;
+    replyTo?: string;
+    replies?: Array<{ id: string; target: string; text: string }>;
+    toolChip?: string;
+    /** Team seat role short name ("Macro"/"Technical"/"Risk") from the
+     *  run's analyst ledger — rendered as the seat's role tag. */
+    seatRole?: string;
+    /** Focus dimension tag for unroled team seats ("structure", "risk"…)
+     *  — the u1 rotation that keeps N general seats distinguishable. */
+    seatFocus?: string;
+    /** Quiet cost/latency line for the hover tooltip —
+     *  "Macro · gemini-2.5-pro · 41s · 1.2k out · ~$0.01". */
+    meta?: string;
+}
+
+/** One directed addressing edge on the floor (who replied to whom). */
+export interface DebateExchange {
+    from: string;
+    to: string;
+    count: number;
+}
 
 const CONVICTION_LINE_RE = /^\s*CONVICTION:\s*(\d{1,3})\b[^\n]*$/im;
 
@@ -26,10 +55,10 @@ export const isEnsembleMessage = (message: Message): boolean =>
     );
 
 /**
- * Build the per-seat actor list for one message's debate. Mirrors the logic
- * that previously lived inline in MessageItem: one actor per distinct speaker
- * (from turns, then active speakers), with live/speaking/thinking flags, the
- * newest speech lines, the reply-to chip, and the quiet cost/latency meta.
+ * Build the per-seat actor list for one message's debate: one actor per
+ * distinct speaker (from turns, then active speakers), with live/speaking/
+ * thinking flags, the newest speech lines, the reply-to chip, and the quiet
+ * cost/latency meta.
  */
 export const stageActorsForMessage = (message: Message): DebateStageActor[] => {
     if (!isEnsembleMessage(message)) return [];
@@ -91,9 +120,8 @@ export const stageActorsForMessage = (message: Message): DebateStageActor[] => {
 
 /**
  * Each seat's LAST sealed CONVICTION line across the transcript — the
- * auction the Moderator alone sees at verdict time, made visible.
- * Mirrors the helper DebateSummary uses, lifted here so DeskScene can
- * show the same auction in the floor's verdict card.
+ * auction the Moderator alone sees at verdict time, made visible. Lives
+ * here so the desk floor and the verdict card read one auction, not two.
  */
 export const convictionsFromTurns = (
     debateTurns: DebateTurn[],
@@ -110,9 +138,9 @@ export const convictionsFromTurns = (
 
 /**
  * Build the directed addressing map (who replied to whom, and how many
- * times) for a debate. Mirrors the helper MessageItem uses; the DeskScene
- * reads it from the same source so the room and the transcript never
- * disagree about the shape of the conversation.
+ * times) for a debate. The DeskScene reads it from the same source the
+ * transcript does, so the room and the transcript never disagree about the
+ * shape of the conversation.
  */
 export const exchangesForTurns = (debateTurns: DebateTurn[]): DebateExchange[] => {
     const counts = new Map<string, number>();

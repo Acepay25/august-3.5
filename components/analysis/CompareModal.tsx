@@ -4,6 +4,7 @@ import { Message } from '../../types';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { formatChars, summarizeRunUsage } from '../../utils/runUsage';
+import { fmtPercent } from '../../utils/formatters';
 
 interface CompareModalProps {
   primary: Message;
@@ -35,10 +36,10 @@ const summaryOf = (message: Message, modelIdToName: Record<string, string>) => {
     sl: a.stopLoss || '—',
     tp: a.takeProfit?.map(t => t.price).join(' / ') || '—',
     confidence: a.confidence,
-    probability: a.probability !== undefined ? `${a.probability}%` : '—',
+    probability: a.probability !== undefined ? fmtPercent(a.probability, 0) : '—',
     grade: a.grade || '—',
-    gateCap: a.gateResult?.confidenceCap !== undefined ? `${Math.round(a.gateResult.confidenceCap * 100)}%` : '—',
-    mcWinRate: message.runStats?.mcWinRate !== undefined ? `${message.runStats.mcWinRate}%` : '—',
+    gateCap: a.gateResult?.confidenceCap !== undefined ? fmtPercent(a.gateResult.confidenceCap * 100, 0) : '—',
+    mcWinRate: message.runStats?.mcWinRate !== undefined ? fmtPercent(message.runStats.mcWinRate, 0) : '—',
     mcEV: message.runStats?.mcEV !== undefined ? `${message.runStats.mcEV > 0 ? '+' : ''}${message.runStats.mcEV}R` : '—',
     duration: message.runStats ? `${Math.round(message.runStats.durationMs / 1000)}s` : '—',
     tokens: (() => {

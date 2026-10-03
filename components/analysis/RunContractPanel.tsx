@@ -4,7 +4,7 @@ import type { RunContractStage, RunContractStageState } from '../../utils/runCon
 
 /**
  * The stage ladder is `utils/runContract.ts`'s vocabulary, not this component's:
- * the derivation lives there, `DebateStage` already types its prop from it, and
+ * the derivation lives there, the desk floor types its prop from it, and
  * a local copy of the same union is how a renamed state ends up rendering as
  * `undefined` instead of failing to compile.
  */

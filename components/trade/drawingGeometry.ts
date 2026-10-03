@@ -13,6 +13,7 @@
  * these return, and the maths is unit-testable without a browser.
  */
 import type { DrawKind } from '../../services/trade/chartDrawings';
+import { fmtRiskReward } from '../../utils/riskReward';
 
 export interface XY { x: number; y: number }
 
@@ -131,7 +132,7 @@ export const measuredMoveGeometry = (
         });
         g.labels.push({
             at: { x: labelX, y: (entry.y + target.y) / 2 },
-            text: `reward ${formatLeg(e, t, e)}${ratio ? ` · ${ratio.toFixed(1)}:1` : ''}`,
+            text: `reward ${formatLeg(e, t, e)}${ratio ? ` · ${fmtRiskReward(ratio, 1)}` : ''}`,
             font,
             color: stroke,
         });

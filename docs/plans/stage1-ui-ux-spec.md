@@ -1,6 +1,6 @@
 # Stage 1 — UI/UX Research & Design Spec
 
-**Status:** FOR APPROVAL — no code changes made.
+**Status:** APPROVED (2026-10-03) — D1–D6 taken at the recommended defaults; Stage 2 Phase 0 underway.
 **Date:** 2026-10-03
 **Scope:** trading harness, first launch → app update.
 **Constraint (user):** UI refactor, not a logic change. Preserve behavior and data.

@@ -49,6 +49,7 @@ export {
   RefreshCw as RetryIcon,
   BarChart3 as ChartBarIcon,
   Activity as ActivityIcon,
+  Timer as TimerIcon,
   Bell as BellIcon,
   Camera as CameraIcon,
   Plus as PlusIcon,

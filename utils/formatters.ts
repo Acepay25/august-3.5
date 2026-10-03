@@ -38,3 +38,25 @@ export const fmtPrice = (n: number): string => {
         maximumFractionDigits: n >= 1000 ? 2 : n >= 1 ? 4 : 6,
     });
 };
+
+/**
+ * Percent readout → `66.7%`. Takes the value ALREADY in percent units
+ * (0–100), not a fraction — the ledger, the dashboards and the gate all
+ * carry percents that way, and a helper that silently multiplied would
+ * double-scale half of them.
+ *
+ * `digits` is a required argument on purpose. Percent precision used to be
+ * whatever each call site happened to leave behind, so the same win rate
+ * printed as `66.66666666666667%` in one panel and `67%` in another, and a
+ * raw float reflows its own column every tick. Declaring the digit count at
+ * the call site keeps the glyph width fixed (doctrine: digits may change
+ * while streaming, width may not). House standard: win rates 0, P&L 1,
+ * spread 3, funding 4.
+ *
+ * Not for Brier scores — those are 0–1 probabilities rendered without a
+ * percent sign, and this appends one.
+ */
+export const fmtPercent = (n: number, digits: number): string =>
+    Number.isFinite(n)
+        ? `${n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`
+        : '—';

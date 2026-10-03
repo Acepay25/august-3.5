@@ -1,6 +1,6 @@
 # Stage 2 — UI/UX Refactor Implementation Plan
 
-**Status:** DRAFT — awaiting user approval of the Stage 1 spec.
+**Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phase 0 complete**, gates green; Phase 1 not started.
 **Companion doc:** [stage1-ui-ux-spec.md](./stage1-ui-ux-spec.md) (research + audit + design spec — all load-bearing claims fact-checked).
 **Rule:** UI refactor, not a logic change. Preserve existing behavior and data.
 Reuse the current stack (React 19, Tailwind v4 token block, lightweight-charts,
@@ -29,8 +29,7 @@ lucide-react, electron-updater) unless the spec justifies otherwise.
 
 ## Decision defaults (D1–D6)
 
-Applied as listed if the user approves "as recommended"; each is reversible
-until its phase starts.
+Approved 2026-10-03 as recommended; each is reversible until its phase starts.
 
 | | Decision | Default |
 |---|---|---|
@@ -91,6 +90,45 @@ npx eslint <changed files>  # errors fail CI; the --max-warnings 889 ratchet mus
 
 **Verify:** gates above + manual Trade & Journal pass.
 **Risk:** low; `debateStageActors` re-homing is the only fiddly bit.
+
+### Phase 0 result (done 2026-10-03)
+
+Gates: typecheck clean · 4418 tests pass (467 files) · build clean · eslint 858
+warnings against the 889 ratchet · render-probe OK with zero pageerrors.
+
+Four points where the code disagreed with this plan, recorded so the doc does
+not lie:
+
+1. **`debateStageActors.ts` is live, not dead.** App and the desk floor both
+   call it. Only `DebateStage.tsx` was dead, so `DebateStageActor` +
+   `DebateExchange` were re-homed INTO that module (9 files imported those
+   types from the deleted component).
+2. **`DebateBotAvatar.tsx` was collateral** — its only production caller was
+   the dead file, and its own test kept it green while nothing rendered it.
+   Deleted with it, along with the `.bot-avatar` CSS (which was pasted twice).
+   The live identity renderers are `BotAvatar`/`BotFace`/`pixelAvatars`; Phase 3
+   should use one of those rather than resurrecting this.
+3. **D4 shipped as shape-only, not digits-only.** "One display shape" is the
+   reward-first `X:1` order; the digit count stays declared per call site,
+   because `tests/analysisUtils.test.ts:521` pins the verdict markdown at
+   `1.37:1` and `tests/drawingGeometry.test.ts:98` pins the canvas chip at
+   `3.0:1`. Forcing 1 decimal everywhere would have re-rounded a quoted number
+   — and made the avoid-reason print "1.0:1 is below the 1:1 floor" for a 0.97.
+   Helper: `fmtRiskReward(ratio, digits)` + `fmtRMultiple(r)` in
+   `utils/riskReward.ts`. A **fourth** risk-first site the audit missed:
+   `BacktestResults.tsx:124`.
+4. **The canvas R:R site moved before this phase began.** Task 3 names
+   `TradingChart.tsx:907`, but the measured-move annotation was extracted
+   into `components/trade/drawingGeometry.ts` by commit `0aea8c8`, so the
+   site the shape actually had to be unified is `drawingGeometry.ts:135`
+   (now `fmtRiskReward(ratio, 1)`). The requirement held; only the citation
+   was stale. Stage 1's audit prose still cites the old line deliberately —
+   it records the tree as audited on 2026-10-03.
+
+Carried to Phase 1: the pre-existing dead `.debate-stage-*` / `.debate-seat-*`
+CSS (`index.css:712-786, 1027-1110`) was orphaned by an earlier refactor, not
+this one, and the stale `MessageItem` / `DebateSidePanel` comments still live in
+`App.tsx:1704, 2082, 2181`, `hooks/useWatchAndAutopilot.ts:20`, `index.css:1819`.
 
 ## Phase 1 — Tokens, type ramp, icon standard (low-medium)
 

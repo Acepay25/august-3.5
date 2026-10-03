@@ -13,6 +13,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     firstTargetDistance,
+    fmtRiskReward,
+    fmtRMultiple,
     plannedRiskReward,
     riskRewardDistances,
 } from '../utils/riskReward';
@@ -123,5 +125,52 @@ describe('calculateMetrics stays on the canonical nearest-target rule', () => {
     it('does NOT invent 2R for a target that exists but sits on entry', () => {
         const m = calculateMetrics({ ...base, entry: 100, stopLoss: 90, takeProfits: [100] });
         expect(m.rrRatio).toBe(0);
+    });
+});
+
+/**
+ * The DISPLAY half of the contract (Stage 2 Phase 0, D4). Computing R:R once
+ * was not enough — the same number was then printed three ways, two of them
+ * risk-first (`1:2.0`, `R:R: 1:2`), which reads as "one unit of reward for two
+ * of risk" to anyone skimming a verdict card. Order is meaning, so the shape
+ * lives in one function; digits stay per-surface, because a canvas chip and a
+ * forensic markdown line legitimately quote different precision.
+ */
+describe('fmtRiskReward — one reward-first shape', () => {
+    it('always puts reward first over one unit of risk', () => {
+        expect(fmtRiskReward(2.4, 1)).toBe('2.4:1');
+        expect(fmtRiskReward(2, 1)).toBe('2.0:1');
+        expect(fmtRiskReward(1.37, 2)).toBe('1.37:1');
+        // The risk-first forms this replaces: `1:2.4` / `1:2.00`.
+        expect(fmtRiskReward(2.4, 1)).not.toMatch(/^1:/);
+    });
+
+    it('keeps sub-1 ratios distinguishable at 2 digits', () => {
+        // The avoid-reason sentence quotes the floor, so 0.97 must not round
+        // to "1.0:1 is below the 1:1 floor".
+        expect(fmtRiskReward(0.97, 2)).toBe('0.97:1');
+        expect(fmtRiskReward(0.85, 2)).toBe('0.85:1');
+    });
+
+    it('refuses to print a non-finite ratio as a number', () => {
+        expect(fmtRiskReward(Number.NaN, 1)).toBe('—');
+        expect(fmtRiskReward(Infinity, 2)).toBe('—');
+    });
+});
+
+/**
+ * The realized multiple is a DIFFERENT quantity (see the module header) and
+ * must not borrow the planned ratio's `:1` suffix — that collision is how
+ * "avg R 1.80" and "1.8:1 planned" came to mean the same thing to a reader.
+ */
+describe('fmtRMultiple — the realized metric stays distinct', () => {
+    it('prints a plain 2-decimal multiple with no ratio suffix', () => {
+        expect(fmtRMultiple(1.8)).toBe('1.80');
+        expect(fmtRMultiple(-0.5)).toBe('-0.50');
+        expect(fmtRMultiple(1.8)).not.toContain(':1');
+    });
+
+    it('returns an em dash for a non-finite multiple', () => {
+        expect(fmtRMultiple(Number.NaN)).toBe('—');
     });
 });

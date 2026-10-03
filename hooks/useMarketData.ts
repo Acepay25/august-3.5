@@ -5,6 +5,15 @@ import { LiveBacktestResult } from '../services/backtesting/LiveBacktestService'
 import { SLOptimization } from '../services/backtesting/StopLossOptimizerService';
 import { fetchRecentLiquidations, fetchOHLCV, pingBinanceAPI } from '../services/analysis/MarketDataService';
 
+/**
+ * The ONE instrument the live-market sampler reads. Sampling several symbols
+ * is logic work and deliberately out of scope — but the header printed
+ * "(BTC)" from a literal of its own, so the label and the numbers underneath
+ * it could disagree and nothing failed. The symbol is exposed on the hook so
+ * the label can only ever name what was actually sampled.
+ */
+const LIVE_MARKET_SYMBOL = 'BTCUSDT';
+
 export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEnabled: boolean) {
     const [currentHybridData, setCurrentHybridData] = useState<HybridDataPacket | null>(null);
     const [hybridConnectionStatus, setHybridConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -36,10 +45,10 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
         const fetchLiveMarketConditions = async () => {
             try {
                 // Fetch liquidation data
-                const liquidationData = await fetchRecentLiquidations('BTCUSDT');
+                const liquidationData = await fetchRecentLiquidations(LIVE_MARKET_SYMBOL);
 
                 // Fetch recent candles to calculate volatility (ATR approximation)
-                const candles = await fetchOHLCV('BTCUSDT', '1h', 20);
+                const candles = await fetchOHLCV(LIVE_MARKET_SYMBOL, '1h', 20);
 
                 // Calculate average true range for volatility
                 let volatility: 'High' | 'Medium' | 'Low' = 'Medium';
@@ -199,5 +208,8 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
         setCurrentEntryTimingScore,
         liveMarketConditions,
         setLiveMarketConditions,
+        /** Which instrument `liveMarketConditions` describes. Read it in the
+         *  label; never re-state the symbol in the UI. */
+        liveMarketSymbol: LIVE_MARKET_SYMBOL,
     };
 }

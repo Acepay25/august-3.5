@@ -2,6 +2,7 @@ import React, { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
+import { baseOf } from '../../utils/symbol';
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
 import SurfaceMenuList, { surfaceLabel, type NavBadge } from '../shell/SurfaceMenuList';
@@ -43,6 +44,9 @@ interface HeaderProps {
         liquidation: 'High' | 'Medium' | 'Low';
         lastUpdated: string;
     } | null;
+    /** The instrument `liveMarketConditions` was sampled from. The label binds
+     *  to it instead of naming a symbol of its own. */
+    liveMarketSymbol?: string;
     // Sidebar (shared with the persistent desktop column)
     conversations: Conversation[];
     activeConversationId: string | null;
@@ -88,6 +92,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     isOnline = true,
     pendingQueueCount = 0,
     liveMarketConditions,
+    liveMarketSymbol,
     conversations,
     activeConversationId,
     onDeleteConversation,
@@ -242,7 +247,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                         <div className="flex items-center justify-between mb-1.5">
                                                             <div className="text-ui-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-pulse" />
-                                                                LIVE MARKET (BTC)
+                                                                LIVE MARKET{liveMarketSymbol ? ` (${baseOf(liveMarketSymbol)})` : ''}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2">

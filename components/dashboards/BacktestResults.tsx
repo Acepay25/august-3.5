@@ -12,6 +12,7 @@ import React from 'react';
 import { Check, X } from 'lucide-react';
 import { SectionCard, StatPill, ProgressBar, LiveBacktestResult } from './analyticsShared';
 import StatusPill from '../ui/StatusPill';
+import { fmtRiskReward } from '../../utils/riskReward';
 
 interface BacktestResultsProps {
     backtestResult?: LiveBacktestResult | null;
@@ -121,7 +122,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                                 <div className="flex justify-between text-ui-dense">
                                     <span className="text-amber-300">R:R</span>
                                     <span className="text-amber-400 font-semibold">
-                                        1:{(backtestResult!.avgWinPercent / Math.max(backtestResult!.avgLossPercent, 0.1)).toFixed(1)}
+                                        {fmtRiskReward(backtestResult!.avgWinPercent / Math.max(backtestResult!.avgLossPercent, 0.1), 1)}
                                     </span>
                                 </div>
                             </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { loadMonthlyReport, MonthlyReportCard as MonthlyReport } from '../../services/learning/monthlyReport';
+import { fmtRMultiple } from '../../utils/riskReward';
 
 /**
  * Monthly report card (Batch 5 remainder,) — what happened /
@@ -42,7 +43,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-ui-dense text-zinc-500 tabular-nums">
                 <span>{w.closed} closed ({w.wins}W/{w.losses}L)</span>
                 <span>Net ${Math.round(w.netPnlUsd)}</span>
-                {w.avgR !== null && <span>avg R {w.avgR.toFixed(2)}</span>}
+                {w.avgR !== null && <span>avg R {fmtRMultiple(w.avgR)}</span>}
                 {l.adherenceFollowedPct !== null && <span>adherence {l.adherenceFollowedPct}%</span>}
                 {l.biggestMistake && <span>costliest: {l.biggestMistake}</span>}
                 {l.bestTrade && <span>best: {l.bestTrade.label} +${Math.round(l.bestTrade.pnlUsd)}</span>}

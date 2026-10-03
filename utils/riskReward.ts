@@ -73,3 +73,30 @@ export const riskRewardDistances = (input: {
         ratio: risk > 0 && reward > 0 ? Math.round((reward / risk) * 100) / 100 : 0,
     };
 };
+
+/**
+ * The ONE display shape for a planned ratio: `2.4:1`, REWARD FIRST, always
+ * over one unit of risk.
+ *
+ * Before this, the same number reached the trader three ways — `1:2.0` and
+ * `R:R: 1:2` (risk-first, which reads as "one unit of reward for two of risk"
+ * to anyone skimming) against `2.00:1` (reward-first). Order is the whole
+ * meaning of a ratio, so it now lives in one function.
+ *
+ * `digits` is a required argument, as in `fmtPercent`: the shape is canonical,
+ * the precision belongs to the surface. A canvas chip quotes `3.0:1`, the
+ * verdict markdown quotes `1.37:1` because that is what `plannedRiskReward`
+ * actually computed, and neither should be re-rounded to fit the other.
+ */
+export const fmtRiskReward = (ratio: number, digits: number): string =>
+    Number.isFinite(ratio) ? `${ratio.toFixed(digits)}:1` : '—';
+
+/**
+ * The REALIZED multiple — `avg R 1.80` — which is a different quantity from
+ * the planned ratio above (BacktestingService asks which target the market
+ * actually reached; this module asks what the ticket promised). It deliberately
+ * has no `:1` suffix: a multiple of risk is not a ratio of two prices, and
+ * printing it as one is how the two got confused in the first place.
+ */
+export const fmtRMultiple = (r: number): string =>
+    Number.isFinite(r) ? r.toFixed(2) : '—';

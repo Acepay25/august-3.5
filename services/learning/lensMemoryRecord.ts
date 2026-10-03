@@ -24,7 +24,7 @@
  */
 import { AnalystRole } from '../../types';
 import { appendLensMemoryLine } from './lensMemory';
-import { plannedRiskReward } from '../../utils/riskReward';
+import { fmtRiskReward, plannedRiskReward } from '../../utils/riskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import type { TradeAnalysis } from '../../types/analysis';
 import type { LoggedTrade } from '../../types/trade';
@@ -81,7 +81,7 @@ export const lensLinesForTrade = (input: LensRecordInput): Array<{ role: Analyst
     lines.push({
         role: AnalystRole.TECHNICAL_ANALYST,
         line: `${coin} ${direction} entry ${entry} / stop ${stop} / first target ${target}`
-            + `${rr ? ` (planned ${rr.toFixed(1)}:1)` : ''} closed ${outcome}${tape}`,
+            + `${rr ? ` (planned ${fmtRiskReward(rr, 1)})` : ''} closed ${outcome}${tape}`,
     });
 
     // RISK — the sizing verdict and the plan's own risk boundary, which is what
@@ -95,7 +95,7 @@ export const lensLinesForTrade = (input: LensRecordInput): Array<{ role: Analyst
     } else if (typeof declaredRr === 'number' && declaredRr > 0) {
         lines.push({
             role: AnalystRole.RISK_EXECUTION,
-            line: `${coin} ${direction} took ${declaredRr.toFixed(1)}:1 planned risk (stop ${stop}) and closed ${outcome}${tape}`,
+            line: `${coin} ${direction} took ${fmtRiskReward(declaredRr, 1)} planned risk (stop ${stop}) and closed ${outcome}${tape}`,
         });
     }
 
