@@ -17,7 +17,7 @@ export interface UseWatchAndAutopilotArgs {
     updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string) => void;
     messagesRef: React.MutableRefObject<Message[]>;
     /** Stable send bridge — a fresh identity here would re-create chatContext
-     *  (and re-render every visible MessageItem) per stream chunk. */
+     *  (and re-render every visible transcript row) per stream chunk. */
     stableHandleSendMessage: (...args: any[]) => any;
     handleLoadConversation: (id: string) => void;
     setIsWatchListVisible: (open: boolean) => void;

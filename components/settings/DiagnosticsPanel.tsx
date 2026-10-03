@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle } from '../shared/Icons';
 import { clearThinkingLeakBin, loadThinkingLeakBin, ThinkingLeakEntry } from '../../utils/thinkingLeakBin';
 
 interface ErrorLog {
@@ -45,9 +45,9 @@ export const DiagnosticsPanel: React.FC = () => {
     const hasErrors = promiseError || globalError;
 
     const renderError = (error: ErrorLog, label: string): React.ReactNode => (
-        <div className="p-3 rounded-xl bg-red-950/30 border border-red-500/20 space-y-1">
+        <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/20 space-y-1">
             <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-red-400">{label}</span>
+                <span className="text-xs font-semibold text-rose-400">{label}</span>
                 <span className="text-ui-xs text-zinc-500">
                     {new Date(error.timestamp).toLocaleString()}
                 </span>
@@ -88,7 +88,7 @@ export const DiagnosticsPanel: React.FC = () => {
                 {hasErrors && (
                     <button
                         onClick={clearErrors}
-                        className="text-xs text-zinc-400 hover:text-red-400 transition-colors"
+                        className="text-xs text-zinc-400 hover:text-rose-400 transition-colors"
                     >
                         Clear Errors
                     </button>

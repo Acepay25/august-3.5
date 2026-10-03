@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap } from '../../shared/Icons';
 import type { Message } from '../../../types/message';
 import type { LiveEntry } from '../../../services/trade/chatStore';
 import { parseKeyLevels, type MessageLevelLines } from '../../../services/trade/keyLevels';

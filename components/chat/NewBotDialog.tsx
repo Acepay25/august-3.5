@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { X } from 'lucide-react';
+import { X } from '../shared/Icons';
 import { BotFace, BUILTIN_FACES, UPLOADABLE_FACES, randomFace, type BotFaceSpec, type FaceShape } from './BotFace';
 import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';

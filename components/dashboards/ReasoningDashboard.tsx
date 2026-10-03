@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Brain, Loader2 } from 'lucide-react';
+import {Brain, Loader2, ChevronRightIcon, ChevronLeftIcon, FolderIcon, FileTextIcon, ExportIcon} from '../shared/Icons';
 import { getProviderReasoningStats, getAllThinkingForExport, getThinkingByTrade, getThinkingTrades, getAllThinkingRecordsByUser } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecordStats, ThinkingTradeSummary, ThinkingRecord, AnalystLens } from '../../types/thinking';
 import { ThinkingRecordCard } from '../journal/ThinkingRecordCard';
 import { ANALYST_LENS_LABEL, ANALYST_LENS_ORDER, isModeratorThinking, resolveAnalystLens } from '../../utils/thinkingLens';
-import { ChevronRightIcon, ChevronLeftIcon, FolderIcon, FileTextIcon, ExportIcon } from '../shared/Icons';
+
 import StatusPill from '../ui/StatusPill';
 
 interface ReasoningDashboardProps {

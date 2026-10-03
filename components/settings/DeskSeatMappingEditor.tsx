@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, RotateCcw } from '../shared/Icons';
 import {
     getRoleOverrides,
     setRoleOverride,

@@ -9,13 +9,8 @@
  */
 
 import React from 'react';
-import {
-    ActivityIcon,
-    FileTextIcon,
-    LayersIcon,
-    BotIcon,
-} from '../shared/Icons';
-import { GraduationCap, Inbox, LogOut } from 'lucide-react';
+import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox, LogOut} from '../shared/Icons';
+
 import type { AppSurface } from '../../hooks/useSurface';
 
 /** Live activity on a surface: `active` pulses an amber dot, `count` upgrades

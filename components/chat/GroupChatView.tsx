@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Settings, Trash2, Square, Copy, Check, Activity as ActivityIcon, ChevronDown, Loader2, MessageSquare, Minus } from 'lucide-react';
+import { Settings, Trash2, Square, Copy, Check, Activity as ActivityIcon, ChevronDown, Loader2, MessageSquare, Minus } from '../shared/Icons';
 import { BotAvatar } from './BotAvatar';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { findBotById, groupDisplayName } from '../../services/agents/agentRoster';

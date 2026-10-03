@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Wrench, Zap } from 'lucide-react';
+import { CheckCircle, Wrench, Zap } from './Icons';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 /**

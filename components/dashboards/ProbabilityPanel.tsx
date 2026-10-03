@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity } from '../shared/Icons';
 import { LevelProbabilities } from '../../types';
 import { SectionCard } from './analyticsShared';
 import { EmptyState } from '../ui/EmptyState';

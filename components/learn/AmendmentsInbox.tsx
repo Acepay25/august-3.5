@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X } from '../shared/Icons';
 import {
     MemoryAmendment,
     listAmendments,

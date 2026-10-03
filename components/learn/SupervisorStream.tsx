@@ -17,7 +17,7 @@ import React from 'react';
 import { useSyncExternalStore } from 'react';
 import {
     Brain, Gavel, ListChecks, Pause, Play, Search, ShieldCheck, X,
-} from 'lucide-react';
+} from '../shared/Icons';
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import {
     runSupervisorNow, overrideApproveSkill, overrideRejectSkill, abortSupervisorRun,

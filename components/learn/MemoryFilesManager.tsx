@@ -5,8 +5,8 @@ import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import MarkdownContent from '../shared/MarkdownContent';
-import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
-import { FileText, Loader2 } from 'lucide-react';
+import {FileTextIcon, ChevronRightIcon, ChevronLeftIcon, ChevronUpIcon, ChevronDownIcon, FolderIcon, FileText, Loader2} from '../shared/Icons';
+
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
 import { phtClock, phtDayKey, phtDayYear, phtStamp } from '../../utils/timezone';
 import { isSkillFile, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
@@ -582,7 +582,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 onClick={e => { e.stopPropagation(); void handleMove(-1); }}
                                                 className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
                                             >
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                                                <ChevronUpIcon className="h-4 w-4" />
                                             </button>
                                             <button
                                                 type="button"
@@ -592,7 +592,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 onClick={e => { e.stopPropagation(); void handleMove(1); }}
                                                 className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
                                             >
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
+                                                <ChevronDownIcon className="h-4 w-4" />
                                             </button>
                                         </span>
                                         <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0 group-hover/folder:hidden" />

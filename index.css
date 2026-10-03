@@ -126,6 +126,42 @@
   --color-brand-mid: #ff538e;
   --color-brand-end: #ff9a32;
 
+  /* ── Semantic aliases ─────────────────────────────────────────────────────
+     The names the design spec actually talks in. Every value here is an alias
+     of a step ALREADY defined above, so the hexes — and therefore every pixel
+     in the app — are unchanged. What changes is that code can now say what a
+     color means instead of which ramp step it happens to sit on: `bg-surface-
+     panel` survives a future re-step of zinc-900, and a chart can read
+     `chartColor('--color-trade-up', …)` without knowing it came from emerald.
+
+     Declared in the --color-* namespace on purpose: that is what makes them
+     Tailwind utilities (`bg-surface-page`, `text-ink-tertiary`) as well as
+     readable custom properties, which is what lets a component migrate off a
+     `bg-[#0b0b0a]` literal without inventing a parallel CSS rule.
+
+     These are the BASE step of each family. The full ramps (emerald-100…950,
+     rose-100…950) stay above and remain the way to ask for a lighter or
+     darker shade; these four name the meaning, not a shade list. */
+  --color-surface-page: #0b0b0a;    /* = zinc-950, the app's ground */
+  --color-surface-panel: #141412;   /* = zinc-900, panels and the rail */
+  --color-surface-raised: #1f1f1c;  /* = zinc-800, raised surfaces */
+  --color-hairline: #2f2f2f;         /* = zinc-700 — borders/dividers. The spec
+                                   names this --stroke-hairline; it lives in
+                                   the --color-* namespace here so it also
+                                   yields a `border-hairline` utility. */
+  --color-ink-primary: #f6f6f1;     /* = zinc-50 */
+  --color-ink-secondary: #a3a39d;   /* = zinc-400 (see note below) */
+  --color-ink-tertiary: #7e7e78;    /* = zinc-600, the AA-tuned faint step */
+  --color-trade-up: #07b56a;         /* = emerald-500 — gains, up, Long, WIN */
+  --color-trade-down: #f75d5f;       /* = rose-500 — losses, down, Short, LOSS */
+  --color-warn: #f08800;             /* = amber-500 — warnings, watch */
+  --color-info: #399ef7;             /* = cyan-500 — info / in-progress */
+
+  /* Note on --color-ink-secondary: the design spec's C1 table names #a1a19b,
+     which is not a step of this ramp — writing it here would have introduced
+     a color the app has never rendered. zinc-400 (#a3a39d) is the existing
+     step that role occupies, so that is what the alias points at. */
+
   /* Type + motion + radii — Minara's chat-v2 numbers: 14px sans over a
      system stack (Geist), DM Serif Text for display (font-serif resolves
      here, so existing hero <h1 class="font-serif"> upgrades automatically),
@@ -198,6 +234,36 @@
   --default-transition-timing-function: var(--ease-snappy);
 }
 
+/* ── D1: the light mapping, deliberately DORMANT ─────────────────────────────
+   The decision under D1 was to ship dark-only and keep light as a config
+   change rather than a rewrite. This block is that config change, written out
+   but not switched on: no element in the app carries data-theme="light", and
+   index.html hardcodes the dark color-scheme, so these declarations match
+   nothing and cost the app no pixels today.
+
+   DO NOT "finish" this by adding the attribute. The 2026-09-10 decision is
+   dark (AGENTS.md), and the light hues below are UNVERIFIED — the semantic
+   trade hues above are tuned for a near-black ground and have not been
+   re-checked for contrast on a light one. Activating light is its own task,
+   with themeContrast.test.ts run against the light values, not a one-attribute
+   edit. What this block buys is that the token NAMES already exist, so that
+   task is a palette rather than a rename. */
+[data-theme='light'] {
+  --color-surface-page: #faf9f5;
+  --color-surface-panel: #ffffff;
+  --color-surface-raised: #f4f3ef;
+  --color-hairline: #e2e0d8;
+  --color-ink-primary: #141413;
+  --color-ink-secondary: #57564f;
+  --color-ink-tertiary: #8a897f;
+  /* Unverified for AA on a light ground — see the warning above. */
+  --color-trade-up: #067647;
+  --color-trade-down: #c22c2e;
+  --color-warn: #9a5b00;
+  --color-info: #1d64a8;
+  color-scheme: light;
+}
+
 /* The single dial every `text-ui-*` role is measured from. Minara's UI runs on
    14px sans, and that is what the rest of this app was laid out against, so
    the default must reproduce the current pixels exactly — the scale is a
@@ -207,7 +273,44 @@
    the roles. */
 :root {
   --ui-font-size: 14px;
+
+  /* ── The z-ladder ─────────────────────────────────────────────────────────
+     Overlays used to stack by ad-hoc `z-[200]` / `z-[120]` literals typed at
+     each site, which is how two overlays end up fighting over a z-index nobody
+     can see. Naming the rungs makes the order a fact about the theme instead
+     of an accident of who wrote their class last.
+
+     These live in a plain `:root` rule rather than in `@theme` ON PURPOSE.
+     They were declared in `@theme` first, and the build proved that wrong:
+     Tailwind v4 has no `--z-*` namespace, so the variables were silently
+     dropped from the bundle and every `z-modal` written against them would
+     have compiled to nothing — an overlay with no z-index at all, which is
+     worse than the ad-hoc literals it replaced. A plain rule is always
+     emitted. `tests/iconLayer.test.ts` earns its keep for icons; this is the
+     same class of mistake found by building rather than by review. */
+  --z-splash: 9999;      /* cold-start splash, painted outside #root */
+  --z-update: 200;       /* UpdateOverlay */
+  --z-modal: 120;        /* full-screen modals, Settings */
+  --z-confirm: 100;      /* ConfirmDialog, Toast */
+  --z-automation: 75;    /* AutomationView */
+  --z-drawer: 50;        /* portaled drawers */
+  --z-pipeline: 40;      /* the running pipeline card */
+  --z-header: 20;        /* sticky header */
 }
+
+/* `z-modal` and friends resolve the rungs above. Declared with @utility so
+   each is emitted only once something actually uses it, exactly like any other
+   Tailwind utility. Phase 2 replaces the ad-hoc z literals with these; until
+   then nothing references them and none are emitted, which is why this phase
+   changes no stacking. */
+@utility z-splash { z-index: var(--z-splash); }
+@utility z-update { z-index: var(--z-update); }
+@utility z-modal { z-index: var(--z-modal); }
+@utility z-confirm { z-index: var(--z-confirm); }
+@utility z-automation { z-index: var(--z-automation); }
+@utility z-drawer { z-index: var(--z-drawer); }
+@utility z-pipeline { z-index: var(--z-pipeline); }
+@utility z-header { z-index: var(--z-header); }
 
 /* Historical note: the app used to be monochrome, with semantic color opted
    in per-subtree via .analysis-card/.status-surface (the block that lived
@@ -463,7 +566,7 @@ body {
 
 /* Shared chrome: one kicker, one panel, one control radius. */
 .ui-kicker {
-  font-size: 10px;
+  font-size: var(--text-ui-xs);
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -533,7 +636,7 @@ body {
   border: 0;
   background: transparent;
   color: var(--color-zinc-500);
-  font-size: 11px;
+  font-size: var(--text-ui-dense);
   line-height: 18px;
   text-align: left;
   cursor: pointer;
@@ -618,7 +721,7 @@ body {
   padding: 8px 10px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   /* Readable body-size trace at full contrast, not dim gray. */
-  font-size: 13px;
+  font-size: var(--text-ui-caption);
   line-height: 1.65;
 }
 /* Markdown inside an expanded trace keeps the same near-white readability
@@ -655,7 +758,7 @@ body {
   padding: 0.1rem 0.45rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--text-ui-xs);
   color: var(--color-zinc-400);
   animation: tool-chip-in 0.25s ease-out;
 }
@@ -709,81 +812,7 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-.debate-stage-actor.is-live,
-.debate-stage-actor.is-thinking,
-.debate-stage-actor.is-speaking {
-  opacity: 1;
-  z-index: 2;
-}
-.debate-stage-actor.is-thinking::after,
-.debate-stage-actor.is-speaking::after {
-  opacity: 0.9;
-  transform: translateX(-50%) scaleX(1.18);
-}
-.debate-stage-actor.is-thinking .debate-stage-name {
-  color: #b7b7b1;
-  border-color: rgba(255, 255, 255, 0.18);
-}
-.debate-stage-actor.is-speaking {
-  transform: scale(1.1);
-  z-index: 3;
-}
-.debate-stage-actor.is-speaking .debate-stage-name {
-  color: #f6f6f1;
-  border-color: rgba(255, 255, 255, 0.28);
-}
-/* Spotlight cone behind the active speaker — fades in from above. */
-.debate-stage-beam {
-  position: absolute;
-  top: -34px;
-  left: 50%;
-  width: 130px;
-  height: 150px;
-  transform: translateX(-50%);
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.02) 78%, transparent);
-  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
-  filter: blur(1px);
-  opacity: 0.85;
-  pointer-events: none;
-  animation: debate-beam-in 0.5s ease-out;
-}
-.debate-stage-spot {
-  position: absolute;
-  bottom: 22px;
-  width: 56px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(210, 210, 214, 0.18);
-  filter: blur(2px);
-  animation: debate-spot 1.5s ease-in-out infinite;
-}
-/* Speaking spotlight: a brighter floor halo under the active speaker. */
-.debate-stage-actor.is-speaking .debate-stage-spot {
-  background: rgba(245, 245, 246, 0.32);
-  box-shadow: 0 0 14px rgba(245, 245, 246, 0.28);
-}
-.debate-stage-caption {
-  margin: 0;
-  padding: 0 12px 10px;
-  font-size: 11px;
-  color: #8c8c86;
-  text-align: center;
-}
-/* Live pulse dot before the caption — the Floor's "on air" light. */
-.debate-stage-caption-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  border-radius: 999px;
-  background: var(--color-zinc-300);
-  vertical-align: 1px;
-  animation: debate-caption-pulse 1.4s ease-in-out infinite;
-}
-@keyframes debate-caption-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1); }
-}
+
 /* Pixel-art avatars in the desk view. The grid is a 16x20 char matrix
    rendered as absolutely-positioned CSS pixels; `image-rendering: pixelated`
    keeps the shape crisp at any zoom level. The `.pixelArt` container is
@@ -994,91 +1023,7 @@ body.desk-idle-motion-off {
   .beacon::after { display: none; }
   [class*="animate-pulse"] { animation: none; }
 }
-.debate-seat-modal {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  background: #0b0b0a;
-  border-radius: inherit;
-}
-.debate-seat-modal-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: pointer;
-}
-.debate-seat-modal-collapse {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.debate-seat-modal-chat {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px 0 14px;
-}
-/* Flat roster + shared thread — the simplicity-first replacement for the
-   animated stage. Each seat is a section; its transcript flows inline. */
-.debate-thread {
-  display: flex;
-  flex-direction: column;
-  max-height: 460px;
-  overflow-y: auto;
-}
-.debate-thread-seat {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.debate-thread-seat:last-child {
-  border-bottom: 0;
-}
-.debate-thread-seat-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 12px 2px;
-}
-.debate-thread-seat-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-zinc-200);
-}
-.debate-thread-seat-meta {
-  font-size: 11px;
-  color: var(--color-zinc-500);
-}
-.debate-seat-live {
-  background: rgba(255, 255, 255, 0.025);
-}
-.debate-seat-wait {
-  opacity: 0.55;
-  transition: opacity 0.3s ease;
-}
-.debate-seat-wait:hover,
-.debate-seat-wait:focus-within {
-  opacity: 1;
-}
 
-@media (max-width: 640px) {
-  .debate-stage-cast { gap: 4px; }
-  .debate-stage-actor { flex-basis: 4.75rem; width: 4.75rem; }
-  .debate-stage-balloon,
-  .debate-stage-thought,
-  .debate-stage-bubble { max-width: 4.5rem; width: 4.5rem; }
-}
 .ui-control {
   border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1107,7 +1052,7 @@ body.desk-idle-motion-off {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: var(--color-zinc-800);
   color: var(--color-zinc-200);
-  font-size: 11px;
+  font-size: var(--text-ui-dense);
   font-weight: 500;
   line-height: 1;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
@@ -1117,7 +1062,7 @@ body.desk-idle-motion-off {
 }
 .tip-label kbd {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-ui-2xs);
   color: var(--color-zinc-500);
   padding: 1px 4px;
   border-radius: 4px;
@@ -1786,14 +1731,4 @@ select {
   }
 }
 
-/* Docked debate transcript (DebateSidePanel). On wide screens the open panel
-   toggles body.debate-panel-docked; the main chat column then reserves the
-   panel's 480px so the transcript sits BESIDE the conversation instead of
-   covering it — the same dock the analysis-progress panel uses (mr-[21rem]).
-   Below the breakpoint the panel overlays as before. Unlayered on purpose so
-   it wins over the Tailwind margin utilities on <main>. */
-@media (min-width: 1280px) {
-  body.debate-panel-docked .chat-main {
-    margin-right: 30rem;
-  }
-}
+

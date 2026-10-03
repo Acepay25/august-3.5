@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2 } from '../shared/Icons';
 import {
     listProfileMemories, forgetProfileMemory,
     type ProfileMemoryEntry, type ProfileMemoryKind,

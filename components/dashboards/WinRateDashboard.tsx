@@ -8,13 +8,14 @@ import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
     ResponsiveContainer, Cell
 } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3 } from '../shared/Icons';
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { buildCalibrationLedger, ledgerFramingLine, brierQuality } from '../../services/validation/CalibrationLedgerService';
 import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
 import { fmtPercent } from '../../utils/formatters';
+import { chartColor } from '../../utils/themeColors';
 import {
     calculateOverallStats,
     calculatePerformanceByConfidence,
@@ -37,29 +38,41 @@ interface WinRateDashboardProps {
 // Color constants — Minara chart palette; each series/bucket is a distinct
 // hue so families stay separable (the old monochrome map reused grays, so
 // e.g. Family A and Family C drew identical lines).
+//
+// Every entry reads its token off :root THROUGH A GETTER, not a plain call:
+// in dev the style tag is injected by JS after this module is evaluated, so a
+// value captured at import time would fall back to the literal forever and
+// never track a theme change. The getters keep the `COLORS.x` call sites
+// exactly as they were and still resolve at render time.
 const COLORS = {
-    cyan: '#42d0ff',
-    emerald: '#2fc97f',
-    rose: '#f75d5f',
-    yellow: '#f08800',
-    orange: '#ff9a32',
-    purple: '#a142ff',
-    blue: '#42a1ff',
-    zinc: '#8c8c86'
+    get cyan() { return chartColor('--color-teal-500', '#42d0ff'); },
+    get emerald() { return chartColor('--color-emerald-400', '#2fc97f'); },
+    get rose() { return chartColor('--color-rose-500', '#f75d5f'); },
+    get amber() { return chartColor('--color-amber-500', '#f08800'); },
+    get orange() { return chartColor('--color-brand-end', '#ff9a32'); },
+    get purple() { return chartColor('--color-purple-500', '#a142ff'); },
+    // The one value in this palette that is not a step of any ramp, and so is
+    // the one entry that cannot be token-driven without changing what it
+    // draws. Left literal on purpose; C9 settles the categorical palette in
+    // Phase 4 rather than inventing a ramp step here.
+    get blue() { return '#42a1ff'; },
+    get zinc() { return chartColor('--color-zinc-500', '#8c8c86'); }
 };
 
+// Lazy for the same reason as COLORS: these are read at render time from the
+// charts below, so a plain object literal would freeze the values at import.
 const FAMILY_COLORS: Record<string, string> = {
-    'Family A': COLORS.rose,
-    'Family B': COLORS.emerald,
-    'Family C': COLORS.blue,
-    'Omega': COLORS.purple
+    get 'Family A'() { return COLORS.rose; },
+    get 'Family B'() { return COLORS.emerald; },
+    get 'Family C'() { return COLORS.blue; },
+    get 'Omega'() { return COLORS.purple; }
 };
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-    'High': COLORS.emerald,
-    'Medium': COLORS.yellow,
-    'Low': COLORS.orange,
-    'Avoid': COLORS.rose
+    get 'High'() { return COLORS.emerald; },
+    get 'Medium'() { return COLORS.amber; },
+    get 'Low'() { return COLORS.orange; },
+    get 'Avoid'() { return COLORS.rose; }
 };
 
 // Custom tooltip for charts
@@ -266,7 +279,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 {/* Profit Factor */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Profit Factor</div>
-                    <div className={`text-xl sm:text-3xl font-black ${overallStats.profitFactor >= 1.5 ? 'text-cyan-400' : overallStats.profitFactor >= 1 ? 'text-yellow-400' : 'text-rose-400'}`}>
+                    <div className={`text-xl sm:text-3xl font-black ${overallStats.profitFactor >= 1.5 ? 'text-cyan-400' : overallStats.profitFactor >= 1 ? 'text-amber-400' : 'text-rose-400'}`}>
                         {overallStats.profitFactor >= 999 ? '∞' : `${overallStats.profitFactor}x`}
                     </div>
                 </div>
@@ -286,7 +299,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 brierQuality(ledger.overallBrier) === 'good'
                                     ? 'text-emerald-400 bg-emerald-500/10'
                                     : brierQuality(ledger.overallBrier) === 'fair'
-                                        ? 'text-yellow-400 bg-yellow-500/10'
+                                        ? 'text-amber-400 bg-amber-500/10'
                                         : 'text-rose-400 bg-rose-500/10'
                             }`}
                             title={`Brier score over ${ledger.brierN} trades with a declared probability (lower is better; 0.25 = coin flip)`}
@@ -408,8 +421,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                         <stop offset="95%" stopColor={COLORS.cyan} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6e6e68' }} axisLine={false} tickLine={false} />
-                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#6e6e68' }} axisLine={false} tickLine={false} width={25} />
+                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#7e7e78') }} axisLine={false} tickLine={false} />
+                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#7e7e78') }} axisLine={false} tickLine={false} width={25} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Area
                                     type="monotone"
@@ -435,8 +448,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={confidenceChartData} layout="vertical">
-                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: '#6e6e68' }} axisLine={false} tickLine={false} />
-                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: '#8c8c86', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
+                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#7e7e78') }} axisLine={false} tickLine={false} />
+                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: chartColor('--color-zinc-500', '#8c8c86'), fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Bar dataKey="winRate" radius={[0, 6, 6, 0]} barSize={20}>
                                     {confidenceChartData.map((entry, index) => (

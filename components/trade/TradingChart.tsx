@@ -46,6 +46,7 @@ import { drawingsControl, capDrawings } from '../../services/trade/drawingsContr
 import type { LiveKline } from '../../services/trade/futuresStreams';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { getActiveUsername } from '../../utils/activeUser';
+import { chartColor } from '../../utils/themeColors';
 import { TradeAnalysis } from '../../types';
 import { ChartToolRail, CHART_RAIL_WIDTH } from './ChartToolRail';
 import { shapeGeometry } from './drawingGeometry';
@@ -78,17 +79,12 @@ export const intervalSeconds = (interval: ChartInterval): number => INTERVAL_SEC
  * color for the JS-side surfaces that cannot take Tailwind classes:
  * lightweight-charts options and raw canvas fills (deep-dive 2026-09-15 UI
  * finding — "6 hardcoded chart-lib hexes that should read the token once").
- * The chart lib takes plain color strings, so we read the live value off
- * :root at call time. `fallback` is the token's palette value, used when no
- * CSS is loaded (unit tests/jsdom import no stylesheet, exotic webviews,
- * first paint before the CSS chunk) — the chart never renders "undefined".
+ *
+ * The implementation now lives in `utils/themeColors` so the dashboards can
+ * read the theme without importing this ~200 kB chunk; re-exported here so
+ * existing callers (including `TradeView`) are unaffected.
  */
-export const chartColor = (token: string, fallback: string): string => {
-    try {
-        const v = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-        return v.length > 0 ? v : fallback;
-    } catch { return fallback; }
-};
+export { chartColor };
 
 /** Chart-internal palette: the semantic ramp, resolved from the theme at
  *  call time (never at module-eval time — in dev the style tag is injected

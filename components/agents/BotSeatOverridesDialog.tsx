@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X } from '../shared/Icons';
 import { BotRegistry } from '../../services/bots/BotRegistry';
 import { DESK_TOOL_DEFINITIONS } from '../../services/analysis/DeskToolsService';
 import type { HermesBot } from '../../types/bot';

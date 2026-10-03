@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search } from '../shared/Icons';
 import type { SymbolMeta } from '../../services/analysis/MarketDataService';
 import { display as symbolDisplay } from '../../utils/symbol';
 

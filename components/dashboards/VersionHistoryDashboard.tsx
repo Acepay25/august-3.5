@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ThumbsDown, ThumbsUp } from 'lucide-react';
+import {ThumbsDown, ThumbsUp, X, Brain, Zap, Server, Target, AreaChart as AreaChartIcon, Code} from '../shared/Icons';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { APP_VERSION } from '../../constants/version';
@@ -9,6 +9,7 @@ import { APP_VERSION } from '../../constants/version';
 import { ReinforcementSignalService, ReinforcementSignal } from '../../services/learning/ReinforcementSignalService';
 import { getCalibrationSummary } from '../../services/validation/calibrationStore';
 import { fmtPercent } from '../../utils/formatters';
+import { chartColor } from '../../utils/themeColors';
 import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';
@@ -32,7 +33,7 @@ const validationSchemas: Record<string, any> = {
 };
 
 // -- ICONS (lucide-react) --
-import { X, Brain, Zap, Server, Target, AreaChart as AreaChartIcon, Code } from 'lucide-react';
+
 import { phtClockSeconds } from '../../utils/timezone';
 
 const Icons = {
@@ -134,8 +135,8 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
             purple: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-300",
             emerald: "from-emerald-500/20 to-emerald-500/5 border-emerald-500/20 text-emerald-400",
             amber: "from-amber-500/20 to-amber-500/5 border-amber-500/20 text-amber-400",
-            yellow: "from-yellow-500/20 to-amber-500/5 border-yellow-500/20 text-yellow-400",
-            rose: "from-rose-500/20 to-red-500/5 border-rose-500/20 text-rose-400",
+            yellow: "from-amber-500/20 to-amber-500/5 border-amber-500/20 text-amber-400",
+            rose: "from-rose-500/20 to-rose-500/5 border-rose-500/20 text-rose-400",
             zinc: "from-zinc-800/50 to-zinc-900/50 border-zinc-700/50 text-zinc-400"
         };
 
@@ -191,15 +192,15 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         <AreaChart data={signals}>
                                             <defs>
                                                 <linearGradient id="colorReward" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#2fc97f" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#2fc97f" stopOpacity={0} />
+                                                    <stop offset="5%" stopColor={chartColor('--color-emerald-400', '#2fc97f')} stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor={chartColor('--color-emerald-400', '#2fc97f')} stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
                                             <Tooltip
-                                                contentStyle={{ backgroundColor: '#141412', border: '1px solid #2f2f2f', borderRadius: '12px' }}
-                                                itemStyle={{ color: '#b7b7b1' }}
+                                                contentStyle={{ backgroundColor: chartColor('--color-zinc-900', '#141412'), border: `1px solid ${chartColor('--color-zinc-700', '#2f2f2f')}`, borderRadius: '12px' }}
+                                                itemStyle={{ color: chartColor('--color-zinc-300', '#b7b7b1') }}
                                             />
-                                            <Area type="monotone" dataKey="rewardScore" stroke="#2fc97f" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
+                                            <Area type="monotone" dataKey="rewardScore" stroke={chartColor('--color-emerald-400', '#2fc97f')} strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>

@@ -72,7 +72,7 @@ const InstructionCard: React.FC<{
                             const ok = await confirmDelete({ title: 'Delete this instruction?', message: 'This cannot be undone.', confirmLabel: 'Delete' });
                             if (ok) onDelete(instruction.id);
                         }}
-                        className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                        className="p-1.5 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
                         title="Delete"
                     >
                         <TrashIcon className="w-4 h-4" />
@@ -186,7 +186,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                 <div className="flex justify-between items-center text-ui-xs font-mono mb-1.5">
                     <span className="text-zinc-500 uppercase font-bold tracking-wider">Token Usage</span>
-                    <span className={`${totalWordCount > MAX_WORD_COUNT ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
+                    <span className={`${totalWordCount > MAX_WORD_COUNT ? 'text-rose-400 font-bold' : 'text-zinc-400'}`}>
                         {totalWordCount} / {MAX_WORD_COUNT} words
                     </span>
                 </div>
@@ -194,7 +194,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
                     <div
                         // Data-value motion: this animates the token-usage bar's width,
                         // so the 500ms stays (ui-doctrine "Motion and density" exception).
-                        className={`h-full rounded-full transition-[width,background-color] duration-500 ease-[var(--ease-snappy)] ${totalWordCount > MAX_WORD_COUNT ? 'bg-red-500' : 'bg-cyan-600'}`}
+                        className={`h-full rounded-full transition-[width,background-color] duration-500 ease-[var(--ease-snappy)] ${totalWordCount > MAX_WORD_COUNT ? 'bg-rose-500' : 'bg-cyan-600'}`}
                         style={{ width: `${Math.min(100, (totalWordCount / MAX_WORD_COUNT) * 100)}%` }}
                     ></div>
                 </div>

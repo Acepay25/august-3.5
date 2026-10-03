@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { X } from '../shared/Icons';
 
 interface ImageViewerModalProps {
     imageUrl: string | null;
@@ -41,9 +42,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
                 className="absolute top-4 right-4 p-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full transition-colors z-10"
                 aria-label="Close image"
             >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="h-5 w-5" />
             </button>
 
             {/* Image container */}

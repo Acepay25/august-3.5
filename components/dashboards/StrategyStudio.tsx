@@ -41,7 +41,7 @@ import SkillDetail, {
     trySkillInChat, toggleSkillRetire, deleteSkillFile, PIN_STORAGE_KEY,
 } from '../skills/SkillDetail';
 import StatusPill, { type PillTone } from '../ui/StatusPill';
-import { ChevronRight, Grid3x3, Pin, PowerOff, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { ChevronRight, Grid3x3, Pin, PowerOff, RotateCcw, Trash2, Upload } from '../shared/Icons';
 
 interface StrategyStudioProps {
     trades: LoggedTrade[];

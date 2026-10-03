@@ -11,6 +11,6 @@ export const REGIMES = ['trending', 'ranging', 'volatile', 'compression'] as con
 
 export const getWinRateColor = (rate: number): string => {
     if (rate >= 65) return 'text-emerald-400';
-    if (rate >= 50) return 'text-yellow-400';
-    return 'text-red-400';
+    if (rate >= 50) return 'text-amber-400';
+    return 'text-rose-400';
 };

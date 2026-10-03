@@ -14,7 +14,7 @@
  * not exported — so the card sits in the Journal tab without a second dialect.
  */
 import React, { useState } from 'react';
-import { Ban, Check, Undo2 } from 'lucide-react';
+import { Ban, Check, Undo2 } from '../shared/Icons';
 import {
     getAutoJournalRules, setAutoJournalRule, type AutoJournalRule,
 } from '../../utils/approvalInbox';

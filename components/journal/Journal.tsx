@@ -7,8 +7,8 @@ import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, BotIcon } from '../shared/Icons';
-import { FileSpreadsheet, FileText } from 'lucide-react';
+import {CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, BotIcon, FileSpreadsheet, FileText} from '../shared/Icons';
+
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';

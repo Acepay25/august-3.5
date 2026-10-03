@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { CheckSquare, Clock, Square, TrendingDown, TrendingUp } from 'lucide-react';
+import { CheckSquare, Clock, Square, TrendingDown, TrendingUp } from '../shared/Icons';
 import { Message, TradeOutcome } from '../../types';
 import { CaptureJournalTags } from '../../types/trade';
 import { loadChecklistConfig, summarizeChecklist } from '../../utils/checklist';
@@ -77,7 +77,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     const outcomeColors = {
         [TradeOutcome.WIN]: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', glow: 'shadow-emerald-500/20' },
         [TradeOutcome.LOSS]: { bg: 'bg-rose-500/10', border: 'border-rose-500/30', text: 'text-rose-400', glow: 'shadow-rose-500/20' },
-        [TradeOutcome.ENTRY_NOT_HIT]: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400', glow: 'shadow-yellow-500/20' },
+        [TradeOutcome.ENTRY_NOT_HIT]: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', glow: 'shadow-amber-500/20' },
         [TradeOutcome.SKIPPED]: { bg: 'bg-zinc-500/10', border: 'border-zinc-500/30', text: 'text-zinc-400', glow: 'shadow-zinc-500/20' },
         [TradeOutcome.PENDING]: { bg: 'bg-zinc-500/10', border: 'border-zinc-500/30', text: 'text-zinc-400', glow: 'shadow-zinc-500/20' },
     };
@@ -161,7 +161,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                             {isWin ? (
                                 <TrendingUp className="h-5 w-5 text-emerald-400" />
                             ) : outcome === TradeOutcome.ENTRY_NOT_HIT ? (
-                                <Clock className="h-5 w-5 text-yellow-400" />
+                                <Clock className="h-5 w-5 text-amber-400" />
                             ) : (
                                 <TrendingDown className="h-5 w-5 text-rose-400" />
                             )}

@@ -37,7 +37,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Gavel, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from 'lucide-react';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Gavel, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
@@ -598,7 +598,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <button type="button" onClick={() => setOpenRoutines(open ? null : r.bot.id)}
                         aria-expanded={open} data-testid="row-routines"
                         className="flex items-center gap-1 rounded-full border border-zinc-800 px-1.5 py-0.5 text-ui-2xs text-zinc-500 transition-colors hover:text-zinc-300">
-                        <Timer className="h-2.5 w-2.5" />{routines.length}
+                        <Timer className="h-3 w-3" />{routines.length}
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </button>
                 ) : undefined}>
@@ -795,7 +795,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
             </aside>
 
             {/* ── Main pane ── */}
-            <section ref={paneRef} className="flex min-w-0 flex-1 flex-col bg-[#0b0b0a]">
+            <section ref={paneRef} className="flex min-w-0 flex-1 flex-col bg-surface-page">
                 {/* The instrument bar. The timeframe row is the SAME component the
                     chart renders, over the same persisted selection, so a
                     choice here is the choice there rather than a second

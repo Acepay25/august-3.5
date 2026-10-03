@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, ChevronDown, Loader2, MessageSquare } from 'lucide-react';
+import { Brain, ChevronDown, Loader2, MessageSquare } from '../shared/Icons';
 import { getThinkingByTrade } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';

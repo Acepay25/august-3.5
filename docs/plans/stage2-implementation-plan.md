@@ -1,6 +1,7 @@
 # Stage 2 — UI/UX Refactor Implementation Plan
 
-**Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phase 0 complete**, gates green; Phase 1 not started.
+**Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phases 0–1
+complete**, gates green; Phase 2 not started.
 **Companion doc:** [stage1-ui-ux-spec.md](./stage1-ui-ux-spec.md) (research + audit + design spec — all load-bearing claims fact-checked).
 **Rule:** UI refactor, not a logic change. Preserve existing behavior and data.
 Reuse the current stack (React 19, Tailwind v4 token block, lightweight-charts,
@@ -152,6 +153,67 @@ this one, and the stale `MessageItem` / `DebateSidePanel` comments still live in
 **Verify:** `themeContrast`, `typeRamp`, lint ratchet, render-probe on all six
 probe surfaces.
 **Risk:** low-medium — edit volume; keep every hue inside the allowlist.
+
+### Phase 1 result (done 2026-10-03)
+
+Gates: typecheck clean · 4423 tests pass (468 files) · build clean · eslint 858
+warnings against the 889 ratchet (unchanged) · render-probe OK, zero pageerrors.
+
+Four places the code disagreed with the plan, recorded so the doc does not lie:
+
+1. **`text-ui-micro` was not added, because the step already exists.** Task 2
+   asks for a base−3 role for the 11px literals; `--text-ui-dense` IS base−3
+   (11px), and its own comment records the same 281-occurrence migration. A
+   second name for one size is exactly the ambiguity `typeRamp.test.ts` exists
+   to prevent, so the literals moved onto `dense` instead. The ramp's own
+   comment had already covered this; the audit read it as missing.
+2. **The z-ladder could not live in `@theme`.** Declared there first, the build
+   proved Tailwind v4 has no `--z-*` namespace: every variable was silently
+   dropped and a `z-modal` written against them would compile to nothing —
+   an overlay with no z-index, worse than the literals it replaced. The rungs
+   now sit in a plain `:root` rule with `@utility` declarations on top,
+   verified by a build (`z-modal` → `z-index:var(--z-modal)`).
+3. **`--ink-secondary: #a1a19b` (C1) is not a step of this ramp.** Writing it
+   would have introduced a color the app has never rendered; the alias points
+   at `zinc-400` `#a3a39d`, the existing step that role occupies.
+4. **`chartColor` had to move out of `TradingChart.tsx`.** The dashboards need
+   it, and importing it from there pulls the ~200 kB chart chunk into every
+   dashboard bundle to get a four-line function. It now lives in
+   `utils/themeColors.ts` and `TradingChart` re-exports it, so `TradeView` and
+   the rest are unaffected.
+
+**What actually changed.** Semantic aliases (`--color-surface-*`, `--color-ink-*`,
+`--color-trade-up/down`, `--color-warn`, `--color-info`, `--color-hairline`) in
+`@theme` — same hexes, verified emitted, and `bg-surface-page` generated. The D1
+light mapping is written and ships inert (no element carries `data-theme`). The
+six remaining fixed-size literals in `index.css` moved onto ramp roles, and the
+dead `.debate-stage-*` / `.debate-seat-*` / `.debate-thread*` CSS carried over
+from Phase 0 was deleted rather than restyled — 160 lines, zero references,
+two of its animations naming keyframes that were never even defined. The
+`MessageItem` / `DebateSidePanel` stale comments are gone with it. 106 generic
+`red-*`/`yellow-*` class sites became `rose-*`/`amber-*` (every shade used has an
+hex-identical target, so nothing moved). 77 files now import icons from
+`components/shared/Icons.tsx`, which re-exports 101 lucide names verbatim
+alongside its 64 legacy aliases; 11 hand-rolled glyphs were replaced and 10 kept
+(identity/data/scene artwork). `tests/iconLayer.test.ts` is new and makes the
+import surface, the 2px stroke, and the 12px size floor enforceable.
+
+**Deliberately not done, and why.** The `{h-3,h-4,h-5}` size set is only half
+enforced: the sub-floor `h-2.5` icons (13 sites) were raised to `h-3`, but ~87
+icons sit at `h-3.5` (14px), and folding those to 12 or 16 moves pixels across
+most of the app. That is a per-site design call, not a lint fix, so it is left
+for a deliberate pass rather than mass-converted. The three ChartToolRail glyphs
+also stay hand-drawn — each names a drawing tool (endpoints, anchor, level
+bands) that lucide does not carry, and the guard test says so.
+
+**Visible colour changes, on purpose:** WinRateDashboard's axis ticks carried the
+pre-AA-bump `#6e6e68` and now read `zinc-600` `#7e7e78`; EquityCurveDashboard's
+four stock-Tailwind hexes and ModelPerformanceDashboard's demoted-series gray
+now sit on the ramp; ImageViewerModal's close button went 24px → 20px and
+MemoryFilesManager's chevrons 14px → 16px (to match the sibling icon beside them).
+`COLORS.blue` (`#42a1ff`) has no ramp step and stays literal for C9. `.ui-control`
+in `index.css` is unreferenced dead CSS found next to the deleted block — left
+alone as out of scope.
 
 ## Phase 2 — App shell: rail + right-panel system (highest risk)
 

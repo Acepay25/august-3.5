@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef, Fragment } from 'react';
 import { clamp100 } from '../../utils/math';
-import { Cpu } from 'lucide-react';
+import { Cpu } from '../shared/Icons';
 import { AIProvider, LoggedTrade } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
@@ -21,6 +21,7 @@ import {
 import { MarketRegime } from '../../services/analysis/TechnicalAnalysisService';
 import { getUnderperformerStatus } from '../../services/learning/UnderperformerFeedbackService';
 import { seriesColor } from '../../utils/seriesPalette';
+import { chartColor } from '../../utils/themeColors';
 
 interface ModelCardData {
     provider: AIProvider;
@@ -50,8 +51,10 @@ const resolveModelDisplay = (provider: AIProvider, index: number): { provider: A
 });
 
 /** A demoted model wears the neutral chrome color instead of its series
- *  color, so "this line is parked" reads without borrowing the loss hue. */
-const DEMOTED_SERIES_COLOR = '#56564f';
+ *  color, so "this line is parked" reads without borrowing the loss hue.
+ *  Read through a call rather than a const: the style tag is injected after
+ *  module evaluation in dev, so a value captured here would never see it. */
+const demotedSeriesColor = (): string => chartColor('--color-zinc-600', '#7e7e78');
 
 /** Provider ids that contributed to a trade (dynamic first, legacy fallback). */
 const tradeProviderIds = (trade: LoggedTrade): string[] => {
@@ -176,7 +179,7 @@ const ModelTableRow: React.FC<{
     onToggle: () => void;
 }> = ({ data, expanded, onToggle }) => {
     const { name, color, stats, expertise, modelName } = data;
-    const modelColor = stats.isDemoted ? DEMOTED_SERIES_COLOR : color;
+    const modelColor = stats.isDemoted ? demotedSeriesColor() : color;
     const losses = stats.last20Total - stats.last20Wins;
 
     return (
@@ -232,7 +235,7 @@ const ModelTableRow: React.FC<{
                             <div className="space-y-0.5 text-zinc-400">
                                 <p>Last {stats.last20Total} trades</p>
                                 {stats.coldStreakCount > 0 && (
-                                    <p className="text-red-400">
+                                    <p className="text-rose-400">
                                         {stats.coldStreakCount} consecutive losses
                                     </p>
                                 )}
@@ -303,15 +306,15 @@ const ColdStreakAlerts: React.FC<{ modelData: ModelCardData[] }> = ({ modelData 
     }
 
     return (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-            <h3 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30">
+            <h3 className="text-sm font-semibold text-rose-400 mb-2 flex items-center gap-2">
                  Cold Streak Alerts
             </h3>
             <div className="space-y-1">
                 {demotedModels.map(m => (
                     <div key={m.provider} className="flex items-center justify-between">
                         <span className="text-xs text-zinc-300">{m.name}</span>
-                        <span className="text-xs text-red-400 tabular-nums">
+                        <span className="text-xs text-rose-400 tabular-nums">
                             {m.stats.coldStreakCount} losses • weight -50%
                         </span>
                     </div>

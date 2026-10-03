@@ -34,15 +34,15 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
 
     return (
         <div ref={dialogRef} className=" fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
-            <div className="bg-zinc-900 border border-yellow-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-colors duration-[150ms] ease-[var(--ease-snappy)] scale-100 max-h-[90vh] overflow-y-auto">
+            <div className="bg-zinc-900 border border-amber-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-colors duration-[150ms] ease-[var(--ease-snappy)] scale-100 max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}
-                <div className="bg-yellow-500/10 p-5 border-b border-yellow-500/20 flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0 text-yellow-500">
+                <div className="bg-amber-500/10 p-5 border-b border-amber-500/20 flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 text-amber-500">
                         <AlertTriangleIcon className="w-6 h-6" />
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-yellow-500">Outcome Discrepancy</h3>
+                        <h3 className="text-lg font-bold text-amber-500">Outcome Discrepancy</h3>
                         <p className="text-zinc-400 text-xs mt-1">
                             Price data conflicts with your logged outcome.
                         </p>
@@ -57,13 +57,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                     <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider">You Logged</div>
-                            <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {userOutcome}
                             </div>
                         </div>
                         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider">Price Shows</div>
-                            <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {priceValidation.outcome}
                             </div>
                         </div>
@@ -79,11 +79,11 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                             )}
                             {slTouchTime && (
                                 <li>
-                                    <span className="text-red-400 font-bold">SL Touched</span> at {new Date(slTouchTime).toLocaleTimeString()}
+                                    <span className="text-rose-400 font-bold">SL Touched</span> at {new Date(slTouchTime).toLocaleTimeString()}
                                 </li>
                             )}
                         </ul>
-                        <p className="text-xs text-yellow-500/80 mt-2 bg-yellow-500/10 p-2 rounded-lg">
+                        <p className="text-xs text-amber-500/80 mt-2 bg-amber-500/10 p-2 rounded-lg">
                             {tpHitFirst
                                 ? 'The Take Profit was reached <strong>BEFORE</strong> the Stop Loss.'
                                 : 'The Stop Loss was touched <strong>BEFORE</strong> any Take Profit was reached.'}
@@ -103,7 +103,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                         </button>
                         <button
                             onClick={() => onResolve('LOSS')}
-                            className="p-3 rounded-xl bg-red-500/10 border border-red-500/50 hover:bg-red-500/20 text-red-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
+                            className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/50 hover:bg-rose-500/20 text-rose-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
                         >
                             Select LOSS
                         </button>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GraduationCap, Inbox } from 'lucide-react';
+import { GraduationCap, Inbox } from '../shared/Icons';
 import { listSkillDrafts, type SkillDraft } from '../../utils/skillDrafts';
 import type { SkillProofResult } from '../../services/learning/skillProof';
 import { EmptyState } from '../ui/EmptyState';

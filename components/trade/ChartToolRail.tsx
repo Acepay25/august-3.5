@@ -14,7 +14,7 @@ import React, { useState } from 'react';
 import {
     Eraser, Eye, EyeOff, Minus, MousePointer2, Palette, Pencil, Square,
     Trash2, Type, Undo2,
-} from 'lucide-react';
+} from '../shared/Icons';
 import { DRAW_COLORS, type DrawTool } from '../../services/trade/chartDrawings';
 
 /** Rail width in px — the chart host and overlay inset by this so shapes
@@ -23,9 +23,21 @@ export const CHART_RAIL_WIDTH = 40;
 
 interface RailIconProps { className?: string }
 
+/* These three stay hand-drawn rather than coming from the icon layer, and
+ * that is a deliberate exception to "no hand-rolled SVGs", not an oversight:
+ * each names a DRAWING TOOL whose meaning lucide does not carry. A trendline
+ * is a segment with two grabbable endpoints; a ray is an anchored point with
+ * an arrowhead; a Fibonacci is a diagonal plus level bands. Substituting
+ * lucide's nearest neighbours (Slash, ArrowUpRight, Sqrt) loses exactly the
+ * part that tells the trader which tool they are about to draw — the comment
+ * on TrendIcon records the same conclusion when lucide's Slash was tried.
+ *
+ * They obey the rest of the doctrine: stroke 2, currentColor, size from the
+ * caller's class, aria-hidden (each button carries its own label). */
+
 /** Fibonacci retracement glyph: the anchor diagonal with retracement levels. */
 const FibIcon: React.FC<RailIconProps> = ({ className }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className} aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={className} aria-hidden>
         <path d="M5 3 L19 21" />
         <path d="M3 8.4 H21" strokeDasharray="2.5 2.5" />
         <path d="M3 14.6 H21" />
@@ -35,7 +47,7 @@ const FibIcon: React.FC<RailIconProps> = ({ className }) => (
 
 /** A small trendline glyph (lucide's Slash reads as a plain divider at 16px). */
 const TrendIcon: React.FC<RailIconProps> = ({ className }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className} aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={className} aria-hidden>
         <path d="M4 20 L14 10" />
         <circle cx="4" cy="20" r="1.6" fill="currentColor" stroke="none" />
         <circle cx="14" cy="10" r="1.6" fill="currentColor" stroke="none" />
@@ -45,7 +57,7 @@ const TrendIcon: React.FC<RailIconProps> = ({ className }) => (
 
 /** A ray glyph: anchored segment extending right with an arrowhead. */
 const RayIcon: React.FC<RailIconProps> = ({ className }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className} aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={className} aria-hidden>
         <circle cx="5" cy="17" r="1.6" fill="currentColor" stroke="none" />
         <path d="M6.5 15.8 L19 5" />
         <path d="M13.5 4.5 L19.5 4.5 L19.5 10.5" />

@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { BarChart2, CheckCircle, ChevronDown, TrendingUp } from 'lucide-react';
+import { BarChart2, CheckCircle, ChevronDown, TrendingUp } from '../shared/Icons';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AIProvider, LevelProbabilities } from '../../types';

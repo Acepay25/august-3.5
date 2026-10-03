@@ -1694,7 +1694,7 @@ const App: React.FC = () => {
 
     // Stable handler identities — plain arrow functions here were recreated
     // every render, defeating the chatContext memo and re-rendering every
-    // visible MessageItem on each stream chunk / keystroke.
+    // visible transcript row on each stream chunk / keystroke.
     const handleApplyStrategy = useCallback((strategyName: string) => {
         if (!activeFrameworks.includes(strategyName)) {
             setActiveFrameworks(prev => [...prev, strategyName]);
@@ -2072,7 +2072,7 @@ const App: React.FC = () => {
     // reads messages via messagesRef (not the `messages` closure) so
     // this handler keeps a stable identity across stream chunks — a fresh
     // identity here would re-create chatContext (and re-render every visible
-    // MessageItem) on each chunk.
+    // transcript row) on each chunk.
     const handleCalculateAIProbabilities = useCallback(async (messageId: string, mode: 'AI' | 'Algo' = 'AI') => {
         const msg = messages.find(m => m.id === messageId);
         if (!msg || !msg.analysis) return;
@@ -2171,7 +2171,7 @@ const App: React.FC = () => {
     // ─── Stable identities for overlay/panel callbacks ─────────────────────
     // Inline arrows here were recreated on every App render, busting
     // React.memo on ChatArea/Journal and rebuilding ChatArea's
-    // enhancedContext (re-rendering every memoized MessageItem) on each
+    // enhancedContext (re-rendering every memoized transcript row) on each
     // keystroke / progress tick even when nothing relevant changed.
     const handleCloseJournal = useCallback(() => {
         setSurface('trade');

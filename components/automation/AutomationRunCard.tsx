@@ -43,7 +43,7 @@ const AutomationRunCard: React.FC<{
     const statusBadge = run.status === 'complete' ? (
         <StatusPill tone="up" kicker>Complete</StatusPill>
     ) : run.status === 'running' ? (
-        <StatusPill tone="info" kicker icon={<LoadingIcon className="w-2.5 h-2.5 animate-spin" />}>Running</StatusPill>
+        <StatusPill tone="info" kicker icon={<LoadingIcon className="w-3 h-3 animate-spin" />}>Running</StatusPill>
     ) : run.status === 'error' ? (
         <StatusPill tone="down" kicker>Failed</StatusPill>
     ) : (

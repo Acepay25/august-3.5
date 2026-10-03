@@ -21,7 +21,7 @@
 
 import React from 'react';
 import { clamp01 } from '../../utils/math';
-import { X, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Maximize2, Minimize2 } from '../shared/Icons';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { EmptyState } from '../ui/EmptyState';
 import { PixelSeat } from './PixelSeat';

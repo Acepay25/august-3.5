@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Brain, ChevronDown, MessageSquare } from 'lucide-react';
+import { Brain, ChevronDown, MessageSquare } from '../shared/Icons';
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 import ThinkingModal from '../analysis/ThinkingModal';

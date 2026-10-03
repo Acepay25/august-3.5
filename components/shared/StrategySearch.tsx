@@ -151,7 +151,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
   // semantic color in this list.
   const getFamilyColorClasses = (color: string) => {
       switch(color) {
-          case 'red': return 'bg-red-500/10 border-red-500/30 text-red-400';
+          case 'red': return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
           case 'emerald': return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
           case 'blue': return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
           case 'purple': return 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300';
@@ -223,7 +223,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-10 pb-12">
             {isLoading && <div className="flex justify-center py-8"><LoadingIcon className="w-8 h-8 sm:w-10 sm:h-10 text-cyan-500" /></div>}
-            {error && <div className="text-xs sm:text-sm text-red-300 p-4 sm:p-5 bg-red-500/10 rounded-xl border border-red-500/20">{error}</div>}
+            {error && <div className="text-xs sm:text-sm text-rose-300 p-4 sm:p-5 bg-rose-500/10 rounded-xl border border-rose-500/20">{error}</div>}
             
             {(searchResults || []).length > 0 && (
                 <div className="space-y-3 sm:space-y-5">
@@ -278,7 +278,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                             <h4 className="font-black uppercase tracking-tight text-sm sm:text-base flex items-center gap-2">
                                                 {family.name}
                                                 {stats.total > 0 ? (
-                                                    <span className={`text-ui-xs sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold ${parseInt(String(stats.winRate)) > 50 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                                                    <span className={`text-ui-xs sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold ${parseInt(String(stats.winRate)) > 50 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
                                                         {stats.winRate}% Win
                                                     </span>
                                                 ) : (
@@ -347,7 +347,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                             {!isDefault && (
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); onRemoveStrategy(framework); }}
-                                                    className="p-1.5 sm:p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    className="p-1.5 sm:p-2 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
                                                     aria-label={`Remove ${framework}`}
                                                 >
                                                     <CloseIcon className="w-3 h-3 sm:w-4 sm:h-4" />

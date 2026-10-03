@@ -19,7 +19,7 @@
  */
 
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { BookOpen, ClipboardCheck, Gauge, ListChecks } from 'lucide-react';
+import { BookOpen, ClipboardCheck, Gauge, ListChecks } from '../shared/Icons';
 import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import SupervisorStream from './SupervisorStream';
@@ -96,7 +96,7 @@ const LearnView: React.FC<LearnViewProps> = ({
     }, [tab]);
 
     return (
-        <div className="flex h-full min-h-0 flex-col bg-[#0b0b0a]" data-testid="learn-view">
+        <div className="flex h-full min-h-0 flex-col bg-surface-page" data-testid="learn-view">
             <nav className="flex shrink-0 items-center gap-1 border-b border-zinc-800/80 px-3" aria-label="Learn sections">
                 {tabs.map(({ id, label, Icon }) => {
                     const active = tab === id;

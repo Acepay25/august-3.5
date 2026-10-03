@@ -38,7 +38,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Compass, Crosshair, Eye, History, LayoutGrid, MessageSquare, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from 'lucide-react';
+import { Activity, Compass, Crosshair, Eye, History, LayoutGrid, MessageSquare, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
@@ -988,7 +988,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 {m.botId && <span className="text-ui-2xs uppercase tracking-widest text-zinc-500">agent</span>}
                                 <button type="button" aria-label={`Remove ${panelSeatKey(m)}`}
                                     onClick={() => setPanelModels(panelPickerFor, (sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).filter((x: PanelSeatRef) => panelSeatKey(x) !== panelSeatKey(m)))}
-                                    className="text-zinc-500 hover:text-rose-400"><X className="h-2.5 w-2.5" /></button>
+                                    className="text-zinc-500 hover:text-rose-400"><X className="h-3 w-3" /></button>
                             </span>
                         ))}
                         {(sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0) < PANEL_MAX_MODELS && (

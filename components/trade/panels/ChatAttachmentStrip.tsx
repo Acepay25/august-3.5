@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { FileText, X } from 'lucide-react';
+import { FileText, X } from '../../shared/Icons';
 import type { Attachment } from '../../../hooks/useChatAttachments';
 
 export interface ChatAttachmentStripProps {

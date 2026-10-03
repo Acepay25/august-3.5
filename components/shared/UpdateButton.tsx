@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, AlertCircle, Download, Loader2 } from 'lucide-react';
+import { RefreshCw, AlertCircle, Download, Loader2 } from './Icons';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 import StatusPill from '../ui/StatusPill';
 

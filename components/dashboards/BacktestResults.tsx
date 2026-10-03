@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X } from '../shared/Icons';
 import { SectionCard, StatPill, ProgressBar, LiveBacktestResult } from './analyticsShared';
 import StatusPill from '../ui/StatusPill';
 import { fmtRiskReward } from '../../utils/riskReward';

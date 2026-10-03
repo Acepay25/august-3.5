@@ -5,7 +5,7 @@
 // state setter passed under its local name, so the cross-tab links ("Open"
 // journal, "Backups & usage") keep navigating unchanged.
 import React from 'react';
-import { ArrowUpRight, Database, HardDrive, User, Users } from 'lucide-react';
+import { ArrowUpRight, Database, HardDrive, User, Users } from '../../shared/Icons';
 import { APP_NAME, APP_VERSION } from '../../../constants/version';
 import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import type { SettingsTab } from '../SettingsMenu';
