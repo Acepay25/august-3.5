@@ -4,6 +4,7 @@
 // Moved verbatim from the inline body in SettingsMenu.tsx.
 import React from 'react';
 import ToolForgeManager from '../ToolForgeManager';
+import StrategyPlans from '../StrategyPlans';
 import type { SettingsTabProps } from './types';
 
 /** Skills consumes only the shared props (the Studio pointer). */
@@ -36,6 +37,14 @@ const SkillsTab: React.FC<{ tab: SkillsTabProps }> = ({ tab: props }) => {
                         </button>
                     )}
                 </div>
+            </div>
+            <div className="border-t border-zinc-800 pt-4">
+                <h3 className="text-ui-caption font-bold text-zinc-100">Trade plans</h3>
+                <p className="mt-0.5 text-ui-dense text-zinc-500 mb-3">
+                    Named strategies the model proposed. Only an ACTIVE plan is shown to the desk —
+                    a draft is an unapproved proposal and no seat follows it.
+                </p>
+                <StrategyPlans />
             </div>
             <div className="border-t border-zinc-800 pt-4">
                 <h3 className="text-ui-caption font-bold text-zinc-100">Forged tools</h3>

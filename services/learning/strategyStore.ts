@@ -120,7 +120,9 @@ export function parseStrategyMarkdown(content: string): StrategyMeta | null {
     if (!entry || !invalidation) return null;
     const name = fm.name || entry.slice(0, 48);
     return {
-        status: (fm.status === 'active' || fm.status === 'retired' ? fm.status : 'draft') as StrategyStatus,
+        // One status parser, one home: anything unrecognised is a draft, which
+        // is the safe default — a plan the trader never approved.
+        status: fm.status === 'active' || fm.status === 'retired' ? fm.status : 'draft',
         name,
         description: fm.description || undefined,
         entry,
@@ -182,17 +184,22 @@ export function serializeStrategy(meta: StrategyMeta): string {
 export const strategySlug = (name: string): string =>
     name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'strategy';
 
+/** The notebook file a plan lives in. Exported so no caller re-derives the
+ *  slug — a second copy of this rule is how a rename writes a second file. */
+export const strategyFileName = (name: string): string => `${strategySlug(name)}.md`;
+
+/** Whether `file` is a plan in the strategies folder. The folderId check is
+ *  load-bearing, not decorative: without it any note dropped into
+ *  strategies/ would be parsed as a plan and could reach a seat. */
 export const isStrategyFile = (file: { folderId: string; name: string }): boolean =>
-    file.name.endsWith('.md');
+    file.name.endsWith('.md')
+    && getMemoryFiles().folders.some(f => f.id === file.folderId && f.name === STRATEGY_FOLDER);
 
 /** Whether a plan's frontmatter marks it live. A DRAFT is not guidance: it is
  *  an unapproved proposal, and presenting it to a seat as a plan it should
  *  follow is the same defect as an unwritten lens file — worse, because it
  *  looks authoritative. Only `active` reaches the model. */
-const statusOf = (content: string): StrategyStatus => {
-    const m = content.match(/^status:\s*(draft|active|retired)\s*$/mi)?.[1];
-    return m === 'active' || m === 'retired' ? m : 'draft';
-};
+
 
 /** The plans a seat may act on: active, not retired. */
 export const listActiveStrategies = (): StrategyMeta[] =>
