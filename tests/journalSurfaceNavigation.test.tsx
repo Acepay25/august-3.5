@@ -136,7 +136,17 @@ describe('App journal routing (source contract)', () => {
     });
 
     it('the reasoning deep link routes to the journal surface Think tab', () => {
-        expect(appSrc).toMatch(/openJournal\('reasoning', tradeId\)/);
+        // RETIRED 2026-10-03. This pinned `handleViewReasoning` in App.tsx —
+        // the "open the reasoning behind this message" deep link into the
+        // journal's Think tab. It had no call site for months (the handler was
+        // reachable only from this assertion), so it was deleted as part of
+        // removing the unwired handler batch.
+        //
+        // If that deep link is wanted back, this is the contract to restore
+        // with it: a visible control that calls
+        // openJournal('reasoning', tradeId). openJournal itself is unchanged
+        // and still asserted by the palette + surface-menu cases above.
+        expect(true).toBe(true);
     });
 
     it('the hash serializer depends on isApprovalInboxVisible (stale-URL fix)', () => {
