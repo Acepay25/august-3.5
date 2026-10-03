@@ -163,16 +163,25 @@ function main() {
         console.error(`[signature-gate] could not read the signature of ${exeName}. `
             + 'Treating that as unsigned rather than passing it silently.');
     }
-    const verdict = decide(sig ?? { status: '', signer: '' }, {
-        allowUnsigned: String(process.env.ALLOW_UNSIGNED_RELEASE).toLowerCase() === 'true',
-        exeName,
-    });
+    // One read of the override: the decision and the warning annotation below
+    // must agree about whether this ship is unsigned.
+    const allowUnsigned = String(process.env.ALLOW_UNSIGNED_RELEASE).toLowerCase() === 'true';
+    const verdict = decide(sig ?? { status: '', signer: '' }, { allowUnsigned, exeName });
     if (override && !process.env.ALLOW_UNSIGNED_RELEASE) {
         console.warn(`[signature-gate] ignoring the argument "${override}" — the override is the `
             + 'ALLOW_UNSIGNED_RELEASE=true environment variable, so a passing flag can never be the '
             + 'thing that quietly let an unsigned build through.');
     }
     console.log(`[signature-gate] ${exeName}: ${verdict.reason}`);
+    // An unsigned ship that only exists because a repo variable says so must be
+    // VISIBLE in the run, not just in the log line nobody reads. A GitHub
+    // annotation is the one thing that survives a green checkmark.
+    if (allowUnsigned) {
+        console.log('::warning title=Unsigned release::'
+            + `${exeName} is NOT signed. Anyone able to publish to this repo can ship an `
+            + 'update this app will install. Buy a code-signing certificate and remove '
+            + 'ALLOW_UNSIGNED_RELEASE to close this.');
+    }
     process.exit(verdict.ok ? 0 : 1);
 }
 

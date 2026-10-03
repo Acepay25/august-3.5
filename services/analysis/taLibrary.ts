@@ -330,10 +330,18 @@ export const superTrend = (bars: readonly Kline[], period = 10, multiplier = 3):
 
 /** Chande Kroll Stop — a Donchian fed through two ATR smoothings. */
 export const chandeKrollStop = (bars: readonly Kline[], period = 10, multiplier = 1, periodK = 10): { upper: number; lower: number } => {
-    const dc = donchian(bars, period);
-    if (dc.upper === 0) return { upper: 0, lower: 0 };
-    const atr = last(rmaOf(trueRange(bars), periodK), 0);
-    return { upper: rounded(dc.upper + atr * multiplier), lower: rounded(dc.lower - atr * multiplier) };
+    // Published definition: the HIGHER of two Donchian highs (the long and the
+    // short lookback), each padded by the ATR of ITS OWN period. A single
+    // Donchian plus one ATR is a different indicator wearing this name.
+    const long = donchian(bars, periodK);
+    const short = donchian(bars, period);
+    if (long.upper === 0 || short.upper === 0) return { upper: 0, lower: 0 };
+    const atrLong = last(rmaOf(trueRange(bars), periodK), 0);
+    const atrShort = last(rmaOf(trueRange(bars), period), 0);
+    return {
+        upper: rounded(Math.max(long.upper, short.upper) + Math.max(atrLong, atrShort) * multiplier),
+        lower: rounded(Math.min(long.lower, short.lower) - Math.max(atrLong, atrShort) * multiplier),
+    };
 };
 
 /** Williams Alligator — three smoothed MAs, "teeth" vs "lips". */
@@ -695,17 +703,19 @@ export const choppinessIndex = (bars: readonly Kline[], period = 14): { value: n
 /** Chaikin Oscillator - the MACD of the money flow multiplier. */
 export const chaikinOscillator = (bars: readonly Kline[], fast = 3, slow = 10): number => {
     if (bars.length < slow + 2) return 0;
-    const mf: number[] = [];
-    for (let i = 0; i < bars.length; i++) {
-        const rng = bars[i].high - bars[i].low;
-        const mfm = rng === 0 ? 0 : ((bars[i].close - bars[i].low) - (bars[i].high - bars[i].close)) / rng;
-        const vol = i > 0 && bars[i - 1].volume > 0 ? bars[i].volume / bars[i - 1].volume : 1;
-        mf.push(mfm * vol);
+    // Published definition: the fast-minus-slow EMA of the ACCUMULATION/
+    // DISTRIBUTION line, where each bar contributes MFM * VOLUME. An earlier
+    // version weighted MFM by a bar-to-bar VOLUME RATIO instead — not part of
+    // any definition, and on flat volume it silently degenerated to SMA(MFM).
+    let running = 0;
+    const ad: number[] = [];
+    for (const b of bars) {
+        const range = b.high - b.low;
+        const mfm = range === 0 ? 0 : ((b.close - b.low) - (b.high - b.close)) / range;
+        running += mfm * b.volume;
+        ad.push(running);
     }
-    const ad = mf.map((_, i) => mf.slice(0, i + 1).reduce((a, b) => a + b, 0));
-    const f = last(emaOf(ad, fast), 0);
-    const s = last(emaOf(ad, slow), 0);
-    return rounded(f - s, 4);
+    return rounded(last(emaOf(ad, fast), 0) - last(emaOf(ad, slow), 0), 4);
 };
 
 /** Ease of Movement. */
@@ -826,8 +836,12 @@ export const pivotPoints = (bars: readonly Kline[]): PivotResult => {
 };
 
 /** ZigZag - the last swing point at least `deviation` percent away. */
-export const zigzag = (bars: readonly Kline[], deviation = 5): { point: { index: number; price: number }; label: 'high' | 'low' } => {
-    if (bars.length < 3) return { point: { index: bars.length - 1, price: 0 }, label: 'high' };
+export const zigzag = (bars: readonly Kline[], deviation = 5): { point: { index: number; price: number }; label: 'high' | 'low'; confirmed: boolean } => {
+    // On a series that never reverses by `deviation` there is NO confirmed
+    // swing — the previous version returned index 0 labelled 'high', which a
+    // seat reads as "the last swing high is the first bar". `confirmed: false`
+    // says so instead of inventing a pivot.
+    if (bars.length < 3) return { point: { index: bars.length - 1, price: 0 }, label: 'high', confirmed: false };
     const closes = bars.map(b => b.close);
     let lastIndex = 0;
     let lastPrice = closes[0];
@@ -844,7 +858,7 @@ export const zigzag = (bars: readonly Kline[], deviation = 5): { point: { index:
             label = 'high';
         }
     }
-    return { point: { index: lastIndex, price: rounded(lastPrice) }, label };
+    return { point: { index: lastIndex, price: rounded(lastPrice) }, label, confirmed: lastIndex > 0 || label === 'low' };
 };
 
 /** Williams Fractal - the nearest 5-bar swing in the window. */

@@ -1718,11 +1718,13 @@ async function runIndicators(symbol: string, interval: string, groups: string[])
             available: Object.entries(INDICATOR_GROUPS).map(([id, covers]) => ({ id, covers })),
         });
     }
-    // Bound the REQUEST, not the response. Each study is a few hundred to two
-    // thousand pretty-printed characters, so past three the payload no longer
-    // fits the result budget and the clipper has to throw whole studies away —
-    // the model then pays for a call and reads an answer missing what it
-    // asked for. Naming what was not run is better than that.
+    // Bound the REQUEST, not the response — but on the REAL reason: the whole
+    // result must stay inside one tool-result budget, and the model has to
+    // parse the whole thing to reason about it. Measured, the ta* groups run
+    // ~200-700 chars each and the heaviest pair exceeds the cap, so asking for
+    // more than a few in one call means the clipper sheds whole studies and the
+    // model pays for a call to read an answer missing what it asked for.
+    // Naming what was not run is better than that.
     const MAX_STUDIES_PER_CALL = 3;
     const asked = all.slice(0, MAX_STUDIES_PER_CALL);
     const notRun = all.slice(MAX_STUDIES_PER_CALL);

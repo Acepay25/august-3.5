@@ -279,6 +279,6 @@ jobs:
             gh release upload $env:VERIFIED_TAG @paths --clobber
           } else {
             if ($LASTEXITCODE -ne 1) { throw "gh release view failed with exit code $LASTEXITCODE" }
-            gh release create $env:VERIFIED_TAG @paths --verify-tag --title "August Trading $env:VERIFIED_TAG" --notes "Automated release for $env:VERIFIED_TAG. Installer signature verified by scripts/verify-release-signature.cjs before upload."
+            gh release create $env:VERIFIED_TAG @paths --verify-tag --title "August Trading $env:VERIFIED_TAG" --notes "Automated release for $env:VERIFIED_TAG. The installer was checked by scripts/verify-release-signature.cjs before upload."
           }
           if ($LASTEXITCODE -ne 0) { throw "Publishing the verified installer failed with exit code $LASTEXITCODE" }

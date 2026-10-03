@@ -48,6 +48,7 @@ import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { getActiveUsername } from '../../utils/activeUser';
 import { TradeAnalysis } from '../../types';
 import { ChartToolRail, CHART_RAIL_WIDTH } from './ChartToolRail';
+import { shapeGeometry } from './drawingGeometry';
 
 /** Every timeframe Binance klines serve — the pool the user picks from. */
 export const CHART_INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1D', '3D', '1W', '1M'] as const;
@@ -818,96 +819,32 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     }
                     return;
                 }
-                case 'channel': {
-                    // Two parallel lines through the two anchors, filled
-                    // between — the "this is the range" shape.
-                    if (pts.length < 2) return;
-                    const [a, b] = pts;
-                    const dx = b.x - a.x;
-                    if (Math.abs(dx) < 0.001) { strokeLine([a, b], stroke); return; }
-                    const slope = (b.y - a.y) / dx;
-                    const offset = a.y - b.y;
-                    const topA = { x: 0, y: a.y };
-                    const topB = { x: plotW, y: a.y + slope * plotW };
-                    const botA = { x: 0, y: a.y + offset };
-                    const botB = { x: plotW, y: b.y + slope * (plotW - b.x) };
-                    ctx.beginPath();
-                    ctx.moveTo(Math.min(topA.x, topB.x), topA.y);
-                    ctx.lineTo(topB.x, topB.y);
-                    ctx.lineTo(botB.x, botB.y);
-                    ctx.lineTo(botA.x, botA.y);
-                    ctx.closePath();
-                    ctx.fillStyle = fill ?? `${stroke}1f`;
-                    ctx.fill();
-                    ctx.strokeStyle = stroke;
-                    ctx.lineWidth = 1.2;
-                    ctx.stroke();
-                    break;
-                }
-                case 'arrow': {
-                    // A short shaft with a head, pointing at the level the
-                    // model is talking about.
-                    if (pts.length < 2) return;
-                    const [a, b] = pts;
-                    const ang = Math.atan2(b.y - a.y, b.x - a.x);
-                    const head = Math.max(7, Math.min(14, Math.hypot(b.x - a.x, b.y - a.y) * 0.32));
-                    ctx.strokeStyle = stroke;
-                    ctx.lineWidth = 1.6;
-                    ctx.beginPath();
-                    ctx.moveTo(a.x, a.y);
-                    ctx.lineTo(b.x, b.y);
-                    ctx.stroke();
-                    ctx.fillStyle = stroke;
-                    ctx.beginPath();
-                    ctx.moveTo(b.x, b.y);
-                    ctx.lineTo(b.x - head * Math.cos(ang - 0.42), b.y - head * Math.sin(ang - 0.42));
-                    ctx.lineTo(b.x - head * Math.cos(ang + 0.42), b.y - head * Math.sin(ang + 0.42));
-                    ctx.closePath();
-                    ctx.fill();
-                    break;
-                }
+                case 'channel':
+                case 'arrow':
                 case 'measured_move': {
-                    // Three prices stacked on one bar: entry, stop, first
-                    // target. The point is the NUMBER — how far each leg is —
-                    // so both distances and the resulting ratio are labelled.
-                    if (pts.length < 3) return;
-                    const [entry, stop, target] = pts;
-                    const cs = candlesRef.current;
-                    const px = (p: { y: number }): number => {
-                        const v = cs ? Number(cs.coordinateToPrice(p.y as never)) : NaN;
-                        return Number.isFinite(v) ? v : NaN;
-                    };
-                    const e = px(entry);
-                    const s = px(stop);
-                    const t = px(target);
-                    const leg = (p: { x: number; y: number }, dashed: boolean): void => {
-                        ctx.strokeStyle = stroke;
-                        ctx.lineWidth = 1.5;
-                        ctx.setLineDash(dashed ? [4, 3] : []);
+                    // The maths lives in drawingGeometry so it is unit-testable
+                    // without a canvas; this block only issues the draw calls.
+                    const geo = shapeGeometry(kind, pts, { plotW, stroke, priceAt: y => {
+                        const cs = candlesRef.current;
+                        const dp = cs ? Number(cs.coordinateToPrice(y as never)) : NaN;
+                        return dp;
+                    } });
+                    if (!geo) return;
+                    for (const line of geo.lines) strokeLine(line, stroke);
+                    for (const poly of geo.fills) {
                         ctx.beginPath();
-                        ctx.moveTo(entry.x - 4, entry.y);
-                        ctx.lineTo(p.x + 12, p.y);
-                        ctx.stroke();
-                        ctx.setLineDash([]);
-                    };
-                    leg(stop, true);
-                    leg(target, false);
-                    const fmt = (v: number): string => (v >= 1000 ? v.toFixed(0) : v.toFixed(2));
-                    const pctOf = (v: number): string =>
-                        (Number.isFinite(e) && e > 0 ? `${Math.abs(((v - e) / e) * 100).toFixed(2)}%` : '');
-                    ctx.font = '9px ui-monospace, monospace';
-                    if (Number.isFinite(e) && Number.isFinite(s)) {
-                        ctx.fillStyle = stroke;
-                        ctx.fillText(`risk ${fmt(Math.abs(e - s))} ${pctOf(s)}`, entry.x + 14, (entry.y + stop.y) / 2);
+                        ctx.moveTo(poly.points[0].x, poly.points[0].y);
+                        for (let i = 1; i < poly.points.length; i++) ctx.lineTo(poly.points[i].x, poly.points[i].y);
+                        ctx.closePath();
+                        ctx.fillStyle = poly.fill ?? `${stroke}1f`;
+                        ctx.fill();
                     }
-                    if (Number.isFinite(e) && Number.isFinite(t)) {
-                        const rr = Math.abs(e - s) > 0 ? Math.abs(t - e) / Math.abs(e - s) : 0;
-                        ctx.fillStyle = stroke;
-                        ctx.fillText(
-                            `reward ${fmt(Math.abs(t - e))} ${pctOf(t)}${rr ? ` · ${rr.toFixed(1)}:1` : ''}`,
-                            entry.x + 14, (entry.y + target.y) / 2,
-                        );
+                    for (const lbl of geo.labels) {
+                        ctx.fillStyle = lbl.color;
+                        ctx.font = lbl.font;
+                        ctx.fillText(lbl.text, lbl.at.x, lbl.at.y);
                     }
+                    priceLabel(pts[0], stroke);
                     return;
                 }
                 case 'text': {
