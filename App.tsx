@@ -5,7 +5,7 @@ import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 // Apply the user's persisted idle-motion preference to <body> on app
 // startup so the desk view mounts with the correct class.
 reapplyIdleMotionClass();
-import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, SavedAnalysis, LoggedTrade } from './types';
+import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, LoggedTrade } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
@@ -91,7 +91,7 @@ import CommandPalette, { PaletteAction } from './components/shared/CommandPalett
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { isProviderReady } from './utils/providerUtils';
-import { createNewConversation, DEFAULT_LEVERAGE } from './utils/conversationUtils';
+import { DEFAULT_LEVERAGE } from './utils/conversationUtils';
 import { parsePrice as parsePriceCanonical } from './utils/analysisUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
@@ -110,7 +110,6 @@ import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, type SkillDraf
 import { listLearningProposals } from './utils/learningQueue';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
-import { processImagesForSummarization } from './services/providers/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
 import useNetworkStatus from './hooks/useNetworkStatus';
@@ -390,13 +389,6 @@ const App: React.FC = () => {
             if (timer) clearTimeout(timer);
         };
     }, [toast]);
-    const requiredAnalystRoles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
-    const missingAnalystRoles = useMemo(() => requiredAnalystRoles
-        .filter(role => {
-            const assignment = lensConfig?.assignments.find(item => item.role === role);
-            const provider = readyProviders.find(item => item.id === assignment?.assignedProvider);
-            return !assignment?.assignedProvider || !(assignment.assignedModel || provider?.selectedModel);
-        }), [lensConfig, readyProviders]);
     /** Set when another surface asks to open Learn on a SPECIFIC tab
      *  (Settings → "Open the notebook"). LearnView reports it consumed
      *  (onInitialTabConsumed), so it navigates exactly once and the user's own
@@ -475,7 +467,7 @@ const App: React.FC = () => {
         currentSlOptimization, setCurrentSlOptimization,
  setCurrentSuggestedEntryPrice,
         currentEntryTimingScore, setCurrentEntryTimingScore,
-        liveMarketConditions, setLiveMarketConditions,
+        liveMarketConditions,
     } = marketData;
 
     // Network status and offline queue
@@ -489,7 +481,7 @@ const App: React.FC = () => {
     const {
         selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
- setCopiedMessageId,
+
 
  setExpandedPostMortems,
         postMortemCandidate, setPostMortemCandidate,
@@ -723,6 +715,9 @@ const App: React.FC = () => {
     const {
         input, setInput,
 
+        // tsc reports this binding as unused; it is NOT. The one function
+        // that reads it declares a local `const images` that shadows it, which
+        // is why no reference resolves back to this destructure member.
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
@@ -823,7 +818,7 @@ const App: React.FC = () => {
     // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
     const {
         mismatchData,
-        typingMessageState, setTypingMessageState,
+
         livePostMortemThoughts,
         startPostMortemAnalysis,
         invalidatePostMortemRuns,
@@ -1297,8 +1292,8 @@ const App: React.FC = () => {
     // MessageItem mirrors the actor into its local side-panel state and
     // the per-message DebateSidePanel pops. Clicking another seat (or
     // re-clicking the same seat) bumps the nonce to re-fire the effect.
-    const [externalOpenActor, setExternalOpenActor] = useState<{ messageId: string; actorId: string } | null>(null);
-    const [externalOpenActorNonce, setExternalOpenActorNonce] = useState(0);
+    const [, setExternalOpenActor] = useState<{ messageId: string; actorId: string } | null>(null);
+    const [, setExternalOpenActorNonce] = useState(0);
 
     // The debate the desk view projects: the message currently debating, else
     // the most recent ensemble message. Actors derive through the SAME builder
@@ -1402,20 +1397,6 @@ const App: React.FC = () => {
     // Opens the Trading Journal's Think tab focused on the reasoning records
     // of the clicked analysis card. The reasoning set is keyed by the
     // analysis createdAt, so resolve it via the card (message) id.
-    const handleViewReasoning = useCallback(async (messageId: string) => {
-        let tradeId: string | undefined;
-        try {
-            const { getThinkingByMessage } = await import('./services/infrastructure/ThinkingStoreService');
-            // Scoped to the active user — message ids can otherwise collide
-            // across profiles.
-            const records = await getThinkingByMessage(messageId, activeUsername || undefined);
-            tradeId = records[0]?.tradeId;
-        } catch (err) {
-            console.warn('[App] Failed to resolve reasoning records for card:', err);
-        }
-        openJournal('reasoning', tradeId);
-    }, [openJournal, activeUsername]);
-
     // Stable identity for the Journal's deep-link consumer. An inline arrow
     // here would change on every render and refire ReasoningDashboard's load
     // effect (it lists this prop in its deps), re-querying the store during
@@ -1621,7 +1602,6 @@ const App: React.FC = () => {
     };
 
     const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
-    const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
     const handleUpdateSummaryCharLimit = (limit: number) => setSummaryCharLimit(limit);
 
 
@@ -1889,112 +1869,12 @@ const App: React.FC = () => {
         },
     ], [handleScrollToBottom, input, stableHandleSendMessage, openJournal, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals, isDeskSceneOpen, deskSceneMessage]);
 
-    const removeImage = (index: number) => {
-        setImages(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files) {
-            const newFiles: File[] = Array.from(event.target.files);
-            const remainingSlots = 5 - images.length;
-            if (remainingSlots <= 0) return;
-            const filesToProcess = newFiles.slice(0, remainingSlots);
-            const placeholderMetadata: ImageMetadata[] = filesToProcess.map(file => ({ file, dataURL: '', isLoading: true }));
-            setImages(prev => [...prev, ...placeholderMetadata]);
-            // OCR burns a vision API call — only run it in ensemble mode
-            // (the upload button is already hidden/disabled otherwise).
-            if (isEnsembleEnabled) {
-                processImagesForSummarization(filesToProcess, images.length, visionConfig, setImages, handleQuotaExceeded);
-            } else {
-                setImages(prev => prev.filter(img => !img.isLoading));
-            }
-            if (event.target) event.target.value = '';
-        }
-    };
-
-    const handleTypingComplete = useCallback(() => {
-        if (typingMessageState) {
-            const { id, fullText, field } = typingMessageState;
-            updateMessages(prev => prev.map(m => m.id === id ? { ...m, [field]: fullText } : m));
-            setTypingMessageState(null);
-        }
-    }, [typingMessageState]);
-
-    const handleCopy = useCallback((message: Message) => {
-        // Ensemble messages carry a stub text — copy the actual plan markdown
-        // (analysis.strategy) when it exists, else the raw message text.
-        const plan = message.analysis?.strategy;
-        const textToCopy = (plan && !plan.startsWith('Parsing Error:') && !plan.startsWith('Connection Error:'))
-            ? plan
-            : message.text;
-        if (textToCopy) {
-            navigator.clipboard.writeText(textToCopy);
-            setCopiedMessageId(message.id);
-            setTimeout(() => setCopiedMessageId(null), 2000);
-        }
-    }, []);
-
     // F4: "Re-run debate" — re-dispatches the original prompt + chart images
     // through the normal pipeline so the user gets a fresh debate for the
     // same setup (also the missing retry path for failed analyst slots).
     // Shared by the manual Re-run button and price-triggered setup watches.
-    const buildRerunPayload = useCallback((messageId: string, isUserMessageId = false): { prompt: string; images: ImageMetadata[] } | null => {
-        // read via messagesRef for a stable identity (see handleSaveAnalysis).
-        const msgs = messagesRef.current;
-        const index = msgs.findIndex(m => m.id === messageId);
-        const card = index >= 0 ? msgs[index] : undefined;
-        if (!card) return null;
-        let userMsg: Message | undefined;
-        if (isUserMessageId) {
-            // Failed-run retry: the id IS the user message that started the run.
-            userMsg = card.role === MessageRole.USER ? card : undefined;
-        } else {
-            for (let i = index - 1; i >= 0; i--) {
-                if (msgs[i].role === MessageRole.USER) { userMsg = msgs[i]; break; }
-            }
-        }
-        const prompt = userMsg?.text?.trim();
-        if (!prompt) return null;
-        // Rebuild ImageMetadata from the persisted dataURLs (the pipeline's
-        // vision payload needs File objects).
-        const images: ImageMetadata[] = (userMsg?.images ?? []).map((url, i) => ({
-            file: dataUrlToFile(url, `chart-${i + 1}.png`),
-            dataURL: url,
-            summary: userMsg?.imageSummaries?.[i],
-            isLoading: false,
-        }));
-        return { prompt, images };
-    }, [messagesRef]);
-
-    const handleReRunAnalysis = useCallback((messageId: string) => {
-        const payload = buildRerunPayload(messageId);
-        if (!payload) {
-            toast.warning('Cannot re-run', 'No original prompt found for this analysis.');
-            return;
-        }
-        stableHandleSendMessage(payload.prompt, payload.images, `Re-run requested for analysis card ${messageId}.`);
-    }, [buildRerunPayload, stableHandleSendMessage, toast]);
-
     // Failed-run retry: rebuild the exact prompt + charts from the user
     // message the failed run was sent with (the error bubble carries its id).
-    const handleRetryFailedRun = useCallback((userMessageId: string) => {
-        const payload = buildRerunPayload(userMessageId, true);
-        if (!payload) {
-            toast.warning('Cannot retry', 'No original prompt found for this analysis.');
-            return;
-        }
-        stableHandleSendMessage(payload.prompt, payload.images, 'Retrying the failed analysis.');
-    }, [buildRerunPayload, stableHandleSendMessage, toast]);
-
-    const handleResumeDebate = useCallback((messageId: string) => {
-        const payload = buildRerunPayload(messageId);
-        if (!payload) {
-            toast.warning('Cannot resume', 'No original prompt found for this debate.');
-            return;
-        }
-        stableHandleSendMessage(payload.prompt, payload.images, 'Resume interrupted debate.', { resumeMessageId: messageId });
-    }, [buildRerunPayload, stableHandleSendMessage, toast]);
-
     // ── Chart AI dock bridges ─────────────────────────────────────────────
     // "Full analysis" from the trade chat: run the SAME ensemble pipeline the
     // old Chat surface ran (automation-shaped private run), resolve with the
@@ -2196,92 +2076,10 @@ const App: React.FC = () => {
         updateMessages(prev => [...prev, row], activeConversationId ?? null);
     }, [updateMessages, activeConversationId]);
 
-    const handleForkDebate = useCallback((messageId: string, round: number) => {
-        const msgs = messagesRef.current;
-        const index = msgs.findIndex(m => m.id === messageId);
-        if (index < 0) return;
-        const ai = msgs[index];
-        const userMsg = msgs.slice(0, index).reverse().find(m => m.role === MessageRole.USER);
-        const turns = (ai.debateTurns || []).filter(t => (t.round || 1) <= round);
-        if (turns.length === 0) {
-            toast.warning('Cannot fork', 'No debate turns up to that round.');
-            return;
-        }
-        const newConv = createNewConversation();
-        if (activeConversation) {
-            newConv.ocrModel = activeConversation.ocrModel;
-            newConv.moderatorProviderId = activeConversation.moderatorProviderId;
-            newConv.moderatorModel = activeConversation.moderatorModel;
-            newConv.leverage = activeConversation.leverage;
-        }
-        const now = Date.now();
-        newConv.messages = [
-            ...(userMsg ? [{ ...userMsg, id: `user-${now}` }] : []),
-            {
-                ...ai,
-                id: `ai-${now}`,
-                analysis: undefined,
-                outcome: undefined,
-                isDebating: false,
-                debateTurns: turns,
-                debateCheckpoint: {
-                    lastCompletedRound: round,
-                    savedAt: new Date().toISOString(),
-                    analystNames: [...new Set(turns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))],
-                    laneDrafts: {},
-                },
-                ocrCache: ai.ocrCache,
-                text: `Forked from round ${round}. Continue debate to resume from here.`,
-            },
-        ];
-        handleCancelAnalysis();
-        setConversationHistory(prev => [newConv, ...prev]);
-        setActiveConversationId(newConv.id);
-        toast.success('Forked debate', `New session from round ${round}.`);
-    }, [activeConversation, handleCancelAnalysis, messagesRef, toast]);
-
-
-    const handleViewStrategyDetails = useCallback((name: string) => {
-        setStrategyToView(name);
-        setIsStrategySearchVisible(true);
-    }, []);
-
     // reads messages via messagesRef (not the `messages` closure) so
     // this handler keeps a stable identity across stream chunks — a fresh
     // identity here would re-create chatContext (and re-render every visible
     // MessageItem) on each chunk.
-    const handleSaveAnalysis = useCallback((messageId: string) => {
-        const msgs = messagesRef.current;
-        const msgIndex = msgs.findIndex(m => m.id === messageId);
-        const msg = msgIndex >= 0 ? msgs[msgIndex] : undefined;
-        if (msg && msg.analysis) {
-            // Find the nearest preceding user message. Reconstructing the user ID from the
-            // AI message ID never matches because both use independent Date.now() timestamps.
-            let userPrompt = "Unknown Request";
-            for (let i = msgIndex - 1; i >= 0; i--) {
-                if (msgs[i].role === MessageRole.USER) {
-                    userPrompt = msgs[i].text || "Unknown Request";
-                    break;
-                }
-            }
-            const saved: SavedAnalysis = {
-                id: msg.id,
-                analysis: msg.analysis,
-                userPrompt,
-                timestamp: new Date().toISOString(),
-                modelsUsed: msg.modelsUsed,
-
-                ocrModelUsed: msg.ocrModelUsed,
-                moderatorProvider: moderatorProviderId,
-                moderatorModel
-            };
-            setSavedAnalyses(prev => {
-                if (prev.some(s => s.id === saved.id)) return prev;
-                return [...prev, saved];
-            });
-        }
-    }, [messagesRef, moderatorProviderId, moderatorModel]);
-
     const handleCalculateAIProbabilities = useCallback(async (messageId: string, mode: 'AI' | 'Algo' = 'AI') => {
         const msg = messages.find(m => m.id === messageId);
         if (!msg || !msg.analysis) return;
@@ -2382,12 +2180,6 @@ const App: React.FC = () => {
     // React.memo on ChatArea/Journal and rebuilding ChatArea's
     // enhancedContext (re-rendering every memoized MessageItem) on each
     // keystroke / progress tick even when nothing relevant changed.
-    const handleSelectMessageForProbability = useCallback((id: string) => {
-        setSelectedProbabilityMessageId(id);
-        setIsAdvancedAnalyticsOpen(true);
-        handleCalculateAIProbabilities(id);
-    }, [handleCalculateAIProbabilities]);
-
     const handleCloseJournal = useCallback(() => {
         setSurface('trade');
     }, [setSurface]);
@@ -2404,14 +2196,6 @@ const App: React.FC = () => {
 
     const handleOpenVersionHistory = useCallback(() => {
         setIsVersionHistoryVisible(true);
-    }, []);
-
-    const handleOpenAnalytics = useCallback(() => {
-        setIsAdvancedAnalyticsOpen(true);
-    }, []);
-
-    const handleInteract = useCallback(() => {
-        setIsAdvancedAnalyticsOpen(false);
     }, []);
 
     // Journal props were rebuilt per render (fresh array/object identities),
