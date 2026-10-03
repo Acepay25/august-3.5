@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { Activity, AlertTriangle, Check, Loader2 } from '../shared/Icons';
 import { buildMemoryHealthReport, type MemoryHealthReport } from '../../services/learning/memoryHealth';
 import { isHygieneDue, runMemoryHygiene } from '../../services/learning/memoryHygiene';
 import { loadProviderConfigs } from '../../services/infrastructure/ProviderConfigService';
@@ -275,7 +275,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                 {hygieneError && (
                     <p role="alert" data-testid="memory-hygiene-error"
                         className="mt-1.5 flex items-start gap-1.5 text-ui-xs leading-4 text-rose-300">
-                        <AlertTriangle className="mt-0.5 h-2.5 w-2.5 shrink-0" />
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                         {/* Deliberately not claiming the pass changed nothing —
                             a partial run is possible and the log above is the
                             only record of what it got through. What IS certain
@@ -288,7 +288,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                     <ul className="mt-1.5 space-y-0.5 border-t border-zinc-800/80 pt-1.5">
                         {report.hygiene.slice(1, 6).map(l => (
                             <li key={`${l.atMs}-${l.text}`} className="flex items-start gap-1.5 text-ui-xs leading-4 text-zinc-600">
-                                <Check className="mt-0.5 h-2.5 w-2.5 shrink-0 text-emerald-500/70" />
+                                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500/70" />
                                 <span>{l.text}</span>
                             </li>
                         ))}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Inbox, X } from 'lucide-react';
+import { Inbox, X } from '../shared/Icons';
 import { jobQueue, Job } from '../../services/infrastructure/JobQueueService';
 import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryService';
 import { EmptyState } from '../ui/EmptyState';

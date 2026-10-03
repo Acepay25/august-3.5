@@ -1,9 +1,9 @@
 import React from 'react';
-import { Inbox } from 'lucide-react';
+import {Inbox, CloseIcon} from '../shared/Icons';
 import { ApprovalItem, AutoJournalPolicy } from '../../utils/approvalInbox';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { CloseIcon } from '../shared/Icons';
+
 import { EmptyState } from '../ui/EmptyState';
 import * as supervisorStore from '../../services/learning/supervisorStore';
 

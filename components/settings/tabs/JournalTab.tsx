@@ -5,7 +5,7 @@
 // `tab` props object to the name `props`, so the body's `props.` references
 // are the same keys the IIFE closed over — no renames.
 import React from 'react';
-import { Activity, ArrowUpRight, Bot, Brain, BrainCircuit, FileText } from 'lucide-react';
+import { Activity, ArrowUpRight, Bot, Brain, BrainCircuit, FileText } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import AutoJournalRulesCard from '../AutoJournalRulesCard';
 import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';

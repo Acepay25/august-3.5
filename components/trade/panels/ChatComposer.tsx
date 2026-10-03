@@ -9,14 +9,14 @@
  */
 
 import React from 'react';
-import { Brain, Camera, ChevronDown, FileText, Plus, TriangleAlert } from 'lucide-react';
+import {Brain, Camera, ChevronDown, FileText, Plus, TriangleAlert, SendIcon, StopIcon} from '../../shared/Icons';
 import type { ProviderConfig } from '../../../types/provider';
 import type { Attachment } from '../../../hooks/useChatAttachments';
 import type { ReasoningEffort } from '../../../services/providers/reasoningControls';
 import { formatModelDisplayName } from '../../../utils/providerUtils';
 import { DISCLAIMER_SHORT } from '../../../constants/disclaimer';
 import ModelPicker from '../../shared/ModelPicker';
-import { SendIcon, StopIcon } from '../../shared/Icons';
+
 import ChatAttachmentStrip from './ChatAttachmentStrip';
 import ComposerWorkspaceRow from './ComposerWorkspaceRow';
 import * as chatStore from '../../../services/trade/chatStore';

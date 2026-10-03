@@ -11,7 +11,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { requestSkillTry } from '../chat/skillDeepLink';
 import MarkdownContent from '../shared/MarkdownContent';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { FlaskConical, History } from 'lucide-react';
+import { FlaskConical, History } from '../shared/Icons';
 
 /**
  * Shared building blocks for the Strategy Studio (the single skill-library

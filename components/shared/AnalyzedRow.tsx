@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Brain } from 'lucide-react';
+import { Brain } from './Icons';
 
 export interface AnalyzedRowProps {
     /** The turn is still working (streaming, no answer text yet) — the

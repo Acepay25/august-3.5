@@ -22,7 +22,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, Flag } from 'lucide-react';
+import { Check, ChevronDown, Flag } from '../shared/Icons';
 import { getRecentMemoryInjections, type MemoryInjectionRecord } from '../../services/learning/MemoryInjectionService';
 import { recordHarnessLesson } from '../../services/learning/harnessLessons';
 import { getActiveUsername } from '../../utils/activeUser';

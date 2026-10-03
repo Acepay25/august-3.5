@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { X } from '../shared/Icons';
 import { AutomationConfig, AutomationInputSource, AutomationMode, AutomationModelPick } from '../../types/automation';
 import { parseCron, nextCronTime, humanizeCron } from '../../services/automation/cronParser';
 import { ProviderConfig } from '../../types/provider';

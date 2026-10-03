@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { AlertTriangle, Bookmark, ShieldAlert, X, Zap } from 'lucide-react';
+import {AlertTriangle, Bookmark, ShieldAlert, X, Zap, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon, RefreshIcon} from '../shared/Icons';
 import { AIProvider, LoggedTrade, TradeOutcome, TradeSummary } from '../../types';
 import { ProviderConfig } from '../../types/provider';
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon, RefreshIcon } from '../shared/Icons';
+
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill, { type PillTone } from '../ui/StatusPill';
@@ -414,7 +414,7 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 )}
 
-                                {correctedEntry && <div className="col-span-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20 text-yellow-200 font-medium">Corrected Entry: {correctedEntry}</div>}
+                                {correctedEntry && <div className="col-span-2 bg-amber-500/10 p-2 rounded border border-amber-500/20 text-amber-200 font-medium">Corrected Entry: {correctedEntry}</div>}
 
                                 <div className="col-span-2 text-ui-2xs text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
                                     <span>Analyst: {(() => {

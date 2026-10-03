@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bookmark } from 'lucide-react';
+import {Bookmark, CloseIcon, ChevronDownIcon, TrashIcon} from '../shared/Icons';
 import { SavedAnalysis } from '../../types';
-import { CloseIcon, ChevronDownIcon, TrashIcon } from '../shared/Icons';
+
 import { EmptyState } from '../ui/EmptyState';
 
 interface SavedAnalysesProps {

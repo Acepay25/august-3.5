@@ -9,7 +9,14 @@
  * P&L meaning is carried by the curve's own emerald/rose stroke, not by any
  * surface class — the old `.status-surface` opt-in was a no-op (no rule in
  * index.css since the theme went semantic globally) and has been removed.
+ *
+ * The four hexes this used to carry were stock Tailwind values (`#34d399`,
+ * `#fb7185`, `#71717a`, `#18181b`) — cool grays and emerald/rose steps the
+ * theme ramp never had. They now read the ramp, so the curve follows the app
+ * instead of coinciding with it.
  */
+
+import { chartColor } from '../../utils/themeColors';
 
 import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
@@ -44,7 +51,9 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
     if (counted === 0) return null;
 
     const pnlPositive = totalPnl >= 0;
-    const accent = pnlPositive ? '#34d399' : '#fb7185';
+    const accent = pnlPositive
+        ? chartColor('--color-emerald-400', '#2fc97f')
+        : chartColor('--color-rose-400', '#f97d80');
 
     return (
         <div className=" glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
@@ -66,11 +75,11 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                        <XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 9 }} tickLine={false} axisLine={false} minTickGap={40} />
-                        <YAxis tick={{ fill: '#71717a', fontSize: 9 }} tickLine={false} axisLine={false} />
+                        <XAxis dataKey="label" tick={{ fill: chartColor('--color-zinc-500', '#8c8c86'), fontSize: 9 }} tickLine={false} axisLine={false} minTickGap={40} />
+                        <YAxis tick={{ fill: chartColor('--color-zinc-500', '#8c8c86'), fontSize: 9 }} tickLine={false} axisLine={false} />
                         <Tooltip
-                            contentStyle={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
-                            labelStyle={{ color: '#a1a1aa' }}
+                            contentStyle={{ background: chartColor('--color-zinc-900', '#141412'), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
+                            labelStyle={{ color: chartColor('--color-zinc-400', '#a3a39d') }}
                         />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" />
                         <Area type="monotone" dataKey="equity" stroke={accent} strokeWidth={1.8} fill="url(#equityFill)" dot={false} name="Equity" />

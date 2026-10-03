@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Brain, Lightbulb } from 'lucide-react';
+import { Brain, Lightbulb } from './Icons';
 import { getActiveUsername } from '../../utils/activeUser';
 import { nextTip } from '../../utils/tradingTips';
 import { stripTraceMarkers, traceLines } from '../../utils/traceText';

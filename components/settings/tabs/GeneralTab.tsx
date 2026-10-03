@@ -7,7 +7,7 @@
 // the tab. The service setter `setIdleMotionEnabled` is imported here because
 // only this body writes through it.
 import React from 'react';
-import { Activity, ChevronDown, Layers, ShieldCheck, Wrench } from 'lucide-react';
+import { Activity, ChevronDown, Layers, ShieldCheck, Wrench } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import DeskSeatMappingEditor from '../DeskSeatMappingEditor';
 import { SegmentedControl, SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';

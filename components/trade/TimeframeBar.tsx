@@ -8,7 +8,7 @@
  * other — not a second, parallel preference.
  */
 import React, { useState } from 'react';
-import { Check, Settings } from 'lucide-react';
+import { Check, Settings } from '../shared/Icons';
 import {
     CHART_INTERVALS,
     readTfBarSelection,

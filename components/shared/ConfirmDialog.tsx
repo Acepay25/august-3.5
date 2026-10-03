@@ -163,7 +163,7 @@ export function useConfirmDialog() {
                         <div className="p-6">
                             <div className="flex items-start gap-4">
                                 {state.destructive && (
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
+                                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
                                         <TrashIcon className="h-5 w-5" />
                                     </div>
                                 )}
@@ -221,7 +221,7 @@ export function useConfirmDialog() {
                                 disabled={state.typedConfirm !== undefined && typedInput !== state.typedConfirm}
                                 data-testid="confirm-dialog-confirm"
                                 className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${state.destructive
-                                    ? 'bg-red-500 enabled:hover:bg-red-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
+                                    ? 'bg-rose-500 enabled:hover:bg-rose-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
                                     : 'bg-cyan-500 enabled:hover:bg-cyan-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
                                     }`}
                             >

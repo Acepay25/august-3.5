@@ -6,7 +6,7 @@ export const CalibrationBar: React.FC<{ label: string; actual: number; expected:
     label, actual, expected, count
 }) => {
     const diff = actual - expected;
-    const color = diff >= 5 ? 'bg-emerald-500' : diff <= -10 ? 'bg-red-500' : 'bg-yellow-500';
+    const color = diff >= 5 ? 'bg-emerald-500' : diff <= -10 ? 'bg-rose-500' : 'bg-amber-500';
     const status = diff >= 5 ? 'Underconfident' : diff <= -10 ? 'Overconfident' : 'Calibrated';
 
     return (
@@ -27,7 +27,7 @@ export const CalibrationBar: React.FC<{ label: string; actual: number; expected:
                 />
             </div>
             <div className="flex justify-between text-ui-xs">
-                <span className={diff >= 5 ? 'text-emerald-400' : diff <= -10 ? 'text-red-400' : 'text-yellow-400'}>
+                <span className={diff >= 5 ? 'text-emerald-400' : diff <= -10 ? 'text-rose-400' : 'text-amber-400'}>
                     {status}
                 </span>
                 <span className="text-zinc-500">

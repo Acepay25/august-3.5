@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronDownIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronDownIcon } from '../../shared/Icons';
 import { LoggedTrade, TradeOutcome } from '../../../types';
 import type { TopLesson } from '../../../services/learning/MemoryFilesService';
 import { REGIMES } from './shared';

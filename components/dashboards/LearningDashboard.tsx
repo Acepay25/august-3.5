@@ -1,6 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { BrainCircuit } from 'lucide-react';
+import { BrainCircuit } from '../shared/Icons';
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { computeLearningProfile } from '../../services/learning/SelfLearningService';
 import { initMemoryFiles, getMemoryFiles, computeTopLessons } from '../../services/learning/MemoryFilesService';

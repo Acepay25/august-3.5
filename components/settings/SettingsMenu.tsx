@@ -7,16 +7,14 @@ import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { EmptyState } from '../ui/EmptyState';
-import { AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
+import {AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon, User, FileText, Brain, BookOpen, Database, Eye, Search, ChevronRight} from '../shared/Icons';
 import { getIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
 import { loadForgedTools } from '../../services/tools/toolForge';
 import { listAmendments } from '../../services/learning/memoryAmendments';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import type { LearnTab } from '../learn/LearnView';
 import type { InstructionTab } from './CustomInstructionsEditor';
-import {
-    User, FileText, Brain, BookOpen, Database, Eye, Search, ChevronRight
-} from 'lucide-react';
+
 
 // The tab bodies are code-split. Each used to be an inline IIFE in this file
 // (with ~70 props threaded through the one component); they now live under

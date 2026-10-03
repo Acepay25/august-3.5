@@ -6,9 +6,9 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Check, X } from 'lucide-react';
+import {Check, X, CloseIcon} from '../shared/Icons';
 import { Message, LoggedTrade, TradeOutcome } from '../../types';
-import { CloseIcon } from '../shared/Icons';
+
 import {
     ScenarioConfig,
     ScenarioMetrics,
@@ -377,13 +377,13 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         {/* Leverage & Position Size */}
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-ui-xs uppercase font-bold text-yellow-400 tracking-wider mb-1.5">
+                                                <label className="block text-ui-xs uppercase font-bold text-amber-400 tracking-wider mb-1.5">
                                                     Leverage
                                                 </label>
                                                 <select
                                                     value={scenarioLeverage}
                                                     onChange={(e) => setScenarioLeverage(parseInt(e.target.value))}
-                                                    className="w-full bg-zinc-800 border border-yellow-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-yellow-200 focus:outline-none focus:border-yellow-500/60 appearance-none"
+                                                    className="w-full bg-zinc-800 border border-amber-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-amber-200 focus:outline-none focus:border-amber-500/60 appearance-none"
                                                 >
                                                     {[1, 2, 3, 5, 10, 20, 25, 50, 75, 100, 125].map((lev) => (
                                                         <option key={lev} value={lev}>{lev}x</option>
@@ -548,7 +548,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         const stats = calculateHistoricalWinRate(scenarioResult.historicalMatches);
                                         return (
                                             <div className={`text-center p-3 rounded-lg mb-4 ${stats.winRate >= 60 ? 'bg-emerald-950/30 border border-emerald-500/20' :
-                                                stats.winRate >= 40 ? 'bg-yellow-950/30 border border-yellow-500/20' :
+                                                stats.winRate >= 40 ? 'bg-amber-950/30 border border-amber-500/20' :
                                                     'bg-rose-950/30 border border-rose-500/20'
                                                 }`}>
                                                 <span className="text-2xl font-black">

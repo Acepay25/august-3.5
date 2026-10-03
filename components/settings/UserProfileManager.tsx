@@ -139,7 +139,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                                     disabled={isBusy}
                                     onClick={() => { void runAction(() => onDeleteUser(user)); }}
                                     aria-label={`Delete user ${user}`}
-                                    className="p-2 text-zinc-600 hover:text-red-400 focus-visible:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-wait disabled:opacity-30"
+                                    className="p-2 text-zinc-600 hover:text-rose-400 focus-visible:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-wait disabled:opacity-30"
                                     title="Delete User"
                                  >
                                      <TrashIcon />
@@ -159,12 +159,12 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                         value={newUsername} 
                         onChange={(e) => { setNewUsername(e.target.value); setFormError(''); }} 
                         placeholder="Create New Workspace" 
-                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-colors duration-[150ms] ease-[var(--ease-snappy)] font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
+                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-colors duration-[150ms] ease-[var(--ease-snappy)] font-medium ${formError ? 'border-rose-500/50' : 'border-white/10'}`}
                         autoFocus
                         aria-invalid={!!formError}
                         aria-describedby={formError ? 'username-error' : undefined}
                     />
-                    {formError && <p id="username-error" className="mt-2 text-xs text-red-400" role="alert">{formError}</p>}
+                    {formError && <p id="username-error" className="mt-2 text-xs text-rose-400" role="alert">{formError}</p>}
                     <button 
                         type="submit" 
                         disabled={isBusy || !newUsername.trim()}

@@ -86,7 +86,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                         name,
                         action: 'demoted',
                         why: h.reason || 'lost authority',
-                        color: 'text-yellow-500',
+                        color: 'text-amber-500',
                         at: t,
                     });
                 } else if (h.status === 'retired') {
@@ -94,7 +94,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                         name,
                         action: 'retired',
                         why: h.reason || 'evidence said stop',
-                        color: 'text-red-400',
+                        color: 'text-rose-400',
                         at: t,
                     });
                 }
@@ -265,7 +265,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                             review?.expectancyConflict ? `expectancy ${review.expectancyR! > 0 ? '+' : ''}${review.expectancyR}R` : null,
                         ].filter(Boolean).join(' · '),
                         color: review?.recommendation === 'retire' || review?.recommendation === 'demote' || meta.evalVerdict === 'hurts' || (lift?.verdict === 'negative') || review?.expectancyConflict === true
-                            ? 'text-red-400'
+                            ? 'text-rose-400'
                             : review?.recommendation === 'promote' || lift?.verdict === 'positive'
                                 ? 'text-emerald-400'
                                 : 'text-white',
@@ -280,9 +280,9 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                     value: c.brierScore !== null ? c.brierScore.toFixed(3) : '—',
                     subtext: `${c.verdict === 'calibrated' ? 'calibrated' : c.verdict.replace('-', ' ')}${c.highGap !== null ? ` · High gap ${c.highGap > 0 ? '+' : ''}${c.highGap}%` : ''} (n=${c.samples})`,
                     color: c.verdict === 'overconfident'
-                        ? 'text-red-400'
+                        ? 'text-rose-400'
                         : c.verdict === 'underconfident'
-                            ? 'text-yellow-500'
+                            ? 'text-amber-500'
                             : c.verdict === 'calibrated'
                                 ? 'text-emerald-400'
                                 : 'text-zinc-500',
@@ -304,7 +304,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                             ? 'text-emerald-400'
                             : c.avgConviction >= 45
                                 ? 'text-zinc-300'
-                                : 'text-yellow-500',
+                                : 'text-amber-500',
                     };
                 })}
                 emptyText="Run debates to see each seat's average sealed conviction (0-100)"
@@ -326,8 +326,8 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                                 : a.hits / settled >= 0.6
                                     ? 'text-emerald-400'
                                     : a.runs > a.hits
-                                        ? 'text-red-400'
-                                        : 'text-yellow-500',
+                                        ? 'text-rose-400'
+                                        : 'text-amber-500',
                         };
                     })}
                 emptyText="Vetoes appear once an avoid skill blocks a setup — price paths grade them afterward"

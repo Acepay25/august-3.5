@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowDown, ArrowUp, ArrowUpDown, BrainCircuit, Loader2, Minus, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, BrainCircuit, Loader2, Minus, Search, X } from '../shared/Icons';
 import { runScreenerWithStatus, type ScreenerRow } from '../../services/trade/screener';
 import { display as symbolDisplay } from '../../utils/symbol';
 import { fmtPrice } from '../../utils/formatters';
@@ -37,10 +37,10 @@ type SortKey = 'volume' | 'movers' | 'rsi' | 'setups';
  *  nothing) so the memoized row below can use it. */
 const regimePill = (regime: ScreenerRow['regime']): React.ReactNode => (
     regime === 'up'
-        ? <StatusPill tone="up" icon={<ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />}>up</StatusPill>
+        ? <StatusPill tone="up" icon={<ArrowUp className="h-3 w-3" aria-hidden="true" />}>up</StatusPill>
         : regime === 'down'
-            ? <StatusPill tone="down" icon={<ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />}>down</StatusPill>
-            : <StatusPill tone="neutral" icon={<Minus className="h-2.5 w-2.5" aria-hidden="true" />}>range</StatusPill>
+            ? <StatusPill tone="down" icon={<ArrowDown className="h-3 w-3" aria-hidden="true" />}>down</StatusPill>
+            : <StatusPill tone="neutral" icon={<Minus className="h-3 w-3" aria-hidden="true" />}>range</StatusPill>
 );
 
 /** The flat, primitive-only view model a row renders from. The scan hands
@@ -235,9 +235,9 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                     {label}
                     {active
                         ? (sort.desc
-                            ? <ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />
-                            : <ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />)
-                        : <ArrowUpDown className="h-2.5 w-2.5 opacity-40" aria-hidden="true" />}
+                            ? <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                            : <ArrowUp className="h-3 w-3" aria-hidden="true" />)
+                        : <ArrowUpDown className="h-3 w-3 opacity-40" aria-hidden="true" />}
                 </button>
             </th>
         );
@@ -339,8 +339,8 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                     <span className="ml-auto inline-flex items-center gap-1">
                         sorted by {sort.key}
                         {sort.desc
-                            ? <ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />
-                            : <ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />}
+                            ? <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                            : <ArrowUp className="h-3 w-3" aria-hidden="true" />}
                     </span>
                 </div>
             </div>

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Scale } from 'lucide-react';
+import { Scale } from '../../shared/Icons';
 import type { SkillEffectiveness } from '../../../services/learning/SkillMemoryService';
 
 interface ReviewActionsSectionProps {
@@ -36,7 +36,7 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
                     {actionableReviews.slice(0, 8).map(r => (
                         <div key={r.fileId} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center gap-2">
                             <div className="min-w-0 flex-1">
-                                <span className={`text-ui-xs font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-red-400' : r.recommendation === 'refine' ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                                <span className={`text-ui-xs font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-rose-400' : r.recommendation === 'refine' ? 'text-amber-400' : 'text-emerald-400'}`}>
                                     {r.recommendation}
                                 </span>
                                 <span className="text-ui-dense text-zinc-300 ml-1.5 truncate inline-block max-w-[45%] align-bottom">{r.title}</span>

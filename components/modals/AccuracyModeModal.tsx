@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { ShieldCheck, Lock, Users } from 'lucide-react';
-import { BotIcon, CloseIcon } from '../shared/Icons';
+import {ShieldCheck, Lock, Users, BotIcon, CloseIcon} from '../shared/Icons';
+
 
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';

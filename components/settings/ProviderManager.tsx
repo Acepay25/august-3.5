@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Check, X } from 'lucide-react';
+import {Box, Check, Eye, EyeOff, LoadingIcon, Pencil, RefreshCw, Trash2, X, Zap} from '../shared/Icons';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { GOOGLE_GEMINI_DEFAULT_BASE } from '../../utils/googleGeminiFormat';
 import { testConnection } from '../../services/providers/GenericProviderService';
@@ -19,7 +19,7 @@ import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { findProviderById, mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { useToastActions } from '../shared/Toast';
-import { LoadingIcon } from '../shared/Icons';
+
 import StatusPill from '../ui/StatusPill';
 
 interface ProviderManagerProps {
@@ -41,57 +41,7 @@ interface ProviderManagerProps {
     onDirtyChange?: (dirty: boolean) => void;
 }
 
-// ─── SVG Icons ────────────────────────────────────────────────────────────────
 
-const CubeIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4 text-zinc-400" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-    </svg>
-);
-
-const PencilIcon: React.FC<{ className?: string }> = ({ className = "w-3.5 h-3.5" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-);
-
-const TrashIcon: React.FC<{ className?: string }> = ({ className = "w-3.5 h-3.5" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="3 6 5 6 21 6" />
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-        <line x1="10" y1="11" x2="10" y2="17" />
-        <line x1="14" y1="11" x2="14" y2="17" />
-    </svg>
-);
-
-const EyeIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-        <circle cx="12" cy="12" r="3" />
-    </svg>
-);
-
-const EyeOffIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-        <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-);
-
-const RefreshIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-    </svg>
-);
-
-const BoltIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-);
 
 // ─── Presentational Helpers ───────────────────────────────────────────────────
 
@@ -595,7 +545,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     title="Refresh model catalogs"
                     aria-label="Refresh model catalogs"
                 >
-                    <RefreshIcon />
+                    <RefreshCw className="h-4 w-4" />
                 </button>
             </div>
 
@@ -622,7 +572,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                             >
                                                 <span className="flex min-w-0 items-center gap-2">
                                                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-zinc-700/80 bg-zinc-950">
-                                                        <CubeIcon className="h-3.5 w-3.5 text-zinc-400" />
+                                                        <Box className="h-3 w-3 text-zinc-400" />
                                                     </span>
                                                     <span className="truncate text-ui-caption font-medium">{c.name}</span>
                                                 </span>
@@ -656,7 +606,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             <div>
                                 <FieldLabel>Base URI</FieldLabel>
                                 <input type="text" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder={newFormat === 'google' ? GOOGLE_GEMINI_DEFAULT_BASE : 'https://opencode.ai/zen/v1'} className={inputBase} />
-                                {!newUrlValidation.valid && newUrl.trim() && <p className="mt-1 text-xs text-red-300">{newUrlValidation.message}</p>}
+                                {!newUrlValidation.valid && newUrl.trim() && <p className="mt-1 text-xs text-rose-300">{newUrlValidation.message}</p>}
                             </div>
                             <div>
                                 <FieldLabel>Endpoint</FieldLabel>
@@ -682,7 +632,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         {isDiscoveringNew ? '…' : 'Discover'}
                                     </button>
                                 </div>
-                                {addError && <p className="mt-1 text-xs text-red-300">{addError}</p>}
+                                {addError && <p className="mt-1 text-xs text-rose-300">{addError}</p>}
                             </div>
                             <button onClick={handleAddProvider} disabled={!newName.trim() || !newUrlValidation.valid} className="w-full rounded-xl bg-zinc-100 py-2 text-xs font-bold text-zinc-950 disabled:opacity-40">
                                 Create provider
@@ -701,7 +651,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         <>
                                             <h3 className="truncate text-[15px] font-semibold text-zinc-100">{nameDraft.trim() || selected.name}</h3>
                                             <button onClick={() => setIsEditingName(true)} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit name" aria-label="Edit provider name">
-                                                <PencilIcon className="h-3.5 w-3.5" />
+                                                <Pencil className="h-3 w-3" />
                                             </button>
                                         </>
                                     )}
@@ -733,7 +683,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     title={selected.isBuiltIn ? 'Built-in providers cannot be deleted' : 'Delete provider'}
                                     aria-label={selected.isBuiltIn ? 'Built-in providers cannot be deleted' : `Delete provider ${selected.name}`}
                                 >
-                                    <TrashIcon className="h-4 w-4" />
+                                    <Trash2 className="h-4 w-4" />
                                 </button>
                             </div>
 
@@ -748,7 +698,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             <div>
                                 <FieldLabel>Base URI</FieldLabel>
                                 <input type="text" value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} placeholder={draftFormat === 'google' ? GOOGLE_GEMINI_DEFAULT_BASE : 'https://opencode.ai/zen/v1'} className={inputBase} />
-                                {!draftUrlValidation.valid && draftUrl.trim() && <p className="mt-1 text-xs text-red-300">{draftUrlValidation.message}</p>}
+                                {!draftUrlValidation.valid && draftUrl.trim() && <p className="mt-1 text-xs text-rose-300">{draftUrlValidation.message}</p>}
                             </div>
                             <div>
                                 <FieldLabel>Endpoint</FieldLabel>
@@ -767,7 +717,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <div className="relative">
                                     <input type={showKey ? 'text' : 'password'} value={draftKey} onChange={(e) => setDraftKey(e.target.value)} placeholder="••••••••••••••••••••••••••••••••" className={`${inputBase} pr-10`} autoComplete="off" />
                                     <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300" title={showKey ? 'Hide key' : 'Show key'} aria-label={showKey ? 'Hide API key' : 'Show API key'}>
-                                        {showKey ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
                                 </div>
                             </div>
@@ -819,10 +769,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 <div className="ml-4 flex shrink-0 items-center gap-2.5" onClick={e => e.stopPropagation()}>
                                                     <span className="font-mono text-ui-xs font-medium text-zinc-500">{badgeText}</span>
                                                     <button type="button" onClick={() => void handleTestModel(m)} disabled={isTestingThis || isTesting || !draftUrlValidation.valid} className="p-1 text-zinc-500 hover:text-zinc-200 disabled:opacity-40" title={modelTest?.message || `Test ${m}`} aria-label={modelTest?.message ? `Test ${m} — ${modelTest.message}` : `Test model ${m}`}>
-                                                        {isTestingThis ? <LoadingIcon className="h-3.5 w-3.5 animate-spin" /> : <BoltIcon className="h-3.5 w-3.5" />}
+                                                        {isTestingThis ? <LoadingIcon className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
                                                     </button>
                                                     <button onClick={() => { setEditingModelId(m); setEditModelInput(m); }} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit model ID" aria-label={`Edit model ID for ${m}`}>
-                                                        <PencilIcon className="h-3.5 w-3.5" />
+                                                        <Pencil className="h-3 w-3" />
                                                     </button>
                                                     <button
                                                         onClick={async () => {
@@ -837,7 +787,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                         title="Remove model"
                                                         aria-label={`Remove model ${m}`}
                                                     >
-                                                        <TrashIcon className="h-3.5 w-3.5" />
+                                                        <Trash2 className="h-3 w-3" />
                                                     </button>
                                                 </div>
                                             </div>

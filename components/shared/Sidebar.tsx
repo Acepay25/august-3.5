@@ -323,7 +323,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         onDeleteConversation(conv.id);
                         onNavigate?.();
                     }}
-                     className="p-1 rounded-md text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:ring-2 focus-visible:ring-cyan-400 shrink-0"
+                     className="p-1 rounded-md text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:ring-2 focus-visible:ring-cyan-400 shrink-0"
                     title="Delete session"
                     aria-label={`Delete ${getPreview(conv)}`}
                 >

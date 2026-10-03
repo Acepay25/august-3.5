@@ -2,6 +2,7 @@
 // Dismissible alert that warns users about recurring mistake patterns
 
 import React, { useState, useMemo } from 'react';
+import { CloseIcon } from './Icons';
 import { LoggedTrade, TradingWeaknesses } from '../../types';
 import { getTradingWeaknesses } from '../../services/learning/MistakePatternService';
 
@@ -71,9 +72,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                 className="absolute top-2 right-2 p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                 aria-label="Dismiss warning"
             >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <CloseIcon className="h-4 w-4" />
             </button>
 
             {/* Header */}

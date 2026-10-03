@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Brain } from 'lucide-react';
+import { Brain } from '../../shared/Icons';
 import { LoggedTrade, MemoryFile } from '../../../types';
 import type { SkillMeta } from '../../../services/learning/SkillMemoryService';
 import { buildMemoryGraph } from '../../../services/learning/MemoryGraph';

@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle } from '../../shared/Icons';
 import type { TradeProposal } from '../../../services/trade/proposedTrade';
 
 export interface TradeProposalCardProps {

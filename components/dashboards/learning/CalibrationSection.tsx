@@ -9,15 +9,15 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
     <>
         {/* Setups to Avoid */}
         {profile.worstSetups.length > 0 && (
-            <div className="bg-red-950/20 rounded-xl border border-red-500/20 p-3 sm:p-4">
-                <h4 className="text-ui-xs sm:text-xs font-bold text-red-400 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-2">
+            <div className="bg-rose-950/20 rounded-xl border border-rose-500/20 p-3 sm:p-4">
+                <h4 className="text-ui-xs sm:text-xs font-bold text-rose-400 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-2">
                     Setups to Avoid
                 </h4>
                 <div className="space-y-2">
                     {profile.worstSetups.slice(0, 4).map((s, i) => (
                         <div key={i} className="flex items-center justify-between text-sm">
                             <span className="text-zinc-400 truncate pr-2">{s.description}</span>
-                            <span className="text-red-400 font-bold whitespace-nowrap">{s.winRate}% WR</span>
+                            <span className="text-rose-400 font-bold whitespace-nowrap">{s.winRate}% WR</span>
                         </div>
                     ))}
                 </div>

@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { Lightbulb } from 'lucide-react';
+import { Lightbulb } from '../../shared/Icons';
 import type { ToolAction } from '../../../types/message';
 import { tipForSeed } from '../../../utils/tradingTips';
 import { splitReasoningAroundTools } from '../../../utils/traceText';

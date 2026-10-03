@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X } from '../shared/Icons';
 import { BotAvatar } from './BotAvatar';
 import { SelectMenu } from '../shared/SelectMenu';
 import { useEscapeClose } from '../../hooks/useEscapeClose';

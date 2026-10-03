@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Check, Trash2, Ban } from 'lucide-react';
+import { Check, Trash2, Ban } from '../shared/Icons';
 import { ForgedTool, loadForgedTools, approveForgedTool, retireForgedTool, deleteForgedTool, forgedToolStats, FORGED_PROPOSAL_EVENT } from '../../services/tools/toolForge';
 
 const StatusBadge: React.FC<{ tool: ForgedTool }> = ({ tool }) => {

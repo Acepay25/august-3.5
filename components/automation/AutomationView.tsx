@@ -1,6 +1,6 @@
 import React from 'react';
 import { AutomationConfig, AutomationRun } from '../../types/automation';
-import { ChevronLeftIcon, TrashIcon, EditIcon, LoadingIcon, RefreshIcon } from '../shared/Icons';
+import {ChevronLeftIcon, TrashIcon, EditIcon, LoadingIcon, RefreshIcon, Bookmark, Play} from '../shared/Icons';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import AutomationRunCard, { RunOutcomeConfirm } from './AutomationRunCard';
@@ -8,7 +8,7 @@ import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { getNextRunAt } from '../../services/automation/AutomationService';
 import { humanizeCron } from '../../services/automation/cronParser';
 import { phtClock } from '../../utils/timezone';
-import { Bookmark, Play } from 'lucide-react';
+
 
 /**
  * Automation detail view — a card feed of everything this automation has

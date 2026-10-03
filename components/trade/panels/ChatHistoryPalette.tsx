@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2 } from '../../shared/Icons';
 import type { LiveSession } from '../../../services/trade/chatStore';
 
 /** "2 days ago" style relative time — the palette's right column, copied from

@@ -226,10 +226,10 @@ export const Header: React.FC<HeaderProps> = memo(({
                                         aria-expanded={isSessionModalOpen}
                                         aria-haspopup="dialog"
                                     >
-                                        <span className={`w-1.5 h-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-red-500 animate-pulse' :
+                                        <span className={`w-1.5 h-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-rose-500 animate-pulse' :
                                             sessionContext.currentSession === 'off_hours' ? 'bg-zinc-500' : 'bg-emerald-500'
                                             }`} />
-                                        <span className={sessionContext.isKillZone ? 'text-red-400' : ''}>
+                                        <span className={sessionContext.isKillZone ? 'text-rose-400' : ''}>
                                             {sessionContext.currentSession === 'overlap' ? 'Ldn/NY' :
                                                 sessionContext.currentSession === 'new_york' ? 'NY' :
                                                     sessionContext.currentSession === 'london' ? 'London' :
@@ -251,7 +251,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.volatility === 'High' ? 'border-red-500/40 text-red-400 bg-red-500/15' :
+                                                            <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.volatility === 'High' ? 'border-rose-500/40 text-rose-400 bg-rose-500/15' :
                                                                 liveMarketConditions.volatility === 'Medium' ? 'border-amber-500/40 text-amber-400 bg-amber-500/15' :
                                                                     'border-emerald-500/40 text-emerald-400 bg-emerald-500/15'
                                                                 }`}>
@@ -275,7 +275,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                                 <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                                <span className={`text-ui-2xs px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-red-500/30 text-red-400 bg-red-500/10' :
+                                                                <span className={`text-ui-2xs px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-rose-500/30 text-rose-400 bg-rose-500/10' :
                                                                     session.volatility === 'Medium' ? 'border-amber-500/30 text-amber-400 bg-amber-500/10' :
                                                                         'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
                                                                     }`}>
@@ -329,7 +329,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     )}
                     {!isOnline && (
                         <span role="status" aria-label="Offline">
-                            <CloudOffIcon className="h-4 w-4 text-yellow-500" />
+                            <CloudOffIcon className="h-4 w-4 text-amber-500" />
                         </span>
                     )}
 

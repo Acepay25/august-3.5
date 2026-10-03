@@ -9,7 +9,7 @@
  */
 
 import React, { useSyncExternalStore } from 'react';
-import { Brain, Eye, Gavel, Search, ShieldCheck, Zap } from 'lucide-react';
+import { Brain, Eye, Gavel, Search, ShieldCheck, Zap } from '../../shared/Icons';
 import * as supervisorStore from '../../../services/learning/supervisorStore';
 import type { SupervisorPhase } from '../../../services/learning/supervisorStore';
 

@@ -8,7 +8,7 @@
  * `group/msg` for hover-reveal to work.
  */
 import React, { useState } from 'react';
-import { Check, Copy, Pin, RotateCcw } from 'lucide-react';
+import { Check, Copy, Pin, RotateCcw } from './Icons';
 import { copyText } from '../../utils/clipboard';
 import MarkdownContent from './MarkdownContent';
 

@@ -16,8 +16,8 @@ import {
     readFreeOnlyPref,
     writeFreeOnlyPref,
 } from '../../utils/providerUtils';
-import { ChevronRightIcon, ChevronDownIcon, CheckIcon } from './Icons';
-import { RotateCw, Check, Search as SearchIcon } from 'lucide-react';
+import {ChevronRightIcon, ChevronDownIcon, CheckIcon, RotateCw, Check, Search as SearchIcon} from './Icons';
+
 import { FLYOUT_VIEWPORT_MARGIN } from './flyoutLayout';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be

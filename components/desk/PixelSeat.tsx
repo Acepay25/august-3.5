@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Mic, MicOff, Loader2, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, Loader2, MessageSquare } from '../shared/Icons';
 import {
     buildGridForRole,
     colorForToken,

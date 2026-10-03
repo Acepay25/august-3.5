@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { AlertTriangle, Brain, Wrench, FilePlus2, NotebookPen } from 'lucide-react';
+import { AlertTriangle, Brain, Wrench, FilePlus2, NotebookPen } from '../shared/Icons';
 import type { ToolAction } from '../../types/message';
 
 export interface ToolActionsRowProps {

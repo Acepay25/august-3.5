@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { GripVertical, PanelRight, TrendingDown, TrendingUp } from 'lucide-react';
+import { GripVertical, PanelRight, TrendingDown, TrendingUp } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
