@@ -44,7 +44,12 @@ export const resolveSource = (bars: readonly Kline[], source: TaSource = 'close'
 export const isNum = (n: number): boolean => Number.isFinite(n);
 export const last = <T>(arr: T[], fallback: T): T => (arr.length > 0 ? arr[arr.length - 1] : fallback);
 
-// ── primitives (kept local: technicalindicators has no export for several) ──
+// ── primitives ────────────────────────────────────────────────────────────
+// Kept local even though `technicalindicators` exports SMA/EMA/WMA, because its
+// return arrays are positionally OFFSET by the warm-up period and an EMA seeded
+// differently. Several studies here index an average array by bar index
+// (Schaff's stochastic pass), which silently reads the wrong bar against that
+// library's convention. Owning the primitives makes the indexing explicit.
 
 export const smaOf = (values: number[], period: number): number[] => {
     const out: number[] = [];
@@ -925,13 +930,22 @@ export const TA_STUDIES: Record<string, TaStudy> = {
         // Historical volatility is ANNUALISED, and the SAME 365 applied to 5m
         // bars and to daily bars is not a small error — it is a meaningless
         // number. It is computed on the window's own bar spacing instead.
-        run: b => ({
-            historicalVolatility: historicalVolatility(b, 20, true, periodsPerYearFor(b)),
-            chaikinVolatility: chaikinVolatility(b),
-            massIndex: massIndex(b),
-            ulcerIndex: ulcerIndex(b),
-            choppinessIndex: choppinessIndex(b),
-        }),
+        run: b => {
+            // The factor is REPORTED, not recomputed downstream: a second copy of
+            // "bars per year" in the tool would disagree whenever the fetched
+            // window is not exactly the nominal bar spacing (missing candles),
+            // and the note would then describe a different number than the one
+            // printed beside it.
+            const ppy = periodsPerYearFor(b);
+            return {
+                historicalVolatility: historicalVolatility(b, 20, true, ppy),
+                historicalVolatilityAnnualization: ppy,
+                chaikinVolatility: chaikinVolatility(b),
+                massIndex: massIndex(b),
+                ulcerIndex: ulcerIndex(b),
+                choppinessIndex: choppinessIndex(b),
+            };
+        },
     },
     volumeflow: {
         id: 'volumeflow',

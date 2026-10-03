@@ -52,7 +52,7 @@ const actionLabel = (tool: string, items: ToolAction[]): string => {
             // Without this the row falls through to "Ran <slug>" and the trader
             // reads a plan awaiting their review as something already done.
             return n === 1
-                ? `Strategy plan proposed — ${items[0].label} (draft: not active until you activate it)`
+                ? `Strategy plan proposed — ${items[0].label} (Settings → Skills → Trade plans; inactive until you activate it)`
                 : `${n} strategy plans proposed — drafts, not active until you activate them`;
         case 'revise_skill':
             return n === 1

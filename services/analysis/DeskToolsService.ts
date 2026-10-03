@@ -87,7 +87,7 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
             // A plan is saved as a draft file, so the trader should be told
             // WHERE it went — otherwise a model can quietly fill the notebook.
             label = String(parsed.strategy ?? 'strategy');
-            review = 'Settings → Strategies (draft — not active until you activate it)';
+            review = 'Settings → Skills → Trade plans (draft — nothing acts on it until you activate it)';
         } else if (name === 'revise_skill') {
             label = String(parsed.skill ?? 'skill');
             review = 'Settings → Skills';
@@ -440,16 +440,20 @@ function clipWithinBudget(body: string, visible: number, noteText: string): stri
                 changed = true;
                 shaped = JSON.stringify({ ...obj, _omitted: dropped }, null, 2);
             }
-            // Only take the shape-preserving result when it actually reshaped
-            // something. If the object is one huge scalar — `{"blob": "…"}` —
-            // there is nothing to reshape, and the honest clip is the raw cut
-            // plus the trailing notice the caller appends, which is the
-            // long-standing contract for that case.
+            // Prefer the shape-preserving result whenever it actually reshaped
+            // something. An earlier version also required it to fit `visible`,
+            // and that condition abandoned a VALID result for a truncated one
+            // the moment the `_clip`/`_omitted` metadata pushed it a few
+            // characters over — trading a parseable body for broken JSON,
+            // which is the exact failure this function exists to prevent.
+            // Slightly over the visible budget is the caller's to bound.
             if (changed) {
-                const withNote: Record<string, unknown> = { ...obj, _clip: noteText, _omitted: dropped };
-                const finalJson = JSON.stringify(withNote, null, 2);
-                if (finalJson.length <= visible) return finalJson;
+                return JSON.stringify({ ...obj, _clip: noteText, _omitted: dropped }, null, 2);
             }
+            // Nothing could be reshaped (e.g. one huge scalar like
+            // `{"blob": "…"}`): the honest clip is the raw cut plus the
+            // trailing notice the caller appends — the long-standing contract
+            // for that case.
         }
     } catch {
         // Not a JSON object — fall through to the line-boundary cut.
@@ -549,9 +553,22 @@ export const budgetToolContent = (
         })();
         out = isJson ? clipped : `${clipped}${note(visible)}`;
         if (out.length > cap) {
-            // Degenerate cap (tiny budget, large reserve): keep the size
-            // promise over the message.
-            out = `${out.slice(0, visible)}\n${MINIMAL_CLIP_NOTE}`;
+            // The only way a parseable body still exceeds the cap is the
+            // `_clip`/`_omitted` metadata on a body that just fits. Trim the
+            // note, NOT the JSON — cutting here would re-break what the
+            // clipper just made whole.
+            if (isJson) {
+                try {
+                    const obj = JSON.parse(out) as Record<string, unknown>;
+                    out = JSON.stringify({ ...obj, _clip: MINIMAL_CLIP_NOTE }, null, 2);
+                } catch {
+                    out = `${out.slice(0, visible)}\n${MINIMAL_CLIP_NOTE}`;
+                }
+            } else {
+                // Degenerate cap (tiny budget, large reserve): keep the size
+                // promise over the message.
+                out = `${out.slice(0, visible)}\n${MINIMAL_CLIP_NOTE}`;
+            }
         }
         // ...and now it can be got back. The artifact holds the DESK's own
         // payload, before the array down-sampling above, so paging through it
@@ -1683,15 +1700,6 @@ const TA_GROUP_TO_KEYS: Record<string, keyof typeof import('./taLibrary').TA_STU
     taOverlays: 'overlays',
 };
 
-/** Bars per year for an interval. Crypto runs 365 days, so annualisation
- *  follows the bar size: 1d -> 365, 4h -> 2190, 15m -> 35040, 5m -> 105120.
- *  Applying one factor to every timeframe made historical volatility mean
- *  nothing at all on anything but the daily. */
-const periodsPerYearForInterval = (interval: string): number => {
-    const minutes: Record<string, number> = { '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440 };
-    const m = minutes[interval] ?? 60;
-    return Math.round((365 * 24 * 60) / m);
-};
 
 /**
  * get_indicators — on-demand technical studies for any symbol/timeframe.
@@ -1792,18 +1800,18 @@ async function runIndicators(symbol: string, interval: string, groups: string[])
                 if (!taKey) break;
                 const { TA_STUDIES } = await import('./taLibrary');
                 const result = TA_STUDIES[taKey].run(klines);
-                // Historical volatility is ANNUALISED, so the same 365 applied
-                // to 5m bars and to daily bars is not a small error — it is a
-                // meaningless number. The study returns the bare reading; the
-                // tool labels it with the factor it used, so the model can see
-                // what the number actually is.
+                // Historical volatility is ANNUALISED, so the same factor applied to 5m bars
+                // and to daily bars is not a small error — it is a meaningless
+                // number. The STUDY reports the factor it actually used; read it
+                // rather than recomputing one here, or the note describes a
+                // different number than the one printed beside it.
                 if (taKey === 'volatility' && result && typeof result === 'object') {
                     const v = result as Record<string, unknown>;
                     const hv = v.historicalVolatility;
-                    if (typeof hv === 'number') {
-                        v.historicalVolatilityAnnualization = periodsPerYearForInterval(tf);
+                    const factor = v.historicalVolatilityAnnualization;
+                    if (typeof hv === 'number' && typeof factor === 'number' && factor > 0) {
                         v.historicalVolatilityNote =
-                            `annualised from the ${tf} window (x${periodsPerYearForInterval(tf)}); a single-period stdev is ${(hv / Math.sqrt(periodsPerYearForInterval(tf))).toFixed(2)}`;
+                            `annualised from this window (x${factor}); a single-period stdev is ${(hv / Math.sqrt(factor)).toFixed(2)}`;
                     }
                 }
                 out[group] = result;
