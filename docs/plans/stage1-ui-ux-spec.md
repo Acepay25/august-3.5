@@ -9,6 +9,13 @@
 > reference claim below is traced to a repo/docs URL or marked **[not verified]**.
 > If you drop screenshots into the workspace, I will fold them in and correct.
 
+> **Verification stamp (2026-10-03):** before presentation, (1) all 28 Hermes /
+> DeepSeek-harness claims were verified against fresh clones of both repos — two
+> precision fixes applied below; (2) all 35 current-state audit citations were
+> checked against this repo — six corrections applied below, the rest confirmed
+> as written; (3) the chart-look reference research was added as **A5** and the
+> chart visual spec as **C9**.
+
 ---
 
 ## Part A — Reference research (4 products)
@@ -23,9 +30,18 @@ Sources: `apps/desktop/DESIGN.md`, `apps/desktop/README.md`, hermes-agent.nousre
 - **Sidebar:** Cmd/Ctrl+B toggle, Cmd/Ctrl+\ swaps side; `Sessions | Bots` tab strip; projects with repo discovery; archive + "Hide from sidebar"; search by id (Cmd/Ctrl+Shift+F); Cmd/Ctrl+N new session.
 - **Right panel:** terminal, file browser, Git review (Cmd/Ctrl+G), browser, artifacts. **Hide vs Close** distinction: Hide keeps the pane mounted-but-inert (forms, timers, scroll, shell state preserved); Close releases it. Multiple terminals stack in a tab rail.
 - **Settings:** OverlayView card (not a nav stack); `OverlayNav` subpages with breadcrumbs, shared disclosure carets, narrow-window dropdown collapse, **search resolves to the owning child and highlights it**; `ListRow` primitive (label/description/action, flat, flush-left, spacing over dividers); "Applies to" profile chip when ≥2 profiles.
-- **Updates:** GitHub-feed check (token → gh → anonymous fallback, rate-limit surfaced); one-click update; streams build output to `update.log` with an idle watchdog; per-artifact-owner install paths (MSIX/Store/electron-updater/checkout). Release-notes UI and rollback: **[not verified]**.
+- **Updates:** the packaged desktop app updates via electron-updater over a hosted
+  (Cloudflare R2) feed; the GitHub-feed ladder (token → gh CLI → anonymous fallback,
+  rate-limit surfaced) serves the CLI / source-checkout updater — don't conflate the
+  two. One-click update; streams build output to `update.log` with an idle watchdog;
+  per-artifact-owner install paths (MSIX/Store/electron-updater/checkout). Release-notes UI and rollback: **[not verified]**.
 - **Icons:** **Tabler** for chrome, **Codicon** for editor/tool/status; curated aliases + `iconSize` scale from `src/lib/icons.ts` — feature code never imports icon packages directly; SVGs inherit `size-3.5` (`size-3` at xs), never re-set per site; never mix sets within one control group; `StatusDismissButton` owns the close glyph.
 - **Micro:** canonical `ErrorState`/`ErrorIcon`, `EmptyState`/`PanelEmpty`, one `ConfirmDialog` (Enter/Esc, never `window.confirm`); `Tip` tooltips (200ms first open, 300ms re-open, 100ms exit); ~100ms functional transitions, spring `AnimatedInt` counts; **one Esc = one thing** (cancel active interaction XOR close topmost surface); composer status stack with a ridge drawer; hover 500ms grace on directive-chip action pills.
+- **Verified addenda:** **tooltip anti-tax doctrine** — a tip exists only when hover
+  teaches something new, never on menu triggers or close buttons, and native
+  `title=` is lint-banned; **named z-index ladder tokens** (boot chain
+  `--z-connecting → --z-onboarding → --z-setup → --z-crash`) so overlays never
+  fight via ad-hoc z classes.
 
 ### A2. DeepSeek harness (deepseek-ai/deepseek-harness)
 *Credited in `THIRD_PARTY_NOTICES.md:31`. Most directly transferable reference.*
@@ -39,7 +55,11 @@ Sources: repo READMEs (`ui-layout`, `ui-sidebar`, `ui-sidebar-right`, `ui-theme`
 - **Settings:** modal panel portaled beside `#root`, shared 800×800 bounded by viewport, ≥24px margin; Esc closes and **restores focus to the invoking control**; Mod+/ opens the shortcut reference above Settings. Nav is a projection of contributed sections (General, Models, Plugins, Account, Keyboard shortcuts). Onboarding ledger mounts exactly one visible step at a time and `inert`s the root.
 - **Updates:** fixed nightly feed, 10-min polling with ±20% jitter, backoff doubling to 1h; manual "Check for Updates…" joins in-flight checks; automatic checks never open dialogs. **Status carrier = the lower-left account row** (availability, spinner + download %, verification, readiness, persistent red retry with tooltip); collapsed sidebar shows the same as a brand-blue dot on the expand button. Apply: shell-owned restart confirmation that **warns when running agents/queued input/jobs would be interrupted** (API requests alone don't warn); Host locks new requests, drains, re-checks; drain timeout refuses install and unlocks. Windows: installer explains close/reopen/ don't-relaunch; `--updated` re-focuses the window. Failure: typed cause → guidance, "View technical details" collapsed by default (exit status, signal, deadline facts — not plugin stderr); 7-Zip extract failure writes a log + **Copy error details** button; same-path upgrade keeps the old dir until promotion; **downgrades disabled**; fatal failures offer Exit / Restart / **Disable third-party plugins** (renames the patch file) + restart.
 - **Icons:** owned by `ui-primitives`; names end in `Regular` (1px artwork) or `Medium` (same geometry at **1.3px stroke**); both weights always exported so callers choose emphasis without a new API; glyphs are decorative (no labels); reuse-before-copy rule; feature packages cannot import each other's atoms. Plugin artworks fixed 36×36; file-type glyphs 28px. Menu icons consume `--dsw-alias-menu-icon`; destructive icons keep the error color.
-- **Micro:** streaming markdown freezes completed blocks and re-parses only the tail (incl. unclosed fences + Shiki grammar resume); **`TextShimmer`** for running titles/reasoning/tool rows/retry line (300ms delay, 1s sweep, 500ms rest, 15° tilt, reduced-motion → static); completed-turn action footer starts 20px below prose, visible only on the latest turn (hover/focus on history, always on no-hover devices); tool rows 6px apart, group title 8px before content, assistant 12px from process rows; empty lists = centered glyph-over-text with named emptiness ("No archived sessions yet" + "View other sessions"); provider quota errors use neutral copy, not the provider message; terminal failures render an inline red-dot row (retries don't create rows); Esc Esc (500ms) stops a response; shortcut-reference dialog 480×600 with subsequence search, 42px rows, per-key recording drawer; **turn rail** (10px pitch marks, gradient fades, hides ≤900px width) + back-to-bottom button.
+- **Micro:** streaming markdown freezes completed blocks and re-parses only the tail (incl. unclosed fences + Shiki grammar resume); **`TextShimmer`** for running titles/reasoning/tool rows/retry line (300ms delay, 1s sweep, 500ms rest, 15° tilt, reduced-motion → static); completed-turn action footer starts 20px below prose, visible only on the latest turn (hover/focus on history, always on no-hover devices); tool rows 6px apart, group title 8px before content, assistant 12px from process rows; empty lists = centered glyph-over-text with named emptiness ("No archived sessions yet" + "View other sessions"); provider quota errors use neutral copy, not the provider message; terminal failures render an inline red-dot row (retries don't create rows); Esc Esc (500ms) stops a response; shortcut-reference dialog 480×600 with subsequence search, 42px rows, per-key recording drawer; **turn rail** (10px pitch marks, gradient fades, hidden once the transcript column's usable width drops below ~900px — column width, not viewport) + back-to-bottom button.
+- **Verified addenda:** **focus rings are modality-aware** — hidden under pointer
+  input except on editable controls, restored on keyboard use; **search is
+  abort-ordered** — each new query aborts the previous request, and a failed
+  content search keeps the metadata matches visible with no extra warning.
 
 ### A3. Claude Desktop (Anthropic)
 *Consumer client; closed-source. Sources: support.claude.com, claude.com/download, academy.claude.com, teardowns.*
@@ -52,6 +72,62 @@ Sources: repo READMEs (`ui-layout`, `ui-sidebar`, `ui-sidebar-right`, `ui-theme`
 - **Updates:** "Claude" menu → Check for updates; background download; blue top banner / corner notification prompting restart; "Restart to update" applies; release notes in Help Center only (in-app "what's new" **[not verified]**); failure/rollback **[not verified]**.
 - **Thinking:** "Thinking" indicator with a **live timer**, then an expandable Thinking section above the response; incomplete thinking says "the rest of Claude's thought process is not available."
 - **Icons:** no published spec — **[not verified]**; visually small monochrome outline glyphs.
+
+### A5. Chart look reference: LuxAlgo/Vela (+ lightweight-charts conventions)
+*The chart reference the brief asked for. Identity verified: **LuxAlgo/Vela**
+(Apache-2.0) — "the open-source charting library for the agentic era": headless
+core, WebGL2 renderer (canvas2d fallback), workspace UI, plugin SDK, Pine-Script
+engine. The "AI" is positioning plus host-facing annotation APIs — not a built-in
+chat. Rejected name-shares: Vela Exchange (DeFi perps contracts, no chart UI),
+Vela Trading Systems (proprietary vendor), go-vela (CI). All claims below are from
+source, cited repo-relative.*
+
+- **Theme** (`src/core/theme.ts`): dark background `#151619`, axis text `#b2b5be`,
+  grid `#20222c`, border `#2a2b30`; candle hues are shared by both themes —
+  "switching themes recolors surfaces, never the series."
+- **One palette module** (`src/core/palette.ts`) — every fixed color lives once:
+  BULLISH `#089981` / BEARISH `#f23645`; ACCENT `#2962ff` (active chrome) with
+  drawing default `#38c0fd`; INFO `#5b9cf6` — "statistical overlays (regression,
+  VWAP)… read as derived data"; WARNING `#ff9800` (second lines); NEUTRAL
+  `#787b86` (levels, flat slope); VALID/INVALID deliberately brighter/cooler than
+  BULLISH/BEARISH "so a validity wash never reads as direction"; a categorical
+  list ordered for adjacent-hue contrast + stable hash for multi-series.
+- **Candles** (`chartConfig.ts`, `candle-lod.ts`): body visible, **border off**,
+  wick inherits the body color; body = floor(spacing·0.7), wick capped at half
+  body width; 3-tier LOD (full → wick-only → aggregate) with device-pixel
+  snapping so candles stay symmetric; hollow mode when the body drops.
+- **Crosshair:** 1px **dashed**, opacity 0.4, neutral `#9aa0ad`, snapped to bar
+  center, rendered on its own transparent canvas; axis chips on plate `#595959`
+  with auto-contrast ink.
+- **Last price** (`ChromeRenderer.ts`): dotted 1px line + axis chip **filled with
+  the candle-direction color**; optional bar-close countdown merges into one
+  stacked chip.
+- **Axis/typography:** axis text 11px and deliberately recessive; chrome text
+  `#d1d4dc` one step brighter than the axis.
+- **Volume** (`VolumeRenderer.ts`): bottom-anchored columns on a canvas **behind**
+  the data canvas, own scale (tallest visible bar = 96% of pane), never touches
+  price autoscale; direction-colored; candle-body width; can move to its own pane.
+- **Watermark** (`watermark.ts`): "SYMBOL · TF", ≤36px, **opacity 0.05**, price
+  pane only.
+- **Indicators** (`core/native-indicators/classics/`): an `overlay` flag decides
+  over-price vs **own pane below** (26px collapsed strip, draggable separator).
+  **Color is role-based, not per-indicator:** statistical/first line = INFO blue,
+  second line (signal, %D) = WARNING orange, slope coloring = BULLISH/BEARISH,
+  fixed levels = NEUTRAL gray dashed 1px; bands/fills 40–50% alpha; histograms
+  per-bar direction-colored; line width 2 everywhere.
+- **Legend** (`InputsUI.ts`): lives in its own pane; chip = translucent
+  background wash at rest, solid when hovered/open; 12px/600 title; live values
+  beside the title **in the plot's color**; ~24px controls; collapsible.
+- **Drawings:** default `#38c0fd` 2px; `levelPalette.ts` pins Fibonacci ratio
+  colors once so ~18 tools can't drift; highlighter = wide translucent `#ff5d00`.
+- **AI annotations:** `chart.marks` bottom lane (colored glyphs, click panels),
+  time-range highlights `rgba(120,130,160,0.10)`, ghost crosshair for synced
+  charts — AI ink is kept separate from direction hues.
+- **Converging conventions:** lightweight-charts' own candlestick defaults use
+  one hue per direction with wick/border inheriting it (`#26a69a`/`#ef5350`); v5
+  added native panes. Dark-chrome convention across references: near-black
+  background (never pure black), grid barely lighter, recessive gray axis text,
+  legend top-left with values in series color.
 
 ### A4. ChatGPT desktop (OpenAI)
 *Closed-source (Electron + webview; Linux repackagers confirm). Sources: learn.chatgpt.com/docs, help.openai.com, community reports.*
@@ -71,6 +147,7 @@ Sources: repo READMEs (`ui-layout`, `ui-sidebar`, `ui-sidebar-right`, `ui-theme`
 4. **One Esc = one thing** (Hermes); **focus returns to the invoking control** (DSH); **never fabricate progress** (Hermes boot, DSH loading page).
 5. **Thinking indicators settle to a duration label** ("Thought for Ns", Claude timer) — the repo's `ReasoningRow` already does "Thought · 14s"; the live view and desk floor don't.
 6. **Icon discipline**: one library, curated import layer, inherited sizes, one stroke weight (DSH Regular/Medium 1px/1.3px; Hermes Tabler `size-3.5`).
+7. **Chart cosmetics converge too** (Vela + lightweight-charts, A5): one hue per direction with wick/border inherited, role-based indicator colors, recessive chrome. The structure is portable; the hues are not — C9 remaps everything onto our tokens.
 
 ---
 
@@ -78,10 +155,10 @@ Sources: repo READMEs (`ui-layout`, `ui-sidebar`, `ui-sidebar-right`, `ui-theme`
 
 ### B1. Shell & navigation
 - Root: `App.tsx:2794` — overlays mount **outside** `<main>` (correct per render-probe doctrine): `VersionHistoryDashboard`, `UpdateOverlay`, `LiveStreamView`, `UserProfileManager`, `AccuracyModeModal`, `LiveMarket`, capture modals, `SettingsMenu`, `VisionDataViewer`, `AutomationView` (`z-[75]`), `AutomationEditorModal` (`App.tsx:2794-3007`).
-- **Five real surfaces** (AGENTS.md says six — it's five + the Approvals overlay): trade (`TradeView`), journal, studio, agents ("Chat"), learn — `App.tsx:3151-3340`, `hooks/useSurface.ts:11-30`, `components/shell/SurfaceMenuList.tsx:44-51`.
+- **Five real surfaces** (AGENTS.md says six — it's five + the Approvals overlay): trade (`TradeView`), journal, studio, agents ("Chat"), learn — `App.tsx:3151-3340`, `hooks/useSurface.ts:11-30`, `components/shell/SurfaceMenuList.tsx:44-51`. render-probe's six-entry surface list (`scripts/render-probe.cjs:764-777`) is exactly these five + the Approvals overlay, so AGENTS.md's "six nav surfaces" counts the overlay.
 - **No persistent left sidebar.** `SidebarContent` (`components/shared/Sidebar.tsx:130-659`) renders only inside the hamburger drawer (`Header.tsx:418-476`, portaled to `document.body` because the header's `backdrop-blur` clips fixed children — documented at `Header.tsx:410-417`). Keyboard: `Alt+1..5` (`App.tsx:1500-1508`), hash routing (`hooks/useSurfaceRouter.ts`).
 - Right panel: per-surface only — Chart AI dock (`TradeChatPanel`, collapse/persist `TradeChatPanel.tsx:774-779`, drag-resize `TradeView.tsx:991-1001`), `AdvancedAnalyticsSidePanel` (right slide, `inert` at `:133`), Journal aside, `VisionDataViewer` drawer, fixed overlays for search/saved-analyses/live-market.
-- Responsive: below `lg`, Trade becomes a single-pane Chart|AI|Book segmented control (`TradeView.tsx:356-366,888-924`); mobile viewport meta + safe-area insets (`index.html:9-10`, `index.css:1256-1263`); Electron floor 800px (`App.tsx:3342-3349`).
+- Responsive: below `lg`, Trade becomes a single-pane Chart|AI|Book segmented control (`TradeView.tsx:356-366`, tablist `:909-943`); mobile viewport meta + safe-area insets (`index.html:9-10`, `index.css:1256-1263`); Electron floor is **minWidth 800 / minHeight 600** (`electron/main.cjs:953-954`; the `App.tsx:3342-3346` comment cites the width only).
 - Z-ladder: splash `z-9999` → UpdateOverlay `z-[200]` → modals `z-[120]` → Confirm/Toast `z-[100]` → AutomationView `z-[75]` → drawers `z-50` → pipeline card `z-40` → header `z-20`.
 
 ### B2. Launch / onboarding
@@ -101,8 +178,8 @@ Sources: repo READMEs (`ui-layout`, `ui-sidebar`, `ui-sidebar-right`, `ui-theme`
 
 ### B5. Icons
 - One library: `lucide-react@^1.26.0`. Canonical re-export layer `components/shared/Icons.tsx:13-77` (legacy names) + `LoadingIcon` (`:84-86`).
-- **Inconsistency:** ~75 files import `lucide-react` directly; `SurfaceMenuList.tsx:12-18` mixes both styles in one file.
-- **~20 hand-rolled inline SVGs** aping lucide: `ProviderManager.tsx:47-91` (7 glyphs, mixed 1.8/2 stroke), `ChartToolRail.tsx:28,38,48`, `DebateStage.tsx:189,202`, `ImageViewerModal.tsx:44`, `MistakeWarningBanner.tsx:74`, `MemoryFilesManager.tsx:585,595`, `DeskScene.tsx:582,607`, `SpeechBubble.tsx:110`, `BotFace.tsx:97,121`, `SessionUsagePanel.tsx:68`, `ModelPerformanceDashboard.tsx:85` (donuts), `TradeView.tsx:268` (sparkline).
+- **Inconsistency:** 82 files import `lucide-react` directly (78 production, 4 test/e2e); `SurfaceMenuList.tsx:11-17` mixes both styles in one file.
+- **~23 hand-rolled inline SVGs** aping lucide: `ProviderManager.tsx:47-91` (7 glyphs, mixed 1.8/2 stroke), `ChartToolRail.tsx:28,38,48`, `DebateStage.tsx:189,202`, `ImageViewerModal.tsx:44`, `MistakeWarningBanner.tsx:74`, `MemoryFilesManager.tsx:585,595`, `DeskScene.tsx:582,607`, `SpeechBubble.tsx:110`, `BotFace.tsx:97,121`, `SessionUsagePanel.tsx:68`, `ModelPerformanceDashboard.tsx:85` (donuts), `TradeView.tsx:268` (sparkline).
 - Sizes in free-fall: `h-3 w-3`, `h-3.5 w-3.5`, `h-4 w-4`, `h-5 w-5`, `w-6 h-6`, `width="14" height="14"`. No `strokeWidth` overrides on lucide (default 2 everywhere); custom SVGs split 1.8 vs 2.
 - **`⏱` emoji used as an icon** (`Sidebar.tsx:441`); plain `+` glyph (`Sidebar.tsx:431`).
 
@@ -133,15 +210,15 @@ The debate actually surfaces through **four divergent implementations**:
 ### B9. Chat screen & trading data
 - **Signal/trade cards:** `TradeProposalCard.tsx:25-53` (direction pill, symbol, confidence, Entry/SL/TP 3-col mono grid, rationale, Log/Cancel) — **does not show R:R even though `computeRrRatio` exists and `rrRatio` is built onto the logged analysis** (`services/trade/proposedTrade.ts:48-49,113`). `KeyLevelsCard.tsx` (Level·Price·Dist·Context table, live "last" divider, click-to-pin, chart toggle). Label formats vary across `WatchListPanel.tsx:112-120`, `SavedAnalysesGallery.tsx:113-115`, `CompareModal.tsx:34-36`, `SavedAnalyses.tsx:60-69`, `TradeLog.tsx:335-347`, `AutomationRunCard.tsx:68`.
 - **Chart:** `lightweight-charts` (deliberately not the TradingView iframe), own Binance kline fetchers, TradingView-style drawings on a transparent overlay canvas, Entry/SL/TP lines via `verdictLevels()` (`services/trade/chartData.ts:58+`), `measured_move` annotates risk/reward on-canvas (`TradingChart.tsx:865-907`).
-- **Formatting:** canonical `fmtPrice` (`utils/formatters.ts:34-40`); **no `Intl.NumberFormat` anywhere**; `fmtPx` duplicated in `KeyLevelsCard.tsx:39`; % decimals vary 0–4 (win rate 0, PnL 1, spread 3–4, Brier 3); **R:R has 3+ shapes** — `1:2.0` (`TradingChart.tsx:903`), `2.00:1` (`utils/avoidReason.ts:78`), `R:R: 1:2` (`utils/tradeInsightBrief.ts:41`), `avg R 1.80` (`WeeklyReviewCard.tsx:33`); currency mixed (`$1.2K` `fmtUsd` vs `$0.003` costs vs bare prices).
+- **R:R has two colliding conventions** — reward-first `2.0:1` (`TradingChart.tsx:907`) and `2.00:1` (`utils/avoidReason.ts:78`) vs risk-first `R:R: 1:2` (`utils/tradeInsightBrief.ts:41`), plus the realized multiple `avg R 1.80` (`WeeklyReviewCard.tsx:33`, a different metric on purpose per AGENTS.md); **no `Intl.NumberFormat` anywhere**; `fmtPx` duplicated in `KeyLevelsCard.tsx:39`; % decimals vary 0–4 (win rate 0, PnL 1, spread 3–4, Brier 3); currency mixed (`$1.2K` `fmtUsd` vs `$0.003` costs vs bare prices).
 - **Colors:** semantic tokens used consistently for Long/Short and P&L; `VOLUME_UP/DOWN` hand-rolled rgba matching the tokens (`services/trade/chartData.ts:26-27`); `KEY_LEVEL_COLORS` categorical by level kind.
 - **Accessibility weakest spot:** the chart canvas and overlay have **no role/aria-label/text alternative** (`TradingChart.tsx:1181,1197,1204`); `KeyLevelsCard` is the de-facto text alternative; `Sparkline` is `aria-hidden`.
 
 ### B10. Dead UI / fake status
 - No TODO/FIXME/"coming soon"/empty-onClick found. Commented-out dead block: memory-compression effect (`App.tsx:1028-1046`). Intentional no-op retained: `handleQuotaExceeded` (`App.tsx:1656-1661`) — modal call sites still pass it.
-- **Cosmetic-only cyclers** (do not claim real progress but read as staged progress): splash "Loading modules / Restoring session / Connecting market data" (`index.html:37-41`), update "Preparing your session… / Relaunching…" (`UpdateOverlay.tsx:224-226`) — both labelled in-code (`index.css:348`).
+- **Cosmetic-only cyclers** (do not claim real progress but read as staged progress): splash "Loading modules / Restoring session / Connecting market data" (`index.html:37-41`), update "Preparing your session… / Relaunching…" (`UpdateOverlay.tsx:224-226`) — nothing in code labels either as decorative (the `index.css:348` comment describes only the cross-fade).
 - `Sidebar.tsx:456` defensive no-op fallback (unreachable in practice).
-- **"LIVE MARKET (BTC)" header label is hardcoded** (`Header.tsx:245`) while the data comes from `hooks/useMarketData.ts:23-33` — the label isn't bound to the sampled symbol.
+- **"LIVE MARKET (BTC)" header label is hardcoded** (`Header.tsx:245`) — and the sampler itself hardcodes BTCUSDT (`hooks/useMarketData.ts:39,42`), so the label matches the data only by accident. Binding the label to the hook's actually-sampled symbol is the UI fix; multi-symbol sampling is logic work (out of scope).
 
 ### B11. Accessibility (strong patterns worth keeping)
 Dialog semantics on all modals; Journal tablist with roving focus + arrow keys (`Journal.tsx:204-219,309-319`) — but the Trade mobile tablist has **no** arrow-key handler (`TradeView.tsx:892-924`); Toast `role="alert"`/`status`; UpdateOverlay `aria-live="assertive"` + progressbar values; focus traps in drawer/Settings; `inert` removes off-screen panels from the tab ring; Esc-gating (`App.tsx:1410-1442`); ⌘K palette, ⌘, settings; reduced-motion handling throughout; 4.82:1 contrast on micro-labels by design.
@@ -149,7 +226,7 @@ Dialog semantics on all modals; Journal tablist with roving focus + arrow keys (
 ### B12. Ranked inconsistencies
 1. DebateStage dead code + dead `externalOpenActor` state + stale comments (B7).
 2. TradeProposalCard hides the computed R:R (B9).
-3. R:R formatted 3+ ways; % decimals 0–4; `fmtPx` duplicate (B9).
+3. R:R in two colliding conventions (reward-first vs risk-first); % decimals 0–4; `fmtPx` duplicate (B9).
 4. Two icon import styles + ~20 hand-rolled SVGs + free-fall sizes + `⏱` emoji (B5).
 5. Four divergent thinking indicators; GroupChatView's has no live region (B7).
 6. No persistent sidebar — navigation hidden behind a hamburger (B1).
@@ -183,7 +260,7 @@ Dialog semantics on all modals; Journal tablist with roving focus + arrow keys (
 
 **Spacing:** 4px base scale — 4/8/12/16/24/32/48/64; panel padding 16; bubble gap 12; section gap 24. No `space-y` magic numbers outside the scale.
 
-**Type:** keep the `text-ui-*` ramp and the `--ui-font-size` dial. **Resolve the 11px literal** (flagged in `index.css:166-173`): add an `text-ui-micro` step (base−3) and migrate the 11px sites — one dial, one role. Geist Variable UI / DM Serif Text display-only / JetBrains Mono data. Every numeric readout `font-mono tabular-nums` (already doctrine).
+**Type:** keep the `text-ui-*` ramp and the `--ui-font-size` dial. **Resolve the 11px literals** (`index.css:536, :768, :794`): add a `text-ui-micro` step (base−3) and migrate those sites — one dial, one role. Geist Variable UI / DM Serif Text display-only / JetBrains Mono data. Every numeric readout `font-mono tabular-nums` (already doctrine).
 
 **Radii:** `rounded-control` 8px (inputs/buttons), `rounded-bubble` 12px (chat bubbles). Nothing else. DSH's superellipse corners: reject (visual noise on a trading terminal).
 
@@ -191,10 +268,16 @@ Dialog semantics on all modals; Journal tablist with roving focus + arrow keys (
 
 **Motion:** `--ease-snappy` 0.12–0.18s; name the property (`transition-colors`, `transition-transform`), never `transition-all`; durations >180ms only for data-value animation (progress bars) and documented. No new `@keyframes` beyond the existing tick-flash/beacon/streaming-dots.
 
+**Z-ladder as tokens:** name the existing rungs (splash `z-9999` → update `z-[200]` → modals `z-[120]` → confirm/toast `z-[100]` → automation `z-[75]` → drawers `z-50` → pipeline `z-40` → header `z-20`, B1) as CSS variables — Hermes pattern — so overlays stop fighting via ad-hoc z classes.
+
+**Focus rings are modality-aware:** hide `:focus-visible` rings under pointer input except on editable controls; keyboard focus styling resumes on keyboard use (DSH pattern).
+
+**Tooltip tax rule:** `Tip` appears only when hover teaches something new — never on menu triggers or close buttons; native `title=` stays banned (Hermes doctrine; already matches `ui/Tip`'s `shortcut=` rule).
+
 **Number format standard** (new, in `utils/formatters.ts`):
 - prices: `fmtPrice` (canonical; delete the `fmtPx` duplicate in `KeyLevelsCard.tsx:39`)
 - percents: new `fmtPercent(v, digits)` — win rates 0, P&L 1, spread 3, Brier 3; call sites declare digits explicitly
-- R:R: **one shape everywhere: `1:2.0`** (the chart's) — migrate `avoidReason.ts:78`, `tradeInsightBrief.ts:41`, review cards
+- R:R: **one shape everywhere: `2.4:1` (reward:risk)** — the majority convention already at `TradingChart.tsx:907` and `utils/avoidReason.ts:78`, and numerically the ratio `utils/riskReward.ts` computes (nearest target ÷ stop). Migrate `utils/tradeInsightBrief.ts:41` (risk-first). The realized "avg R" multiple (`WeeklyReviewCard.tsx:33`) is a deliberately different metric — keep it distinct, but format it through one helper.
 - currency: `fmtUsd` for aggregate USD; costs `$0.003`; prices bare (no `$`)
 
 ### C2. Icon system
@@ -290,7 +373,7 @@ Keep the existing main-process state machine (it's already strong). Renderer con
 
 ### C7. Component inventory
 
-**Keep (restyle only):** `ChatTranscriptRow`, `ChatTranscriptList`, `TradeProposalCard` (+R:R), `KeyLevelsCard`, `VerdictCard`, `VerdictAudit` + its panels, `ReasoningPanel`, `ThinkingRecordCard`, `ChatWorkTimeline`, `AnalyzedRow`, `ReasoningRow`, `TradeChatPanel`, `TradingChart` (+a11y), `TradingView` layout, `SettingsMenu` + tabs, `UpdateOverlay`/`UpdateButton` (+states), `UserProfileManager`, `SidebarContent`, `SurfaceMenuList`, `Header`, `StatusPill`, `EmptyState`, `Tip`, `SelectMenu`, `ConfirmDialog`, `Toast`, `DeskScene`/`PixelSeat`/`SpeechBubble`, `AgentsView` roster, `HarnessSection`, `RegimeMatrixStrip`, `WinRateDashboard`/`EquityCurveDashboard`/`VersionHistoryDashboard`/`ModelPerformanceDashboard` (re-token their hex palettes).
+**Keep (restyle only):** `ChatTranscriptRow`, `ChatTranscriptList`, `TradeProposalCard` (+R:R), `KeyLevelsCard`, `VerdictCard`, `VerdictAudit` + its panels, `ReasoningPanel`, `ThinkingRecordCard`, `ChatWorkTimeline`, `AnalyzedRow`, `ReasoningRow`, `TradeChatPanel`, `TradingChart` (+a11y + C9 visual retune), `TradingView` layout, `SettingsMenu` + tabs, `UpdateOverlay`/`UpdateButton` (+states), `UserProfileManager`, `SidebarContent`, `SurfaceMenuList`, `Header`, `StatusPill`, `EmptyState`, `Tip`, `SelectMenu`, `ConfirmDialog`, `Toast`, `DeskScene`/`PixelSeat`/`SpeechBubble`, `AgentsView` roster, `HarnessSection`, `RegimeMatrixStrip`, `WinRateDashboard`/`EquityCurveDashboard`/`VersionHistoryDashboard`/`ModelPerformanceDashboard` (re-token their hex palettes).
 
 **Rewrite:** new `TypingIndicator` (unify 4 framings); new left `NavRail`/`NavPanel` shell (reusing `SidebarContent`); right-panel contract wrapper (wrap existing docks); `UpdateButton` installing state; chart accessibility layer (role/aria/text summary); splash cycler (simplify); `Icons.tsx` becomes the sole import surface.
 
@@ -303,7 +386,7 @@ Keep the existing main-process state machine (it's already strong). Renderer con
 Each phase: `npm run typecheck && npm run test && npm run build`, then `npm run render-probe` (updates expectations where nav structure changes), then a manual browser pass on the changed screens (doctrine: jsdom can't see an inflated pill). CI ratchets to respect: lint `--max-warnings 889`, `themeContrast.test.ts` (hue allowlist), `typeRamp.test.ts` (9/10px ban), `deadControlsGuard.test.ts`.
 
 **Phase 0 — Dead code & standards (low risk, ~half a day)**
-Delete DebateStage + dead state + stale comments + `fmtPx` dup; add `fmtPercent` and the single R:R shape at the 4 call sites; replace `⏱`/`+` glyphs; fix the hardcoded "LIVE MARKET (BTC)" label.
+Delete DebateStage + dead state + stale comments + `fmtPx` dup; add `fmtPercent` and the single reward-first R:R shape (`2.4:1`) at `TradingChart.tsx:907` / `utils/avoidReason.ts:78` / `utils/tradeInsightBrief.ts:41`; replace `⏱`/`+` glyphs; fix the hardcoded "LIVE MARKET (BTC)" label by binding it to the symbol the hook actually samples.
 *Verify:* typecheck, tests (delete the steer test), render-probe, Trade/Journal screens.
 *Risk:* low. `debateStageActors.ts` type imports must be re-homed or deleted.
 
@@ -322,12 +405,36 @@ New `TypingIndicator` (4 call sites, live-region fix, settle-to-duration); per-m
 *Verify:* debateFlow tests, render-probe (chat rows), manual debate run.
 *Risk:* medium — streaming rows re-render often; watch for layout shift on stream chunks (doctrine).
 
-**Phase 4 — Settings, update flow, chart a11y, polish (low)**
-Settings Developer→nav + version/update row + focus-return; UpdateButton installing state + up-to-date toast + error details; chart `role`/`aria-label` + text summary (top levels); Trade mobile tablist arrow keys; GroupChatView live region (if not folded into Phase 3).
+**Phase 4 — Settings, update flow, chart, polish (low)**
+Settings Developer→nav + version/update row + focus-return; UpdateButton installing state + up-to-date toast + error details; chart `role`/`aria-label` + text summary (top levels); **C9 chart visual retune** (candle/wick/border from the two trade hues, borderless bodies, dashed crosshair, direction-colored last-price chip, recessive axis/grid, watermark, role-based indicator colors — options + overlay-canvas changes only); Trade mobile tablist arrow keys; GroupChatView live region (if not folded into Phase 3).
 *Verify:* full suite, `installer-smoke` (update flow touches the updater), manual update-state pass with `ELECTRON_DISABLE_SECURITY_WARNINGS` dev harness.
 *Risk:* low; updater changes are renderer-only (main.cjs untouched).
 
 **Deferred / couldn't verify (report at end of Stage 2):** per-agent win rates (needs data work); light theme activation (D1); settings value-search; release-notes rendering fidelity vs. GitHub markdown; rollback (not supported by electron-updater — documented, not built); exact reference-app spacing/radii values marked **[not verified]** in Part A.
+
+### C9. Chart visual language & fast-market readability
+
+**Visual language** — structure from A5 (Vela + lightweight-charts conventions), hues remapped to our tokens:
+
+- **Candles: one hue per direction.** Body, wick (and border, when shown) all derive from `--trade-up`/`--trade-down` (`#07b56a`/`#f75d5f`); bodies render **borderless** (Vela/TV structure). Reference palettes differ only in hue value (theirs deeper/teal-leaning) — never mix reference hues into the chart.
+- **Chrome recessive:** chart surface sits on the `zinc-900` panel; grid one step above the background (~`#1f1f1c`+8% class); axis text 11px recessive gray; chrome text one step brighter — mirrors our ink ramp, no new colors.
+- **Crosshair:** 1px dashed, 0.4 opacity, neutral gray, snapped to bar center; axis chips on a `#595959`-class plate with auto-contrast ink.
+- **Last-price line:** dotted, direction-colored, axis chip filled with the direction color — formalizes the existing 'mark'-line work.
+- **Volume:** bottom-anchored behind candles, own scale, direction-colored, candle-body width (`chartData.ts` VOLUME colors already match; keep).
+- **Watermark** "SYMBOL · TF" at 5% opacity, ≤36px, price pane only.
+- **Indicator colors are role-based, not per-indicator:** derived/statistical overlays = `--info` cyan (absorbs Vela's INFO role; if the Trade view already spends its one cyan accent elsewhere, that one stops being cyan — doctrine rule); second line (signal/%D-class) = `--warn` amber; slope/direction coloring = the two trade hues; fixed levels = neutral gray dashed 1px; bands/fills ~40–50% alpha; 2px lines; per-bar direction-colored histograms. Any categorical auto-color list **drops bull/bear hues** — emerald/rose already mean direction here.
+- **Legend chips:** translucent background wash at rest, solid on hover, live values in the plot's color, placed inside their pane, collapsible.
+- **AI/model ink stays separate from direction hues:** marks lane + translucent time-range highlights (`rgba(120,130,160,0.10)`-class) + translucent highlighter — the same separation the key-levels cards already practice.
+- **Scope note:** applied via lightweight-charts options and the existing overlay canvas — no renderer swap. Vela's WebGL2/Pine-Script machinery is explicitly **not** adopted; the chart stays lightweight-charts (deliberate, per repo history).
+
+**Fast-market readability** (the trading-data presentation rules the brief asked for):
+
+- **Fixed-decimal contract per metric** — prices via `fmtPrice`, percents via `fmtPercent(digits declared per call site)`, R:R as `2.4:1` — so digits change but glyph width never does; `font-mono tabular-nums`, numeric columns right-aligned, labels left, units live in the label not the cell. No layout jitter while ticks stream.
+- **Value text never animates:** numbers snap; only color/state transitions animate (0.12s). Tick flash uses the existing tick-flash keyframe in the two trade hues — never a new hue for a new state.
+- **Live-region announcements throttle** (≤1 per 5s per metric) while visual updates stay unthrottled.
+- **Hit targets ≥24px** on dense pills/rows even when text is 10–11px.
+- **Stale data is marked, never silent** — the harness-marks / POSSIBLY-STALE doctrine extends to every chart-side number.
+- **Chart a11y (from B9):** canvas gets `role="img"` + an aria-label (symbol · interval · last · trend) plus a visually-hidden data summary; `KeyLevelsCard` remains the full text alternative.
 
 ---
 
@@ -338,5 +445,6 @@ Settings Developer→nav + version/update row + focus-return; UpdateButton insta
 - **D3 — Delete dead DebateStage** (recommended) vs. resurrect it as the messenger view.
 - **D4 — R:R on TradeProposalCard/VerdictCard** (small presentation addition threading an already-computed value) — in or out?
 - **D5 — Update overlay:** keep full-screen during download/ready (current) vs. demote to the account-row/toast pattern (DSH).
+- **D6 — C9 chart visual retune** (recommended: Vela/lightweight-charts structure on our hues — borderless candles, dashed crosshair, direction-colored price chip, role-based indicator colors) vs. keep the current chart look unchanged.
 
-**Approve the spec (with any D1–D5 rulings) and I start Stage 2, Phase 0.**
+**Approve the spec (with any D1–D6 rulings) and I start Stage 2, Phase 0.**
