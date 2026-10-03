@@ -18,7 +18,6 @@ import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
 import * as chatStore from './services/trade/chatStore';
-import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
@@ -131,8 +130,6 @@ import { getPreference, setPreference, removePreference, PREF_KEYS } from './ser
 import { ProviderConfig } from './types/provider';
 import { loadLastModeratorPick, saveLastModeratorPick } from './services/ui/AnalystLensService';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
-import { assessSession } from './services/validation/SessionGuardService';
-import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
 import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurfaceRouter } from './hooks/useSurfaceRouter';
@@ -400,15 +397,6 @@ const App: React.FC = () => {
             const provider = readyProviders.find(item => item.id === assignment?.assignedProvider);
             return !assignment?.assignedProvider || !(assignment.assignedModel || provider?.selectedModel);
         }), [lensConfig, readyProviders]);
-    const hasCompleteAnalystAssignments = useMemo(() => {
-        if (missingAnalystRoles.length > 0) return false;
-        const identities = requiredAnalystRoles.map(role => {
-            const assignment = lensConfig.assignments.find(item => item.role === role)!;
-            const provider = readyProviders.find(item => item.id === assignment.assignedProvider);
-            return `${assignment.assignedProvider}::${assignment.assignedModel || provider?.selectedModel}`;
-        });
-        return new Set(identities).size === identities.length;
-    }, [lensConfig, missingAnalystRoles, readyProviders]);
     /** Set when another surface asks to open Learn on a SPECIFIC tab
      *  (Settings → "Open the notebook"). LearnView reports it consumed
      *  (onInitialTabConsumed), so it navigates exactly once and the user's own
@@ -480,12 +468,12 @@ const App: React.FC = () => {
     const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
     const {
         currentHybridData, setCurrentHybridData,
-        hybridConnectionStatus, setHybridConnectionStatus,
+ setHybridConnectionStatus,
         latestMonteCarloResult, setLatestMonteCarloResult,
         latestBacktestResult, setLatestBacktestResult,
         perAIMonteCarloResults, setPerAIMonteCarloResults,
         currentSlOptimization, setCurrentSlOptimization,
-        currentSuggestedEntryPrice, setCurrentSuggestedEntryPrice,
+ setCurrentSuggestedEntryPrice,
         currentEntryTimingScore, setCurrentEntryTimingScore,
         liveMarketConditions, setLiveMarketConditions,
     } = marketData;
@@ -627,7 +615,6 @@ const App: React.FC = () => {
     // a boolean spinner otherwise; a 50-trade rewrite runs for minutes).
     const [insightProgress, setInsightProgress] = useState<{ done: number; total: number } | null>(null);
     const appRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     // ── Scroll-to-message bridge (audit UI-shell fix, 2026-09-15) ──────────
     // The main transcript lives in the trade surface's Chart AI dock
     // (TradeChatPanel renders a plain scroll container, NOT a Virtuoso), so
@@ -788,18 +775,10 @@ const App: React.FC = () => {
     // Regime-matched provider win rates for the CURRENT market regime — feeds
     // the lens auto-assign (Team modal) so routing prefers who actually wins
     // in this kind of market, not a blended all-time number.
-    const regimeProviderStats = useMemo(
-        () => computeRegimeProviderStats(loggedTrades, (currentHybridData as any)?.regime?.regime),
-        [loggedTrades, currentHybridData]
-    );
 
     // Session-guard verdict (Batch 2): deterministic day-P&L/trade-cap/streak
     // state over the journal — drives the composer banner and is injected
     // into the debate context so the moderator weighs it when grading.
-    const sessionGuard = useMemo(
-        () => assessSession(loggedTrades, getHarnessSettings().equityUsd, getSessionGuardConfig()),
-        [loggedTrades],
-    );
 
     // Toggling Trade on no longer warns about missing setup — incomplete
     // teams surface as chat bubbles when a run is actually attempted
@@ -904,12 +883,9 @@ const App: React.FC = () => {
     }, [handleCancelAnalysis, invalidatePostMortemRuns]);
 
     const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);    const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
-    const isImageUploadDisabled = isAnalysisInProgress || isPostMortemInProgress;
-    const isSummarizing = images.some(img => img.isLoading);
     // The Send button must never look active when no provider can actually
     // run — accuracy mode doesn't conjure providers out of thin air (the
     // pipeline toasts "No AI Providers Enabled" on send).
-    const isAnyProviderEnabled = readyProviders.length > 0;
 
     const familyWinRates = useMemo(() => {
         const stats: Record<string, { total: number; wins: number; winRate: number }> = {
@@ -1120,33 +1096,6 @@ const App: React.FC = () => {
     // every hook called from here down reads it.
     activeUsernameRef.current = activeUsername ?? null;
 
-    const homeDashboard = useMemo(() => {
-        // The dashboard early-returns while a run is streaming (messages
-        // present) — so the scan below must live BEHIND that gate: computing
-        // it as a separate memo re-scanned EVERY conversation's messages on
-        // every stream frame (conversationHistory changes identity per chunk)
-        // even though the only consumer renders none of it during a run.
-        if (messages.length > 0 || (conversationHistory.length === 0 && loggedTrades.length === 0)) return undefined;
-        const latestHistoricalAnalysis = conversationHistory
-            .flatMap(conversation => conversation.messages || [])
-            .filter(message => Boolean(message.analysis))
-            .sort((a, b) => new Date(b.analysis?.createdAt || b.createdAt).getTime() - new Date(a.analysis?.createdAt || a.createdAt).getTime())[0]?.analysis;
-        return {
-            username: activeUsername,
-            trades: loggedTrades,
-            latestAnalysis: latestHistoricalAnalysis,
-            conversationCount: conversationHistory.length,
-            readyProviderCount: readyProviders.length,
-            hasProviderConfig: providerConfigs.length > 0,
-            onStartAnalysis: () => {
-                setInput('Analyze the chart I attached with a clear verdict, entry, stop, targets, and invalidation criteria.');
-                requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea')?.focus());
-            },
-            onOpenJournal: () => openJournal(),
-            onOpenLiveMarket: () => setIsLiveMarketVisible(true),
-            onOpenSettings: () => setIsSettingsMenuVisible(true),
-        };
-    }, [activeUsername, conversationHistory, loggedTrades, messages.length, openJournal, providerConfigs.length, readyProviders.length, setInput, setIsLiveMarketVisible, setIsSettingsMenuVisible]);
 
     // Track the previous active user in a ref mutated by this
     // effect itself. (A render-phase read of activeUsernameRef made
