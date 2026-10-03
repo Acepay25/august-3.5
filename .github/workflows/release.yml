@@ -16,6 +16,9 @@ permissions:
 jobs:
   build:
     if: startsWith(github.ref, 'refs/tags/v')
+    # Electron packaging + three Chromium probes; the 6h default is too long to
+    # wait out a hang.
+    timeout-minutes: 60
     runs-on: windows-latest
     permissions:
       contents: write
@@ -86,7 +89,7 @@ jobs:
         run: node scripts/check-workflow-shells.cjs
 
       - name: Tests
-        run: npm run test
+        run: npm run test:coverage
 
       - name: Lint
         run: npm run lint

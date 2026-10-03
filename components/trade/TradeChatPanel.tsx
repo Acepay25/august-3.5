@@ -45,6 +45,7 @@ import type { Message } from '../../types/message';
 import {
     buildSkillsIndexForPrompt, TRADE_CHAT_SYSTEM_PROMPT,
 } from '../../services/trade/tradeChatContext';
+import { activeStrategiesBlock } from '../../services/learning/strategyStore';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
@@ -376,6 +377,21 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         }
     };
 
+    /**
+     * The ACTIVE strategy plans, injected beside the skills index so a skill
+     * that references a plan and the plan itself travel together. Drafts are
+     * deliberately excluded: an unapproved plan presented to a seat as
+     * guidance is the defect the review flagged, and a store nothing reads is
+     * the other half of it.
+     */
+    const strategiesForPrompt = (): string => {
+        try {
+            return activeStrategiesBlock();
+        } catch {
+            return '';
+        }
+    };
+
     /** The system prompt every seat of this session answers under. The
      *  collaboration-memory index is read FRESH per prompt (like the skills
      *  index): a `remember` call lands in the NEXT turn's prompt immediately,
@@ -389,6 +405,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  the ROOM (you are one of N seats), so it stays the caller's. */
     const systemPromptFor = useCallback((bot?: AgentBot, roleNote?: string): string => {
         const skillsBlock = skillsIndexForPrompt();
+        const strategiesBlock = strategiesForPrompt();
         const memoryBlock = buildProfileMemoryIndex();
         let agent: ResolvedAgentContext | null = null;
         if (bot) {
@@ -408,7 +425,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         const persona = [agent?.persona, roleNote].filter(Boolean).join('\n\n');
         // Same heading the desk uses (`buildBotSystemPrompt`) — one agent
         // should meet its own notes under one name wherever it is asked.
-        const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}${agent?.notes ? `\n\n## Your private notes\n${agent.notes}` : ''}`;
+        const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${strategiesBlock ? `\n\n${strategiesBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}${agent?.notes ? `\n\n## Your private notes\n${agent.notes}` : ''}`;
         return persona ? `${base}\n\n## Your role\n${persona}` : base;
     }, [symbol, trades]);
 
