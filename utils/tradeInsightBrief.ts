@@ -1,4 +1,5 @@
 import { LoggedTrade } from '../types';
+import { fmtRiskReward } from './riskReward';
 
 const MAX_POST_MORTEM_CHARS = 2500;
 
@@ -38,7 +39,7 @@ export function buildTradeInsightBrief(trade: LoggedTrade): string {
         `Entry: ${trade.correctedEntry || entries}`,
         `Stop loss: ${trade.correctedStopLoss || analysis?.stopLoss || 'N/A'}`,
         `Take profit: ${trade.correctedTakeProfit || tps}`,
-        analysis?.rrRatio != null ? `R:R: 1:${analysis.rrRatio}` : null,
+        analysis?.rrRatio != null ? `R:R: ${fmtRiskReward(analysis.rrRatio, 2)}` : null,
         trade.leverage ? `Leverage: ${trade.leverage}x` : null,
         trade.marketRegime ? `Regime: ${trade.marketRegime}` : null,
         trade.extendedSLZoneBreach ? 'Extended SL zone: BREACHED' : null,

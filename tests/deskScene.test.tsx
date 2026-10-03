@@ -3,7 +3,7 @@ import React from 'react';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 
 import { DeskScene } from '../components/desk/DeskScene';
-import type { DebateStageActor } from '../components/analysis/DebateStage';
+import type { DebateStageActor } from '../utils/debateStageActors';
 
 // jsdom does not implement matchMedia (PixelSeat reads it for reduced
 // motion). Provide a no-op stub that reports "no reduced motion".

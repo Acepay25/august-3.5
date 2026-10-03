@@ -21,7 +21,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchOrderBookDepth, type OrderBookData } from '../../services/analysis/MarketDataService';
-import { fmtPrice } from '../../utils/formatters';
+import { fmtPercent, fmtPrice } from '../../utils/formatters';
 import type { LiveDepth } from '../../services/trade/futuresStreams';
 
 interface OrderBookPanelProps {
@@ -140,9 +140,10 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
     // renders a real 0.0001% spread as "0.000%" — which reads as "no spread"
     // rather than "one tick". Widen only when the value would otherwise round
     // to zero, so the common case keeps its compact 3-decimal form.
-    const spreadPctText = spreadPercent > 0 && spreadPercent < 0.001
-        ? `${spreadPercent.toFixed(4)}%`
-        : `${spreadPercent.toFixed(3)}%`;
+    const spreadPctText = fmtPercent(
+        spreadPercent,
+        spreadPercent > 0 && spreadPercent < 0.001 ? 4 : 3,
+    );
     const askDepth = asksCum[asksCum.length - 1]?.total ?? 0;
     const bidDepth = bidsCum[bidsCum.length - 1]?.total ?? 0;
     const dominant: 'buyers' | 'sellers' | 'balanced' = usingLive

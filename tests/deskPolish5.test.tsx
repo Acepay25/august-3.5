@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 
 import { DeskScene } from '../components/desk/DeskScene';
 import { PixelSeat } from '../components/desk/PixelSeat';
-import type { DebateStageActor } from '../components/analysis/DebateStage';
+import type { DebateStageActor } from '../utils/debateStageActors';
 import {
     pushUndo,
     popUndoN,

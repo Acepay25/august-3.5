@@ -61,6 +61,7 @@ import { MessageRole } from '../../types/enums';
 import type { Message } from '../../types/message';
 import StatusPill from '../ui/StatusPill';
 import VerdictAudit from '../analysis/VerdictAudit';
+import { fmtPercent } from '../../utils/formatters';
 
 interface AgentsViewProps {
     username: string;
@@ -321,7 +322,7 @@ const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
             <VerdictLine label="entry" value={a.entryPoints?.[0]?.price ?? '—'} />
             <VerdictLine label="stop" value={a.stopLoss ?? '—'} />
             <VerdictLine label="target" value={a.takeProfit?.[0]?.price ?? '—'} />
-            {typeof a.probability === 'number' && <VerdictLine label="probability" value={`${a.probability}%`} />}
+            {typeof a.probability === 'number' && <VerdictLine label="probability" value={fmtPercent(a.probability, 0)} />}
             {/* Why the run said what it said. Until this block existed a
                declined verdict was the single word above. */}
             <VerdictAudit

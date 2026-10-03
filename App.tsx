@@ -468,6 +468,7 @@ const App: React.FC = () => {
  setCurrentSuggestedEntryPrice,
         currentEntryTimingScore, setCurrentEntryTimingScore,
         liveMarketConditions,
+        liveMarketSymbol,
     } = marketData;
 
     // Network status and offline queue
@@ -1287,17 +1288,9 @@ const App: React.FC = () => {
     }, [groups, bots, messages, activity, workingBotId, groupRunning, sendGroupThread,
         sendGroupReply, cancelGroupRun, isHybridIntelligenceEnabled, toggleGroupHybrid,
         setIsNewGroupOpen, deleteGroup]);
-    // External open-actor request: when the desk view's seat is clicked,
-    // we publish {messageId, actorId} + bump a nonce so the matching
-    // MessageItem mirrors the actor into its local side-panel state and
-    // the per-message DebateSidePanel pops. Clicking another seat (or
-    // re-clicking the same seat) bumps the nonce to re-fire the effect.
-    const [, setExternalOpenActor] = useState<{ messageId: string; actorId: string } | null>(null);
-    const [, setExternalOpenActorNonce] = useState(0);
-
     // The debate the desk view projects: the message currently debating, else
     // the most recent ensemble message. Actors derive through the SAME builder
-    // MessageItem uses, so the desk view never drifts from the transcript.
+    // the transcript uses, so the desk view never drifts from the transcript.
     const deskSceneMessage = useMemo(() => {
         const debating = messages.find(m => m.isDebating);
         if (debating) return debating;
@@ -1311,10 +1304,10 @@ const App: React.FC = () => {
         () => (deskSceneMessage ? stageActorsForMessage(deskSceneMessage) : []),
         [deskSceneMessage],
     );
-    // The desk view renders the same exchanges, sealed convictions, and
-    // run-contract stages the in-transcript DebateStage renders. Building
-    // them from the shared helpers keeps the room and the transcript
-    // perfectly aligned — one source of truth.
+    // Exchanges, sealed convictions and the live phase for the desk floor,
+    // from the SAME shared builders the transcript rows use. Deriving them
+    // in one place keeps the room and the transcript aligned — one source
+    // of truth.
     const deskSceneExchanges = useMemo(
         () => (deskSceneMessage
             ? exchangesForTurns(deskSceneMessage.debateTurns ?? deskSceneMessage.postMortemDebateTurns ?? [])
@@ -2766,6 +2759,7 @@ const App: React.FC = () => {
                 isOnline={isOnline}
                 pendingQueueCount={pendingQueueCount}
                 liveMarketConditions={liveMarketConditions}
+                liveMarketSymbol={liveMarketSymbol}
                 conversations={conversationHistory}
                 activeConversationId={activeConversationId}
                 onNewConversation={handleStartNewConversation}
@@ -3179,14 +3173,10 @@ const App: React.FC = () => {
                         convictions={deskSceneConvictions}
                         verdictDetail={deskSceneVerdictDetail}
                         onSteerSeat={handleSteerSeat}
-                        onOpenActor={actorId => {
-                            // Publish a {messageId, actorId} request so
-                            // the matching MessageItem's per-message side
-                            // panel opens with this actor selected. Then
-                            // close the desk overlay so the trader lands
-                            // on the panel.
-                            setExternalOpenActor({ messageId: deskSceneMessage.id, actorId });
-                            setExternalOpenActorNonce(n => n + 1);
+                        onOpenActor={() => {
+                            // The per-seat transcript hand-off this used to
+                            // request never shipped, so the click does what it
+                            // has always visibly done: dismiss the floor.
                             setIsDeskSceneOpen(false);
                         }}
                         onClose={() => setIsDeskSceneOpen(false)}

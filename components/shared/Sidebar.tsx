@@ -13,6 +13,7 @@ import {
     PlusIcon,
     SearchIcon,
     SettingsIcon,
+    TimerIcon,
     TrashIcon,
 } from './Icons';
 
@@ -424,11 +425,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             <button
                                 type="button"
                                 onClick={act(onCreateAutomation)}
-                                className="rounded px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
                                 title="New automation"
                                 aria-label="New automation"
                             >
-                                + New
+                                <PlusIcon className="h-3 w-3" aria-hidden="true" />
+                                New
                             </button>
                         )}
                     </div>
@@ -438,7 +440,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         onOpenAutomation && (
                             <NavRow
                                 collapsed
-                                icon={<span className="text-ui-xs font-black">⏱</span>}
+                                icon={<TimerIcon className="h-4 w-4" />}
                                 label="Automations"
                                 onClick={act(() => onOpenAutomation(automations[0]?.id ?? null))}
                             />

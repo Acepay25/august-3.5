@@ -784,36 +784,6 @@ body {
   0%, 100% { opacity: 0.35; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
 }
-.bot-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--color-zinc-200);
-  font-size: 11px;
-  font-weight: 600;
-  flex-shrink: 0;
-  overflow: hidden;
-  position: relative;
-}
-.bot-avatar.is-speaking { box-shadow: 0 0 0 2px rgba(255,255,255,0.18); }
-.bot-avatar.is-thinking { border-color: rgba(255,255,255,0.18); }
-.bot-avatar-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.bot-avatar img ~ .bot-avatar-fallback { display: none; }
-
-.bot-avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); color: var(--color-zinc-200); font-size: 11px; font-weight: 600; flex-shrink: 0; overflow: hidden; position: relative; }
-.bot-avatar.is-speaking { box-shadow: 0 0 0 2px rgba(255,255,255,0.18); }
-.bot-avatar.is-thinking { border-color: rgba(255,255,255,0.18); }
-.bot-avatar-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.bot-avatar img ~ .bot-avatar-fallback { display: none; }
-
 /* Pixel-art avatars in the desk view. The grid is a 16x20 char matrix
    rendered as absolutely-positioned CSS pixels; `image-rendering: pixelated`
    keeps the shape crisp at any zoom level. The `.pixelArt` container is

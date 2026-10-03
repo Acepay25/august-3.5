@@ -3,7 +3,7 @@ import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 import { DeskScene } from '../components/desk/DeskScene';
-import type { DebateStageActor } from '../components/analysis/DebateStage';
+import type { DebateStageActor } from '../utils/debateStageActors';
 
 beforeAll(() => {
     if (typeof window !== 'undefined' && !window.matchMedia) {

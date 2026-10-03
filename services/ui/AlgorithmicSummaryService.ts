@@ -3,6 +3,7 @@
 
 import { LoggedTrade } from '../../types';
 import { detectTradingSession } from '../validation/calibrationStore';
+import { fmtRiskReward } from '../../utils/riskReward';
 
 /**
  * Generates a structured trade summary string algorithmically.
@@ -35,7 +36,7 @@ export const generateAlgorithmicTradeSummary = (trade: LoggedTrade): string => {
     const entry = trade.correctedEntry || analysis?.entryPoints?.[0]?.price || 'N/A';
     const sl = trade.correctedStopLoss || analysis?.stopLoss || 'N/A';
     const tp = trade.correctedTakeProfit || analysis?.takeProfit?.[0]?.price || 'N/A';
-    const rr = analysis?.rrRatio ? `1:${analysis.rrRatio}` : 'N/A';
+    const rr = analysis?.rrRatio ? fmtRiskReward(analysis.rrRatio, 2) : 'N/A';
 
     lines.push(`Entry: ${entry}, SL: ${sl}, TP: ${tp} | R:R ${rr}`);
 

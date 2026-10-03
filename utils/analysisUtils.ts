@@ -12,7 +12,7 @@ import { TradeAnalysis, ConfidenceCalibration, DebateTurn } from '../types';
 import { parseTradeAnalysis } from '../schemas/tradeAnalysis';
 import { normalizeStrategyFamily } from '../types/strategy';
 import { classifyStrategyFamily } from './strategyFamily';
-import { plannedRiskReward } from './riskReward';
+import { fmtRiskReward, plannedRiskReward } from './riskReward';
 import { clipNote } from './harnessMarks';
 import { FAMILY_UI_DATA } from '../constants/models';
 import { CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_RE } from '../constants/debateMarkers';
@@ -81,7 +81,7 @@ export const buildAnalysisMarkdown = (analysis: TradeAnalysis): string => {
         if (entry) push(`- Entry: **${entry}**`);
         if (sl) push(`- Stop Loss: **${sl}**${analysis.stopLossPercentage ? ` (${analysis.stopLossPercentage})` : ''}`);
         tps.forEach((tp, i) => push(`- TP${i + 1}: **${tp.price}**${tp.percentage ? ` (${tp.percentage})` : ''}`));
-        if (typeof analysis.rrRatio === 'number') push(`- Risk/Reward: **${analysis.rrRatio.toFixed(2)}:1**`);
+        if (typeof analysis.rrRatio === 'number') push(`- Risk/Reward: **${fmtRiskReward(analysis.rrRatio, 2)}**`);
         push('');
     }
 
@@ -226,7 +226,7 @@ export const buildSupplementMarkdown = (analysis: TradeAnalysis, calibration?: C
     if (ets && typeof ets.score === 'number') {
         setupRows.push(['Entry timing', `${ets.score}/100${ets.timingQuality ? ` (${ets.timingQuality})` : ''}${ets.suggestedEntry?.reason ? ` — ${ets.suggestedEntry.reason}` : ''}`]);
     }
-    if (typeof analysis.rrRatio === 'number') setupRows.push(['Risk/Reward', `${analysis.rrRatio.toFixed(2)}:1`]);
+    if (typeof analysis.rrRatio === 'number') setupRows.push(['Risk/Reward', fmtRiskReward(analysis.rrRatio, 2)]);
     if (analysis.stopLossPercentage) setupRows.push(['Stop distance', analysis.stopLossPercentage]);
     const tp0 = analysis.takeProfit?.[0];
     if (tp0?.percentage) setupRows.push(['TP1 gain', tp0.percentage]);
@@ -1059,9 +1059,9 @@ export const explainSignalConfidence = (analysis: TradeAnalysis): string => {
 
     if (typeof analysis.rrRatio === 'number') {
         if (analysis.rrRatio < 1.2) {
-            bits.push(`R:R ${analysis.rrRatio.toFixed(2)}:1 is below the 1.2 floor (max 54% / Grade D)`);
+            bits.push(`R:R ${fmtRiskReward(analysis.rrRatio, 2)} is below the 1.2 floor (max 54% / Grade D)`);
         } else if (analysis.rrRatio < 1.5 && (conf === 'High' || (p !== undefined && p >= 70))) {
-            bits.push(`R:R ${analysis.rrRatio.toFixed(2)}:1 cannot support High (cap 69% / Grade C)`);
+            bits.push(`R:R ${fmtRiskReward(analysis.rrRatio, 2)} cannot support High (cap 69% / Grade C)`);
         }
     }
 
@@ -1110,7 +1110,7 @@ export const buildTradingSignalMarkdown = (
     summaryRows.push(['Confidence', analysis.confidence ?? '—']);
     if (typeof analysis.probability === 'number') summaryRows.push(['Probability', `${Math.round(analysis.probability)}%`]);
     if (analysis.grade) summaryRows.push(['Grade', analysis.grade]);
-    if (typeof analysis.rrRatio === 'number') summaryRows.push(['R:R', `1:${analysis.rrRatio.toFixed(1)}`]);
+    if (typeof analysis.rrRatio === 'number') summaryRows.push(['R:R', fmtRiskReward(analysis.rrRatio, 1)]);
     lines.push(mdTable(['Field', 'Value'], summaryRows));
     lines.push('');
 

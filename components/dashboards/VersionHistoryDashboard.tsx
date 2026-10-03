@@ -8,6 +8,7 @@ import { APP_VERSION } from '../../constants/version';
 // Import services
 import { ReinforcementSignalService, ReinforcementSignal } from '../../services/learning/ReinforcementSignalService';
 import { getCalibrationSummary } from '../../services/validation/calibrationStore';
+import { fmtPercent } from '../../utils/formatters';
 import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';
@@ -262,7 +263,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* 1.3 Bayesian */}
                         <ModernCard
                             title="Bayesian Confidence"
-                            value={highConfidenceWinRate != null ? `${highConfidenceWinRate}%` : 'No data'}
+                            value={highConfidenceWinRate != null ? fmtPercent(highConfidenceWinRate, 0) : 'No data'}
                             subtitle={highConfidenceWinRate != null ? 'High-confidence outcomes' : 'Log resolved high-confidence trades to calibrate'}
                             accent="zinc"
                             icon={<Icons.Target className="w-5 h-5" />}

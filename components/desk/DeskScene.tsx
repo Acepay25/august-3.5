@@ -3,11 +3,11 @@
  * "room of seat cards". Hidden by default. The toggle lives in the header
  * `⋯` menu (SettingsMenu) and the command palette.
  *
- * The scene is a *projection* of the same DebateState that drives the
+ * The scene is a *projection* of the same debate state that drives the
  * transcript — no separate state. Actor names + speech lines come from the
  * shared `stageActorsForMessage` builder; exchanges + sealed convictions
  * come from the same `exchangesForTurns` / `convictionsFromTurns` helpers
- * MessageItem uses, so the room and the transcript never disagree.
+ * the transcript reads, so the room and the transcript never disagree.
  *
  * Layout (top to bottom):
  *   - Backdrop band: caption, run-contract stage strip, exchange map.
@@ -16,7 +16,7 @@
  *   - Foreground rail: inline steer input, verdict card, close button.
  *
  * Phase 7 deliverable (visual refresh). No business logic, no storage,
- * no LLM calls. Pure presentational projection of the same DebateState.
+ * no LLM calls. Pure presentational projection of the same debate state.
  */
 
 import React from 'react';
@@ -24,16 +24,18 @@ import { clamp01 } from '../../utils/math';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { EmptyState } from '../ui/EmptyState';
-import type {
-    DebateStageActor,
-    DebateExchange,
-} from '../analysis/DebateStage';
 import { PixelSeat } from './PixelSeat';
 import { SpeechBubble, SPEECH_BUBBLE_FADE_MS } from './SpeechBubble';
 import { VerdictCard, extractConvictions, type VerdictSeat } from './VerdictCard';
 import { DeskSteerInput } from './DeskSteerInput';
 import { layoutFloor, FLOOR_REFERENCE_W, FLOOR_REFERENCE_H } from './floorLayout';
-import { convictionsFromTurns, exchangesForTurns, livePhaseForMessage } from '../../utils/debateStageActors';
+import {
+    convictionsFromTurns,
+    exchangesForTurns,
+    livePhaseForMessage,
+    type DebateExchange,
+    type DebateStageActor,
+} from '../../utils/debateStageActors';
 import type { RunContractStage } from '../../utils/runContract';
 import Tip from '../ui/Tip';
 import { roleForName } from './pixelAvatars';

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { loadWeeklyReview, WeeklyReviewDigest } from '../../services/learning/weeklyReview';
+import { fmtRMultiple } from '../../utils/riskReward';
 
 const pctOrDash = (v: number | null | undefined): string =>
     v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`;
@@ -30,7 +31,7 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-ui-dense text-zinc-500 tabular-nums">
                 <span>{s.closed} closed ({s.wins}W/{s.losses}L)</span>
                 <span>Net ${Math.round(s.netPnlUsd)}</span>
-                {s.avgR !== null && <span>avg R {s.avgR.toFixed(2)}</span>}
+                {s.avgR !== null && <span>avg R {fmtRMultiple(s.avgR)}</span>}
                 {s.adherenceFollowedPct !== null && <span>adherence {s.adherenceFollowedPct}%</span>}
                 {s.topMistake && <span>costliest: {s.topMistake}</span>}
                 {s.givebackDays > 0 && <span>givebacks: {s.givebackDays}</span>}

@@ -19,6 +19,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deriveChartLines, formatDist, KEY_LEVEL_COLORS, type MessageLevelLines, type ModelKeyLevel } from '../../services/trade/keyLevels';
+import { fmtPrice } from '../../utils/formatters';
 
 interface KeyLevelsCardProps {
     levels: ModelKeyLevel[];
@@ -35,8 +36,6 @@ interface KeyLevelsCardProps {
      *  clears count (card A unmounting must not null card B's live lines). */
     onChatLevels?: (payload: MessageLevelLines | null, ownerId?: string) => void;
 }
-
-const fmtPx = (p: number): string => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: p >= 1000 ? 2 : 4 });
 
 /** Text tone per kind — CATEGORICAL markers (which kind of level), never a
  *  gain/loss read. Each row's left border is painted from KEY_LEVEL_COLORS in
@@ -153,7 +152,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                         {i === splitAt && (
                             <div className="my-0.5 flex items-center justify-center gap-2 border-y border-dashed border-emerald-500/30 bg-emerald-500/[0.06] py-1 text-ui-dense text-emerald-400" data-testid="key-levels-last">
                                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
-                                last <span className="font-mono font-bold tabular-nums">{fmtPx(mark!)}</span>
+                                last <span className="font-mono font-bold tabular-nums">{fmtPrice(mark!)}</span>
                             </div>
                         )}
                         <button
@@ -167,7 +166,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                             className={`grid w-full grid-cols-[42px_80px_52px_1fr] items-center gap-x-2 border-l-[3px] px-3 py-1.5 text-left transition-colors hover:bg-white/[0.04] ${pinned.has(l.id) ? 'bg-white/[0.05]' : ''}`}
                         >
                             <span className={`text-[11.5px] font-bold ${KIND_TEXT[l.kind]}`}>{l.label}{pinned.has(l.id) && <span className="ml-0.5 text-cyan-400" aria-hidden="true">⌖</span>}</span>
-                            <span className="font-mono text-[11.5px] tabular-nums text-zinc-200">{fmtPx(l.price)}</span>
+                            <span className="font-mono text-[11.5px] tabular-nums text-zinc-200">{fmtPrice(l.price)}</span>
                             <span className={`font-mono text-[10.5px] tabular-nums ${KIND_TEXT[l.kind]}`}>{formatDist(l.price, mark)}</span>
                             <span className="line-clamp-2 text-ui-dense leading-4 text-zinc-400">{l.context}</span>
                         </button>

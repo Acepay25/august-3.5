@@ -28,7 +28,7 @@ import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import { drawingsControl, capDrawings } from '../../services/trade/drawingsControl';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { getActiveUsername } from '../../utils/activeUser';
-import { fmtPrice } from '../../utils/formatters';
+import { fmtPercent, fmtPrice } from '../../utils/formatters';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { formatLevelHitForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
@@ -862,7 +862,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                 {changePct! >= 0
                                     ? <TrendingUp className="h-3 w-3" aria-hidden="true" />
                                     : <TrendingDown className="h-3 w-3" aria-hidden="true" />}
-                                {changePct! >= 0 ? '+' : ''}{changePct!.toFixed(2)}%
+                                {changePct! >= 0 ? '+' : ''}{fmtPercent(changePct!, 2)}
                             </span>
                         )}
                         <span>24h · MARK</span>
@@ -876,7 +876,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
                 <Stat label="Mark" value={Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'} />
                 <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
-                <Stat label="24h Change" value={Number.isFinite(changePct) ? `${changePct! >= 0 ? '+' : ''}${changePct!.toFixed(2)}%` : '—'} />
+                <Stat label="24h Change" value={Number.isFinite(changePct) ? `${changePct! >= 0 ? '+' : ''}${fmtPercent(changePct!, 2)}` : '—'} />
                 <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
                 <div className="flex w-[210px] shrink-0 flex-col px-3.5">
@@ -887,7 +887,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             <>
                                 <span className="flex items-baseline justify-between">
                                     <span className={`font-mono text-ui-sm font-medium tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {(fundingRate! * 100).toFixed(4)}%
+                                        {fmtPercent(fundingRate! * 100, 4)}
                                     </span>
                                     <span className="font-mono text-ui-dense tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
                                 </span>

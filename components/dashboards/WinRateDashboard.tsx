@@ -14,6 +14,7 @@ import { EmptyState } from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { buildCalibrationLedger, ledgerFramingLine, brierQuality } from '../../services/validation/CalibrationLedgerService';
 import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
+import { fmtPercent } from '../../utils/formatters';
 import {
     calculateOverallStats,
     calculatePerformanceByConfidence,
@@ -226,7 +227,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Win Rate</div>
                     <div className={`text-xl sm:text-3xl font-black ${overallStats.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {overallStats.winRate}%
+                        {fmtPercent(overallStats.winRate, 0)}
                     </div>
                 </div>
 
@@ -250,14 +251,14 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         </div>
                     ) : overallStats.totalPnLPercent !== 0 ? (
                         <div className={`text-lg sm:text-2xl font-mono font-black tabular-nums ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
+                            {overallStats.totalPnLPercent >= 0 ? '+' : ''}{fmtPercent(overallStats.totalPnLPercent, 1)}
                         </div>
                     ) : (
                         <div className="text-lg sm:text-2xl font-mono font-black text-zinc-500 tabular-nums">$0</div>
                     )}
                     {overallStats.totalPnL !== 0 && overallStats.totalPnLPercent !== 0 && (
                         <div className={`text-ui-xs font-mono tabular-nums mt-0.5 ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
-                            {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
+                            {overallStats.totalPnLPercent >= 0 ? '+' : ''}{fmtPercent(overallStats.totalPnLPercent, 1)}
                         </div>
                     )}
                 </div>
@@ -312,8 +313,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 <tr key={r.key} className="border-t border-white/5 text-zinc-300">
                                     <td className="py-1 text-left">{r.label}</td>
                                     <td className="py-1 text-right tabular-nums">{r.n}</td>
-                                    <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
-                                    <td className="py-1 text-right tabular-nums text-zinc-500">{r.avgDeclaredPct !== null ? `${Math.round(r.avgDeclaredPct)}%` : '—'}</td>
+                                    <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? fmtPercent(r.winRate, 0) : '—'}</td>
+                                    <td className="py-1 text-right tabular-nums text-zinc-500">{r.avgDeclaredPct !== null ? fmtPercent(r.avgDeclaredPct, 0) : '—'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -335,7 +336,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                     <tr key={r.label} className="border-t border-white/5 text-zinc-300">
                                         <td className="py-1">{r.label}</td>
                                         <td className="py-1 text-right tabular-nums">{r.n} trades</td>
-                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? fmtPercent(r.winRate, 0) : '—'}</td>
                                         <td className="py-1 text-right tabular-nums text-zinc-500">{r.n > 0 && Number.isFinite(r.profitFactor) ? `${r.profitFactor.toFixed(2)} PF` : '—'}</td>
                                     </tr>
                                 ))}
@@ -352,9 +353,9 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         {discipline.excursion.n > 0 && (
                             <p className="text-ui-xs text-zinc-500 mt-1" data-testid="discipline-excursion">
                                 Over {discipline.excursion.n} measured trade{discipline.excursion.n === 1 ? '' : 's'}: held through −
-                                {discipline.excursion.meanMaePct ?? '—'}% on average,
+                                {discipline.excursion.meanMaePct !== null ? fmtPercent(discipline.excursion.meanMaePct, 1) : '—'} on average,
                                 {discipline.excursion.captureN > 0
-                                    ? ` captured ${discipline.excursion.meanCapturePct ?? '—'}% of the best move — ${discipline.excursion.captureN} of those had both sides measured.`
+                                    ? ` captured ${discipline.excursion.meanCapturePct !== null ? fmtPercent(discipline.excursion.meanCapturePct, 1) : '—'} of the best move — ${discipline.excursion.captureN} of those had both sides measured.`
                                     : ' capture efficiency needs a best move and a settled percent, and none had both.'}
                             </p>
                         )}
@@ -385,7 +386,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                     <tr key={r.label} className="border-t border-white/5 text-zinc-300">
                                         <td className="py-1">{r.label}</td>
                                         <td className="py-1 text-right tabular-nums">{r.n} trades</td>
-                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? fmtPercent(r.winRate, 0) : '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -482,7 +483,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                     {family.family.replace('Family ', '')}
                                 </span>
                                 <span className="text-lg sm:text-xl font-black block" style={{ color }}>
-                                    {family.total > 0 ? `${family.winRate}%` : '-'}
+                                    {family.total > 0 ? fmtPercent(family.winRate, 0) : '-'}
                                 </span>
                                 <span className="text-[8px] sm:text-ui-2xs opacity-60 text-zinc-400">
                                     {family.wins}W / {family.total}T
@@ -513,11 +514,11 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                             </span>
                                         ) : coin.pnlPercent !== 0 ? (
                                             <span className={`text-xs font-mono tabular-nums ${coin.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                                {coin.pnlPercent >= 0 ? '+' : ''}{coin.pnlPercent.toFixed(1)}%
+                                                {coin.pnlPercent >= 0 ? '+' : ''}{fmtPercent(coin.pnlPercent, 1)}
                                             </span>
                                         ) : null}
                                         <StatusPill tone={coin.winRate >= 50 ? 'up' : 'down'} className="tabular-nums">
-                                            {coin.winRate}%
+                                            {fmtPercent(coin.winRate, 0)}
                                         </StatusPill>
                                     </div>
                                 </div>

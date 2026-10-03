@@ -3,7 +3,7 @@ import { ConfidenceCalibration } from '../types';
 import { MIN_TRADES_FOR_CALIBRATION } from '../constants/calibrationConstants';
 import { formatModelDisplayName } from './providerUtils';
 import { parsePrice } from './analysisUtils';
-import { plannedRiskReward } from './riskReward';
+import { fmtRiskReward, plannedRiskReward } from './riskReward';
 
 /**
  * Decision-quality helpers: explain WHY a setup became Avoid, distinguish
@@ -75,7 +75,7 @@ export const classifyAvoidBasis = (
 
     const rr = resolveRatio(analysis);
     if (typeof rr === 'number' && rr < 1) {
-        hard.push({ text: `R:R ${rr.toFixed(2)}:1 is below the 1:1 viability floor.`, tone: 'blocked' });
+        hard.push({ text: `R:R ${fmtRiskReward(rr, 2)} is below the 1:1 viability floor.`, tone: 'blocked' });
     }
 
     const gate = analysis.gateResult;

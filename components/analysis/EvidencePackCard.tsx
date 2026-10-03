@@ -1,6 +1,7 @@
 import React from 'react';
 import { Task, TaskTrigger, TaskContent } from '../ui/task';
 import AuditPanel from '../shared/AuditPanel';
+import { fmtPercent } from '../../utils/formatters';
 
 /**
  * Minimal shape mirrored on Message.evidencePack (kept structural so the
@@ -67,7 +68,7 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                                     <li key={`${s.coin}-${s.date}-${i}`} className="text-ui-dense leading-snug text-zinc-400">
                                         <span className={s.outcome === 'WIN' ? 'font-semibold text-zinc-100' : s.outcome === 'LOSS' ? 'font-semibold text-zinc-500' : 'font-semibold'}>{s.outcome}</span>
                                         {' · '}{s.date} {s.coin} {s.direction}
-                                        <span className="text-zinc-600"> · {s.similarity}% match</span>
+                                        <span className="text-zinc-600"> · {fmtPercent(s.similarity, 0)} match</span>
                                         {s.lesson ? <span className="text-zinc-500"> — {s.lesson}</span> : null}
                                     </li>
                                 ))}

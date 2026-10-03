@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fmtPrice } from '../utils/formatters';
+import { fmtPercent, fmtPrice } from '../utils/formatters';
 
 /**
  * The audit (2026-09-15, dead-code sweep "duplicated fmtPrice ×4") consolidation:
@@ -37,5 +37,40 @@ describe('utils/formatters fmtPrice', () => {
     it('never prints NaN/Infinity on the desk', () => {
         expect(fmtPrice(Number.NaN)).toBe('—');
         expect(fmtPrice(Infinity)).toBe('—');
+    });
+});
+
+/**
+ * fmtPercent exists because percent readouts each carried whatever digits
+ * their author left behind: a mean win rate reached the UI as
+ * `66.66666666666666%` in one panel and `67%` in another, and a raw float
+ * reflows its own column every tick. The digit count is a REQUIRED argument
+ * so a call site has to state its precision rather than inherit one by
+ * accident. Stage 2 Phase 0 (2026-10-03), paired with the house standard:
+ * win rates 0, P&L 1, spread 3, funding 4.
+ */
+describe('utils/formatters fmtPercent', () => {
+    it('takes the value in percent units and does NOT rescale it', () => {
+        // A helper that silently multiplied by 100 would double-scale the
+        // ledger, which already stores 0–100.
+        expect(fmtPercent(0.5, 1)).toBe('0.5%');
+        expect(fmtPercent(100, 0)).toBe('100%');
+    });
+
+    it('fixes the digit count so the glyph width never moves', () => {
+        expect(fmtPercent(66.66666666666667, 0)).toBe('67%');
+        expect(fmtPercent(3, 1)).toBe('3.0%');
+        expect(fmtPercent(0.0001, 4)).toBe('0.0001%');
+        expect(fmtPercent(0.00004, 3)).toBe('0.000%');
+    });
+
+    it('keeps en-US grouping and the caller sign', () => {
+        expect(fmtPercent(1234.567, 1)).toBe('1,234.6%');
+        expect(fmtPercent(-1.4, 1)).toBe('-1.4%');
+    });
+
+    it('never prints NaN/Infinity as a percent', () => {
+        expect(fmtPercent(Number.NaN, 0)).toBe('—');
+        expect(fmtPercent(Infinity, 1)).toBe('—');
     });
 });
