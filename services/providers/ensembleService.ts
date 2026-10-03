@@ -111,44 +111,6 @@ import {
 // DUAL SCENARIO EVALUATION PROTOCOL
 // =============================================================================
 
-/**
- * Protocol that forces analysts to evaluate both bullish and bearish scenarios
- * before selecting a direction. This reduces directional bias and improves
- * decision transparency.
- */
-const SCENARIO_EVALUATION_PROTOCOL = `
-##  MANDATORY DUAL SCENARIO EVALUATION PROTOCOL
-
-**BEFORE selecting a direction, you MUST explicitly evaluate BOTH scenarios:**
-
-###  BULLISH SCENARIO
-- **Trigger:** What level must price break ABOVE to confirm bullish?
-- **Confirmation:** What candle close / volume spike validates this?
-- **Primary Target:** Upside price target
-- **Invalidation:** Where does this bullish thesis FAIL?
-
-###  BEARISH SCENARIO  
-- **Trigger:** What level must price break BELOW to confirm bearish?
-- **Confirmation:** What candle close / volume spike validates this?
-- **Primary Target:** Downside price target
-- **Invalidation:** Where does this bearish thesis FAIL?
-
-###  DOMINANT SCENARIO SELECTION
-After evaluating BOTH scenarios:
-1. Compare evidence: Trend alignment, volume, Pattern Memory, Family classification
-2. **Select ONE** as the trade plan with explicit reasoning
-3. If neither dominates → Output "NEUTRAL / Wait for Breakout"
-
-**MODERATOR ENFORCEMENT:**
-- You MUST reject any final verdict that doesn't include BOTH scenarios with specific price levels
-- The JSON output MUST include a "dualScenarioAnalysis" field with both scenarios
-
-**OUTPUT FORMAT FOR dualScenarioAnalysis:**
-\`\`\`json
-${DUAL_SCENARIO_JSON_SCHEMA}
-\`\`\`
-`;
-
 // =============================================================================
 // AI CORE SKILL SET — HIGH-ACCURACY MODE
 // =============================================================================

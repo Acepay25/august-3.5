@@ -279,6 +279,16 @@ jobs:
             gh release upload $env:VERIFIED_TAG @paths --clobber
           } else {
             if ($LASTEXITCODE -ne 1) { throw "gh release view failed with exit code $LASTEXITCODE" }
-            gh release create $env:VERIFIED_TAG @paths --verify-tag --title "August Trading $env:VERIFIED_TAG" --notes "Automated release for $env:VERIFIED_TAG. The installer was checked by scripts/verify-release-signature.cjs before upload."
+            # State which happened. "Checked by the signature gate" reads as
+            # "signed" to anyone skimming, which is exactly the wrong
+            # impression on an unsigned channel: the updater carries no
+            # publisher identity, so anyone able to push here can ship an
+            # update this app will install.
+            if ("${{ steps.win-signing.outputs.present }}" -eq "true") {
+              $sigNote = "Installer is code-signed (Authenticode verified by scripts/verify-release-signature.cjs before upload)."
+            } else {
+              $sigNote = "!! UNSIGNED INSTALLER. It passed only because the ALLOW_UNSIGNED_RELEASE repository variable is set. The auto-update channel carries no publisher identity, so anyone able to publish to this repo can ship an update this app will install. Do not rely on it to verify authenticity."
+            }
+            gh release create $env:VERIFIED_TAG @paths --verify-tag --title "August Trading $env:VERIFIED_TAG" --notes "Automated release for $env:VERIFIED_TAG. $sigNote"
           }
           if ($LASTEXITCODE -ne 0) { throw "Publishing the verified installer failed with exit code $LASTEXITCODE" }
