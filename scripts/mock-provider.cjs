@@ -26,6 +26,74 @@ const http = require('http');
 const PORT = Number(process.argv[2] || 8787);
 const MODEL = 'mock-mini';
 
+/**
+ * OPT-IN tool-call scenario. `MOCK_TOOL_CALL=1` (or --tool-call) enables it.
+ *
+ * WHY: the desk tools are only reachable through a model turn, so the parts of
+ * the proposal flow that live ABOVE the inbox — `propose_skill`'s own argument
+ * parsing, the zod clause bar, `deterministicDraftGate`, and a queue write that
+ * fails — could not be driven in a browser at all. Seeding a draft skips every
+ * one of them.
+ *
+ * With the flag OFF nothing below runs: `toolScenario()` returns null on the
+ * first line and the response is built by the same code as before. That is the
+ * contract, because this file is a shared CI fixture used by boot-probe,
+ * render-probe and the approval probe unchanged.
+ */
+const TOOL_SCENARIO = process.env.MOCK_TOOL_CALL === '1' || process.argv.includes('--tool-call');
+const TOOL_NAME = process.env.MOCK_TOOL_NAME || 'propose_skill';
+
+const DEFAULT_SKILL_ARGS = {
+    name: 'Session-open fade short',
+    kind: 'avoid',
+    coin: 'ETH',
+    when: 'price rallies into the first fifteen minutes of the US session and stalls at the open high',
+    steps: JSON.stringify([
+        'Mark the US session-open high on 15m',
+        'Refuse longs under it until a close takes it out',
+        'Short a reclaim failure with the stop above that high',
+    ]),
+    validate: 'Confirm the open high held twice on closing prices',
+    output: 'A short with a defined stop above the session-open high',
+    approval: 'A human approves this draft in the Coach inbox before it is applied',
+    if_condition: 'us session open high held twice on closing prices',
+    then_action: 'short a reclaim failure with the stop above that high',
+    reason: 'the last three ETH longs taken at the open all stopped out',
+};
+
+/** The scripted call, or null when this request must get a plain reply.
+ *  `MOCK_SKILL_ARGS` overrides the payload as a JSON object, which is how a
+ *  caller tests the rejection paths (e.g. a 6-character if_condition). */
+function toolScenario(body) {
+    if (!TOOL_SCENARIO) return null;
+    if (!Array.isArray(body.tools) || body.tools.length === 0) return null;
+    const msgs = Array.isArray(body.messages) ? body.messages : [];
+    // One shot only. After the app runs the tool it calls back with the result,
+    // and re-emitting the same call would loop the turn forever.
+    if (msgs.some(m => m && m.role === 'tool')) return null;
+    let args = DEFAULT_SKILL_ARGS;
+    if (process.env.MOCK_SKILL_ARGS) {
+        try { args = JSON.parse(process.env.MOCK_SKILL_ARGS); } catch { /* keep the default */ }
+    }
+    return {
+        model: MODEL,
+        choices: [{
+            index: 0,
+            message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{
+                    id: `call_${Date.now().toString(36)}`,
+                    type: 'function',
+                    function: { name: TOOL_NAME, arguments: JSON.stringify(args) },
+                }],
+            },
+            finish_reason: 'tool_calls',
+        }],
+        usage: { prompt_tokens: 40, completion_tokens: 40, total_tokens: 80 },
+    };
+}
+
 const cors = (res, req) => {
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     // Echo the requested headers rather than a fixed list: the app sends
@@ -104,6 +172,16 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
         let body = {};
         try { body = JSON.parse(raw || '{}'); } catch { /* keep the default */ }
+        // Opt-in scenario. Returns null unless MOCK_TOOL_CALL is on AND this
+        // request carries tools AND no tool result is in the history yet, so a
+        // flag-off run never reaches past the first statement.
+        const scripted = toolScenario(body);
+        if (scripted) {
+            console.log(`[mock-provider] scripted ${scripted.choices[0].message.tool_calls[0].function.name} call`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(scripted));
+            return;
+        }
         const text = replyTo(body);
         if (body.stream) { stream(res, text); return; }
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -116,5 +194,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-    console.log(`[mock-provider] http://127.0.0.1:${PORT}/v1  (model ${MODEL})`);
+    console.log(`[mock-provider] http://127.0.0.1:${PORT}/v1  (model ${MODEL})${TOOL_SCENARIO ? '  TOOL-CALL SCENARIO ON' : ''}`);
 });
