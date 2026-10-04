@@ -14,7 +14,6 @@ interface UIStateShape {
     isAdvancedAnalyticsOpen: boolean;
     isVersionHistoryVisible: boolean;
     isLivePostMortemVisible: boolean;
-    isMobileMenuOpen: boolean;
     showMismatchModal: boolean;
     isVisionDataVisible: boolean;
     showAccuracyModal: boolean;
@@ -52,7 +51,6 @@ const initialState: UIStateShape = {
     isAdvancedAnalyticsOpen: false,
     isVersionHistoryVisible: false,
     isLivePostMortemVisible: false,
-    isMobileMenuOpen: false,
     showMismatchModal: false,
     isVisionDataVisible: false,
     showAccuracyModal: false,
@@ -95,7 +93,6 @@ const OVERLAY_KEYS: (keyof UIStateShape)[] = [
     'isAdvancedAnalyticsOpen',
     'isVersionHistoryVisible',
     'isLivePostMortemVisible',
-    'isMobileMenuOpen',
     'showMismatchModal',
     'isVisionDataVisible',
     'showAccuracyModal',

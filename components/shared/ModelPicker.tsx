@@ -414,7 +414,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     ref={flyoutRef}
                     onMouseDownCapture={(e) => e.stopPropagation()}
                     onPointerDownCapture={(e) => e.stopPropagation()}
-                    className={`fixed z-[100] flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in ${
+                    className={`fixed z-confirm flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in ${
                         mode !== "provider-only" && (hoveredProvider || isSearching) ? "min-w-[320px]" : "min-w-[192px]"
                     }`}
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}

@@ -22,12 +22,12 @@ import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-import { Header } from '../components/shared/Header';
+import SurfaceMenuList from '../components/shell/SurfaceMenuList';
 import type { AppSurface } from '../hooks/useSurface';
-import type { Conversation } from '../types';
 
 const appSrc = readFileSync('App.tsx', 'utf8');
 const headerSrc = readFileSync('components/shared/Header.tsx', 'utf8');
+const navRailSrc = readFileSync('components/shell/NavRail.tsx', 'utf8');
 /** The routing state itself moved out of App into `useSurfaceRouter` (handoff
  *  2.1). The CONTRACT is unchanged — only its address moved — so the scans are
  *  split by owner rather than rewritten: App still owns the call sites (the
@@ -53,48 +53,56 @@ afterEach(() => {
     window.localStorage.clear();
 });
 
-// ─── 1. Behavior: the navigation menu routes through the surface list ──────
+// ─── 1. Behavior: navigation routes through the surface list ────────────────
+// The list moved twice — hamburger drawer, then the persistent NavRail (D2) —
+// but it has always been ONE list, and it is the row that owns the route. The
+// component under test is therefore the list itself rather than whatever shell
+// happens to host it, so this keeps testing the route and not the furniture.
 
-const renderHeaderWithDrawer = (onSelectSurface: (s: AppSurface) => void): void => {
-    const conversations: Conversation[] = [];
+const renderSurfaceMenu = (onSelectSurface: (s: AppSurface) => void, collapsed = false): void => {
     render(
-        <Header
-            activeUsername="tester"
-            saveStatus="SAVED"
-            isAnalysisInProgress={false}
-            isPostMortemInProgress={false}
-            currentVisionData={[]}
-            isFreshSession
-            isMobileMenuOpen
-            mobileMenuRef={{ current: null }}
-            setIsMobileMenuOpen={() => {}}
-            setIsVisionDataVisible={() => {}}
+        <SurfaceMenuList
             surface="trade"
-            onSelectSurface={onSelectSurface}
-            setIsSettingsVisible={() => {}}
-            setIsLivePostMortemVisible={() => {}}
-            onOpenLiveMarket={() => {}}
-            onOpenVersionHistory={() => {}}
-            conversations={conversations}
-            activeConversationId={null}
-            onNewConversation={() => {}}
-            onLoadConversation={() => {}}
-            onDeleteConversation={() => {}}
+            onSelect={onSelectSurface}
+            collapsed={collapsed}
         />,
     );
 };
 
-describe('Header navigation menu → journal surface routing', () => {
-    it('the Journal row invokes onSelectSurface("journal")', () => {
-        const onSelectSurface = vi.fn();
-        renderHeaderWithDrawer(onSelectSurface);
+describe('surface list → journal surface routing', () => {
+    it('the Journal row invokes onSelect("journal")', () => {
+        const onSelect = vi.fn();
+        renderSurfaceMenu(onSelect);
         fireEvent.click(screen.getByRole('button', { name: /^Journal/ }));
-        expect(onSelectSurface).toHaveBeenCalledWith('journal');
+        expect(onSelect).toHaveBeenCalledWith('journal');
+    });
+
+    // The collapsed rail renders the same rows without their labels, so the
+    // route has to survive the loss of visible text — it is carried by the
+    // accessible name instead. A rail whose rows stopped navigating would be
+    // invisible in jsdom and obvious to a user at 56px.
+    it('the Journal row still routes from the collapsed 56px rail', () => {
+        const onSelect = vi.fn();
+        renderSurfaceMenu(onSelect, true);
+        fireEvent.click(screen.getByRole('button', { name: /^Journal/ }));
+        expect(onSelect).toHaveBeenCalledWith('journal');
     });
 
     it('carries no second Journal entry — the surface list owns that route', () => {
-        renderHeaderWithDrawer(() => {});
+        renderSurfaceMenu(() => {});
         expect(screen.queryByText('Trading Journal')).toBeNull();
+    });
+
+    it('the nav props live in the rail, not the header', () => {
+        // The drawer is gone. Its replacement must not leave the header still
+        // owning a second copy of the navigation. The header still IMPORTS
+        // `surfaceLabel` from this module to name the current surface, so the
+        // check is that it does not RENDER the list.
+        expect(headerSrc).not.toMatch(/<SurfaceMenuList/);
+        expect(headerSrc).not.toMatch(/onSelectSurface/);
+        expect(headerSrc).not.toMatch(/isMobileMenuOpen/);
+        expect(navRailSrc).toMatch(/<SurfaceMenuList/);
+        expect(navRailSrc).toMatch(/onSelectSurface/);
     });
 
     it('Header no longer carries the dead setJournalState plumbing', () => {

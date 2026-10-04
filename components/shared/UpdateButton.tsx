@@ -17,6 +17,58 @@ import StatusPill from '../ui/StatusPill';
  *
  * In the browser (non-Electron), this component renders nothing.
  */
+/**
+ * The collapsed nav rail carries update state on one dot.
+ *
+ * The full `UpdateButton` is a row of words and will not fit in 56px, but
+ * dropping the status there entirely is what left the old drawer able to
+ * download an update with nothing on screen to say so. This returns a dot —
+ * or null when there is genuinely nothing to report — and the account row
+ * renders it above the Settings button.
+ *
+ * The dot is decorative; `UpdateButton` in the expanded panel remains the
+ * control that carries the accessible text.
+ */
+export const useUpdateStatusDot = (): React.ReactNode => {
+    const { isElectron, updateStatus } = useAutoUpdate();
+    if (!isElectron) return null;
+
+    const { status, error, version, progress } = updateStatus;
+    /* A plain pulsing span rather than a lucide glyph: this is a 8px status
+     * light, not an icon, and drawing an icon that small is below the 12px
+     * floor tests/iconLayer.test.ts holds the rest of the app to. The three
+     * "working" states differ by colour, not by shape. */
+    const dot = (label: string, className: string, busy = false) => (
+        <span
+            aria-hidden
+            title={label}
+            className={`block h-2 w-2 rounded-full ${className} ${busy ? 'animate-pulse' : ''}`}
+        />
+    );
+
+    switch (status) {
+        case 'checking':
+            return dot('Checking for updates…', 'bg-cyan-400', true);
+        case 'available':
+            // Brand gradient is reserved for the wordmark, the active-nav bar
+            // and this: an available update is a brand moment, not a status hue.
+            return dot(`Version ${version} is available`, 'bg-gradient-to-b from-brand-start to-brand-end');
+        case 'downloading':
+            return dot(
+                Number.isFinite(progress) && progress > 0 ? `Downloading — ${progress}%` : 'Downloading…',
+                'bg-cyan-500/30', true,
+            );
+        case 'downloaded':
+            return dot('Ready to restart', 'bg-emerald-500');
+        case 'installing':
+            return dot('Installing…', 'bg-amber-500/30', true);
+        case 'error':
+            return dot(error ? `Update error — ${error}` : 'Update error', 'bg-rose-500');
+        default:
+            return null;
+    }
+};
+
 export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' }) => {
     const { isElectron, appVersion, updateStatus, checkForUpdates, downloadUpdate, installUpdate } = useAutoUpdate();
 

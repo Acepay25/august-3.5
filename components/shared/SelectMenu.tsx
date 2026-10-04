@@ -202,7 +202,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                     role="listbox"
                     onMouseDownCapture={e => e.stopPropagation()}
                     onPointerDownCapture={e => e.stopPropagation()}
-                    className="fixed z-[100] min-w-[220px] max-w-[340px] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900 py-1 shadow-2xl animate-fade-in custom-scrollbar"
+                    className="fixed z-confirm min-w-[220px] max-w-[340px] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900 py-1 shadow-2xl animate-fade-in custom-scrollbar"
                     style={{ left: Math.min(anchor?.left ?? 0, window.innerWidth - 348), ...pos }}
                 >
                     {sections.map((section, si) => (

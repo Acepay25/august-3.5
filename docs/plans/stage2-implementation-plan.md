@@ -1,7 +1,8 @@
 # Stage 2 — UI/UX Refactor Implementation Plan
 
 **Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phases 0–1
-complete**, gates green; Phase 2 not started.
+complete**, Phase 2 partially done (tasks 1–2 + the z-ladder; task 3 and focus
+rings outstanding).
 **Companion doc:** [stage1-ui-ux-spec.md](./stage1-ui-ux-spec.md) (research + audit + design spec — all load-bearing claims fact-checked).
 **Rule:** UI refactor, not a logic change. Preserve existing behavior and data.
 Reuse the current stack (React 19, Tailwind v4 token block, lightweight-charts,
@@ -237,6 +238,55 @@ window widths (Electron floor is minWidth 800 / minHeight 600,
 `electron/main.cjs:953-954`).
 **Risk:** high — App.tsx is 3,500+ lines and the probe asserts counts; the
 same-phase probe update is mandatory.
+
+### Phase 2 result — partially done (done 2026-10-03)
+
+Gates: typecheck clean · 4426 tests pass (469 files) · build clean · eslint 860
+warnings against the 889 ratchet · render-probe OK, zero pageerrors. Ladder
+utilities (`z-update`, `z-modal`, `z-confirm`, `z-drawer`) verified as emitted.
+
+**Done.** Tasks 1 and 2 in full, and the z-ladder half of task 4.
+
+- `components/shell/NavRail.tsx` is a persistent 56px column that expands to
+  280px, replacing the hamburger drawer. The drawer's portal, its Esc/Tab-trap
+  effect, the `isMobileMenuOpen` state in `useUIState`, and the header's
+  hamburger are all gone rather than left dormant. `Ctrl/Cmd+B` toggles;
+  below 1024px the rail is a rail whatever the user last chose — applied at
+  render time, not written back, so widening the window restores the choice.
+- `SurfaceMenuList` gained a `collapsed` mode. It is ONE list rendered at two
+  widths, not a second icon set: a surface that could appear at one width and
+  not the other is the drift this prevents. The collapsed row keeps
+  `aria-current`, the badge and an accessible name that still carries the
+  shortcut, which is also what lets the probe drive either width.
+- The account row is bottom-pinned and owns update status: `UpdateButton` when
+  expanded, `useUpdateStatusDot()` on the rail. The header's duplicate update
+  chip was removed so there is exactly one status carrier.
+- render-probe was retargeted in the same change, not afterwards: `navTo`
+  scopes to `[data-testid="surface-menu"]`, `openMenu` became
+  "ensure the rail is expanded", and four hamburger-click sites became direct
+  row clicks. Five new checks cover the claim the old probe could not make —
+  that navigation is on screen with no menu to open, that `Ctrl+B` collapses to
+  56px and restores, and that a COLLAPSED rail still navigates.
+- The three genuinely global overlay rungs (`z-[200]`/`z-[120]`/`z-[100]`, 9
+  sites) now use `z-update`/`z-modal`/`z-confirm`. The other ~88 z-index
+  literals were left alone on purpose: most are local stacking inside one
+  panel (`z-40` in TimeframeBar, `z-10` in TradingChart), and naming a global
+  rung after those would mislabel them. The lone `z-[101]` in ConfirmDialog
+  stays literal because it is a deliberate +1 over its own backdrop, and that
+  relationship has to survive.
+
+**Not done, and why it is not a small remainder.** Task 3 (the right-panel
+contract) and the focus-ring half of task 4 are untouched. Task 3 is the
+larger half of this phase: push-vs-fullscreen, no-transition-delay drag
+resize, per-surface width persistence, hide-vs-close for `TradeChatPanel`, and
+tab capsules for multiple docks. Parts of it already exist per-surface
+(`TradeChatPanel` persists its own width, `TradeView` already drag-resizes),
+which is exactly what makes a single contract worth building rather than
+adding — but unifying them touches the Trade surface's layout and needs its own
+pass and its own probe coverage. Two dead tests were rewritten rather than
+deleted: `deadControlsGuard` had pinned the OLD decision (rail absent), and
+`journalSurfaceNavigation` asserted the drawer's routing; both now pin the new
+contract and additionally assert the collapsed rail still routes.
 
 ## Phase 3 — Debate/messenger unification (medium)
 

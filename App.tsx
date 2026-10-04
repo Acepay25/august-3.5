@@ -135,6 +135,7 @@ import { useSurfaceRouter } from './hooks/useSurfaceRouter';
 import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
 import type { NavBadge } from './components/shell/SurfaceMenuList';
+import NavRail, { NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
 // The Journal pulls recharts + react-virtuoso into its chunk — statically
 // importing it put both on the startup path for a surface most users open
 // after days of logging. Lazy-once like the other surfaces; the deep-link
@@ -172,6 +173,11 @@ const SurfaceSkeleton: React.FC = () => (
     </div>
 );
 
+/** Persisted nav-rail width preference. Deliberately NOT per-profile: the rail
+ *  is a property of the window, not of who is signed into it, and two profiles
+ *  on one machine should see the same rail they left behind. */
+const NAV_RAIL_KEY = 'nav_rail_width_v1';
+
 const App: React.FC = () => {
     const toast = useToastActions();
     const { confirm: confirmDialog, ConfirmDialogComponent } = useConfirmDialog();
@@ -186,7 +192,6 @@ const App: React.FC = () => {
         isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen,
         isVersionHistoryVisible, setIsVersionHistoryVisible,
         isLivePostMortemVisible, setIsLivePostMortemVisible,
-        isMobileMenuOpen, setIsMobileMenuOpen,
         showMismatchModal, setShowMismatchModal,
         isVisionDataVisible, setIsVisionDataVisible,
         showAccuracyModal, setShowAccuracyModal,
@@ -620,7 +625,35 @@ const App: React.FC = () => {
     const registerScrollToMessage = useCallback((fn: ((messageId: string) => void) | null): void => {
         scrollToMessageRef.current = fn;
     }, []);
-    const mobileMenuRef = useRef<HTMLDivElement>(null);
+    // ── Nav rail (D2) ───────────────────────────────────────────────────────
+    // The rail is the navigation now: a 56px column that expands to 280px,
+    // instead of a drawer the whole surface list was hidden behind.
+    //
+    // The preference is persisted like every other layout choice, but the
+    // window gets the last word: below 1024px there is no room for a 280px
+    // panel beside a chart, so the rail is a rail regardless of what the user
+    // last chose. That override is applied at RENDER time rather than stored
+    // back, so widening the window restores the choice the user actually made
+    // instead of leaving it silently overwritten.
+    const [isNavRailExpanded, setIsNavRailExpanded] = useState(() => {
+        try {
+            return localStorage.getItem(NAV_RAIL_KEY) !== 'collapsed';
+        } catch { return true; }
+    });
+    const [isNavViewportNarrow, setIsNavViewportNarrow] = useState(
+        () => typeof window !== 'undefined' && window.innerWidth < NAV_RAIL_AUTO_COLLAPSE_PX,
+    );
+    useEffect(() => {
+        const onResize = () => setIsNavViewportNarrow(window.innerWidth < NAV_RAIL_AUTO_COLLAPSE_PX);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+    useEffect(() => {
+        try { localStorage.setItem(NAV_RAIL_KEY, isNavRailExpanded ? 'expanded' : 'collapsed'); }
+        catch { /* private mode */ }
+    }, [isNavRailExpanded]);
+    const isNavRailOpen = isNavRailExpanded && !isNavViewportNarrow;
+    const toggleNavRail = useCallback(() => setIsNavRailExpanded(prev => !prev), []);
 
     // Chart AI dock routing (the Chat surface is gone — roster clicks open
     // sessions inside the trade surface instead). Nonce-keyed so re-clicking
@@ -934,18 +967,6 @@ const App: React.FC = () => {
             setLeverageInput(String(activeConversation.leverage));
         }
     }, [activeConversation?.id, activeConversation?.leverage]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (isMobileMenuOpen && mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
-                setIsMobileMenuOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isMobileMenuOpen]);
 
     // Offline Queue: Sync when coming back online
     useEffect(() => {
@@ -1420,7 +1441,15 @@ const App: React.FC = () => {
                 e.preventDefault();
                 setIsSettingsMenuVisible(true);
             }
-            // Alt+1..5 jumps the icon-rail surfaces (Minara nav; Alt keeps
+            // Ctrl/Cmd+B collapses and expands the nav rail. Matches the reference
+            // clients, and is checked BEFORE the Ctrl+B that the rich-text
+            // surfaces would otherwise claim — nothing else in this app binds
+            // it, but the composer does contain a focusable text field.
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
+                e.preventDefault();
+                toggleNavRail();
+            }
+            // Alt+1..5 jumps the nav-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
                 '1': 'trade', '2': 'journal', '3': 'studio', '4': 'agents', '5': 'learn',
@@ -1432,7 +1461,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [handleSurfaceSelect, setIsSettingsMenuVisible]);
+    }, [handleSurfaceSelect, setIsSettingsMenuVisible, toggleNavRail]);
 
 
 
@@ -2734,39 +2763,17 @@ const App: React.FC = () => {
 
 
             <Header
-                activeUsername={activeUsername}
                 saveStatus={saveStatus}
                 isAnalysisInProgress={isAnalysisInProgress}
                 isPostMortemInProgress={isPostMortemInProgress}
                 currentVisionData={currentVisionData}
-                isFreshSession={messages.length === 0}
                 onOpenVersionHistory={handleOpenVersionHistory}
-                isMobileMenuOpen={isMobileMenuOpen}
-                mobileMenuRef={mobileMenuRef}
-                setIsMobileMenuOpen={setIsMobileMenuOpen}
-                setIsVisionDataVisible={setIsVisionDataVisible}
                 surface={surface}
-                onSelectSurface={handleSurfaceSelect}
-                badges={navBadges}
-                onOpenApprovals={() => setIsApprovalInboxVisible(true)}
-                approvalsCount={approvalItems.length}
-                onSwitchUser={handleSwitchUser}
-                setIsSettingsVisible={setIsSettingsMenuVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
-                onOpenLiveMarket={handleOpenLiveMarket}
-                onDeleteConversation={handleDeleteConversationFromSidebar}
-                onDeleteConversations={handleDeleteSelectedConversations}
                 isOnline={isOnline}
                 pendingQueueCount={pendingQueueCount}
                 liveMarketConditions={liveMarketConditions}
                 liveMarketSymbol={liveMarketSymbol}
-                conversations={conversationHistory}
-                activeConversationId={activeConversationId}
-                onNewConversation={handleStartNewConversation}
-                onLoadConversation={handleLoadConversation}
-                automations={automations.configs}
-                onOpenAutomation={(id) => automations.openAutomation(id)}
-                onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
                 onOpenWatchList={() => setIsWatchListVisible(true)}
                 watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                 watchOpenR={watchOpenR}
@@ -2868,9 +2875,38 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Main row: the surfaces fill the width beneath the header, whose
-                hamburger now carries the navigation. */}
+            {/* Main row: the nav rail and the surfaces share it. The rail sits BESIDE
+                the content rather than spanning the header too, so the header
+                keeps its full width for the command palette and the live-market
+                read — and so the rail is a plain flex child, not something that
+                has to out-z-index the sticky header. */}
             <div className="flex-1 flex flex-row min-h-0">
+                <NavRail
+                    expanded={isNavRailOpen}
+                    onToggleExpanded={toggleNavRail}
+                    activeUsername={activeUsername}
+                    surface={surface}
+                    onSelectSurface={handleSurfaceSelect}
+                    badges={navBadges}
+                    onOpenApprovals={() => setIsApprovalInboxVisible(true)}
+                    approvalsCount={approvalItems.length}
+                    onSwitchUser={handleSwitchUser}
+                    conversations={conversationHistory}
+                    activeConversationId={activeConversationId}
+                    hasVisionData={currentVisionData.length > 0}
+                    isFreshSession={messages.length === 0}
+                    onNewConversation={handleStartNewConversation}
+                    onLoadConversation={handleLoadConversation}
+                    onDeleteConversation={handleDeleteConversationFromSidebar}
+                    onDeleteConversations={handleDeleteSelectedConversations}
+                    onOpenLiveMarket={handleOpenLiveMarket}
+                    onOpenVisionData={() => setIsVisionDataVisible(true)}
+                    onOpenWatchList={() => setIsWatchListVisible(true)}
+                    onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                    automations={automations.configs}
+                    onOpenAutomation={(id) => automations.openAutomation(id)}
+                    onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
+                />
                 {/* Surfaces: pages, not modals. The Chat surface is gone — the
                     trade surface's Chart AI dock carries the chats, panels and
                     roster threads; the Coach inbox is a Learn tab; the other

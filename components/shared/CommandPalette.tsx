@@ -55,7 +55,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-modal flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-sm animate-fade-in">
       <div
         ref={dialogRef}
         role="dialog"

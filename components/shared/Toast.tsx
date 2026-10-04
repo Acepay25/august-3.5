@@ -93,7 +93,7 @@ const ToastContainer: React.FC = () => {
     const hiddenCount = toasts.length - visibleToasts.length;
 
     return (
-        <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        <div className="fixed top-4 right-4 z-confirm flex flex-col gap-2 max-w-sm w-full pointer-events-none">
             {hiddenCount > 0 && !expanded && (
                 <button
                     type="button"
