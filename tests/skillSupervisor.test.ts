@@ -208,6 +208,29 @@ describe('user overrides', () => {
         const overridden = store.getSnapshot().events.find(e => e.id === ev.id);
         expect(overridden?.decision?.verdict).toBe('approved');
     });
+
+    it('overrideApproveSkill does NOT report approved when the ingest could not write', async () => {
+        const { getMemoryFiles } = await import('../services/learning/MemoryFilesService');
+        queueSkillDraft({ tradeId: 'd7b', coin: 'BTCUSDT', crafted: crafted() }, USER);
+        verdictJson({ action: 'reject', reason: 'not convinced' });
+        await runSupervisorPass(USER, { manual: true });
+        const ev = store.getSnapshot().events.find(e => e.decision)!;
+
+        // No harness folder survives, so ensureHarnessFoldersUnlocked bails at
+        // its `looksLikeHarness` check and the skills folder is never created.
+        const mf = getMemoryFiles();
+        mf.folders = [{ id: 'custom', name: 'my-notes', order: 0 }] as typeof mf.folders;
+        mf.files = [];
+
+        const result = await overrideApproveSkill(ev.id, USER);
+
+        expect(result).toEqual({ created: false, reason: 'no-skills-folder' });
+        expect(skillFiles()).toHaveLength(0);
+        const after = store.getSnapshot().events.find(e => e.id === ev.id);
+        // The bug: markOverridden ran unconditionally, so the log claimed a
+        // human override had been applied when nothing had been written.
+        expect(after?.decision?.overriddenByUser).not.toBe(true);
+    });
 });
 
 // ─── WS-2: proposal actuation ────────────────────────────────────────────────

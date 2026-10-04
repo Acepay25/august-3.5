@@ -14,6 +14,15 @@ Branch `workstream1-trade-review` (from `6e81c50`). Never pushed. Commit by expl
 | `121bd1d` | A3 read-back + null / empty-slug reject | green |
 | `a6e007e`,`e62051a` | A7 pass 1 + 1b: **4 of 4 approval cases green in the real app** | 15/15, exit 0 |
 | `724882a` | A7 pass 2 step 1: mock emits a scripted `propose_skill` call, opt-in | flag-off: boot-probe 0, approval probe 15/15 |
+| `ce637f9` | named `no-skills-folder` result from the ingest (guard was live, not dead) | red→green |
+| (this) | `overrideApproveSkill` reads the result; no phantom "approved by you" | red→green, TC/lint 0 |
+
+## Reordered backlog (this run)
+1 done → **2 A2** (contradiction check first) → 3 backup registration + real
+export/restore round trip → 4 agentsSurface flake rate → 5 **Step B audit, STOP**.
+Item "true propose_skill chain via the dock" moved to LAST, after the audit; its
+two upstream legs (A5 short clause, A3 desk-tool failure) are unit-verified only,
+accepted as such for now.
 
 ## Next: item 3 — drive the TRUE propose_skill chain in the app
 `node scripts/probe-skill-approval.cjs` is the reusable harness (vite :4189, mock
