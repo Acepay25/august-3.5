@@ -84,7 +84,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" aria-busy={isBusy} onClick={(e) => { if (e.target === e.currentTarget && canClose && !pendingRef.current) onClose?.(); }}>
+    <div className="fixed inset-0 bg-black z-modal flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" aria-busy={isBusy} onClick={(e) => { if (e.target === e.currentTarget && canClose && !pendingRef.current) onClose?.(); }}>
       <div className="relative w-full max-w-md bg-zinc-900 rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="relative px-8 py-10 text-center border-b border-white/5">

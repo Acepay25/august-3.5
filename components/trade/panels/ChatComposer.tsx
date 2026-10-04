@@ -125,7 +125,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 onRemove={removeAttachment}
             />
         )}
-        <div className="rounded-2xl border border-white/10 bg-zinc-800/70 px-3 py-2.5 shadow-lg">
+        <div className="rounded-2xl border border-white/[0.08] bg-surface-raised px-3 py-2.5">
             <textarea
                 ref={composerRef}
                 rows={1}
@@ -138,7 +138,13 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 placeholder={ready ? 'Ask anything…' : isPanel ? 'Add at least 2 panel models above' : 'Configure a provider in Settings first'}
                 className="max-h-28 min-h-[24px] w-full resize-none bg-transparent text-ui-caption leading-5 text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
             />
-            <div className="mt-2 flex items-center gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {/* `flex-wrap` + nowrap chips: the toolbar was ALWAYS over-
+                    tight at the dock's 384px default — before, that showed up
+                    as a chip breaking across two lines ("Scan —/skills"), and
+                    once the chips were nowrap it showed up as 6px of page
+                    overflow (render-probe caught it). Wrapping BETWEEN chips is
+                    the honest middle: a label stays whole, and nothing overflows. */}
                 <input type="file" multiple accept="image/*,.md,.txt,.csv,.json" ref={fileInputRef} className="hidden"
                     onChange={ev => { attachFiles(ev.target.files); ev.target.value = ''; }} />
                 {/* Reference layout: ONE + button opens everything that
@@ -172,13 +178,13 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                     discoverable, like Full analysis. */}
                 <button type="button" onClick={() => void send(SCAN_SKILLS_PROMPT)} disabled={!ready || busy}
                     title="Study every candle in this chart and draft IF/THEN skills from what actually worked — drafts wait for your approval in the Inbox"
-                    className="rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
+                    className="shrink-0 whitespace-nowrap rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
                 Scan → skills
                 </button>
                 {onRunAnalysis && draft.trim() && !isPanel && (
                     <button type="button" onClick={() => void runFullAnalysis()} disabled={busy}
                         title="Run the full ensemble analysis (hybrid data + debate + verdict) on this request"
-                        className="rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
+                        className="shrink-0 whitespace-nowrap rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
                     Full analysis
                     </button>
                 )}

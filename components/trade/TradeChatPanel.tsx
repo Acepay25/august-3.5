@@ -833,22 +833,29 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
 
     return (
-        <div className="relative flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40" data-testid="trade-chat-panel">
+        <div className="relative flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-transparent" data-testid="trade-chat-panel">
             {/* Header — the reference's Agent-panel cluster: wordmark left,
                 + / history / ⋯ / × right, nothing else. Conversations are
                 reached through the Past Conversations palette, not a tab
                 strip. */}
-            <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
+            <div className="@container flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
-                <span className="text-ui-caption font-semibold text-zinc-100">Chart AI</span>
-                <span className="truncate text-ui-dense text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
+                {/* The dock is narrow and user-dragged, so the brand never
+                    yields: at 370px a squeezed "Chart AI" wrapped into two
+                    lines while the controls kept their width. The session
+                    title is the flexible element — it truncates. */}
+                <span className="shrink-0 whitespace-nowrap text-ui-caption font-semibold text-zinc-100">Chart AI</span>
+                <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
                 {(() => {
                     // The prototype's "Analyzed 2m ago" meta, told honestly:
                     // the session's last real activity, and only once a settled
-                    // answer exists to be "answered".
+                    // answer exists to be "answered". Gated on the DOCK's width
+                    // (@container), not the viewport — `sm:` lit this up on a
+                    // 1440px window whose dock was 370px, which is what
+                    // squeezed the title in the first place.
                     const hasAnswer = entries.some(x => x.role === 'ai' && !x.notice && !x.streaming && x.text);
                     if (!hasAnswer) return null;
-                    return <span className="hidden shrink-0 text-ui-xs text-zinc-600 sm:inline" data-testid="chat-answered-meta">answered {relTime(activeSession.updatedAt)}</span>;
+                    return <span className="hidden shrink-0 text-ui-xs text-zinc-600 @min-[460px]:inline" data-testid="chat-answered-meta">answered {relTime(activeSession.updatedAt)}</span>;
                 })()}
                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} />

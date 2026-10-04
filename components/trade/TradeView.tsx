@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { GripVertical, PanelRight, TrendingDown, TrendingUp } from '../shared/Icons';
+import { PanelRight, TrendingDown, TrendingUp } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
@@ -44,6 +44,8 @@ import { fetchKlines } from '../../services/analysis/KlineService';
 import { LevelAccuracyBadge } from './LevelAccuracyBadge';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel, { ChartAiDockRail } from './TradeChatPanel';
+import RightPanel from '../shell/RightPanel';
+import { useRightPanel } from '../../hooks/useRightPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
@@ -153,12 +155,8 @@ const DOCK_WIDTH_KEY = 'trade_dock_width_v1';
 const DOCK_MIN = 300;
 const DOCK_MAX = 820;
 const DOCK_DEFAULT = 384;
-const readDockWidth = (): number => {
-    try {
-        const n = Number(localStorage.getItem(DOCK_WIDTH_KEY));
-        return Number.isFinite(n) && n >= DOCK_MIN && n <= DOCK_MAX ? n : DOCK_DEFAULT;
-    } catch { return DOCK_DEFAULT; }
-};
+/** Registry id of the Chart AI dock inside the shared right-panel contract. */
+const DOCK_ID = 'chart-ai';
 
 const Stat: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex min-w-0 flex-col px-3.5 first:pl-3">
@@ -353,7 +351,21 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // the previous coin's shapes under the new coin's key.
     const drawingsClaimedRef = useRef('');
     const chartHandleRef = useRef<ChartHandle | null>(null);
-    const [dockWidth, setDockWidth] = useState<number>(readDockWidth);
+    /* The Chart AI dock runs on the shared right-panel contract, not its own
+     * geometry: presentation, per-surface persisted width, hide-vs-close, and
+     * the tab strip all come from `useRightPanel` so that the next panel on
+     * this surface is a registration rather than a second implementation.
+     *
+     * `DOCK_WIDTH_KEY` is handed over as the legacy key so an existing dragged
+     * width is adopted on first read rather than reset by the upgrade. */
+    const rightPanel = useRightPanel({
+        surface: 'trade',
+        defaultWidth: DOCK_DEFAULT,
+        minWidth: DOCK_MIN,
+        maxWidth: DOCK_MAX,
+        legacyWidthKey: DOCK_WIDTH_KEY,
+    });
+    const { width: dockWidth } = rightPanel;
     const [dockCollapsed, setDockCollapsed] = useState(false);
     const [dockExpanded, setDockExpanded] = useState(false);
     const [screenerOpen, setScreenerOpen] = useState(false);
@@ -362,6 +374,16 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // md toggle used to summon are replaced by an explicit Chart | AI | Book
     // segmented control (the NavRail book toggle stays a lg+ control).
     const isBelowLg = useIsBelowLg();
+
+    // The dock is the surface's first registered right panel. It is always
+    // "open" in the registry sense when the rail is showing, because CLOSE and
+    // COLLAPSE are different things here: closing removes the dock from the
+    // strip, collapsing hides it while keeping it mounted.
+    useEffect(() => {
+        rightPanel.register({ id: DOCK_ID, label: 'Chart AI' });
+        // `register` is stable; the whole hook object changes identity on every
+        // width commit, and re-announcing per drag tick is pure noise.
+    }, [rightPanel.register]);
     const [mode, setMode] = useState<TradeMode>(readTradeMode);
     const pickMode = useCallback((m: TradeMode): void => {
         setMode(m);
@@ -422,9 +444,6 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             return lines;
         });
     }, []);
-    const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
-    const widthRef = useRef(dockWidth);
-    widthRef.current = dockWidth;
 
     // Push-first feed: markPrice@1s + depth20@100ms + ticker + kline over two
     // websockets. `live` gates every REST poll below — polling is the
@@ -678,32 +697,25 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     }, [changePct]);
     const tickFlash = useTickFlash(markPrice);
 
-    // ── Dock drag-resize (pointer capture, persists on release) ────────────
-    // While the dock is EXPANDED the width comes from the flex layout, so a
-    // drag starts by un-expanding and capturing the CURRENT pixel width (the
-    // ref reads the live DOM, not the stale px state) — the separator always
-    // does something instead of feeling dead.
-    const onDragMove = useCallback((ev: PointerEvent): void => {
-        const drag = dragRef.current;
-        if (!drag) return;
-        setDockWidth(Math.min(DOCK_MAX, Math.max(DOCK_MIN, drag.startWidth - (ev.clientX - drag.startX))));
-    }, []);
-    const onDragUp = useCallback((): void => {
-        dragRef.current = null;
-        window.removeEventListener('pointermove', onDragMove);
-        window.removeEventListener('pointerup', onDragUp);
-        try { localStorage.setItem(DOCK_WIDTH_KEY, String(widthRef.current)); } catch { /* private mode */ }
-    }, [onDragMove]);
+    // ── Dock drag-resize ────────────────────────────────────────────
+    // The drag itself belongs to the shared contract now (hooks/useRightPanel):
+    // it clamps, persists per surface, and drops the width transition for the
+    // duration of the gesture. All this surface keeps is the one thing the hook
+    // cannot know — while the dock is EXPANDED its width comes from the flex
+    // layout, so a drag first un-expands it and starts from the live pixel
+    // width, which keeps the separator from feeling dead on first grab.
     const startDrag = useCallback((ev: React.PointerEvent): void => {
-        ev.preventDefault();
-        const dockEl = (ev.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null;
-        const currentWidth = dockEl?.getBoundingClientRect().width ?? widthRef.current;
         if (dockExpanded) setDockExpanded(false);
-        dragRef.current = { startX: ev.clientX, startWidth: currentWidth };
-        window.addEventListener('pointermove', onDragMove);
-        window.addEventListener('pointerup', onDragUp);
-    }, [onDragMove, onDragUp, dockExpanded]);
-    useEffect(() => () => { window.removeEventListener('pointermove', onDragMove); window.removeEventListener('pointerup', onDragUp); }, [onDragMove, onDragUp]);
+        // The handle lives inside the shell's <aside>, so the element being
+        // sized is the handle's PARENT, not its sibling. Measuring anything
+        // narrower would seed the drag low and shave the dock on every grab.
+        const dockEl = (ev.currentTarget as HTMLElement).parentElement;
+        const live = dockEl?.getBoundingClientRect().width;
+        if (live && Number.isFinite(live) && live >= DOCK_MIN && live <= DOCK_MAX) {
+            rightPanel.setWidth(live);
+        }
+        rightPanel.startResize(ev);
+    }, [dockExpanded, rightPanel]);
 
     const captureChart = useCallback((): string | null => chartHandleRef.current?.capturePng() ?? null, []);
     const getChartSnapshot = useCallback(() => chartHandleRef.current?.getSnapshot() ?? null, []);
@@ -999,57 +1011,40 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         <OrderBookPanel symbol={symbol} live={feed.depthLive} liveDepth={feed.depth} />
                     </div>
                 )}
-                {/* The Chart AI dock: ONE mounted instance, hidden rather than closed.
+                {/* The Chart AI dock on the shared right-panel contract.
 
-                    HIDE vs CLOSE (right-panel contract). Collapsing used to swap a
-                    collapsed rail in for this panel, unmounting it — so the composer
-                    draft, the scroll position and any in-flight turn died with it.
-                    Collapsing the dock to look at the chart is an ordinary thing to
-                    do mid-analysis; coming back to an empty dock was data loss
-                    wearing a UI costume.
+                    It supplies the WIDTH, the hide-vs-close behaviour, the drag
+                    handle and (once a second panel registers) the tab capsules;
+                    this surface supplies the layout classes, because below lg the
+                    dock is one pane of a three-mode single-column stack rather
+                    than a panel — which is why its presentation is pinned to
+                    'push'. Letting the contract switch it to 'fullscreen' there
+                    would overlay the mode switcher it is supposed to live in.
 
-                    So the panel always stays mounted. When collapsed it is taken out
-                    of flow, made inert, and hidden visually: `visibility: hidden`
-                    keeps its box — which is what preserves the scroll offset, where
-                    `display: none` would not — while `inert` and
-                    `pointer-events: none` keep it out of the tab ring and the mouse.
-
-                    Below lg the dock is a single-pane MODE rather than a panel, so
-                    the collapse toggle is a lg+ affordance and must never blank the
-                    chat pane on phones; `isBelowLg` wins over `dockCollapsed` here
-                    for exactly that reason. */}
-                {!dockCollapsed && !isBelowLg && (
-                    <div
-                        role="separator"
-                        aria-orientation="vertical"
-                        aria-label="Resize Chart AI dock"
-                        onPointerDown={startDrag}
-                        onDoubleClick={() => { setDockWidth(DOCK_DEFAULT); try { localStorage.setItem(DOCK_WIDTH_KEY, String(DOCK_DEFAULT)); } catch { /* private mode */ } }}
-                        title="Drag to resize · double-click to reset"
-                        className="hidden w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center border-x border-white/[0.06] bg-zinc-900/40 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 lg:flex"
-                    >
-                        <GripVertical className="h-3 w-3" />
-                    </div>
-                )}
-                <div
-                    data-testid="trade-dock"
+                    HIDE vs CLOSE. Collapsing used to swap a collapsed rail in for
+                    this panel, unmounting it — so the composer draft, the scroll
+                    offset and any in-flight turn died with it. Collapsing the dock
+                    to look at the chart is an ordinary thing to do mid-analysis,
+                    and coming back to an empty dock was data loss wearing a UI
+                    costume. The shell keeps it mounted and makes it inert. */}
+                <RightPanel
+                    presentation="push"
+                    isResizing={rightPanel.isResizing}
+                    width={dockWidth}
+                    isActive={!dockCollapsed}
+                    isHidden={dockCollapsed && !isBelowLg}
+                    docks={rightPanel.docks}
+                    openIds={rightPanel.openIds}
+                    activeId={rightPanel.activeId}
+                    onSelectDock={rightPanel.setActive}
+                    onCloseDock={rightPanel.close}
+                    onResizeStart={startDrag}
+                    onResizeReset={rightPanel.resetWidth}
+                    label="Chart AI"
+                    testId="trade-dock"
                     className={isBelowLg
                         ? (mode === 'ai' ? 'min-h-0 w-full flex-1' : 'hidden')
-                        : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-1/2 xl:!w-7/12' : ''}`}
-                    data-hidden={dockCollapsed && !isBelowLg ? 'true' : 'false'}
-                    inert={dockCollapsed && !isBelowLg ? true : undefined}
-                    style={dockCollapsed && !isBelowLg
-                        ? {
-                            position: 'absolute',
-                            right: 0,
-                            top: 0,
-                            height: '100%',
-                            width: `${dockWidth}px`,
-                            visibility: 'hidden',
-                            pointerEvents: 'none',
-                            zIndex: -1,
-                        }
-                        : ({ '--dock-w': `${dockWidth}px` } as React.CSSProperties)}
+                        : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--panel-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-1/2 xl:!w-7/12' : ''}`}
                 >
                     <TradeChatPanel
                         {...dockProps}
@@ -1063,7 +1058,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         onBotTurnCommit={onBotTurnCommit}
                         onOpenChat={onOpenChat}
                     />
-                </div>
+                </RightPanel>
                 {dockCollapsed && !isBelowLg && (
                     <div className="hidden shrink-0 lg:block" data-testid="trade-dock-rail">
                         <ChartAiDockRail onExpand={expandDock} live={live} />

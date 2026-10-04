@@ -62,6 +62,7 @@ import type { Message } from '../../types/message';
 import StatusPill from '../ui/StatusPill';
 import VerdictAudit from '../analysis/VerdictAudit';
 import { fmtPercent } from '../../utils/formatters';
+import { fmtRiskReward } from '../../utils/riskReward';
 
 interface AgentsViewProps {
     username: string;
@@ -310,27 +311,41 @@ const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
     const up = a.direction === 'Long';
     const down = a.direction === 'Short';
     return (
-        <div className="mt-1.5 w-full max-w-sm rounded-bubble border border-zinc-800/80 bg-zinc-900 p-2.5"
+        <div className="mt-2.5 w-full max-w-lg border-t border-zinc-800/80 pt-2.5"
             data-testid="inline-verdict">
-            <div className="mb-1.5 flex items-center gap-2">
+            <div className="mb-2 flex items-center gap-2">
                 <StatusPill tone={up ? 'up' : down ? 'down' : 'neutral'} kicker>
                     {a.direction ?? 'No trade'}
                 </StatusPill>
                 <span className="truncate text-ui-caption font-semibold text-zinc-100">{a.coinName ?? 'setup'}</span>
+                {a.rrRatio && (
+                    <span className="rounded-control bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs text-zinc-300">
+                        {fmtRiskReward(a.rrRatio, 1)} R:R
+                    </span>
+                )}
                 {a.confidence && <span className="ml-auto font-mono text-ui-xs text-zinc-500">{a.confidence}</span>}
             </div>
-            <VerdictLine label="entry" value={a.entryPoints?.[0]?.price ?? '—'} />
-            <VerdictLine label="stop" value={a.stopLoss ?? '—'} />
-            <VerdictLine label="target" value={a.takeProfit?.[0]?.price ?? '—'} />
-            {typeof a.probability === 'number' && <VerdictLine label="probability" value={fmtPercent(a.probability, 0)} />}
-            {/* Why the run said what it said. Until this block existed a
-               declined verdict was the single word above. */}
-            <VerdictAudit
-                analysis={a}
-                evidencePack={m.evidencePack}
-                runContract={m.runContract}
-                className="mt-1.5"
-            />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-control bg-white/[0.02] p-2 border border-white/[0.04]">
+                <VerdictLine label="entry" value={a.entryPoints?.[0]?.price ?? '—'} />
+                <VerdictLine label="stop" value={a.stopLoss ?? '—'} />
+                <VerdictLine label="target" value={a.takeProfit?.[0]?.price ?? '—'} />
+                {typeof a.probability === 'number' && <VerdictLine label="probability" value={fmtPercent(a.probability, 0)} />}
+            </div>
+            {/* Progressive disclosure for the forensic audit */}
+            <details className="group/audit mt-2" open>
+                <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 font-mono text-ui-2xs uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300 list-none">
+                    <ChevronDown className="h-3 w-3 transition-transform group-open/audit:rotate-180" />
+                    <span>Inspect debate audit & evidence</span>
+                </summary>
+                <div className="mt-1.5 border-t border-zinc-800/60 pt-1.5">
+                    <VerdictAudit
+                        analysis={a}
+                        evidencePack={m.evidencePack}
+                        runContract={m.runContract}
+                        className="mt-1"
+                    />
+                </div>
+            </details>
         </div>
     );
 };
@@ -784,13 +799,16 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </section>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2 border-t border-zinc-800/80 px-3 py-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 font-mono text-ui-xs uppercase text-zinc-300">
-                        {username.slice(0, 1) || '·'}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-300">{username}</span>
+                {/* Identity is the NAV RAIL's row (nav-account: name, initial,
+                    Settings). This row repeated it a second time on the same
+                    screen. What the pane actually owns is the live signal —
+                    is a provider ready for the desk — so that is all it says
+                    now, in the pattern the references' status bars use: a dot
+                    and five words on one hairline. */}
+                <div className="flex shrink-0 items-center gap-1.5 border-t border-zinc-800/80 px-3 py-2">
                     <span data-testid="desk-status" title={providerReady ? 'A provider is configured — the desk can think' : 'No provider ready — configure one in Settings'}
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${providerReady ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+                    <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500">{providerReady ? 'Ready' : 'No provider'}</span>
                 </div>
             </aside>
 
@@ -800,72 +818,82 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     chart renders, over the same persisted selection, so a
                     choice here is the choice there rather than a second
                     preference that drifts. */}
-                {!activeGroup && (
-                    <div data-testid="chat-instrument-bar" className="shrink-0 border-b border-white/[0.06]">
-                        <TimeframeBar interval={sessionInterval} onIntervalChange={setSessionInterval}>
-                            <SymbolPicker
-                                symbols={symbols}
-                                value={sessionSymbol}
-                                onChange={setSessionSymbol}
-                            />
-                        </TimeframeBar>
-                    </div>
-                )}
                 {activeGroup && renderGroup ? (
                     <div className="flex min-h-0 flex-1 flex-col">{renderGroup(activeGroup)}</div>
                 ) : (
                     <>
-                        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 py-2">
-                            <button type="button" onClick={() => setRailOpen(true)}
-                                aria-label="Open conversations" data-testid="rail-open"
-                                className="shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:hidden">
-                                <Users className="h-3.5 w-3.5" />
-                            </button>
-                            {collapsed && (
-                                <button type="button" onClick={() => setCollapsed(false)} data-testid="rail-expand"
-                                    aria-label="Show conversations" title="Show the conversation rail"
-                                    className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
-                                    <PanelLeftOpen className="h-3.5 w-3.5" />
+                        {/* Unified Top Header Strip: Hermes & Claude Desktop minimalism.
+                            Single hairline bar containing identity, instrument picker, timeframe,
+                            and dock hop without stacked toolbars. */}
+                        <div
+                            data-testid="chat-instrument-bar"
+                            className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-2"
+                        >
+                            <div className="flex min-w-0 items-center gap-2">
+                                <button type="button" onClick={() => setRailOpen(true)}
+                                    aria-label="Open conversations" data-testid="rail-open"
+                                    className="shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:hidden">
+                                    <Users className="h-3.5 w-3.5" />
                                 </button>
-                            )}
-                            <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">
-                                {activeBot ? `@${activeBot.name}` : 'Chart AI'}
-                            </span>
-                            {/* WS-3.4: what this bot has actually learned, where
-                                you are about to ask it something. */}
-                            {activeStat && (
-                                <span className="hidden shrink-0 font-mono text-ui-xs tabular-nums text-zinc-600 sm:inline"
-                                    data-testid="bot-learning-stats"
-                                    title={activeStat.lastLessonAt ? `newest lesson ${activeStat.lastLessonAt}` : 'no dated lessons'}>
-                                    {activeStat.lessons} lessons · {activeStat.skillsAuthored} skills · {activeStat.evidence} evidence
+                                {collapsed && (
+                                    <button type="button" onClick={() => setCollapsed(false)} data-testid="rail-expand"
+                                        aria-label="Show conversations" title="Show the conversation rail"
+                                        className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
+                                        <PanelLeftOpen className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                                <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200">
+                                    {activeBot ? `@${activeBot.name}` : 'Chart AI'}
                                 </span>
-                            )}
-                            {activeBot && (
-                                <StatusPill
-                                    tone={botIsolated ? 'neutral' : 'info'}
-                                    kicker
-                                    data-testid="bot-notebook-sync"
-                                    title={botIsolated
-                                        ? 'Isolated: thinks from its own notes. The shared notebook never reaches it and nothing it learns surfaces for others.'
-                                        : `Reads the shared notebook every turn and folds its closed trades back in.${activeStat?.lastLessonAt ? ` Last lesson ${activeStat.lastLessonAt}.` : ' No lesson written yet.'}`}
-                                    icon={<span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />}
-                                >
-                                    {botIsolated ? 'own notes' : 'notebook'}
-                                </StatusPill>
-                            )}
-                            {onOpenInDock && (
-                                <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
-                                    className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
-                                    Open in Chart AI
-                                </button>
-                            )}
+                                {activeBot && (
+                                    <StatusPill
+                                        tone={botIsolated ? 'neutral' : 'info'}
+                                        kicker
+                                        data-testid="bot-notebook-sync"
+                                        title={botIsolated
+                                            ? 'Isolated: thinks from its own notes. The shared notebook never reaches it and nothing it learns surfaces for others.'
+                                            : `Reads the shared notebook every turn and folds its closed trades back in.${activeStat?.lastLessonAt ? ` Last lesson ${activeStat.lastLessonAt}.` : ' No lesson written yet.'}`}
+                                        icon={<span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />}
+                                    >
+                                        {botIsolated ? 'own notes' : 'notebook'}
+                                    </StatusPill>
+                                )}
+                                {activeStat && (
+                                    <span className="hidden shrink-0 font-mono text-ui-xs tabular-nums text-zinc-600 xl:inline"
+                                        data-testid="bot-learning-stats"
+                                        title={activeStat.lastLessonAt ? `newest lesson ${activeStat.lastLessonAt}` : 'no dated lessons'}>
+                                        {activeStat.lessons} lessons · {activeStat.skillsAuthored} skills · {activeStat.evidence} evidence
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-2">
+                                <SymbolPicker
+                                    symbols={symbols}
+                                    value={sessionSymbol}
+                                    onChange={setSessionSymbol}
+                                />
+                                <div className="hidden sm:flex items-center">
+                                    <TimeframeBar
+                                        interval={sessionInterval}
+                                        onIntervalChange={setSessionInterval}
+                                        className="border-b-0 px-0 py-0"
+                                    />
+                                </div>
+                                {onOpenInDock && (
+                                    <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
+                                        className="shrink-0 rounded-control border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
+                                        Open in Chart AI
+                                    </button>
+                                )}
+                            </div>
                         </div>
                         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
                             {thread.length === 0 ? (
                                 <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">
-                                    <Bot className="mb-3 h-7 w-7 text-zinc-500" />
-                                    <h2 className="font-serif text-2xl text-zinc-100">{greeting(username || 'trader')}</h2>
-                                    <p className="mt-1 max-w-sm text-ui-sm leading-5 text-zinc-500">
+                                    <Bot className="mb-3 h-8 w-8 text-zinc-500" />
+                                    <h2 className="font-serif text-3xl font-normal tracking-tight text-zinc-100">{greeting(username || 'trader')}</h2>
+                                    <p className="mt-2 max-w-md text-ui-sm leading-relaxed text-zinc-500">
                                         {activeBot
                                             ? botIsolated
                                                 ? `@${activeBot.name} thinks from its own notes only — it is isolated from the shared notebook.`
@@ -874,7 +902,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </p>
                                 </div>
                             ) : (
-                                <div className="chat-column space-y-3 py-4" data-testid="agent-thread">
+                                <div className="chat-column space-y-4 py-6" data-testid="agent-thread">
                                     {thread.map(m => {
                                         const isUser = m.role === MessageRole.USER;
                                         return (
@@ -893,15 +921,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                         {/* ── Composer pill ── */}
                         <div className="shrink-0 px-4 pb-4">
-                            <div className="chat-column rounded-2xl border border-zinc-800 bg-zinc-900 p-2 focus-within:border-zinc-600">
+                            <div className="chat-column rounded-2xl border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"
                                     onChange={e => { attachFiles(e.target.files); e.target.value = ''; }} />
                                 {attachments.length > 0 && (
-                                    <div className="mb-1 flex flex-wrap gap-1 px-1.5" data-testid="composer-attachments">
+                                    <div className="mb-1.5 flex flex-wrap gap-1 px-1.5" data-testid="composer-attachments">
                                         {attachments.map(a => (
                                             <span key={a.id}
-                                                className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1 pr-0.5 text-ui-xs text-zinc-300">
+                                                className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1.5 pr-1 text-ui-xs text-zinc-300">
                                                 {a.kind === 'image' && (
                                                     <img src={a.payload} alt="" className="h-5 w-5 rounded object-cover" />
                                                 )}
@@ -919,23 +947,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
                                     }}
                                     rows={2} placeholder={placeholder} aria-label="Message"
-                                    className="w-full resize-none bg-transparent px-1.5 py-1 text-ui-caption leading-5 text-zinc-100 outline-none placeholder:text-zinc-600" />
+                                    className="w-full resize-none bg-transparent px-2 py-1 text-ui-caption leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500" />
                                 <div className="mt-1 flex items-center gap-2 px-1">
-                                    {/* Always available now. It used to be gated on
-                                        Analyze mode, which forced the tooltip to
-                                        explain the mode — and the mode is gone,
-                                        chosen by the rail instead. A bot turn
-                                        simply ignores an attachment. */}
                                     <button type="button" onClick={openPicker} data-testid="composer-attach"
                                         aria-label="Attach image"
                                         title="Attach an image"
-                                        className="rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-40 disabled:hover:text-zinc-500">
+                                        className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:opacity-40 disabled:hover:text-zinc-400">
                                         <Paperclip className="h-3.5 w-3.5" />
                                     </button>
-                                    {/* The Chat/Analyze segmented toggle is gone.
-                                        The rail already says which of the two you
-                                        want, and a second control for the same
-                                        decision was one more thing to read. */}
                                     {modelPicker}
                                     <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
                                         aria-label="Send" data-testid="composer-send"
@@ -944,17 +963,10 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-                            <p className="mx-auto mt-1.5 max-w-3xl text-center text-ui-xs text-zinc-600">
-                                {/* The switch is gone, so the hint names the
-                                    SELECTION rather than a mode the user
-                                    can no longer see. */}
-                                {activeBot
-                                    ? `@${activeBot.name} answers here`
-                                    : 'No agent selected — the full analysis runs'}
-                            </p>
-                            <p className="mt-1.5 text-ui-2xs leading-4 text-zinc-600">
-                                {DISCLAIMER_SHORT}
-                            </p>
+                            <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between px-2 text-ui-2xs text-zinc-600">
+                                <span>{activeBot ? `@${activeBot.name} answers here` : 'No agent selected — the full analysis runs'}</span>
+                                <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>
+                            </div>
                         </div>
                     </>
                 )}

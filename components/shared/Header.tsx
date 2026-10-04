@@ -1,5 +1,6 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon, PanelLeftOpen } from './Icons';
+import { useUpdateStatusDot } from './UpdateButton';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { baseOf } from '../../utils/symbol';
 import { surfaceLabel } from '../shell/SurfaceMenuList';
@@ -35,6 +36,11 @@ interface HeaderProps {
     watchOpenR?: string;
     /** Open the command palette. */
     onOpenCommandPalette?: () => void;
+    /** Present only while the NavRail is hidden (D2 amendment): the collapsed
+     *  rail is 0px, so the expand affordance moves here. The DSH pattern —
+     *  the hidden sidebar's expand button also carries the update-status dot,
+     *  so the one quiet status carrier stays visible in the resting view. */
+    onExpandNavRail?: () => void;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -56,7 +62,9 @@ export const Header: React.FC<HeaderProps> = memo(({
     watchOpenR,
     onOpenJobs,
     onOpenCommandPalette,
+    onExpandNavRail,
 }) => {
+    const navUpdateDot = useUpdateStatusDot();
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
@@ -139,6 +147,27 @@ export const Header: React.FC<HeaderProps> = memo(({
         <header className="sticky top-0 z-20 flex-shrink-0 border-b border-white/[0.06] bg-zinc-900/85 backdrop-blur px-4 py-1.5 sm:px-6 sm:py-2 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
             <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
+                    {/* The rail is hidden — this is the hamburger's honest
+                        successor: one quiet button that gives the left column
+                        back, riding the update dot while it is the only nav
+                        surface on screen. */}
+                    {onExpandNavRail && (
+                        <button
+                            type="button"
+                            data-testid="nav-rail-toggle-header"
+                            onClick={onExpandNavRail}
+                            aria-label="Expand navigation"
+                            aria-controls="nav-rail-panel"
+                            className="relative -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                        >
+                            <PanelLeftOpen className="h-4 w-4" />
+                            {navUpdateDot && (
+                                <span data-testid="nav-update-dot-header" className="absolute -right-0.5 -top-0.5">
+                                    {navUpdateDot}
+                                </span>
+                            )}
+                        </button>
+                    )}
                     {/* Where you are, not a control. Navigation is the persistent
                         NavRail to the left; this names the surface it moved you
                         to, which is the one thing the rail's active bar cannot

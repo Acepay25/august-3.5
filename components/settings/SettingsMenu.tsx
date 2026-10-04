@@ -388,7 +388,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     return (
         <>
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+            {/* z-modal, not a literal: the expanded nav rail rides z-drawer
+                (50), and at the same rung DOM order let the rail paint OVER
+                this modal — its panel covered the settings nav entirely. */}
+            <div className="fixed inset-0 z-modal flex items-center justify-center p-3 sm:p-6">
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} aria-hidden="true" />
                 <div
                     ref={dialogRef}

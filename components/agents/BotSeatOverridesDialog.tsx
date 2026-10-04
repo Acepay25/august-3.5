@@ -73,7 +73,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
     if (!open || !bot) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label={`Debate overrides for ${bot.name}`}>
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label={`Debate overrides for ${bot.name}`}>
             <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="bot-seat-overrides">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

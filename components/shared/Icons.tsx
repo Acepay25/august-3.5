@@ -162,6 +162,7 @@ export {
   Loader2,
   Lock,
   LogOut,
+  UsersRound,
   Maximize2,
   MessageSquare,
   Mic,

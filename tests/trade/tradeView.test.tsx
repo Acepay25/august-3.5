@@ -299,6 +299,6 @@ describe('TradeView mobile 3-mode surface (<lg)', { timeout: 45_000 }, () => {
         await screen.findByTestId('trade-view');
         expect(screen.queryByTestId('trade-mode-switcher')).toBeNull();
         expect(screen.getByTestId('trade-chart-pane').className).toContain('lg:min-h-0');
-        expect(screen.getByTestId('trade-dock').className).toContain('lg:w-[var(--dock-w)]');
+        expect(screen.getByTestId('trade-dock').className).toContain('lg:w-[var(--panel-w)]');
     });
 });
