@@ -1,39 +1,20 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { baseOf } from '../../utils/symbol';
-import { UpdateButton } from './UpdateButton';
-import { SidebarContent } from './Sidebar';
-import SurfaceMenuList, { surfaceLabel, type NavBadge } from '../shell/SurfaceMenuList';
+import { surfaceLabel } from '../shell/SurfaceMenuList';
 import type { AppSurface } from '../../hooks/useSurface';
-import { Conversation } from '../../types';
-import { AutomationConfig } from '../../types/automation';
 
 interface HeaderProps {
-    activeUsername: string | null;
     saveStatus: 'SAVED' | 'SAVING' | 'ERROR';
     isAnalysisInProgress: boolean;
     isPostMortemInProgress: boolean;
     currentVisionData: string[];
-    // Fresh session = active conversation has no messages (Sidebar gates
-    // New Conversation on this).
-    isFreshSession: boolean;
-    isMobileMenuOpen: boolean;
-    mobileMenuRef: React.RefObject<HTMLDivElement | null>;
-    setIsMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsVisionDataVisible: (visible: boolean) => void;
-    /** The surface menu — the five tabs live in the hamburger now, so the
-     *  header carries the nav props the icon rail used to own. */
+    /** The current surface, named in the header. Navigation itself moved to
+     *  the persistent NavRail (D2) — this is the label that tells you where
+     *  you are, not a control that moves you somewhere. */
     surface: AppSurface;
-    onSelectSurface: (surface: AppSurface) => void;
-    badges?: Partial<Record<AppSurface, NavBadge>>;
-    onOpenApprovals?: () => void;
-    approvalsCount?: number;
-    onSwitchUser?: () => void;
-    setIsSettingsVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
-    onOpenLiveMarket: () => void;
     onOpenVersionHistory: () => void; // New prop for Changelog
     // Network status
     isOnline?: boolean;
@@ -47,21 +28,11 @@ interface HeaderProps {
     /** The instrument `liveMarketConditions` was sampled from. The label binds
      *  to it instead of naming a symbol of its own. */
     liveMarketSymbol?: string;
-    // Sidebar (shared with the persistent desktop column)
-    conversations: Conversation[];
-    activeConversationId: string | null;
-    onNewConversation: () => void;
-    onLoadConversation: (id: string) => void;
-    onDeleteConversation: (id: string) => void;
-    onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
-    // Automations (mobile drawer sidebar section)
-    automations?: AutomationConfig[];
-    onOpenAutomation?: (id: string | null) => void;
-    onCreateAutomation?: () => void;
+    // Toolbar entries that stayed in the header when the drawer was retired.
+    onOpenJobs?: () => void;
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     watchOpenR?: string;
-    onOpenJobs?: () => void;
     /** Open the command palette. */
     onOpenCommandPalette?: () => void;
 }
@@ -69,39 +40,17 @@ interface HeaderProps {
 // Memoized: Header re-renders every time App does (typing, progress ticks);
 // with stable props it only renders when something it actually shows changes.
 export const Header: React.FC<HeaderProps> = memo(({
-    activeUsername,
     saveStatus,
     isAnalysisInProgress,
     isPostMortemInProgress,
     currentVisionData,
-    isFreshSession,
-    isMobileMenuOpen,
-    mobileMenuRef,
-    setIsMobileMenuOpen,
-    setIsVisionDataVisible,
     surface,
-    onSelectSurface,
-    badges,
-    onOpenApprovals,
-    approvalsCount,
-    onSwitchUser,
-    setIsSettingsVisible,
     setIsLivePostMortemVisible,
-    onOpenLiveMarket,
     onOpenVersionHistory,
     isOnline = true,
     pendingQueueCount = 0,
     liveMarketConditions,
     liveMarketSymbol,
-    conversations,
-    activeConversationId,
-    onDeleteConversation,
-    onDeleteConversations,
-    onNewConversation,
-    onLoadConversation,
-    automations,
-    onOpenAutomation,
-    onCreateAutomation,
     onOpenWatchList,
     watchOpenCount = 0,
     watchOpenR,
@@ -150,26 +99,19 @@ export const Header: React.FC<HeaderProps> = memo(({
         };
     }, []);
 
+    // Esc closes the session modal. This used to also close the navigation
+    // drawer and trap Tab inside it — both of which died with the drawer (D2).
+    // The trap in particular was correct there and is simply not a thing for a
+    // panel that is always on screen: trapping focus inside navigation that
+    // sits beside the content would make the app unusable.
     useEffect(() => {
-        if (!isMobileMenuOpen) return;
+        if (!isSessionModalOpen) return;
         const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setIsSessionModalOpen(false);
-                setIsMobileMenuOpen(false);
-                return;
-            }
-            if (event.key !== 'Tab' || !mobileMenuRef.current) return;
-            const focusable = mobileMenuRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-            if (!focusable.length) return;
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            if (event.key === 'Escape') setIsSessionModalOpen(false);
         };
         document.addEventListener('keydown', handleEscape);
-        requestAnimationFrame(() => mobileMenuRef.current?.querySelector<HTMLElement>('button')?.focus());
         return () => document.removeEventListener('keydown', handleEscape);
-    }, [isMobileMenuOpen, setIsMobileMenuOpen]);
+    }, [isSessionModalOpen]);
 
     // Close session modal when clicking outside
     useEffect(() => {
@@ -197,21 +139,16 @@ export const Header: React.FC<HeaderProps> = memo(({
         <header className="sticky top-0 z-20 flex-shrink-0 border-b border-white/[0.06] bg-zinc-900/85 backdrop-blur px-4 py-1.5 sm:px-6 sm:py-2 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
             <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
-                    {/* The navigation menu. The five surfaces moved in here
-                        when the icon rail went, so at every width this is the
-                        only way to change view — which is why it names the
-                        surface you are looking at. */}
-                    <button
-                        onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="flex shrink-0 items-center gap-1.5 rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500"
-                        title={`Menu — ${surfaceLabel(surface)}`}
-                        aria-label="Toggle navigation menu"
-                        aria-expanded={isMobileMenuOpen}
-                        aria-controls="mobile-navigation-menu"
+                    {/* Where you are, not a control. Navigation is the persistent
+                        NavRail to the left; this names the surface it moved you
+                        to, which is the one thing the rail's active bar cannot
+                        spell out at a glance. */}
+                    <span
+                        data-testid="header-surface-label"
+                        className="shrink-0 select-none text-ui-dense font-semibold uppercase tracking-wider text-zinc-300"
                     >
-                        <HamburgerIcon className="h-5 w-5" />
-                        <span className="text-ui-dense font-semibold uppercase tracking-wider">{surfaceLabel(surface)}</span>
-                    </button>
+                        {surfaceLabel(surface)}
+                    </span>
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
@@ -333,11 +270,6 @@ export const Header: React.FC<HeaderProps> = memo(({
                         </span>
                     )}
 
-                    {/* Desktop: Update button */}
-                    <div className="hidden sm:block">
-                        <UpdateButton />
-                    </div>
-
                     {/* Desktop: Segmented Quick Action Tray. Approvals is NOT
                         here — the activity rail owns that drawer (WS-5.2), and
                         this tray used to repeat it under a second name. */}
@@ -412,74 +344,6 @@ export const Header: React.FC<HeaderProps> = memo(({
                     )}
                 </div>
 
-                {/* Slide-out Menu Panel — the surfaces live in here now, so it
-                    opens at every width, not just below lg.
-
-                    Portaled to <body> on purpose: this header carries
-                    `backdrop-blur`, and a filter makes its element the
-                    containing block for every fixed-position descendant — so
-                    rendered in place the drawer's `inset-0` resolved against
-                    the 53px header bar and the whole menu was clipped to it. */}
-                {isMobileMenuOpen && createPortal(
-                    <div className="fixed inset-0 z-50">
-                        {/* Backdrop */}
-                        <div
-                            className="absolute inset-0 bg-black/50"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                        />
-
-                        {/* Menu Panel */}
-                         <div id="mobile-navigation-menu" ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-950 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" role="dialog" aria-modal="true" aria-label="Navigation menu">
-                            <div className="p-5 border-b border-white/10 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/15 flex items-center justify-center text-zinc-300">
-                                        <BotIcon />
-                                    </div>
-                                    <div>
-                                        <h2 className="font-bold text-white">August Trading</h2>
-                                        <span className="text-ui-xs text-zinc-500">{activeUsername}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex-1 min-h-0 overflow-y-auto py-3">
-                                <SurfaceMenuList
-                                    surface={surface}
-                                    badges={badges}
-                                    approvalsCount={approvalsCount}
-                                    onOpenApprovals={onOpenApprovals ? () => { onOpenApprovals(); setIsMobileMenuOpen(false); } : undefined}
-                                    onSwitchUser={onSwitchUser ? () => { onSwitchUser(); setIsMobileMenuOpen(false); } : undefined}
-                                    onSelect={(next) => { onSelectSurface(next); setIsMobileMenuOpen(false); }}
-                                />
-                                <div className="my-1 mx-2 border-t border-white/[0.06]" />
-                                <SidebarContent
-                                    activeUsername={activeUsername}
-                                    conversations={conversations}
-                                    activeConversationId={activeConversationId}
-                                    hasVisionData={currentVisionData.length > 0}
-                                    isFreshSession={isFreshSession}
-                                    onNewConversation={onNewConversation}
-                                    onLoadConversation={onLoadConversation}
-                                    onDeleteConversation={onDeleteConversation}
-                                    onDeleteConversations={onDeleteConversations}
-                                    onOpenLiveMarket={onOpenLiveMarket}
-                                    onOpenVisionData={() => setIsVisionDataVisible(true)}
-                                    onOpenWatchList={onOpenWatchList}
-                                    onOpenSettings={() => setIsSettingsVisible(true)}
-                                    automations={automations}
-                                    onOpenAutomation={onOpenAutomation}
-                                    onCreateAutomation={onCreateAutomation}
-                                    onNavigate={() => setIsMobileMenuOpen(false)}
-                                />
-                            </div>
-
-                            <div className="px-5 py-3 border-t border-white/5">
-                                <UpdateButton />
-                            </div>
-                        </div>
-                    </div>,
-                    document.body,
-                )}
             </div>
         </header >
     );

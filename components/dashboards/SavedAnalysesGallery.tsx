@@ -61,7 +61,7 @@ const SavedAnalysesGallery: React.FC<SavedAnalysesGalleryProps> = ({ savedAnalys
     Object.values(sa.modelsUsed ?? {}).map(m => modelIdToName[m] ?? m).join(', ') || '—';
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Saved analyses" className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>

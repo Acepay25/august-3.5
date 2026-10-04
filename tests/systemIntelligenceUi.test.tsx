@@ -71,15 +71,11 @@ describe('System Intelligence UI', () => {
     it('labels the header destination accurately and uses the History icon', () => {
         const open = vi.fn();
         render(<Header
-            activeUsername="Alice" saveStatus="SAVED" isAnalysisInProgress={false}
-            isPostMortemInProgress={false} currentVisionData={[]} isFreshSession
-            isMobileMenuOpen={false} mobileMenuRef={React.createRef<HTMLDivElement>()}
-            setIsMobileMenuOpen={vi.fn()} setIsVisionDataVisible={vi.fn()}
-            surface="trade" onSelectSurface={vi.fn()}
-            setIsSettingsVisible={vi.fn()} setIsLivePostMortemVisible={vi.fn()}
-            onOpenLiveMarket={vi.fn()} onOpenVersionHistory={open}
-            conversations={[]} activeConversationId={null} onNewConversation={vi.fn()}
-            onLoadConversation={vi.fn()} onDeleteConversation={vi.fn()}
+            saveStatus="SAVED" isAnalysisInProgress={false}
+            isPostMortemInProgress={false} currentVisionData={[]}
+            surface="trade"
+            setIsLivePostMortemVisible={vi.fn()}
+            onOpenVersionHistory={open}
         />);
         const button = screen.getByRole('button', { name: 'System Intelligence' });
         expect(button).toHaveAttribute('title', 'System Intelligence');

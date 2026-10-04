@@ -311,6 +311,11 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     'trader_learning_v1',
     'trader_learner_counter_v1',
     'book_drafts_seeded_v1',
+    // Nav-rail width preference (Stage 2 Phase 2). A layout preference, not
+    // trading data — but it is read straight from localStorage, so on NATIVE
+    // it lives in a different place from the Preferences-owned keys above, and
+    // leaving it out means a restored backup silently drops the user's rail.
+    'nav_rail_width_v1',
 ];
 
 /**

@@ -1,15 +1,20 @@
 /**
- * SurfaceMenuList — the five surfaces, now reached from the header's hamburger
- * instead of the always-visible icon rail. One row per surface: icon, name,
- * keyboard shortcut and live badge, with the active row carrying the brand
- * gradient bar the rail used to wear.
+ * SurfaceMenuList — the five surfaces.
  *
- * Below the surfaces sit the two rail leftovers that have no other home:
- * Approvals (one drawer, counted) and Switch profile.
+ * Rendered twice from one list because the nav rail has two widths and the
+ * surface set must not be able to drift between them: at 280px a row shows
+ * icon, name, live badge and its shortcut; at 56px the same row collapses to
+ * the glyph alone, keeping `aria-current`, the badge dot and an accessible
+ * name that still carries the shortcut. The collapsed rows are the SAME
+ * buttons, not a parallel icon set — a surface that could render in one width
+ * and not the other is exactly the drift a single list prevents.
+ *
+ * Below the surfaces sit Approvals (one drawer, counted) and Switch profile.
  */
 
 import React from 'react';
 import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox, LogOut} from '../shared/Icons';
+import Tip from '../ui/Tip';
 
 import type { AppSurface } from '../../hooks/useSurface';
 
@@ -57,6 +62,8 @@ interface SurfaceMenuListProps {
     approvalsCount?: number;
     onSwitchUser?: () => void;
     badges?: Partial<Record<AppSurface, NavBadge>>;
+    /** 56px rail mode: glyph only, no label column and no shortcut column. */
+    collapsed?: boolean;
 }
 
 const Badge: React.FC<{ badge: NavBadge }> = ({ badge }) => {
@@ -77,24 +84,35 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
     approvalsCount,
     onSwitchUser,
     badges,
+    collapsed = false,
 }) => (
-    <nav aria-label="Surfaces" data-testid="surface-menu" className="shrink-0 px-2 pt-3 pb-1">
+    <nav
+        aria-label="Surfaces"
+        data-testid="surface-menu"
+        className={`shrink-0 ${collapsed ? 'px-1.5 pt-2 pb-1' : 'px-2 pt-3 pb-1'}`}
+    >
         {SURFACE_ITEMS.map(({ id, label, shortcut, Icon }) => {
             const active = surface === id;
             const badge = badges?.[id];
-            return (
+            /* aria-label replaces the row's content for assistive tech, so the
+               shortcut has to be spelled out here — at 280px the visible <kbd>
+               would otherwise exist for the mouse only, and in the collapsed
+               rail there is no visible content at all. */
+            const accessibleName = badge
+                ? `${label}. ${badge.detail}, shortcut ${shortcut}`
+                : `${label}, shortcut ${shortcut}`;
+            const row = (
                 <button
                     key={id}
                     type="button"
                     onClick={() => onSelect(id)}
                     aria-current={active ? 'page' : undefined}
-                    /* aria-label replaces the row's content for assistive tech,
-                       so the shortcut has to be spelled out here — the visible
-                       <kbd> would otherwise exist for the mouse only. */
-                    aria-label={badge ? `${label}. ${badge.detail}, shortcut ${shortcut}` : `${label}, shortcut ${shortcut}`}
-                    className={`relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
-                        active ? 'text-zinc-100' : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100'
-                    }`}
+                    aria-label={accessibleName}
+                    className={`relative flex w-full items-center rounded-lg transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                        collapsed
+                            ? 'justify-center px-2 py-2'
+                            : 'gap-2.5 px-2.5 py-2 text-left text-ui-caption'
+                    } ${active ? 'text-zinc-100' : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100'}`}
                 >
                     {active && (
                         <span
@@ -102,12 +120,31 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                             className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-brand-start via-brand-mid to-brand-end shadow-[0_0_8px_rgba(235,83,255,0.4)]"
                         />
                     )}
-                    <Icon className="h-4 w-4 shrink-0 text-zinc-500" />
-                    <span className="flex-1 truncate">{label}</span>
-                    {badge && <Badge badge={badge} />}
-                    <kbd className="shrink-0 rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>
+                    <span className="relative shrink-0">
+                        <Icon className="h-4 w-4 text-zinc-500" />
+                        {/* In the rail a badge dot has no row beside it to sit in,
+                           so it rides the glyph. Decorative either way — the
+                           count is spoken through the row's accessible name. */}
+                        {collapsed && badge && (
+                            <span className="absolute -right-0.5 -top-0.5 flex h-1.5 w-1.5">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+                                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            </span>
+                        )}
+                    </span>
+                    {!collapsed && <span className="flex-1 truncate">{label}</span>}
+                    {!collapsed && badge && <Badge badge={badge} />}
+                    {!collapsed && (
+                        <kbd className="shrink-0 rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>
+                    )}
                 </button>
             );
+            /* Tooltip only in the collapsed rail, where the glyph is the only
+               thing visible — the anti-tax rule says a tip earns its place when
+               hover teaches something the screen does not already show. */
+            return collapsed
+                ? <Tip key={id} label={label} shortcut={shortcut}>{row}</Tip>
+                : row;
         })}
 
         {(onOpenApprovals || onSwitchUser) && <div className="my-2 border-t border-white/[0.06]" />}
@@ -118,11 +155,18 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 data-testid="nav-approvals"
                 onClick={onOpenApprovals}
                 aria-label={approvalsCount ? `Approvals, ${approvalsCount} waiting` : 'Approvals'}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100"
+                className={`flex w-full items-center rounded-lg py-2 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
+                    collapsed ? 'justify-center px-2 text-zinc-400' : 'gap-2.5 px-2.5 text-left text-ui-caption text-zinc-400'
+                }`}
             >
-                <Inbox className="h-4 w-4 shrink-0 text-zinc-500" />
-                <span className="flex-1">Approvals</span>
-                {!!approvalsCount && (
+                <span className="relative shrink-0">
+                    <Inbox className="h-4 w-4 text-zinc-500" />
+                    {collapsed && !!approvalsCount && (
+                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    )}
+                </span>
+                {!collapsed && <span className="flex-1">Approvals</span>}
+                {!collapsed && !!approvalsCount && (
                     <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950">
                         {approvalsCount > 99 ? '99+' : approvalsCount}
                     </span>
@@ -135,10 +179,13 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 type="button"
                 data-testid="nav-switch-user"
                 onClick={onSwitchUser}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                aria-label="Switch profile"
+                className={`flex w-full items-center rounded-lg py-2 text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 ${
+                    collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5 text-left text-ui-caption'
+                }`}
             >
                 <LogOut className="h-4 w-4 shrink-0" />
-                <span className="flex-1">Switch profile</span>
+                {!collapsed && <span className="flex-1">Switch profile</span>}
             </button>
         )}
     </nav>

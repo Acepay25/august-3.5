@@ -98,21 +98,35 @@ describe('a control renders only when it can act', () => {
 });
 
 /**
- * The 2026-09-21 nav move: the five surfaces left the always-visible icon rail
- * for the header's hamburger, and the Coach inbox left the Chart AI dock for a
- * Learn tab. Both deleted a control, so each pins what replaced it — the risk
- * here is a prop that outlives its UI, or a route that quietly stops existing.
+ * The surfaces moved twice: out of the always-visible icon rail into the
+ * header's hamburger (2026-09-21), then out of the hamburger into a
+ * persistent rail again (Stage 2 Phase 2, decision D2). Each move deleted a
+ * control, so each pins what replaced it — the risk here is a prop that
+ * outlives its UI, or a route that quietly stops existing.
+ *
+ * What is deliberately NOT pinned is which chrome hosts the list. The failure
+ * this guards against is a surface list that exists in two places (or none),
+ * and a header that kept a nav prop after the nav moved out of it.
  */
-describe('the surfaces live in the hamburger menu', () => {
-    it('the activity bar is gone, not merely unmounted', () => {
-        expect(existsSync('components/shell/NavRail.tsx')).toBe(false);
-        expect(appSrc).not.toMatch(/NavRail/);
+describe('the surfaces live in the persistent nav rail', () => {
+    it('the nav rail exists and App mounts it', () => {
+        expect(existsSync('components/shell/NavRail.tsx')).toBe(true);
+        expect(appSrc).toMatch(/<NavRail/);
         expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
-        expect(headerSrc).toMatch(/<SurfaceMenuList/);
     });
 
-    it('the menu keeps the rail\'s two orphaned entry points', () => {
-        // Approvals and Switch profile had no other home; a menu that lists
+    it('the header no longer owns the navigation', () => {
+        // The header's hamburger was the only nav host between the two moves;
+        // if either comes back the app has two lists that can disagree.
+        expect(headerSrc).not.toMatch(/<SurfaceMenuList/);
+        expect(headerSrc).not.toMatch(/onSelectSurface/);
+        expect(headerSrc).not.toMatch(/isMobileMenuOpen/);
+        const railSrc = read('components/shell/NavRail.tsx');
+        expect(railSrc).toMatch(/<SurfaceMenuList/);
+    });
+
+    it('the rail keeps the orphaned entry points the old rail had', () => {
+        // Approvals and Switch profile had no other home; a rail that lists
         // only the surfaces would strand both.
         const menuSrc = read('components/shell/SurfaceMenuList.tsx');
         expect(menuSrc).toMatch(/data-testid="nav-approvals"/);

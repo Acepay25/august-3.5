@@ -66,7 +66,7 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
   if (!a) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Compare analyses" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>

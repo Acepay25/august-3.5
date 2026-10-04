@@ -619,14 +619,12 @@ async function main() {
         check('the dock header jumps straight to Chat',
             chatJump === 'clicked' && landedOnChat === true, `${chatJump}/${landedOnChat}`);
         // And back again, so the probe resumes on the surface it expects.
+        // Navigation is the persistent NavRail (D2) — the rows are in the DOM at
+        // every width, so this is a direct row click with no menu to open.
         if (landedOnChat) {
-            await page.evaluate(() => {
-                document.querySelector('button[aria-controls="mobile-navigation-menu"]')?.click();
-            });
-            await sleep(300);
             const backToTrade = await page.evaluate(() => {
-                const hit = [...document.querySelectorAll('#mobile-navigation-menu button, #mobile-navigation-menu a')]
-                    .find(b => /^Trade/i.test((b.textContent || '').trim()));
+                const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
+                    .find(b => /^Trade/i.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
                 if (!hit) return 'not found';
                 hit.click();
                 return 'clicked';
@@ -652,15 +650,16 @@ async function main() {
             .locator('[data-testid="agent-message"][data-role="ai"]').count();
 
         const openAgents = async () => {
-            const toggle = page.locator('button[aria-controls="mobile-navigation-menu"]');
-            await toggle.first().click();
-            await sleep(350);
-            // The toggle's own accessible text starts with the current surface
-            // name ("Chat" once it is open), so matching /^Chat/ across all
-            // buttons re-clicks the hamburger — whose open menu then covers
-            // itself with a full-screen backdrop and the click never lands.
-            await page.locator('#mobile-navigation-menu')
-                .getByRole('button', { name: /^Chat/ }).first().click();
+            // Direct rail-row click. The rows carry the surface name in their
+            // accessible name in BOTH rail widths (the collapsed 56px row has
+            // no visible label at all), so matching on aria-label is what makes
+            // one click work at any width.
+            await page.evaluate(() => {
+                const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
+                    .find(b => /^Chat/i.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
+                if (!hit) throw new Error('no Chat row in the nav rail');
+                hit.click();
+            });
             // The transcript container only exists once the thread has a row —
             // an empty thread renders the greeting hero instead. Wait for the
             // composer, which is present either way.
@@ -755,7 +754,7 @@ async function main() {
         check('the declined verdict explains itself', /why avoid|why no trade/i.test(seededText));
 
         // ── Every nav surface must actually mount something ────────────
-        // The five hamburger surfaces are separate lazy trees; a blank one is
+        // The five nav-rail surfaces are separate lazy trees; a blank one is
         // the same class of defect this probe was written for, and no jsdom
         // suite covers the nav that mounts them. Each is checked for content
         // AND for a pageerror delta, so a surface that renders then throws is
@@ -787,37 +786,98 @@ async function main() {
             });
             await sleep(250);
         };
-        /** Navigate by clicking in the page rather than through Playwright:
-         *  these entries exist in the rail and in a collapsed menu, and the
-         *  hidden copy makes a locator click time out on visibility. A DOM
-         *  click hits whichever one the app actually wired. */
+        /** Navigate by clicking in the page rather than through Playwright: these
+         *  entries exist at two rail widths, and a locator click would time out
+         *  on visibility whenever the rail is collapsed. A DOM click hits
+         *  whichever width the app is actually showing. */
         const navTo = async (label) => {
             return page.evaluate((name) => {
                 const re = new RegExp(`^${name}`, 'i');
-                const matches = (b) => re.test((b.textContent || '').trim())
-                    || re.test(b.getAttribute('aria-label') || '');
-                // Prefer the navigation menu. A GLOBAL search used to work by
-                // luck, and then stopped: SymbolPicker's trigger is labelled
-                // "Trade symbol", so `navTo('Trade')` on the Chat surface
-                // opened the coin picker instead of navigating. Scope the search
-                // to the menu first, and only fall back to the page when the
-                // menu is not mounted — which is the case this helper exists
-                // to survive, so the fallback stays but is no longer first.
-                const inMenu = [...document.querySelectorAll('#mobile-navigation-menu button, #mobile-navigation-menu a, #mobile-navigation-menu [role="menuitem"]')]
+                const matches = (b) => re.test((b.getAttribute('aria-label') || '').trim())
+                    || re.test((b.textContent || '').trim());
+                // Scope the search to the nav rail first, and only fall back to
+                // the whole page when the rail is not mounted. The fallback is
+                // still wrong often enough to matter — SymbolPicker's trigger is
+                // labelled "Trade symbol", so a bare `navTo('Trade')` opens the
+                // coin picker instead of navigating — which is why the rail is
+                // tried first rather than the page.
+                const inRail = [...document.querySelectorAll('[data-testid="surface-menu"] button, [data-testid="nav-approvals"]')]
                     .find(matches);
-                const hit = inMenu
+                const hit = inRail
                     ?? [...document.querySelectorAll('button, a, [role="menuitem"]')].find(matches);
                 if (!hit) return 'not found';
                 hit.click();
                 return 'clicked';
             }, label);
         };
-        const openMenu = () => page.evaluate(() => {
-            const toggle = document.querySelector('button[aria-controls="mobile-navigation-menu"]');
+        /** The rail is always on screen, so there is no menu to open — this now
+         *  only asserts the rail exists and, if the window is narrow enough to
+         *  have forced it collapsed, expands it so the wide sweep is measuring
+         *  what a desktop user sees. */
+        const openMenu = async () => page.evaluate(() => {
+            const rail = document.querySelector('[data-testid="nav-rail"]');
+            if (!rail) return 'no rail';
+            if (rail.getAttribute('data-expanded') === 'true') return 'already expanded';
+            const toggle = document.querySelector('[data-testid="nav-rail-toggle"]');
             if (!toggle) return 'no toggle';
             toggle.click();
-            return 'opened';
+            return 'expanded';
         });
+        // ── The nav rail itself (D2) ────────────────────────────────────
+        // Placed HERE, after navTo/openMenu, because it calls both — and those
+        // are `const`, so reaching them from above this line hits their
+        // temporal dead zone (the same trap the Chat-hop block documents).
+        //
+        // The surfaces below are only reachable at all if the rail is mounted,
+        // so the rail is checked rather than assumed by them. "Navigation still
+        // works" is NOT the same claim as "navigation is on screen with no menu
+        // to open", and only this block makes the second one.
+        {
+            const rail = await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="nav-rail"]');
+                if (!el) return null;
+                return {
+                    expanded: el.getAttribute('data-expanded'),
+                    width: Math.round(el.getBoundingClientRect().width),
+                    // Five surfaces + Approvals + Switch profile.
+                    rows: el.querySelectorAll('[data-testid="surface-menu"] button').length,
+                };
+            });
+            check('the nav rail is mounted without opening any menu', rail !== null,
+                rail ? `width ${rail.width}` : 'no [data-testid="nav-rail"]');
+            check('the rail carries every surface row, Approvals and Switch profile',
+                rail !== null && rail.rows === 7, rail ? `${rail.rows} rows` : 'no rail');
+
+            // Ctrl/Cmd+B must collapse and restore it — the documented binding.
+            const beforeWidth = rail ? rail.width : 0;
+            await page.keyboard.press('Control+b');
+            await sleep(500);
+            const collapsed = await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="nav-rail"]');
+                return el
+                    ? { expanded: el.getAttribute('data-expanded'), width: Math.round(el.getBoundingClientRect().width) }
+                    : null;
+            });
+            check('Ctrl+B collapses the rail to the 56px column',
+                collapsed !== null && collapsed.expanded === 'false' && collapsed.width < beforeWidth,
+                collapsed ? `${collapsed.width}px` : 'no rail');
+            // And the surfaces must STILL be reachable from the collapsed rail.
+            // A rail that only navigates when expanded is a trap: it looks
+            // interactive, and every glyph in it is a dead button.
+            const fromCollapsed = await navTo('Learn');
+            check('a collapsed rail still navigates', fromCollapsed === 'clicked', fromCollapsed);
+            await page.keyboard.press('Control+b');
+            await sleep(500);
+            const restored = await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="nav-rail"]');
+                return el ? el.getAttribute('data-expanded') : null;
+            });
+            check('Ctrl+B restores the expanded panel', restored === 'true', `${restored}`);
+            // Leave the run on a known surface before the sweep.
+            await navTo('Trade');
+            await sleep(400);
+        }
+
         /** Wait for the surface to settle: two identical, non-empty reads of
          *  <main>. A fixed sleep made this sweep flaky — under load a surface's
          *  lazy chunk arrives after the sleep, and the probe reported a blank
@@ -934,8 +994,8 @@ async function main() {
         // to be open is the "check whose measurement is identical across two
         // different states" trap: on Learn there is no verdict, so the check
         // measures the wrong screen and fails for the wrong reason.
-        // The surface menu is a hamburger, so a bare navTo finds nothing until
-        // the menu is open — the same dance the Agents revisit below uses.
+        // The surface menu is the persistent nav rail, so a bare navTo always finds
+        // the row — no "open the menu first" dance is needed any more.
         let toTrade = await navTo('Trade');
         if (toTrade === 'not found') {
             await openMenu();
@@ -1335,13 +1395,9 @@ async function main() {
         // screen.
         {
             const goSurface = async (name) => {
-                await page.evaluate(() => {
-                    document.querySelector('button[aria-controls="mobile-navigation-menu"]')?.click();
-                });
-                await sleep(350);
                 return page.evaluate((n) => {
-                    const hit = [...document.querySelectorAll('#mobile-navigation-menu button, #mobile-navigation-menu a')]
-                        .find(b => new RegExp('^' + n, 'i').test((b.textContent || '').trim()));
+                    const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
+                        .find(b => new RegExp('^' + n, 'i').test((b.getAttribute('aria-label') || b.textContent || '').trim()));
                     if (!hit) return 'not found';
                     hit.click();
                     return 'clicked';
