@@ -14,15 +14,19 @@
  */
 
 import type { CraftedSkill } from '../../schemas/learning';
+import { CLAUSE_MIN_LENGTH } from '../../schemas/learning';
 
 export const GENERIC_IF_RE = /^(follow trend|use risk management|be careful|manage risk|trade carefully)/i;
 
-/** The same IF/THEN bar validateCraftedSkill applies to worth-gate creates. */
+/** The same IF/THEN bar validateCraftedSkill applies to worth-gate creates.
+ *  The length is `CLAUSE_MIN_LENGTH`, imported from the schema that also
+ *  enforces it — the two used to disagree (8 here, 12 there), which let a
+ *  clause parse, queue as a draft, and then be refused by this gate. */
 export const validateIfThen = (crafted: Pick<CraftedSkill, 'ifCondition' | 'thenAction'>): string | null => {
     const ic = (crafted.ifCondition || '').trim();
     const ta = (crafted.thenAction || '').trim();
-    if (!ic || ic.length < 12) return 'IF condition too short or missing';
-    if (!ta || ta.length < 12) return 'THEN action too short or missing';
+    if (!ic || ic.length < CLAUSE_MIN_LENGTH) return `IF condition too short (under ${CLAUSE_MIN_LENGTH}) or missing`;
+    if (!ta || ta.length < CLAUSE_MIN_LENGTH) return `THEN action too short (under ${CLAUSE_MIN_LENGTH}) or missing`;
     if (GENERIC_IF_RE.test(ic)) return 'IF condition is generic';
     return null;
 };
