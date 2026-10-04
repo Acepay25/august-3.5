@@ -41,7 +41,7 @@ Copy lives in `skillApproval.skillIngestOverrideNote` beside `skillApprovalToast
 New file `tests/supervisorOverrideFeedback.test.tsx` (no existing suite rendered
 `SupervisorStream`). Panels were done in slice 2.
 
-**Slice 5 DONE** (this commit): `scripts/probe-skill-approval.cjs` gained case 5
+**Slice 5 DONE** (`86ce021`): `scripts/probe-skill-approval.cjs` gained case 5
 in the REAL app — seed the live skill through the Coach thread, seed the exact
 `revise_skill` proposal row, press `coach-proposal-apply-<id>`, then assert the
 skill FILE BYTES (1023 → 1063: new clause in, old clause and its prose line out,
@@ -118,11 +118,27 @@ both apply paths. KNOWN SAME GAP, NOT FIXED: the shadow-promotion swap at
 not sync the body line.
 
 ## Then
-Backup pre-flight + registration (open `trade_tf_bar_v1` first; per key: owner
-never touches Preferences, typical/worst-case size vs the shared origin quota, a
-REAL key in a test incl. the double-underscore ones) → real export/restore round
-trip with byte equality → agentsSurface flake rate (10 solo + 1 under load) →
-**Step B audit, then STOP for approval.** Dock chain (below) only if room remains.
+Backup pre-flight + registration → real export/restore round trip with byte
+equality → agentsSurface flake rate (10 solo + 1 under load) → **Step B audit,
+then STOP for approval.** Dock chain (below) only if room remains.
+
+**`trade_tf_bar_v1` — ANSWERED, it needs the RAW list.** Its owner is
+`TradingChart.tsx:100/112` (`readTfBarSelection`/`writeTfBarSelection`), which
+talk to `localStorage` DIRECTLY and never to Preferences — and it is already in
+`RESTORABLE_PREFERENCE_KEY_PREFIXES` (`ExportService.ts:544`) but NOT in
+`RAW_LOCAL_STORAGE_PREFIXES` (the 293-356 block), so on NATIVE an import would
+restore it into a place nothing reads. Size is trivial (a JSON array of
+timeframe strings, ≤ ~90 bytes worst case), so it costs the shared origin quota
+nothing. `tests/exportRawLocalStorage.test.ts:167` still lists it as awaiting a
+decision, and that test FAILS when an awaiting entry gets registered — the
+registration must move the row out of `AWAITING_BACKUP_DECISION` in the same
+commit, with a real key asserted.
+**Decision still owed by the user:** the eight `TRADING DATA — Decide: register
+or delete` rows in that same map (`desk_tools_forged_v1`, `trade_drawings_v1_*`,
+`trade_chat_sessions_v1_*`, `trade_chat_active_v1_*`, `trade_level_arms_v1_*`,
+`trade_level_hits_v1_*`, `trade_watches_v1_*`, `trading_checklist_v1`). Register
+= backed on mobile; delete = the surface goes. Not a call to make by reflex, per
+AGENTS.md's "do not widen it for safety".
 
 ## Probe facts — paid for
 Coach tab `data-testid="learn-tab-coach"` (textContent is `Coach1`, badge span, so
