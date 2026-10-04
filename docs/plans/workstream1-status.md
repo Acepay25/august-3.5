@@ -1,8 +1,10 @@
 # Workstream 1 — status / handoff
 
 Read first; don't re-explore what's recorded. Branch `workstream1-trade-review`
-(from `6e81c50`), never pushed, commit by explicit paths. Tip green: full suite
-474 files passed, typecheck 0, lint 0 errors.
+(from `6e81c50`), never pushed, commit by explicit paths. Tip green (measured at
+`86ce021`+docs): full suite 475 files passed | 1 skipped, `tsc --noEmit` 0, eslint
+0 errors (860 warnings, inside the ratchet), `vite build` 0, skill-approval probe
+25/25.
 
 ## Done
 | commit | item |
