@@ -29,9 +29,10 @@ export type SkillApprovalResult =
     /** The trigger was ALREADY a live skill before the write — nothing new was
      *  born, but the draft has served its purpose, so it is consumed. */
     | { created: false; reason: 'duplicate'; slug: string }
-    /** The write did not land. The draft is LEFT IN THE INBOX so the human can
-     *  fix and retry it, rather than being destroyed on an assumption. */
-    | { created: false; reason: 'not-written' | 'write-failed'; error?: string };
+    /** The write path declined for a named reason, or threw. The draft is LEFT
+     *  IN THE INBOX so the human can fix and retry it, rather than being
+     *  destroyed on an assumption. */
+    | { created: false; reason: 'not-written' | 'write-failed' | 'no-skills-folder'; error?: string };
 
 /** Case-insensitive trigger match — the same comparison the ingest path uses
  *  to refuse a duplicate, so "already learned" means the same thing on both
@@ -59,9 +60,16 @@ export const approveSkillDraft = async (
     const alreadyThere = findByTrigger(trigger);
 
     const trade = trades.find(t => t.id === draft.tradeId);
+    let declined: 'no-skills-folder' | null = null;
     try {
         if (trade) await ingestCraftedSkill(trade, draft.crafted, user);
-        else await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, user, undefined, 'human');
+        else {
+            const r = await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, user, undefined, 'human');
+            // The ingest now says WHY it wrote nothing. The read-back below is
+            // still the authority on success, but a named cause beats a generic
+            // one in the message the human reads.
+            if (r && !r.created && r.reason === 'no-skills-folder') declined = r.reason;
+        }
     } catch (e) {
         return { created: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
     }
@@ -70,7 +78,7 @@ export const approveSkillDraft = async (
     if (!nowThere) {
         // The write path declined, or declined to say so. Do not consume the
         // draft: the human's only copy of this proposal is the inbox row.
-        return { created: false, reason: 'not-written' };
+        return { created: false, reason: declined ?? 'not-written' };
     }
     takeSkillDraft(draft.id, username || undefined);
     if (alreadyThere && alreadyThere === nowThere) {
