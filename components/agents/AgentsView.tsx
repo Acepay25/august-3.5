@@ -300,8 +300,8 @@ const Row: React.FC<{
 
 const VerdictLine: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex items-baseline justify-between gap-3">
-        <span className="text-ui-xs uppercase tracking-wider text-zinc-600">{label}</span>
-        <span className="font-mono text-ui-dense tabular-nums text-zinc-200">{value}</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+        <span className="font-mono text-ui-dense font-medium tabular-nums text-zinc-100">{value}</span>
     </div>
 );
 
@@ -319,13 +319,13 @@ const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
                 </StatusPill>
                 <span className="truncate text-ui-caption font-semibold text-zinc-100">{a.coinName ?? 'setup'}</span>
                 {a.rrRatio && (
-                    <span className="rounded-control bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs text-zinc-300">
+                    <span className="rounded-control border border-white/[0.04] bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs font-medium text-zinc-300">
                         {fmtRiskReward(a.rrRatio, 1)} R:R
                     </span>
                 )}
-                {a.confidence && <span className="ml-auto font-mono text-ui-xs text-zinc-500">{a.confidence}</span>}
+                {a.confidence && <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{a.confidence}</span>}
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-control bg-white/[0.02] p-2 border border-white/[0.04]">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-control border border-white/[0.04] bg-white/[0.02] p-2.5">
                 <VerdictLine label="entry" value={a.entryPoints?.[0]?.price ?? '—'} />
                 <VerdictLine label="stop" value={a.stopLoss ?? '—'} />
                 <VerdictLine label="target" value={a.takeProfit?.[0]?.price ?? '—'} />
