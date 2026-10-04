@@ -101,6 +101,77 @@ const underNamespace = (shape: string, ns: string): boolean =>
     shape === ns || shape.startsWith(`${ns}_`) || shape.startsWith(`${ns}:`);
 
 const isBackedUp = (shape: string): boolean => isRawLocalStorageKey(shape) || isRestorablePreferenceKey(shape);
+
+/**
+ * The gap this file was written to catch, and did not.
+ *
+ * `isBackedUp` ORs the two lists, and for a store whose owner ONLY ever talks to
+ * `localStorage` that is wrong: `skill_drafts_v1` and `learning_proposals_v1`
+ * were on the RESTORE allow-list but absent from `RAW_LOCAL_STORAGE_PREFIXES`,
+ * so every check passed while the export sweep read a Preferences copy that
+ * nothing writes — and the restore mirror put it back where nothing reads.
+ * ExportService says it plainly: a key missing from the raw list "does not
+ * merely fail to restore, it exports the wrong bytes".
+ *
+ * The discriminator is whether the OWNER ever touches Preferences. A store that
+ * goes through `PreferencesService` is right to be restore-listed only — its
+ * localStorage key is that service's web fallback, not a second home. A store
+ * that never mentions it has exactly one home, and that home has to be declared.
+ */
+const PREFERENCES_TOUCH = /PreferencesService|getPreference(?:Object|Array)?\(|setPreference(?:Object|Array)?\(/;
+const ownerUsesPreferences = (path: string): boolean => PREFERENCES_TOUCH.test(readFileSync(path, 'utf8'));
+
+/** Only a WRITE claims ownership. A lone `getItem` of someone else's key must
+ *  not be held to the raw list by the file that happens to read it. */
+const isWriteSite = (site: CallSite): boolean => site.method !== 'get';
+
+/**
+ * The backlog the rule below exposes, NOT an endorsement.
+ *
+ * Enforcing "a localStorage-only owner must be on the raw list" surfaced 18
+ * namespaces in the same hole `skill_drafts_v1` was in — all but unbacked on
+ * mobile, or backed as a copy nothing reads. `skill_drafts_v1` and
+ * `learning_proposals_v1` were registered because Step A named them; the rest
+ * need an owner's decision rather than a sweeping `RAW_LOCAL_STORAGE_PREFIXES`
+ * widening, because the WebView origin quota is SHARED and AGENTS.md forbids
+ * shadow-copying a value nothing reads to feel safe.
+ *
+ * TRADING DATA — should almost certainly be registered (decide first):
+ *   desk_tools_forged_v1 (user/model-authored HTTPS tools),
+ *   trade_drawings_v1_*, trade_chat_sessions_v1_*, trade_chat_active_v1_*,
+ *   trade_level_arms_v1_*, trade_level_hits_v1_*, trade_watches_v1_*,
+ *   trading_checklist_v1, harness_settings_v1, trade_tf_bar_v1_*
+ * FURNITURE / TELEMETRY — plausibly right to stay unbacked:
+ *   last_active_user (a plain string pointer), desk_idle_motion_v1_*,
+ *   desk_role_overrides_v1_*, desk_room_layout_v1_*_*, thinking_leak_bin_v1,
+ *   lastPromiseError, lastGlobalError, lastCrashError
+ *
+ * A NEW store cannot be added here by reflex: it has to say which of the two it
+ * is, and the test below fails if an entry gets registered for real.
+ */
+const AWAITING_BACKUP_DECISION = new Map<string, string>([
+    ['desk_idle_motion_v1', 'furniture: reduced-motion preference'],
+    ['desk_role_overrides_v1', 'furniture: per-room role overrides'],
+    ['desk_room_layout_v1', 'furniture: room layout'],
+    ['last_active_user', 'a plain string pointer, not a record'],
+    ['desk_tools_forged_v1', 'TRADING DATA — authored HTTPS tools. Decide: register or delete.'],
+    ['trade_drawings_v1', 'TRADING DATA — chart drawings. Decide: register or delete.'],
+    ['trade_chat_sessions_v1', 'TRADING DATA — chat transcripts. Decide: register or delete.'],
+    ['trade_chat_active_v1', 'pointer into trade_chat_sessions — needs the same decision'],
+    ['trade_level_arms_v1', 'TRADING DATA — level arming state. Decide: register or delete.'],
+    ['trade_level_hits_v1', 'TRADING DATA — level hit history. Decide: register or delete.'],
+    ['trade_watches_v1', 'TRADING DATA — price watches. Decide: register or delete.'],
+    ['trading_checklist_v1', 'TRADING DATA — the user checklist. Decide: register or delete.'],
+    ['harness_settings_v1', 'harness config — likely belongs in Preferences, not here'],
+    ['thinking_leak_bin_v1', 'telemetry: withheld reasoning bin'],
+    ['trade_tf_bar_v1', 'furniture: timeframe bar selection'],
+    ['lastPromiseError', 'crash breadcrumb'],
+    ['lastGlobalError', 'crash breadcrumb'],
+    ['lastCrashError', 'crash breadcrumb'],
+]);
+
+const awaitsDecision = (shape: string): boolean =>
+    [...AWAITING_BACKUP_DECISION.keys()].some(ns => underNamespace(shape, ns));
 const isExempt = (shape: string): boolean => [...DELIBERATELY_UNBACKED.keys()].some(ns => underNamespace(shape, ns));
 
 interface CallSite {
@@ -110,6 +181,8 @@ interface CallSite {
     shape: string;
     /** The source expression, for the failure message. */
     expr: string;
+    /** Which localStorage call it is — only a WRITE claims a store's home. */
+    method: 'get' | 'set' | 'remove';
 }
 
 /** PREF_KEYS is read out of the source rather than imported: importing
@@ -254,6 +327,7 @@ const scan = (): CallSite[] => SOURCES.flatMap(path => {
             line: src.slice(0, m.index).split('\n').length,
             shape: resolveKey(expr, consts),
             expr,
+            method: m[0].includes('.setItem(') ? 'set' : m[0].includes('.removeItem(') ? 'remove' : 'get',
         });
     }
     return found;
@@ -288,6 +362,41 @@ describe('every raw-localStorage store is registered in ExportService', () => {
             .filter(s => !(s.shape.startsWith('*') && describesAnAllowListedNamespace(s.path)))
             .map(s => `${s.path}:${s.line}  ${s.expr}  →  ${s.shape}`);
         expect(offenders).toEqual([]);
+    });
+
+    it('puts a store whose only home is localStorage on the RAW list', () => {
+        // The half the test above cannot see: passing `isBackedUp` on the
+        // restore list alone still exports the wrong bytes.
+        const offenders = sites
+            .filter(isWriteSite)
+            .filter(s => !isRawLocalStorageKey(s.shape))
+            .filter(s => !isExempt(s.shape))
+            .filter(s => !awaitsDecision(s.shape))
+            .filter(s => !ownerUsesPreferences(s.path))
+            .filter(s => !(s.shape.startsWith('*') && describesAnAllowListedNamespace(s.path)))
+            .map(s => `${s.path}:${s.line}  ${s.expr}  →  ${s.shape}`);
+        expect(offenders).toEqual([]);
+    });
+
+    it('is still watching: the new rule has real call sites behind it', () => {
+        // Guard the guard. If every write site became exempt, or the
+        // Preferences test started matching every file, the rule above would
+        // pass vacuously — the exact failure mode this whole file exists for.
+        const writes = sites.filter(isWriteSite);
+        expect(writes.length).toBeGreaterThan(10);
+        expect(writes.filter(s => isRawLocalStorageKey(s.shape)).length).toBeGreaterThan(5);
+        // The backlog is doing real work: without it the rule above would be
+        // enforcing nothing, and it must shrink rather than grow.
+        const backlogNamespaces = new Set(sites
+            .filter(isWriteSite)
+            .filter(s => !isRawLocalStorageKey(s.shape) && !isExempt(s.shape) && awaitsDecision(s.shape))
+            .map(s => s.shape));
+        expect(backlogNamespaces.size).toBeGreaterThan(8);
+    });
+
+    it('drops a backlog entry once the namespace is actually registered', () => {
+        // Stops the list rotting into a second set of exemptions nobody revisits.
+        expect([...AWAITING_BACKUP_DECISION.keys()].filter(isRawLocalStorageKey)).toEqual([]);
     });
 
     it('admits a key off both lists only with a stated reason', () => {
