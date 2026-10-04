@@ -63,6 +63,7 @@ describe('repeated legacy draft ids', () => {
     it('new drafts never share an id', () => {
         const a = queueSkillDraft({ tradeId: 't-a', crafted: crafted('a') } as never, USER);
         const b = queueSkillDraft({ tradeId: 't-b', crafted: crafted('b') } as never, USER);
+        if (!a || !b) throw new Error('a queued draft must read back out of the store');
         expect(a.id).not.toBe(b.id);
     });
 });

@@ -46,17 +46,23 @@ const read = (username?: string): SkillDraft[] => {
     }
 };
 
-const write = (drafts: SkillDraft[], username?: string): void => {
+/** True only when the bytes are on disk. A caller is about to tell a human
+ *  "your proposal is in the inbox"; that claim needs the store's agreement, not
+ *  the absence of a throw. */
+const write = (drafts: SkillDraft[], username?: string): boolean => {
     try {
         localStorage.setItem(storageKey(username), JSON.stringify(drafts.slice(-20)));
         if (typeof window !== 'undefined') window.dispatchEvent(new Event('august-skill-drafts'));
-    } catch { /* ignore */ }
+        return true;
+    } catch {
+        return false;
+    }
 };
 
 export const listSkillDrafts = (username?: string): SkillDraft[] =>
     typeof localStorage === 'undefined' ? [] : read(username);
 
-export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>, username?: string): SkillDraft => {
+export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>, username?: string): SkillDraft | null => {
     const next: SkillDraft = {
         ...draft,
         // A millisecond timestamp alone is NOT unique: several trades closing
@@ -67,8 +73,12 @@ export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>, use
         createdAt: new Date().toISOString(),
     };
     const rest = listSkillDrafts(username).filter(d => d.tradeId !== draft.tradeId);
-    write([...rest, next], username);
-    return next;
+    if (!write([...rest, next], username)) return null;
+    // Read-back. `write` returning true only proves setItem did not throw, and
+    // propose_skill's receipt was already claiming the draft was queued before
+    // anyone looked. Confirm the row is actually in the store the human will
+    // open, and let the caller report a real failure if it is not.
+    return listSkillDrafts(username).some(d => d.id === next.id) ? next : null;
 };
 
 export const takeSkillDraft = (id: string, username?: string): SkillDraft | null => {

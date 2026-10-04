@@ -127,6 +127,7 @@ describe('runSupervisorPass — skill drafts', () => {
 
     it('a reject verdict tombstones the trigger exactly like the human Discard', async () => {
         const draft = queueSkillDraft({ tradeId: 'd3', coin: 'BTCUSDT', crafted: crafted() }, USER);
+        if (!draft) throw new Error('queueSkillDraft stored nothing — the supervisor had no draft to act on');
         verdictJson({ action: 'reject', reason: 'duplicate of an existing catalog entry' });
         await runSupervisorPass(USER, { manual: true });
         expect(listSkillDrafts(USER)).toHaveLength(0);

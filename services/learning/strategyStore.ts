@@ -322,6 +322,11 @@ export const proposeStrategy = async (
     if (error) return { ok: false, error };
     try {
         const { slug, created } = await withNotebookWriteLock(() => writeStrategyUnlocked(proposal, username));
+        // `writeStrategyUnlocked` signals "no strategies folder" with an empty
+        // slug and wrote nothing. Reporting ok:true here told the model — and
+        // through it the trader — that a plan was saved when the notebook held
+        // no file at all. A write that produced no name is a failure.
+        if (!slug) return { ok: false, error: 'the notebook has no strategies folder to write into' };
         return { ok: true, slug, created };
     } catch (e) {
         console.warn('[Strategy] Could not persist the proposed plan:', e);
