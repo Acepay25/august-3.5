@@ -322,6 +322,23 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     // a restored backup that silently resets every panel to its default is the
     // same lost-layout annoyance. Plain numeric strings; they round-trip.
     'right_panel_width_v1',
+    // Pending skill proposals (`utils/skillDrafts.ts`) call `localStorage.setItem`
+    // themselves, so on NATIVE their bytes live in the WebView origin and NOT in
+    // Preferences. `skill_drafts_v1` was already on the RESTORE allow-list, which
+    // is the worse half of this pair: the sweep read the frozen Preferences copy
+    // (or nothing) while the live drafts sat in localStorage, so a backup taken
+    // after a restore shipped stale bytes, and the restore mirror wrote into a
+    // place the owner never looks. See the comment above `isRawLocalStorageKey`:
+    // a key missing from THIS list does not merely fail to restore, it exports
+    // the wrong bytes. Covers `skill_drafts_v1:<user>` and the
+    // `skill_drafts_v1_rejected:<user>` tombstones by the same prefix.
+    'skill_drafts_v1',
+    // Same defect class, same owner style: `utils/learningQueue.ts` writes the
+    // proposal inbox through localStorage directly and was already on the
+    // restore allow-list only — so a backup exported the Preferences copy that
+    // nothing writes, and the restore mirror put it back where nothing reads.
+    // Covers `learning_proposals_v1:<user>`.
+    'learning_proposals_v1',
 ];
 
 /**
