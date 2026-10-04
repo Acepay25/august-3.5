@@ -23,29 +23,38 @@ export interface TradeProposalCardProps {
 }
 
 const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, onLog, onCancel }) => (
-    <div className="mt-1 rounded-xl border border-white/10 bg-zinc-800/70 p-2.5" data-testid="trade-proposal-card">
+    <div className="mt-1 rounded-control border border-white/[0.04] bg-white/[0.015] p-2.5" data-testid="trade-proposal-card">
         <div className="flex items-center gap-2">
-            <span className={`rounded px-1.5 py-0.5 text-ui-xs font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
+            <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
             <span className="font-mono text-ui-sm font-bold text-zinc-100">{proposal.symbol}</span>
-            <span className="ml-auto text-ui-xs uppercase tracking-wider text-zinc-500">{proposal.confidence} confidence</span>
+            <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{proposal.confidence} confidence</span>
         </div>
-        <div className="mt-1.5 grid grid-cols-3 gap-1 font-mono text-ui-dense tabular-nums">
-            <span className="text-zinc-400">Entry <span className="text-zinc-100">{proposal.entry}</span></span>
-            <span className="text-zinc-400">SL <span className="text-rose-400">{proposal.stopLoss}</span></span>
-            <span className="text-zinc-400">TP <span className="text-emerald-400">{proposal.takeProfits.join(' / ')}</span></span>
+        <div className="mt-2 grid grid-cols-3 gap-2 rounded-control border border-white/[0.04] bg-white/[0.02] p-2 font-mono text-ui-dense tabular-nums">
+            <div>
+                <div className="font-mono text-[10px] uppercase text-zinc-500">Entry</div>
+                <div className="font-semibold text-zinc-100">{proposal.entry}</div>
+            </div>
+            <div>
+                <div className="font-mono text-[10px] uppercase text-zinc-500">SL</div>
+                <div className="font-semibold text-rose-400">{proposal.stopLoss}</div>
+            </div>
+            <div>
+                <div className="font-mono text-[10px] uppercase text-zinc-500">TP</div>
+                <div className="font-semibold text-emerald-400">{proposal.takeProfits.join(' / ')}</div>
+            </div>
         </div>
-        {proposal.rationale && <p className="mt-1.5 text-ui-dense leading-4 text-zinc-400">{proposal.rationale}</p>}
-        <div className="mt-2 flex items-center gap-1.5">
+        {proposal.rationale && <p className="mt-1.5 text-ui-dense leading-relaxed text-zinc-400">{proposal.rationale}</p>}
+        <div className="mt-2.5 flex items-center gap-1.5">
             {canLog && (
                 <button type="button"
                     onClick={onLog}
-                    className="rounded-control bg-emerald-600 px-2.5 py-1 text-ui-dense font-semibold text-white transition-colors hover:bg-emerald-500">
+                    className="rounded-control bg-emerald-600/90 px-2.5 py-1 text-ui-dense font-medium text-white transition-colors hover:bg-emerald-500">
                     Log this trade
                 </button>
             )}
             <button type="button"
                 onClick={onCancel}
-                className="rounded-control border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
+                className="rounded-control border border-white/[0.06] px-2.5 py-1 text-ui-dense text-zinc-400 transition-colors hover:bg-white/[0.04] hover:text-zinc-200">
                 Cancel
             </button>
         </div>

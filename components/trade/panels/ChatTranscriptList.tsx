@@ -153,7 +153,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                     : null}
                             </div>
                             {shownText && !e.streaming && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
                                     <CopyChip text={shownText} />
                                     {onToggleWatch && analysisId && pinnedMessageIds && (
                                         <PinChip pinned={pinnedMessageIds.has(analysisId)}

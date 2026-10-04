@@ -119,7 +119,7 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
     const drawnCount = levels.length - lines.filter(l => l.state === 'hidden').length;
 
     return (
-        <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-zinc-800/70" data-testid="key-levels-card"
+        <div className="mt-2 overflow-hidden rounded-control border border-white/[0.04] bg-white/[0.015]" data-testid="key-levels-card"
             onMouseLeave={() => setHoverId(null)}>
             <div className="flex items-center justify-between px-3 py-2">
                 <span className="text-ui-xs font-bold uppercase tracking-[0.09em] text-zinc-400">

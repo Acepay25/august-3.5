@@ -857,8 +857,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     if (!hasAnswer) return null;
                     return <span className="hidden shrink-0 text-ui-xs text-zinc-600 @min-[460px]:inline" data-testid="chat-answered-meta">answered {relTime(activeSession.updatedAt)}</span>;
                 })()}
-                <div className="ml-auto flex shrink-0 items-center gap-0.5">
-                    <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} />
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} compact />
                     {/* The overlay needs a debate message to project, so before
                         the first run this button could only ever do nothing. */}
                     {onToggleDeskScene && (hasDeskSceneMessage || isDeskSceneOpen) && (
@@ -868,41 +868,38 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             aria-label={isDeskSceneOpen ? 'Close desk view' : 'Open 2D desk view'}
                             title={isDeskSceneOpen ? 'Close 2D debate floor' : 'Open 2D debate floor'}
                             className={`relative rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
-                                isDeskSceneOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-zinc-500'
+                                isDeskSceneOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-zinc-400'
                             }`}
                         >
-                            <LayoutGrid className="h-4 w-4" />
+                            <LayoutGrid className="h-3.5 w-3.5" />
                             {hasDeskSceneMessage && !isDeskSceneOpen && (
                                 <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-cyan-400 ring-2 ring-zinc-900 animate-pulse" />
                             )}
                         </button>
                     )}
-                    {/* The primary jump OUT of the dock. This was a re-run (⟳)
-                        button — re-asking the last question with fresh market
-                        context — which sat under the cursor unused, while the
-                        move a trader makes constantly is "get me to Chat". It
-                        goes straight there now; the re-run moved into the
-                        Customization menu below, so the function survives even
-                        though the top-level control no longer is it. */}
+                    {/* Segmented chat actions: new + history */}
+                    <div className="flex items-center rounded-control border border-white/[0.04] bg-white/[0.02] p-0.5">
+                        <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
+                            className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                            <Plus className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" onClick={() => { setHistoryOpen(v => !v); setHistoryQuery(''); setHistorySel(0); setHistoryShowAll(false); }}
+                            aria-label="Past conversations" aria-expanded={historyOpen} title="Past conversations"
+                            className={`rounded p-1 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.08] text-zinc-100' : 'text-zinc-400'}`}>
+                            <History className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                    {/* The primary jump OUT of the dock */}
                     <button type="button" onClick={onOpenChat} disabled={!onOpenChat}
                         data-testid="dock-open-chat"
                         aria-label="Open Chat" title="Open the Chat surface"
-                        className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40">
-                        <MessageSquare className="h-4 w-4" />
-                    </button>
-                    <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
-                        className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
-                        <Plus className="h-4 w-4" />
-                    </button>
-                    <button type="button" onClick={() => { setHistoryOpen(v => !v); setHistoryQuery(''); setHistorySel(0); setHistoryShowAll(false); }}
-                        aria-label="Past conversations" aria-expanded={historyOpen} title="Past conversations"
-                        className={`rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.06] text-zinc-100' : 'text-zinc-500'}`}>
-                        <History className="h-4 w-4" />
+                        className="rounded-control p-1.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40">
+                        <MessageSquare className="h-3.5 w-3.5" />
                     </button>
                     <div className="relative">
                         <button type="button" onClick={() => setShowNewMenu(v => !v)} aria-label="Customization" aria-expanded={showNewMenu} title="Customization"
-                            className={`rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${showNewMenu ? 'bg-white/[0.06] text-zinc-100' : 'text-zinc-500'}`}>
-                            <MoreHorizontal className="h-4 w-4" />
+                            className={`rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${showNewMenu ? 'bg-white/[0.06] text-zinc-100' : 'text-zinc-400'}`}>
+                            <MoreHorizontal className="h-3.5 w-3.5" />
                         </button>
                         {showNewMenu && (
                             <>
@@ -987,8 +984,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         desktop rail when the window later grew (audit R6 #22). */}
                     {onToggleCollapsed && (
                         <button type="button" onClick={onToggleCollapsed} aria-label="Collapse Chart AI" title="Collapse"
-                            className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
-                            <X className="h-4 w-4" />
+                            className="rounded-control p-1.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                            <X className="h-3.5 w-3.5" />
                         </button>
                     )}
                 </div>
