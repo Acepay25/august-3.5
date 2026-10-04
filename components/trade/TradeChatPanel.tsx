@@ -170,8 +170,10 @@ interface TradeChatPanelProps {
      *  unmounted dock. (Replaces the old virtuosoRef, which pointed at a
      *  list this panel never rendered as a Virtuoso.) */
     registerScrollToMessage?: (fn: ((messageId: string) => void) | null) => void;
-    /** Dock geometry controls, hoisted to the trade layout (drag handle). */
-    collapsed?: boolean;
+    /** Dock geometry controls, hoisted to the trade layout (drag handle).
+     *  There is deliberately no `collapsed` prop: the dock is HIDDEN, not
+     *  closed, so this component stays mounted while collapsed and this
+     *  never renders a second copy of itself. See ChartAiDockRail below. */
     onToggleCollapsed?: () => void;
     expanded?: boolean;
     onToggleExpanded?: () => void;
@@ -225,6 +227,48 @@ const QUICK_PROMPTS: { text: string; Icon: React.FC<{ className?: string }> }[] 
     { text: 'Scan chart → skills', Icon: Zap },
 ];
 
+/**
+ * The collapsed Chart AI dock — a 10px column carrying only an expand
+ * affordance, the name, and the live/busy light.
+ *
+ * Extracted from what used to be an early return inside TradeChatPanel so the
+ * dock can be HIDDEN rather than closed. That panel used to render itself
+ * twice: collapsed it returned this rail, expanded it returned the dock, and
+ * React unmounted one to mount the other. Collapsing mid-turn therefore threw
+ * away the composer draft, the scroll position and the in-flight stream —
+ * the user collapsed the dock to see the chart, and came back to an empty one.
+ * Now TradeView mounts the panel exactly once and hides it, so this is
+ * presentation only and carries no panel state.
+ */
+export const ChartAiDockRail: React.FC<{
+    onExpand: () => void;
+    live: boolean;
+}> = ({ onExpand, live }) => (
+    <div
+        className="flex h-10 w-full shrink-0 flex-row items-center gap-3 border-l border-white/[0.06] bg-zinc-900/40 px-3 lg:h-full lg:w-10 lg:flex-col lg:py-3"
+        data-testid="trade-chat-rail"
+    >
+        <button
+            type="button"
+            onClick={onExpand}
+            title="Expand Chart AI"
+            aria-label="Expand Chart AI"
+            className="rounded-control p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+        >
+            <PanelRightOpen className="h-4 w-4" />
+        </button>
+        <span className="select-none text-ui-xs font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
+        {/* `live` only, not `busy`: busy is derived from the chat store's
+            running map inside the panel, and reproducing that subscription out
+            here to animate one 8px light on a 10px column would be a second
+            source of truth for the same fact. One click away is the dock. */}
+        <span className={`h-2 w-2 rounded-full ${live ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
+        {/* The supervisor's detail panel lives inside the dock, so opening it
+            from the collapsed rail means expanding the dock first. */}
+        <SupervisorIndicator compact onOpen={onExpand} />
+    </div>
+);
+
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
@@ -232,7 +276,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     onChatLevelsChange,
     renderGroupSurface, groups = [],
     registerScrollToMessage,
-    collapsed, onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
+    onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
     onNewGroup, onOpenCoach, coachCount = 0, botThreadRows, onBotTurnCommit,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
@@ -787,20 +831,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const historyRows = historyShowAll ? historyFiltered : historyFiltered.slice(0, 8);
     const historyHidden = historyFiltered.length - historyRows.length;
 
-
-    if (collapsed) {
-        return (
-            <div className="flex h-10 w-full shrink-0 flex-row items-center gap-3 border-l border-white/[0.06] bg-zinc-900/40 px-3 lg:h-full lg:w-10 lg:flex-col lg:py-3" data-testid="trade-chat-rail">
-                <button type="button" onClick={onToggleCollapsed} title="Expand Chart AI" aria-label="Expand Chart AI"
-                    className="rounded-control p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100">
-                    <PanelRightOpen className="h-4 w-4" />
-                </button>
-                <span className="select-none text-ui-xs font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
-                <span className={`h-2 w-2 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
-                <SupervisorIndicator compact onOpen={() => setSupervisorOpen(true)} />
-            </div>
-        );
-    }
 
     return (
         <div className="relative flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40" data-testid="trade-chat-panel">

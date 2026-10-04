@@ -193,7 +193,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     value={pnl}
                                     onChange={e => setPnl(e.target.value)}
                                     placeholder="250"
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-white font-mono text-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-white font-mono text-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 focus:border-cyan-500/50 transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                     autoFocus
                                 />
                             </div>
@@ -224,7 +224,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                                         setSelectedEntryIndices(prev => [...prev, idx]);
                                                     }
                                                 }}
-                                                className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-cyan-600 focus:ring-cyan-500"
+                                                className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-cyan-600 focus-visible:ring-cyan-500"
                                             />
                                             <span className="ml-3 text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
                                                 <span className="text-zinc-500">Entry {idx + 1}:</span>{' '}
@@ -249,7 +249,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     type="checkbox"
                                     checked={isAdvanced}
                                     onChange={() => setIsAdvanced(!isAdvanced)}
-                                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-cyan-600 focus:ring-cyan-500"
+                                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-cyan-600 focus-visible:ring-cyan-500"
                                 />
                                 <span className="ml-3 text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
                                     {content.advancedToggle}
@@ -269,7 +269,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     value={correctedValue}
                                     onChange={e => setCorrectedValue(e.target.value)}
                                     placeholder={content.advancedPlaceholder}
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
                                 />
                                 <p className="mt-1.5 text-xs text-zinc-500">{content.advancedHelp}</p>
                             </div>

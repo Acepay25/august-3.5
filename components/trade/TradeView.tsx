@@ -43,7 +43,7 @@ import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import { LevelAccuracyBadge } from './LevelAccuracyBadge';
 import OrderBookPanel from './OrderBookPanel';
-import TradeChatPanel from './TradeChatPanel';
+import TradeChatPanel, { ChartAiDockRail } from './TradeChatPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
@@ -999,60 +999,74 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         <OrderBookPanel symbol={symbol} live={feed.depthLive} liveDepth={feed.depth} />
                     </div>
                 )}
-                {/* The dock belongs to the AI mode below lg (always mounted
-                    there — the desktop collapse toggle is a lg+ affordance
-                    and must never blank the chat pane on phones). */}
-                {(!dockCollapsed || isBelowLg) && (
-                    <>
-                        {/* Drag handle: resize the Chart AI dock (TradingView-style). */}
-                        <div
-                            role="separator"
-                            aria-orientation="vertical"
-                            aria-label="Resize Chart AI dock"
-                            onPointerDown={startDrag}
-                            onDoubleClick={() => { setDockWidth(DOCK_DEFAULT); try { localStorage.setItem(DOCK_WIDTH_KEY, String(DOCK_DEFAULT)); } catch { /* private mode */ } }}
-                            title="Drag to resize · double-click to reset"
-                            className="hidden w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center border-x border-white/[0.06] bg-zinc-900/40 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 lg:flex"
-                        >
-                            <GripVertical className="h-3 w-3" />
-                        </div>
-                        <div
-                            data-testid="trade-dock"
-                            style={{ '--dock-w': `${dockWidth}px` } as React.CSSProperties}
-                            className={isBelowLg
-                                ? (mode === 'ai' ? 'min-h-0 w-full flex-1' : 'hidden')
-                                : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-1/2 xl:!w-7/12' : ''}`}
-                        >
-                            <TradeChatPanel
-                                {...dockProps}
-                                collapsed={false}
-                                onToggleCollapsed={isBelowLg ? undefined : collapseDock}
-                                expanded={dockExpanded}
-                                onToggleExpanded={toggleDockExpanded}
-                                onNewGroup={onNewGroup}
-                                onOpenCoach={onOpenCoach}
-                                coachCount={coachCount}
-                                botThreadRows={botThreadRows}
-                                onBotTurnCommit={onBotTurnCommit}
-                                onOpenChat={onOpenChat}
-                            />
-                        </div>
-                    </>
+                {/* The Chart AI dock: ONE mounted instance, hidden rather than closed.
+
+                    HIDE vs CLOSE (right-panel contract). Collapsing used to swap a
+                    collapsed rail in for this panel, unmounting it — so the composer
+                    draft, the scroll position and any in-flight turn died with it.
+                    Collapsing the dock to look at the chart is an ordinary thing to
+                    do mid-analysis; coming back to an empty dock was data loss
+                    wearing a UI costume.
+
+                    So the panel always stays mounted. When collapsed it is taken out
+                    of flow, made inert, and hidden visually: `visibility: hidden`
+                    keeps its box — which is what preserves the scroll offset, where
+                    `display: none` would not — while `inert` and
+                    `pointer-events: none` keep it out of the tab ring and the mouse.
+
+                    Below lg the dock is a single-pane MODE rather than a panel, so
+                    the collapse toggle is a lg+ affordance and must never blank the
+                    chat pane on phones; `isBelowLg` wins over `dockCollapsed` here
+                    for exactly that reason. */}
+                {!dockCollapsed && !isBelowLg && (
+                    <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label="Resize Chart AI dock"
+                        onPointerDown={startDrag}
+                        onDoubleClick={() => { setDockWidth(DOCK_DEFAULT); try { localStorage.setItem(DOCK_WIDTH_KEY, String(DOCK_DEFAULT)); } catch { /* private mode */ } }}
+                        title="Drag to resize · double-click to reset"
+                        className="hidden w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center border-x border-white/[0.06] bg-zinc-900/40 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 lg:flex"
+                    >
+                        <GripVertical className="h-3 w-3" />
+                    </div>
                 )}
+                <div
+                    data-testid="trade-dock"
+                    className={isBelowLg
+                        ? (mode === 'ai' ? 'min-h-0 w-full flex-1' : 'hidden')
+                        : `h-96 w-full shrink-0 lg:h-auto lg:w-[var(--dock-w)] lg:min-w-[300px] ${dockExpanded ? 'lg:!w-1/2 xl:!w-7/12' : ''}`}
+                    data-hidden={dockCollapsed && !isBelowLg ? 'true' : 'false'}
+                    inert={dockCollapsed && !isBelowLg ? true : undefined}
+                    style={dockCollapsed && !isBelowLg
+                        ? {
+                            position: 'absolute',
+                            right: 0,
+                            top: 0,
+                            height: '100%',
+                            width: `${dockWidth}px`,
+                            visibility: 'hidden',
+                            pointerEvents: 'none',
+                            zIndex: -1,
+                        }
+                        : ({ '--dock-w': `${dockWidth}px` } as React.CSSProperties)}
+                >
+                    <TradeChatPanel
+                        {...dockProps}
+                        onToggleCollapsed={isBelowLg ? undefined : collapseDock}
+                        expanded={dockExpanded}
+                        onToggleExpanded={toggleDockExpanded}
+                        onNewGroup={onNewGroup}
+                        onOpenCoach={onOpenCoach}
+                        coachCount={coachCount}
+                        botThreadRows={botThreadRows}
+                        onBotTurnCommit={onBotTurnCommit}
+                        onOpenChat={onOpenChat}
+                    />
+                </div>
                 {dockCollapsed && !isBelowLg && (
                     <div className="hidden shrink-0 lg:block" data-testid="trade-dock-rail">
-                        <TradeChatPanel
-                            {...dockProps}
-                            collapsed
-                            onToggleCollapsed={expandDock}
-                            expanded={dockExpanded}
-                            onToggleExpanded={toggleDockExpanded}
-                            onNewGroup={onNewGroup}
-                            onOpenCoach={onOpenCoach}
-                            coachCount={coachCount}
-                            botThreadRows={botThreadRows}
-                            onBotTurnCommit={onBotTurnCommit}
-                        />
+                        <ChartAiDockRail onExpand={expandDock} live={live} />
                     </div>
                 )}
             </div>

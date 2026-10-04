@@ -159,7 +159,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                         value={newUsername} 
                         onChange={(e) => { setNewUsername(e.target.value); setFormError(''); }} 
                         placeholder="Create New Workspace" 
-                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-colors duration-[150ms] ease-[var(--ease-snappy)] font-medium ${formError ? 'border-rose-500/50' : 'border-white/10'}`}
+                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 focus:border-transparent transition-colors duration-[150ms] ease-[var(--ease-snappy)] font-medium ${formError ? 'border-rose-500/50' : 'border-white/10'}`}
                         autoFocus
                         aria-invalid={!!formError}
                         aria-describedby={formError ? 'username-error' : undefined}

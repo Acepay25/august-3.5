@@ -125,6 +125,38 @@ describe('theme hue lockout (WS-5.3)', () => {
 });
 
 /**
+ * 5) Focus-modality lockout — C1/DSH. A focus ring is a keyboard affordance;
+ * painting one on every mouse click trains people to ignore it, which costs
+ * the indicator its whole job. `:focus-visible` is modality-aware on its own,
+ * so the rule is simply that no call site may opt out by writing a bare
+ * `focus:ring-*`. 19 sites did exactly that (checkboxes, text fields, a
+ * close button) and each lit up on click.
+ *
+ * Scanned the same way as the hue and motion lockouts: source text, not
+ * computed styles, because Tailwind generates the utility on demand and jsdom
+ * would never see it.
+ */
+describe('focus-modality lockout (C1)', () => {
+    const offenders = tsxFilesUnder(resolve(__dirname, '../components'))
+        .map(file => {
+            const lines = readFileSync(file, 'utf8').split('\n');
+            const hits = lines
+                .map((line, i) => ({ line: i + 1, text: line }))
+                // `focus:ring` but NOT `focus-visible:ring` — the negative
+                // lookahead is the whole rule.
+                .filter(l => /focus:ring/.test(l.text) && !/focus-visible:ring/.test(l.text));
+            return { rel: relative(__dirname, file).replace(/\\/g, '/').replace(/^..\//, ''), hits };
+        })
+        .filter(o => o.hits.length > 0);
+
+    it('paints no focus ring without the keyboard having asked for one', () => {
+        const report = offenders
+            .map(o => `${o.rel}\n${o.hits.map(h => `  ${h.line}: ${h.text.trim().slice(0, 120)}`).join('\n')}`)
+            .join('\n');
+        expect(report, `${offenders.length} file(s) use a bare focus:ring`).toBe('');
+    });
+});
+/**
  * 4) `transition-all` lockout — WS-5.4. `all` animates geometry as well as
  *    paint, so any state change that resizes a box (text growing a stream
  *    chunk at a time, a disclosure opening) slides the layout with it. Naming

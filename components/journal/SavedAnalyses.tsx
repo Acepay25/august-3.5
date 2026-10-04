@@ -39,7 +39,7 @@ const SavedAnalysisRowImpl: React.FC<{
           checked={isSelected}
           onChange={() => onSelect(item.id)}
           onClick={(e) => e.stopPropagation()}
-          className="form-checkbox h-5 w-5 bg-zinc-900 border-white/10 text-cyan-600 focus:ring-cyan-500 rounded cursor-pointer flex-shrink-0"
+          className="form-checkbox h-5 w-5 bg-zinc-900 border-white/10 text-cyan-600 focus-visible:ring-cyan-500 rounded cursor-pointer flex-shrink-0"
         />
         <div className="flex-1 min-w-0 ml-4">
           <div className="flex items-center gap-3">

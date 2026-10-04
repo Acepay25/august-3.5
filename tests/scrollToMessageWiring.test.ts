@@ -62,11 +62,15 @@ describe('App: both affordances call the bridge', () => {
 });
 
 describe('TradeView: forwards the bridge to the dock', () => {
-    it('declares the prop and includes it in dockProps (both dock renders spread dockProps)', () => {
+    it('declares the prop and includes it in dockProps (the single dock render spreads them)', () => {
         expect(tradeViewSrc).toMatch(/registerScrollToMessage\?: \(fn: \(\(messageId: string\) => void\) \| null\) => void/);
         expect(tradeViewSrc).toMatch(/const dockProps = \{[\s\S]{0,1200}registerScrollToMessage,\s*\};/);
-        expect(tradeViewSrc.match(/<TradeChatPanel\b/g)?.length).toBe(2);
-        expect(tradeViewSrc.match(/\{\.\.\.dockProps\}/g)?.length).toBe(2);
+        // Was 2 until the dock became hide-not-close (Stage 2 Phase 2): there is
+        // one mounted panel now, and the collapsed rail is a separate
+        // presentation component. The bridge is registered once, which is the
+        // point — a second panel was a second registration to keep in step.
+        expect(tradeViewSrc.match(/<TradeChatPanel\b/g)?.length).toBe(1);
+        expect(tradeViewSrc.match(/\{\.\.\.dockProps\}/g)?.length).toBe(1);
     });
 });
 
