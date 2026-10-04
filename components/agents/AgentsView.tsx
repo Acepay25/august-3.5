@@ -690,31 +690,36 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 collapsed ? 'md:hidden' : ''
             }`}
                 data-testid="agents-rail">
-                <div className="flex shrink-0 items-center gap-1.5 p-2">
-                    <button type="button" onClick={onNewBot} data-testid="rail-new"
-                        className="flex items-center gap-1 rounded-control border border-zinc-700 px-2 py-1 text-ui-dense font-semibold text-zinc-200 transition-colors hover:bg-zinc-800">
-                        <Plus className="h-3 w-3" /> New
-                    </button>
-                    <div className="relative ml-auto min-w-0 flex-1">
-                        <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-600" />
-                        <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search"
+                <div className="flex shrink-0 items-center gap-1.5 p-2 pb-1.5">
+                    <div className="relative min-w-0 flex-1">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                        <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search conversations..."
                             aria-label="Search conversations" data-testid="rail-search"
-                            className="w-full rounded-control border border-zinc-800 bg-zinc-950 py-1 pl-7 pr-2 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-zinc-600" />
+                            className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-8 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
+                        {!query && (
+                            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-[10px] leading-none text-zinc-500">
+                                /
+                            </kbd>
+                        )}
                     </div>
                     <button type="button" onClick={() => setCollapsed(true)} data-testid="rail-collapse"
                         aria-label="Collapse conversations" title="Collapse the conversation rail"
-                        className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
-                        <PanelLeftClose className="h-3 w-3" />
+                        className="hidden shrink-0 rounded-control border border-zinc-800/80 p-1.5 text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-200 md:block">
+                        <PanelLeftClose className="h-3.5 w-3.5" />
                     </button>
                 </div>
 
-                <div className="flex shrink-0 gap-1 px-2 pb-2">
+                <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-2 pb-2 pt-0.5">
+                    <button type="button" onClick={onNewBot} data-testid="rail-new"
+                        className="flex items-center gap-1 rounded-full border border-zinc-700/80 bg-zinc-800/60 px-2 py-0.5 text-ui-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 hover:text-white">
+                        <Plus className="h-3 w-3" /> New
+                    </button>
                     <button type="button" onClick={onNewBot}
-                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:text-zinc-200">
+                        className="flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-900/50 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200">
                         <Bot className="h-3 w-3" /> Agents
                     </button>
                     <button type="button" onClick={onNewGroup}
-                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:text-zinc-200">
+                        className="flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-900/50 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200">
                         <Users className="h-3 w-3" /> Rooms
                     </button>
                     {/* The Coach inbox is not a thread on this surface — it is a
@@ -724,7 +729,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         <button type="button" onClick={onOpenCoach}
                             aria-label="Coach — awaiting your decision"
                             className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs transition-colors ${
-                                coachCount > 0 ? 'border-amber-500/30 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                coachCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-zinc-800/80 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                             }`} data-testid="rail-coach">
                             <Gavel className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
                         </button>
