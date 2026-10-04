@@ -154,7 +154,12 @@ const readDrafts = (page) => page.evaluate((k) => {
 /** Skill file names currently in the notebook, from the live page.
  *  Resolves the key INSIDE the page every call: the app recreates the notebook
  *  asynchronously after a storage clear, so a key captured once at startup can
- *  be stale (that null-deref is what killed case 4 last pass). */
+ *  be stale (that null-deref is what killed case 4 last pass).
+ *
+ *  Note: removing the skills FOLDER was tried as case 4's failure injection and
+ *  does not work — `ensureHarnessFoldersUnlocked` recreates it, so the write
+ *  succeeds. That is why case 4 sabotages `Storage.prototype.setItem` instead,
+ *  and why there is no deleteSkillsFolder helper here. */
 const readSkillFiles = (page) => page.evaluate(() => {
     const nk = Object.keys(localStorage).find(k => k.startsWith('memory_files_v1'));
     if (!nk) return { key: null, folders: [], files: [], error: 'no-notebook-key' };
@@ -169,24 +174,6 @@ const readSkillFiles = (page) => page.evaluate(() => {
             files: skills ? (store.files || []).filter(f => f.folderId === skills.id).map(f => f.name) : [],
         };
     } catch (e) { return { key: nk, folders: [], files: [], error: String(e) }; }
-});
-
-/** Drop the skills folder from the live notebook. Kept as a helper because it
- *  is how case 4 was disproved: the app recreates the folder, so removing it
- *  cannot make the write fail. No case uses it today. */
-const deleteSkillsFolder = (page) => page.evaluate(() => {
-    const nk = Object.keys(localStorage).find(k => k.startsWith('memory_files_v1'));
-    if (!nk) return false;
-    try {
-        const store = JSON.parse(localStorage.getItem(nk) || 'null');
-        if (!store || !Array.isArray(store.folders)) return false;
-        const skills = store.folders.find(f => f.name === 'skills');
-        if (!skills) return false;
-        store.folders = store.folders.filter(f => f.name !== 'skills');
-        store.files = (store.files || []).filter(f => f.folderId !== skills.id);
-        localStorage.setItem(nk, JSON.stringify(store));
-        return true;
-    } catch { return false; }
 });
 
 async function shot(page, name) {
@@ -370,8 +357,11 @@ async function readToast(page) {
         await freshSession(page);
         {
             await page.addInitScript(() => {
-                const real = Storage.prototype.setItem;
-                Storage.prototype.setItem = function (k, v) {
+                // `window.Storage`, not bare `Storage`: this file is a .cjs and
+                // the lint config has no browser globals, so bare `Storage` is
+                // an error under no-undef.
+                const real = window.Storage.prototype.setItem;
+                window.Storage.prototype.setItem = function (k, v) {
                     if (typeof k === 'string' && k.startsWith('memory_files_v1')) {
                         throw new Error('probe: quota exceeded');
                     }
