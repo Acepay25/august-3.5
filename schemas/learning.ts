@@ -105,6 +105,19 @@ export const parseStrategySearchResults = (raw: unknown): ValidatedStrategySearc
   return results;
 };
 
+/**
+ * The one clause-length bar, declared HERE because `services/learning/
+ * skillClauseBar.ts` imports its types from this file — a constant the other
+ * way round would close the edge schemas → services that `utils/` is explicitly
+ * forbidden to make.
+ *
+ * Until now the schema accepted 8 characters and `validateIfThen` rejected
+ * under 12, so a chat or verdict craft of 8–11 characters parsed clean, was
+ * queued as a draft, and then died in a gate the proposer had already been
+ * told it passed. One number, both checks.
+ */
+export const CLAUSE_MIN_LENGTH = 12;
+
 export const CraftedSkillSchema = z.object({
   name: z.string().min(2).max(80),
   kind: z.enum(['repeat', 'avoid']).catch('avoid'),
@@ -118,8 +131,8 @@ export const CraftedSkillSchema = z.object({
   validate: z.string().min(4),
   output: z.string().min(4),
   approval: z.string().min(4),
-  ifCondition: z.string().min(8),
-  thenAction: z.string().min(8),
+  ifCondition: z.string().min(CLAUSE_MIN_LENGTH),
+  thenAction: z.string().min(CLAUSE_MIN_LENGTH),
   // Optional machine-checkable trigger. Length-capped here and validated where
   // it is STORED (services/learning/SkillMemoryService → sanitizePredicate),
   // because the field whitelist lives with the evaluator and a boundary that
