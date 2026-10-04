@@ -127,6 +127,17 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                     {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} />}
                                 </div>
                             )}
+                            {!e.image && e.imageOmitted && (
+                                // A restored backup carries no image bytes: the row must
+                                // still say an image was attached — and never via an <img>
+                                // with a missing src, which renders as a broken icon.
+                                <div
+                                    data-testid="chat-image-omitted"
+                                    className="rounded-lg border border-white/10 bg-zinc-900/60 px-2 py-1 text-ui-xs text-zinc-500"
+                                >
+                                    image not backed up ({e.imageOmitted.mime}, {Math.max(1, Math.round(e.imageOmitted.bytes / 1024))} KB)
+                                </div>
+                            )}
                             {e.text && e.text !== '(chart screenshot)' && (
                                 <div className="group/msg flex max-w-[85%] items-start gap-1">
                                     {!answerStreaming && <CopyChip text={e.text} className="mt-2" />}
