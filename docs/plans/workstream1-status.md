@@ -116,9 +116,63 @@ clauses ignored), 22 passed. Full path
 `**My rule:** when <IF>, I <THEN>` line (`SkillCraftService.ts:79`) reciting the
 OLD trigger — the file claimed two triggers, and the prose is what a seat reads
 back. `syncSkillRuleLine(meta)` (SkillMemoryService) now moves it, called from
-both apply paths. KNOWN SAME GAP, NOT FIXED: the shadow-promotion swap at
-`SkillMemoryService.ts:1439` sets `meta.ifCondition` from `meta.shadow` and does
-not sync the body line.
+both apply paths. SWEEP RESULT FOR THE OTHER TRIGGER WRITERS — see decision 3
+below: none of them goes around the prose line.
+
+## RUN RULES (user-set, this branch)
+- Red first for every behavior change: run the new/rewritten test, confirm it
+  fails FOR THE RIGHT REASON, quote the counts. Keep the export and its caller in
+  ONE commit so every tip is independently green.
+- Commit by explicit paths, one commit per item, message names the CONTRACT change
+  when a test's meaning is inverted. Never push.
+- Targeted suites per slice; ONE full suite + lint + build at the end of a run,
+  reported from the runner (exit code + summary line), measured from a committed
+  tip.
+- Context economy: grep over whole files, no screenshots unless a check fails, no
+  re-exploring what this file records. Harness notes stay current.
+- Hard stops: a feature-shape question is the user's; a silent swallow of a failed
+  write is never acceptable; if a criterion cannot be met, report it unmet with the
+  measurement. Step B audit ends in a STOP for approval.
+
+## DECISIONS (user, 2026-10-05)
+1. `trade_chat_sessions_v1` — back it up WHOLE, WITHOUT image bytes. Export emits a
+   placeholder object per image (exists + size + type); text, order and metadata
+   stay intact. The transform touches the EXPORT COPY ONLY, never the live key.
+   Restore must render normally and show "image not backed up" where an image was —
+   no crash, no broken `<img>`. Fail visibly: if the key is still over a set byte
+   cap after stripping, SKIP it and show a notice in the export result; no silent
+   truncation. Cap recorded below. Test with a real session carrying a large image:
+   export, restore, text identical, placeholder present, export under cap, live key
+   byte-untouched. Do NOT change `trimForStorage` or the write path this pass —
+   "bound trade_chat_sessions bytes at write time" goes to the backlog.
+2. `harness_settings_v1` — NOT in the raw list (its owner touches Preferences, so a
+   raw copy is a shadow copy). Must be CONFIRMED covered by the Preferences backup
+   path with a real export/restore round trip; if it is not covered that is a bug to
+   fix or report. Marked "covered via Preferences" in the table with a test.
+3. The shadow-promotion stale-body gap (`SkillMemoryService.ts:1439`) — FIX it, same
+   class as the re-scope one: reuse `syncSkillRuleLine`, red test first, own commit.
+   Also sweep for any OTHER writer that changes a skill's trigger and goes around it.
+   **SWEEP DONE — the shadow site was a false alarm, and there is no other gap.**
+   `SkillMemoryService.ts:1441` sets `meta.body = meta.shadow.body`, and the shadow's
+   body is built from the shadow's OWN clauses when it is created
+   (`:1744` and `:1861`, both `formatCraftedSkillBody(refined)`), so a promotion
+   already moves prose and clause together. Every other writer that can change a
+   trigger was checked and each rebuilds the body from the same source: the
+   worth-gate craft update `:2117` + `meta.body = formatCraftedSkillBody(crafted)`
+   at `:2131`; `skillGeneralization.ts:153-156` (clauses AND body from `richest.meta`);
+   the consolidation merge `:2510` (grouping is by identical IF-claim, so all
+   members state the same trigger); `applyReviewRecommendationUnlocked:3270` and
+   `skillIdleLifecycle`/`SkillEvalService` serialize status/metrics only;
+   `MemoryFilesManager.tsx:192/203/413` toggle `enabled`/`disabledByUser`/`audience`
+   and the editor otherwise writes the whole file text by hand. The two paths that
+   DID move a clause without the prose were exactly the two slice 3 fixed. What was
+   added instead: a parity test (`craftedSkillStrategy.test.ts`) asserting
+   `syncSkillRuleLine` emits the BYTE-IDENTICAL line `formatCraftedSkillBody` does —
+   the class-level risk is two producers of one sentence, not a third stale writer.
+   BACKLOG (not done, needs the evidence-window harness): a test that drives a real
+   shadow to settlement and asserts the promoted file's prose line, since nothing
+   currently exercises that path end-to-end (`skillRefinement.test.ts` only pins
+   serialization and the lock split).
 
 ## Then
 Backup pre-flight + registration → real export/restore round trip with byte
