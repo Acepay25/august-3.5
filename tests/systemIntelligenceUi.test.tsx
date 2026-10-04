@@ -26,7 +26,12 @@ vi.mock('../services/infrastructure/JobQueueService', () => ({ jobQueue: { getQu
 vi.mock('../services/learning/SkillMemoryService', () => ({ listSkills: (): unknown[] => data.skills }));
 vi.mock('../services/learning/MemoryFilesService', () => ({ getMemoryFilesStats: (): object => ({ enabledCount: 0, charCount: 0 }) }));
 vi.mock('../services/infrastructure/SessionService', () => ({ getSessionContext: (): null => null, getAllSessionsStatus: (): never[] => [] }));
-vi.mock('../components/shared/UpdateButton', () => ({ UpdateButton: (): null => null }));
+// Header reads the update dot through this hook as well as the button, so the
+// mock has to export both or the render throws before any assertion runs.
+vi.mock('../components/shared/UpdateButton', () => ({
+    UpdateButton: (): null => null,
+    useUpdateStatusDot: (): null => null,
+}));
 vi.mock('../components/shared/Sidebar', () => ({ SidebarContent: (): null => null }));
 vi.mock('../utils/thinkingLeakBin', () => ({ loadThinkingLeakBin: (): never[] => [], clearThinkingLeakBin: vi.fn() }));
 
