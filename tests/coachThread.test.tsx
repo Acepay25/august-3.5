@@ -101,12 +101,17 @@ describe('CoachThreadPanel', () => {
         });
     });
 
-    it('rescope is applyable and contradiction is not — one Apply between them', () => {
-        const rs = queueLearningProposal({ kind: 'rescope', text: 'Re-scope?', fingerprint: 'rs|x', skillSlug: 'x' })!;
+    it('Apply appears only for a row that carries something to apply', () => {
+        const rs = queueLearningProposal({
+            kind: 'rescope', text: 'Re-scope?', fingerprint: 'rs|with-clauses', skillSlug: 'x',
+            payload: { source: 'model:desk', ifCondition: 'funding positive 8 sessions and the daily low was swept', thenAction: 'go long only after a 1h close back above the swept level' },
+        })!;
+        // The regime-divergence pass (SkillMemoryService.ts:1622) queues a rescope
+        // with NO payload. A button that can only answer "nothing to apply" is an
+        // invitation to press it, so those rows show Dismiss only, as before A2.
+        queueLearningProposal({ kind: 'rescope', text: 'Re-scope?', fingerprint: 'rs|x', skillSlug: 'x' })!;
         const co = queueLearningProposal({ kind: 'contradiction', text: 'Conflict?', fingerprint: 'co|a|b', skillSlug: 'a', payload: { pair: ['a', 'b'] } })!;
         render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
-        // rescope joined the applyable set (A2); contradiction stayed out because its
-        // payload is a slug pair with no clause text to apply.
         expect(screen.getByTestId(`coach-proposal-apply-${rs.id}`)).toBeTruthy();
         expect(screen.getAllByTestId(/^coach-proposal-apply-/)).toHaveLength(1);
         fireEvent.click(screen.getByTestId(`coach-proposal-dismiss-${co.id}`));
