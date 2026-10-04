@@ -84,7 +84,7 @@ describe('learning queue apply paths', () => {
             ifCondition: 'new challenger trigger clause',
             thenAction: 'fade into the reclaim',
         });
-        expect(ok).toBe(true);
+        expect(ok).toEqual({ applied: true });
         const retired = findSkill('old-incumbent.md')!;
         expect(parseSkillMarkdown(retired.content)!.status).toBe('retired');
         const archive = getMemoryFiles().folders.find(f => f.name === 'archive');
@@ -97,15 +97,15 @@ describe('learning queue apply paths', () => {
         expect(meta.ifCondition).toBe('new challenger trigger clause');
     });
 
-    it('displacement with no challenger clauses still retires the incumbent (returns true)', async () => {
+    it('displacement with no challenger clauses still retires the incumbent (applied)', async () => {
         const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
         await createMemoryFile(skills.id, 'solo.md', skillMd('confirmed', 'solo trigger clause'), USER);
-        expect(await applyDisplacementProposal('solo', USER)).toBe(true);
+        expect((await applyDisplacementProposal('solo', USER)).applied).toBe(true);
         expect(parseSkillMarkdown(findSkill('solo.md')!.content)!.status).toBe('retired');
     });
 
-    it('displacement on a missing slug returns false (UI keeps the proposal + explains)', async () => {
-        expect(await applyDisplacementProposal('ghost', USER)).toBe(false);
+    it('displacement on a missing slug names WHY (UI keeps the proposal + explains)', async () => {
+        expect(await applyDisplacementProposal('ghost', USER)).toEqual({ applied: false, reason: 'no-target' });
     });
 
     it('revival: archived retired twin comes back as candidate in the live folder', async () => {
@@ -122,7 +122,7 @@ describe('learning queue apply paths', () => {
         expect(findSkill('twin.md')!.folderId).toBe(archive!.id);
 
         const ok = await applyRevivalProposal('twin', USER);
-        expect(ok).toBe(true);
+        expect(ok).toEqual({ applied: true });
         const revived = findSkill('twin.md')!;
         expect(revived.folderId).toBe(skills.id);
         const meta = parseSkillMarkdown(revived.content)!;
@@ -143,7 +143,7 @@ describe('learning queue apply paths', () => {
         const fresh = await createMemoryFolder('skills', USER);
         expect(fresh.id).not.toBe(original.id);
 
-        expect(await applyRevivalProposal('phoenix', USER)).toBe(true);
+        expect((await applyRevivalProposal('phoenix', USER)).applied).toBe(true);
         const revived = findSkill('phoenix.md')!;
         expect(revived.folderId).toBe(fresh.id);
         expect(parseSkillMarkdown(revived.content)!.status).toBe('candidate');
@@ -155,7 +155,7 @@ describe('learning queue apply paths', () => {
     it('demote: confirmed zero-evidence skill drops to candidate', async () => {
         const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
         await createMemoryFile(skills.id, 'zombie.md', skillMd('confirmed', 'zombie trigger clause'), USER);
-        expect(await applyDemoteProposal('zombie', USER)).toBe(true);
+        expect((await applyDemoteProposal('zombie', USER)).applied).toBe(true);
         expect(parseSkillMarkdown(findSkill('zombie.md')!.content)!.status).toBe('candidate');
     });
 

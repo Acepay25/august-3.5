@@ -29,10 +29,10 @@ const mockApplyRescope = vi.mocked(applyRescopeProposal);
 vi.mock('../services/learning/SkillMemoryService', () => ({
     // The panel imports the whole applier set; only rescope is under test here,
     // and the others are stubbed so the module resolves.
-    applyDisplacementProposal: vi.fn(async () => true),
-    applyRevivalProposal: vi.fn(async () => true),
-    applyDemoteProposal: vi.fn(async () => true),
-    applyRescopeProposal: vi.fn(async () => true),
+    applyDisplacementProposal: vi.fn(async () => ({ applied: true })),
+    applyRevivalProposal: vi.fn(async () => ({ applied: true })),
+    applyDemoteProposal: vi.fn(async () => ({ applied: true })),
+    applyRescopeProposal: vi.fn(async () => ({ applied: true })),
 }));
 
 const USER = 'queue-panel-user';
@@ -119,5 +119,17 @@ describe('rescope apply (A2 slice 1)', () => {
         fireEvent.click(await screen.findByRole('button', { name: /^Apply/ }));
         await waitFor(() => expect(mockApplyRescope)
             .toHaveBeenCalledWith('btc-sweep', clauses, USER));
+    });
+
+    it('a refused rescope names the reason it was refused', async () => {
+        seedRescope();
+        mockApplyRescope.mockResolvedValueOnce({ applied: false, reason: 'below-bar' });
+        render(<LearningQueuePanel />);
+        fireEvent.click(await screen.findByRole('button', { name: /^Apply/ }));
+        // The row is the human's only copy of the proposal, so it stays — and the
+        // copy must be the reason the library gave, not a guess about one.
+        await waitFor(() => expect(screen.getByText(/below the bar/i)).toBeTruthy());
+        expect(screen.getByText(/re-scope/)).toBeTruthy();
+        expect(screen.queryByText(/no longer exists/i)).toBeNull();
     });
 });

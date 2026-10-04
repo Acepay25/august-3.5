@@ -426,9 +426,12 @@ const superviseLearningProposal = async (
     let ok = false;
     if (MECHANICAL_PROPOSALS.has(proposal.kind)) {
         const { applyDisplacementProposal, applyRevivalProposal, applyDemoteProposal } = await import('./SkillMemoryService');
-        if (proposal.kind === 'displacement') ok = await applyDisplacementProposal(String(payload.displacedSlug || proposal.skillSlug || ''), username);
-        else if (proposal.kind === 'revival') ok = await applyRevivalProposal(proposal.skillSlug || '', username);
-        else if (proposal.kind === 'demote') ok = await applyDemoteProposal(proposal.skillSlug || '', username);
+        // These now say WHY they refused; the auto path has no human to tell, so
+        // it keeps its own generic line — but `applied` is the only thing that may
+        // drain the proposal.
+        if (proposal.kind === 'displacement') ok = (await applyDisplacementProposal(String(payload.displacedSlug || proposal.skillSlug || ''), username)).applied;
+        else if (proposal.kind === 'revival') ok = (await applyRevivalProposal(proposal.skillSlug || '', username)).applied;
+        else if (proposal.kind === 'demote') ok = (await applyDemoteProposal(proposal.skillSlug || '', username)).applied;
     } else {
         // rescope / contradiction: only an "enhance" verdict carries the
         // rewritten clause these kinds need; a bare approve is meaningless

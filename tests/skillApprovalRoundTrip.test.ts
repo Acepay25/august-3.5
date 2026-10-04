@@ -223,7 +223,7 @@ describe('applyRescopeProposal against the real notebook', () => {
 
         const ok = await applyRescopeProposal('funding-exhaustion-long', NEW, USER);
 
-        expect(ok).toBe(true);
+        expect(ok).toEqual({ applied: true });
         expect(triggers()).toContain(NEW.ifCondition.toLowerCase());
         expect(triggers()).not.toContain(original.ifCondition.toLowerCase());
         // A rewrite is one skill moved, not a second skill born.
@@ -240,11 +240,11 @@ describe('applyRescopeProposal against the real notebook', () => {
             USER,
         );
 
-        expect(ok).toBe(false);
+        expect(ok).toEqual({ applied: false, reason: 'below-bar' });
         expect(triggers()).toEqual([original.ifCondition.toLowerCase()]);
     });
 
-    it('returns false for a slug that is not a live skill', async () => {
-        expect(await applyRescopeProposal('no-such-skill', NEW, USER)).toBe(false);
+    it('names the missing skill for a slug that is not a live skill', async () => {
+        expect(await applyRescopeProposal('no-such-skill', NEW, USER)).toEqual({ applied: false, reason: 'no-target' });
     });
 });

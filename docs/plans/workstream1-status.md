@@ -34,14 +34,25 @@ dropped when the rewrite carries none — then READ BACK the parsed file), wired
 "no Apply button", the 4 existing passed; green after. `coachThread.test.tsx:100`
 still passes untouched because CoachThreadPanel is not yet wired — the contract
 rewrite moves to slice 2 with that panel, so every commit is independently green.
-**Next: slice 2** = CoachThreadPanel + rewrite `coachThread.test.tsx:100` for
-rescope-only (red first, name the contract change). Then slice 3 =
-`applyProposalRewrite` prefers `proposal.payload` + full-path test
-(`revise_skill → queue → approve → skill updated`). Slice 4 = consume results in
-the UI: both panels AND the component calling `overrideApproveSkill` must show the
-named failure instead of ignoring the return. Slice 5 = real-app rescope check.
+**Next: slice 3** = `applyProposalRewrite` prefers `proposal.payload` over
+`verdict.enhanced` for rescope (red first) + full-path test
+(`revise_skill → queue → approve → skill updated`, real notebook). Slice 4 = the
+component calling `overrideApproveSkill` must show the named failure instead of
+ignoring the return (panels done). Slice 5 = real-app rescope check.
 Contradiction stays Dismiss-only: `beliefChallenge.ts:119` stores `{slug,
 contradictions}`, `contradictionSweep.ts:116` stores `{pair:[a,b]}` — no clauses.
+
+**Slice 2 DONE** (`<hash>`): CoachThreadPanel wired for rescope + **contract
+rewritten** in `coachThread.test.tsx` (old line 100 asserted "rescope gets
+Dismiss only" — inverted for rescope, kept for contradiction). The four appliers
+now return `ProposalApplyResult` (`{applied:true}` | `{applied:false,reason,error?}`)
+instead of `boolean`, so a refusal names WHOSE reason it is: `utils/learningQueue.ts`
+owns the union, the copy (`proposalApplyFailureMessage`) and
+`APPLYABLE_PROPOSAL_KINDS` — both panels read that one list (two local sets is how
+slice 1 left one panel wired and the other not). `skillSupervisor.ts:429-431`
+gates on `.applied`. Reasons: `no-target`/`unreadable`/`no-clauses`/`below-bar`/
+`challenger-blocked`/`not-written`/`write-failed`. Red first: 4 new/rewritten
+tests failed (3 coach + 1 queue), 11 existing passed.
 
 ## Then
 Backup pre-flight + registration (open `trade_tf_bar_v1` first; per key: owner

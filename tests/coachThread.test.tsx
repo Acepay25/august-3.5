@@ -9,19 +9,23 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 const mockIngest = vi.hoisted(() => vi.fn());
 const mockIngestDraft = vi.hoisted(() => vi.fn());
+const mockApplyRevival = vi.hoisted(() => vi.fn(async (): Promise<ProposalApplyResult> => ({ applied: true })));
+const mockApplyRescope = vi.hoisted(() => vi.fn(async () => ({ applied: true })));
 
 vi.mock('../services/learning/SkillMemoryService', () => ({
     ingestCraftedSkill: mockIngest,
     ingestCraftedSkillFromDraft: mockIngestDraft,
-    applyDisplacementProposal: vi.fn(async () => true),
-    applyRevivalProposal: vi.fn(async () => true),
-    applyDemoteProposal: vi.fn(async () => true),
+    applyDisplacementProposal: vi.fn(async () => ({ applied: true })),
+    applyRevivalProposal: mockApplyRevival,
+    applyDemoteProposal: vi.fn(async () => ({ applied: true })),
+    applyRescopeProposal: mockApplyRescope,
 }));
 
 import CoachThreadPanel from '../components/chat/CoachThreadPanel';
 import { queueSkillDraft } from '../utils/skillDrafts';
 import { queueLearningProposal } from '../utils/learningQueue';
 import type { CraftedSkill } from '../schemas/learning';
+import type { ProposalApplyResult } from '../utils/learningQueue';
 
 afterEach(() => {
     cleanup();
@@ -97,12 +101,46 @@ describe('CoachThreadPanel', () => {
         });
     });
 
-    it('non-applyable kinds (rescope/contradiction) get Dismiss only', () => {
-        const p = queueLearningProposal({ kind: 'rescope', text: 'Re-scope?', fingerprint: 'rs|x', skillSlug: 'x' })!;
+    it('rescope is applyable and contradiction is not — one Apply between them', () => {
+        const rs = queueLearningProposal({ kind: 'rescope', text: 'Re-scope?', fingerprint: 'rs|x', skillSlug: 'x' })!;
+        const co = queueLearningProposal({ kind: 'contradiction', text: 'Conflict?', fingerprint: 'co|a|b', skillSlug: 'a', payload: { pair: ['a', 'b'] } })!;
         render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
+        // rescope joined the applyable set (A2); contradiction stayed out because its
+        // payload is a slug pair with no clause text to apply.
+        expect(screen.getByTestId(`coach-proposal-apply-${rs.id}`)).toBeTruthy();
+        expect(screen.getAllByTestId(/^coach-proposal-apply-/)).toHaveLength(1);
+        fireEvent.click(screen.getByTestId(`coach-proposal-dismiss-${co.id}`));
+        expect(screen.queryByTestId(`coach-proposal-${co.id}`)).toBeNull();
+    });
+
+    it('Apply on a rescope passes the clauses the PROPOSER stored, verbatim', async () => {
+        const clauses = {
+            ifCondition: 'funding positive 8 sessions and the daily low was swept',
+            thenAction: 'go long only after a 1h close back above the swept level',
+            predicate: 'close > open',
+        };
+        const p = queueLearningProposal({
+            kind: 'rescope', text: 'Re-scope?', fingerprint: 'rs:y', skillSlug: 'y',
+            payload: { source: 'model:desk', ...clauses },
+        })!;
+        render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
+        fireEvent.click(screen.getByTestId(`coach-proposal-apply-${p.id}`));
+        await vi.waitFor(() => {
+            expect(mockApplyRescope).toHaveBeenCalledWith('y', clauses, expect.any(String));
+            expect(screen.queryByTestId(`coach-proposal-${p.id}`)).toBeNull();
+        });
+    });
+
+    it('an apply that wrote nothing keeps the card and names WHY', async () => {
+        mockApplyRevival.mockResolvedValueOnce({ applied: false, reason: 'no-target' });
+        const p = queueLearningProposal({ kind: 'revival', text: 'Revive?', fingerprint: 'rev|gone', skillSlug: 'gone', payload: { slug: 'gone' } })!;
+        render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
+        fireEvent.click(screen.getByTestId(`coach-proposal-apply-${p.id}`));
+        // The row must survive a failed apply — it is the human's only copy of the
+        // proposal — and say what failed, not just that something did.
+        await vi.waitFor(() => expect(screen.getByTestId(`coach-proposal-error-${p.id}`)).toBeTruthy());
         const card = screen.getByTestId(`coach-proposal-${p.id}`);
-        expect(card.querySelector(`[data-testid="coach-proposal-apply-${p.id}"]`)).toBeNull();
-        fireEvent.click(card.querySelector(`[data-testid="coach-proposal-dismiss-${p.id}"]`)!);
-        expect(screen.queryByTestId(`coach-proposal-${p.id}`)).toBeNull();
+        expect(card.textContent).toMatch(/no live skill/i);
+        expect(card.querySelector(`[data-testid="coach-proposal-apply-${p.id}"]`)).toBeTruthy();
     });
 });

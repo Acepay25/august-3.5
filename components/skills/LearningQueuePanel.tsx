@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import {
     listLearningProposals,
     dismissLearningProposal,
+    proposalApplyFailureMessage,
+    APPLYABLE_PROPOSAL_KINDS,
     type LearningProposal,
+    type ProposalApplyResult,
 } from '../../utils/learningQueue';
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import StatusPill from '../ui/StatusPill';
@@ -38,11 +41,10 @@ const KIND_LABEL: Record<string, string> = {
     contradiction: 'conflict',
 };
 
-/** Kinds with a deterministic actuation path. `rescope` joined them: the
- *  clauses a seat stored in `payload` are applied verbatim, so a human no longer
- *  has to hope a model rewrite agrees with the proposal in front of them.
- *  `contradiction` stays out — its payload carries a slug pair, not clauses. */
-const APPLYABLE = new Set(['displacement', 'revival', 'demote', 'rescope']);
+/** Kinds with a deterministic actuation path, from the one shared list — the
+ *  Coach thread reads the same set, so a kind cannot be applyable in one surface
+ *  and Dismiss-only in the other (that drift is why `rescope` stayed unusable). */
+const APPLYABLE = new Set<string>(APPLYABLE_PROPOSAL_KINDS);
 
 interface LearningQueuePanelProps {
     /** Bump to force a refresh from outside (e.g. after approving a draft). */
@@ -53,7 +55,7 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
     const [proposals, setProposals] = useState<LearningProposal[]>([]);
     const [open, setOpen] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
-    const [errorId, setErrorId] = useState<string | null>(null);
+    const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
     // Which review state to label each row with: auto decides them, paused does
     // not — the difference the user needs before deciding to act at all.
     const [auto, setAuto] = useState(() => supervisorStore.getSnapshot().autoEnabled);
@@ -79,36 +81,40 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
 
     const apply = async (p: LearningProposal): Promise<void> => {
         setBusyId(p.id);
-        setErrorId(null);
+        setFailure(null);
         const username = getActiveUsername();
-        let ok = false;
+        let result: ProposalApplyResult;
         try {
             if (p.kind === 'displacement') {
                 const payload = p.payload as { displacedSlug?: string; challenger?: never } | undefined;
                 const displaced = payload?.displacedSlug || p.skillSlug || '';
-                ok = await applyDisplacementProposal(displaced, username, payload?.challenger as never);
+                result = await applyDisplacementProposal(displaced, username, payload?.challenger as never);
             } else if (p.kind === 'revival') {
                 const slug = (p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '';
-                ok = await applyRevivalProposal(slug, username);
+                result = await applyRevivalProposal(slug, username);
             } else if (p.kind === 'demote') {
                 const slug = (p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '';
-                ok = await applyDemoteProposal(slug, username);
+                result = await applyDemoteProposal(slug, username);
             } else if (p.kind === 'rescope') {
                 // The clauses the PROPOSER wrote, applied as written. This is
                 // what makes `revise_skill` actionable by a person at all.
                 const c = p.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
-                ok = await applyRescopeProposal(p.skillSlug || '', {
+                result = await applyRescopeProposal(p.skillSlug || '', {
                     ifCondition: c?.ifCondition,
                     thenAction: c?.thenAction,
                     predicate: c?.predicate,
                 }, username);
+            } else {
+                result = { applied: false, reason: 'no-clauses' };
             }
-        } catch {
-            ok = false;
+        } catch (e) {
+            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
         }
         setBusyId(null);
-        if (ok) dismiss(p);
-        else setErrorId(p.id); // target vanished (skill edited/retired since queuing)
+        // Never drain a row the library did not act on, and never claim a bare
+        // "failed": the reason comes from the writer that refused.
+        if (result.applied) dismiss(p);
+        else setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
     };
 
     if (proposals.length === 0) return null;
@@ -183,9 +189,9 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                     Dismiss
                                 </button>
                             </div>
-                            {errorId === p.id && (
-                                <p className="mt-1.5 pl-1 text-ui-xs text-zinc-500">
-                                    Target skill no longer exists — the proposal was left in place; dismiss it if it is stale.
+                            {failure?.id === p.id && (
+                                <p className="mt-1.5 pl-1 text-ui-xs text-amber-300/90" data-testid="proposal-apply-error">
+                                    {failure.message}
                                 </p>
                             )}
                         </li>

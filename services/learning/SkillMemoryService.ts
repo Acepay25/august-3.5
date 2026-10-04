@@ -58,7 +58,7 @@ import {
     type SkillPrediction,
 } from '../../utils/skillPrediction';
 import { ciGatePasses } from '../../utils/skillStatistics';
-import { queueLearningProposal } from '../../utils/learningQueue';
+import { queueLearningProposal, type ProposalApplyResult } from '../../utils/learningQueue';
 import { getSkillLibraryCap } from '../../utils/harnessSettings';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
@@ -2656,14 +2656,14 @@ export const applyDisplacementProposal = async (
     displacedSlug: string,
     username: string,
     challenger?: Partial<CapChallenger> & { supersededBy?: string },
-): Promise<boolean> => withNotebookWriteLock(async () => {
+): Promise<ProposalApplyResult> => withNotebookWriteLock(async () => {
     await ensureHarnessFoldersUnlocked(username);
     const target = getMemoryFiles().files
         .filter(isSkillFile)
         .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === displacedSlug.replace(/\.md$/i, '').toLowerCase());
-    if (!target) return false;
+    if (!target) return { applied: false, reason: 'no-target' };
     const meta = parseSkillMarkdown(target.content);
-    if (!meta) return false;
+    if (!meta) return { applied: false, reason: 'unreadable' };
 
     // CREATE THE CHALLENGER FIRST. Retiring before creating meant a failed
     // create left a confirmed skill archived with no replacement, and a retry
@@ -2709,7 +2709,7 @@ export const applyDisplacementProposal = async (
             const m = parseSkillMarkdown(f.content);
             return m?.ifCondition?.toLowerCase() === challenger.ifCondition?.toLowerCase();
         });
-        if (!alreadyThere) return false;
+        if (!alreadyThere) return { applied: false, reason: 'challenger-blocked' };
     }
 
     stampStatusTransition(meta, 'retired', 'superseded');
@@ -2726,7 +2726,7 @@ export const applyDisplacementProposal = async (
     if (archive) {
         await updateMemoryFileUnlocked(target.id, { folderId: archive.id, enabled: false }, username);
     }
-    return true;
+    return { applied: true };
 });
 
 /**
@@ -2737,14 +2737,14 @@ export const applyDisplacementProposal = async (
 export const applyRevivalProposal = async (
     slug: string,
     username: string,
-): Promise<boolean> => withNotebookWriteLock(async () => {
+): Promise<ProposalApplyResult> => withNotebookWriteLock(async () => {
     await ensureHarnessFoldersUnlocked(username);
     const target = getMemoryFiles().files
         .filter(f => f.name.endsWith('.md'))
         .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === slug.replace(/\.md$/i, '').toLowerCase());
-    if (!target) return false;
+    if (!target) return { applied: false, reason: 'no-target' };
     const meta = parseSkillMarkdown(target.content);
-    if (!meta) return false;
+    if (!meta) return { applied: false, reason: 'unreadable' };
     // Resolve the live skills folder from the CURRENT notebook tree instead
     // of the hardcoded default id: a user who deleted and recreated the
     // folder gets a fresh folder id, and writing folderId: 'skills' pointed
@@ -2767,7 +2767,7 @@ export const applyRevivalProposal = async (
         folderId: skillsFolder.id,
         enabled: skillEnabledFlag(meta),
     }, username);
-    return true;
+    return { applied: true };
 });
 
 /**
@@ -2785,14 +2785,14 @@ export const applyRevivalProposal = async (
 export const applyDemoteProposal = async (
     slug: string,
     username: string,
-): Promise<boolean> => withNotebookWriteLock(async () => {
+): Promise<ProposalApplyResult> => withNotebookWriteLock(async () => {
     await ensureHarnessFoldersUnlocked(username);
     const target = getMemoryFiles().files
         .filter(isSkillFile)
         .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === slug.replace(/\.md$/i, '').toLowerCase());
-    if (!target) return false;
+    if (!target) return { applied: false, reason: 'no-target' };
     const meta = parseSkillMarkdown(target.content);
-    if (!meta) return false;
+    if (!meta) return { applied: false, reason: 'unreadable' };
     stampStatusTransition(meta, 'candidate', 'demote-approved');
     meta.status = 'candidate';
     meta.modifiedAt = new Date().toISOString();
@@ -2803,7 +2803,7 @@ export const applyDemoteProposal = async (
         content: serializeSkill(meta, titleFromMeta(meta)),
         enabled: skillEnabledFlag(meta),
     }, username);
-    return true;
+    return { applied: true };
 });
 
 /**
@@ -2826,21 +2826,21 @@ export const applyRescopeProposal = async (
     slug: string,
     clauses: { ifCondition?: string; thenAction?: string; predicate?: string },
     username: string,
-): Promise<boolean> => withNotebookWriteLock(async () => {
+): Promise<ProposalApplyResult> => withNotebookWriteLock(async () => {
     const ifCondition = (clauses.ifCondition ?? '').trim();
     const thenAction = (clauses.thenAction ?? '').trim();
-    if (!slug || !ifCondition || !thenAction) return false;
+    if (!slug || !ifCondition || !thenAction) return { applied: false, reason: 'no-clauses' };
     const { validateIfThen } = await import('./skillClauseBar');
-    if (validateIfThen({ ifCondition, thenAction })) return false;
+    if (validateIfThen({ ifCondition, thenAction })) return { applied: false, reason: 'below-bar' };
 
     await ensureHarnessFoldersUnlocked(username);
     const wanted = slug.replace(/\.md$/i, '').toLowerCase();
     const target = getMemoryFiles().files
         .filter(isSkillFile)
         .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === wanted);
-    if (!target) return false;
+    if (!target) return { applied: false, reason: 'no-target' };
     const meta = parseSkillMarkdown(target.content);
-    if (!meta) return false;
+    if (!meta) return { applied: false, reason: 'unreadable' };
 
     meta.ifCondition = ifCondition;
     meta.thenAction = thenAction;
@@ -2856,10 +2856,11 @@ export const applyRescopeProposal = async (
         enabled: skillEnabledFlag(meta),
     }, username);
 
-    const applied = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === target.id)?.content ?? '');
-    return !!applied
-        && applied.ifCondition === ifCondition
-        && applied.thenAction === thenAction;
+    const readBack = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === target.id)?.content ?? '');
+    const landed = !!readBack
+        && readBack.ifCondition === ifCondition
+        && readBack.thenAction === thenAction;
+    return landed ? { applied: true } : { applied: false, reason: 'not-written' };
 });
 
 /**
