@@ -168,7 +168,17 @@ const rehydrate = (): void => {
     sessions = stored.length > 0 ? stored : [createSession()];
     let wanted = '';
     try { wanted = localStorage.getItem(activeKey(loadedFor)) || ''; } catch { /* private mode */ }
-    activeId = sessions.some(s => s.id === wanted) ? wanted : sessions[0].id;
+    // No pointer (a fresh install, another device's backup, or this key's
+    // deliberate absence from backups — it is a plain string the export sweep
+    // cannot carry): open the session the trader touched LAST. Not `sessions[0]`,
+    // which is the OLDEST row, because new sessions are appended and a restore can
+    // add rows out of order — so the choice is made from the row's own timestamps.
+    const byRecency = (s: LiveSession): number => s.updatedAt || s.createdAt || 0;
+    const newest = sessions.reduce<LiveSession | undefined>(
+        (best, s) => (!best || byRecency(s) > byRecency(best) ? s : best),
+        undefined,
+    );
+    activeId = sessions.some(s => s.id === wanted) ? wanted : (newest?.id ?? '');
     rebuild();
     for (const l of listeners) l();
 };
