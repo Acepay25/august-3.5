@@ -27,7 +27,7 @@ and `applyProposalRewrite` (`skillSupervisor.ts:352`) reads only `verdict.enhanc
 so those clauses are dropped on every path today.
 
 ## A2 — SLICED, committing each green slice with its caller in the same commit
-**Slice 1 DONE** (`a2-slice-1`): `applyRescopeProposal(slug, clauses, username)` in
+**Slice 1 DONE** (`e2dd23d`): `applyRescopeProposal(slug, clauses, username)` in
 SkillMemoryService (validateIfThen fail-closed, find by slug, replace predicate —
 dropped when the rewrite carries none — then READ BACK the parsed file), wired into
 `LearningQueuePanel` (APPLYABLE + payload branch). Red first: 2 new tests failed on
