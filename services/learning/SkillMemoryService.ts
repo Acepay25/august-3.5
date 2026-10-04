@@ -2807,6 +2807,62 @@ export const applyDemoteProposal = async (
 });
 
 /**
+ * Apply a re-scope the HUMAN approved, from the clauses the proposer STORED.
+ *
+ * `rescope` was the one proposal kind no person could act on: both panels kept
+ * it out of their APPLYABLE sets, and the only rewriter in the tree
+ * (`applyProposalRewrite` in skillSupervisor) reads `verdict.enhanced` — a
+ * rewrite the model authors at apply time — and never looks at
+ * `proposal.payload.ifCondition/thenAction/predicate`, which is exactly what
+ * `revise_skill` writes. So a seat could propose a tightening, a human could
+ * agree with it, and the row could only be Dismissed.
+ *
+ * Fail-closed and verified like every other write here: the clause must clear
+ * the same `validateIfThen` bar a fresh draft clears, and the file is read BACK
+ * after the update. True means the library now says this, not that a call
+ * completed — the same guard `approveSkillDraft` uses.
+ */
+export const applyRescopeProposal = async (
+    slug: string,
+    clauses: { ifCondition?: string; thenAction?: string; predicate?: string },
+    username: string,
+): Promise<boolean> => withNotebookWriteLock(async () => {
+    const ifCondition = (clauses.ifCondition ?? '').trim();
+    const thenAction = (clauses.thenAction ?? '').trim();
+    if (!slug || !ifCondition || !thenAction) return false;
+    const { validateIfThen } = await import('./skillClauseBar');
+    if (validateIfThen({ ifCondition, thenAction })) return false;
+
+    await ensureHarnessFoldersUnlocked(username);
+    const wanted = slug.replace(/\.md$/i, '').toLowerCase();
+    const target = getMemoryFiles().files
+        .filter(isSkillFile)
+        .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === wanted);
+    if (!target) return false;
+    const meta = parseSkillMarkdown(target.content);
+    if (!meta) return false;
+
+    meta.ifCondition = ifCondition;
+    meta.thenAction = thenAction;
+    // A re-scope moves the trigger, so the machine clause that used to prove it
+    // describes a different claim now: take the rewrite's predicate when it
+    // carried one, and DROP it otherwise. Keeping the old one would let the desk
+    // keep firing the pre-revision trigger under the new wording.
+    meta.predicate = clauses.predicate?.trim() ? sanitizePredicate(clauses.predicate.trim()) : undefined;
+    meta.modifiedAt = new Date().toISOString();
+
+    await updateMemoryFileUnlocked(target.id, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: skillEnabledFlag(meta),
+    }, username);
+
+    const applied = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === target.id)?.content ?? '');
+    return !!applied
+        && applied.ifCondition === ifCondition
+        && applied.thenAction === thenAction;
+});
+
+/**
  * Closed-loop write: diary + mistakes + skill scores. Safe to call from
  * both trade-log and post-mortem (diary entries are de-duplicated by id).
  */

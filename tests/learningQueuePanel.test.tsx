@@ -22,6 +22,18 @@ import LearningQueuePanel from '../components/skills/LearningQueuePanel';
 import { queueLearningProposal, listLearningProposals } from '../utils/learningQueue';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
 import * as supervisorStore from '../services/learning/supervisorStore';
+import { applyRescopeProposal } from '../services/learning/SkillMemoryService';
+
+const mockApplyRescope = vi.mocked(applyRescopeProposal);
+
+vi.mock('../services/learning/SkillMemoryService', () => ({
+    // The panel imports the whole applier set; only rescope is under test here,
+    // and the others are stubbed so the module resolves.
+    applyDisplacementProposal: vi.fn(async () => true),
+    applyRevivalProposal: vi.fn(async () => true),
+    applyDemoteProposal: vi.fn(async () => true),
+    applyRescopeProposal: vi.fn(async () => true),
+}));
 
 const USER = 'queue-panel-user';
 
@@ -75,5 +87,37 @@ describe('LearningQueuePanel review state', () => {
         render(<LearningQueuePanel />);
         fireEvent.click(screen.getByText('Dismiss'));
         expect(listLearningProposals(USER)).toHaveLength(0);
+    });
+});
+
+describe('rescope apply (A2 slice 1)', () => {
+    const clauses = {
+        ifCondition: 'funding positive 8 sessions and the daily low was swept',
+        thenAction: 'go long only after a 1h close back above the swept level',
+        predicate: 'close > open',
+    };
+    const seedRescope = () => queueLearningProposal({
+        kind: 'rescope', text: 'Narrow this rule.', skillSlug: 'btc-sweep',
+        fingerprint: 'model-revision:btc-sweep:x', payload: { source: 'model:desk', ...clauses },
+    } as never, USER);
+
+    it('offers Apply for a rescope, and still not for a contradiction', async () => {
+        seedRescope();
+        queueLearningProposal({
+            kind: 'contradiction', text: 'Two rules disagree.', skillSlug: 'a',
+            relatedSlug: 'b', fingerprint: 'contradiction|a|b', payload: { pair: ['a', 'b'] },
+        } as never, USER);
+        render(<LearningQueuePanel />);
+        // Exactly one Apply: rescope joined the deterministic set, contradiction
+        // has no clause payload to apply and stays Dismiss-only.
+        expect(await screen.findAllByRole('button', { name: /^Apply/ })).toHaveLength(1);
+    });
+
+    it('applies the clauses the proposer stored, verbatim', async () => {
+        seedRescope();
+        render(<LearningQueuePanel />);
+        fireEvent.click(await screen.findByRole('button', { name: /^Apply/ }));
+        await waitFor(() => expect(mockApplyRescope)
+            .toHaveBeenCalledWith('btc-sweep', clauses, USER));
     });
 });

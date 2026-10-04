@@ -26,18 +26,22 @@ comment at `tests/skillSupervisor.test.ts:213`). So **A2 is rescope-only**; leav
 and `applyProposalRewrite` (`skillSupervisor.ts:352`) reads only `verdict.enhanced`,
 so those clauses are dropped on every path today.
 
-## A2 — remaining work, in order (NOT started)
-1. RED: rewrite `tests/coachThread.test.tsx:100` ("rescope/contradiction get Dismiss
-   only") to expect Apply for `rescope`. Name the contract change in the commit.
-2. `applyRescopeProposal(slug, clauses, username)` beside `applyDemoteProposal:2766`
-   (same `withNotebookWriteLock` idiom): `validateIfThen` fail-closed, find by slug,
-   set clauses, REPLACE predicate (drop it if the rewrite carries none — a stale one
-   fires the pre-revision trigger), then **read back** and return true only if the
-   parsed file matches. Drafted once and reverted for want of a test.
-3. `LearningQueuePanel.tsx:42` + `CoachThreadPanel.tsx:248`: add `rescope`; `apply()`
-   branch reads `p.payload`. 4. `applyProposalRewrite`: prefer `proposal.payload`.
-5. GREEN: full path `revise_skill → queue → approve → skill updated`.
-6. Short real-app rescope check + screenshot.
+## A2 — SLICED, committing each green slice with its caller in the same commit
+**Slice 1 DONE** (`a2-slice-1`): `applyRescopeProposal(slug, clauses, username)` in
+SkillMemoryService (validateIfThen fail-closed, find by slug, replace predicate —
+dropped when the rewrite carries none — then READ BACK the parsed file), wired into
+`LearningQueuePanel` (APPLYABLE + payload branch). Red first: 2 new tests failed on
+"no Apply button", the 4 existing passed; green after. `coachThread.test.tsx:100`
+still passes untouched because CoachThreadPanel is not yet wired — the contract
+rewrite moves to slice 2 with that panel, so every commit is independently green.
+**Next: slice 2** = CoachThreadPanel + rewrite `coachThread.test.tsx:100` for
+rescope-only (red first, name the contract change). Then slice 3 =
+`applyProposalRewrite` prefers `proposal.payload` + full-path test
+(`revise_skill → queue → approve → skill updated`). Slice 4 = consume results in
+the UI: both panels AND the component calling `overrideApproveSkill` must show the
+named failure instead of ignoring the return. Slice 5 = real-app rescope check.
+Contradiction stays Dismiss-only: `beliefChallenge.ts:119` stores `{slug,
+contradictions}`, `contradictionSweep.ts:116` stores `{pair:[a,b]}` — no clauses.
 
 ## Then
 Backup pre-flight + registration (open `trade_tf_bar_v1` first; per key: owner

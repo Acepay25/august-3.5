@@ -10,6 +10,7 @@ import {
     applyDisplacementProposal,
     applyRevivalProposal,
     applyDemoteProposal,
+    applyRescopeProposal,
 } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { requestSkillTry as trySkillInChat } from '../chat/skillDeepLink';
@@ -37,9 +38,11 @@ const KIND_LABEL: Record<string, string> = {
     contradiction: 'conflict',
 };
 
-/** Kinds with a deterministic actuation path. The others need a rewrite the
- *  model authors — matching the supervisor's own split in skillSupervisor. */
-const APPLYABLE = new Set(['displacement', 'revival', 'demote']);
+/** Kinds with a deterministic actuation path. `rescope` joined them: the
+ *  clauses a seat stored in `payload` are applied verbatim, so a human no longer
+ *  has to hope a model rewrite agrees with the proposal in front of them.
+ *  `contradiction` stays out — its payload carries a slug pair, not clauses. */
+const APPLYABLE = new Set(['displacement', 'revival', 'demote', 'rescope']);
 
 interface LearningQueuePanelProps {
     /** Bump to force a refresh from outside (e.g. after approving a draft). */
@@ -90,6 +93,15 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
             } else if (p.kind === 'demote') {
                 const slug = (p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '';
                 ok = await applyDemoteProposal(slug, username);
+            } else if (p.kind === 'rescope') {
+                // The clauses the PROPOSER wrote, applied as written. This is
+                // what makes `revise_skill` actionable by a person at all.
+                const c = p.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
+                ok = await applyRescopeProposal(p.skillSlug || '', {
+                    ifCondition: c?.ifCondition,
+                    thenAction: c?.thenAction,
+                    predicate: c?.predicate,
+                }, username);
             }
         } catch {
             ok = false;
