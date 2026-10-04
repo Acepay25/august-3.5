@@ -37,7 +37,7 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
         // Nothing structured to explain (e.g. a plain model-declared Neutral) —
         // keep the previous flat line so the card never goes blank.
         return (
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2.5">
+            <div className="rounded-control border border-rose-500/15 bg-rose-500/[0.03] px-3 py-2">
                 <div className="text-ui-xs font-semibold uppercase tracking-widest text-rose-300">Why no trade</div>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">{explainNoTrade(analysis)}</p>
             </div>
@@ -45,7 +45,7 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
     }
 
     return (
-        <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2.5">
+        <div className="rounded-control border border-rose-500/15 bg-rose-500/[0.03] px-3 py-2">
             <div className="text-ui-xs font-semibold uppercase tracking-widest text-rose-300">Why Avoid?</div>
 
             {basis.hard.length > 0 && (
@@ -107,7 +107,7 @@ export const WaitForConfirmationBanner: React.FC<{ analysis: TradeAnalysis }> = 
     const trigger = confirmationTrigger(analysis, { skipInvalidationSource: true });
     if (!trigger) return null;
     return (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+        <div className="rounded-control border border-amber-500/15 bg-amber-500/[0.03] px-3 py-2">
             <div className="text-ui-xs font-semibold uppercase tracking-widest text-amber-300">Wait for confirmation</div>
             <p className="mt-1 text-sm leading-6 text-zinc-300">
                 This setup is a watch, not a no-trade. Enter when {trigger.text}

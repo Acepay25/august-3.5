@@ -12,7 +12,7 @@ const AuditPanel: React.FC<{
     children: React.ReactNode;
     className?: string;
 }> = ({ children, className = '' }) => (
-    <div className={`rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2 ${className}`.trim()}>
+    <div className={`rounded-control border border-white/[0.04] bg-white/[0.015] px-3 py-2 ${className}`.trim()}>
         {children}
     </div>
 );
