@@ -19,7 +19,7 @@
  * swallow-and-continue; surface it.
  */
 
-import { ingestCraftedSkill, ingestCraftedSkillFromDraft, listSkills } from './SkillMemoryService';
+import { ingestCraftedSkill, ingestCraftedSkillFromDraft, listSkills, type SkillIngestResult } from './SkillMemoryService';
 import { takeSkillDraft, type SkillDraft } from '../../utils/skillDrafts';
 import type { LoggedTrade } from '../../types';
 
@@ -85,6 +85,22 @@ export const approveSkillDraft = async (
         return { created: false, reason: 'duplicate', slug: nowThere };
     }
     return { created: true, slug: nowThere };
+};
+
+/** What an INGEST's named outcome means to the human who just pressed a button
+ *  on it. `null` means the write landed — show nothing on success. Kept beside
+ *  `skillApprovalToast` so the two surfaces that approve drafts cannot describe
+ *  one refusal two different ways. */
+export const skillIngestOverrideNote = (
+    result: SkillIngestResult,
+): { kind: 'error' | 'info'; body: string } | null => {
+    if (result.created) return null;
+    switch (result.reason) {
+        case 'duplicate':
+            return { kind: 'info', body: `Already a live skill (${result.slug}) — the trigger was there before you pressed.` };
+        case 'no-skills-folder':
+            return { kind: 'error', body: 'Not approved — this notebook has no skills folder to write into, so nothing was created.' };
+    }
 };
 
 /** What the trader is told, derived from what the library actually did. Kept

@@ -25,6 +25,8 @@ import {
     getSupervisionSpend,
 } from '../../services/learning/skillSupervisor';
 import type { SupervisorEvent, SupervisorPhase } from '../../services/learning/supervisorStore';
+import { skillIngestOverrideNote } from '../../services/learning/skillApproval';
+import type { SkillIngestResult } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 
 const PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
@@ -72,11 +74,32 @@ const relTime = (atMs: number): string => {
 
 const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
     const [busy, setBusy] = React.useState(false);
+    const [note, setNote] = React.useState<{ kind: 'error' | 'info'; body: string } | null>(null);
     const decision = ev.decision;
     const overridable = !!decision && !decision.overriddenByUser && (!!ev.draftSnapshot || !!ev.itemId);
-    const override = async (fn: (eventId: string, user: string) => Promise<unknown>): Promise<void> => {
+    /** `describe` reads what the override actually did. Only the skill override
+     *  answers — the other kinds reverse store rows that cannot decline — so a
+     *  press whose write was refused no longer looks like a press that worked. */
+    const override = async (
+        fn: (eventId: string, user: string) => Promise<unknown>,
+        describe?: (result: unknown) => { kind: 'error' | 'info'; body: string } | null,
+    ): Promise<void> => {
         setBusy(true);
-        try { await fn(ev.id, getActiveUsername()); } finally { setBusy(false); }
+        setNote(null);
+        let result: unknown;
+        let threw = false;
+        try {
+            result = await fn(ev.id, getActiveUsername());
+        } catch (e) {
+            threw = true;
+            setNote({ kind: 'error', body: `Could not act on this: ${e instanceof Error ? e.message : String(e)}` });
+        } finally {
+            setBusy(false);
+        }
+        if (!threw && describe) {
+            const said = describe(result);
+            if (said) setNote(said);
+        }
     };
     return (
         <div className="rounded-xl border border-white/[0.06] bg-zinc-900/60 p-2.5" data-testid={`supervisor-event-${ev.id}`}>
@@ -106,7 +129,13 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                     {overridable && ev.itemKind === 'skill' && (
                         <div className="mt-1.5 flex gap-1.5">
                             {decision.verdict === 'rejected' || decision.verdict === 'skipped' ? (
-                                <button type="button" disabled={busy} onClick={() => void override(overrideApproveSkill)}
+                                <button type="button" disabled={busy}
+                                    onClick={() => void override(overrideApproveSkill, r => r
+                                        ? skillIngestOverrideNote(r as SkillIngestResult)
+                                        // A null answer means the row kept no draft to
+                                        // ingest — nothing was written, whatever the
+                                        // button said.
+                                        : { kind: 'error', body: 'Nothing to approve — this entry kept no draft snapshot, so there was nothing to write.' })}
                                     className="rounded-control border border-emerald-500/30 px-2 py-0.5 text-ui-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40">
                                     Approve anyway
                                 </button>
@@ -125,6 +154,14 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                                 {undoLabel(ev.itemKind, decision.verdict)}
                             </button>
                         </div>
+                    )}
+                    {note && (
+                        <p
+                            data-testid={`supervisor-override-note-${ev.id}`}
+                            className={`mt-1.5 text-ui-dense leading-relaxed ${note.kind === 'error' ? 'text-amber-300/90' : 'text-zinc-400'}`}
+                        >
+                            {note.body}
+                        </p>
                     )}
                 </div>
             )}
