@@ -1546,18 +1546,39 @@ body,
 
 /* ===== ACCESSIBILITY ===== */
 
-/* Focus visible styles for keyboard navigation */
-:focus-visible {
-  outline: 2px solid #399ef7;
-  outline-offset: 2px;
+/* The focus ring, named once. Both the global outline below and the
+   `focus-visible:ring-*` utilities across the tree are this one colour —
+   previously each call site picked its own, so the same control could show a
+   cyan ring in one state and a zinc ring in another. */
+:root {
+  --focus-ring: var(--color-info);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
 }
 
-/* Text inputs keep their own focus treatment (border-color / none) — the
-   global gold outline would otherwise draw a box around the message input
-   (and every field) when clicked. */
+/* Focus visible styles for keyboard navigation. `:focus-visible` is itself
+   modality-aware — the browser only matches it when focus arrived from the
+   keyboard — so this rule IS the C1 rule: a mouse click leaves no ring. What
+   C1 adds on top is that no call site may opt OUT of that awareness by
+   writing a bare `focus:ring-*`; those were 19 sites that lit up on every
+   click. They are `focus-visible:` now, and `tests/iconLayer.test.ts` does not
+   police this — see the note in AGENTS.md about guards earning their keep
+   rather than their line count. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Editable controls keep the outline too. These fields own their focus
+   treatment with a `focus-visible:ring-*` utility, and a global outline
+   stacked on top of that ring draws a second box around every input — so the
+   outline steps aside and the field's own ring is the indicator. (The comment
+   here used to call the global ring "gold"; it has been the cyan accent for
+   some time, which is the sort of drift a named token removes.) */
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
+select:focus-visible,
+[contenteditable]:focus-visible {
   outline: none;
 }
 

@@ -1,8 +1,7 @@
 # Stage 2 — UI/UX Refactor Implementation Plan
 
-**Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phases 0–1
-complete**, Phase 2 partially done (tasks 1–2 + the z-ladder; task 3 and focus
-rings outstanding).
+**Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phases 0–2
+complete**; the shared right-panel contract and multi-dock tabs carry into Phase 3.
 **Companion doc:** [stage1-ui-ux-spec.md](./stage1-ui-ux-spec.md) (research + audit + design spec — all load-bearing claims fact-checked).
 **Rule:** UI refactor, not a logic change. Preserve existing behavior and data.
 Reuse the current stack (React 19, Tailwind v4 token block, lightweight-charts,
@@ -275,18 +274,63 @@ utilities (`z-update`, `z-modal`, `z-confirm`, `z-drawer`) verified as emitted.
   stays literal because it is a deliberate +1 over its own backdrop, and that
   relationship has to survive.
 
-**Not done, and why it is not a small remainder.** Task 3 (the right-panel
-contract) and the focus-ring half of task 4 are untouched. Task 3 is the
-larger half of this phase: push-vs-fullscreen, no-transition-delay drag
-resize, per-surface width persistence, hide-vs-close for `TradeChatPanel`, and
-tab capsules for multiple docks. Parts of it already exist per-surface
-(`TradeChatPanel` persists its own width, `TradeView` already drag-resizes),
-which is exactly what makes a single contract worth building rather than
-adding — but unifying them touches the Trade surface's layout and needs its own
-pass and its own probe coverage. Two dead tests were rewritten rather than
-deleted: `deadControlsGuard` had pinned the OLD decision (rail absent), and
+**Not done, and why it is not a small remainder.** Task 3's remaining items —
+push-vs-fullscreen as a *shared contract*, and tab capsules for multiple docks —
+are untouched. Parts of the dock already existed per-surface (`TradeChatPanel`
+persists its own width, `TradeView` already drag-resizes), which is what makes a
+single contract worth building rather than adding to; unifying `AdvancedAnalytics`
+and the Journal aside onto it, plus multi-dock tabs, touches the Trade surface's
+layout and needs its own pass. Two dead tests were rewritten rather than deleted:
+`deadControlsGuard` had pinned the OLD decision (rail absent), and
 `journalSurfaceNavigation` asserted the drawer's routing; both now pin the new
 contract and additionally assert the collapsed rail still routes.
+
+### Phase 2 result — complete (second pass, 2026-10-03)
+
+Gates: typecheck clean · 4434 tests pass (470 files) · build clean · eslint 860
+warnings, 0 errors, against the 889 ratchet · render-probe OK, zero pageerrors ·
+`scripts/ui-inspect.cjs` OK.
+
+**A new probe was written for this phase: `scripts/ui-inspect.cjs`.** It answers
+a question render-probe structurally cannot — "what does the shell actually look
+like" — by measuring rather than eyeballing. It reads `getBoundingClientRect` and
+`getComputedStyle` off the live DOM at 800 / 1024 / 1440px, collapsed and
+expanded, and asserts: no horizontal overflow; the rail's width and ladder rung;
+that the surface keeps a usable share of the viewport; that collapsing gives the
+content back exactly the width the rail takes; that the theme is still the dark
+one. It writes screenshots for a human, but deliberately never reads them back —
+an automated pass that depends on an agent's eyes is not a gate.
+
+What it measured at this commit: rail 56px below 1024 and 280px at/above it;
+content 744px at 800 (93%), 744px at 1024, 1160px at 1440; collapse moves 224px
+from rail to content with no overflow at any width; `body` still `#0b0b0a`.
+
+**Focus rings (C1) are now modality-aware.** 19 call sites wrote a bare
+`focus:ring-*`, which paints on every mouse click — training people to ignore the
+one indicator that tells a keyboard user where they are. All 19 are
+`focus-visible:ring-*` now, and `tests/themeContrast.test.ts` owns a new
+focus-modality lockout so they cannot come back. The global ring is a named
+`--focus-ring` token rather than a literal repeated per site.
+
+**The Chart AI dock is hidden, not closed.** This was a real data-loss bug: the
+panel rendered itself TWICE — collapsed it returned a 10px rail, expanded it
+returned the dock — so React unmounted the live conversation to mount the rail,
+destroying the composer draft, the scroll offset and any in-flight turn.
+Collapsing the dock to look at the chart mid-analysis came back empty. Now one
+instance stays mounted, `visibility: hidden` (which preserves the scroll box,
+where `display: none` would not) plus `inert` so it leaves the tab ring, and the
+rail is a separate presentational `ChartAiDockRail`.
+
+Verified the only way it can honestly be: `ui-inspect` types a draft in a real
+browser, collapses, expands, and reads the draft back. Three source-contract
+tests in `tests/rightPanelContract.test.tsx` pin the shape, and one of them
+asserts the browser test exists — otherwise all three would pass against the old
+swapping implementation, which is exactly the bug.
+
+**Two existing tests were source-scans pinned to the old two-instance dock** and
+were updated rather than weakened: `scrollToMessageWiring` (the scroll bridge is
+registered once now, which is the point) and `dockExpandedLayout` (its 420-char
+window needed the JSX attributes reordered so `className` follows the testid).
 
 ## Phase 3 — Debate/messenger unification (medium)
 
