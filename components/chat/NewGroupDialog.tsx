@@ -105,7 +105,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
     const saveDisabled = selected.size < 2 || (editing && !membershipChanged && Object.keys(changes).length === 0);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Group Chat">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Group Chat">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-group-dialog">
                 <div className="flex items-start justify-between">
                     <div>

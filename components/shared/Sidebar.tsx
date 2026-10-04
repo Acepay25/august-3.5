@@ -7,26 +7,13 @@ import { EmptyState } from '../ui/EmptyState';
 import type { SidebarPane } from '../../hooks/useSidebarPane';
 import {
     ActivityIcon,
-    ChevronDownIcon,
     CodeIcon,
     PinIcon,
     PlusIcon,
     SearchIcon,
-    SettingsIcon,
     TimerIcon,
     TrashIcon,
 } from './Icons';
-
-/** App version for the account-popover footer (best-effort import). */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const APP_VERSION: string = (() => {
-    try {
-        // Vite injects this at build time; fall back gracefully elsewhere.
-        return (typeof import.meta !== 'undefined' && (import.meta as { env?: { PACKAGE_VERSION?: string } }).env?.PACKAGE_VERSION) || '';
-    } catch {
-        return '';
-    }
-})();
 
 interface NavRowProps {
     icon: React.ReactNode;
@@ -87,7 +74,6 @@ const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick, collapsed = false
 );
 
 interface SidebarContentProps {
-    activeUsername: string | null;
     conversations: Conversation[];
     activeConversationId: string | null;
     hasVisionData: boolean;
@@ -99,7 +85,6 @@ interface SidebarContentProps {
     onOpenLiveMarket: () => void;
     onOpenVisionData: () => void;
     onOpenWatchList?: () => void;
-    onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
     // Unified-pane props (desktop sidebar only). Given `sidebarPane` plus a
@@ -129,7 +114,6 @@ interface SidebarContentProps {
 // Shared sidebar body, rendered inside the slide-out navigation drawer
 // (Header.tsx) beneath the surface list.
 export const SidebarContent: React.FC<SidebarContentProps> = ({
-    activeUsername,
     conversations,
     activeConversationId,
     hasVisionData,
@@ -139,7 +123,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onOpenLiveMarket,
     onOpenVisionData,
     onOpenWatchList,
-    onOpenSettings,
     onDeleteConversation,
     onDeleteConversations,
     sidebarPane,
@@ -167,8 +150,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     const [showAllConversations, setShowAllConversations] = useState(false);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
-    // Account popover on the footer row.
-    const [userMenuOpen, setUserMenuOpen] = useState(false);
 
     useEffect(() => {
         const validIds = new Set(conversations.map(conversation => conversation.id));
@@ -365,7 +346,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 <button
                     onClick={act(onNewConversation)}
                     disabled={isFreshSession}
-                    className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-2 rounded-lg text-ui-caption text-zinc-300 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed`}
+                    className={`group w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-2 rounded-lg text-ui-caption text-zinc-300 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed`}
                     title={isFreshSession ? 'Start typing to begin a conversation' : 'Start a new conversation'}
                     aria-label="Start a new conversation"
                 >
@@ -373,7 +354,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                     {!collapsed && (
                         <>
                             <span className="truncate flex-1 text-left">New chat</span>
-                            <Kbd>Ctrl+N</Kbd>
+                            <span className="opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-visible:opacity-100">
+                                <Kbd>Ctrl+N</Kbd>
+                            </span>
                         </>
                     )}
                 </button>
@@ -598,64 +581,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
             {showBotsBody && rosterSlot}
 
-            {/* User footer — opens an account popover (Settings,
-                New chat, version). The footer no longer navigates
-                directly; it reveals the account menu. */}
-            {activeUsername && (
-                <div className="relative border-t border-white/[0.06]">
-                    <button
-                        onClick={() => setUserMenuOpen(open => !open)}
-                        aria-expanded={userMenuOpen}
-                        aria-haspopup="menu"
-                        className={`${collapsed ? 'p-2 justify-center' : 'p-3 gap-2.5'} flex items-center w-full hover:bg-white/[0.06] transition-colors text-left`}
-                        title="Account"
-                        aria-label="Open account menu"
-                    >
-                        <div className="w-8 h-8 rounded-full bg-zinc-700/70 flex items-center justify-center text-xs font-bold text-zinc-200 uppercase shrink-0">
-                            {activeUsername.charAt(0)}
-                        </div>
-                        {!collapsed && (
-                            <>
-                                <span className="flex-1 truncate text-sm font-medium text-zinc-300">{activeUsername}</span>
-                                <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
-                            </>
-                        )}
-                    </button>
-                    {userMenuOpen && !collapsed && (
-                        <>
-                            {/* Click-away layer */}
-                            <div className="fixed inset-0 z-30" onClick={() => setUserMenuOpen(false)} aria-hidden="true" />
-                            <div role="menu" aria-label="Account" className="absolute bottom-full left-2 right-2 z-40 mb-2 rounded-xl bg-zinc-800 p-1.5 shadow-2xl animate-fade-in">
-                                <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => { setUserMenuOpen(false); act(onOpenSettings)(); }}
-                                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-zinc-200 transition-colors hover:bg-white/[0.06]"
-                                >
-                                    <SettingsIcon className="h-4 w-4 shrink-0 text-zinc-500" />
-                                    <span className="flex-1">Settings</span>
-                                    <Kbd>Ctrl+,</Kbd>
-                                </button>
-                                {!isFreshSession && (
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={() => { setUserMenuOpen(false); act(onNewConversation)(); }}
-                                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui-caption text-zinc-200 transition-colors hover:bg-white/[0.06]"
-                                    >
-                                        <PlusIcon className="h-4 w-4 shrink-0 text-zinc-500" />
-                                        <span className="flex-1">New chat</span>
-                                        <Kbd>Ctrl+N</Kbd>
-                                    </button>
-                                )}
-                                <p className="border-t border-white/[0.06] px-2.5 pb-1 pt-2 font-mono text-ui-xs text-zinc-600">
-                                    August v{typeof APP_VERSION === 'string' ? APP_VERSION : ''}
-                                </p>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
         </div>
     );
 };

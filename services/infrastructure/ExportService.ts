@@ -316,6 +316,12 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     // it lives in a different place from the Preferences-owned keys above, and
     // leaving it out means a restored backup silently drops the user's rail.
     'nav_rail_width_v1',
+    // Right-panel width preference (Stage 2 Phase 2, the shared contract in
+    // hooks/useRightPanel): `right_panel_width_v1_<surface>`, one per surface.
+    // Same reasoning as the rail width — the user dragged the panel there, and
+    // a restored backup that silently resets every panel to its default is the
+    // same lost-layout annoyance. Plain numeric strings; they round-trip.
+    'right_panel_width_v1',
 ];
 
 /**

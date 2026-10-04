@@ -1,25 +1,29 @@
 /**
- * NavRail — the persistent left navigation, replacing the header's hamburger
- * drawer (D2).
+ * NavRail — the persistent left navigation (D2, amended 2026-10-04: the
+ * collapsed state is FULLY hidden).
  *
  * Why this exists: the surfaces used to be reachable only by opening a menu,
  * which made "where am I" and "how do I leave" two questions instead of none.
- * All four references in the design spec — and the app this one is copied from
- * — keep navigation on screen and collapse it to a rail rather than hiding it.
+ * The references keep navigation collapsible rather than behind a hamburger —
+ * but the user's ruling after living with the 56px strip is that the resting
+ * state shows NOTHING on the left, not a column of icons. So collapse now
+ * takes the column to 0px, and the expand affordance moves to the header
+ * (the DSH pattern: the hidden sidebar's expand button carries the update
+ * dot). Expanding brings back the full 280px panel. Ctrl/Cmd+B toggles either
+ * way; below 1024px the rail is hidden whatever the user last chose.
  *
- * Two widths, one tree. 56px collapsed, 280px expanded, toggled with
- * Ctrl/Cmd+B and auto-collapsed below 1024px. Nothing is conditionally
- * rendered on width except the conversation history: the surface rows, the
- * approvals entry and the account row stay mounted in both states, so a
- * surface can never be reachable at one width and not the other. Collapsing
- * changes what is *readable*, not what exists.
+ * One tree, hidden rather than unmounted. The rows keep rendering inside the
+ * collapsed box — inert, invisible, 0px wide — the same hide-vs-close contract
+ * the Chart AI dock follows: collapsing changes what is *readable*, not what
+ * exists, so the tree's state survives the round trip and expansion reveals
+ * the same nodes, not a rebuild.
  *
  * The brand gradient is reserved: the active-surface bar and the account-row
  * status dot are the only places it appears outside the wordmark.
  */
 
 import React from 'react';
-import { PanelLeftClose, PanelLeftOpen, Settings, BotIcon } from '../shared/Icons';
+import { PanelLeftClose, Settings, BotIcon } from '../shared/Icons';
 import Tip from '../ui/Tip';
 import SurfaceMenuList, { type NavBadge } from './SurfaceMenuList';
 import { SidebarContent } from '../shared/Sidebar';
@@ -30,11 +34,14 @@ import type { AppSurface } from '../../hooks/useSurface';
 import type { Conversation } from '../../types';
 import type { AutomationConfig } from '../../types/automation';
 
-export const NAV_RAIL_COLLAPSED_PX = 56;
+/** The collapsed column is 0px: the rail leaves the layout entirely and its
+ *  expand affordance lives in the header (nav-rail-toggle-header). */
+export const NAV_RAIL_COLLAPSED_PX = 0;
 export const NAV_RAIL_EXPANDED_PX = 280;
-/** Below this the rail is a rail whatever the user last chose — there is no
+/** Below this the rail is hidden whatever the user last chose — there is no
  *  room for a 280px panel beside a trade chart, and Electron's floor is
- *  minWidth 800. */
+ *  minWidth 800. The choice is applied at render time, not written back, so
+ *  widening the window restores what the user actually picked. */
 export const NAV_RAIL_AUTO_COLLAPSE_PX = 1024;
 
 interface NavRailProps {
@@ -102,8 +109,11 @@ const AccountRow: React.FC<{
             data-testid="nav-account"
             className="flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-3 py-2.5"
         >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-                <BotIcon className="h-4 w-4" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold uppercase text-zinc-300">
+                {/* The person's initial, not a bot glyph — this row is the one
+                    place the rail says who is signed in (the references all use
+                    an initials block here). */}
+                {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" />}
             </div>
             <div className="min-w-0 flex-1">
                 <div className="truncate text-ui-caption text-zinc-300">{activeUsername || 'No profile'}</div>
@@ -157,27 +167,37 @@ const NavRail: React.FC<NavRailProps> = ({
             data-testid="nav-rail"
             data-expanded={expanded ? 'true' : 'false'}
             aria-label="Navigation"
+            aria-hidden={!expanded || undefined}
+            inert={expanded ? undefined : true}
             style={{ width }}
             /* Only `width` animates. Naming the property is the whole rule
                here: an unnamed transition would also animate the conversation
                list re-laying-out on every frame of the collapse, which is the
-               geometry animation WS-5.4 bans. */
-            className="z-drawer flex shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900 transition-[width] duration-[150ms] ease-[var(--ease-snappy)] max-lg:w-14"
+               geometry animation WS-5.4 bans. Collapsed adds `invisible` (it
+               flips at once, so the shrink happens offstage) and `inert`, the
+               dock's hide-vs-close pair: a zero-width box whose rows stayed
+               focusable would eat Tab presses against nothing. */
+            className={`z-drawer flex shrink-0 flex-col overflow-hidden bg-zinc-900 transition-[width] duration-[150ms] ease-[var(--ease-snappy)] ${
+                /* The border belongs to the expanded state only: a 0px box
+                   that kept even a transparent hairline would still measure
+                   1px and leave a stray edge on the page ground. */
+                expanded ? 'border-r border-white/[0.06]' : 'invisible'
+            }`}
         >
-            {/* Expand/collapse. In the expanded panel the chevron points at the
-                edge it will move toward; in the rail it carries the brand dot so
-                the rail is visibly the same component, just narrower. */}
-            <div className={`flex shrink-0 items-center ${expanded ? 'justify-end px-2 pt-2.5' : 'justify-center pt-2.5'}`}>
+            {/* Collapse. Only exists in the expanded state — the collapsed
+                rail's expand affordance is the header's button, which is what
+                makes the resting view free of left-edge chrome. */}
+            <div className="flex shrink-0 items-center justify-end px-2 pt-2.5">
                 <button
                     type="button"
                     data-testid="nav-rail-toggle"
                     onClick={onToggleExpanded}
                     aria-expanded={expanded}
-                    aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+                    aria-label="Collapse navigation"
                     aria-controls="nav-rail-panel"
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
-                    {expanded ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+                    <PanelLeftClose className="h-4 w-4" />
                 </button>
             </div>
 
@@ -199,7 +219,6 @@ const NavRail: React.FC<NavRailProps> = ({
                     <>
                         <div className="mx-2 border-t border-white/[0.06]" />
                         <SidebarContent
-                            activeUsername={activeUsername}
                             conversations={conversations}
                             activeConversationId={activeConversationId}
                             hasVisionData={hasVisionData}
@@ -211,7 +230,6 @@ const NavRail: React.FC<NavRailProps> = ({
                             onOpenLiveMarket={onOpenLiveMarket}
                             onOpenVisionData={onOpenVisionData}
                             onOpenWatchList={onOpenWatchList}
-                            onOpenSettings={onOpenSettings}
                             automations={automations}
                             onOpenAutomation={onOpenAutomation}
                             onCreateAutomation={onCreateAutomation}

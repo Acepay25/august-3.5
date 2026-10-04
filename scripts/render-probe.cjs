@@ -816,8 +816,12 @@ async function main() {
          *  what a desktop user sees. */
         const openMenu = async () => page.evaluate(() => {
             const rail = document.querySelector('[data-testid="nav-rail"]');
-            if (!rail) return 'no rail';
-            if (rail.getAttribute('data-expanded') === 'true') return 'already expanded';
+            if (rail && rail.getAttribute('data-expanded') === 'true') return 'already expanded';
+            // D2 amendment: the collapsed rail is 0px and inert, so the expand
+            // affordance lives in the header. The in-rail toggle only renders
+            // for the collapse direction now.
+            const headerToggle = document.querySelector('[data-testid="nav-rail-toggle-header"]');
+            if (headerToggle) { headerToggle.click(); return 'expanded'; }
             const toggle = document.querySelector('[data-testid="nav-rail-toggle"]');
             if (!toggle) return 'no toggle';
             toggle.click();
@@ -849,30 +853,57 @@ async function main() {
                 rail !== null && rail.rows === 7, rail ? `${rail.rows} rows` : 'no rail');
 
             // Ctrl/Cmd+B must collapse and restore it — the documented binding.
-            const beforeWidth = rail ? rail.width : 0;
+            // D2 amendment: collapsing HIDES the rail (0px); the expand
+            // affordance moves to the header, which must exist exactly while
+            // the rail does not — an unreachable nav is the trap this catches.
             await page.keyboard.press('Control+b');
             await sleep(500);
             const collapsed = await page.evaluate(() => {
                 const el = document.querySelector('[data-testid="nav-rail"]');
-                return el
-                    ? { expanded: el.getAttribute('data-expanded'), width: Math.round(el.getBoundingClientRect().width) }
-                    : null;
+                return {
+                    expanded: el ? el.getAttribute('data-expanded') : null,
+                    width: el ? Math.round(el.getBoundingClientRect().width) : -1,
+                    inert: el ? el.hasAttribute('inert') : false,
+                    headerToggle: !!document.querySelector('[data-testid="nav-rail-toggle-header"]'),
+                };
             });
-            check('Ctrl+B collapses the rail to the 56px column',
-                collapsed !== null && collapsed.expanded === 'false' && collapsed.width < beforeWidth,
-                collapsed ? `${collapsed.width}px` : 'no rail');
-            // And the surfaces must STILL be reachable from the collapsed rail.
-            // A rail that only navigates when expanded is a trap: it looks
-            // interactive, and every glyph in it is a dead button.
-            const fromCollapsed = await navTo('Learn');
-            check('a collapsed rail still navigates', fromCollapsed === 'clicked', fromCollapsed);
+            check('Ctrl+B hides the rail completely',
+                collapsed.expanded === 'false' && collapsed.width === 0 && collapsed.inert,
+                `${collapsed.width}px, inert=${collapsed.inert}`);
+            check('the header carries the expand button while the rail is hidden',
+                collapsed.headerToggle, 'nav-rail-toggle-header');
+            const revived = await page.evaluate(() => {
+                const t = document.querySelector('[data-testid="nav-rail-toggle-header"]');
+                if (!t) return false;
+                t.click();
+                return true;
+            });
+            await sleep(500);
+            const revivedState = await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="nav-rail"]');
+                return {
+                    expanded: el ? el.getAttribute('data-expanded') : null,
+                    width: el ? Math.round(el.getBoundingClientRect().width) : -1,
+                };
+            });
+            check('the header toggle revives the full panel',
+                revived && revivedState.expanded === 'true' && revivedState.width === 280,
+                revivedState ? `${revivedState.width}px, expanded=${revivedState.expanded}` : 'no rail');
+            // And Ctrl+B still works in the other direction.
             await page.keyboard.press('Control+b');
             await sleep(500);
-            const restored = await page.evaluate(() => {
+            const hiddenAgain = await page.evaluate(() => {
                 const el = document.querySelector('[data-testid="nav-rail"]');
-                return el ? el.getAttribute('data-expanded') : null;
+                return {
+                    expanded: el ? el.getAttribute('data-expanded') : null,
+                    width: el ? Math.round(el.getBoundingClientRect().width) : -1,
+                };
             });
-            check('Ctrl+B restores the expanded panel', restored === 'true', `${restored}`);
+            check('Ctrl+B hides it again from the keyboard',
+                hiddenAgain.expanded === 'false' && hiddenAgain.width === 0,
+                hiddenAgain ? `${hiddenAgain.width}px, expanded=${hiddenAgain.expanded}` : 'no rail');
+            await page.evaluate(() => document.querySelector('[data-testid="nav-rail-toggle-header"]')?.click());
+            await sleep(500);
             // Leave the run on a known surface before the sweep.
             await navTo('Trade');
             await sleep(400);

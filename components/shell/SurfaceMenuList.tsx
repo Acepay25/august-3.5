@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox, LogOut} from '../shared/Icons';
+import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox, UsersRound} from '../shared/Icons';
 import Tip from '../ui/Tip';
 
 import type { AppSurface } from '../../hooks/useSurface';
@@ -108,7 +108,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                     onClick={() => onSelect(id)}
                     aria-current={active ? 'page' : undefined}
                     aria-label={accessibleName}
-                    className={`relative flex w-full items-center rounded-lg transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                    className={`group relative flex w-full items-center rounded-lg transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                         collapsed
                             ? 'justify-center px-2 py-2'
                             : 'gap-2.5 px-2.5 py-2 text-left text-ui-caption'
@@ -135,7 +135,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                     {!collapsed && <span className="flex-1 truncate">{label}</span>}
                     {!collapsed && badge && <Badge badge={badge} />}
                     {!collapsed && (
-                        <kbd className="shrink-0 rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>
+                        <kbd className="shrink-0 opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-visible:opacity-100 rounded border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>
                     )}
                 </button>
             );
@@ -180,11 +180,11 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 data-testid="nav-switch-user"
                 onClick={onSwitchUser}
                 aria-label="Switch profile"
-                className={`flex w-full items-center rounded-lg py-2 text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 ${
+                className={`flex w-full items-center rounded-lg py-2 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
                     collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5 text-left text-ui-caption'
                 }`}
             >
-                <LogOut className="h-4 w-4 shrink-0" />
+                <UsersRound className="h-4 w-4 shrink-0" />
                 {!collapsed && <span className="flex-1">Switch profile</span>}
             </button>
         )}

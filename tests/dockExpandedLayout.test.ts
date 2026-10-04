@@ -63,7 +63,11 @@ describe('the expanded dock fits the row', () => {
     });
 
     it('the expanded dock leaves the chart a real share, and the two sum to the row', () => {
-        const dock = classExprAround('data-testid="trade-dock"');
+        // `testId="trade-dock"`, not `data-testid=` in the source: the dock's
+        // element is now the shared RightPanel shell, which takes the attribute
+        // as a prop. The geometry being pinned is unchanged — it is still this
+        // surface's className, still beside the chart.
+        const dock = classExprAround('testId="trade-dock"');
         const m = /dockExpanded \? '([^']*)'/.exec(dock);
         expect(m, 'the expanded dock no longer sets a width').not.toBeNull();
 
@@ -80,8 +84,22 @@ describe('the expanded dock fits the row', () => {
     });
 
     it('the collapsed dock keeps its draggable width and its floor', () => {
-        const dock = classExprAround('data-testid="trade-dock"');
-        expect(dock).toMatch(/lg:w-\[var\(--dock-w\)\]/);
+        const dock = classExprAround('testId="trade-dock"');
+        // `--panel-w` is published by the shared RightPanel shell; this surface
+        // only consumes it in its className. Pinning the consumption keeps the
+        // variable name one across every future panel.
+        expect(dock).toMatch(/lg:w-\[var\(--panel-w\)\]/);
         expect(dock).toMatch(/lg:min-w-\[300px\]/);
+    });
+
+    it('the dock runs on the shared right-panel contract, not its own geometry', () => {
+        // The phase-2 point: a second panel here must be a registration, not a
+        // second implementation of resize/persistence/hide-vs-close.
+        expect(raw).toMatch(/import \{ useRightPanel \} from '\.\.\/\.\.\/hooks\/useRightPanel'/);
+        expect(raw).toMatch(/import RightPanel from '\.\.\/shell\/RightPanel'/);
+        expect(raw).toMatch(/useRightPanel\(\{/);
+        // The old bespoke drag is gone: no manual window listeners remain.
+        expect(raw).not.toMatch(/window\.addEventListener\('pointermove'/);
+        expect(raw).not.toMatch(/const readDockWidth/);
     });
 });

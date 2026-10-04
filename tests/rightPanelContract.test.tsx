@@ -19,6 +19,8 @@ import { readFileSync } from 'node:fs';
 
 const tradeView = readFileSync('components/trade/TradeView.tsx', 'utf8');
 const panel = readFileSync('components/trade/TradeChatPanel.tsx', 'utf8');
+const shell = readFileSync('components/shell/RightPanel.tsx', 'utf8');
+const hook = readFileSync('hooks/useRightPanel.ts', 'utf8');
 const inspect = readFileSync('scripts/ui-inspect.cjs', 'utf8');
 
 describe('the Chart AI dock hides, it does not close', () => {
@@ -45,14 +47,17 @@ describe('the Chart AI dock hides, it does not close', () => {
 
     it('the hidden dock is inert, not merely invisible', () => {
         // A `visibility: hidden` box stays focusable, so without `inert` the
-        // collapsed dock's controls would still take Tab focus off-screen.
-        expect(tradeView).toMatch(/inert=\{dockCollapsed && !isBelowLg \? true : undefined\}/);
-        expect(tradeView).toMatch(/visibility: 'hidden'/);
-        expect(tradeView).toMatch(/pointerEvents: 'none'/);
+        // collapsed dock's controls would still take Tab focus off-screen. Both
+        // now live in the shared shell; this surface only passes `isHidden`.
+        expect(tradeView).toMatch(/isHidden=\{dockCollapsed && !isBelowLg\}/);
+        expect(shell).toMatch(/inert=\{isHidden \? true : undefined\}/);
+        expect(shell).toMatch(/visibility: 'hidden'/);
+        expect(shell).toMatch(/pointerEvents: 'none'/);
     });
 
     it('the drag handle is not rendered while the dock is closed', () => {
-        expect(tradeView).toMatch(/\{!dockCollapsed && !isBelowLg && \(\s*<div\s+role="separator"/);
+        expect(shell).toMatch(/\{!isHidden && presentation === 'push' && \(/);
+        expect(shell).toMatch(/role="separator"/);
     });
 
     it('a browser test actually exercises hide-vs-close, not just the source', () => {
@@ -64,8 +69,13 @@ describe('the Chart AI dock hides, it does not close', () => {
 });
 
 describe('the dock width is the trader\'s, not a constant', () => {
-    it('persists across sessions under one key', () => {
+    it('persists per surface under one namespaced key', () => {
+        expect(hook).toMatch(/right_panel_width_v1_\$\{surface\}/);
+        expect(hook).toMatch(/localStorage\.setItem\(widthKey/);
+    });
+
+    it('adopts the pre-contract key rather than resetting an existing dock', () => {
+        expect(tradeView).toMatch(/legacyWidthKey: DOCK_WIDTH_KEY/);
         expect(tradeView).toMatch(/DOCK_WIDTH_KEY = 'trade_dock_width_v1'/);
-        expect(tradeView).toMatch(/localStorage\.setItem\(DOCK_WIDTH_KEY/);
     });
 });

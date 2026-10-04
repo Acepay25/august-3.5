@@ -43,6 +43,10 @@ const ComposerWorkspaceRow: React.FC<ComposerWorkspaceRowProps> = ({
         {botName !== null && (
             <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-400">{botName}</span>
         )}
+        {/* Pre-packet this used to print `${symbol} · ${interval}` — the SAME
+            instrument twice on one row, in two formats (`BTC/USDT` at the left,
+            `BTCUSDT` here). The interval is the only half that is not already
+            spoken for; the symbol never repeats. */}
         <span className="ml-auto shrink-0 font-mono text-ui-xs text-zinc-600" title={contextAt ? `Live packet fetched ${new Date(contextAt).toISOString()}` : 'No packet yet'}>
             {contextAt ? `ctx ${phtClock(contextAt)} PHT` : `${symbol} · ${interval}`}
         </span>

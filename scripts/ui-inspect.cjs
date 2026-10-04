@@ -233,7 +233,7 @@ async function main() {
         const after = await page.evaluate(measureShell);
         note('expanded', `${before.rail.width}px, main ${before.main.width}px`);
         note('collapsed', `${after.rail.width}px, main ${after.main.width}px`);
-        check('Ctrl+B collapses to the 56px rail', after.rail.width === 56, `${after.rail.width}px`);
+        check('Ctrl+B hides the rail completely (0px)', after.rail.width === 0, `${after.rail.width}px`);
         check('the surface gains exactly the width the rail gives up',
             Math.abs((after.main.width - before.main.width) - (before.rail.width - after.rail.width)) <= 1,
             `main +${after.main.width - before.main.width}, rail -${before.rail.width - after.rail.width}`);
@@ -243,14 +243,21 @@ async function main() {
             after.rows.every(r => r.visibleText === ''), 'glyph-only');
         await page.screenshot({ path: path.join(SHOTS, 'ui-1440-collapsed.png') });
 
-        // A collapsed rail that cannot navigate is the trap this catches.
+        // A hidden rail whose expand affordance does not work is the trap
+        // this catches: the header button must revive the panel, and the
+        // revived panel must provably route — measured by the header's own
+        // surface label, since data-expanded never changes on a click.
+        await page.evaluate(() => document.querySelector('[data-testid="nav-rail-toggle-header"]')?.click());
+        await sleep(600);
+        const revived = await page.evaluate(() => document.querySelector('[data-testid="nav-rail"]')?.getAttribute('data-expanded'));
+        check('the header toggle revives the hidden rail', revived === 'true', `expanded=${revived}`);
         await page.evaluate(() => {
             [...document.querySelectorAll('[data-testid="surface-menu"] button')]
                 .find(b => /^Journal/i.test(b.getAttribute('aria-label') || ''))?.click();
         });
         await sleep(1200);
-        const onJournal = await page.evaluate(() => document.querySelector('[data-testid="nav-rail"]')?.getAttribute('data-expanded'));
-        check('a collapsed rail still routes', onJournal !== null, `expanded=${onJournal}`);
+        const where = await page.evaluate(() => document.querySelector('[data-testid="header-surface-label"]')?.textContent?.trim());
+        check('the revived rail routes to Journal', where === 'Journal', where);
 
         await page.keyboard.press('Control+b');
         await sleep(500);

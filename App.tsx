@@ -2779,6 +2779,7 @@ const App: React.FC = () => {
                 watchOpenR={watchOpenR}
                 onOpenJobs={() => setIsJobsDrawerVisible(true)}
                 onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+                onExpandNavRail={isNavRailOpen ? undefined : toggleNavRail}
             />
 
             {/* The old Journal OVERLAY was removed (navigation rewired to the

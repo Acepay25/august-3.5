@@ -21,9 +21,10 @@ export interface TimeframeBarProps {
     onIntervalChange: (next: ChartInterval) => void;
     /** Rendered after the bar's own controls (the chart puts studies here). */
     children?: React.ReactNode;
+    className?: string;
 }
 
-const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange, children }) => {
+const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange, children, className }) => {
     const [open, setOpen] = useState(false);
     // The persisted selection is read ONCE on mount (and again on toggle) —
     // not per render: this bar sits on the chart, which re-renders on every
@@ -45,7 +46,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
     };
 
     return (
-        <div className="relative flex shrink-0 flex-wrap items-center gap-0.5 border-b border-white/[0.06] px-2 py-1.5">
+        <div className={`relative flex shrink-0 flex-wrap items-center gap-0.5 ${className ?? 'border-b border-white/[0.06] px-2 py-1.5'}`}>
             {shownIntervals.map(tf => (
                 <button
                     key={tf}

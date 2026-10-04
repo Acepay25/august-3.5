@@ -1,7 +1,8 @@
 # Stage 2 — UI/UX Refactor Implementation Plan
 
 **Status:** APPROVED (2026-10-03) — D1–D6 accepted as recommended. **Phases 0–2
-complete**; the shared right-panel contract and multi-dock tabs carry into Phase 3.
+complete**, including the Task 3 shared right-panel contract (third pass,
+2026-10-04 — AdvancedAnalytics/Journal migration still owed to it). Phase 3 next.
 **Companion doc:** [stage1-ui-ux-spec.md](./stage1-ui-ux-spec.md) (research + audit + design spec — all load-bearing claims fact-checked).
 **Rule:** UI refactor, not a logic change. Preserve existing behavior and data.
 Reuse the current stack (React 19, Tailwind v4 token block, lightweight-charts,
@@ -35,7 +36,7 @@ Approved 2026-10-03 as recommended; each is reversible until its phase starts.
 | | Decision | Default |
 |---|---|---|
 | D1 | Light theme | **Dormant** token mapping; ship dark-only (honors the 2026-09-10 decision) |
-| D2 | Sidebar | **Persistent 56px rail → 280px panel**, replaces the hamburger drawer |
+| D2 | Sidebar | ~~Persistent 56px rail → 280px panel~~ **AMENDED 2026-10-04 after living with it: collapsed = fully hidden (0px, inert); the expand affordance moves to the header and carries the update dot (DSH's hidden-sidebar pattern). Expanded = the 280px panel. Ctrl/Cmd+B unchanged; below 1024px always hidden.** |
 | D3 | Dead DebateStage | **Delete** (component + steer test + unreachable seat-click plumbing) |
 | D4 | R:R on trade/verdict cards | **Add**, one display shape `2.4:1` |
 | D5 | Update flow | **Keep full-screen overlay** for download/ready; account row mirrors status |
@@ -331,6 +332,99 @@ swapping implementation, which is exactly the bug.
 were updated rather than weakened: `scrollToMessageWiring` (the scroll bridge is
 registered once now, which is the point) and `dockExpandedLayout` (its 420-char
 window needed the JSX attributes reordered so `className` follows the testid).
+
+## Phase 2, Task 3 — the shared right-panel contract (third pass, 2026-10-04)
+
+Gates: typecheck clean · 4455 tests pass · build clean · eslint 859 warnings
+against the 889 ratchet, 0 errors · render-probe OK, zero pageerrors ·
+`scripts/ui-inspect.cjs` OK, including the draft-survives-collapse browser
+check now running through the shared shell.
+
+**The contract exists.** `hooks/useRightPanel` (geometry + lifecycle) and
+`components/shell/RightPanel` (chrome) are the one implementation of: per-surface
+persisted width (`right_panel_width_v1_<surface>`, clamped), push vs fullscreen
+(below 768px forces fullscreen), drag-resize with the width transition suppressed
+for the gesture, hide-vs-close (the hidden panel goes out of flow at its SAME
+pixel width so the interior never reflows — `visibility: hidden` alone would
+have left the collapsed dock occupying its full width in the flex row), and tab
+capsules that render only when more than one dock is open. The Chart AI dock is
+the first consumer: its bespoke drag listeners, `readDockWidth`, and local
+`--dock-w` variable are gone; the shell publishes `--panel-w` and the surface
+consumes it in its className, because where the width lands stays the surface's
+layout decision (below lg the dock is a mode pane, not a panel). The old
+`trade_dock_width_v1` key is adopted once via `legacyWidthKey`, so the upgrade
+does not reset a dragged width. `right_panel_width_v1` is registered in
+`ExportService.RAW_LOCAL_STORAGE_PREFIXES` (the `nav_rail_width_v1` precedent —
+a restored backup must not silently reset the layout) — the export-registry
+guard caught the first draft of this, which is the guard working.
+
+**Still open from Task 3:** `AdvancedAnalytics` and the Journal aside have not
+migrated onto the contract, so the capsule strip has no second consumer yet;
+the fullscreen presentation is implemented but unused (the Trade dock pins
+`push` deliberately — see the comment at its registration).
+
+### Browser-found fixes from the same pass (the UI-quieting batch)
+
+A dev-server walk of every surface at 1440px found these; each is verified in
+the browser, not just in tests:
+
+1. **The settings modal rendered its nav underneath the expanded rail.**
+   `SettingsMenu`'s overlay wrapper was a literal `z-50` — the same rung as the
+   rail's `z-drawer` — so DOM order let the rail paint over the modal's left
+   column: the settings categories were in the DOM but invisible, and the
+   search bar visually slid under the rail. Moved to `z-modal`, and with it the
+   other full-viewport overlays still on literal `z-50`
+   (`UserProfileManager`, `BotSeatOverridesDialog`, `NewGroupDialog`,
+   `NewBotDialog`, both `ScenarioSimulator` wrappers,
+   `VersionHistoryDashboard`) — they are app-global rungs, not local stacking,
+   which is the distinction Phase 2's z-note drew. `JobsDrawer` stays: it is a
+   right-side drawer that never shares space with the left rail.
+2. **The rail carried identity three times.** The SidebarContent user footer
+   (name + account popover), the NavRail account row (name + Settings + update
+   dot), and a rose `Switch profile` row with a LogOut glyph all showed at
+   once. The footer is deleted (its popover duplicated entries that exist
+   elsewhere), the account avatar now shows the profile initial (the
+   references' initials-block pattern), and Switch profile is a quiet zinc row
+   with a `UsersRound` glyph — a routine identity change was dressed as a
+   destructive sign-out.
+3. **Shortcut chips are trailing keybinding text now (DSH).** Every surface
+   row and New chat wore a permanent `Alt+n` / `Ctrl+N` chip; they are
+   hover- and focus-revealed via opacity, which keeps the accessible name —
+   the rows' `aria-label` already carried the shortcut, so nothing assistive
+   depended on the visible chip.
+4. **The Chart AI dock header wrapped its own title.** "Chart AI" broke onto
+   two lines at the default 384px dock because the "answered N ago" meta was
+   gated on the VIEWPORT (`sm:`) while the dock is user-dragged — on a 1440px
+   window with a 370px dock the meta always lit. The brand is now `shrink-0`
+   + `nowrap`, the session title flexes and truncates, and the meta is gated
+   on the dock's own width with a `@container` query (`@min-[460px]`).
+
+**Deliberately not done:** the chart's duplicated mark/last price chips (C9,
+Phase 4); the splash's staged cycler (C3 launch, Phase 4); Studio row actions
+hover-reveal (per-site design calls, not shell doctrine); the dock composer's
+two-line "Scan skills" chip (cosmetic, needs its own look).
+
+## D2 amendment — the resting view hides navigation entirely (2026-10-04)
+
+The user, after seeing the 56px strip live, ruled that the collapsed state
+should show nothing on the left — "too many icons" — and that the panel should
+return to the hamburger's resting shape. The rail stays (D2's core: navigation
+is a first-class panel, not a portal), but collapse now means HIDDEN:
+
+- `NavRail` collapsed = 0px wide, `invisible`, `inert` — the dock's
+  hide-vs-close pair applied to the rail, so the same tree renders inside it
+  and expansion reveals the same nodes with their state intact. The border
+  belongs to the expanded state only, or the "0px" box still measures 1px.
+- The expand affordance moves to the header (`nav-rail-toggle-header`),
+  present exactly while the rail is hidden, and carries the update-status dot
+  — the DSH pattern for the hidden sidebar, so the one quiet status carrier
+  stays visible in the resting view.
+- Probes retargeted in the same change: render-probe's D2 block now asserts
+  the hide (0px + inert), the header button's existence while hidden, its
+  revive (back to 280px), and Ctrl+B re-hiding — and `ui-inspect` measures
+  0px and proves routing through the REVIVED rail via the header's surface
+  label (the old collapsed-row-click check would have passed vacuously
+  against an inert rail).
 
 ## Phase 3 — Debate/messenger unification (medium)
 

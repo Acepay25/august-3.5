@@ -77,11 +77,11 @@ describe('surface list → journal surface routing', () => {
         expect(onSelect).toHaveBeenCalledWith('journal');
     });
 
-    // The collapsed rail renders the same rows without their labels, so the
-    // route has to survive the loss of visible text — it is carried by the
-    // accessible name instead. A rail whose rows stopped navigating would be
-    // invisible in jsdom and obvious to a user at 56px.
-    it('the Journal row still routes from the collapsed 56px rail', () => {
+    // The rail's collapsed state is now a fully hidden box (D2 amendment), but
+    // the same tree renders inside it — glyph-only, labels carried by the
+    // accessible name. Reviving the panel (header toggle) must reveal rows
+    // that still route, so the route has to survive the label-less render.
+    it('the Journal row routes from the hidden rail\'s label-less tree', () => {
         const onSelect = vi.fn();
         renderSurfaceMenu(onSelect, true);
         fireEvent.click(screen.getByRole('button', { name: /^Journal/ }));

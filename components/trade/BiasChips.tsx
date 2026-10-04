@@ -1,10 +1,17 @@
 /**
- * BiasChips — the prototype's bias-pill row sitting right under the Chart AI
+ * BiasChips — the dock's code-calculated bias read, right under the Chart AI
  * header: 1D regime, the chart timeframe's regime, and position vs session
  * VWAP. CODE-CALCULATED from the app's own klines (the regime math lives in
  * services/trade/regime — EMA/RSI/VWAP, pure + unit-tested), never model
  * prose; re-pulls on coin/timeframe change and every 60 s, and renders
  * NOTHING until both series arrive — a missing chip beats an invented one.
+ *
+ * 2026-10-04 restyle, against the Hermes capture ("flat, not boxed") and DSH's
+ * StateDot vocabulary: three filled pills were the loudest chrome in the dock
+ * and repeated on EVERY conversation. It is now ONE quiet meta line — the tone
+ * lives on a 6px dot, the words are the same ink as the session title, and the
+ * three facts are separated by middots instead of three rounded borders. The
+ * data and its honesty are untouched; only the furniture changed.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -16,15 +23,15 @@ import { toKlineInterval, type ChartInterval } from './TradingChart';
  *  price, and the kline cache already absorbs most of this traffic. */
 const REFRESH_MS = 60_000;
 
-/** Chip tones: `bull`/`bear` are semantic (gain-side / loss-side, matching the
- *  theme's emerald = up and rose = down), while `vwap` is a categorical label
+/** Dot colors only: `bull`/`bear` are semantic (gain-side / loss-side, matching
+ *  the theme's emerald = up and rose = down), `vwap` is a categorical label
  *  for the session-VWAP reference line — info, not a verdict. `neutral` is the
  *  no-direction state. */
 const TONE: Record<BiasChip['tone'], string> = {
-    bull: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-    bear: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
-    neutral: 'border-white/10 bg-white/[0.04] text-zinc-400',
-    vwap: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300',
+    bull: 'bg-emerald-400',
+    bear: 'bg-rose-400',
+    neutral: 'bg-zinc-500',
+    vwap: 'bg-cyan-400',
 };
 
 const BiasChips: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symbol, interval }) => {
@@ -47,12 +54,15 @@ const BiasChips: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symb
     }, [symbol, interval]);
     if (!chips || chips.length === 0) return null;
     return (
-        <div className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-1 pt-3" data-testid="bias-chips">
-            {chips.map(c => (
-                <span key={c.text} title="Code-calculated from klines: EMA9/21 + RSI-14 trend, session VWAP"
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold ${TONE[c.tone]}`}>
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
-                    {c.text}
+        /* One quiet line, not three bordered pills. Truncating (not wrapping)
+           matters at the dock's 300px floor: a wrapped meta row re-introduces
+           the furniture it just shed. */
+        <div className="flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap px-4 pb-1 pt-2 text-ui-dense text-zinc-500" data-testid="bias-chips">
+            {chips.map((c, i) => (
+                <span key={c.text} className="inline-flex min-w-0 items-center gap-1.5" title="Code-calculated from klines: EMA9/21 + RSI-14 trend, session VWAP">
+                    {i > 0 && <span aria-hidden className="text-zinc-700">·</span>}
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE[c.tone]}`} aria-hidden="true" />
+                    <span className="truncate">{c.text}</span>
                 </span>
             ))}
         </div>

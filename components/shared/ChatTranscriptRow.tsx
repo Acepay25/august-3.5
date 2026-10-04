@@ -110,17 +110,19 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 </div>
             )}
 
-            <div className={`max-w-[85%] rounded-bubble px-3 py-2 text-ui-caption leading-5 ${
-                isUser
-                    ? 'bg-zinc-800 text-zinc-100'
-                    : 'border border-zinc-800/80 bg-zinc-900 text-zinc-200'
-            }`}>
-                {!isUser && <ChatWorkTimeline entry={work} />}
-                {body.trim()
-                    ? <FadingText text={body} streaming={!!row.streaming} />
-                    : <span className="text-zinc-500">{row.analysis ? 'Analysis' : '…'}</span>}
-                {children}
-            </div>
+            {isUser ? (
+                <div className="max-w-[85%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-caption leading-5 text-zinc-100">
+                    <FadingText text={body} streaming={!!row.streaming} />
+                </div>
+            ) : (
+                <div className="w-full max-w-full text-zinc-200 text-ui-caption leading-relaxed">
+                    <ChatWorkTimeline entry={work} />
+                    {body.trim()
+                        ? <FadingText text={body} streaming={!!row.streaming} />
+                        : <span className="text-zinc-500">{row.analysis ? 'Analysis' : '…'}</span>}
+                    {children}
+                </div>
+            )}
 
             {/* A failed post-mortem is a dead end without this. Rendered in the
                 flow (not a hover chip) because the whole point is that the
@@ -149,7 +151,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 </div>
             )}
 
-            <div className="mt-0.5 flex items-center gap-1">
+            <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
                 {isUser && onRetry && <RetryChip onRetry={onRetry} />}
                 <CopyChip text={row.text} />
                 {!isUser && onTogglePin && (
@@ -157,7 +159,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 )}
                 {!isUser && canLogTrade && onLogTrade && row.analysis && (
                     <button type="button" onClick={() => onLogTrade(row.analysis!)}
-                        className="rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100">
+                        className="rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
                         Log this trade
                     </button>
                 )}

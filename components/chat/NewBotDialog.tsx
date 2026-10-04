@@ -106,7 +106,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const previewName = name.trim() || 'New Bot';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Bot">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Bot">
             <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-bot-dialog">
                 <div className="flex items-start justify-between">
                     <div>
