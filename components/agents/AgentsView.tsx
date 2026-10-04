@@ -300,7 +300,7 @@ const Row: React.FC<{
 
 const VerdictLine: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+        <span className="font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{label}</span>
         <span className="font-mono text-ui-dense font-medium tabular-nums text-zinc-100">{value}</span>
     </div>
 );
@@ -697,7 +697,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             aria-label="Search conversations" data-testid="rail-search"
                             className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-8 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
                         {!query && (
-                            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-[10px] leading-none text-zinc-500">
+                            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
                                 /
                             </kbd>
                         )}

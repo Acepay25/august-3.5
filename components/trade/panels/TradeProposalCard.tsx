@@ -31,15 +31,15 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 rounded-control border border-white/[0.04] bg-white/[0.02] p-2 font-mono text-ui-dense tabular-nums">
             <div>
-                <div className="font-mono text-[10px] uppercase text-zinc-500">Entry</div>
+                <div className="font-mono text-ui-xs uppercase text-zinc-500">Entry</div>
                 <div className="font-semibold text-zinc-100">{proposal.entry}</div>
             </div>
             <div>
-                <div className="font-mono text-[10px] uppercase text-zinc-500">SL</div>
+                <div className="font-mono text-ui-xs uppercase text-zinc-500">SL</div>
                 <div className="font-semibold text-rose-400">{proposal.stopLoss}</div>
             </div>
             <div>
-                <div className="font-mono text-[10px] uppercase text-zinc-500">TP</div>
+                <div className="font-mono text-ui-xs uppercase text-zinc-500">TP</div>
                 <div className="font-semibold text-emerald-400">{proposal.takeProfits.join(' / ')}</div>
             </div>
         </div>
