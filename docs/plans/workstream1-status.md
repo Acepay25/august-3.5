@@ -54,9 +54,10 @@ unchanged. 25/25 checks, 2 pageErrors — both the probe's own case-4 sabotage.
 blanket `setItem` block silently broke case 5's prerequisite write (it "failed"
 because the probe had destroyed its own setup). It is now gated on a
 `probe_block_notebook` flag that case 4 sets and clears.
-**Next:** steps 9-11 — backup pre-flight + `trade_tf_bar_v1` registration → real
-export/restore round trip with byte equality → agentsSurface flake rate → Step B
-read-only audit into `docs/plans/`, then STOP for approval.
+**Next:** step 9 = the mechanical registration + export/restore byte equality
+(pre-flight ALREADY measured, see the table below — the one decision it needs is
+`trade_chat_sessions_v1`) → step 10 agentsSurface flake rate (10 solo + 1 under
+load) → step 11 Step B read-only audit into `docs/plans/`, then STOP for approval.
 Contradiction stays Dismiss-only: `beliefChallenge.ts:119` stores `{slug,
 contradictions}`, `contradictionSweep.ts:116` stores `{pair:[a,b]}` — no clauses.
 
@@ -135,12 +136,31 @@ nothing. `tests/exportRawLocalStorage.test.ts:167` still lists it as awaiting a
 decision, and that test FAILS when an awaiting entry gets registered — the
 registration must move the row out of `AWAITING_BACKUP_DECISION` in the same
 commit, with a real key asserted.
-**Decision still owed by the user:** the eight `TRADING DATA — Decide: register
-or delete` rows in that same map (`desk_tools_forged_v1`, `trade_drawings_v1_*`,
-`trade_chat_sessions_v1_*`, `trade_chat_active_v1_*`, `trade_level_arms_v1_*`,
-`trade_level_hits_v1_*`, `trade_watches_v1_*`, `trading_checklist_v1`). Register
-= backed on mobile; delete = the surface goes. Not a call to make by reflex, per
-AGENTS.md's "do not widen it for safety".
+**Step 9 pre-flight — MEASURED, verified in code (all owners write `localStorage`
+directly; none imports PreferencesService — re-checked, 9 `setItem` sites):**
+
+| key shape | owner write | size bound | safe to bundle? |
+|---|---|---|---|
+| `trade_watches_v1_<user>` | `watchService.ts:61` | `MAX_WATCHES=10` slice | yes |
+| `trade_level_arms_v1_<user>` | `levelWatchService.ts:140` | `MAX_ARMS=10` | yes |
+| `trade_level_hits_v1_<user>` | `levelWatchService.ts:167` | `MAX_LATCHED=200` | yes |
+| `trade_drawings_v1_<user>_<SYMBOL>` | `chartDrawings.ts:121` | 40 drawings ×200 pts | yes |
+| `trade_session_drawings_v1_<user>_<sessionId>` | `chartDrawings.ts:187` | per-coin capped, **coin count unbounded** (:179 "keep EVERY coin") | one key grows with symbols traded |
+| `trade_chat_active_v1_<user>` | `chatStore.ts:160` | a plain string id | yes — but a plain string NEVER round-trips `getPreferenceObject`, so the restore mirror must write it raw |
+| `desk_tools_forged_v1` (no user suffix) | `toolForge.ts:365` | **unbounded** count; already redacted on export (`ExportService.ts:225`) | yes, redaction path exists |
+| `trading_checklist_v1` (no user suffix) | `checklist.ts:51` | **unbounded** `items` | yes, small in practice |
+| `trade_chat_sessions_v1_<user>` | `chatSessions.ts:199` | 12 sessions × 60 entries by COUNT, but `MAX_IMAGE_CHARS=1_200_000` per entry → **worst case hundreds of MB, and `trimForStorage` slices counts not bytes** | **NO — decision needed** |
+| `harness_settings_v1` | `harnessSettings.ts:79` | fixed-shape flat object | the doc itself says it likely belongs in Preferences, not here |
+
+Not registered yet because the run ran out of room, and `trade_chat_sessions_v1`
+should not go in as it stands: the export would read the whole base64-image blob
+into one JSON payload against a SHARED origin quota (AGENTS.md). Decide: back it
+without images / back it whole / leave it unbacked. The other nine are mechanical:
+add to `RAW_LOCAL_STORAGE_PREFIXES` (`ExportService.ts:293-356`), move the row out
+of `AWAITING_BACKUP_DECISION` (`tests/exportRawLocalStorage.test.ts:152` — that
+test FAILS if an awaiting entry is registered without being removed from the map),
+assert a REAL key each (incl. the two-underscore `trade_drawings_v1_<user>_BTCUSDT`
+shape), then the export→restore byte-equality round trip.
 
 ## Probe facts — paid for
 Coach tab `data-testid="learn-tab-coach"` (textContent is `Coach1`, badge span, so
