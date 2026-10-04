@@ -502,6 +502,49 @@ const putSweptValue = (
     backup[key] = value;
 };
 
+type ChatSessionLike = { id?: unknown; entries?: unknown };
+
+const sessionIdOf = (s: unknown): string | null =>
+    typeof (s as ChatSessionLike | null)?.id === 'string' ? (s as { id: string }).id : null;
+
+/** Does this live session still hold image bytes the backup deliberately dropped? */
+const hasImageBytes = (s: unknown): boolean => {
+    const entries = (s as ChatSessionLike | null)?.entries;
+    return Array.isArray(entries) && entries.some(e =>
+        typeof (e as { image?: unknown } | null)?.image === 'string'
+        && (e as { image: string }).image.length > 0);
+};
+
+/**
+ * A backup's chat rows travel without image bytes, so restoring one onto an install
+ * that still holds those screenshots would DELETE them — data loss caused by the
+ * restore rather than by the backup. Reconcile by session id before anything is
+ * written: a live session carrying images always keeps its own bytes, missing
+ * sessions are added, and a live copy with no images accepts the backup's text.
+ *
+ * The result may exceed the owner's MAX_SESSIONS. That is deliberate: trimming here
+ * would subtract rows that exist on the device, which is the failure this function
+ * exists to prevent; `chatSessions` trims on its next write.
+ */
+const mergeChatSessionsWithLive = (key: string, backupValue: unknown): unknown => {
+    if (!Array.isArray(backupValue)) return backupValue;
+    let live: unknown;
+    try {
+        live = typeof localStorage === 'undefined' ? null : JSON.parse(localStorage.getItem(key) ?? 'null');
+    } catch { live = null; }
+    if (!Array.isArray(live) || live.length === 0) return backupValue;
+
+    const merged: unknown[] = [...live];
+    for (const session of backupValue) {
+        const id = sessionIdOf(session);
+        const existing = id === null ? undefined : live.find(s => sessionIdOf(s) === id);
+        if (existing && hasImageBytes(existing)) continue;
+        const at = merged.findIndex(s => sessionIdOf(s) === id);
+        if (at >= 0) merged[at] = session; else merged.push(session);
+    }
+    return merged;
+};
+
 /**
  * Export all preference keys as a supplementary backup
  * This captures settings that aren't in database
@@ -852,15 +895,21 @@ export const importPreferencesData = async (
                 continue;
             }
             // Known preference key — persist exactly as before.
-            if (typeof value === 'object') {
-                await setPreferenceObject(key, value);
+            // A stripped backup must not overwrite images the device still has.
+            // Reconciled ONCE and written to BOTH stores, so neither holds a copy
+            // the other does not.
+            const writeValue = key.startsWith('trade_chat_sessions_v1')
+                ? mergeChatSessionsWithLive(key, value)
+                : value;
+            if (typeof writeValue === 'object') {
+                await setPreferenceObject(key, writeValue);
             } else {
                 // If it's a string, we might need setPreference, but setPreferenceObject handles objects
                 // wrapper might be needed if base is string
-                await setPreferenceObject(key, value);
+                await setPreferenceObject(key, writeValue);
             }
             // …and where the owner actually reads. See RAW_LOCAL_STORAGE_PREFIXES.
-            mirrorToLocalStorage(key, value);
+            mirrorToLocalStorage(key, writeValue);
             report.keysWritten += 1;
         } catch (error) {
             console.error(`[ExportService] Failed to import key ${key}:`, error);

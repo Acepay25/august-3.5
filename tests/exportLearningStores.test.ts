@@ -311,4 +311,33 @@ describe('trade_chat_sessions_v1 exports whole, WITHOUT image bytes', () => {
         expect(JSON.stringify(backup._backup_notices)).toContain(KEY);
         expect(localStorage.getItem(KEY)).not.toBeNull();
     });
+
+    it('a restore over a live install keeps the images still on the device', async () => {
+        localStorage.setItem(KEY, JSON.stringify(session('s1')));
+        const liveBefore = localStorage.getItem(KEY);
+        const backup = await exportPreferencesData();
+        // The stripped copy is what leaves the device; the live key still holds the
+        // screenshot. Mirroring the backup wholesale would replace those bytes with
+        // a stub — data loss caused by RESTORING, not by backing up.
+        expect(JSON.stringify(backup[KEY])).not.toContain('data:image/png');
+
+        const report = await importPreferencesData(backup);
+        expect(report.failedKeys).toEqual([]);
+        expect(localStorage.getItem(KEY)).toBe(liveBefore);
+    });
+
+    it('fills in sessions the device no longer has, stub and all, from an empty live copy', async () => {
+        localStorage.setItem(KEY, JSON.stringify(session('s1')));
+        const backup = await exportPreferencesData();
+        localStorage.clear();
+        localStorage.setItem('last_active_user', USER);
+
+        const report = await importPreferencesData(backup);
+        expect(report.skippedKeys).toEqual([]);
+        expect(report.failedKeys).toEqual([]);
+        const restored = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Array<{ entries: Array<Record<string, unknown>> }>;
+        expect(restored).toHaveLength(1);
+        expect(restored[0].entries[0].text).toBe('look at this chart');
+        expect(restored[0].entries[0].imageOmitted).toEqual({ bytes: PNG.length, mime: 'image/png' });
+    });
 });
