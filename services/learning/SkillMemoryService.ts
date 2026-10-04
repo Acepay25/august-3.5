@@ -2806,6 +2806,20 @@ export const applyDemoteProposal = async (
     return { applied: true };
 });
 
+/** The body recites the rule in prose — `SkillCraftService.ts:79` writes
+ *  `**My rule:** when <IF>, I <THEN>`, and that line is what a seat reads back when
+ *  it recalls the skill. Any path that moves a skill's IF/THEN must move this line
+ *  with it, or the file ends up claiming two different triggers: the front matter
+ *  the machine gates on and the prose the model is shown. */
+const RULE_LINE = /^\*\*My rule:\*\* when .*, I .*$/m;
+
+export const syncSkillRuleLine = (meta: SkillMeta): void => {
+    if (!meta.ifCondition || !meta.thenAction) return;
+    const line = `**My rule:** when ${meta.ifCondition.replace(/\s+/g, ' ').trim()}, I ${meta.thenAction.replace(/\s+/g, ' ').trim()}`;
+    const body = meta.body ?? '';
+    meta.body = RULE_LINE.test(body) ? body.replace(RULE_LINE, line) : `${body.trimEnd()}\n${line}`.trimStart();
+};
+
 /**
  * Apply a re-scope the HUMAN approved, from the clauses the proposer STORED.
  *
@@ -2849,6 +2863,7 @@ export const applyRescopeProposal = async (
     // carried one, and DROP it otherwise. Keeping the old one would let the desk
     // keep firing the pre-revision trigger under the new wording.
     meta.predicate = clauses.predicate?.trim() ? sanitizePredicate(clauses.predicate.trim()) : undefined;
+    syncSkillRuleLine(meta);
     meta.modifiedAt = new Date().toISOString();
 
     await updateMemoryFileUnlocked(target.id, {

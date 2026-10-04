@@ -34,15 +34,13 @@ dropped when the rewrite carries none — then READ BACK the parsed file), wired
 "no Apply button", the 4 existing passed; green after. `coachThread.test.tsx:100`
 still passes untouched because CoachThreadPanel is not yet wired — the contract
 rewrite moves to slice 2 with that panel, so every commit is independently green.
-**Next: slice 3** = `applyProposalRewrite` prefers `proposal.payload` over
-`verdict.enhanced` for rescope (red first) + full-path test
-(`revise_skill → queue → approve → skill updated`, real notebook). Slice 4 = the
-component calling `overrideApproveSkill` must show the named failure instead of
-ignoring the return (panels done). Slice 5 = real-app rescope check.
+**Next: slice 4 remainder** = the component calling `overrideApproveSkill`
+(`components/learn/SupervisorStream.tsx`) must show the named failure instead of
+ignoring the return — the panels are done. Slice 5 = real-app rescope check.
 Contradiction stays Dismiss-only: `beliefChallenge.ts:119` stores `{slug,
 contradictions}`, `contradictionSweep.ts:116` stores `{pair:[a,b]}` — no clauses.
 
-**Slice 2 DONE** (`<hash>`): CoachThreadPanel wired for rescope + **contract
+**Slice 2 DONE** (`cd43b0d`): CoachThreadPanel wired for rescope + **contract
 rewritten** in `coachThread.test.tsx` (old line 100 asserted "rescope gets
 Dismiss only" — inverted for rescope, kept for contradiction). The four appliers
 now return `ProposalApplyResult` (`{applied:true}` | `{applied:false,reason,error?}`)
@@ -53,6 +51,25 @@ slice 1 left one panel wired and the other not). `skillSupervisor.ts:429-431`
 gates on `.applied`. Reasons: `no-target`/`unreadable`/`no-clauses`/`below-bar`/
 `challenger-blocked`/`not-written`/`write-failed`. Red first: 4 new/rewritten
 tests failed (3 coach + 1 queue), 11 existing passed.
+
+**Slice 3 DONE** (`<s3>`): `applyProposalRewrite` now takes the clauses the
+PROPOSER stored FIRST (delegating to `applyRescopeProposal`, the same call the
+human's Apply makes, so the two surfaces cannot land different wordings of one
+proposal) and falls back to `verdict.enhanced` only when the row carries none.
+An `approve` verdict on a clause-carrying rescope now applies (it used to be
+meaningless); the judge's prompt line changed to say so, because telling it
+"'approve" does nothing here, enhance with your own wording" made it write a
+re-wording this path then ignored. Red first: 2 supervisor tests failed (stored
+clauses ignored), 22 passed. Full path
+`revise_skill → queue → approve → skill updated` is in
+`skillApprovalRoundTrip.test.ts` against the real notebook, asserting FILE BYTES.
+**Bug that test caught:** a re-scope moved the front matter and left the body's
+`**My rule:** when <IF>, I <THEN>` line (`SkillCraftService.ts:79`) reciting the
+OLD trigger — the file claimed two triggers, and the prose is what a seat reads
+back. `syncSkillRuleLine(meta)` (SkillMemoryService) now moves it, called from
+both apply paths. KNOWN SAME GAP, NOT FIXED: the shadow-promotion swap at
+`SkillMemoryService.ts:1439` sets `meta.ifCondition` from `meta.shadow` and does
+not sync the body line.
 
 ## Then
 Backup pre-flight + registration (open `trade_tf_bar_v1` first; per key: owner

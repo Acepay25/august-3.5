@@ -272,6 +272,54 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
         expect(decided?.decision?.verdict).toBe('enhanced');
     });
 
+    it('the clauses the PROPOSER stored land, not the judge\'s restatement of them', async () => {
+        const slug = await seedSkill();
+        const stored = {
+            ifCondition: 'BTC sweeps the prior low and reclaims while the 4h trend is up',
+            thenAction: 'Enter long once the reclaim candle closes above the swept level, trending tapes only',
+            predicate: 'close > open',
+        };
+        queueLearningProposal({
+            kind: 'rescope', skillSlug: slug, fingerprint: 'rs-stored',
+            text: 'The seat proposed this narrowing.',
+            payload: { source: 'model:desk', ...stored },
+        }, USER);
+        verdictJson({
+            action: 'enhance',
+            reason: 'agreed, and here is my own wording of it',
+            enhanced: {
+                ifCondition: 'a different wording the judge invented here',
+                thenAction: 'and a different action the judge invented too',
+            },
+        });
+        await runSupervisorPass(USER, { manual: true });
+        const meta = listSkills()[0].meta;
+        expect(meta.ifCondition).toBe(stored.ifCondition);
+        expect(meta.thenAction).toBe(stored.thenAction);
+        // The stored predicate travels with the clauses — the machine clause that
+        // proved the OLD trigger must not survive the re-scope.
+        expect(meta.predicate).toBeDefined();
+        expect(listLearningProposals(USER)).toHaveLength(0);
+    });
+
+    it('an "approve" verdict applies the stored clauses — they are already a rewrite', async () => {
+        const slug = await seedSkill();
+        queueLearningProposal({
+            kind: 'rescope', skillSlug: slug, fingerprint: 'rs-approve',
+            text: 'The seat proposed this narrowing.',
+            payload: {
+                source: 'model:desk',
+                ifCondition: 'BTC sweeps the prior low and reclaims while the 4h trend is up',
+                thenAction: 'Enter long once the reclaim candle closes above the swept level, trending tapes only',
+            },
+        }, USER);
+        verdictJson({ action: 'approve', reason: 'the stored re-scope is justified by the evidence' });
+        await runSupervisorPass(USER, { manual: true });
+        expect(listSkills()[0].meta.ifCondition)
+            .toBe('BTC sweeps the prior low and reclaims while the 4h trend is up');
+        expect(listLearningProposals(USER)).toHaveLength(0);
+    });
+
     it('a rewrite of a CONFIRMED skill demotes it — the new claim must re-prove itself', async () => {
         const slug = await seedSkill();
         await setSkillStatus(listSkills()[0].file.id, 'confirmed', USER);

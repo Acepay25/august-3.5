@@ -40,6 +40,8 @@ import {
 import { approveSkillDraft } from '../services/learning/skillApproval';
 import { applyRescopeProposal } from '../services/learning/SkillMemoryService';
 import { listSkillDrafts, queueSkillDraft } from '../utils/skillDrafts';
+import { listLearningProposals } from '../utils/learningQueue';
+import { executeDeskTool } from '../services/analysis/DeskToolsService';
 import type { CraftedSkill } from '../schemas/learning';
 import type { LoggedTrade } from '../types';
 
@@ -246,5 +248,59 @@ describe('applyRescopeProposal against the real notebook', () => {
 
     it('names the missing skill for a slug that is not a live skill', async () => {
         expect(await applyRescopeProposal('no-such-skill', NEW, USER)).toEqual({ applied: false, reason: 'no-target' });
+    });
+});
+
+// ─── A2 slice 3: the WHOLE chain a seat walks to re-scope one of my skills ────
+// Nothing here mocks the applier, the queue or the notebook: the desk tool
+// proposes, the queue holds it, a person approves, and the FILE is re-read off
+// the store. This is the path that did not exist before A2 — the seat could
+// propose, and the row could only ever be dismissed.
+
+describe('revise_skill → queue → approve → skill updated', () => {
+    it('the clauses a seat wrote are the clauses the live skill ends up with', async () => {
+        const original = craft();
+        await ingestCraftedSkillFromDraft(original, 'BTC', USER, undefined, 'human');
+        const fileBytes = () => getMemoryFiles().files
+            .find(f => f.name === 'funding-exhaustion-long.md')?.content ?? '';
+        expect(fileBytes()).toContain(original.ifCondition);
+
+        const receipt = await executeDeskTool({
+            id: 'rev-1',
+            name: 'revise_skill',
+            arguments: {
+                skill_slug: 'funding-exhaustion-long',
+                reason: 'It fires on 3-session funding streaks too and loses there; only 8+ is the real edge.',
+                if_condition: 'funding positive 14 sessions and the daily low was swept',
+                then_action: 'go long only after a 4h close back above the swept level',
+                predicate: 'close > open',
+            },
+        });
+        expect(receipt.ok).toBe(true);
+
+        const queued = listLearningProposals(USER);
+        expect(queued).toHaveLength(1);
+        expect(queued[0].kind).toBe('rescope');
+        expect(queued[0].skillSlug).toBe('funding-exhaustion-long');
+        // A proposal is a PROPOSAL: the live skill is untouched until a human acts.
+        expect(fileBytes()).toContain(original.ifCondition);
+
+        // The panel's Apply passes this same payload object (pinned in
+        // learningQueuePanel.test.tsx / coachThread.test.tsx).
+        const clauses = queued[0].payload as { ifCondition: string; thenAction: string; predicate: string };
+        expect(await applyRescopeProposal(queued[0].skillSlug!, clauses, USER)).toEqual({ applied: true });
+
+        expect(fileBytes()).toContain('funding positive 14 sessions and the daily low was swept');
+        expect(fileBytes()).toContain('go long only after a 4h close back above the swept level');
+        expect(fileBytes()).toContain('close > open');
+        expect(fileBytes()).not.toContain(original.ifCondition);
+        // The prose line the body carries (and a seat reads back) moved WITH the
+        // front matter — otherwise the file claims two different triggers.
+        expect(fileBytes()).toContain(
+            '**My rule:** when funding positive 14 sessions and the daily low was swept, I go long only after a 4h close back above the swept level',
+        );
+        // One skill moved, not a second one born.
+        expect(names().filter(n => n.includes('funding'))).toHaveLength(1);
+        expect(listSkills()).toHaveLength(1);
     });
 });
