@@ -38,6 +38,7 @@ import {
     listSkills,
 } from '../services/learning/SkillMemoryService';
 import { approveSkillDraft } from '../services/learning/skillApproval';
+import { applyRescopeProposal } from '../services/learning/SkillMemoryService';
 import { listSkillDrafts, queueSkillDraft } from '../utils/skillDrafts';
 import type { CraftedSkill } from '../schemas/learning';
 import type { LoggedTrade } from '../types';
@@ -206,5 +207,44 @@ describe('the desk tool that feeds this inbox', () => {
         const approved = await approveSkillDraft(draft, USER, []);
         expect(approved.created).toBe(true);
         expect(triggers()).toContain('us session open high held twice on closing prices');
+    });
+});
+
+describe('applyRescopeProposal against the real notebook', () => {
+    const NEW = {
+        ifCondition: 'us session open high held twice on closing prices',
+        thenAction: 'short a reclaim failure with the stop above that high',
+    };
+
+    it('rewrites the stored clauses and proves it by reading the file back', async () => {
+        const original = craft();
+        await ingestCraftedSkillFromDraft(original, 'BTC', USER, undefined, 'human');
+        expect(triggers()).toContain(original.ifCondition.toLowerCase());
+
+        const ok = await applyRescopeProposal('funding-exhaustion-long', NEW, USER);
+
+        expect(ok).toBe(true);
+        expect(triggers()).toContain(NEW.ifCondition.toLowerCase());
+        expect(triggers()).not.toContain(original.ifCondition.toLowerCase());
+        // A rewrite is one skill moved, not a second skill born.
+        expect(names().filter(n => n.includes('funding'))).toHaveLength(1);
+    });
+
+    it('refuses a clause below the bar and leaves the skill exactly as it was', async () => {
+        const original = craft();
+        await ingestCraftedSkillFromDraft(original, 'BTC', USER, undefined, 'human');
+
+        const ok = await applyRescopeProposal(
+            'funding-exhaustion-long',
+            { ifCondition: 'too short', thenAction: NEW.thenAction },
+            USER,
+        );
+
+        expect(ok).toBe(false);
+        expect(triggers()).toEqual([original.ifCondition.toLowerCase()]);
+    });
+
+    it('returns false for a slug that is not a live skill', async () => {
+        expect(await applyRescopeProposal('no-such-skill', NEW, USER)).toBe(false);
     });
 });
