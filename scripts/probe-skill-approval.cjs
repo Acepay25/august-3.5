@@ -141,16 +141,10 @@ async function freshSession(page) {
     return notebookKey;
 }
 
-async function seedDrafts(page, key, drafts) {
+async function seedDrafts(page, drafts) {
     await page.evaluate(([k, d]) => localStorage.setItem(k, JSON.stringify(d)), [DRAFTS_KEY, drafts]);
     await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
     await sleep(2000);
-    if (key) {
-        await page.evaluate(([nk]) => {
-            const raw = localStorage.getItem(nk);
-            window.__notebookBefore = raw;
-        }, [key]);
-    }
 }
 
 const readDrafts = (page) => page.evaluate((k) => {
@@ -177,8 +171,9 @@ const readSkillFiles = (page) => page.evaluate(() => {
     } catch (e) { return { key: nk, folders: [], files: [], error: String(e) }; }
 });
 
-/** Drop the skills folder from the live notebook. Returns false if there was
- *  nothing to drop, so the case cannot pass vacuously on a missing folder. */
+/** Drop the skills folder from the live notebook. Kept as a helper because it
+ *  is how case 4 was disproved: the app recreates the folder, so removing it
+ *  cannot make the write fail. No case uses it today. */
 const deleteSkillsFolder = (page) => page.evaluate(() => {
     const nk = Object.keys(localStorage).find(k => k.startsWith('memory_files_v1'));
     if (!nk) return false;
@@ -311,63 +306,93 @@ async function readToast(page) {
         check('notebook key discovered on the live page', !!notebookKey, notebookKey);
         if (!notebookKey) throw new Error('no notebook to assert against');
 
-        const cases = [
-            { label: '1-happy', id: 'sk-probe-1', crafted: craft() },
-            { label: '2-collision', id: 'sk-probe-2', crafted: craft({ ifCondition: 'a completely different trigger clause entirely' }) },
-            { label: '3-duplicate', id: 'sk-probe-3', crafted: craft({ name: 'Renamed duplicate trigger' }) },
-            { label: '4-no-folder', id: 'sk-probe-4', crafted: craft({ ifCondition: 'fourth case trigger that cannot be written' }) },
-        ];
-
-        for (const c of cases) {
-            await freshSession(page);
-            let folderRemoved = true;
-            if (c.label === '4-no-folder') {
-                folderRemoved = await deleteSkillsFolder(page);
-                await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
-                await sleep(2000);
-            }
-            check(`${c.label}: the skills folder really was removed first`, folderRemoved);
+        /** Seed exactly one draft, approve it through the real UI, report what
+         *  happened. Every case calls this for its OWN prerequisite, because
+         *  `freshSession` clears localStorage — a case that relied on the
+         *  previous case's file could never see it (that is why 2-4 were red). */
+        const approveOne = async (id, crafted) => {
+            await seedDrafts(page, [draftRow(id, crafted)]);
             const before = await readSkillFiles(page);
-            await seedDrafts(page, notebookKey, [draftRow(c.id, c.crafted)]);
-            const seeded = await readDrafts(page);
-            check(`${c.label}: draft is in the inbox before the click`, seeded.length === 1, seeded.map(d => d.id));
-
-            const nav = await openCoachAndAllow(page, c.id);
-            check(`${c.label}: Coach tab and approve control were reachable`, nav.tabClicked && nav.clicked, nav);
-            // Screenshot AFTER reading the toast, so the image is evidence of
-            // the claim rather than a frame captured before it rendered.
+            const nav = await openCoachAndAllow(page, id);
             const toast = await readToast(page);
-            await shot(page, `${c.label}-after-click`);
-            const after = await readSkillFiles(page);
-            const draftsAfter = await readDrafts(page);
-            console.log(`       ${c.label} toast="${toast.slice(0, 60)}" files=${JSON.stringify(after.files)} drafts=${draftsAfter.length}`);
+            await shot(page, `${id}-after-click`);
+            return { before, nav, toast, after: await readSkillFiles(page), draftsAfter: await readDrafts(page) };
+        };
 
-            if (c.label === '1-happy') {
-                check('1-happy: "Skill saved" shown', /Skill saved/.test(toast), toast.slice(0, 80));
-                check('1-happy: a skill file was written', after.files.includes('funding-exhaustion-long.md'), after.files);
-                check('1-happy: draft consumed', draftsAfter.length === 0, draftsAfter.map(d => d.id));
-            }
-            if (c.label === '2-collision') {
-                check('2-collision: second file written as -2.md (no throw)', after.files.includes('funding-exhaustion-long-2.md'), after.files);
-                check('2-collision: no unhandled pageerror', pageErrors.filter(e => /already exists/.test(e)).length === 0,
-                    pageErrors.filter(e => /already exists/.test(e)));
-            }
-            if (c.label === '3-duplicate') {
-                check('3-duplicate: says Already learned', /Already learned/.test(toast), toast.slice(0, 80));
-                check('3-duplicate: does NOT claim Skill saved', !/Skill saved/.test(toast), toast.slice(0, 80));
-                check('3-duplicate: wrote no new file', after.files.length === before.files.length, { before: before.files, after: after.files });
-            }
-            if (c.label === '4-no-folder') {
-                check('4-no-folder: says Not saved', /Not saved/.test(toast), toast.slice(0, 80));
-                check('4-no-folder: the draft SURVIVES the failed write', draftsAfter.length === 1, draftsAfter.map(d => d.id));
-            }
+        // ── 1. happy path ────────────────────────────────────────────────────
+        await freshSession(page);
+        {
+            const r = await approveOne('sk-happy', craft());
+            check('1-happy: tab and approve control reachable', r.nav.tabClicked && r.nav.clicked, r.nav);
+            check('1-happy: toast says Skill saved', /Skill saved/.test(r.toast), r.toast);
+            check('1-happy: the new skill file is in the notebook',
+                r.after.files.includes('funding-exhaustion-long.md'), r.after.files.length);
+            check('1-happy: draft consumed', r.draftsAfter.length === 0, r.draftsAfter.map(d => d.id));
+        }
+
+        // ── 2. slug collision: same NAME, different trigger ─────────────────
+        await freshSession(page);
+        {
+            await approveOne('sk-col-1', craft());
+            const r = await approveOne('sk-col-2', craft({ ifCondition: 'a completely different trigger clause entirely' }));
+            // Asserted by the NEW file's name, not by a count: the app pre-seeds
+            // twelve book-*.md skills, so a length check proves nothing.
+            check('2-collision: second file written as funding-exhaustion-long-2.md',
+                r.after.files.includes('funding-exhaustion-long-2.md'), r.after.files);
+            check('2-collision: the collision did not throw',
+                pageErrors.filter(e => /already exists/.test(e)).length === 0,
+                pageErrors.filter(e => /already exists/.test(e)));
+            check('2-collision: toast says Skill saved for a real second write',
+                /Skill saved/.test(r.toast), r.toast);
+        }
+
+        // ── 3. duplicate: an already-live trigger ───────────────────────────
+        await freshSession(page);
+        {
+            const first = await approveOne('sk-dup-1', craft());
+            const r = await approveOne('sk-dup-2', craft({ name: 'Renamed duplicate trigger' }));
+            check('3-duplicate: toast says Already learned', /Already learned/.test(r.toast), r.toast);
+            check('3-duplicate: does NOT claim Skill saved', !/Skill saved/.test(r.toast), r.toast);
+            check('3-duplicate: wrote no new file',
+                JSON.stringify(r.after.files) === JSON.stringify(r.before.files),
+                { before: r.before.files.length, after: r.after.files.length });
+            check('3-duplicate: prerequisite really was live first',
+                first.after.files.includes('funding-exhaustion-long.md'), first.toast);
+        }
+
+        // ── 4. the write cannot land ────────────────────────────────────────
+        // Deleting the skills FOLDER does not test this: `ingestCraftedSkillFrom
+        // DraftUnlocked` calls `ensureHarnessFoldersUnlocked` first, which
+        // recreates it, so the write simply succeeds (observed: "Skill saved",
+        // draft consumed). That makes the `if (!folder) return` guard at
+        // SkillMemoryService.ts:2191 unreachable from this path. So force the
+        // failure where it is genuinely forced — the notebook write itself.
+        await freshSession(page);
+        {
+            await page.addInitScript(() => {
+                const real = Storage.prototype.setItem;
+                Storage.prototype.setItem = function (k, v) {
+                    if (typeof k === 'string' && k.startsWith('memory_files_v1')) {
+                        throw new Error('probe: quota exceeded');
+                    }
+                    return real.call(this, k, v);
+                };
+            });
+            const r = await approveOne('sk-writefail', craft({ ifCondition: 'a trigger whose write will be forced to fail' }));
+            check('4-writefail: toast says Not saved, not Skill saved',
+                /Not saved/.test(r.toast) && !/Skill saved/.test(r.toast), r.toast);
+            check('4-writefail: the draft SURVIVES the failed write',
+                r.draftsAfter.length === 1, r.draftsAfter.map(d => d.id));
         }
         await shot(page, 'final');
     } catch (e) {
         check('probe completed without throwing', false, String(e && e.message || e));
         await shot(page, 'aborted');
     } finally {
-        check('no uncaught page errors during the run', pageErrors.length === 0, pageErrors.slice(0, 3));
+        check('no uncaught page errors during the run',
+            // Errors my own case-4 sabotage provokes are not app bugs.
+            pageErrors.filter(e => !/probe: quota exceeded/.test(e)).length === 0,
+            pageErrors.filter(e => !/probe: quota exceeded/.test(e)).slice(0, 3));
         console.log(`(resource-load noise ignored: ${resourceErrors.length})`);
         fs.writeFileSync(path.join(OUT, 'transcript.json'),
             JSON.stringify({ results, failed, pageErrors, resourceErrors: resourceErrors.slice(0, 20) }, null, 2));
