@@ -214,6 +214,15 @@ now asserts BOTH directions (came down from 17, still > 5).
 `trimForStorage` bounds counts (12 × 60) not bytes, and `MAX_IMAGE_CHARS` is
 1,200,000 per entry, which is what forced the export-side strip.
 
+## Step 9 follow-ups — decisions 1-4 DONE
+| commit | item | result |
+|---|---|---|
+| `46d375a` | 2 — restore must not destroy on-device images | **The risk was real.** `importPreferencesData` mirrored the backup's stripped value over the live key, so restoring deleted screenshots that were still on the device. Now reconciled per session id (a live session carrying image bytes keeps them; missing sessions are added; a live copy WITHOUT images accepts the backup's text), merged once and written to both stores. Not trimmed to `MAX_SESSIONS` after merging — that would be the same subtraction. Live-empty case: the stub + text restore normally. Red first: 1 failed / 15 passed. |
+| `95555e4` | 3 — notices must be visible | They were internal to the sidecar file only. `BackupMetadata.notices` now carries `_backup_notices` up and Settings → Data renders "Backup created, but LEFT OUT: …" in a new amber `warn` state. Tested at both ends (the panel renders whatever the service returns, so the extraction is pinned in `backupService.test.ts` too). Red first: 2 failed on the missing status element. |
+| `157bb60` | 4 — the stub branch had no test | `tests/chatTranscriptImageStub.test.tsx` mounts `ChatTranscriptList` (smallest renderer of the stub): stub → notice with mime+size and no src-less `<img>`; real data-URL → image, no notice; plain entry → neither; neighbouring text rows still render. Coverage only, nothing was red. |
+| `7ea41e8` | 1 — pointer-missing fallback | Falls back cleanly (never a crash, never an empty dock) BUT it opened the OLDEST session — `sessions[0]` while new sessions append. Now by each row's `updatedAt`/`createdAt`. Pointer honoured when it matches; a pointer to a deleted row falls back; corrupt sessions row tolerated. `trade_chat_active_v1` stays OUT of backups for the plain-string reason (quoted `"s-1"` vs bare `s-1` on mirror). Red first: 2 of 5 failed. |
+| `7ea41e8` | 1 — recorded | The reason the key is unbacked is in this file AND in `chatActivePointerFallback.test.ts`'s header, so the next run does not re-derive it. |
+
 ## Then
 Backup pre-flight + registration → real export/restore round trip with byte
 equality → agentsSurface flake rate (10 solo + 1 under load) → **Step B audit,
