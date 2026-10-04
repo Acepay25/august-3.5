@@ -39,7 +39,7 @@ import { listAmendments, approveAmendment, rejectAmendment } from './memoryAmend
 import { getMemoryFiles, updateMemoryFile, deleteMemoryFile } from './MemoryFilesService';
 import {
     listSkills, parseSkillMarkdown,
-    ingestCraftedSkillFromDraft, isSkillFile,
+    ingestCraftedSkillFromDraft, isSkillFile, type SkillIngestResult,
 } from './SkillMemoryService';
 import { graveyardBlock } from './skillGraveyard';
 import { resolveMemoryConfig } from './MemoryModelService';
@@ -703,12 +703,21 @@ export const overrideRejectSkill = async (eventId: string, username = getActiveU
     store.markOverridden(eventId, 'rejected');
 };
 
-/** Reverse a REJECTED skill: ingest the draft snapshot after all. */
-export const overrideApproveSkill = async (eventId: string, username = getActiveUsername()): Promise<void> => {
+/** Reverse a REJECTED skill: ingest the draft snapshot after all.
+ *  Returns what the ingest actually did so the caller can say so too — it used
+ *  to mark the event overridden unconditionally, so an override that could not
+ *  write (no skills folder) still read "approved by you" in the log. */
+export const overrideApproveSkill = async (
+    eventId: string,
+    username = getActiveUsername(),
+): Promise<SkillIngestResult | null> => {
     const ev = store.getSnapshot().events.find(e => e.id === eventId);
     const draft = ev?.draftSnapshot as SkillDraft | undefined;
-    if (!draft) return;
+    if (!draft) return null;
     const modelReason = ev?.decision?.reason ? ` The model had said: ${ev.decision.reason}` : '';
-    await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username, `Approved by you over the supervisor's verdict.${modelReason}`, 'human');
-    store.markOverridden(eventId, 'approved');
+    const result = await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username, `Approved by you over the supervisor's verdict.${modelReason}`, 'human');
+    // 'duplicate' counts: the trigger IS live, which is what the human meant by
+    // approving it. Anything else wrote nothing, so nothing is claimed.
+    if (result.created || result.reason === 'duplicate') store.markOverridden(eventId, 'approved');
+    return result;
 };
