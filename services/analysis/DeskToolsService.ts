@@ -1136,7 +1136,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     studies: {
                         type: 'array',
                         items: { type: 'string', enum: ['core', 'momentum', 'regime', 'volume', 'vwap', 'ichimoku', 'structure', 'taAverages', 'taBands', 'taOscillators', 'taTrend', 'taVolatility', 'taVolumeFlow', 'taOverlays'] },
-                        description: 'Which studies to compute (up to 3 per call). "momentum"=ROC/momentum score/divergence, "regime"=ADX + trend-vs-reversion, "volume"=OBV/CVD/volume profile, "vwap", "ichimoku", "structure"=nearest support/resistance + daily pivots + Fibonacci + psychological levels. The "ta*" groups are the wider study catalogue: "taAverages"=HMA/ZLEMA/VIDYA/ALMA/LSMA/DEMA/TEMA/KAMA/VWMA, "taBands"=Donchian/SuperTrend/Kroll/Alligator, "taOscillators"=PPO/CMO/Connors RSI/Fisher/TSI/SMI/Schaff/Coppock/DPO/Ultimate/Elder Ray/TTM Squeeze, "taTrend"=Aroon/Vortex, "taVolatility"=historical vol/Chaikins vol/Mass/Ulcer/Choppiness, "taVolumeFlow"=Chaikin Oscillator/EoM/Klinger/PVI-NVI/PVT/VFI, "taOverlays"=pivots/ZigZag/Fractals.',
+                        description: 'Which studies to compute (up to 3 per call). "momentum"=ROC/momentum score/divergence, "regime"=ADX + trend-vs-reversion, "volume"=OBV/CVD/volume profile, "vwap", "ichimoku", "structure"=nearest support/resistance + daily pivots + Fibonacci + psychological levels. The "ta*" groups are the wider study catalogue: "taAverages"=HMA/ZLEMA/VIDYA/ALMA/LSMA/DEMA/TEMA/KAMA/VWMA, "taBands"=Donchian/SuperTrend/Kroll/Alligator, "taOscillators"=PPO/CMO/Connors RSI/Fisher/TSI/SMI/Schaff/Coppock/DPO/Ultimate/Elder Ray/TTM Squeeze, "taTrend"=Aroon/Vortex/bar state (whether the last bar of this interval expanded, swept or stayed inside the previous closed bar), "taVolatility"=historical vol/Chaikins vol/Mass/Ulcer/Choppiness, "taVolumeFlow"=Chaikin Oscillator/EoM/Klinger/PVI-NVI/PVT/VFI, "taOverlays"=pivots/ZigZag/Fractals.',
                     },
                 },
                 required: ['studies'],
@@ -1681,7 +1681,7 @@ const INDICATOR_GROUPS = {
     taAverages: 'HMA, ZLEMA, VIDYA, ALMA, LSMA, DEMA, TEMA, KAMA, VWMA — lag-free and adaptive averages',
     taBands: 'Donchian channel, SuperTrend, Chande Kroll Stop, Williams Alligator',
     taOscillators: 'PPO, CMO, Connors RSI, Fisher, TSI, SMI, Schaff, Coppock, DPO, Ultimate, RVI, Elder Ray, TTM Squeeze',
-    taTrend: 'Aroon and Vortex — directional strength and directional movement',
+    taTrend: 'Aroon and Vortex — directional strength and directional movement; plus bar state (Expansion / High swept / Low swept / Inside / Outside) of the last bar against the one before it',
     taVolatility: 'Historical volatility, Chaikin volatility, Mass Index, Ulcer Index, Choppiness Index',
     taVolumeFlow: 'Chaikin Oscillator, Ease of Movement, Klinger, PVI/NVI, PVT, Volume/Pct Oscillator, VFI',
     taOverlays: 'Pivot points, ZigZag swing point, Williams Fractal — levels and structure you can act on',
@@ -2235,8 +2235,17 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     // tombstone cooldown, duplicate skip, live-skill coverage
                     // skip, IF/THEN sanity, and a falsifiable prediction.
                     const { deterministicDraftGate } = await import('../../services/learning/draftGates');
+                    const { draftTriggerKey } = await import('../../utils/skillDrafts');
                     const username = getActiveUsername();
-                    const tradeId = `chat-${Date.now()}`;
+                    // A STABLE trade id, keyed the same way the dedupe and
+                    // tombstones are. `chat-${Date.now()}` was unique every
+                    // call, so `queueSkillDraft`'s replace-by-tradeId could
+                    // never fire and a re-proposal stacked a second inbox row
+                    // instead of replacing the first.
+                    const tradeId = `chat:${draftTriggerKey(
+                        asString(call.arguments.coin) || undefined,
+                        { kind: crafted.kind, ifCondition: crafted.ifCondition },
+                    )}`;
                     const gate = deterministicDraftGate({
                         crafted,
                         tradeId,
@@ -2252,6 +2261,13 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                         { tradeId, coin: asString(call.arguments.coin) || undefined, crafted: gate.crafted },
                         username,
                     );
+                    // queueSkillDraft read the store back and came with nothing:
+                    // the draft is NOT in the inbox. Say so instead of handing
+                    // the model a `proposed:true` it will repeat to the user.
+                    if (!draft) {
+                        return rejectedResult(call, 'propose_skill rejected: the draft could not be stored'
+                            + ' (the proposal inbox is full or its storage refused the write). No draft is pending — say so.');
+                    }
                     content = JSON.stringify({ proposed: true, id: draft.id, skill: crafted.name, note: 'Pending draft queued for human approval in the Coach inbox. The skill does nothing until a human allows it.' });
                 } catch (err) {
                     return rejectedResult(call, `propose_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
@@ -2326,17 +2342,26 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                             ? `revise_skill rejected: "${slug}" is a PENDING DRAFT in the Inbox, not a live skill — drafts cannot be revised through this tool. It is edited (or approved/rejected) by the human in the Inbox.`
                             : `revise_skill rejected: no skill "${slug}". Call get_notebook_map or recall first for the exact slug.`);
                     }
+                    const clauses = {
+                        ifCondition: asString(call.arguments.if_condition) || undefined,
+                        thenAction: asString(call.arguments.then_action) || undefined,
+                        predicate: asString(call.arguments.predicate) || undefined,
+                    };
                     const proposal = queueLearningProposal({
                         kind: 'rescope',
                         text: asString(call.arguments.reason),
                         skillSlug: slug,
-                        fingerprint: `model-revision:${slug}:${Date.now()}`,
-                        payload: {
-                            source: 'model:desk',
-                            ifCondition: asString(call.arguments.if_condition) || undefined,
-                            thenAction: asString(call.arguments.then_action) || undefined,
-                            predicate: asString(call.arguments.predicate) || undefined,
-                        },
+                        // Stable, and derived from WHAT WOULD CHANGE. The old
+                        // `:${Date.now()}` suffix made every call a unique
+                        // fingerprint, so the queue's own dedupe never fired and
+                        // the same revision piled up; a content key re-queues
+                        // correctly once the payload genuinely differs.
+                        fingerprint: `model-revision:${slug}:${[
+                            clauses.ifCondition ?? '',
+                            clauses.thenAction ?? '',
+                            clauses.predicate ?? '',
+                        ].join('|')}`,
+                        payload: { source: 'model:desk', ...clauses },
                     }, getActiveUsername());
                     content = proposal
                         ? JSON.stringify({ proposed: true, id: proposal.id, skill: slug, note: 'Revision proposal queued — a human approves it in Settings → Skills. The live skill is unchanged until then.' })
