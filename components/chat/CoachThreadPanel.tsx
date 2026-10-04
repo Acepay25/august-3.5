@@ -6,12 +6,16 @@ import { EmptyState } from '../ui/EmptyState';
 import {
     listLearningProposals,
     dismissLearningProposal,
+    proposalApplyFailureMessage,
+    APPLYABLE_PROPOSAL_KINDS,
     type LearningProposal,
+    type ProposalApplyResult,
 } from '../../utils/learningQueue';
 import {
     applyDisplacementProposal,
     applyRevivalProposal,
     applyDemoteProposal,
+    applyRescopeProposal,
 } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 
@@ -190,6 +194,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
     const [drafts, setDrafts] = useState<SkillDraft[]>([]);
     const [proposals, setProposals] = useState<LearningProposal[]>([]);
     const [busyId, setBusyId] = useState<string | null>(null);
+    const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
 
     const refresh = (): void => {
         const user = getActiveUsername();
@@ -209,24 +214,40 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
 
     const applyProposal = async (p: LearningProposal): Promise<void> => {
         setBusyId(p.id);
+        setFailure(null);
         const username = getActiveUsername();
-        let ok = false;
+        let result: ProposalApplyResult;
         try {
             if (p.kind === 'displacement') {
                 const payload = p.payload as { displacedSlug?: string; challenger?: never } | undefined;
-                ok = await applyDisplacementProposal(payload?.displacedSlug || p.skillSlug || '', username, payload?.challenger as never);
+                result = await applyDisplacementProposal(payload?.displacedSlug || p.skillSlug || '', username, payload?.challenger as never);
             } else if (p.kind === 'revival') {
-                ok = await applyRevivalProposal((p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '', username);
+                result = await applyRevivalProposal((p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '', username);
             } else if (p.kind === 'demote') {
-                ok = await applyDemoteProposal((p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '', username);
+                result = await applyDemoteProposal((p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '', username);
+            } else if (p.kind === 'rescope') {
+                // The clauses the PROPOSER wrote, applied as written — the same
+                // call the queue strip makes, so both surfaces act identically.
+                const c = p.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
+                result = await applyRescopeProposal(p.skillSlug || '', {
+                    ifCondition: c?.ifCondition,
+                    thenAction: c?.thenAction,
+                    predicate: c?.predicate,
+                }, username);
+            } else {
+                result = { applied: false, reason: 'no-clauses' };
             }
-        } catch {
-            ok = false;
+        } catch (e) {
+            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
         }
         setBusyId(null);
-        if (ok) {
+        // A refusal keeps the card: it is the human's only copy of this proposal,
+        // and the reason is the writer's, not a guess made from a bare false.
+        if (result.applied) {
             dismissLearningProposal(p.id, username);
             refresh();
+        } else {
+            setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
         }
     };
 
@@ -245,7 +266,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
         refresh();
     };
 
-    const applyable = new Set(['displacement', 'revival', 'demote']);
+    const applyable = new Set<string>(APPLYABLE_PROPOSAL_KINDS);
     const empty = drafts.length === 0 && proposals.length === 0;
 
     return (
@@ -310,6 +331,14 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                             </ActionButton>
                         )}
                     </div>
+                    {failure?.id === p.id && (
+                        <p
+                            className="mt-2 text-ui-dense leading-relaxed text-amber-300/90"
+                            data-testid={`coach-proposal-error-${p.id}`}
+                        >
+                            {failure.message}
+                        </p>
+                    )}
                 </CardShell>
             ))}
         </div>

@@ -11,6 +11,60 @@
 
 export type LearningProposalKind = 'displacement' | 'rescope' | 'revival' | 'contradiction' | 'demote';
 
+/**
+ * The kinds a HUMAN can act on with one press, because the actuation is
+ * deterministic and everything it needs is already in `payload`.
+ *
+ * This is the single source for it: both approval surfaces (the Coach thread and
+ * the Strategy Studio's queue strip) used to keep their own copy, which is how
+ * `rescope` came to be wired into one and left Dismiss-only in the other.
+ * `contradiction` is deliberately absent — its payload is a slug pair
+ * (`contradictionSweep.ts:116`) or a list of contradicting notes
+ * (`beliefChallenge.ts:119`), so there is no clause text to apply.
+ */
+export const APPLYABLE_PROPOSAL_KINDS: readonly LearningProposalKind[] = [
+    'displacement', 'revival', 'demote', 'rescope',
+];
+
+/** Why an apply wrote nothing. Named by the writer that refused, not guessed by
+ *  the UI — the same rule `skillApproval.ts` follows for drafts. */
+export type ProposalApplyFailure =
+    /** No live skill carries that slug: renamed, retired or deleted since queuing. */
+    | 'no-target'
+    /** A file with that name exists but no longer parses as a skill. */
+    | 'unreadable'
+    /** The proposal carries no clause text (a rescope queued without a rewrite). */
+    | 'no-clauses'
+    /** The clause exists but fails `validateIfThen` — too short or generic. */
+    | 'below-bar'
+    /** Displacement only: the challenger could not be installed, so the incumbent stands. */
+    | 'challenger-blocked'
+    /** The write returned but the library does not show the new value. */
+    | 'not-written'
+    /** The write threw. */
+    | 'write-failed';
+
+export type ProposalApplyResult =
+    | { applied: true }
+    | { applied: false; reason: ProposalApplyFailure; error?: string };
+
+/** What the trader reads when an apply did not apply. One copy for one reason,
+ *  shared by both surfaces so they cannot disagree about the same refusal. */
+export const proposalApplyFailureMessage = (
+    reason: ProposalApplyFailure,
+    error?: string,
+): string => {
+    switch (reason) {
+        case 'no-target': return 'No live skill by that name any more — it was renamed, retired or deleted. Nothing was changed.';
+        case 'unreadable': return 'That notebook file is no longer a readable skill, so nothing was changed.';
+        case 'no-clauses': return 'This proposal carries no rewritten IF/THEN to apply — only the supervisor model can rewrite it.';
+        case 'below-bar': return 'The proposed clause is below the bar a new skill must clear (too short or too generic) — nothing was changed.';
+        case 'challenger-blocked': return 'The skill that would take the slot could not be created, so the incumbent was left alone.';
+        case 'not-written': return 'The library does not show the new clause after the write, so nothing was claimed.';
+        case 'write-failed': return `The notebook write failed: ${error ?? 'unknown error'}. Nothing was changed.`;
+    }
+};
+
 export interface LearningProposal {
     id: string;
     kind: LearningProposalKind;
