@@ -1,14 +1,16 @@
 # Workstream 1 — status / handoff
 
 Read first; don't re-explore what's recorded. Branch `workstream1-trade-review`
-(from `6e81c50`), never pushed, commit by explicit paths. Tip green (measured from
-the committed tip `26cccaa`, runner output not a notification): full suite
-**exit 0, 475 files passed | 1 skipped (476)**, `tsc --noEmit` 0, eslint 0 errors,
-`vite build` 0, skill-approval probe 25/25.
-**Remaining in order: step 10** agentsSurface flake rate (10 solo + 1 under load)
-→ **step 11** Step B read-only audit into `docs/plans/` + STOP. Both were reached
-out of room this run, not blocked. Also open: a test for the
-`ChatTranscriptList` "image not backed up" branch (untested, noted above).
+(from `6e81c50`), never pushed, commit by explicit paths. Gate numbers are at the bottom of this
+header block, measured from a committed tip.
+**Step 10 DONE**: `tests/agentsSurface.test.tsx` solo **10/10 exit 0** — no run
+failed, so per "if it never fails alone, stop there" the under-load run was NOT done.
+**Step 11 DONE — STOPPED FOR APPROVAL**: read-only gap audit in
+`docs/plans/workstream1-stepB-gap-audit.md` (six gaps, one deliberate undecided
+feature shape, plus this run's backlog). Nothing was changed to produce it.
+**Gates from the committed tip `404182b`, runner output:** `npm run test` exit 0,
+**Test Files 478 passed | 1 skipped (479)**; `npm run lint` exit 0, **0 errors /
+861 warnings**; `npm run build` exit 0; `tsc --noEmit` 0; probe 25/25.
 
 ## Done
 | commit | item |
