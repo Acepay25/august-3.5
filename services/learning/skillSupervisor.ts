@@ -343,11 +343,31 @@ const APPLYABLE_PROPOSALS = new Set(['displacement', 'revival', 'demote', 'resco
  *  actuation paths; rescope/contradiction need a model-authored rewrite. */
 const MECHANICAL_PROPOSALS = new Set(['displacement', 'revival', 'demote']);
 
+/** The clause text a PROPOSER stored on its own row. `revise_skill` writes
+ *  exactly this (`DeskToolsService.ts:2364`), so a re-scope often arrives with
+ *  the rewrite already in it — the wording the seat judged the skill needs. */
+type StoredClauses = { ifCondition?: string; thenAction?: string; predicate?: string };
+
+const storedClausesOf = (
+    proposal: ReturnType<typeof listLearningProposals>[number],
+): StoredClauses | null => {
+    if (proposal.kind !== 'rescope') return null;
+    const c = proposal.payload as StoredClauses | undefined;
+    return c?.ifCondition && c?.thenAction ? c : null;
+};
+
 /**
- * Apply a model-authored rescope/contradiction rewrite to the affected skill.
- * Fail-closed: the enhanced clause must survive the same IF/THEN bar as a
- * fresh draft (validateIfThen discipline — min lengths, non-generic). Returns
- * false when anything is missing so the proposal STAYS queued for the human.
+ * Apply a re-scope to the affected skill. Two clause sources, in this order:
+ *
+ * 1. the clauses the PROPOSER stored — applied through `applyRescopeProposal`,
+ *    the SAME path the human's Apply button uses, so what a trader approves in
+ *    the inbox and what the supervisor auto-applies cannot be different wordings
+ *    of one proposal. Fail-closed there (`validateIfThen`, then a read-back).
+ * 2. otherwise the model-authored `verdict.enhanced`, which is the only clause
+ *    source a `beliefChallenge`/gate-authored re-scope has.
+ *
+ * Returns false when anything is missing so the proposal STAYS queued for the
+ * human.
  */
 const applyProposalRewrite = async (
     proposal: ReturnType<typeof listLearningProposals>[number],
@@ -358,6 +378,19 @@ const applyProposalRewrite = async (
     if (!slug) return false;
     const target = listSkills().find(({ file }) => file.name.replace(/\.md$/i, '') === slug);
     if (!target) return false;
+    const stored = storedClausesOf(proposal);
+    if (stored) {
+        const { applyRescopeProposal } = await import('./SkillMemoryService');
+        const res = await applyRescopeProposal(slug, stored, username);
+        if (!res.applied) return false;
+        // The same re-proof the model path applies: the trigger moved, so the
+        // confirmed warrant was earned by a claim that no longer exists.
+        if (target.meta.status === 'confirmed') {
+            const { setSkillStatus } = await import('./SkillMemoryService');
+            await setSkillStatus(target.file.id, 'candidate', username);
+        }
+        return true;
+    }
     const enhanced = verdict.enhanced;
     if (!enhanced?.ifCondition || !enhanced?.thenAction) return false;
     // The same bar a draft must clear: vague rewrites never auto-apply.
@@ -371,7 +404,9 @@ const applyProposalRewrite = async (
         if (p) meta.prediction = p;
     }
     meta.modifiedAt = new Date().toISOString();
-    const { serializeSkill, titleFromMeta, setSkillStatus } = await import('./SkillMemoryService');
+    const { serializeSkill, titleFromMeta, setSkillStatus, syncSkillRuleLine } = await import('./SkillMemoryService');
+    // Same rule as the human path: the prose line must move with the clause.
+    syncSkillRuleLine(meta);
     const content = serializeSkill(meta, titleFromMeta(meta));
     await updateMemoryFile(target.file.id, { content }, username);
     // A rewrite re-opens the question: a confirmed skill whose trigger moved
@@ -401,15 +436,21 @@ const superviseLearningProposal = async (
         ? listSkills().find(({ file }) => file.name.replace(/\.md$/i, '') === proposal.skillSlug)
         : undefined;
     const needsRewrite = !MECHANICAL_PROPOSALS.has(proposal.kind);
+    const carriesClauses = !!storedClausesOf(proposal);
     const verdict = await streamVerdict(eventId, verdictPrompt(
         JSON.stringify({ kind: proposal.kind, text: proposal.text, skill: proposal.skillSlug, payload: proposal.payload }, null, 1),
         {
             graveyard: '(n/a — judge whether the proposed ladder move is justified by the evidence quoted in the proposal)',
             memory: buildProfileMemoryIndex(username) || '(none)',
             extra: (affected ? `AFFECTED SKILL: ${affected.file.name} · ${affected.meta.status} · ${affected.meta.wins}W/${affected.meta.losses}L — IF ${(affected.meta.ifCondition || '').slice(0, 120)}` : '(affected skill not found)')
-                + (needsRewrite
-                    ? '\nThis proposal asks to RE-SCOPE or RESOLVE the affected skill. "approve" does nothing here: either "enhance" with the corrected ifCondition + thenAction (mechanical, specific — the rewrite applies verbatim), or "reject" if the claim is not justified.'
-                    : ''),
+                + (carriesClauses
+                    // Telling a judge to "enhance" here would make it write a
+                    // re-wording that this path then ignores — the silently-dropped
+                    // half of the A2 bug. Say what actually happens.
+                    ? '\nThis proposal ALREADY CARRIES its re-written IF/THEN clauses (in the payload above) and they are applied verbatim — your own rewrite cannot override them. Judge the stored clauses on their merits: "approve" installs them as written, "reject" dismisses the proposal.'
+                    : needsRewrite
+                        ? '\nThis proposal asks to RE-SCOPE or RESOLVE the affected skill. "approve" does nothing here: either "enhance" with the corrected ifCondition + thenAction (mechanical, specific — the rewrite applies verbatim), or "reject" if the claim is not justified.'
+                        : ''),
         },
     ), config);
     store.setPhase('deciding', `Applying the verdict on the ${proposal.kind} proposal`);
@@ -433,10 +474,13 @@ const superviseLearningProposal = async (
         else if (proposal.kind === 'revival') ok = (await applyRevivalProposal(proposal.skillSlug || '', username)).applied;
         else if (proposal.kind === 'demote') ok = (await applyDemoteProposal(proposal.skillSlug || '', username)).applied;
     } else {
-        // rescope / contradiction: only an "enhance" verdict carries the
-        // rewritten clause these kinds need; a bare approve is meaningless
-        // (nothing to apply), so it stays queued for the human.
-        ok = verdict.action === 'enhance' && await applyProposalRewrite(proposal, verdict, username);
+        // rescope / contradiction: a re-scope that CARRIES its clauses is already
+        // a rewrite, so "approve" is enough to act on it. Without stored clauses
+        // only an "enhance" verdict supplies the wording these kinds need, and a
+        // bare approve stays queued for the human.
+        ok = (verdict.action === 'enhance'
+                || (verdict.action === 'approve' && !!storedClausesOf(proposal)))
+            && await applyProposalRewrite(proposal, verdict, username);
     }
     if (ok) dismissLearningProposal(proposal.id, username);
     store.setDecision(eventId, {
