@@ -32,7 +32,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 }));
 vi.mock('../utils/activeUser', () => ({ getActiveUsername: () => 'test-user' }));
 
-import { initMemoryFiles } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import {
     ingestCraftedSkillFromDraft,
     listSkills,
@@ -137,6 +137,40 @@ describe('the write that used to be reported as a save', () => {
         expect(names()).toEqual(expect.arrayContaining([
             'funding-exhaustion-long.md', 'funding-exhaustion-long-2.md',
         ]));
+    });
+});
+
+describe('a notebook with no harness folders', () => {
+    /**
+     * `ensureHarnessFoldersUnlocked` returns early unless at least one
+     * DEFAULT_FOLDERS name is already present (MemoryFilesService.ts:200), so
+     * for a notebook that has none of them — an import with custom folders —
+     * the skills folder is genuinely never created and
+     * `ingestCraftedSkillFromDraftUnlocked` reaches its `if (!folder) return`.
+     * That return wrote nothing and resolved undefined, which is the same
+     * silent-success shape Phase 0 was about.
+     */
+    it('names the reason instead of resolving void', async () => {
+        const mf = getMemoryFiles();
+        mf.folders = [{ id: 'custom', name: 'my-notes', order: 0 }] as typeof mf.folders;
+        mf.files = [];
+
+        const result = await ingestCraftedSkillFromDraft(craft(), 'BTC', USER, undefined, 'human');
+
+        expect(result).toEqual({ created: false, reason: 'no-skills-folder' });
+        expect(listSkills()).toHaveLength(0);
+    });
+
+    it('and the approval path tells the human that reason', async () => {
+        const mf = getMemoryFiles();
+        mf.folders = [{ id: 'custom', name: 'my-notes', order: 0 }] as typeof mf.folders;
+        mf.files = [];
+        queueDraft(craft(), 'chat-x');
+
+        const result = await approveSkillDraft(listSkillDrafts(USER)[0], USER, []);
+
+        expect(result.created ? 'created' : result.reason).toBe('no-skills-folder');
+        expect(listSkillDrafts(USER)).toHaveLength(1);
     });
 });
 

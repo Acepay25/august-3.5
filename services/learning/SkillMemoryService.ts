@@ -2176,6 +2176,19 @@ export const ingestCraftedSkill = (
  * earn wins/losses through applySkillEvidence before it can confirm.
  * `prior: 'gated'` is what lets it into the prompt at all: see the field doc.
  */
+/**
+ * What an ingest actually did.
+ *
+ * Both ingest functions used to resolve `void`, which made "the skills folder
+ * does not exist", "this trigger is already a live skill" and "a file was
+ * written" three indistinguishable outcomes to every caller — and the caller
+ * holding them was about to tell a human their proposal had been saved.
+ */
+export type SkillIngestResult =
+    | { created: true; slug: string }
+    | { created: false; reason: 'duplicate'; slug: string }
+    | { created: false; reason: 'no-skills-folder' };
+
 const ingestCraftedSkillFromDraftUnlocked = async (
     crafted: CraftedSkill,
     coin: string | undefined,
@@ -2185,15 +2198,20 @@ const ingestCraftedSkillFromDraftUnlocked = async (
     whyAccepted?: string,
     /** Who approved it — see SkillMeta.approvedBy. */
     approvedBy?: 'supervisor' | 'human',
-): Promise<void> => {
+): Promise<SkillIngestResult> => {
     await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
-    if (!folder) return;
+    // Reachable, and the only reason this returns rather than throws:
+    // `ensureHarnessFoldersUnlocked` adds missing folders ONLY when at least one
+    // DEFAULT_FOLDERS name is already present (MemoryFilesService.ts:200), so a
+    // notebook that has none of them — an import with its own folder names —
+    // gets no skills folder and nothing here can create one.
+    if (!folder) return { created: false, reason: 'no-skills-folder' };
     const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
         const meta = parseSkillMarkdown(f.content);
         return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
     });
-    if (existing) return; // already learned — never duplicate a trigger
+    if (existing) return { created: false, reason: 'duplicate', slug: existing.name }; // already learned — never duplicate a trigger
     const meta: SkillMeta = {
         status: 'candidate',
         kind: crafted.kind,
@@ -2232,6 +2250,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
     let fileName = `${slug}.md`;
     for (let n = 2; taken.has(fileName.toLowerCase()); n++) fileName = `${slug}-${n}.md`;
     await createMemoryFileUnlocked(folder.id, fileName, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
+    return { created: true, slug: fileName };
 };
 
 /** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
@@ -2241,7 +2260,7 @@ export const ingestCraftedSkillFromDraft = (
     username: string,
     whyAccepted?: string,
     approvedBy?: 'supervisor' | 'human',
-): Promise<void> =>
+): Promise<SkillIngestResult> =>
     withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username, whyAccepted, approvedBy));
 
 /** Record which agent bot a skill came from (WS-3.3). Callers must invoke this

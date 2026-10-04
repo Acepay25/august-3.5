@@ -38,9 +38,14 @@ Branch `workstream1-trade-review` (from `6e81c50`). Never pushed. Commit by expl
   empty live region and returns "" → false failure.
 - Notebook key is recreated async after a `localStorage.clear()` → resolve in-page.
 - The app pre-seeds **12 `book-*.md`** skills: assert new file NAMES, never counts.
-- Deleting the skills folder cannot fail a write — `ensureHarnessFoldersUnlocked`
-  recreates it, so `SkillMemoryService.ts:2191`'s `if (!folder) return` is
-  unreachable from that path (one of Phase 0's "seven silent returns" is dead).
+- Removing the skills FOLDER does NOT fail a write in the probe's notebook,
+  because `ensureHarnessFoldersUnlocked` recreates it. **My earlier claim that
+  the guard was dead was wrong**: that function adds folders only when at least
+  one `DEFAULT_FOLDERS` name already exists (`MemoryFilesService.ts:200`), so a
+  notebook with none of them (an import with custom folders) reaches
+  `if (!folder) return` for real. It now returns
+  `{created:false, reason:'no-skills-folder'}` and `approveSkillDraft` surfaces
+  it. Case 4 sabotages `window.Storage.prototype.setItem` instead.
 - Only uncaught exceptions count as page errors; filter the probe's own sabotage
   (`/probe: quota exceeded/`) out of that check.
 
