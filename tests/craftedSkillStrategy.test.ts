@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseCraftedSkill } from '../schemas/learning';
 import { formatCraftedSkillBody, SKILL_CRAFT_FALLBACK } from '../services/learning/SkillCraftService';
+import { syncSkillRuleLine } from '../services/learning/SkillMemoryService';
 
 const base = {
     name: 'liquidity sweep reclaim',
@@ -63,6 +64,21 @@ describe('a crafted skill may carry a structured strategy', () => {
         expect(skill?.strategy).toBeUndefined();
         expect(formatCraftedSkillBody(skill!)).toContain('**My rule:**');
         expect(formatCraftedSkillBody(skill!)).not.toContain('**My plan:**');
+    });
+
+    it('the rule line a re-scope moves is byte-identical to the one a craft writes', () => {
+        // Two producers of this one prose line is exactly how a skill ends up
+        // stating two triggers. Every writer that moves a clause must produce the
+        // SAME sentence the craft path writes at creation — pin the parity, so a
+        // future edit to one template fails here instead of shipping a file whose
+        // front matter and prose disagree (the A2 re-scope bug).
+        const skill = parseCraftedSkill(base)!;
+        const craftedLine = (formatCraftedSkillBody(skill).split('\n')
+            .find(l => l.startsWith('**My rule:**')) ?? '');
+        expect(craftedLine).toBeTruthy();
+        const moved = { ifCondition: skill.ifCondition, thenAction: skill.thenAction, body: '' };
+        syncSkillRuleLine(moved as never);
+        expect(moved.body).toBe(craftedLine);
     });
 
     it('accepts a partial plan — an invalidation-only rule is still valid', () => {
