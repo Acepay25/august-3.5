@@ -23,6 +23,7 @@
  *    rather than a flat list.
  */
 import type { Kline } from './MarketDataService';
+import { classifyBar } from '../../utils/htfPhase';
 
 export type TaSource = 'close' | 'open' | 'high' | 'low' | 'hl2' | 'hlc3' | 'ohlc4' | 'hlcc4';
 
@@ -935,8 +936,13 @@ export const TA_STUDIES: Record<string, TaStudy> = {
     },
     trend: {
         id: 'trend',
-        covers: 'Aroon and Vortex - directional-strength and directional-movement',
-        run: b => ({ aroon: aroon(b), vortex: vortex(b) }),
+        covers: 'Aroon and Vortex - directional-strength and directional-movement; plus bar state (expansion / sweep / inside / outside) of the last bar vs the one before it',
+        // `barState` classifies the LAST bar of whatever interval was asked for
+        // against the bar before it. It needs two bars and no lookback, so it is
+        // honest on a short window — and it is the one study here that answers
+        // "what is this frame doing right now" rather than "how strong has it
+        // been".
+        run: b => ({ aroon: aroon(b), vortex: vortex(b), barState: classifyBar(b) }),
     },
     volatility: {
         id: 'volatility',

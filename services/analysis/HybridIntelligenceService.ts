@@ -69,7 +69,15 @@ import {
     SmcStructureRead,
     buildSmcStructureRead,
     formatSmcStructureBlock,
+    MtfPremiumDiscount,
+    premiumDiscountAcross,
+    formatMtfPremiumDiscountLine,
 } from '../../utils/smcStructure';
+import {
+    HtfPhaseRead,
+    formatHtfPhaseBlock,
+    htfPhaseAgreement,
+} from '../../utils/htfPhase';
 import { fundingCarrySnapshotLine } from '../../utils/trustSurface';
 
 import { getSessionContext, SessionContext } from '../infrastructure/SessionService';
@@ -225,6 +233,20 @@ export interface HybridDataPacket {
     // pools, FVG/imbalance, order blocks, premium/discount, draw-on-liquidity
     // targets, session CVD, measured-move projection, seasonality flags.
     smcStructure?: SmcStructureRead;
+
+    // ========== HIGHER-TIMEFRAME BAR STATE ==========
+    // What each harness frame is DOING right now, against its own last closed
+    // bar, folded into one weighted bias. The spatial reads above answer "where
+    // is price vs a level"; nothing answered "is the 4h expanding, sweeping, or
+    // sitting inside yesterday", which is the filter a seat applies before it
+    // trusts a setup at all.
+    htfBarState?: HtfPhaseRead;
+
+    // ========== PREMIUM / DISCOUNT ON EVERY FRAME ==========
+    // The same dealing-range position on 15m/1h/4h/1d at once. `smcStructure`
+    // carries the 4h one only; a 15m discount inside a 1d premium is a different
+    // trade than a 15m discount inside a 1d discount.
+    mtfPremiumDiscount?: MtfPremiumDiscount;
 
     // ========== MARKET CONTEXT ==========
     // The "where are we in the week/month" layer every human trader checks
@@ -558,6 +580,19 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         dolLevels,
     });
 
+    // HARNESS_TIMEFRAMES is already ascending, which is what the weighting
+    // needs: the slowest frame carries the most. A reordered list would flip
+    // the bias on identical data, so the constant is used rather than a literal.
+    const phaseFrames = HARNESS_TIMEFRAMES.map(tf => ({
+        timeframe: tf,
+        bars: snapshot.klines[tf],
+    }));
+    const htfBarState = htfPhaseAgreement(phaseFrames, { price: priceNow });
+    const mtfPremiumDiscount = premiumDiscountAcross(
+        HARNESS_TIMEFRAMES.map(tf => ({ timeframe: tf, klines: snapshot.klines[tf] })),
+        { currentPrice: priceNow },
+    );
+
     // Create partial packet for classification (circular dependency workaround)
     const partialData: any = {
         symbol: snapshot.marketData.symbol,
@@ -635,6 +670,9 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         liquiditySweeps,
         // SMC structure detectors (equal H/L, FVG, OB, P/D, DOL, CVD, AB=CD)
         smcStructure,
+        // Higher-timeframe bar state + premium/discount on every harness frame
+        htfBarState,
+        mtfPremiumDiscount,
         // Weekly/monthly market context
         marketContext,
         live1h
@@ -966,6 +1004,14 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         `## Hybrid market packet — REST snapshot (cross-check against the live chart mark)`,
         `This packet is calculated from REST ticker/kline data and can lag the chart by seconds. The chart's websocket mark (when supplied in the live price stamp or get_chart_view) is current and wins; treat any gap as snapshot age or perp basis, never as a fresh move. Before stating ANY price or indicator value, check it against the live mark first, then this packet.`,
         `PRICE KINDS: the \`Last (ticker)\` column below is the last TRADED price from the 24h ticker; the live stamp is the perpetual MARK price. Those are different quantities — a few dollars between them is basis, not a move, and neither is evidence of direction on its own.`,
+        // The two frame-level filters go FIRST, above every table. The 2400-char
+        // snapshot cap is a head-slice (hooks/useAnalysisPipeline.ts), and these
+        // are the lines that decide whether a setup should be taken at all — a
+        // seat that never receives them cannot apply them. Measured on a minimal
+        // packet they landed at 2467/2629, i.e. past the cut, behind the SMC
+        // block that was itself only relocated once already.
+        data.htfBarState ? formatHtfPhaseBlock(data.htfBarState) : '',
+        data.mtfPremiumDiscount ? formatMtfPremiumDiscountLine(data.mtfPremiumDiscount) : '',
         mdTable(
             ['Symbol', 'Last (ticker)', '24h', 'High', 'Low', 'Vol 24h', 'Funding', 'Age', 'Quality'],
             [[

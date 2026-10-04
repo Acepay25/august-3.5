@@ -256,6 +256,297 @@ export const formatPremiumDiscountLine = (pd: PremiumDiscount | null): string =>
     return `Dealing range $${px(pd.rangeLow)}–$${px(pd.rangeHigh)} · price ${pd.positionPct.toFixed(0)}% up the range — ${pd.zone.toUpperCase()} (rule: don't buy premium / sell discount against bias)`;
 };
 
+// ─── d2) Premium / discount ACROSS timeframes ───────────────────────────────
+
+export interface MtfPremiumDiscountRow {
+    timeframe: string;
+    pd: PremiumDiscount;
+}
+
+export interface MtfPremiumDiscount {
+    /** Only frames whose range could be measured at all. */
+    rows: MtfPremiumDiscountRow[];
+    premium: string[];
+    discount: string[];
+    equilibrium: string[];
+    /** Frames price has left entirely — >100% or <0% of that dealing range. */
+    outside: string[];
+    consensus: 'all-premium' | 'all-discount' | 'mixed' | 'none';
+    /** Mean position up each measured range. Null when no frame was measurable. */
+    averagePositionPct: number | null;
+}
+
+/**
+ * The same dealing-range read on every frame the caller holds, at once.
+ *
+ * One frame's premium tells you where price is in that frame. Four frames'
+ * premium is the actual question — a 15m discount inside a 1d premium is a
+ * different trade than a 15m discount inside a 1d discount, and before this the
+ * packet could only ever answer the 4h one. Reuses `computePremiumDiscount`
+ * unchanged, so the zone thresholds (60/40) cannot drift between the two paths.
+ */
+export const premiumDiscountAcross = (
+    entries: { timeframe: string; klines: Kline[] }[],
+    opts: { lookback?: number; currentPrice?: number } = {},
+): MtfPremiumDiscount => {
+    const rows: MtfPremiumDiscountRow[] = [];
+    for (const e of Array.isArray(entries) ? entries : []) {
+        const pd = computePremiumDiscount(e.klines, opts.lookback ?? 60, opts.currentPrice);
+        if (pd) rows.push({ timeframe: String(e.timeframe), pd });
+    }
+    const inZone = (z: PremiumDiscount['zone']): string[] =>
+        rows.filter(r => r.pd.zone === z).map(r => r.timeframe);
+    const premium = inZone('premium');
+    const discount = inZone('discount');
+    const equilibrium = inZone('equilibrium');
+    const outside = rows
+        .filter(r => r.pd.positionPct > 100 || r.pd.positionPct < 0)
+        .map(r => r.timeframe);
+
+    let consensus: MtfPremiumDiscount['consensus'] = 'none';
+    if (rows.length > 0) {
+        if (premium.length === rows.length) consensus = 'all-premium';
+        else if (discount.length === rows.length) consensus = 'all-discount';
+        else consensus = 'mixed';
+    }
+
+    return {
+        rows,
+        premium,
+        discount,
+        equilibrium,
+        outside,
+        consensus,
+        averagePositionPct: rows.length > 0
+            ? rows.reduce((s, r) => s + r.pd.positionPct, 0) / rows.length
+            : null,
+    };
+};
+
+export const formatMtfPremiumDiscountLine = (read: MtfPremiumDiscount): string => {
+    if (read.rows.length === 0) {
+        return 'MTF premium/discount: no frame had a measurable dealing range (needs 10+ completed candles).';
+    }
+    const word = (z: PremiumDiscount['zone']): string => z === 'premium' ? 'PREMIUM' : z === 'discount' ? 'DISCOUNT' : 'EQ';
+    const detail = read.rows
+        .map(r => `${r.timeframe} ${r.pd.positionPct.toFixed(0)}% ${word(r.pd.zone)}${r.pd.positionPct > 100 ? ' (above range)' : r.pd.positionPct < 0 ? ' (below range)' : ''}`)
+        .join(' · ');
+    // A POSITION PERCENT, not a price — it must not carry the px() formatter's
+    // dollar sign, or the seat reads "mean $55.00%" as a level.
+    const eq = read.averagePositionPct === null
+        ? ''
+        : ` · mean ${read.averagePositionPct.toFixed(0)}% up`;
+    return `MTF premium/discount: ${detail} — ${consensusWord(read.consensus)} (${read.premium.length} premium / ${read.discount.length} discount / ${read.equilibrium.length} eq)${eq}`;
+};
+
+const consensusWord = (c: MtfPremiumDiscount['consensus']): string =>
+    c === 'all-premium' ? 'EVERY FRAME PREMIUM'
+        : c === 'all-discount' ? 'EVERY FRAME DISCOUNT'
+            : c === 'mixed' ? 'MIXED' : 'NO READ';
+
+// ─── d3) Sweep → reversal ───────────────────────────────────────────────────
+
+export interface SweepReversalLevel {
+    price: number;
+    label: string;
+}
+
+export interface SweepReversal {
+    /** The direction the reversal expects: a swept HIGH rolls bearish. */
+    side: 'bearish' | 'bullish';
+    levelLabel: string;
+    level: number;
+    /** Furthest wick past the level since the sweep candle. */
+    extreme: number;
+    status: 'confirmed' | 'developing';
+    /** Index into the COMPLETED candles the caller passed. */
+    sweepIndex: number;
+    confirmIndex: number | null;
+    /** Bars spent on this candidate, counting the sweep bar itself. */
+    barsElapsed: number;
+    reclaimed: boolean;
+    structureBroken: boolean;
+    /** The structure line price had to close through to confirm. */
+    confirmationLevel: number;
+    zone: { top: number; bottom: number };
+    text: string;
+}
+
+export interface SweepReversalOptions {
+    /** Minimum wick beyond the level, in ATR units. 0 = any take of the level. */
+    minPenetrationAtr?: number;
+    /** Prior bars the structure line is drawn over. */
+    structureLookback?: number;
+    /** Body the confirming candle must show, in ATR units. */
+    minDisplacementAtr?: number;
+    /** Bars a sweep stays live for before the candidate is dropped. */
+    maxBarsToConfirm?: number;
+    /** ATR override for short windows or tests; defaults to `atr14`. */
+    atr?: number;
+    /** Completed candles to replay, newest tail of the window. */
+    scanBars?: number;
+    /** Cap on returned reads, newest first. */
+    maxReads?: number;
+}
+
+const SWEEP_DEFAULTS = {
+    minPenetrationAtr: 0,
+    structureLookback: 3,
+    minDisplacementAtr: 0.2,
+    maxBarsToConfirm: 12,
+    scanBars: 120,
+    maxReads: 3,
+} as const;
+
+/**
+ * Sweep → reclaim → structure break, replayed over a window.
+ *
+ * `detectLiquiditySweeps` already answers "did the last completed candle take
+ * liquidity and reject?" — which is two of the three things a sweep has to do
+ * before it is a reversal rather than a wick into nothing. This adds the third:
+ * after the level is taken and reclaimed, price must also close through the
+ * structure that sat behind it, on a candle with a body. That is the difference
+ * between "a high got swept" and "the sweep produced a sell", and it yields a
+ * zone (swept level → extreme) with a stated invalidation instead of an event.
+ *
+ * Stateful by nature, so it is a faithful REPLAY rather than a scan: walk the
+ * completed candles forward and carry the candidate. The sweep candle itself is
+ * eligible to confirm on the same bar, because one bar can take the level,
+ * close back under it and break structure all at once. A candidate that never
+ * confirms is dropped at `maxBarsToConfirm` — it is NOT reported as an
+ * unconfirmed signal, because a stale sweep line is the thing that gets a seat
+ * killed.
+ *
+ * Needs a volatility yardstick: when `atr14` cannot be measured the displacement
+ * test has no scale, so nothing is returned rather than returning candidates
+ * whose displacement filter silently passed.
+ */
+export const detectSweepReversals = (
+    klines: Kline[],
+    levels: SweepReversalLevel[],
+    opts: SweepReversalOptions = {},
+): SweepReversal[] => {
+    const o = { ...SWEEP_DEFAULTS, ...opts };
+    const ks = (Array.isArray(klines) ? klines : []).slice(0, -1); // drop the forming candle
+    const candLevels = (Array.isArray(levels) ? levels : [])
+        .filter(l => Number.isFinite(l?.price) && l.price > 0);
+    if (ks.length < o.structureLookback + 2 || candLevels.length === 0) return [];
+
+    const atr = Number.isFinite(opts.atr) ? (opts.atr as number) : atr14(klines);
+    if (!Number.isFinite(atr) || atr <= 0) return [];
+
+    const penetration = o.minPenetrationAtr * atr;
+    const minBody = o.minDisplacementAtr * atr;
+    const from = Math.max(o.structureLookback, ks.length - o.scanBars);
+    const out: SweepReversal[] = [];
+
+    for (const L of candLevels) {
+        for (const side of ['bearish', 'bullish'] as const) {
+            let state: SweepReversal | null = null;
+
+            for (let i = from; i < ks.length; i++) {
+                const b = ks[i];
+                if (!b || ![b.open, b.high, b.low, b.close].every(Number.isFinite)) continue;
+
+                if (!state) {
+                    // The candidate must START from the level. `detectLiquiditySweeps`
+                    // hit the same trap and documents it: a candle merely trading
+                    // on one side of a level reports "beyond" forever. Here it is
+                    // worse, because `levels` is an arbitrary set of pools rather
+                    // than the script's one latest swing extreme — so a bearish
+                    // sweep of $100 means the bar rose INTO $100 from below it, not
+                    // that some older bar happened to print a low under it.
+                    const startsFromLevel = side === 'bearish'
+                        ? b.open <= L.price
+                        : b.open >= L.price;
+                    if (!startsFromLevel) continue;
+                    const swept = side === 'bearish'
+                        ? b.high >= L.price + penetration
+                        : b.low <= L.price - penetration;
+                    if (!swept) continue;
+                    // The structure line is frozen at the sweep bar from the
+                    // bars BEFORE it — never from the sweeping candle itself,
+                    // which would move the goalposts onto the bar being tested.
+                    const prior = ks.slice(i - o.structureLookback, i);
+                    if (prior.length < o.structureLookback) continue;
+                    const conf = side === 'bearish'
+                        ? Math.min(...prior.map(k => k.low))
+                        : Math.max(...prior.map(k => k.high));
+                    if (!Number.isFinite(conf)) continue;
+                    state = {
+                        side,
+                        levelLabel: L.label,
+                        level: L.price,
+                        extreme: side === 'bearish' ? b.high : b.low,
+                        status: 'developing',
+                        sweepIndex: i,
+                        confirmIndex: null,
+                        barsElapsed: 0,
+                        reclaimed: side === 'bearish' ? b.close < L.price : b.close > L.price,
+                        structureBroken: false,
+                        confirmationLevel: conf,
+                        zone: { top: 0, bottom: 0 },
+                        text: '',
+                    };
+                }
+
+                if (!state) continue;
+                state.extreme = side === 'bearish'
+                    ? Math.max(state.extreme, b.high)
+                    : Math.min(state.extreme, b.low);
+                state.barsElapsed = i - state.sweepIndex + 1;
+                state.reclaimed = state.reclaimed
+                    || (side === 'bearish' ? b.close < state.level : b.close > state.level);
+                const broke = side === 'bearish'
+                    ? b.close < state.confirmationLevel
+                    : b.close > state.confirmationLevel;
+                const body = Math.abs(b.close - b.open);
+
+                if (state.reclaimed && broke && body >= minBody) {
+                    state.status = 'confirmed';
+                    state.confirmIndex = i;
+                    state.structureBroken = true;
+                    state.zone = side === 'bearish'
+                        ? { top: state.extreme, bottom: state.level }
+                        : { top: state.level, bottom: state.extreme };
+                    state.text = formatSweepReversal(state);
+                    out.push(state);
+                    state = null;
+                    continue;
+                }
+                if (i - state.sweepIndex > o.maxBarsToConfirm) {
+                    // Expired, not "developing forever": drop it silently.
+                    state = null;
+                }
+            }
+
+            if (state) {
+                state.zone = side === 'bearish'
+                    ? { top: state.extreme, bottom: state.level }
+                    : { top: state.level, bottom: state.extreme };
+                state.text = formatSweepReversal(state);
+                out.push(state);
+            }
+        }
+    }
+
+    return out
+        .sort((a, b) => b.sweepIndex - a.sweepIndex)
+        .slice(0, Math.max(1, o.maxReads));
+};
+
+const formatSweepReversal = (r: SweepReversal): string => {
+    const px = (v: number): string => v >= 1000 ? v.toFixed(0) : v.toFixed(2);
+    const zone = `$${px(Math.min(r.zone.top, r.zone.bottom))}–$${px(Math.max(r.zone.top, r.zone.bottom))}`;
+    const invalid = px(r.extreme);
+    if (r.status === 'confirmed') {
+        return `${r.side.toUpperCase()} sweep-reversal: took ${r.levelLabel} $${px(r.level)} to $${px(r.extreme)}, closed back ${r.side === 'bearish' ? 'under' : 'over'} it and through structure $${px(r.confirmationLevel)} in ${r.barsElapsed} bar(s) — reversal zone ${zone}, invalid beyond $${invalid}`;
+    }
+    const missing = !r.reclaimed ? 'not reclaimed' : 'structure not broken';
+    return `${r.side.toUpperCase()} sweep RECHECK (developing): took ${r.levelLabel} $${px(r.level)} to $${px(r.extreme)}, ${missing} ($${px(r.confirmationLevel)}) after ${r.barsElapsed} bar(s) — zone ${zone}`;
+};
+
+
 // ─── e) Draw on liquidity ───────────────────────────────────────────────────
 
 export interface DolTarget {
@@ -512,6 +803,8 @@ export interface SmcStructureRead {
     measuredMove: MeasuredMove | null;
     /** Calendar timing flags (Monday-Asia window, weekend, pre-open). */
     seasonality: SeasonalityFlags;
+    /** 1h sweep→reclaim→structure-break reads, newest first. */
+    sweepReversals: SweepReversal[];
 }
 
 /** Period levels for the DOL read, as provided by the packet's marketContext. */
@@ -534,16 +827,29 @@ export const buildSmcStructureRead = (parts: {
     currentPrice: number;
     dolLevels: DolLevelInput[];
     now?: Date;
-}): SmcStructureRead => ({
-    equalLevels: detectEqualLevels(parts.klines1h),
-    fvg: detectFvg(parts.klines1h),
-    orderBlocks: detectOrderBlocks(parts.klines1h),
-    premiumDiscount: computePremiumDiscount(parts.klines4h, 60, parts.currentPrice),
-    dolTargets: buildDolTargets(parts.currentPrice, parts.dolLevels),
-    cvd: computeSessionCvd(parts.klines1h),
-    measuredMove: projectMeasuredMove(parts.klines1h),
-    seasonality: seasonalityFlags(parts.now ?? new Date()),
-});
+}): SmcStructureRead => {
+    const equalLevels = detectEqualLevels(parts.klines1h);
+    const dolTargets = buildDolTargets(parts.currentPrice, parts.dolLevels);
+    // The pools the sweep-reversal replay watches are the ones this same read
+    // just found: internal liquidity (equal highs/lows) and external liquidity
+    // (the untested period extremes). No second swing detector, no drift.
+    const reversalLevels: SweepReversalLevel[] = [
+        ...equalLevels.equalHighs.map(h => ({ price: h.level, label: `EQH ×${h.touches}` })),
+        ...equalLevels.equalLows.map(l => ({ price: l.level, label: `EQL ×${l.touches}` })),
+        ...dolTargets.map(t => ({ price: t.price, label: t.label })),
+    ];
+    return {
+        equalLevels,
+        fvg: detectFvg(parts.klines1h),
+        orderBlocks: detectOrderBlocks(parts.klines1h),
+        premiumDiscount: computePremiumDiscount(parts.klines4h, 60, parts.currentPrice),
+        dolTargets,
+        cvd: computeSessionCvd(parts.klines1h),
+        measuredMove: projectMeasuredMove(parts.klines1h),
+        seasonality: seasonalityFlags(parts.now ?? new Date()),
+        sweepReversals: detectSweepReversals(parts.klines1h, reversalLevels),
+    };
+};
 
 /**
  * Format the SMC block for the hybrid snapshot. Every line is a concrete
@@ -568,6 +874,11 @@ export const formatSmcStructureBlock = (read: SmcStructureRead, currentPrice: nu
     } else {
         lines.push('Order blocks: no displacement-confirmed OB in the last 40 1h candles.');
     }
+    // A missing line here reads as "the detector did not run"; every other
+    // detector in this block states its own negative for the same reason.
+    lines.push(read.sweepReversals.length > 0
+        ? `Sweep reversals: ${read.sweepReversals.map(r => r.text).join(' | ')}`
+        : 'Sweep reversals: none — no swept pool has reclaimed AND broken structure behind it yet.');
     const pd = formatPremiumDiscountLine(read.premiumDiscount);
     if (pd) lines.push(pd);
     if (read.dolTargets.length > 0) {
