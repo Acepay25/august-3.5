@@ -2222,7 +2222,16 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         body: formatCraftedSkillBody(crafted),
     };
     const slug = slugifyName(crafted.name) || slugifyName([coin, crafted.kind].filter(Boolean).join(' ')) || 'skill';
-    await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
+    // A proposal that keeps an existing skill's NAME but changes its IF clause is
+    // a different skill, so the trigger dedupe above does not catch it — and
+    // `createMemoryFileUnlocked` throws on a same-folder name collision. That
+    // throw was swallowed by every caller (`void` + an unconditional "Skill
+    // saved" toast), so the draft was destroyed, nothing was written, and the
+    // rejection surfaced nowhere but the console. Claim an unused slug instead.
+    const taken = new Set(getMemoryFiles().files.filter(f => f.folderId === folder.id).map(f => f.name.toLowerCase()));
+    let fileName = `${slug}.md`;
+    for (let n = 2; taken.has(fileName.toLowerCase()); n++) fileName = `${slug}-${n}.md`;
+    await createMemoryFileUnlocked(folder.id, fileName, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
 };
 
 /** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */

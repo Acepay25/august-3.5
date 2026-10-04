@@ -106,9 +106,9 @@ import { useBotMailbox, type UseBotMailboxResult } from './hooks/useBotMailbox';
 import { buildBotSystemPrompt } from './services/agents/botMailbox';
 import { classifyBotAttention } from './services/agents/botAttention';
 import { readBotSystemMarkdown, readBotMemoryMarkdown } from './services/bots/BotMemoryService';
-import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, type SkillDraft } from './utils/skillDrafts';
+import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, listSkillDrafts, type SkillDraft } from './utils/skillDrafts';
 import { listLearningProposals } from './utils/learningQueue';
-import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
+import { approveSkillDraft, skillApprovalToast } from './services/learning/skillApproval';
 import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
@@ -2357,14 +2357,8 @@ const App: React.FC = () => {
     }, [workingBotId, dmWorkingBotId, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce]);
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
-        takeSkillDraft(draft.id, activeUsername || undefined);
-        const trade = loggedTradesRef.current.find(t => t.id === draft.tradeId);
-        if (trade) {
-            void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
-        } else {
-            void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default', undefined, 'human');
-        }
-        toast.success('Skill saved', draft.crafted.name);
+        void approveSkillDraft(draft, activeUsername || 'default', loggedTradesRef.current)
+            .then(r => { const t = skillApprovalToast(r, draft.crafted.name); toast[t.kind](t.title, t.body); });
     }, [activeUsername]);
     const coachDenyDraft = useCallback((draft: SkillDraft): void => {
         takeSkillDraft(draft.id, activeUsername || undefined);
@@ -2479,16 +2473,14 @@ const App: React.FC = () => {
     const approvalHandlers = useMemo(() => ({
         allow: (item: ApprovalItem): void => {
             if (item.kind === 'skill') {
-                const draft = takeSkillDraft(item.id, activeUsername || undefined);
-                const trade = loggedTrades.find(t => t.id === item.messageId);
-                if (draft && trade) {
-                    void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
-                    toast.success('Skill saved', draft.crafted.name);
-                } else if (draft) {
-                    // Verdict-sourced draft — no closed trade behind it.
-                    void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default', undefined, 'human');
-                    toast.success('Skill saved', draft.crafted.name);
-                }
+                // Read the draft WITHOUT consuming it: the old path took it off
+                // the queue first, so a write that silently declined destroyed
+                // the trader's only copy and still said "Skill saved".
+                const draft = listSkillDrafts(activeUsername || undefined)
+                    .find(d => d.id === item.id);
+                if (!draft) return;
+                void approveSkillDraft(draft, activeUsername || 'default', loggedTrades)
+                    .then(r => { const t = skillApprovalToast(r, draft.crafted.name); toast[t.kind](t.title, t.body); });
                 return;
             }
             handleConfirmAutopilot(item.messageId);
