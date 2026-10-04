@@ -34,13 +34,27 @@ dropped when the rewrite carries none — then READ BACK the parsed file), wired
 "no Apply button", the 4 existing passed; green after. `coachThread.test.tsx:100`
 still passes untouched because CoachThreadPanel is not yet wired — the contract
 rewrite moves to slice 2 with that panel, so every commit is independently green.
-**Slice 4 DONE** (this commit): `SupervisorStream` now consumes
+**Slice 4 DONE** (`9f1ec9e`): `SupervisorStream` now consumes
 `overrideApproveSkill`'s return and shows the named refusal on the row
 (`supervisor-override-note-<id>`), including the `null` = no draft snapshot case.
 Copy lives in `skillApproval.skillIngestOverrideNote` beside `skillApprovalToast`.
 New file `tests/supervisorOverrideFeedback.test.tsx` (no existing suite rendered
-`SupervisorStream`). Panels were done in slice 2. **Next: slice 5** = real-app
-rescope check.
+`SupervisorStream`). Panels were done in slice 2.
+
+**Slice 5 DONE** (this commit): `scripts/probe-skill-approval.cjs` gained case 5
+in the REAL app — seed the live skill through the Coach thread, seed the exact
+`revise_skill` proposal row, press `coach-proposal-apply-<id>`, then assert the
+skill FILE BYTES (1023 → 1063: new clause in, old clause and its prose line out,
+one file not two, row consumed). Case 5b presses a below-bar re-scope and asserts
+`/below the bar/` in `document.body.innerText`, the row STILL queued, bytes
+unchanged. 25/25 checks, 2 pageErrors — both the probe's own case-4 sabotage.
+**Probe fact paid for:** `page.addInitScript` lives for the whole page, so case 4's
+blanket `setItem` block silently broke case 5's prerequisite write (it "failed"
+because the probe had destroyed its own setup). It is now gated on a
+`probe_block_notebook` flag that case 4 sets and clears.
+**Next:** steps 9-11 — backup pre-flight + `trade_tf_bar_v1` registration → real
+export/restore round trip with byte equality → agentsSurface flake rate → Step B
+read-only audit into `docs/plans/`, then STOP for approval.
 Contradiction stays Dismiss-only: `beliefChallenge.ts:119` stores `{slug,
 contradictions}`, `contradictionSweep.ts:116` stores `{pair:[a,b]}` — no clauses.
 
