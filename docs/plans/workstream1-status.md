@@ -34,11 +34,43 @@ dropped when the rewrite carries none — then READ BACK the parsed file), wired
 "no Apply button", the 4 existing passed; green after. `coachThread.test.tsx:100`
 still passes untouched because CoachThreadPanel is not yet wired — the contract
 rewrite moves to slice 2 with that panel, so every commit is independently green.
-**Next: slice 4 remainder** = the component calling `overrideApproveSkill`
-(`components/learn/SupervisorStream.tsx`) must show the named failure instead of
-ignoring the return — the panels are done. Slice 5 = real-app rescope check.
+**Slice 4 DONE** (this commit): `SupervisorStream` now consumes
+`overrideApproveSkill`'s return and shows the named refusal on the row
+(`supervisor-override-note-<id>`), including the `null` = no draft snapshot case.
+Copy lives in `skillApproval.skillIngestOverrideNote` beside `skillApprovalToast`.
+New file `tests/supervisorOverrideFeedback.test.tsx` (no existing suite rendered
+`SupervisorStream`). Panels were done in slice 2. **Next: slice 5** = real-app
+rescope check.
 Contradiction stays Dismiss-only: `beliefChallenge.ts:119` stores `{slug,
 contradictions}`, `contradictionSweep.ts:116` stores `{pair:[a,b]}` — no clauses.
+
+## Harness notes — copy these, do not re-explore
+- **Panel tests** (`learningQueuePanel.test.tsx`, `coachThread.test.tsx`): mock
+  `../services/learning/SkillMemoryService` wholesale with `vi.mock` +
+  `vi.hoisted` fns returning `{ applied: true }`; seed through the REAL
+  `queueLearningProposal(..., USER)` and pin the active user with
+  `localStorage.setItem(LAST_ACTIVE_USER_KEY, USER)` (both panels read
+  `getActiveUsername()`, not a prop). Assert via `data-testid`
+  (`coach-proposal-apply-<id>`, `coach-proposal-error-<id>`,
+  `proposal-review-state`). A press that fails is async: `await
+  vi.waitFor(() => screen.getByTestId(...))` BEFORE reading the row, or you assert
+  on the still-rendered "Applying…" state.
+- **Real notebook tests** (`skillApprovalRoundTrip.test.ts`,
+  `learningQueueApply.test.ts`): mock ONLY
+  `../services/infrastructure/PreferencesService` onto an in-memory `store`
+  object + `await initMemoryFiles(USER)` in `beforeEach`. Force a declined ingest
+  by emptying harness folders: `getMemoryFiles().folders = [{id:'custom',
+  name:'my-notes'}]` → `no-skills-folder`.
+- **Component that consumes a service return** (`supervisorOverrideFeedback.test.tsx`):
+  also mock `../services/providers/GenericProviderService` (3 fns) or the
+  supervisor import drags the transport in; build rows with
+  `supervisorStore.pushEvent({phase:'deciding', itemKind:'skill', itemId,
+  draftSnapshot}) + setDecision(id, {verdict:'rejected', reason, atMs})` and
+  `supervisorStore.__resetForTests()` per test.
+- **Targeted runs**: `npx vitest run tests/<a> tests/<b>` (NO `--reporter=basic` —
+  this vitest has no such reporter and it fails at startup).
+  Slice suites: `coachThread learningQueuePanel learningQueueApply
+  skillApprovalRoundTrip skillSupervisor supervisorOverrideFeedback`.
 
 **Slice 2 DONE** (`cd43b0d`): CoachThreadPanel wired for rescope + **contract
 rewritten** in `coachThread.test.tsx` (old line 100 asserted "rescope gets
@@ -52,7 +84,7 @@ gates on `.applied`. Reasons: `no-target`/`unreadable`/`no-clauses`/`below-bar`/
 `challenger-blocked`/`not-written`/`write-failed`. Red first: 4 new/rewritten
 tests failed (3 coach + 1 queue), 11 existing passed.
 
-**Slice 3 DONE** (`<s3>`): `applyProposalRewrite` now takes the clauses the
+**Slice 3 DONE** (`22adc60`): `applyProposalRewrite` now takes the clauses the
 PROPOSER stored FIRST (delegating to `applyRescopeProposal`, the same call the
 human's Apply makes, so the two surfaces cannot land different wordings of one
 proposal) and falls back to `verdict.enhanced` only when the row carries none.
