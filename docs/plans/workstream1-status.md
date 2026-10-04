@@ -1,64 +1,56 @@
 # Workstream 1 — status / handoff
 
-Read this first next pass. Do not re-explore what is written here.
-Branch `workstream1-trade-review` (from `6e81c50`). Never pushed.
+Read this first. Do not re-explore what is recorded here.
+Branch `workstream1-trade-review` (from `6e81c50`). Never pushed. Commit by explicit paths.
 
-## Done (commits)
-- `cae8293` carried-over three (typeRamp `text-[10px]`→`text-ui-xs`, systemIntelligenceUi mock)
-- `38872eb` HTF bar state + MTF premium/discount + sweep reversals; **also** A4 stable keys + A3 queue guard (same file, no interactive `add -p`)
-- `bbaae74` Phase 0: `approveSkillDraft` read-back guard + slug-collision fix
-- `7ecefe3` A1: `skill_drafts_v1` + `learning_proposals_v1` registered; scan hole closed
-- `9c679b8` A5 one `CLAUSE_MIN_LENGTH`; `121bd1d` A3 read-back + null / empty-slug reject
-- `bdbf153` probe (WIP); this pass → **A7 pass 1: happy path GREEN in the real app**
+## Done
+| commit | item | result |
+|---|---|---|
+| `cae8293` | carried-over three | typeRamp + systemIntelligenceUi green |
+| `38872eb` | HTF bar state, MTF premium/discount, sweep reversals (+A4 keys, +A3 queue guard in the same file) | 117 tests |
+| `bbaae74` | Phase 0 `approveSkillDraft` read-back + slug fix | red→green |
+| `7ecefe3` | A1 `skill_drafts_v1` + `learning_proposals_v1` registered, scan hole closed | 7 checks |
+| `9c679b8` | A5 one `CLAUSE_MIN_LENGTH=12` | green |
+| `121bd1d` | A3 read-back + null / empty-slug reject | green |
+| `a6e007e`,`e62051a` | A7 pass 1 + 1b: **4 of 4 approval cases green in the real app** | 15/15, exit 0 |
+| `724882a` | A7 pass 2 step 1: mock emits a scripted `propose_skill` call, opt-in | flag-off: boot-probe 0, approval probe 15/15 |
 
-## Verified in the app (not just unit)
-Seeded draft → `Learn` rail → `learn-tab-coach` → "Save as skill" → toast
-`Skill saved` → `funding-exhaustion-long.md` present in the notebook → draft gone
-from `skill_drafts_v1:Probe User` → 0 uncaught page errors. Evidence:
-`.probe-artifacts/skill-approval/1-happy-after-click.png` + `transcript.json`.
-Run: `node scripts/probe-skill-approval.cjs` (vite :4189, mock-provider :8787).
+## Next: item 3 — drive the TRUE propose_skill chain in the app
+`node scripts/probe-skill-approval.cjs` is the reusable harness (vite :4189, mock
+:8787, profile in IndexedDB `FuturesAI-DB/userProfiles`, notebook key
+`memory_files_v1_Probe User`). To do item 3:
+1. Start the mock with `MOCK_TOOL_CALL=1` (or `--tool-call`). Payload override:
+   `MOCK_SKILL_ARGS` (JSON) · tool name: `MOCK_TOOL_NAME`. One-shot guard: it
+   only fires when the request has `tools` AND no `role:"tool"` message yet.
+2. **Unexplored part:** sending a message through the Chart AI dock so the app
+   actually issues a toolbed request, then reading the inbox. The dock needs a
+   session (`New Conversation` is in the rail); `propose_skill` is allow-listed
+   at `services/trade/chatTurnRunner.ts:110`.
+3. Three cases to prove: normal proposal reaches the Coach inbox and saves;
+   `if_condition` of 6 chars is **rejected** (A5); a forced queue-write failure
+   surfaces honestly (A3) — force it by throwing from `Storage.prototype.setItem`
+   for `skill_drafts_v1` via `addInitScript`.
 
-## A7 pass 1b — DONE, 4 of 4 cases green in the app
-`node scripts/probe-skill-approval.cjs` → **15/15 checks, exit 0**. Each case now
-seeds its own prerequisite (`freshSession` clears localStorage, which is why 2-4
-were red before). Verified: happy → `Skill saved` + file + draft consumed;
-collision → `funding-exhaustion-long-2.md` written, no throw; duplicate →
-`Already learned` and explicitly NOT `Skill saved`, no new file; forced write
-failure → `Not saved` and **the draft survives in the inbox**.
+## Probe facts (paid for — do not rediscover)
+- Coach tab: `data-testid="learn-tab-coach"`; its textContent is `Coach1` (badge
+  span, no space) so text matching fails. Approve button: `coach-draft-allow-<id>`.
+- Read toasts by polling `document.body.innerText`; `[role=status]` matches an
+  empty live region and returns "" → false failure.
+- Notebook key is recreated async after a `localStorage.clear()` → resolve in-page.
+- The app pre-seeds **12 `book-*.md`** skills: assert new file NAMES, never counts.
+- Deleting the skills folder cannot fail a write — `ensureHarnessFoldersUnlocked`
+  recreates it, so `SkillMemoryService.ts:2191`'s `if (!folder) return` is
+  unreachable from that path (one of Phase 0's "seven silent returns" is dead).
+- Only uncaught exceptions count as page errors; filter the probe's own sabotage
+  (`/probe: quota exceeded/`) out of that check.
 
-Two findings worth keeping:
-- **Deleting the skills folder cannot make the write fail.** `ingestCraftedSkill
-  FromDraftUnlocked` calls `ensureHarnessFoldersUnlocked` first, which recreates
-  it — so the `if (!folder) return` guard at `SkillMemoryService.ts:2191` is
-  unreachable from this path (one of the "seven silent returns" is dead). Case 4
-  now forces failure by throwing from `Storage.prototype.setItem` for
-  `memory_files_v1*` via `addInitScript`.
-- The app pre-seeds **12 `book-*.md`** skills, so assert on a new file NAME,
-  never a count.
-`deleteSkillsFolder` is left in the script unused, documented as the disproving
-helper.
+## Still unit-verified only
+A5 short-clause rejection and A3 failed-write at the **desk-tool** level (item 3
+closes both). Everything downstream of the inbox is app-verified.
 
-## Probe gotchas, already paid for
-- Coach tab: `data-testid="learn-tab-coach"`. Its textContent is `Coach1` (badge
-  span, NO space) — text matching on `/^Coach(\s|$)/` silently never clicks.
-- Notebook key: `memory_files_v1_Probe User`; shape IS `{version,folders,files}`
-  but the key is recreated async after a clear → resolve it in-page per call.
-- Profile must exist in IndexedDB `FuturesAI-DB/userProfiles` or the app sits on
-  the workspace modal and nothing is ever written.
-- The app seeds 12 `book-*.md` skills on first run — assert on a NEW file, not a count.
-- Toasts: poll `document.body.innerText` for the string. `[role=status]` matches
-  an empty live region and returns "" (that produced a false failure).
-- Only uncaught exceptions count as page errors; resource loads are logged and ignored.
-
-## Still UNIT-VERIFIED ONLY
-A5 short-clause rejection and A3 failed-write path — both upstream of a seeded
-draft. Needs the mock-provider tool-call extension (A7 pass 2): additive,
-opt-in flag, off = identical behaviour, separate commit.
-
-## Next, in order
-A7 pass 1b (duplicate, collision, folder-removed) → A7 pass 2 (mock) → A2 →
-backup pre-flight (open `trade_tf_bar_v1` first) → agentsSurface flake rate →
-Step B (STOP at gate).
-**A2 step 0:** read how `contradiction` proposals store payload; if same
-mismatch as `rescope`, cover both + rewrite `coachThread.test.tsx:100` for both.
+## Then
+A2 (step 0: read how `contradiction` stores payload — if same mismatch as
+`rescope`, cover both + rewrite `coachThread.test.tsx:100` for both; report
+which BEFORE the red test) → backup registration pre-flight (open
+`trade_tf_bar_v1` first) → agentsSurface flake rate → **Step B audit, then STOP**.
 Deferred: reversal zone → `draw_detected` (option 3 taken; all three on backlog).
