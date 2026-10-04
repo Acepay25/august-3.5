@@ -34,6 +34,12 @@ export interface StoredChatEntry {
     /** Attached image (screenshot or upload) shown in the transcript,
      *  data URL, size-capped before storing. */
     image?: string;
+    /** A BACKUP artifact, never a live value: `ExportService` strips image bytes
+     *  from the exported copy (a 60-entry session can carry a 1.2 MB screenshot
+     *  each) and leaves this stub in place so the transcript still says an image
+     *  was there. The live key is never written with it. Read side keeps it
+     *  verbatim — `sanitizeEntry` spreads the entry. */
+    imageOmitted?: { bytes: number; mime: string };
     /** Harness row (level-watch price event, panel notices): rendered as a
      *  compact system line, never as a model answer. */
     notice?: boolean;

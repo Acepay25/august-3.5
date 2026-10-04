@@ -174,6 +174,42 @@ below: none of them goes around the prose line.
    currently exercises that path end-to-end (`skillRefinement.test.ts` only pins
    serialization and the lock split).
 
+## Step 9 — DONE (`<s9>`)
+Registered in `RAW_LOCAL_STORAGE_PREFIXES`: `trade_watches_v1`,
+`trade_level_arms_v1`, `trade_level_hits_v1`, `trade_drawings_v1`,
+`trade_session_drawings_v1`, `trade_chat_sessions_v1`, `desk_tools_forged_v1`,
+`trading_checklist_v1`, `trade_tf_bar_v1`, `harness_settings_v1`.
+**Cap: `EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024`**, applied to
+`trade_chat_sessions_v1` ONLY — a blanket cap would start skipping
+`memory_files_v1_<user>`, which `memoryBudget.ts` legitimately lets reach 2 MB, so
+the guard would have become the data-loss bug. Over the cap → key LEFT OUT +
+`backup._backup_notices` names it (restore reports it as an un-allow-listed key, so
+the omission is visible at both ends).
+`trade_chat_sessions_v1` exports whole minus image bytes: `stripChatSessionImages`
+replaces `image` with `imageOmitted:{bytes,mime}` on the EXPORT COPY ONLY (live key
+asserted byte-identical after export); text/order/metadata verbatim. Render side:
+`ChatTranscriptList.tsx` shows "image not backed up (mime, N KB)" when `image` is
+absent and `imageOmitted` present — `sanitizeEntry` spreads the entry so the stub
+survives the read path. **NOT YET EXERCISED: that JSX branch has no test** (needs a
+`ChatTranscriptList` render harness); `unit-verified only` until then.
+**Decision 2's premise was false and is reported, not applied:**
+`utils/harnessSettings.ts:79` writes `localStorage` directly and never imports
+PreferencesService, so it was NOT covered by the Preferences backup path — with an
+empty Preferences store the old code put no `harness_settings_v1` key in the backup
+at all. The round trip in `exportLearningStores.test.ts` proves both halves.
+**`trade_chat_active_v1` deliberately NOT registered:** `chatStore.ts:160` writes a
+PLAIN session-id string, which the sweep cannot `JSON.parse` (exports nothing) and
+which mirroring would restore as `"s-1"` where the owner reads `s-1` — registering
+it would corrupt the pointer. Needs a raw-string envelope in the backup format;
+backlog.
+Round trip (`write → export → clear → import → byte equality`) now covers all ten
+plus `skill_drafts_v1:alice` and `learning_proposals_v1:alice`, with
+`skippedKeys`/`failedKeys` empty. Backlog floor in `exportRawLocalStorage.test.ts`
+now asserts BOTH directions (came down from 17, still > 5).
+**BACKLOG added (decision 1):** bound `trade_chat_sessions_v1` bytes AT WRITE TIME —
+`trimForStorage` bounds counts (12 × 60) not bytes, and `MAX_IMAGE_CHARS` is
+1,200,000 per entry, which is what forced the export-side strip.
+
 ## Then
 Backup pre-flight + registration → real export/restore round trip with byte
 equality → agentsSurface flake rate (10 solo + 1 under load) → **Step B audit,

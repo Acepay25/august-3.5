@@ -154,17 +154,15 @@ const AWAITING_BACKUP_DECISION = new Map<string, string>([
     ['desk_role_overrides_v1', 'furniture: per-room role overrides'],
     ['desk_room_layout_v1', 'furniture: room layout'],
     ['last_active_user', 'a plain string pointer, not a record'],
-    ['desk_tools_forged_v1', 'TRADING DATA — authored HTTPS tools. Decide: register or delete.'],
-    ['trade_drawings_v1', 'TRADING DATA — chart drawings. Decide: register or delete.'],
-    ['trade_chat_sessions_v1', 'TRADING DATA — chat transcripts. Decide: register or delete.'],
-    ['trade_chat_active_v1', 'pointer into trade_chat_sessions — needs the same decision'],
-    ['trade_level_arms_v1', 'TRADING DATA — level arming state. Decide: register or delete.'],
-    ['trade_level_hits_v1', 'TRADING DATA — level hit history. Decide: register or delete.'],
-    ['trade_watches_v1', 'TRADING DATA — price watches. Decide: register or delete.'],
-    ['trading_checklist_v1', 'TRADING DATA — the user checklist. Decide: register or delete.'],
-    ['harness_settings_v1', 'harness config — likely belongs in Preferences, not here'],
+    // Registered in step 9 (2026-10-05): `trade_watches_v1`,
+    // `trade_level_arms_v1`, `trade_level_hits_v1`, `trade_drawings_v1`,
+    // `trade_session_drawings_v1`, `desk_tools_forged_v1`, `trading_checklist_v1`,
+    // `trade_tf_bar_v1`, `trade_chat_sessions_v1` (images stripped at export) and
+    // `harness_settings_v1` — which is NOT Preferences-owned as this file assumed:
+    // `utils/harnessSettings.ts:79` writes localStorage directly, and an export
+    // with an empty Preferences store proved it was absent from every backup.
+    ['trade_chat_active_v1', 'TRADING POINTER, still unbacked on purpose: chatStore.ts:160 writes a PLAIN string (a session id), which the sweep cannot JSON.parse, so it exports nothing — and mirroring a parsed value back would write `"s-1"` where the owner reads `s-1`. Needs a raw-string envelope in the backup format, not a prefix entry.'],
     ['thinking_leak_bin_v1', 'telemetry: withheld reasoning bin'],
-    ['trade_tf_bar_v1', 'furniture: timeframe bar selection'],
     ['lastPromiseError', 'crash breadcrumb'],
     ['lastGlobalError', 'crash breadcrumb'],
     ['lastCrashError', 'crash breadcrumb'],
@@ -386,12 +384,16 @@ describe('every raw-localStorage store is registered in ExportService', () => {
         expect(writes.length).toBeGreaterThan(10);
         expect(writes.filter(s => isRawLocalStorageKey(s.shape)).length).toBeGreaterThan(5);
         // The backlog is doing real work: without it the rule above would be
-        // enforcing nothing, and it must shrink rather than grow.
+        // enforcing nothing, and it must shrink rather than grow. Step 9 registered
+        // nine trading namespaces, so this asserts BOTH directions — it came down
+        // from the 17 this file recorded, and it is still a real list, not an empty
+        // one kept to make the rule above pass vacuously.
         const backlogNamespaces = new Set(sites
             .filter(isWriteSite)
             .filter(s => !isRawLocalStorageKey(s.shape) && !isExempt(s.shape) && awaitsDecision(s.shape))
             .map(s => s.shape));
-        expect(backlogNamespaces.size).toBeGreaterThan(8);
+        expect(backlogNamespaces.size).toBeGreaterThan(5);
+        expect(backlogNamespaces.size).toBeLessThan(17);
     });
 
     it('drops a backlog entry once the namespace is actually registered', () => {

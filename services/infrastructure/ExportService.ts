@@ -203,8 +203,14 @@ import { ProviderConfig } from '../../types/provider';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { saveProviderConfigs } from './ProviderConfigService';
 
+/** The one transform every exported value passes through. It is allowed to make
+ *  a backup SMALLER or LESS REVEALING than the live store — never to change what
+ *  the owner would read back on this device. */
 const redactPreferenceValue = (key: string, value: unknown): unknown => {
     if (key === FORGED_TOOLS_PREF_KEY) return redactForgedTools(value);
+    // Chat transcripts carry base64 screenshots; they travel as a stub, the rest
+    // of the session verbatim (`stripChatSessionImages`).
+    if (key.startsWith('trade_chat_sessions_v1')) return stripChatSessionImages(value);
     if (key !== PREF_KEYS.PROVIDER_CONFIGS || !Array.isArray(value)) return value;
     return value.map((provider: ProviderConfig) => ({
         ...provider,
@@ -339,7 +345,81 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     // nothing writes, and the restore mirror put it back where nothing reads.
     // Covers `learning_proposals_v1:<user>`.
     'learning_proposals_v1',
+    // The trading surface, measured before registering (owners verified: each
+    // writes `localStorage` directly and never goes through PreferencesService):
+    //   watchService.ts:61 (10 watches), levelWatchService.ts:140/167 (10 arms /
+    //   200 hits), chartDrawings.ts:121/187 (40 drawings × 200 points, per symbol
+    //   and per session), chatStore.ts:160 (a plain id string), chatSessions.ts:199
+    //   (12 sessions × 60 entries — see the image strip below), toolForge.ts:365
+    //   (already redacted), checklist.ts:51, TradingChart.tsx:112 (≤ ~90 bytes),
+    //   and harnessSettings.ts:79 — which is a RAW owner too, not a Preferences
+    //   one: it was assumed "covered via Preferences" and a real export with an
+    //   empty Preferences store proved it was not in the backup at all.
+    // Left OUT deliberately: desk_idle_motion_v1, desk_role_overrides_v1,
+    // desk_room_layout_v1, last_active_user, thinking_leak_bin_v1 and the three
+    // crash breadcrumbs — furniture and telemetry, not the trader's data.
+    'trade_watches_v1',
+    'trade_level_arms_v1',
+    'trade_level_hits_v1',
+    'trade_drawings_v1',
+    'trade_session_drawings_v1',
+    // NOT 'trade_chat_active_v1': chatStore.ts:160 stores a PLAIN session-id
+    // string, which this sweep cannot JSON.parse (so it exports nothing) and a
+    // mirrored `JSON.stringify` would write as `"s-1"` where the owner reads the
+    // bare `s-1`. Registering it would corrupt the very pointer it backs up — it
+    // needs a raw-string envelope in the backup format first.
+    'trade_chat_sessions_v1',
+    'desk_tools_forged_v1',
+    'trading_checklist_v1',
+    'trade_tf_bar_v1',
+    'harness_settings_v1',
 ];
+
+/** One exported store may not exceed this. The notebook's own hard ceiling is
+ *  2 MB (`utils/memoryBudget.ts:38`) and the WebView origin quota is SHARED, so a
+ *  single key gets a fraction of it — and a store that cannot fit even after its
+ *  images are stripped is SKIPPED and reported, never truncated in silence.
+ *
+ *  Scoped to the namespaces listed below ON PURPOSE: `memory_files_v1_<user>` is
+ *  legitimately allowed to reach 2 MB, so a blanket cap here would drop the
+ *  notebook from backups and make this "guard" the data-loss bug it exists to
+ *  prevent. */
+export const EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024;
+const CAPPED_EXPORT_PREFIXES = ['trade_chat_sessions_v1'];
+
+/** The placeholder that replaces an image payload in an EXPORT COPY. Text, order
+ *  and metadata are untouched; the live key is never written with this. */
+interface ExportedImageStub { bytes: number; mime: string }
+
+const IMAGE_MIME_RE = /^data:([^;,]+)/;
+
+/** `trade_chat_sessions_v1_<user>` is 12 sessions × 60 entries bounded by COUNT,
+ *  not bytes, and one entry can carry a 1.2 MB base64 screenshot
+ *  (`chatSessions.ts:98`). Backing it whole would put a hundred-megabyte blob in
+ *  one backup against a shared quota, so images travel as a stub saying they
+ *  existed. Applies to the exported value only. */
+const stripChatSessionImages = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return value;
+    return value.map(session => {
+        if (!session || typeof session !== 'object') return session;
+        const s = session as { entries?: unknown };
+        if (!Array.isArray(s.entries)) return session;
+        return {
+            ...session,
+            entries: s.entries.map(entry => {
+                if (!entry || typeof entry !== 'object') return entry;
+                const e = entry as { image?: unknown; imageOmitted?: unknown };
+                if (typeof e.image !== 'string' || !e.image) return entry;
+                const stub: ExportedImageStub = {
+                    bytes: e.image.length,
+                    mime: IMAGE_MIME_RE.exec(e.image)?.[1] ?? 'image',
+                };
+                const { image: _image, ...rest } = e as { image?: unknown };
+                return { ...rest, imageOmitted: e.imageOmitted ?? stub };
+            }),
+        };
+    });
+};
 
 /**
  * Is this key owned by a store that talks to `localStorage` directly?
@@ -399,12 +479,36 @@ const mirrorToLocalStorage = (key: string, value: unknown): void => {
     }
 };
 
+const byteLength = (s: string): number =>
+    (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : s.length);
+
+/** Put one swept value into the backup, applying the per-store cap. A capped
+ *  store is LEFT OUT with a notice rather than truncated: a backup that silently
+ *  lost the transcripts is worse than one that says it did. */
+const putSweptValue = (
+    backup: Record<string, unknown>,
+    notices: string[],
+    key: string,
+    raw: unknown,
+): void => {
+    const value = redactPreferenceValue(key, raw);
+    if (CAPPED_EXPORT_PREFIXES.some(p => key.startsWith(p))) {
+        const bytes = byteLength(JSON.stringify(value));
+        if (bytes > EXPORT_RAW_KEY_CAP_BYTES) {
+            notices.push(`${key}: NOT IN THIS BACKUP — ${bytes} bytes is over the ${EXPORT_RAW_KEY_CAP_BYTES}-byte cap even after images were stripped`);
+            return;
+        }
+    }
+    backup[key] = value;
+};
+
 /**
  * Export all preference keys as a supplementary backup
  * This captures settings that aren't in database
  */
 export const exportPreferencesData = async (): Promise<Record<string, any>> => {
     const backup: Record<string, any> = {};
+    const notices: string[] = [];
 
     // Get all values from PreferencesService (handles native/web abstraction)
     const keysToBackup = Object.values(PREF_KEYS);
@@ -413,7 +517,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         try {
             const value = await readSweptValue(key);
             if (value !== null) {
-                backup[key] = redactPreferenceValue(key, value);
+                putSweptValue(backup, notices, key, value);
             }
         } catch (e) {
             console.warn(`[ExportService] Failed to export key ${key}:`, e);
@@ -440,12 +544,17 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
             if (!key || keysToBackup.includes(key)) continue;
             const value = await readSweptValue(key);
             if (value !== null) {
-                backup[key] = redactPreferenceValue(key, value);
+                putSweptValue(backup, notices, key, value);
             }
         }
     } catch (e) {
         console.warn('[ExportService] Per-user key sweep failed:', e);
     }
+
+    // Only present when something was left out. Restores skip it as an
+    // un-allow-listed key, which is what makes the omission visible on both ends
+    // instead of a silent hole in the backup.
+    if (notices.length) backup._backup_notices = notices;
 
     return backup;
 };
