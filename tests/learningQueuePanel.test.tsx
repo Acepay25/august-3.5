@@ -121,6 +121,16 @@ describe('rescope apply (A2 slice 1)', () => {
             .toHaveBeenCalledWith('btc-sweep', clauses, USER));
     });
 
+    it('a rescope with no clauses in its payload offers Dismiss only', () => {
+        // The regime/recurrence pass queues exactly this shape
+        // (`SkillMemoryService.ts:1622`, no payload). Hiding Apply here is the
+        // difference between an override offered and a button that can only refuse.
+        seed();
+        render(<LearningQueuePanel />);
+        expect(screen.queryAllByRole('button', { name: /^Apply/ })).toHaveLength(0);
+        expect(screen.getByText('Dismiss')).toBeTruthy();
+    });
+
     it('a refused rescope names the reason it was refused', async () => {
         seedRescope();
         mockApplyRescope.mockResolvedValueOnce({ applied: false, reason: 'below-bar' });

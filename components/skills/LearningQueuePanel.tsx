@@ -3,7 +3,7 @@ import {
     listLearningProposals,
     dismissLearningProposal,
     proposalApplyFailureMessage,
-    APPLYABLE_PROPOSAL_KINDS,
+    isApplyableProposal,
     type LearningProposal,
     type ProposalApplyResult,
 } from '../../utils/learningQueue';
@@ -41,10 +41,10 @@ const KIND_LABEL: Record<string, string> = {
     contradiction: 'conflict',
 };
 
-/** Kinds with a deterministic actuation path, from the one shared list — the
- *  Coach thread reads the same set, so a kind cannot be applyable in one surface
- *  and Dismiss-only in the other (that drift is why `rescope` stayed unusable). */
-const APPLYABLE = new Set<string>(APPLYABLE_PROPOSAL_KINDS);
+/** Kinds with a deterministic actuation path live in `APPLYABLE_PROPOSAL_KINDS`;
+ *  whether THIS row carries what its path needs is `isApplyableProposal` — both
+ *  panels read the same two answers, so neither can offer a button the other
+ *  hides. */
 
 interface LearningQueuePanelProps {
     /** Bump to force a refresh from outside (e.g. after approving a draft). */
@@ -171,7 +171,7 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                         Open in chat
                                     </button>
                                 )}
-                                {APPLYABLE.has(p.kind) && (
+                                {isApplyableProposal(p) && (
                                     <button
                                         type="button"
                                         disabled={busyId === p.id}

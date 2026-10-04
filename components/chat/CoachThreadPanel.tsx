@@ -7,7 +7,7 @@ import {
     listLearningProposals,
     dismissLearningProposal,
     proposalApplyFailureMessage,
-    APPLYABLE_PROPOSAL_KINDS,
+    isApplyableProposal,
     type LearningProposal,
     type ProposalApplyResult,
 } from '../../utils/learningQueue';
@@ -266,7 +266,6 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
         refresh();
     };
 
-    const applyable = new Set<string>(APPLYABLE_PROPOSAL_KINDS);
     const empty = drafts.length === 0 && proposals.length === 0;
 
     return (
@@ -321,7 +320,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                         <ActionButton onPress={() => dismissProposal(p)} testId={`coach-proposal-dismiss-${p.id}`}>
                             Dismiss
                         </ActionButton>
-                        {applyable.has(p.kind) && (
+                        {isApplyableProposal(p) && (
                             <ActionButton
                                 onPress={() => void applyProposal(p)}
                                 variant="solid"
