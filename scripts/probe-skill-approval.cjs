@@ -18,6 +18,10 @@
  *                  and specifically not "Skill saved"
  *   4 no folder  → skills folder deleted from the notebook → "Not saved" AND
  *                  the draft still in the inbox (it must not be destroyed)
+ *   5 rescope    → A2: a `revise_skill` proposal in the Coach thread, pressed
+ *                  Apply, asserted on the skill FILE BYTES (old clause gone,
+ *                  prose line moved), plus 5b: a below-bar clause refused, which
+ *                  must keep its row and name why on it
  *
  * Usage: node scripts/probe-skill-approval.cjs [--headed]
  * Screenshots + a JSON transcript land in .probe-artifacts/skill-approval/.
@@ -150,6 +154,50 @@ async function seedDrafts(page, drafts) {
 const readDrafts = (page) => page.evaluate((k) => {
     try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; }
 }, DRAFTS_KEY);
+
+const PROPOSALS_KEY = `learning_proposals_v1:${USER}`;
+
+/** Seed the learning queue with exactly the bytes `revise_skill` produces (via
+ *  `queueLearningProposal`) so the probe drives the panel, not the store. */
+const seedProposals = async (page, rows) => {
+    await page.evaluate(([k, v]) => localStorage.setItem(k, JSON.stringify(v)), [PROPOSALS_KEY, rows]);
+    await page.reload({ waitUntil: 'networkidle' }).catch(() => {});
+    await sleep(2000);
+};
+
+const readProposals = (page) => page.evaluate((k) => {
+    try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; }
+}, PROPOSALS_KEY);
+
+/** The CONTENT of one skill file, read off the live page's notebook. The
+ *  rescope is only proven by the bytes: a row vanishing proves the click, not
+ *  the write. */
+const readSkillContent = (page, fileName) => page.evaluate((name) => {
+    const nk = Object.keys(localStorage).find(k => k.startsWith('memory_files_v1'));
+    if (!nk) return '';
+    try {
+        const store = JSON.parse(localStorage.getItem(nk) || '{}');
+        const skills = (store.folders || []).find(f => f.name === 'skills');
+        const file = (store.files || []).find(f => f.folderId === skills?.id && f.name === name);
+        return file?.content || '';
+    } catch { return ''; }
+}, fileName);
+
+/** Open the Coach tab and press a control by testid, reporting what was seen. */
+async function clickCoachControl(page, testId) {
+    await clickByText(page, 'Learn');
+    await sleep(1200);
+    try {
+        await page.waitForSelector('[data-testid="learn-tab-coach"]', { timeout: 6000 });
+        await page.click('[data-testid="learn-tab-coach"]');
+    } catch { await clickByText(page, 'Coach'); }
+    await sleep(1500);
+    try {
+        await page.waitForSelector(`[data-testid="${testId}"]`, { timeout: 8000 });
+        await page.click(`[data-testid="${testId}"]`);
+        return true;
+    } catch { return false; }
+}
 
 /** Skill file names currently in the notebook, from the live page.
  *  Resolves the key INSIDE the page every call: the app recreates the notebook
@@ -362,17 +410,92 @@ async function readToast(page) {
                 // an error under no-undef.
                 const real = window.Storage.prototype.setItem;
                 window.Storage.prototype.setItem = function (k, v) {
-                    if (typeof k === 'string' && k.startsWith('memory_files_v1')) {
+                    // Gate on a FLAG, not just the key: an init script lives for
+                    // the whole page, and a blanket block quietly broke every later
+                    // case's notebook writes (case 5 failed on its own missing
+                    // prerequisite before this gate existed).
+                    if (typeof k === 'string' && k.startsWith('memory_files_v1')
+                        && localStorage.getItem('probe_block_notebook') === '1') {
                         throw new Error('probe: quota exceeded');
                     }
                     return real.call(this, k, v);
                 };
             });
+            await page.evaluate(() => localStorage.setItem('probe_block_notebook', '1'));
             const r = await approveOne('sk-writefail', craft({ ifCondition: 'a trigger whose write will be forced to fail' }));
             check('4-writefail: toast says Not saved, not Skill saved',
                 /Not saved/.test(r.toast) && !/Skill saved/.test(r.toast), r.toast);
             check('4-writefail: the draft SURVIVES the failed write',
                 r.draftsAfter.length === 1, r.draftsAfter.map(d => d.id));
+            await page.evaluate(() => localStorage.removeItem('probe_block_notebook'));
+        }
+        // ── 5. A2: a rescope proposal applied by a human in the Coach thread ─
+        // The unit suites prove the applier; this proves the panel reached it in
+        // the real app, and asserts the FILE BYTES — a vanished row proves the
+        // click, not the write.
+        await freshSession(page);
+        {
+            await approveOne('sk-rescope-seed', craft());
+            const lived = await readSkillContent(page, 'funding-exhaustion-long.md');
+            check('5-rescope: prerequisite skill is live with the original clause',
+                lived.includes('funding positive 8 sessions and the daily low was swept'), lived.length);
+
+            const NEW = {
+                ifCondition: 'funding positive 14 sessions and the daily low was swept',
+                thenAction: 'go long only after a 4h close back above the swept level',
+                predicate: 'close > open',
+            };
+            const row = {
+                id: 'lp-probe-rescope-1', kind: 'rescope', skillSlug: 'funding-exhaustion-long',
+                text: 'It fires on 3-session funding streaks too and loses there; only 14+ is the edge.',
+                fingerprint: 'model-revision:funding-exhaustion-long:probe',
+                createdAt: new Date().toISOString(),
+                payload: { source: 'model:desk', ...NEW },
+            };
+            await seedProposals(page, [row]);
+            const clicked = await clickCoachControl(page, `coach-proposal-apply-${row.id}`);
+            check('5-rescope: the Coach thread offered Apply for a rescope', clicked);
+            await sleep(2500);
+            const bytes = await readSkillContent(page, 'funding-exhaustion-long.md');
+            check('5-rescope: the notebook now carries the proposed clause',
+                bytes.includes(NEW.ifCondition) && bytes.includes(NEW.thenAction), bytes.length);
+            check('5-rescope: the old clause is gone from the file, prose line included',
+                !bytes.includes('funding positive 8 sessions'), { stale: bytes.includes('funding positive 8 sessions') });
+            check('5-rescope: one skill, not a second file',
+                (await readSkillFiles(page)).files.filter(f => f.includes('funding-exhaustion-long')).length === 1);
+            check('5-rescope: the proposal row was consumed',
+                (await readProposals(page)).length === 0);
+
+            // 5b. a refusal: same surface, clause below the bar. The row must
+            // STAY and name why — this is slice 4's failure path in the real app.
+            const bad = {
+                id: 'lp-probe-rescope-2', kind: 'rescope', skillSlug: 'funding-exhaustion-long',
+                text: 'Vague tightening.', fingerprint: 'model-revision:funding-exhaustion-long:vague',
+                createdAt: new Date().toISOString(),
+                payload: { source: 'model:desk', ifCondition: 'be careful', thenAction: 'manage risk' },
+            };
+            const queueNow = await readProposals(page);
+            await seedProposals(page, [...queueNow, bad]);
+            const clickedBad = await clickCoachControl(page, `coach-proposal-apply-${bad.id}`);
+            check('5b-refusal: Apply reachable for the below-bar rescope', clickedBad);
+            const why = await page.evaluate(() => {
+                const deadline = Date.now() + 4000;
+                return new Promise((resolve) => {
+                    const poll = () => {
+                        const t = document.body.innerText || '';
+                        if (/below the bar/i.test(t)) return resolve('below the bar');
+                        if (Date.now() > deadline) return resolve('');
+                        setTimeout(poll, 200);
+                    };
+                    poll();
+                });
+            });
+            check('5b-refusal: the row names why it refused', why === 'below the bar', why);
+            check('5b-refusal: the refused proposal is still queued',
+                (await readProposals(page)).some(p => p.id === bad.id));
+            check('5b-refusal: the skill bytes did not change',
+                (await readSkillContent(page, 'funding-exhaustion-long.md')).includes(NEW.ifCondition));
+            await shot(page, 'rescope');
         }
         await shot(page, 'final');
     } catch (e) {
