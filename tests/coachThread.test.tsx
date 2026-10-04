@@ -47,7 +47,12 @@ describe('CoachThreadPanel', () => {
     let draft: { id: string };
     beforeEach(() => {
         localStorage.clear();
-        draft = queueSkillDraft({ tradeId: 'msg-1', coin: 'BTCUSDT', crafted: crafted() });
+        // queueSkillDraft now returns null when the store did not take the row
+        // (it reads back before claiming success), so a null here is the inbox
+        // being broken — fail loudly rather than type-coerce past it.
+        const queued = queueSkillDraft({ tradeId: 'msg-1', coin: 'BTCUSDT', crafted: crafted() });
+        if (!queued) throw new Error('queueSkillDraft stored nothing — the draft never reached the inbox');
+        draft = queued;
     });
 
     it('lists pending drafts and proposals as cards', () => {
