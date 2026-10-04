@@ -23,6 +23,10 @@ export interface BackupMetadata {
     sizeBytes: number;
     conversationCount: number;
     tradeCount: number;
+    /** Stores this backup had to LEAVE OUT (over the per-store export cap).
+     *  Rendered by Settings → Data: a backup that quietly omitted the trader's
+     *  transcripts is worse than one that says it did. */
+    notices?: string[];
 }
 
 const BACKUP_STORE_NAME = 'backups';
@@ -128,7 +132,13 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
         // F6: preferences sidecar — provider configs (with keys), learning
         // rules, price alerts, autopilot state. Restoring a backup previously
         // only restored the profile, silently dropping all of these.
-        const preferencesJson = JSON.stringify(await exportPreferencesData());
+        const preferences = await exportPreferencesData();
+        // The export records what it skipped; carry it up to the person who
+        // pressed the button instead of leaving it inside the sidecar file.
+        const notices = Array.isArray(preferences._backup_notices)
+            ? (preferences._backup_notices as unknown[]).map(String)
+            : [];
+        const preferencesJson = JSON.stringify(preferences);
         // Thinking sidecar — the outcome-correlated reasoning corpus lives in
         // its own store that is NOT part of UserProfile; a restore without it
         // silently dropped every reasoning record.
@@ -142,6 +152,7 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
             sizeBytes,
             conversationCount: profile.conversations?.length || 0,
             tradeCount: profile.tradeLog?.length || 0,
+            ...(notices.length ? { notices } : {}),
         };
 
         if (useNativeStorage()) {

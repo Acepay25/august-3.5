@@ -23,7 +23,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [status, setStatus] = useState<{ kind: 'success' | 'warn' | 'error'; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -48,7 +48,16 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
     try {
       const meta = await createBackup(username);
       if (meta) {
-        setStatus({ kind: 'success', text: `Backup created (${new Date(meta.timestamp).toLocaleString()}).` });
+        if (meta.notices?.length) {
+          // A partial backup is not a clean one. Amber, not emerald, and it names
+          // the store that was left out so the trader can act on it.
+          setStatus({
+            kind: 'warn',
+            text: `Backup created, but LEFT OUT: ${meta.notices.join(' · ')}`,
+          });
+        } else {
+          setStatus({ kind: 'success', text: `Backup created (${new Date(meta.timestamp).toLocaleString()}).` });
+        }
         void refresh();
       } else {
         setStatus({ kind: 'error', text: 'Backup failed — nothing was written.' });
@@ -205,9 +214,13 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
       </div>
 
       {status && (
-        <div className={`text-xs px-3 py-2 rounded-lg border ${status.kind === 'success'
+        <div
+          data-testid="backup-status"
+          className={`text-xs px-3 py-2 rounded-lg border ${status.kind === 'success'
           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-          : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+          : status.kind === 'warn'
+            ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+            : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
           {status.text}
         </div>
       )}

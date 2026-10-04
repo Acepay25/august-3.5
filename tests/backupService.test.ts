@@ -301,3 +301,28 @@ describe('BackupService retention — a recovery point has to still exist', () =
         expect(survivors).toContain(importId);
     });
 });
+
+describe('createBackup carries the export notices', () => {
+    it('names a store the backup had to leave out', async () => {
+        // The component test renders whatever this returns, so the extraction is
+        // pinned here: a notice that never reaches the metadata never reaches the
+        // person who pressed the button.
+        h.getUserProfile.mockResolvedValue(profileFixture as never);
+        h.exportPreferencesData.mockResolvedValueOnce({
+            _backup_notices: ['trade_chat_sessions_v1_rober: NOT IN THIS BACKUP — 600000 bytes is over the 524288-byte cap even after images were stripped'],
+        } as never);
+
+        const meta = await createBackup(USERNAME);
+
+        expect(meta?.notices).toEqual([
+            'trade_chat_sessions_v1_rober: NOT IN THIS BACKUP — 600000 bytes is over the 524288-byte cap even after images were stripped',
+        ]);
+    });
+
+    it('says nothing when the export skipped nothing', async () => {
+        h.getUserProfile.mockResolvedValue(profileFixture as never);
+        const meta = await createBackup(USERNAME);
+        expect(meta).not.toBeNull();
+        expect(meta?.notices).toBeUndefined();
+    });
+});
