@@ -1,10 +1,14 @@
 # Workstream 1 — status / handoff
 
 Read first; don't re-explore what's recorded. Branch `workstream1-trade-review`
-(from `6e81c50`), never pushed, commit by explicit paths. Tip green (measured at
-`86ce021`+docs): full suite 475 files passed | 1 skipped, `tsc --noEmit` 0, eslint
-0 errors (860 warnings, inside the ratchet), `vite build` 0, skill-approval probe
-25/25.
+(from `6e81c50`), never pushed, commit by explicit paths. Tip green (measured from
+the committed tip `26cccaa`, runner output not a notification): full suite
+**exit 0, 475 files passed | 1 skipped (476)**, `tsc --noEmit` 0, eslint 0 errors,
+`vite build` 0, skill-approval probe 25/25.
+**Remaining in order: step 10** agentsSurface flake rate (10 solo + 1 under load)
+→ **step 11** Step B read-only audit into `docs/plans/` + STOP. Both were reached
+out of room this run, not blocked. Also open: a test for the
+`ChatTranscriptList` "image not backed up" branch (untested, noted above).
 
 ## Done
 | commit | item |
@@ -174,7 +178,7 @@ below: none of them goes around the prose line.
    currently exercises that path end-to-end (`skillRefinement.test.ts` only pins
    serialization and the lock split).
 
-## Step 9 — DONE (`<s9>`)
+## Step 9 — DONE (`26cccaa`)
 Registered in `RAW_LOCAL_STORAGE_PREFIXES`: `trade_watches_v1`,
 `trade_level_arms_v1`, `trade_level_hits_v1`, `trade_drawings_v1`,
 `trade_session_drawings_v1`, `trade_chat_sessions_v1`, `desk_tools_forged_v1`,
