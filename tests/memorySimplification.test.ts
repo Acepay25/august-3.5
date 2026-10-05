@@ -34,9 +34,11 @@ direction: Short
 family: Family A
 wins: 1
 losses: 6
+approvedBy: grandfathered
 ifCondition: BTC short setup in Family A without a reclaim close
 thenAction: skip the short until the reclaim candle closes
 tradeIds: a,b,c
+approvedBy: grandfathered
 ---
 
 # Avoid BTC short

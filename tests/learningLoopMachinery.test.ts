@@ -92,9 +92,11 @@ coin: BTCUSDT
 direction: Short
 wins: 1
 losses: 6
+approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: skip the short
 tradeIds: a,b,c
+approvedBy: grandfathered
 ${frontmatter}---
 
 # Avoid BTC short
@@ -517,9 +519,11 @@ coin: BTCUSDT
 direction: Short
 wins: 1
 losses: 9
+approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: skip the short
 tradeIds: a,b,c,d,e,f,g,h,i,j
+approvedBy: grandfathered
 evalVerdict: hurts
 evalStreak: 2
 lastEvalAt: ${now}
@@ -713,9 +717,11 @@ direction: Short
 family: Family A
 wins: ${wins}
 losses: ${losses}
+approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: skip the short
 tradeIds: ${Array.from({ length: wins + losses }, (_, i) => `t${i}`).join(',')}
+approvedBy: grandfathered
 ---
 
 # Candidate avoid BTC short

@@ -110,6 +110,7 @@ direction: Short
 family: Family A
 wins: 5
 losses: 2
+approvedBy: grandfathered
 ifCondition: BTC short setup in Family A
 thenAction: ride it
 modified: ${new Date(born).toISOString()}

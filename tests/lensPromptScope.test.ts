@@ -48,6 +48,7 @@ const buildSkill = (overrides: Record<string, unknown>): string => {
         wins: '3',
         losses: '1',
         sample: '4',
+        approvedBy: 'grandfathered',
         modified: '2026-08-01T00:00:00.000Z',
     };
     for (const [k, v] of Object.entries(overrides)) {

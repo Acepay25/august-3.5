@@ -373,6 +373,11 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     'trading_checklist_v1',
     'trade_tf_bar_v1',
     'harness_settings_v1',
+    // The approval gate's "this pass already ran" marker: written and read straight
+    // through localStorage by services/learning/approvalMigration.ts, so it is a raw
+    // owner like the rest — unbacked on native would mean stamping the library again
+    // after a restore, which is harmless but silently re-writes every skill file.
+    'approvals_grandfathered_v1',
 ];
 
 /** One exported store may not exceed this. The notebook's own hard ceiling is

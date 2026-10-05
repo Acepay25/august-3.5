@@ -59,7 +59,9 @@ direction: Short
 family: Family A
 wins: 1
 losses: 6
+approvedBy: grandfathered
 tradeIds: a,b,c
+approvedBy: grandfathered
 ---
 
 # Avoid BTC short
@@ -72,7 +74,9 @@ direction: Long
 family: Family C
 wins: 0
 losses: 5
+approvedBy: grandfathered
 tradeIds: d,e,f
+approvedBy: grandfathered
 ---
 
 # Avoid ETH long

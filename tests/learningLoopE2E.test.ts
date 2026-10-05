@@ -53,12 +53,15 @@ import {
     applySkillEvidence,
     listSkills,
     setSkillStatus,
+    stampSkillApproval,
+    serializeSkill,
+    titleFromMeta,
     type SkillMeta,
 } from '../services/learning/SkillMemoryService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
 import { gateEvidenceBackedDraft } from '../services/learning/draftGates';
 import { recordEvalVerdict, evaluateSkill, type SkillAnalysisRunner } from '../services/learning/SkillEvalService';
-import { initMemoryFiles, getMemoryFiles, createMemoryFile } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { getRecentMemoryInjections } from '../services/learning/MemoryInjectionService';
 import { shouldSkillHoldout } from '../utils/skillHoldout';
@@ -150,7 +153,7 @@ beforeEach(async () => {
 });
 
 describe('the loop, end to end', () => {
-    it('trade → craft → worth gate → LLM approve → inject → evidence → demote, zero human clicks', async () => {
+    it('trade → craft → worth gate → LLM triage → ONE human approval → inject → evidence → demote', async () => {
         expect(shouldSkillHoldout(RUN)).toBe(false);
 
         // 1. A closed trade with a post-mortem syncs into the notebook.
@@ -190,6 +193,23 @@ describe('the loop, end to end', () => {
         //    records the attribution the evidence join depends on.
         const setup = { coin: 'BTCUSDT', direction: 'Short', family: 'Family A' };
         const slug = skill.file.name.replace(/\.md$/i, '');
+
+        // 3b. THE ACTIVATION GATE. The worth gate CREATED this row and the supervisor
+        //     said yes on the trader's behalf — which is triage, not approval. Until a
+        //     human says so, the rule reaches no prompt and no veto. This is the one
+        //     step where this loop stopped being "zero human clicks", and it is the
+        //     point of the gate: the trader's own yes is what makes a rule live.
+        expect(getMemoryFilesContext(setup, undefined, 'analyst', 'opening', { runId: RUN }))
+            .not.toContain(slug);
+        // Not the grandfather pass: this row carries `approvedBy: supervisor`, and a
+        // model approval is deliberately not a human one, so the migration leaves it
+        // alone. The trader's own yes is what turns it on.
+        const toStamp = parseSkillMarkdown(skill.file.content)!;
+        stampSkillApproval(toStamp, 'human');
+        await updateMemoryFile(skill.file.id, {
+            content: serializeSkill(toStamp, titleFromMeta(toStamp)),
+        }, USER);
+
         const opening = getMemoryFilesContext(setup, undefined, 'analyst', 'opening', { runId: RUN });
         expect(opening).toContain(slug);
         expect(opening).toContain('untested');
@@ -246,9 +266,11 @@ coin: BTCUSDT
 direction: Short
 wins: 2
 losses: 6
+approvedBy: grandfathered
 ifCondition: BTC short into a reclaimed sweep
 thenAction: skip the short
 tradeIds: a,b,c
+approvedBy: grandfathered
 ---
 
 # Avoid BTC short
@@ -304,9 +326,11 @@ coin: BTCUSDT
 direction: Short
 wins: 3
 losses: 1
+approvedBy: grandfathered
 ifCondition: BTC short into a reclaimed sweep on the 15m
 thenAction: skip the short
 tradeIds: a,b,c,d,e
+approvedBy: grandfathered
 originBotId: bot-1
 originBotName: Macro
 ---

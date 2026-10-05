@@ -26,6 +26,7 @@ losses: 6
 ifCondition: BTC short in Family A
 thenAction: skip
 tradeIds: a,b,c
+approvedBy: grandfathered
 ${extra}---
 
 # Avoid BTC short
@@ -108,6 +109,7 @@ losses: 1
 ifCondition: BTC short in Family A
 thenAction: size down
 tradeIds: d,e
+approvedBy: grandfathered
 ---
 
 # Repeat BTC short
@@ -139,6 +141,7 @@ losses: 1
 ifCondition: BTC short in Family A
 thenAction: size down
 tradeIds: d,e
+approvedBy: grandfathered
 ---
 
 # Repeat BTC short
@@ -232,6 +235,7 @@ describe('frontmatter never eats the skill budget', () => {
             modifiedAt: iso,
             evalVerdict: 'helps',
             evalDetail: '3/3',
+            approvedBy: 'grandfathered',
             lastEvalAt: iso,
             controlIds: ['c1', 'c2'],
             history: [

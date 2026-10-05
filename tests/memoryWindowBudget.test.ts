@@ -90,7 +90,9 @@ direction: Short
 family: Family A
 wins: 3
 losses: 2
+approvedBy: grandfathered
 tradeIds: a,b,c,d,e
+approvedBy: grandfathered
 ---
 `;
     await createMemoryFile(skills.id, 'btc-short-familya-avoid.md', `${skillFrontmatter}

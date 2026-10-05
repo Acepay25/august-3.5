@@ -94,10 +94,12 @@ direction: Short
 family: Family A
 wins: 1
 losses: 1
+approvedBy: grandfathered
 ifCondition: BTC short setup holdout-test
 thenAction: short after the 15m reclaim
 lastEvidenceAt: ${new Date(Date.now() - 5 * 60 * 1000).toISOString()}
 tradeIds: seed-1
+approvedBy: grandfathered
 ---
 
 # Repeat BTCUSDT Short Family A
