@@ -314,7 +314,18 @@ export interface SkillMeta {
     lastEvalAt?: string;
     /** Trigger/action snapshot taken BEFORE the last refinement — the
      *  evidence diff shown in the notebook so a rewrite is auditable. */
-    previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
+    /** The version a non-human rewrite replaced, kept so the trader can REVERT it
+     *  with the approval that came before — not just roll the text back and leave
+     *  the row silently inactive. `body` and the approval fields ride along for
+     *  exactly that reason. */
+    previousVersion?: {
+        kind: SkillKind;
+        ifCondition?: string;
+        thenAction?: string;
+        body?: string;
+        approvedBy?: SkillMeta['approvedBy'];
+        approvedAt?: string;
+    };
     /** Temporal ledger: every status transition is
      *  stamped validFrom → (invalidAt | null). Superseded beliefs are never
      *  deleted — retirement/demotion closes the interval, so replay audits
@@ -479,11 +490,15 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
     const prevRaw = pick('previousVersion');
     if (prevRaw) {
         try {
-            const parsed = JSON.parse(prevRaw) as { kind?: string; ifCondition?: string; thenAction?: string };
+            const parsed = JSON.parse(prevRaw) as { kind?: string; ifCondition?: string; thenAction?: string; body?: string; approvedBy?: string; approvedAt?: string };
             previousVersion = {
                 kind: parsed.kind === 'repeat' ? 'repeat' : 'avoid',
                 ifCondition: typeof parsed.ifCondition === 'string' ? parsed.ifCondition : undefined,
                 thenAction: typeof parsed.thenAction === 'string' ? parsed.thenAction : undefined,
+                body: typeof parsed.body === 'string' ? parsed.body : undefined,
+                approvedBy: parsed.approvedBy === 'human' || parsed.approvedBy === 'grandfathered' || parsed.approvedBy === 'supervisor'
+                    ? parsed.approvedBy : undefined,
+                approvedAt: typeof parsed.approvedAt === 'string' ? parsed.approvedAt : undefined,
             };
         } catch {
             previousVersion = undefined;
@@ -730,6 +745,111 @@ export const stampSkillApproval = (meta: SkillMeta, by: 'human', at?: string): v
     meta.approvedBy = by;
     meta.approvedAt = at ?? new Date().toISOString();
 };
+
+/**
+ * A NON-HUMAN rewrite asks instead of activating. Called by every writer that
+ * changes a live skill's trigger or body without a person in front of it (the
+ * supervisor's rewrites, shadow promotion), it:
+ *   1. keeps the version it is replacing — including the approval that version
+ *      carried, so REVERT restores a working rule rather than a rolled-back text
+ *      that is still inert;
+ *   2. withdraws approval, so the new text is inactive until the trader acts;
+ *   3. queues ONE item showing old text, new text and the evidence beside it.
+ *
+ * Fail-closed by construction: a writer that forgets step 2 leaves the row carrying
+ * the approval it had, which is why this is one call the writers make rather than a
+ * convention they remember. The structural test in tests/approvalGate.test.ts is what
+ * keeps it that way.
+ */
+export const requestRewriteApproval = (
+    meta: SkillMeta,
+    to: { ifCondition?: string; thenAction?: string },
+    opts: { slug: string; username: string; source: string; evidence?: string },
+): void => {
+    const from = {
+        kind: meta.kind,
+        ifCondition: meta.ifCondition,
+        thenAction: meta.thenAction,
+        body: meta.body,
+        approvedBy: meta.approvedBy,
+        approvedAt: meta.approvedAt,
+    };
+    meta.previousVersion = from;
+    revokeSkillApproval(meta);
+    queueLearningProposal({
+        kind: 'rewrite',
+        skillSlug: opts.slug,
+        text: `${opts.source} rewrote "${opts.slug}". It is INACTIVE until you approve it.`
+            + `\nWAS: IF ${from.ifCondition ?? '—'} THEN ${from.thenAction ?? '—'}`
+            + `\nNOW: IF ${to.ifCondition ?? '—'} THEN ${to.thenAction ?? '—'}`
+            + (opts.evidence ? `\nEvidence: ${opts.evidence}` : ''),
+        fingerprint: `rewrite|${opts.slug}|${to.ifCondition ?? ''}|${to.thenAction ?? ''}`,
+        payload: {
+            source: opts.source,
+            evidence: opts.evidence,
+            old: { ifCondition: from.ifCondition, thenAction: from.thenAction },
+            new: { ifCondition: to.ifCondition, thenAction: to.thenAction },
+        },
+    }, opts.username);
+};
+
+const findSkillRowBySlug = (slug: string) => {
+    const wanted = slug.replace(/\.md$/i, '').toLowerCase();
+    return getMemoryFiles().files
+        .filter(isSkillFile)
+        .find(f => f.name.replace(/\.md$/i, '').toLowerCase() === wanted);
+};
+
+/** The trader's YES on a pending rewrite: re-approve exactly what the row now
+ *  says. The text was already written — what was missing was the approval. */
+export const approvePendingRewrite = async (slug: string, username: string): Promise<ProposalApplyResult> =>
+    withNotebookWriteLock(async () => {
+        if (!slug) return { applied: false, reason: 'no-target' };
+        await ensureHarnessFoldersUnlocked(username);
+        const file = findSkillRowBySlug(slug);
+        if (!file) return { applied: false, reason: 'no-target' };
+        const meta = parseSkillMarkdown(file.content);
+        if (!meta) return { applied: false, reason: 'unreadable' };
+        stampSkillApproval(meta, 'human');
+        meta.modifiedAt = new Date().toISOString();
+        await updateMemoryFileUnlocked(file.id, {
+            content: serializeSkill(meta, titleFromMeta(meta)),
+        }, username);
+        const back = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === file.id)?.content ?? '');
+        return back?.approvedBy === 'human' ? { applied: true } : { applied: false, reason: 'not-written' };
+    });
+
+/** The trader's NO: put the old rule back, with the approval it held, so reverting
+ *  cannot silently deactivate the thing they had been using. */
+export const revertPendingRewrite = async (slug: string, username: string): Promise<ProposalApplyResult> =>
+    withNotebookWriteLock(async () => {
+        if (!slug) return { applied: false, reason: 'no-target' };
+        await ensureHarnessFoldersUnlocked(username);
+        const file = findSkillRowBySlug(slug);
+        if (!file) return { applied: false, reason: 'no-target' };
+        const meta = parseSkillMarkdown(file.content);
+        if (!meta) return { applied: false, reason: 'unreadable' };
+        const prev = meta.previousVersion;
+        if (!prev?.ifCondition || !prev?.thenAction) {
+            // Nothing to go back to: the row stays as written and still unapproved.
+            return { applied: false, reason: 'no-clauses' };
+        }
+        meta.kind = prev.kind;
+        meta.ifCondition = prev.ifCondition;
+        meta.thenAction = prev.thenAction;
+        if (prev.body) meta.body = prev.body;
+        meta.previousVersion = undefined;
+        // Re-stamp the PRIOR approval, not a fresh human one: the trader never said
+        // yes to the rewrite, and the old version's yes is what they are restoring.
+        meta.approvedBy = prev.approvedBy;
+        meta.approvedAt = prev.approvedAt;
+        meta.modifiedAt = new Date().toISOString();
+        await updateMemoryFileUnlocked(file.id, {
+            content: serializeSkill(meta, titleFromMeta(meta)),
+        }, username);
+        const back = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === file.id)?.content ?? '');
+        return back?.ifCondition === prev.ifCondition ? { applied: true } : { applied: false, reason: 'not-written' };
+    });
 
 /**
  * THE GRANDFATHER MIGRATION — one pass over the existing library so the gate does
@@ -1548,11 +1668,19 @@ const applySkillEvidenceUnlocked = async (
                 // This refinement settled — one recovery sample.
                 void recordRefinementOutcome(username, settled.promoted);
                 if (settled.promoted) {
-                    meta.previousVersion = {
-                        kind: meta.kind,
-                        ifCondition: meta.ifCondition,
-                        thenAction: meta.thenAction,
-                    };
+                    // A shadow promotion rewrites the live rule from model output.
+                    // It now asks: snapshot + withdraw approval + queue the item,
+                    // BEFORE the fields move, so the snapshot is the version the
+                    // trader was actually using.
+                    requestRewriteApproval(meta, {
+                        ifCondition: meta.shadow.ifCondition,
+                        thenAction: meta.shadow.thenAction,
+                    }, {
+                        slug: file.name.replace(/\.md$/i, ''),
+                        username,
+                        source: 'shadow refinement',
+                        evidence: `${meta.shadow.seen} matched trades, ${meta.shadow.wins}W/${meta.shadow.losses}L beat the live version's record`,
+                    });
                     meta.kind = meta.shadow.kind;
                     meta.ifCondition = meta.shadow.ifCondition;
                     meta.thenAction = meta.shadow.thenAction;
@@ -2958,6 +3086,11 @@ export const applyRescopeProposal = async (
     slug: string,
     clauses: { ifCondition?: string; thenAction?: string; predicate?: string },
     username: string,
+    /** Set when a MODEL is applying this re-scope rather than the trader. The text
+     *  is written either way, but a model rewrite withdraws the approval the old
+     *  version held and queues the approve/revert item instead of assuming consent —
+     *  `Apply` on the human path is itself the approval. Omitted ⇒ human path. */
+    options: { requestedBy?: 'supervisor'; evidence?: string } = {},
 ): Promise<ProposalApplyResult> => withNotebookWriteLock(async () => {
     const ifCondition = (clauses.ifCondition ?? '').trim();
     const thenAction = (clauses.thenAction ?? '').trim();
@@ -2973,6 +3106,15 @@ export const applyRescopeProposal = async (
     if (!target) return { applied: false, reason: 'no-target' };
     const meta = parseSkillMarkdown(target.content);
     if (!meta) return { applied: false, reason: 'unreadable' };
+
+    // BEFORE the fields move: a model rewrite must snapshot the version the trader
+    // was actually using, withdraw its approval, and queue the decision. A human
+    // pressing Apply needs none of that — that press IS the approval.
+    if (options.requestedBy === 'supervisor') {
+        requestRewriteApproval(meta, { ifCondition, thenAction }, {
+            slug, username, source: 'supervisor re-scope', evidence: options.evidence,
+        });
+    }
 
     meta.ifCondition = ifCondition;
     meta.thenAction = thenAction;

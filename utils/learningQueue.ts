@@ -9,7 +9,12 @@
  * surface with); proposals are small, bounded, and safe to lose.
  */
 
-export type LearningProposalKind = 'displacement' | 'rescope' | 'revival' | 'contradiction' | 'demote';
+export type LearningProposalKind = 'displacement' | 'rescope' | 'revival' | 'contradiction' | 'demote'
+    /** A non-human rewrite of a live skill, waiting for the trader. Two actions only:
+     *  approve the new text, or revert to the old one WITH its prior approval. It is
+     *  not in APPLYABLE_PROPOSAL_KINDS because "apply" would mean approve-and-it's-
+     *  already-written, which is a different decision from restoring. */
+    | 'rewrite';
 
 /**
  * The kinds a HUMAN can act on with one press, because the actuation is

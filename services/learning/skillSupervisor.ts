@@ -381,7 +381,13 @@ const applyProposalRewrite = async (
     const stored = storedClausesOf(proposal);
     if (stored) {
         const { applyRescopeProposal } = await import('./SkillMemoryService');
-        const res = await applyRescopeProposal(slug, stored, username);
+        // `requestedBy: 'supervisor'` is what makes this a REQUEST: the text is
+        // written, the approval the old version held is withdrawn, and the row waits
+        // on Approve/Revert. The human path passes nothing and keeps its approval.
+        const res = await applyRescopeProposal(slug, stored, username, {
+            requestedBy: 'supervisor',
+            evidence: `proposal: ${proposal.text.slice(0, 160)}`,
+        });
         if (!res.applied) return false;
         // The same re-proof the model path applies: the trigger moved, so the
         // confirmed warrant was earned by a claim that no longer exists.
@@ -397,7 +403,16 @@ const applyProposalRewrite = async (
     const { validateIfThen } = await import('./draftGates');
     const fail = validateIfThen({ ifCondition: enhanced.ifCondition, thenAction: enhanced.thenAction });
     if (fail) return false;
-    const meta = { ...target.meta, ifCondition: enhanced.ifCondition, thenAction: enhanced.thenAction };
+    const meta = { ...target.meta };
+    // Snapshot the version in use BEFORE the fields move — the spread already
+    // holds it, so ask here rather than after.
+    const { requestRewriteApproval } = await import('./SkillMemoryService');
+    requestRewriteApproval(meta, { ifCondition: enhanced.ifCondition, thenAction: enhanced.thenAction }, {
+        slug, username, source: 'supervisor enhance',
+        evidence: verdict.reason ? `judge said: ${verdict.reason.slice(0, 160)}` : undefined,
+    });
+    meta.ifCondition = enhanced.ifCondition;
+    meta.thenAction = enhanced.thenAction;
     if (enhanced.description) meta.description = enhanced.description;
     if (enhanced.prediction) {
         const p = sanitizePrediction(enhanced.prediction);

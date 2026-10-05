@@ -28,6 +28,7 @@ import { proposeForgedTool, loadForgedTools } from '../services/tools/toolForge'
 import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import {
     parseSkillMarkdown, isSkillFile, ingestCraftedSkillFromDraft, listSkills, setSkillStatus,
+    isApprovedSkill,
 } from '../services/learning/SkillMemoryService';
 import type { ProviderConfig } from '../types/provider';
 
@@ -264,7 +265,9 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
             },
         });
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
-        expect(listLearningProposals(USER)).toHaveLength(0);
+        // A supervisor rewrite lands the text but withdraws its approval, so what
+        // stays queued is ONE decision for the trader — not the drained proposal.
+        expect(listLearningProposals(USER).filter(q => q.kind === "rewrite")).toHaveLength(1);
         const meta = listSkills()[0].meta;
         expect(meta.ifCondition).toBe('BTC long reclaim after a liquidity sweep while the 4h trend is up');
         expect(meta.thenAction).toContain('trending tapes only');
@@ -299,7 +302,9 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
         // The stored predicate travels with the clauses — the machine clause that
         // proved the OLD trigger must not survive the re-scope.
         expect(meta.predicate).toBeDefined();
-        expect(listLearningProposals(USER)).toHaveLength(0);
+        // A supervisor rewrite lands the text but withdraws its approval, so what
+        // stays queued is ONE decision for the trader — not the drained proposal.
+        expect(listLearningProposals(USER).filter(q => q.kind === "rewrite")).toHaveLength(1);
     });
 
     it('an "approve" verdict applies the stored clauses — they are already a rewrite', async () => {
@@ -317,7 +322,9 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
         await runSupervisorPass(USER, { manual: true });
         expect(listSkills()[0].meta.ifCondition)
             .toBe('BTC sweeps the prior low and reclaims while the 4h trend is up');
-        expect(listLearningProposals(USER)).toHaveLength(0);
+        // A supervisor rewrite lands the text but withdraws its approval, so what
+        // stays queued is ONE decision for the trader — not the drained proposal.
+        expect(listLearningProposals(USER).filter(q => q.kind === "rewrite")).toHaveLength(1);
     });
 
     it('a rewrite of a CONFIRMED skill demotes it — the new claim must re-prove itself', async () => {
@@ -389,7 +396,7 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
         expect(listLearningProposals(USER)).toHaveLength(1);
     });
 
-    it('one pass drains drafts AND proposals with no human in the loop', async () => {
+    it('one pass drains both queues and leaves the rewrite INACTIVE, awaiting your approval', async () => {
         const slug = await seedSkill({ name: 'Fade the SOL range low' });
         queueSkillDraft({
             tradeId: 'd8', coin: 'ETHUSDT',
@@ -417,12 +424,18 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
         const handled = await runSupervisorPass(USER, { manual: true });
         expect(handled).toBe(2);
         expect(listSkillDrafts(USER)).toHaveLength(0);
-        expect(listLearningProposals(USER)).toHaveLength(0);
-        // The draft landed as a skill AND the proposal's rewrite landed on it
-        // the other skill — both queues emptied through the model alone.
-        expect(listSkills().map(s => s.meta.ifCondition)).toContain(
-            'SOL breaks the 4h range low while funding is still positive',
-        );
+        // CONTRACT REWRITE: "both queues emptied through the model alone" is no longer
+        // the claim. The draft is consumed and the proposal is judged, but a rewrite of
+        // a live rule withdraws its approval and leaves ONE decision for the trader.
+        expect(listLearningProposals(USER).filter(p => p.kind === 'rewrite')).toHaveLength(1);
+        expect(listLearningProposals(USER).filter(p => p.kind !== 'rewrite')).toHaveLength(0);
+        const rewritten = listSkills().find(s => s.meta.ifCondition
+            === 'SOL breaks the 4h range low while funding is still positive');
+        expect(rewritten).toBeTruthy();
+        // The text landed… and nothing else did: an unapproved rewrite is inert.
+        expect(isApprovedSkill(rewritten!.meta)).toBe(false);
+        // The version it replaced is kept, so Revert has something to go back to.
+        expect(rewritten!.meta.previousVersion?.ifCondition).toBeTruthy();
     });
 });
 

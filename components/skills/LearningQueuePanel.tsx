@@ -14,6 +14,8 @@ import {
     applyRevivalProposal,
     applyDemoteProposal,
     applyRescopeProposal,
+    approvePendingRewrite,
+    revertPendingRewrite,
 } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { requestSkillTry as trySkillInChat } from '../chat/skillDeepLink';
@@ -117,6 +119,24 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
         else setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
     };
 
+    /** Approve a pending model rewrite, or put the old version back with its own
+     *  approval. Two actions, no third state. */
+    const decideRewrite = async (p: LearningProposal, decision: 'approve' | 'revert'): Promise<void> => {
+        setBusyId(p.id);
+        setFailure(null);
+        const username = getActiveUsername();
+        let result: ProposalApplyResult;
+        try {
+            const fn = decision === 'approve' ? approvePendingRewrite : revertPendingRewrite;
+            result = await fn(p.skillSlug || '', username);
+        } catch (e) {
+            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
+        }
+        setBusyId(null);
+        if (result.applied) dismiss(p);
+        else setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
+    };
+
     if (proposals.length === 0) return null;
 
     return (
@@ -171,23 +191,48 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
                                         Open in chat
                                     </button>
                                 )}
-                                {isApplyableProposal(p) && (
-                                    <button
-                                        type="button"
-                                        disabled={busyId === p.id}
-                                        onClick={() => void apply(p)}
-                                        className="rounded-md border border-zinc-600 px-2 py-1 text-ui-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-                                    >
-                                        {busyId === p.id ? 'Applying…' : 'Apply'}
-                                    </button>
+                                {p.kind === 'rewrite' ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            disabled={busyId === p.id}
+                                            data-testid={`proposal-revert-${p.id}`}
+                                            onClick={() => void decideRewrite(p, 'revert')}
+                                            className="rounded-md border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-50"
+                                        >
+                                            Revert to the old rule
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={busyId === p.id}
+                                            data-testid={`proposal-approve-${p.id}`}
+                                            onClick={() => void decideRewrite(p, 'approve')}
+                                            className="rounded-md border border-zinc-600 px-2 py-1 text-ui-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                                        >
+                                            {busyId === p.id ? 'Working…' : 'Approve the rewrite'}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        {isApplyableProposal(p) && (
+                                            <button
+                                                type="button"
+                                                disabled={busyId === p.id}
+                                                onClick={() => void apply(p)}
+                                                className="rounded-md border border-zinc-600 px-2 py-1 text-ui-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                                            >
+                                                {busyId === p.id ? 'Applying…' : 'Apply'}
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => dismiss(p)}
+                                            className="rounded-md border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                                        >
+                                            Dismiss
+                                        </button>
+                                    </>
                                 )}
-                                <button
-                                    type="button"
-                                    onClick={() => dismiss(p)}
-                                    className="rounded-md border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
-                                >
-                                    Dismiss
-                                </button>
                             </div>
                             {failure?.id === p.id && (
                                 <p className="mt-1.5 pl-1 text-ui-xs text-amber-300/90" data-testid="proposal-apply-error">
