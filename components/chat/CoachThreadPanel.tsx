@@ -16,6 +16,8 @@ import {
     applyRevivalProposal,
     applyDemoteProposal,
     applyRescopeProposal,
+    approvePendingRewrite,
+    revertPendingRewrite,
 } from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 
@@ -251,6 +253,28 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
         }
     };
 
+    /** The two decisions a pending model rewrite offers, and only two: approve the
+     *  text now in the file, or put the old version back WITH the approval it had. */
+    const decideRewrite = async (p: LearningProposal, decision: 'approve' | 'revert'): Promise<void> => {
+        setBusyId(p.id);
+        setFailure(null);
+        const username = getActiveUsername();
+        let result: ProposalApplyResult;
+        try {
+            const fn = decision === 'approve' ? approvePendingRewrite : revertPendingRewrite;
+            result = await fn(p.skillSlug || '', username);
+        } catch (e) {
+            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
+        }
+        setBusyId(null);
+        if (result.applied) {
+            dismissLearningProposal(p.id, username);
+            refresh();
+        } else {
+            setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
+        }
+    };
+
     const dismissProposal = (p: LearningProposal): void => {
         dismissLearningProposal(p.id, getActiveUsername());
         refresh();
@@ -317,17 +341,34 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                         </div>
                     </div>
                     <div className="mt-3 flex items-center justify-end gap-2">
-                        <ActionButton onPress={() => dismissProposal(p)} testId={`coach-proposal-dismiss-${p.id}`}>
-                            Dismiss
-                        </ActionButton>
-                        {isApplyableProposal(p) && (
-                            <ActionButton
-                                onPress={() => void applyProposal(p)}
-                                variant="solid"
-                                testId={`coach-proposal-apply-${p.id}`}
-                            >
-                                {busyId === p.id ? 'Applying…' : 'Apply'}
-                            </ActionButton>
+                        {p.kind === 'rewrite' ? (
+                            <>
+                                <ActionButton onPress={() => void decideRewrite(p, 'revert')} testId={`coach-proposal-revert-${p.id}`}>
+                                    Revert to the old rule
+                                </ActionButton>
+                                <ActionButton
+                                    onPress={() => void decideRewrite(p, 'approve')}
+                                    variant="solid"
+                                    testId={`coach-proposal-approve-${p.id}`}
+                                >
+                                    {busyId === p.id ? 'Working…' : 'Approve the rewrite'}
+                                </ActionButton>
+                            </>
+                        ) : (
+                            <>
+                                <ActionButton onPress={() => dismissProposal(p)} testId={`coach-proposal-dismiss-${p.id}`}>
+                                    Dismiss
+                                </ActionButton>
+                                {isApplyableProposal(p) && (
+                                    <ActionButton
+                                        onPress={() => void applyProposal(p)}
+                                        variant="solid"
+                                        testId={`coach-proposal-apply-${p.id}`}
+                                    >
+                                        {busyId === p.id ? 'Applying…' : 'Apply'}
+                                    </ActionButton>
+                                )}
+                            </>
                         )}
                     </div>
                     {failure?.id === p.id && (

@@ -15,6 +15,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
@@ -28,9 +30,11 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 import { initMemoryFiles, getMemoryFiles, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
 import {
     confirmedAvoidForSetup, applyNotebookSkillsToAnalysis, isApprovedSkill,
-    grandfatherExistingApprovals,
+    grandfatherExistingApprovals, applyRescopeProposal,
+    approvePendingRewrite, revertPendingRewrite,
     parseSkillMarkdown, serializeSkill, titleFromMeta, type SkillMeta,
 } from '../services/learning/SkillMemoryService';
+import { listLearningProposals } from '../utils/learningQueue';
 import { getMemoryFilesContext, substituteSkillContext } from '../services/learning/MemoryRetrievalService';
 import { saveHarnessSettings } from '../utils/harnessSettings';
 
@@ -218,6 +222,141 @@ describe('the grandfather migration', () => {
         await grandfatherExistingApprovals(USER);
         expect(confirmedAvoidForSetup(SETUP)).not.toBeNull();
         expect(injects()).toMatch(/rising 4h VWAP/);
+    });
+});
+
+describe('a model rewrite asks instead of activating', () => {
+    it('is inactive and queued for approval when the SUPERVISOR applied it', async () => {
+        await plant('rewrite-target', 'approvedBy: human\napprovedAt: 2026-06-01T00:00:00.000Z\n');
+        expect(confirmedAvoidForSetup(SETUP)).not.toBeNull();   // live before
+
+        const res = await applyRescopeProposal('rewrite-target', {
+            ifCondition: 'BTC short only after funding flips positive for 14 sessions',
+            thenAction: 'skip the short until the 4h trend turns down',
+        }, USER, { requestedBy: 'supervisor', evidence: 'judge: overfit in ranging tapes' });
+
+        expect(res).toEqual({ applied: true });
+        const after = readMeta('rewrite-target');
+        // The text moved…
+        expect(after.ifCondition).toBe('BTC short only after funding flips positive for 14 sessions');
+        // …and the approval did NOT come with it.
+        expect(after.approvedBy).toBeUndefined();
+        expect(isApprovedSkill(after)).toBe(false);
+        expect(confirmedAvoidForSetup(SETUP)).toBeNull();
+        expect(injects()).not.toMatch(/rising 4h VWAP/);
+    });
+
+    it('leaves a revert snapshot carrying the approval it had', async () => {
+        await plant('revertible', 'approvedBy: human\napprovedAt: 2026-06-01T00:00:00.000Z\n');
+        await applyRescopeProposal('revertible', {
+            ifCondition: 'BTC short only after funding flips positive for 14 sessions',
+            thenAction: 'skip the short until the 4h trend turns down',
+        }, USER, { requestedBy: 'supervisor' });
+        expect(readMeta('revertible').previousVersion).toEqual(expect.objectContaining({
+            ifCondition: 'BTC short into a rising 4h VWAP with funding flat',
+            approvedBy: 'human',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+        }));
+    });
+
+    it('queues exactly one approve/revert item showing old text, new text and evidence', async () => {
+        await plant('queued-rewrite', 'approvedBy: human\n');
+        await applyRescopeProposal('queued-rewrite', {
+            ifCondition: 'BTC short only after funding flips positive for 14 sessions',
+            thenAction: 'skip the short until the 4h trend turns down',
+        }, USER, { requestedBy: 'supervisor', evidence: '3/3 ranges lost money' });
+        const items = listLearningProposals(USER).filter(p => p.kind === 'rewrite');
+        expect(items).toHaveLength(1);
+        expect(items[0].text).toContain('rising 4h VWAP with funding flat');   // was
+        expect(items[0].text).toContain('funding flips positive for 14 sessions'); // now
+        expect(items[0].text).toContain('3/3 ranges lost money');              // evidence
+        expect(items[0].text).toMatch(/INACTIVE until you approve/i);
+    });
+
+    it('a HUMAN applying the same re-scope keeps it approved — Apply IS the approval', async () => {
+        await plant('human-rescope', 'approvedBy: human\n');
+        await applyRescopeProposal('human-rescope', {
+            ifCondition: 'BTC short only after funding flips positive for 14 sessions',
+            thenAction: 'skip the short until the 4h trend turns down',
+        }, USER);
+        expect(isApprovedSkill(readMeta('human-rescope'))).toBe(true);
+        expect(listLearningProposals(USER).filter(p => p.kind === 'rewrite')).toHaveLength(0);
+    });
+
+    it('Approve stamps the new text and Revert restores the old rule WITH its approval', async () => {
+        await plant('decide-me', 'approvedBy: human\napprovedAt: 2026-06-01T00:00:00.000Z\n');
+        await applyRescopeProposal('decide-me', {
+            ifCondition: 'BTC short only after funding flips positive for 14 sessions',
+            thenAction: 'skip the short until the 4h trend turns down',
+        }, USER, { requestedBy: 'supervisor' });
+
+        expect(await revertPendingRewrite('decide-me', USER)).toEqual({ applied: true });
+        const back = readMeta('decide-me');
+        expect(back.ifCondition).toBe('BTC short into a rising 4h VWAP with funding flat');
+        expect(back.approvedBy).toBe('human');
+        expect(back.previousVersion).toBeUndefined();
+        expect(isApprovedSkill(back)).toBe(true);
+        expect(confirmedAvoidForSetup(SETUP)).not.toBeNull();
+
+        // …and the other way: approve the rewrite that is already written.
+        await applyRescopeProposal('decide-me', {
+            ifCondition: 'BTC short only after funding flips positive for 14 sessions',
+            thenAction: 'skip the short until the 4h trend turns down',
+        }, USER, { requestedBy: 'supervisor' });
+        expect(isApprovedSkill(readMeta('decide-me'))).toBe(false);
+        expect(await approvePendingRewrite('decide-me', USER)).toEqual({ applied: true });
+        expect(isApprovedSkill(readMeta('decide-me'))).toBe(true);
+    });
+});
+
+describe('structural: no writer may rewrite a live rule without asking', () => {
+    it('every source that moves a skill trigger/body references an approval primitive', () => {
+        // The read-side gate cannot catch a writer that keeps a row's approval while
+        // replacing its text — the rule stays live with new wording nobody read. So the
+        // invariant is pinned in the SOURCE, not only in behaviour: a file that writes
+        // `meta.ifCondition` / `.thenAction` / `.body` on a parsed skill must call one of
+        // the approval primitives — requestRewriteApproval (revoke + queue), stampSkillApproval
+        // (a human action), revokeSkillApproval, or approveSkillDraft / ingestCraftedSkill*
+        // (which stamp 'human' themselves).
+        const APPROVAL_PRIMITIVES = [
+            'requestRewriteApproval', 'stampSkillApproval', 'revokeSkillApproval',
+            'approveSkillDraft', 'ingestCraftedSkillFromDraft', 'ingestCraftedSkill(',
+        ];
+        const REWRITES = /(?:^|[^.\w])((?:meta|latest|updated|m|merged)\w*)\.(ifCondition|thenAction|body)\s*=(?!=)/g;
+
+        const offenders: string[] = [];
+        const scan = (dir: string): void => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const p = path.join(dir, entry.name);
+                if (entry.isDirectory()) { scan(p); continue; }
+                if (!/\.tsx?$/.test(entry.name)) continue;
+                const src = fs.readFileSync(p, 'utf8');
+                REWRITES.lastIndex = 0;
+                let hit: RegExpExecArray | null;
+                let rewrites = 0;
+                while ((hit = REWRITES.exec(src)) !== null) rewrites += 1;
+                if (rewrites === 0) continue;
+                if (APPROVAL_PRIMITIVES.some(prim => src.includes(prim))) continue;
+                offenders.push(`${path.relative(process.cwd(), p)} (${rewrites} rewrite site(s))`);
+            }
+        };
+        scan('services/learning');
+        scan('services/analysis');
+        scan('services/trade');
+        expect(offenders).toEqual([]);
+
+        // …and the scan is not vacuous: a file that rewrites a trigger without any
+        // approval primitive MUST be flagged, or the rule above proves nothing.
+        const flag = (src: string): boolean => {
+            REWRITES.lastIndex = 0;
+            let rewrites = 0;
+            let hit: RegExpExecArray | null;
+            while ((hit = REWRITES.exec(src)) !== null) rewrites += 1;
+            return rewrites > 0 && !APPROVAL_PRIMITIVES.some(prim => src.includes(prim));
+        };
+        expect(flag('meta.ifCondition = next; meta.thenAction = act;')).toBe(true);
+        expect(flag('meta.ifCondition = next; stampSkillApproval(meta, "human");')).toBe(false);
+        expect(flag('const x = meta.ifCondition === y;')).toBe(false);
     });
 });
 

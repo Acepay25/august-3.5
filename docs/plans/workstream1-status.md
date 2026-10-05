@@ -139,6 +139,11 @@ below: none of them goes around the prose line.
 - Hard stops: a feature-shape question is the user's; a silent swallow of a failed
   write is never acceptable; if a criterion cannot be met, report it unmet with the
   measurement. Step B audit ends in a STOP for approval.
+- **NEVER STOP VOLUNTARILY (user rule, 2026-10-05).** Do not end a run because you
+  *guess* room is short — nothing tells you context is low, and guessing wrong costs
+  the whole backlog. Keep working through the order until the backlog is done or a
+  hard stop is hit. Everything is committed and logged here as you go, so a platform
+  cutoff loses nothing. Stop only on: a hard stop above, or an explicit instruction.
 
 ## DECISIONS (user, 2026-10-05)
 1. `trade_chat_sessions_v1` — back it up WHOLE, WITHOUT image bytes. Export emits a
