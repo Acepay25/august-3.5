@@ -117,7 +117,9 @@ describe('TradeView', () => {
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
         expect(await screen.findByTestId('trade-view')).toBeTruthy();
         expect(screen.getByLabelText('Trade symbol')).toBeTruthy();
-        expect(screen.getByText('Mark')).toBeTruthy();
+        // Stage 3: Mark and 24h Change appear once — in the hero price — so
+        // the strip keeps only numbers the hero does not already show.
+        expect(screen.queryByText('Mark')).toBeNull();
         expect(screen.getByText('Oracle')).toBeTruthy();
         expect(screen.getByText('Order Book')).toBeTruthy();
         expect(screen.getByTestId('trade-chat-panel')).toBeTruthy();

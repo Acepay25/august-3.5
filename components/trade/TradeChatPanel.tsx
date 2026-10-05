@@ -38,7 +38,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Compass, Crosshair, Eye, History, LayoutGrid, MessageSquare, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from '../shared/Icons';
+import { Activity, Compass, Crosshair, Eye, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
@@ -889,13 +889,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             <History className="h-3.5 w-3.5" />
                         </button>
                     </div>
-                    {/* The primary jump OUT of the dock */}
-                    <button type="button" onClick={onOpenChat} disabled={!onOpenChat}
-                        data-testid="dock-open-chat"
-                        aria-label="Open Chat" title="Open the Chat surface"
-                        className="rounded-control p-1.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-40">
-                        <MessageSquare className="h-3.5 w-3.5" />
-                    </button>
                     <div className="relative">
                         <button type="button" onClick={() => setShowNewMenu(v => !v)} aria-label="Customization" aria-expanded={showNewMenu} title="Customization"
                             className={`rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${showNewMenu ? 'bg-white/[0.06] text-zinc-100' : 'text-zinc-400'}`}>
@@ -932,6 +925,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         {expanded ? 'Shrink back' : 'Expand over chart'}
                                     </button>
+                                    {/* The jump OUT of the dock. Stage 3 moved it
+                                        here from a dedicated header icon: it is a
+                                        route, not a frequent toggle, and the
+                                        header lost its last chrome row. */}
+                                    {onOpenChat && (
+                                        <button type="button" onClick={() => { setShowNewMenu(false); onOpenChat(); }}
+                                            data-testid="dock-open-chat"
+                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            Open in Chat
+                                        </button>
+                                    )}
                                     <div className="my-1 border-t border-white/[0.06]" />
                                     <p className="px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-600">Start</p>
                                     <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">

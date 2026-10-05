@@ -2529,9 +2529,6 @@ const App: React.FC = () => {
                 pendingQueueCount={pendingQueueCount}
                 liveMarketConditions={liveMarketConditions}
                 liveMarketSymbol={liveMarketSymbol}
-                onOpenWatchList={() => setIsWatchListVisible(true)}
-                watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
-                watchOpenR={watchOpenR}
                 onOpenActivity={() => setIsJobsDrawerVisible(true)}
                 onOpenLiveMarket={handleOpenLiveMarket}
                 onOpenVisionData={() => setIsVisionDataVisible(true)}
@@ -2680,6 +2677,9 @@ const App: React.FC = () => {
                                     registerScrollToMessage={registerScrollToMessage}
                                     onToggleDeskScene={() => setIsDeskSceneOpen(v => !v)}
                                     onToggleWatch={handleToggleWatch}
+                                    onOpenWatchList={() => setIsWatchListVisible(true)}
+                                    watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
+                                    watchOpenR={watchOpenR}
                                     pinnedMessageIds={pinnedMessageIds}
                                     isDeskSceneOpen={isDeskSceneOpen}
                                     hasDeskSceneMessage={!!deskSceneMessage}

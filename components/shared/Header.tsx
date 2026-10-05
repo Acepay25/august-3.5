@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { LoadingIcon, CheckIcon, EyeIcon, PinIcon, ActivityIcon, CloudOffIcon, HistoryIcon, AlertTriangleIcon, PanelLeftOpen } from './Icons';
+import { LoadingIcon, CheckIcon, EyeIcon, ActivityIcon, CloudOffIcon, HistoryIcon, AlertTriangleIcon, PanelLeftOpen } from './Icons';
 import { useUpdateStatusDot } from './UpdateButton';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { baseOf } from '../../utils/symbol';
@@ -32,9 +32,6 @@ interface HeaderProps {
     // Toolbar entries that stayed in the header when the drawer was retired.
     /** Opens the Activity drawer: background jobs, skill audits, automations. */
     onOpenActivity?: () => void;
-    onOpenWatchList?: () => void;
-    watchOpenCount?: number;
-    watchOpenR?: string;
     /** Session-popover footer links. The rail's "Live Market" and "View Vision
      *  Data" rows landed here (stage 3): the popover is already the market-
      *  context home, so the full-screen market view is one hop from it. */
@@ -59,9 +56,6 @@ export const Header: React.FC<HeaderProps> = memo(({
     isOnline = true,
     liveMarketConditions,
     liveMarketSymbol,
-    onOpenWatchList,
-    watchOpenCount = 0,
-    watchOpenR,
     onOpenActivity,
     onOpenLiveMarket,
     onOpenVisionData,
@@ -332,38 +326,21 @@ export const Header: React.FC<HeaderProps> = memo(({
                         Activity entry is the drawer's only opener and sits
                         outside the desktop-only tray: touch never had a path
                         to the job queue, and the Activity drawer is where the
-                        rail's automations section landed (stage 3). */}
-                    {(onOpenActivity || onOpenWatchList) && (
+                        rail's automations section landed (stage 3). Pinned
+                        signals moved to the Trade surface's market row (stage
+                        3) — they are a trading tool, not global chrome. */}
+                    {onOpenActivity && (
                         <div className="inline-flex items-center rounded-xl border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
-                            {onOpenActivity && (
-                                <button
-                                    type="button"
-                                    data-testid="header-activity"
-                                    onClick={onOpenActivity}
-                                    className="inline-flex items-center rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
-                                    title="Activity — background jobs, skill audits, automations"
-                                    aria-label="Activity"
-                                >
-                                    <span>Activity</span>
-                                </button>
-                            )}
-                            {onOpenWatchList && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenWatchList}
-                                    className="relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
-                                    title={watchOpenR ? `Pinned · ${watchOpenR}` : 'Pinned signals'}
-                                    aria-label={`Pinned signals, ${watchOpenCount} open`}
-                                >
-                                    <PinIcon className="h-3.5 w-3.5" />
-                                    <span>Pinned</span>
-                                    {watchOpenCount > 0 && (
-                                        <span className="min-w-[1rem] rounded-full bg-zinc-200 px-1 text-ui-2xs font-mono font-bold leading-4 text-zinc-900">
-                                            {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
-                                        </span>
-                                    )}
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                data-testid="header-activity"
+                                onClick={onOpenActivity}
+                                className="inline-flex items-center rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                title="Activity — background jobs, skill audits, automations"
+                                aria-label="Activity"
+                            >
+                                <span>Activity</span>
+                            </button>
                         </div>
                     )}
 
