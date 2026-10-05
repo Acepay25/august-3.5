@@ -224,7 +224,61 @@ describe('restore on native puts the value where the owner reads it', () => {
     });
 });
 
-// ─── Step 9: the trading surface ─────────────────────────────────────────────
+// ─── Step 9 follow-up (decision 2): the unbounded stores are capped AT EXPORT ──
+
+describe('the stores with no write-time bound are capped on the way out', () => {
+    /** [key, normal-size value, bytes that clear its cap] — the caps were chosen
+     *  from the owners' real bounds, not guessed: drawings are ≤40 × 200 points per
+     *  coin (`chartDrawings.ts:54-55`) so a 5-coin session tops out near 900 KB and
+     *  a normal one is ~10 KB; a forged tool is ~1-1.5 KB (`toolForge.ts:18-47`) so
+     *  256 KB is ~170 tools; a checklist item is ~90 bytes (`checklist.ts:9-11`) so
+     *  64 KB is ~700 items. None of these touches a normal backup. */
+    const cases: Array<{ key: string; normal: string; padTo: number }> = [
+        {
+            key: `trade_session_drawings_v1_${USER}_sess-1`,
+            normal: JSON.stringify({ BTCUSDT: [{ id: 'd1', points: [[1726400000000, 64000]] }] }),
+            padTo: 1024 * 1024 + 2000,
+        },
+        {
+            key: 'desk_tools_forged_v1',
+            normal: JSON.stringify([{ id: 't1', proposal: { name: 'fear-greed', description: 'd' } }]),
+            padTo: 256 * 1024 + 2000,
+        },
+        {
+            key: 'trading_checklist_v1',
+            normal: JSON.stringify({ enabled: true, items: [{ id: 'news', label: 'news checked' }] }),
+            padTo: 64 * 1024 + 2000,
+        },
+    ];
+
+    for (const c of cases) {
+        it(`${c.key}: a normal-size row still round-trips byte for byte`, async () => {
+            localStorage.setItem(c.key, c.normal);
+            const backup = await exportPreferencesData();
+            expect(backup[c.key]).toEqual(JSON.parse(c.normal));
+            expect(backup._backup_notices).toBeUndefined();
+
+            localStorage.clear();
+            prefStore = {};
+            localStorage.setItem('last_active_user', USER);
+            const report = await importPreferencesData(backup);
+            expect(report.skippedKeys).toEqual([]);
+            expect(localStorage.getItem(c.key)).toBe(c.normal);
+        });
+
+        it(`${c.key}: an over-cap row is skipped and named in the notice`, async () => {
+            // No image stripping for these — the notice and the skip behave exactly
+            // like the chat-sessions one, because it is the same mechanism.
+            const pad = JSON.stringify([{ id: 'x', blob: 'y'.repeat(c.padTo) }]);
+            localStorage.setItem(c.key, pad);
+            const backup = await exportPreferencesData();
+            expect(backup[c.key]).toBeUndefined();
+            expect(JSON.stringify(backup._backup_notices)).toContain(c.key);
+            // Skipped from the BACKUP, not from the device.
+            expect(localStorage.getItem(c.key)).toBe(pad);
+        });
+    }
+});
 
 describe('the trading stores are registered as RAW', () => {
     it('every one of them, so export reads the owner and restore mirrors it', () => {

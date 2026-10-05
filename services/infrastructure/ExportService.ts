@@ -385,7 +385,26 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
  *  notebook from backups and make this "guard" the data-loss bug it exists to
  *  prevent. */
 export const EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024;
-const CAPPED_EXPORT_PREFIXES = ['trade_chat_sessions_v1'];
+
+/** Per-store ceilings, chosen from each owner's OWN bound so a normal backup is
+ *  never trimmed (measured 2026-10-05, recorded in docs/plans/workstream1-status.md):
+ *
+ *  - chat sessions 512 KB — 12 × 60 rows, images already stripped.
+ *  - session drawings 1 MB — `chartDrawings.ts:54-55` bounds a coin at 40 drawings ×
+ *    200 points (≈180 KB), and one key holds EVERY coin traded in that session;
+ *    a normal session is ~10 KB.
+ *  - forged tools 256 KB — a tool row is ~1-1.5 KB (`toolForge.ts:18-47`) and nothing
+ *    bounds the count; 256 KB is ~170 tools.
+ *  - checklist 64 KB — ~90 bytes per item (`checklist.ts:9-11`); ~700 items.
+ *
+ *  A cap is a ceiling on what the BACKUP may carry, never on what the device keeps:
+ *  an over-cap store is left out and named, and its live bytes are untouched. */
+const EXPORT_KEY_CAPS: ReadonlyArray<{ prefix: string; bytes: number }> = [
+    { prefix: 'trade_chat_sessions_v1', bytes: EXPORT_RAW_KEY_CAP_BYTES },
+    { prefix: 'trade_session_drawings_v1', bytes: 1024 * 1024 },
+    { prefix: 'desk_tools_forged_v1', bytes: 256 * 1024 },
+    { prefix: 'trading_checklist_v1', bytes: 64 * 1024 },
+];
 
 /** The placeholder that replaces an image payload in an EXPORT COPY. Text, order
  *  and metadata are untouched; the live key is never written with this. */
@@ -492,10 +511,11 @@ const putSweptValue = (
     raw: unknown,
 ): void => {
     const value = redactPreferenceValue(key, raw);
-    if (CAPPED_EXPORT_PREFIXES.some(p => key.startsWith(p))) {
+    const cap = EXPORT_KEY_CAPS.find(c => key.startsWith(c.prefix));
+    if (cap) {
         const bytes = byteLength(JSON.stringify(value));
-        if (bytes > EXPORT_RAW_KEY_CAP_BYTES) {
-            notices.push(`${key}: NOT IN THIS BACKUP — ${bytes} bytes is over the ${EXPORT_RAW_KEY_CAP_BYTES}-byte cap even after images were stripped`);
+        if (bytes > cap.bytes) {
+            notices.push(`${key}: NOT IN THIS BACKUP — ${bytes} bytes is over the ${cap.bytes}-byte cap${key.startsWith('trade_chat_sessions_v1') ? ' even after images were stripped' : ''}`);
             return;
         }
     }
