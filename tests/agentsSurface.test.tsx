@@ -329,11 +329,18 @@ describe('composer attachments (WS-6)', () => {
      */
     const EVENTUALLY = { timeout: 5_000 };
 
-    it('offers attach unconditionally now the mode is gone', () => {
+    it('offers attach for analysis sends, and says why it is off for a bot', () => {
         render(<AgentsView {...base} />);
         expect(screen.getByTestId('composer-attach').hasAttribute('disabled')).toBe(false);
         // The old tooltip had to explain the mode; there is no mode to explain.
         expect(screen.getByTestId('composer-attach').getAttribute('title')).not.toContain('Analyze mode');
+        // A bot turn drops attachments silently (they run only with the
+        // pipeline) — stage 3 makes the control say so instead of lying.
+        cleanup();
+        render(<AgentsView {...base} selection={{ kind: 'bot', botId: 'b1' }} bots={[bot({ id: 'b1', name: 'Sweeper' })]} />);
+        const attach = screen.getByTestId('composer-attach');
+        expect(attach.hasAttribute('disabled')).toBe(true);
+        expect(attach.getAttribute('title')).toContain('text-only');
     });
 
     it('reads a picked image into a chip and sends it with the prompt, then clears', async () => {

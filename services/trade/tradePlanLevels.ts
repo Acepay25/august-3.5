@@ -269,11 +269,15 @@ export const describePlanForModel = (p: WatchPlan, firedIds: string[]): string =
 export const formatLevelHitForModel = (p: WatchPlan, hit: LevelHit, firedIds: string[]): string => {
     const when = phtClock(hit.at);
     const others = firedIds.filter(id => id !== hit.levelId);
-    return [
+    // The instruction rides its OWN line. The dock's notice row renders the
+    // signal's first line only — one joined line used to print the model's
+    // orders ("WARN THE USER NOW…") as an all-caps amber transcript row.
+    const event = [
         `[HARNESS SIGNAL — price event, not the user] Plan ${p.planId}: ${hit.label} @ ${hit.price} HIT (mark ${hit.hitPrice}, ${when} PHT).`,
         `Level id ${hit.levelId}.`,
         `Plan: Entry ${p.entry} · SL ${p.stopLoss} · TP ${p.takeProfits.join(' / ')}.`,
         others.length > 0 ? `Already fired: ${others.join(', ')}.` : 'This is the first level of this plan to fire.',
-        'Warn the user now: what hit, the price, whether the rest of the plan holds, and refer to levels by id. Do not re-announce fired levels.',
     ].join(' ');
+    return `${event}
+Warn the user now: what hit, the price, whether the rest of the plan holds, and refer to levels by id. Do not re-announce fired levels.`;
 };

@@ -130,10 +130,24 @@ describe('ToolActionsRow (status rows)', () => {
                 ]}
             />,
         );
-        const row = screen.getByTestId('tool-actions-row');
-        expect(row.textContent).toContain('⚠');
+        const row = screen.getByTestId('tool-actions-blocked');
         expect(row.textContent).toContain('Blocked');
-        expect(row.textContent).toContain('amend_memory rejected, nothing stored');
+        expect(row.textContent).toContain('1 memory amendment rejected · nothing stored');
+        // Cross-tool aggregation: one quiet Blocked line for the whole turn,
+        // however many tool classes tripped a gate (stage 3).
+        cleanup();
+        const multi = render(
+            <ToolActionsRow
+                actions={[
+                    { at: new Date().toISOString(), speaker: 'Macro', tool: 'propose_skill', ok: false, verb: 'proposed', label: 'a', review: '' },
+                    { at: new Date().toISOString(), speaker: 'Macro', tool: 'propose_skill', ok: false, verb: 'proposed', label: 'b', review: '' },
+                    { at: new Date().toISOString(), speaker: 'Macro', tool: 'write_memory_note', ok: false, verb: 'wrote', label: 'c', review: '' },
+                ]}
+            />,
+        );
+        const blocked = multi.getByTestId('tool-actions-blocked');
+        expect(blocked.textContent).toContain('2 skill drafts, 1 memory note rejected · nothing stored');
+        expect(blocked.textContent).toContain('3');
     });
 
     it('rows expand to the per-item detail with the review location', () => {

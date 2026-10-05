@@ -5,8 +5,14 @@
  * ToolAction entries and this renders them as one-line status rows
  * (count chip on grouped rows). A row expands to its per-item detail
  * with the review location — the human knows where to act without a
- * hover. Rejected proposals render DESTRUCTIVE ("Blocked — nothing
- * stored"): a refusal is a status, not a footnote.
+ * hover.
+ *
+ * Refusals are AGGREGATED: every rejected action in the turn renders as
+ * ONE quiet "Blocked" line ("2 skill drafts, 1 memory note rejected ·
+ * nothing stored") no matter how many tool classes tripped a gate —
+ * three alarming red rows for one turn read as the product failing, not
+ * the harness enforcing. A refusal is still a status, not a footnote:
+ * the line expands to the same per-item detail.
  */
 
 import React from 'react';
@@ -73,6 +79,30 @@ const actionLabel = (tool: string, items: ToolAction[]): string => {
     }
 };
 
+/** The noun a refusal counts ("2 skill drafts, 1 memory note rejected"). */
+const failNoun = (tool: string, n: number): string => {
+    const plural = n === 1 ? '' : 's';
+    switch (tool) {
+        case 'propose_skill':
+        case 'revise_skill':
+        case 'skill_draft':
+            return `skill draft${plural}`;
+        case 'skill_ingest':
+            return `skill${plural}`;
+        case 'propose_strategy':
+            return `strategy plan${plural}`;
+        case 'write_memory_note':
+        case 'notebook_note':
+            return `memory note${plural}`;
+        case 'amend_memory':
+            return `memory amendment${plural}`;
+        case 'forge_tool':
+            return `desk tool${plural}`;
+        default:
+            return `${tool} call${plural}`;
+    }
+};
+
 interface Group {
     tool: string;
     ok: boolean;
@@ -82,7 +112,8 @@ interface Group {
 
 export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
     if (!actions.length) return null;
-    // Group by tool+ok — one row per class ("N items").
+    // Group by tool+ok — one row per class ("N items"). Fails are gathered
+    // across classes into the single Blocked line below.
     const groups = new Map<string, Group>();
     for (const a of actions) {
         const key = `${a.tool}::${a.ok ? 'ok' : 'fail'}`;
@@ -91,22 +122,36 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
         if (!g.speakers.includes(a.speaker)) g.speakers.push(a.speaker);
         groups.set(key, g);
     }
+    const okGroups = [...groups.values()].filter(g => g.ok);
+    const failGroups = [...groups.values()].filter(g => !g.ok);
+    const failItems = failGroups.flatMap(g => g.items);
+
     return (
         <div className="mb-2 space-y-1" data-testid="tool-actions-row">
-            {[...groups.values()].map(g => {
+            {okGroups.map(g => {
                 const n = g.items.length;
                 const who = g.speakers.filter(Boolean).join(', ');
                 const icon = ICON_OK[g.tool] ?? ICON_OK.custom;
                 const label = actionLabel(g.tool, g.items);
                 // One-line action rows (OpenBot ToolLine shape): muted while
-                // fine, DESTRUCTIVE when the harness refused — a rejection is
-                // a status, not a footnote, and zinc-400 read as a normal
-                // row. Every row expands to the per-item detail with where
+                // fine. Every row expands to the per-item detail with where
                 // each item is reviewed — that location used to live only in
                 // a hover tooltip.
-                const summary = g.ok
-                    ? (
-                        <>
+                return (
+                    <details
+                        key={`${g.tool}-ok`}
+                        className="group/tool-line"
+                    >
+                        <summary
+                            className="flex cursor-pointer list-none items-center gap-2 text-ui-dense text-zinc-400 [&::-webkit-details-marker]:hidden"
+                            title={`${who ? `${who} — ` : ''}${n} item${n === 1 ? '' : 's'} awaiting human review`}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="shrink-0 text-ui-2xs text-zinc-500 transition-transform group-open/tool-line:rotate-90"
+                            >
+                                ▸
+                            </span>
                             {icon}
                             <span className="min-w-0 flex-1 truncate">
                                 {who ? <span className="text-zinc-500">{who} · </span> : null}
@@ -117,36 +162,6 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                                     {n}
                                 </span>
                             )}
-                        </>
-                    )
-                    : (
-                        <>
-                            <span className="sr-only">⚠</span>
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
-                            <span className="min-w-0 flex-1 truncate">
-                                <span className="font-semibold">Blocked</span>
-                                {' — '}{who ? `${who}: ` : ''}{g.tool} rejected, nothing stored
-                            </span>
-                        </>
-                    );
-                return (
-                    <details
-                        key={`${g.tool}-${g.ok ? 'ok' : 'fail'}`}
-                        className="group/tool-line"
-                    >
-                        <summary
-                            className={`flex cursor-pointer list-none items-center gap-2 text-ui-dense [&::-webkit-details-marker]:hidden ${g.ok ? 'text-zinc-400' : 'text-rose-300'}`}
-                            title={g.ok
-                                ? `${who ? `${who} — ` : ''}${n} item${n === 1 ? '' : 's'} awaiting human review`
-                                : `${g.tool} was rejected by the harness — nothing was stored.`}
-                        >
-                            <span
-                                aria-hidden="true"
-                                className="shrink-0 text-ui-2xs text-zinc-500 transition-transform group-open/tool-line:rotate-90"
-                            >
-                                ▸
-                            </span>
-                            {summary}
                         </summary>
                         <div className="mb-1 mt-1 space-y-0.5 border-l border-white/10 pl-4">
                             {g.items.map((a, i) => (
@@ -159,6 +174,45 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                     </details>
                 );
             })}
+
+            {failGroups.length > 0 && (() => {
+                const counts = failGroups
+                    .map(g => `${g.items.length} ${failNoun(g.tool, g.items.length)}`);
+                const who = [...new Set(failGroups.flatMap(g => g.speakers))].filter(Boolean);
+                return (
+                    <details className="group/tool-line" data-testid="tool-actions-blocked">
+                        <summary
+                            className="flex cursor-pointer list-none items-center gap-2 text-ui-dense text-rose-300 [&::-webkit-details-marker]:hidden"
+                            title="The harness refused these side-effects — nothing was stored."
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="shrink-0 text-ui-2xs text-zinc-500 transition-transform group-open/tool-line:rotate-90"
+                            >
+                                ▸
+                            </span>
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                            <span className="min-w-0 flex-1 truncate">
+                                <span className="font-semibold">Blocked</span>
+                                {' — '}
+                                {who.length === 1 ? <span className="text-rose-400/80">{who[0]}: </span> : null}
+                                {counts.join(', ')} rejected · nothing stored
+                            </span>
+                            <span className="shrink-0 rounded-full border border-rose-500/40 px-1.5 py-px text-ui-2xs font-bold tabular-nums leading-tight text-rose-300">
+                                {failItems.length}
+                            </span>
+                        </summary>
+                        <div className="mb-1 mt-1 space-y-0.5 border-l border-rose-500/20 pl-4">
+                            {failItems.map((a, i) => (
+                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500">
+                                    <span className="text-rose-400/80">{a.verb}</span> {a.label}
+                                    {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
+                                </p>
+                            ))}
+                        </div>
+                    </details>
+                );
+            })()}
         </div>
     );
 };

@@ -151,10 +151,13 @@ export const formatWatchFiredForModel = (fired: WatchFired, armedCount: number):
     const cond = watch.kind === 'price'
         ? `${watch.symbol} printed ${price ?? '—'}, ${watch.condition} the watched ${watch.price}`
         : `the scheduled ${watch.symbol} re-check time arrived (${phtClock(watch.atMs)} PHT)${price !== null ? ` with mark ${price}` : ''}`;
-    return [
+    // Instruction on its own line — see formatLevelHitForModel: the notice
+    // row shows the first line, and "ACT ON IT NOW…" is for the model only.
+    const event = [
         `[HARNESS TRIGGER — scheduled watch fired, not the user] Watch ${watch.id}: ${cond}. Time ${when} PHT.`,
         `The note you attached when arming it: "${watch.note}".`,
         armedCount > 0 ? `Still armed after this: ${armedCount} watch(es).` : 'No other watches are armed.',
-        'Act on it now: pull a fresh read (desk tools), tell the user whether their awaited condition is here and whether the setup is ready to trade or not, and arm a new watch only if there is a specific reason to.',
     ].join(' ');
+    return `${event}
+Act on it now: pull a fresh read (desk tools), tell the user whether their awaited condition is here and whether the setup is ready to trade or not, and arm a new watch only if there is a specific reason to.`;
 };

@@ -28,7 +28,7 @@ import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
 import type { ProviderConfig } from '../../types/provider';
 import type { ChatMessage, ContentPart } from '../providers/GenericProviderService';
-import { streamChatWithDeskTools, type DeskToolCall, type DeskToolResult } from '../analysis/DeskToolsService';
+import { streamChatWithDeskTools, stripTextToolCalls, type DeskToolCall, type DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
@@ -252,6 +252,19 @@ export interface ChatTurnRunner {
     runFullAnalysis: () => Promise<void>;
     runHarnessTurn: (signalText: string) => Promise<void>;
 }
+
+/**
+ * The human notice line for a harness signal: the EVENT's first sentence,
+ * machine-tag stripped. The signal's last line is the MODEL'S orders
+ * ("Warn the user now…") and must never reach the transcript as an amber row
+ * (the all-caps instruction defect stage 3 closed).
+ */
+export const harnessNoticeLine = (signalText: string): string => {
+    const firstLine = signalText.split('\n')[0].replace(/^\[[^\]]*\]\s*/, '').replace(/^⚡\s*/, '').trim();
+    const cut = firstLine.indexOf('. ');
+    const sentence = cut === -1 ? firstLine : firstLine.slice(0, cut + 1);
+    return sentence.trim();
+};
 
 export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner => {
     const {
@@ -635,6 +648,13 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // until it proves it spoke, then the whole answer lands at once.
             patch(e => ({ ...e, text: hidePass && panelCouldStillBePass(full) ? '' : full }));
         }
+        // Settle on STRIPPED text. The loop's own stripped return value was
+        // discarded by this accumulator, so a text-protocol tool call — a bare
+        // <tool_call>, an unquoted <function=…>, native tool_calls coexisting
+        // with painted markup, anything the loop's wipe gate skipped — used to
+        // reach the transcript as literal protocol soup. Every settle path
+        // below (echo repair, peel, abort) now reads the cleaned text.
+        full = stripTextToolCalls(full);
         // An explicit Stop is the user pulling the plug — NOT a failure.
         // Settle quietly and check this FIRST: without the guard, a stopped
         // turn fell through to the pure-echo repair below and printed
@@ -1111,9 +1131,13 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             ?? (bot ? configForSeat(bot.providerId, bot.modelId) : null)
             ?? provider;
         if (!config) return;
-        // Strip the leading machine-tag ([HARNESS SIGNAL …] / [HARNESS
-        // TRIGGER …]) so the user sees a readable line, not the raw envelope.
-        const noticeLine = signalText.split('\n')[0].replace(/^\[[^\]]*\]\s*/, '').replace(/^⚡\s*/, '').trim();
+        // The notice is the EVENT's first sentence, machine-tag stripped. The
+        // signal's last line is the MODEL'S orders ("Warn the user now…") and
+        // must never reach the transcript as an amber row — the composers now
+        // put it on its own line, and the sentence cut keeps even an old
+        // single-line signal honest (a '. ' cut is price-decimal-safe:
+        // "85184.5," has no dot-space).
+        const noticeLine = harnessNoticeLine(signalText);
         const noticeEntry: LiveEntry = { id: newId('n'), role: 'ai', text: '', tools: [noticeLine], notice: true, at: Date.now() };
         const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now(), ...(bot ? { speaker: bot.name } : {}) };
         mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: [...s.entries, noticeEntry, aiEntry] }));

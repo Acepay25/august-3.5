@@ -37,6 +37,7 @@ vi.mock('../services/bots/BotRegistry', () => ({
 }));
 
 vi.mock('../services/analysis/DeskToolsService', () => ({
+    stripTextToolCalls: (t: string): string => t.replace(/<tool_call\s*>[\s\S]*?<\/tool_call\s*>/gi, '').trim(),
     DESK_TOOL_DEFINITIONS: [
         { function: { name: 'get_price_snapshot' } },
         { function: { name: 'web_search' } },

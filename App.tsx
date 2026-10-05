@@ -1756,7 +1756,17 @@ const App: React.FC = () => {
     // watches the SL/TP, and runs the full post-mortem → skill-learning loop
     // when it resolves — so a chat-proposed trade is scored like any analysis.
     const handleLogProposedTrade = useCallback((proposal: TradeProposal): void => {
-        updateMessages(prev => [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)]);
+        updateMessages(prev => {
+            // planId dedupe: the dock's per-card disposition map stops a
+            // double-click on the SAME card, but re-presenting the plan (a
+            // fresh card, or logging from another surface) still minted a
+            // byte-identical second card. The headline embeds the plan id, so
+            // one logged copy per plan is checkable at the writer.
+            if (proposal.planId && prev.some(m => m.text.includes(`· plan ${proposal.planId}`))) {
+                return prev;
+            }
+            return [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)];
+        });
     }, [updateMessages]);
 
     /** The dock holds a settled verdict's message id, not a copy of the
