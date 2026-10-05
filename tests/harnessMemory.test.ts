@@ -48,6 +48,7 @@ import {
   MIN_CLUSTER_FOR_SKILL,
   REFINE_AFTER_CONSECUTIVE_LOSSES,
   followedEvidence,
+  grandfatherExistingApprovals,
 } from '../services/learning/SkillMemoryService';
 import { shouldSkillHoldout } from '../utils/skillHoldout';
 import { LoggedTrade, TradeOutcome } from '../types';
@@ -178,8 +179,10 @@ direction: Short
 family: Family A
 wins: 4
 losses: 6
+approvedBy: grandfathered
 lastEvidenceAt: ${staleDate}
 tradeIds: s1,s2,s3
+approvedBy: grandfathered
 ---
 
 # Avoid BTCUSDT Short Family A (stale)
@@ -204,6 +207,7 @@ direction: Short
 family: Family A
 wins: 2
 losses: 5
+approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: enter the short after the 15m reclaim
 ${extra}tradeIds: a,b,c,d,e,f,g
@@ -314,6 +318,14 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       makeTrade({ id: `t-${i}` })
     );
     await maybeUpsertSkill(trades[2], trades, 'test-user');
+    // The worth gate CREATED this row; under the activation gate a model-authored
+    // rule is inert until a person says yes — so it must not be retrieved yet.
+    // Granting approval here (via the grandfather pass, which marks every row that
+    // carries no approval fact) keeps this test about tiered retrieval, which is
+    // what it always tested.
+    const setup = { coin: 'BTCUSDT', direction: 'Short', family: 'Family A', regime: 'ranging' };
+    expect(getMemoryFilesContext(setup as never, trades)).not.toMatch(/AVOID \[/);
+    await grandfatherExistingApprovals('test-user');
     const ctx = getMemoryFilesContext({
       coin: 'BTCUSDT',
       direction: 'Short',
@@ -366,6 +378,9 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       makeTrade({ id: `t-${i}` })
     );
     await maybeUpsertSkill(trades[2], trades, 'test-user');
+    // Approved before enforcement is asserted (see the retrieval test above): an
+    // unapproved avoid caps nothing.
+    await grandfatherExistingApprovals('test-user');
     const next = applyNotebookSkillsToAnalysis({
       coinName: 'BTCUSDT',
       direction: 'Short',
@@ -392,7 +407,9 @@ direction: Short
 family: Family A
 wins: 1
 losses: 6
+approvedBy: grandfathered
 tradeIds: a,b,c,d,e,f,g
+approvedBy: grandfathered
 ---
 
 # Avoid BTCUSDT Short Family A
@@ -440,7 +457,9 @@ direction: Short
 family: Family A
 wins: 1
 losses: 6
+approvedBy: grandfathered
 tradeIds: a,b,c,d,e,f,g
+approvedBy: grandfathered
 ---
 
 # Avoid BTCUSDT Short Family A
@@ -501,7 +520,9 @@ direction: Long
 family: liquidity sweep
 wins: 1
 losses: 6
+approvedBy: grandfathered
 tradeIds: a,b,c,d,e,f,g
+approvedBy: grandfathered
 ---
 
 # Avoid BTCUSDT Long liquidity sweep
@@ -537,7 +558,9 @@ direction: Long
 family: Family Z
 wins: 1
 losses: 6
+approvedBy: grandfathered
 tradeIds: a,b,c,d,e,f,g
+approvedBy: grandfathered
 ---
 
 # Disabled avoid skill

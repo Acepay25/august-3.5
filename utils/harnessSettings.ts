@@ -29,6 +29,18 @@ export interface HarnessSettings {
      *  less; quick tiers never drop below low). Never affects what the
      *  pipeline DOES — only how hard each call thinks. */
     responseEffort: 'fast' | 'quality';
+    /** THE STARTER LIBRARY — the curated `book-*.md` shelf. Vetted literature, not
+     *  model output, so it is approved by this one explicit toggle instead of one
+     *  press per card. Default ON: the books shipped to be used. Turning it off
+     *  withdraws approval from every `prior: 'book'` skill at once, which is the
+     *  whole point of gating the shelf rather than stamping 12 rows. */
+    starterLibraryEnabled: boolean;
+    /** The user's off-switch over CODE-SIDE enforcement — the confidence caps and
+     *  the confirmed-avoid veto that `applyNotebookSkillsToAnalysis` /
+     *  `confirmedAvoidForSetup` apply. It did not exist: a confirmed `avoid` skill
+     *  could HALT a verdict with no way to say no. Default ON. Injection is governed
+     *  by the approval gate, not by this. */
+    skillEnforcementEnabled: boolean;
 }
 
 const KEY = 'harness_settings_v1';
@@ -70,6 +82,11 @@ export const getHarnessSettings = (): HarnessSettings => {
         guardPostLossCooldownMin: typeof stored.guardPostLossCooldownMin === 'number' && stored.guardPostLossCooldownMin >= 0 ? stored.guardPostLossCooldownMin : undefined,
         skillLibraryCap: typeof cap === 'number' && Number.isFinite(cap) ? cap : undefined,
         responseEffort: stored.responseEffort === 'fast' ? 'fast' : 'quality',
+        // Both opt-OUT only on an explicit false: an absent key is the shipped
+        // default, and a default that silently disabled the shelf or the veto would
+        // read as the app losing its rules.
+        starterLibraryEnabled: stored.starterLibraryEnabled !== false,
+        skillEnforcementEnabled: stored.skillEnforcementEnabled !== false,
     };
 };
 

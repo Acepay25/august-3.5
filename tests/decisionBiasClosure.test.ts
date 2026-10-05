@@ -216,6 +216,7 @@ direction: Short
 family: Family A
 wins: 2
 losses: 2
+approvedBy: grandfathered
 ${extra}ifCondition: BTC short setup
 thenAction: skip the short
 ---
@@ -252,6 +253,7 @@ status: confirmed
 kind: avoid
 wins: 3
 losses: 1
+approvedBy: grandfathered
 crossRegimeIds: t1,t2,t3
 ---
 
@@ -274,6 +276,7 @@ coin: BTCUSDT
 direction: Short
 wins: 4
 losses: 1
+approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: skip the short
 ---

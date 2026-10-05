@@ -63,6 +63,10 @@ const mocks = vi.hoisted(() => ({
         debateCostCapUsd: 0.5,
         deskToolsEnabled: true,
         responseEffort: 'quality' as const,
+        // The gate's two new switches, at their shipped defaults: this suite is not
+        // about approval or enforcement, it must not silently change them.
+        starterLibraryEnabled: true,
+        skillEnforcementEnabled: true,
     })),
     getSessionGuardConfig: vi.fn(() => ({
         dailyLossLimitPct: 0.02,

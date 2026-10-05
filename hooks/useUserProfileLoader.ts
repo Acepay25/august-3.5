@@ -22,6 +22,7 @@ import {
 import { hydrateRegimeLedger } from '../services/learning/regimeLedger';
 import { hydrateStrategyRegimeMatrix } from '../services/learning/strategyRegimeMatrix';
 import { ensureSeedSkills } from '../services/learning/seedStrategies';
+import { runApprovalMigration } from '../services/learning/approvalMigration';
 import { ensureBookSkillDrafts } from '../services/learning/bookSkillDrafts';
 import { runWeeklyRollupIfDue } from '../services/learning/weeklyRollup';
 import { runWeeklyReviewIfDue } from '../services/learning/weeklyReview';
@@ -374,6 +375,14 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             // seed skills once per boot. Idempotent by slug — user edits,
             // retirements and graveyard moves are never overwritten.
             void ensureSeedSkills(username).catch(() => { /* seeding is best-effort */ });
+            // The approval gate's one-time pass, AFTER seeding so the starter shelf
+            // exists (and it deliberately leaves `prior: 'book'` rows to the shelf
+            // toggle rather than freezing them approved). It writes a backup FIRST
+            // and refuses to stamp without one, so a swallowed failure here means
+            // "not yet migrated, retried next boot" — never "activated by accident".
+            void runApprovalMigration(username).catch(e => {
+                console.warn('[ApprovalMigration] pass deferred:', e instanceof Error ? e.message : e);
+            });
             // The trader's own strategy-PDF playbooks, queued once as
             // approval-gated skill drafts (Inbox / Coach). The flag guard means
             // approving or dismissing a draft is never undone on a later boot.

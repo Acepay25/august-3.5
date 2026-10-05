@@ -33,6 +33,7 @@ import { settledBeliefsBlock } from './settledBeliefs';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
 import {
     isSkillFile,
+    isApprovedSkill,
     parseSkillMarkdown,
     skillBody,
     skillMatchesSetup,
@@ -187,6 +188,18 @@ const rankedMatchedSkills = (
         if (!file.enabled || !isSkillFile(file)) continue;
         const meta = parseSkillMarkdown(file.content);
         if (!meta) continue;
+        // THE ACTIVATION GATE (see `isApprovedSkill`): nothing model-generated
+        // reaches a seat's prompt without a human yes — status, evidence and
+        // `enabled` are not consent. The starter library's shelf toggle is the one
+        // explicit exception, evaluated inside the predicate, not here.
+        if (!isApprovedSkill(meta)) continue;
+        // THE ACTIVATION GATE. Nothing reaches a seat's prompt unless a human said
+        // yes to this rule (or it predates the gate / rides the starter-library
+        // toggle) — `enabled` was never an approval, it only means "not retired,
+        // not suspended, not user-disabled", which is how a model-authored rule
+        // could inject itself from birth. Enforcement reads the same predicate, so
+        // a row cannot be silenced here and still veto a trade there.
+        if (!isApprovedSkill(meta)) continue;
         // Point-in-time: a skill created (or retired) after the cutoff is
         // invisible — an older run must not learn from a lesson the future
         // wrote. Without asOf this is exactly the old retired-check.

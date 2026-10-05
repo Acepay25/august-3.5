@@ -66,6 +66,10 @@ describe('assemblePipelineMemoryContext', () => {
             status: 'confirmed', kind: 'avoid', coin: 'BTCUSDT', direction: 'Short', family: 'Family A',
             wins: 2, losses: 6, consecutiveLosses: 0, tradeIds: [],
             ifCondition: 'BTC short in Family A', thenAction: 'skip',
+            // An injected rule must be an approved one (activation gate); this row
+            // stands for a pre-existing library entry, so it carries the migration's
+            // own marker rather than a made-up human.
+            approvedBy: 'grandfathered',
             body: '**Trigger:** t\n**Procedure:** skip.',
         } as SkillMeta;
         await createMemoryFile(skills.id, 'btc-short-avoid.md', serializeSkill(meta, titleFromMeta(meta)), 'stage-skill-user', true);

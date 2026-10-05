@@ -59,7 +59,7 @@ import {
 } from '../../utils/skillPrediction';
 import { ciGatePasses } from '../../utils/skillStatistics';
 import { queueLearningProposal, type ProposalApplyResult } from '../../utils/learningQueue';
-import { getSkillLibraryCap } from '../../utils/harnessSettings';
+import { getSkillLibraryCap, getHarnessSettings } from '../../utils/harnessSettings';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
@@ -268,11 +268,25 @@ export interface SkillMeta {
      *  session-scoped, so without this the audit trail for an auto-approved
      *  skill evaporates on reload. One line, capped. */
     whyAccepted?: string;
-    /** Who said yes to this draft: the LLM supervisor or the human. The
-     *  supervisor approves on the user's behalf, so "the user can still delete"
-     *  (WS-2.3) needs a durable record of which approvals ARE the model's —
-     *  the session event log that carried that fact is gone after a reload. */
-    approvedBy?: 'supervisor' | 'human';
+    /** Who said yes to this rule — THE approval fact the gate reads.
+     *
+     * `'supervisor'` is deliberately NOT approval: the model supervising its own
+     * queue is a triage action, and the trader's standing rule is that nothing
+     * model-generated becomes active, gets veto weight, or is retired without their
+     * yes. It stays in the union because the audit trail must still show which rows
+     * the model landed on its own (WS-2.3's "the user can still delete").
+     *
+     *  - `'human'`            — a person approved it in the app.
+     *  - `'grandfathered'`    — existed before the gate; stamped by the one-time
+     *    migration so the library does not go silent on day one. Marks, never
+     *    rewrites: any later change to the trigger clears it (see `revokeApproval`).
+     *  - `'starter-library'`  — not stored. A `prior: 'book'` row is approved while
+     *    the explicit Settings toggle is on; it is vetted literature, not model
+     *    output, and the toggle is the single thing that says so. */
+    approvedBy?: 'supervisor' | 'human' | 'grandfathered';
+    /** ISO stamp beside `approvedBy` — "approved on", so a reviewer can see how old
+     *  the yes is. Set by the same writers; cleared with it. */
+    approvedAt?: string;
     /** ── WS-3.3 provenance ── the agent bot whose learning created this skill.
      *  Retrieval and the skills table label it so a reader knows whether a
      *  rule came from the chart AI or from a bot's own thread. The name is
@@ -483,7 +497,9 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         source: pick('source'),
         whyAccepted: pick('whyAccepted')?.slice(0, 400),
         approvedBy: pick('approvedBy') === 'supervisor'
-            ? 'supervisor' : pick('approvedBy') === 'human' ? 'human' : undefined,
+            ? 'supervisor' : pick('approvedBy') === 'human'
+                ? 'human' : pick('approvedBy') === 'grandfathered' ? 'grandfathered' : undefined,
+        approvedAt: pick('approvedAt') || undefined,
         originBotId: pick('originBotId')?.slice(0, 40),
         originBotName: pick('originBotName')?.slice(0, 40),
         direction: pick('direction'),
@@ -675,6 +691,98 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
 export const skillEnabledFlag = (meta: SkillMeta): boolean =>
     meta.status !== 'retired' && !meta.suspendedAt && !meta.disabledByUser;
 
+/**
+ * THE ACTIVATION GATE — one fact, read everywhere a belief can reach a model or a
+ * trade: prompt injection (`MemoryRetrievalService.rankedMatchedSkills`), soft
+ * enforcement and the hard veto (`applyNotebookSkillsToAnalysis`,
+ * `confirmedAvoidForSetup`).
+ *
+ * It exists because `enabled` was never an approval: it means "not retired, not
+ * suspended, not user-disabled", so every one of the Step B audit's 13 paths could
+ * inject and veto a rule no person had said yes to. Approval is a separate fact a
+ * HUMAN action sets — and the supervisor's `approvedBy: 'supervisor'` is explicitly
+ * NOT it, because a model approving its own queue is triage, not consent.
+ *
+ * Read-side gating (rather than writing `enabled: false` at creation) is deliberate:
+ * nothing is destroyed, revocation is a one-field edit, the row keeps accruing its
+ * own evidence so the reviewer can see it beside the request, and a writer that
+ * forgets to set the fact fails CLOSED — it simply never activates.
+ */
+export const isApprovedSkill = (meta: SkillMeta): boolean => {
+    if (meta.approvedBy === 'human' || meta.approvedBy === 'grandfathered') return true;
+    // The starter library is vetted literature, not model output: one explicit
+    // Settings toggle approves the whole shelf, and it is ON by default so the app
+    // keeps the behaviour the books were shipped for.
+    if (meta.prior === 'book') return getHarnessSettings().starterLibraryEnabled !== false;
+    return false;
+};
+
+/** A rewrite invalidates the yes that came before it: the approval was for the rule
+ *  as it read, so every path that moves a live skill's trigger must call this.
+ *  `previousVersion` stays intact — this is a withdrawal, not an undo. */
+export const revokeSkillApproval = (meta: SkillMeta): void => {
+    meta.approvedBy = undefined;
+    meta.approvedAt = undefined;
+};
+
+/** Stamp the approval fact from a real decision. `at` defaults to now. */
+export const stampSkillApproval = (meta: SkillMeta, by: 'human', at?: string): void => {
+    meta.approvedBy = by;
+    meta.approvedAt = at ?? new Date().toISOString();
+};
+
+/**
+ * THE GRANDFATHER MIGRATION — one pass over the existing library so the gate does
+ * not silence the app on the day it lands.
+ *
+ * It MARKS and does not rewrite: a row is re-serialized with two front-matter fields
+ * added, and it is only touched when it carries NO approval fact at all. That makes
+ * it idempotent by construction (a second pass matches nothing), so a lost marker
+ * cannot double-stamp or corrupt, and it makes "I never approved this" impossible to
+ * accidentally record as "I did".
+ *
+ * Deliberately left alone:
+ *   - `prior: 'book'` rows — approved by the starter-library TOGGLE, not per row.
+ *     Stamping them would freeze them active even with the shelf switched off.
+ *   - retired rows and rows already approved (including `supervisor` — a
+ *     model-approved row is NOT stamped human; the trader approves it or not).
+ *
+ * The caller backs the notebook AND the profile up first; see
+ * `services/learning/approvalMigration.ts`. This is the only user-data mutation in
+ * the gate work.
+ */
+export const grandfatherExistingApprovals = async (
+    username: string,
+    at: string = new Date().toISOString(),
+): Promise<{ stamped: number; alreadyMarked: number; skipped: number; failed: number }> => {
+    const report = { stamped: 0, alreadyMarked: 0, skipped: 0, failed: 0 };
+    const user = username || 'default';
+    await withNotebookWriteLock(async () => {
+        await ensureHarnessFoldersUnlocked(user);
+        for (const file of getMemoryFiles().files.filter(isSkillFile)) {
+            const meta = parseSkillMarkdown(file.content);
+            if (!meta) { report.failed += 1; continue; }
+            if (meta.approvedBy) { report.alreadyMarked += 1; continue; }
+            if (meta.prior === 'book' || meta.status === 'retired') { report.skipped += 1; continue; }
+            // Surgical front-matter insert, NOT `serializeSkill(meta, titleFromMeta(meta))`:
+            // re-serializing normalizes the `# Title` line and recomputes derived fields
+            // like `evidenceCount` from the tradeIds tail, so a "mark only" migration that
+            // re-serialized would in fact rewrite the row. Two lines go in; nothing else
+            // moves, byte for byte.
+            const head = file.content.startsWith('---\n') ? file.content.indexOf('\n---', 4) : -1;
+            if (head < 0) { report.failed += 1; continue; }
+            const patched = `${file.content.slice(0, head + 1)}approvedBy: grandfathered\napprovedAt: ${at}\n${file.content.slice(head + 1)}`;
+            try {
+                await updateMemoryFileUnlocked(file.id, { content: patched }, user);
+                report.stamped += 1;
+            } catch {
+                report.failed += 1;
+            }
+        }
+    });
+    return report;
+};
+
 export const setSkillStatus = async (fileId: string, status: SkillStatus, username?: string): Promise<void> => {
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     if (!file) return;
@@ -757,6 +865,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.source ? [`source: ${meta.source}`] : []),
         ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
         ...(meta.approvedBy ? [`approvedBy: ${meta.approvedBy}`] : []),
+        ...(meta.approvedAt ? [`approvedAt: ${meta.approvedAt}`] : []),
         ...(meta.originBotId ? [`originBotId: ${meta.originBotId}`] : []),
         ...(meta.originBotName ? [`originBotName: ${meta.originBotName.replace(/\n/g, ' ')}`] : []),
         ...(meta.direction ? [`direction: ${meta.direction}`] : []),
@@ -910,6 +1019,15 @@ const evidenceFreshnessFactor = (meta: SkillMeta): number => {
 const enabledSkillMeta = (file: MemoryFile): SkillMeta | null => {
     if (!file.enabled || !isSkillFile(file)) return null;
     return parseSkillMarkdown(file.content);
+};
+
+/** Enforcement's reader: enabled AND approved. The two are different questions —
+ *  `enabledSkillMeta` stays for reporting (`reviewSkillEffectiveness`), which must
+ *  keep showing an unapproved row so the reviewer can see the evidence beside the
+ *  request it is asked to approve. */
+const approvedSkillMeta = (file: MemoryFile): SkillMeta | null => {
+    const meta = enabledSkillMeta(file);
+    return meta && isApprovedSkill(meta) ? meta : null;
 };
 
 /**
@@ -3113,8 +3231,12 @@ export const applyNotebookSkillsToAnalysis = <T extends {
     // freshness) instead of taken in file order.
     // Enforcement uses the STRICT matcher — a direction-only
     // match no longer vetoes every coin.
+    // And it uses the APPROVED reader: a rule nobody said yes to must not cap
+    // confidence or veto a trade. `skillEnforcementEnabled` is the user's own
+    // off-switch over the whole mechanism (default on).
+    if (getHarnessSettings().skillEnforcementEnabled === false) return analysis;
     const ranked = getMemoryFiles().files
-        .map(enabledSkillMeta)
+        .map(approvedSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)))
         .filter(m => (m.audience ?? 'all') !== 'moderator')
         // Phase 3: lens-scope filter — a 'risk'-scoped skill is dropped
@@ -3209,11 +3331,12 @@ export const confirmedAvoidForSetup = (
     // run this veto must not fire, or the control group is treated. Omitting
     // runId keeps every existing caller behaving exactly as before.
     if (shouldSkillHoldout(runId)) return null;
-    // Strict matching — this result drives the moderator's
-    // skip_to_verdict veto, so a "BTC long" avoid must never HALT an ETH
-    // long just because the direction matches.
+    // The same two readers as the analysis veto: enabled AND approved, and off when
+    // the user switched enforcement off. This one HALTS a verdict, so it must never
+    // fire on a rule the trader has not said yes to.
+    if (getHarnessSettings().skillEnforcementEnabled === false) return null;
     const matches = getMemoryFiles().files
-        .map(enabledSkillMeta)
+        .map(approvedSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)));
     return matches.find(m => m.kind === 'avoid' && m.status === 'confirmed') ?? null;
 };
