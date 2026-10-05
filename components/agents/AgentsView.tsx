@@ -501,7 +501,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const q = query.trim().toLowerCase();
     const matches = useCallback((name: string): boolean => !q || name.toLowerCase().includes(q), [q]);
 
-    const botRows = useMemo<BotRow[]>(() => bots
+    const botRowsRaw = useMemo<BotRow[]>(() => bots
         .filter(b => matches(b.name))
         .map(b => {
             const thread = threadForProvider(messages, b.providerId, b.modelId, b.id);
@@ -515,6 +515,23 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         })
         .sort((a, b) => (b.time ?? '').localeCompare(a.time ?? '')),
     [bots, messages, lastOpenedMap, matches]);
+    // Shared-history previews: a message with no botId stamp is claimable by
+    // every bot on that provider+model (the pre-stamp-history fallback), so
+    // the SAME stale text used to render as several bots' previews — phantom
+    // conversations. If one preview text appears on more than one row, it is
+    // claimed by none of them (the threads still render; this is the LIST
+    // preview only). Single-owner previews are untouched.
+    const previewCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const r of botRowsRaw) {
+            if (!r.preview) continue;
+            counts.set(r.preview, (counts.get(r.preview) ?? 0) + 1);
+        }
+        return counts;
+    }, [botRowsRaw]);
+    const botRows = useMemo<BotRow[]>(() => botRowsRaw
+        .map(r => (r.preview && (previewCounts.get(r.preview) ?? 0) > 1 ? { ...r, preview: '' } : r)),
+    [botRowsRaw, previewCounts]);
 
     const groupRows = useMemo(() => groups
         .filter(g => matches(groupDisplayName(g, bots))), [groups, bots, matches]);
@@ -1116,8 +1133,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 <div className="mt-1 flex items-center gap-2 px-1">
                                     <button type="button" onClick={openPicker} data-testid="composer-attach"
                                         aria-label="Attach image"
-                                        title="Attach an image"
-                                        className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:opacity-40 disabled:hover:text-zinc-400">
+                                        title={activeBot
+                                            ? 'Agent replies are text-only — attachments run with the full analysis (no agent selected)'
+                                            : 'Attach an image'}
+                                        disabled={!!activeBot}
+                                        className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-zinc-400">
                                         <Paperclip className="h-3.5 w-3.5" />
                                     </button>
                                     {modelPicker}

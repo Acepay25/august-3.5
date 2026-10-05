@@ -18,6 +18,7 @@ vi.mock('../utils/activeUser', () => ({
 
 const { streamMock } = vi.hoisted(() => ({ streamMock: vi.fn() as Mock<(...args: any[]) => any> }));
 vi.mock('../services/analysis/DeskToolsService', () => ({
+    stripTextToolCalls: (t: string): string => t.replace(/<tool_call\s*>[\s\S]*?<\/tool_call\s*>/gi, '').replace(/<function\s*=[^>]*>[\s\S]*?<\/function\s*>/gi, '').replace(/<parameter\s*=[^>]*>[\s\S]*?<\/parameter\s*>/gi, '').replace(/<\/?(?:tool_call|function|parameter)\b[^>]*>/gi, '').trim(),
     streamChatWithDeskTools: (...args: unknown[]) => streamMock(...args),
 }));
 vi.mock('../services/analysis/HybridIntelligenceService', () => ({
