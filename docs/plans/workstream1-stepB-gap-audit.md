@@ -29,6 +29,9 @@ claims to do actually happen?** No files were changed while producing this.
    row when `payload` carries no clauses (recommended — the panel already knows), or
    make the regime pass write a suggested clause pair so it is genuinely applyable.
    Not done in this run because it is a feature-shape call.
+   **RESOLVED `d727328`** — Apply is now a per-row test (`isApplyableProposal`), so a
+   clause-less rescope row is Dismiss-only again; generating clause text was declined
+   as Step C design.
 
 2. **The queue strip's refusal line is unverified in the app.** `LearningQueuePanel`
    renders `proposalApplyFailureMessage` (`errorId` replaced with `failure`) and no
@@ -41,6 +44,11 @@ claims to do actually happen?** No files were changed while producing this.
    does export → clear → import against the packaged panel. `render-probe` does cover
    back up / export / import generally (AGENTS.md), but not with an image-bearing
    session. Highest-value remaining app-verification item.
+   **CLOSED `2c7f5b0`** — render-probe now does the strip → restore-over-live round
+   trip in Chromium and asserts the live screenshot survives; exit 0, zero pageerrors.
+   It drives `exportPreferencesData`/`importPreferencesData` through the app's
+   dev-server modules rather than a downloaded file, because the panel's file step is
+   a Blob plus an OS dialog the probe cannot observe.
 
 4. **`harness_settings_v1` is backed up but its restore target is ambiguous.** It is
    now RAW (correct: the owner is `harnessSettings.ts:79`, localStorage only) and it is
@@ -60,6 +68,10 @@ claims to do actually happen?** No files were changed while producing this.
    have no count cap at all. All three are now exported; none is cap-guarded (the cap is
    scoped to chat sessions only, deliberately — see `CAPPED_EXPORT_PREFIXES`).
    Backlog: bound them at write time, same entry as `trimForStorage`.
+   **PARTLY CLOSED `2052f8a`**: all three now have a per-key EXPORT cap with the same
+   visible LEFT OUT notice (1 MB / 256 KB / 64 KB, measured from each owner's bounds).
+   Write-time bounds are still open — a cap stops the backup carrying a runaway store,
+   not the device carrying it.
 
 ## Backlog this run created (not started)
 
