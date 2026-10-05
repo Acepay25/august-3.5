@@ -225,6 +225,18 @@ now asserts BOTH directions (came down from 17, still > 5).
 | `7ea41e8` | 1 — pointer-missing fallback | Falls back cleanly (never a crash, never an empty dock) BUT it opened the OLDEST session — `sessions[0]` while new sessions append. Now by each row's `updatedAt`/`createdAt`. Pointer honoured when it matches; a pointer to a deleted row falls back; corrupt sessions row tolerated. `trade_chat_active_v1` stays OUT of backups for the plain-string reason (quoted `"s-1"` vs bare `s-1` on mirror). Red first: 2 of 5 failed. |
 | `7ea41e8` | 1 — recorded | The reason the key is unbacked is in this file AND in `chatActivePointerFallback.test.ts`'s header, so the next run does not re-derive it. |
 
+## Decisions 1-3 (second batch, 2026-10-05) — DONE
+| commit | decision | result |
+|---|---|---|
+| `d727328` | 1 — hide Apply on a clause-less rescope row | `isApplyableProposal(p)` makes it a PER-ROW test (kind applyable AND, for rescope, payload carries both clauses). Both panels call it. **Contract rewrite**: the coach case that asserted "one Apply between rescope-and-contradiction" now queues three rows (clauses / none / contradiction) and still expects one. Regime-divergence rows (`SkillMemoryService.ts:1622`, no payload) are Dismiss-only again, as before A2. NOT done on purpose: making that pass generate clause text — new rule-text authorship, belongs to Step C. The applier keeps its fail-closed `no-clauses` branch; hiding a button is not a boundary. Red first 2 failed / 14 passed. |
+| `2052f8a` | 2 — per-key export caps for the three unbounded stores | `EXPORT_KEY_CAPS` replaces the single chat-only prefix; same skip + `_backup_notices` mechanism, no image stripping. **Measured first:** drawings are 40 × 200 points per coin (`chartDrawings.ts:54-55`, ≈180 KB/coin) and one key keeps every coin → **1 MB**; a forged tool row is ~1-1.5 KB (`toolForge.ts:18-47`), count unbounded → **256 KB** (~170 tools); a checklist item is ~90 bytes (`checklist.ts:9-11`) → **64 KB** (~700 items); chat stays **512 KB**. Normal usage is 10 KB / 30 KB / 3 KB, so no ordinary backup is trimmed — the test proves that half as loudly as the skip. Write paths untouched. Red first 3 over-cap failed, 6 normal-size passed throughout. |
+| `2c7f5b0` | 3 — browser probe for the chat restore | render-probe gained 3 checks: exported copy has no data-URL and does have the stub; restoring over live data keeps the live screenshot + text; the chat key is written, not skipped/failed. **Exit 0, all ok, zero pageerrors.** First attempt asserted zero skips browser-wide and failed on a live app — 6 probe-owned/plain-string keys are correctly dropped by the allow-list; narrowed to the key under test. |
+
+BACKLOG added this batch: **bound these stores at write time** (drawings-per-session
+coin count, forged-tool count, checklist item count) — same entry as
+`trade_chat_sessions_v1` bytes. A cap on the EXPORT only stops the backup carrying
+them; it does not stop the device carrying them.
+
 ## Then
 Backup pre-flight + registration → real export/restore round trip with byte
 equality → agentsSurface flake rate (10 solo + 1 under load) → **Step B audit,
