@@ -70,7 +70,6 @@ const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyM
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
-const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
 const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
@@ -84,7 +83,6 @@ const LearnView = React.lazy(() => import('./components/learn/LearnView'));
 import type { LearnTab } from './components/learn/LearnView';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import ModelPicker from './components/shared/ModelPicker';
-import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { isProviderReady } from './utils/providerUtils';
@@ -180,7 +178,6 @@ const App: React.FC = () => {
     const {
         isUserModalOpen, setIsUserModalOpen,
         isStrategySearchVisible, setIsStrategySearchVisible,
-        isSavedAnalysesVisible, setIsSavedAnalysesVisible,
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
         isVersionHistoryVisible, setIsVersionHistoryVisible,
@@ -399,7 +396,7 @@ const App: React.FC = () => {
         journalFocusTradeId, setJournalFocusTradeId,
         journalOpenNonce,
         surfaceEnterFrom, setSurfaceEnterFrom,
-        openJournal, handleSurfaceSelect,
+        handleSurfaceSelect,
     } = useSurfaceRouter({
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
@@ -1139,10 +1136,8 @@ const App: React.FC = () => {
     // ─── Command palette (Ctrl/Cmd+K) ─────────────────────────────────────
     // Declared here (before the Esc handler) because the handler gates on
     // these overlay flags.
-    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
     // ─── Saved analyses gallery ────────────────────────────────────────────
-    const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
     // Strategy Studio — the browse/annotate surface for the playbook library.
     // Strategy Studio moved to a surface (useSurface) — no overlay flag.
 
@@ -1358,7 +1353,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1367,7 +1362,6 @@ const App: React.FC = () => {
                 // analysis — but never cancels while anything is open.
                 if (isVisionDataVisible) setIsVisionDataVisible(false);
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
-                if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
                 if (isWatchListVisible) setIsWatchListVisible(false);
                 if (isApprovalInboxVisible) setIsApprovalInboxVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
@@ -1383,7 +1377,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -1411,15 +1405,22 @@ const App: React.FC = () => {
         if (index >= 0) {
             scrollToMessageRef.current?.(messageId);
         }
-        setIsSavedGalleryOpen(false);
     }, [messages]);
+
+    // Saved-analysis Locate: the transcript lives on the Trade surface, so
+    // from the Journal this is the ApprovalInbox dance — land on Trade and
+    // scroll only if the dock's bridge is already mounted.
+    const handleLocateSavedAnalysis = useCallback((messageId: string) => {
+        const dockIsMounted = surface === 'trade';
+        setSurface('trade');
+        if (dockIsMounted) {
+            const index = messages.findIndex(m => m.id === messageId);
+            if (index >= 0) scrollToMessageRef.current?.(messageId);
+        }
+    }, [messages, surface]);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-                e.preventDefault();
-                setIsCommandPaletteOpen(prev => !prev);
-            }
             // Ctrl/Cmd+, opens Settings — the platform convention the activity
             // rail advertises in its tooltip. It was advertised but never
             // bound, so the kbd hint was a dead affordance.
@@ -1739,142 +1740,6 @@ const App: React.FC = () => {
             setSavedAnalyses([]);
         }
     };
-
-    const handleScrollToBottom = () => {
-        // The transcript is the Chart AI dock now: aim the bridge at the
-        // LAST AI entry of the active dock session (what "latest analysis"
-        // means on screen). With an empty dock, fall back to the last
-        // App-side AI message id — a deliberate no-op scroll if that card
-        // isn't rendered in the transcript, exactly like before, while the
-        // highlight clear below always runs.
-        let targetId: string | undefined;
-        const snap = chatStore.getSnapshot();
-        const session = snap.sessions.find(s => s.id === snap.activeId);
-        if (session) {
-            for (let i = session.entries.length - 1; i >= 0; i--) {
-                const e = session.entries[i];
-                if (e.role === 'ai' && !e.notice) { targetId = e.id; break; }
-            }
-        }
-        if (!targetId) {
-            for (let i = messages.length - 1; i >= 0; i--) {
-                if (messages[i].role === MessageRole.AI) { targetId = messages[i].id; break; }
-            }
-        }
-        if (!targetId) return;
-        scrollToMessageRef.current?.(targetId);
-    };
-
-    const commandPaletteActions = useMemo<PaletteAction[]>(() => [
-        {
-            id: 'jump-latest',
-            label: 'Jump to latest analysis',
-            hint: '↓',
-            run: handleScrollToBottom,
-        },
-        {
-            id: 'new-analysis',
-            label: input.trim() ? `Analyze: ${input.trim().slice(0, 40)}` : 'Analyze current input',
-            hint: 'Enter',
-            run: () => { if (input.trim()) stableHandleSendMessage(); },
-        },
-        {
-            id: 'journal',
-            label: 'Open Journal',
-            hint: 'Trades',
-            run: () => openJournal(),
-        },
-        {
-            id: 'live-market',
-            label: 'Open Live Market',
-            hint: 'Prices',
-            run: () => setIsLiveMarketVisible(true),
-        },
-        {
-            id: 'settings',
-            label: 'Open Settings',
-            hint: 'Providers',
-            run: () => setIsSettingsMenuVisible(true),
-        },
-        {
-            id: 'strategies',
-            label: 'Open Strategy Search',
-            hint: 'Playbook',
-            run: () => setIsStrategySearchVisible(true),
-        },
-        {
-            id: 'saved-analyses',
-            label: 'Open Saved Analyses',
-            hint: 'Archive',
-            // This overlay is the ONLY place a saved analysis can be deleted or
-            // cleared — the SettingsMenu restructure dropped its Header trigger
-            // and left handleDeleteSavedAnalyses with no way to be reached.
-            run: () => setIsSavedAnalysesVisible(true),
-        },
-        {
-            id: 'strategy-studio',
-            label: 'Open Strategy Studio',
-            hint: 'Playbook',
-            run: () => setSurface('studio'),
-        },
-        {
-            id: 'toggle-ensemble',
-            label: isEnsembleEnabled ? 'Switch to casual chat' : 'Enable Team analysis',
-            hint: 'Team',
-            // The canonical handler — the raw setter skipped image cleanup and
-            // the setup-warning toasts.
-            run: () => handleSetEnsembleEnabled(!isEnsembleEnabled),
-        },
-        {
-            id: 'toggle-lenses',
-            label: lensConfig.enabled ? 'Disable Analyst Lenses' : 'Enable Analyst Lenses',
-            hint: 'Roles',
-            // The canonical handler — persists the toggle (raw setter reverted on reload).
-            run: () => handleSetLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
-        },
-        // Offered only when there is a debate to project — the overlay itself
-        // needs deskSceneMessage, so before the first run this toggled state
-        // that rendered nothing (same gate as the dock's 2D button).
-        ...(isDeskSceneOpen || deskSceneMessage ? [{
-            id: 'desk-view',
-            label: isDeskSceneOpen ? 'Close desk view' : 'Open desk view',
-            hint: 'Debate',
-            run: () => setIsDeskSceneOpen(v => !v),
-        }] : []),
-        {
-            id: 'watch-list',
-            label: 'Open Pinned signals',
-            hint: `${watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length} open`,
-            run: () => setIsWatchListVisible(true),
-        },
-        {
-            // Distinct id + label from the 'saved-analyses' archive row above:
-            // two actions sharing one id gave CommandPalette duplicate React
-            // keys and two menu entries reading "Open Saved Analyses".
-            id: 'saved-gallery',
-            label: 'Open Analysis Gallery',
-            hint: `${savedAnalyses.length} saved`,
-            run: () => setIsSavedGalleryOpen(true),
-        },
-        {
-            id: 'version-history',
-            label: 'Open Version History',
-            hint: 'Backups',
-            run: () => setIsVersionHistoryVisible(true),
-        },
-        {
-            id: 'accuracy-mode',
-            label: isAccuracyModeEnabled ? 'Accuracy Mode: ON — view settings' : 'Enable Accuracy Mode',
-            hint: 'Validation',
-            run: () => setShowAccuracyModal(true),
-        },
-        {
-            id: 'clear-chat',
-            label: 'Clear current chat',
-            hint: 'Messages',
-            run: () => { void handleClearChat(); },
-        },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, openJournal, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals, isDeskSceneOpen, deskSceneMessage]);
 
     // F4: "Re-run debate" — re-dispatches the original prompt + chart images
     // through the normal pipeline so the user gets a fresh debate for the
@@ -2512,6 +2377,8 @@ const App: React.FC = () => {
                 username={activeUsername || undefined}
                 onProfileRestored={(restoredUsername) => { loadUserData(restoredUsername); }}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
+                isEnsembleEnabled={isEnsembleEnabled}
+                onToggleEnsembleEnabled={() => handleSetEnsembleEnabled(!isEnsembleEnabled)}
                 onToggleAccuracyMode={handleToggleAccuracyMode}
                 accuracySubMode={accuracySubMode}
                 setAccuracySubMode={setAccuracySubMode}
@@ -2672,7 +2539,6 @@ const App: React.FC = () => {
                 <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
             )}
             </React.Suspense>
-            <SavedAnalyses analyses={savedAnalyses} isVisible={isSavedAnalysesVisible} onClose={() => setIsSavedAnalysesVisible(false)} onDelete={handleDeleteSavedAnalyses} onClearAll={handleClearAllSavedAnalyses} modelIdToName={modelIdToName} ocrModelIdToName={ocrModelIdToName} />
             <React.Suspense fallback={null}>
                 <WatchListPanel
                     isVisible={isWatchListVisible}
@@ -2856,6 +2722,11 @@ const App: React.FC = () => {
                                 familyWinRates={familyWinRates}
                                 enabledProviders={journalEnabledProviders}
                                 selectedModels={journalSelectedModels}
+                                savedAnalyses={savedAnalyses}
+                                onDeleteSavedAnalyses={handleDeleteSavedAnalyses}
+                                onClearAllSavedAnalyses={handleClearAllSavedAnalyses}
+                                onLocateSavedAnalysis={handleLocateSavedAnalysis}
+                                ocrModelIdToName={ocrModelIdToName}
                                 />
                             </React.Suspense>
                         )}
@@ -2863,6 +2734,7 @@ const App: React.FC = () => {
                             <React.Suspense fallback={<SurfaceSkeleton />}>
                                 <StrategyStudio
                                     trades={loggedTrades}
+                                    onOpenStrategySearch={() => setIsStrategySearchVisible(true)}
                                     username={activeUsername || undefined}
                                     memoryConfig={memoryConfig}
                                     currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
@@ -2952,6 +2824,7 @@ const App: React.FC = () => {
                                         selectTeamThread();
                                     }}
                                     onDeleteConversation={handleDeleteConversationFromSidebar}
+                                    onClearConversation={(id) => { void handleClearChat(id); }}
                                     onNewChat={handleStartNewConversation}
                                 />
                             </React.Suspense>
@@ -3102,25 +2975,13 @@ const App: React.FC = () => {
             {/* TeamDialog removed — teams merged into groups (one room
                 concept; roles/instructions live on the member bots). */}
 
-            {/* Command palette — Ctrl/Cmd+K */}
-            <CommandPalette
-                isOpen={isCommandPaletteOpen}
-                onClose={() => setIsCommandPaletteOpen(false)}
-                inputPreview={input.trim() ? input.trim().slice(0, 60) : undefined}
-                actions={commandPaletteActions}
-            />
-
-            {/* Saved analyses gallery */}
-            {isSavedGalleryOpen && (
-                <React.Suspense fallback={null}>
-                    <SavedAnalysesGallery
-                        savedAnalyses={savedAnalyses}
-                        modelIdToName={modelIdToName}
-                        onLocateMessage={handleLocateMessage}
-                        onClose={() => setIsSavedGalleryOpen(false)}
-                    />
-                </React.Suspense>
-            )}
+            {/* The command palette was deleted (stage 3): a fixed action list
+                that duplicated chrome and could not search anything. Its
+                sole-path actions were rehomed — StrategySearch onto the
+                Studio, Saved Analyses into the Journal's Saved tab, the
+                ensemble toggle into Settings → Analysis, clear-chat into the
+                conversation row menu, jump-to-latest into the transcript's
+                scroll-to-bottom pill. Every other entry was a duplicate. */}
 
             {/* Strategy Studio is a surface now (surface === 'studio' in the
                 main row) — no overlay state to manage. */}

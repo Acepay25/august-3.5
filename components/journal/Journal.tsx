@@ -7,10 +7,12 @@ import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import {CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, BotIcon, FileSpreadsheet, FileText} from '../shared/Icons';
+import {CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, BotIcon, BookmarkIcon, FileSpreadsheet, FileText} from '../shared/Icons';
+import SavedAnalyses from './SavedAnalyses';
+import { EmptyState } from '../ui/EmptyState';
 
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
-import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
+import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome, SavedAnalysis } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
 import { buildHumanCalibration, humanCalibrationLine as humanCalLine } from '../../utils/preRead';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -20,7 +22,7 @@ import { useEscapeClose } from '../../hooks/useEscapeClose';
 interface JournalProps {
     isVisible: boolean;
     onClose: () => void;
-    initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
+    initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning' | 'saved';
     isEmbedded?: boolean;
     /** Deep link: auto-select this analysis run in the Think (reasoning) tab. */
     initialTradeId?: string;
@@ -77,6 +79,16 @@ interface JournalProps {
     // Analytics Props
     familyWinRates: Record<string, { total: number; wins: number; winRate: number }>;
 
+    // Saved-analyses tab. Stage 3: the archive overlay and the Analysis
+    // Gallery had only the command palette as an opener; the journal is now
+    // the one home for bookmarked analyses (delete included) and Locate hops
+    // to the Trade surface, where the transcript lives.
+    savedAnalyses?: SavedAnalysis[];
+    onDeleteSavedAnalyses?: (ids: string[]) => void;
+    onClearAllSavedAnalyses?: () => void;
+    onLocateSavedAnalysis?: (messageId: string) => void;
+    ocrModelIdToName?: Record<string, string>;
+
     // Memory Props
     globalMemory?: GlobalMemory;
     threadSummary?: string;
@@ -87,7 +99,7 @@ interface JournalProps {
 }
 
 // Tab configuration
-type TabId = 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
+type TabId = 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning' | 'saved';
 
 interface TabConfig {
     id: TabId;
@@ -105,6 +117,7 @@ const TABS: TabConfig[] = [
     { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'models', label: 'Models', shortLabel: 'AI', icon: <BotIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'saved', label: 'Saved', shortLabel: 'Saved', icon: <BookmarkIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
 ];
 
 /** CSV + printable-report export. The journal has TWO headers (the embedded
@@ -150,6 +163,8 @@ const JournalInner: React.FC<JournalProps> = ({
     finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
     familyWinRates = {},
+    // Saved-analyses tab pass-through
+    savedAnalyses, onDeleteSavedAnalyses, onClearAllSavedAnalyses, onLocateSavedAnalysis, ocrModelIdToName = {},
     // Memory Pass-through
     globalMemory = null, threadSummary = '',
     // Model Performance Props
@@ -282,6 +297,27 @@ const JournalInner: React.FC<JournalProps> = ({
                     onInitialTradeConsumed={onInitialTradeConsumed}
                     onDocumentOpenChange={setDocumentOpen}
                 />
+            </div>
+        ) : activeTab === 'saved' ? (
+            <div className="h-full overflow-y-auto">
+                <div className="p-4 sm:p-6">
+                    {savedAnalyses && onDeleteSavedAnalyses && onClearAllSavedAnalyses ? (
+                        <SavedAnalyses
+                            analyses={savedAnalyses}
+                            onDelete={onDeleteSavedAnalyses}
+                            onClearAll={onClearAllSavedAnalyses}
+                            modelIdToName={modelIdToName}
+                            ocrModelIdToName={ocrModelIdToName}
+                            onLocateMessage={onLocateSavedAnalysis}
+                        />
+                    ) : (
+                        <EmptyState
+                            icon={<BookmarkIcon className="w-8 h-8" />}
+                            title="Saved analyses are not wired"
+                            description="App did not hand the journal a saved-analyses store."
+                        />
+                    )}
+                </div>
             </div>
         ) : null
     );

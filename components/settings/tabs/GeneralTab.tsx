@@ -7,7 +7,7 @@
 // the tab. The service setter `setIdleMotionEnabled` is imported here because
 // only this body writes through it.
 import React from 'react';
-import { Activity, ChevronDown, Layers, ShieldCheck, Wrench } from '../../shared/Icons';
+import { Activity, ChevronDown, Layers, ShieldCheck, Users, Wrench } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import DeskSeatMappingEditor from '../DeskSeatMappingEditor';
 import { SegmentedControl, SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
@@ -20,6 +20,10 @@ export interface GeneralTabProps extends SettingsTabProps {
     // Accuracy Mode
     isAccuracyModeEnabled: boolean;
     onToggleAccuracyMode: () => void;
+    // Team (ensemble) analysis — the command palette used to carry this
+    // toggle; stage 3 moved it here, beside the other analysis-mode dials.
+    isEnsembleEnabled?: boolean;
+    onToggleEnsemble?: () => void;
     accuracySubMode: AccuracySubMode;
     setAccuracySubMode?: (subMode: AccuracySubMode) => void;
     // Hybrid & Capturing
@@ -51,6 +55,8 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
     const {
         isAccuracyModeEnabled,
         onToggleAccuracyMode,
+        isEnsembleEnabled,
+        onToggleEnsemble,
         accuracySubMode,
         setAccuracySubMode,
         isHybridIntelligenceEnabled,
@@ -82,6 +88,16 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
             />
 
             <SettingsGroup title="Analysis modes">
+                {isEnsembleEnabled !== undefined && onToggleEnsemble && (
+                    <SettingsRow
+                        icon={<Users className="h-4 w-4" />}
+                        title="Team analysis"
+                        description={isEnsembleEnabled
+                            ? 'On — sends run the analyst ensemble (multi-seat debate) before the verdict.'
+                            : 'Off — sends are casual chat: one model, no debate, no desk tools.'}
+                        control={<ToggleSwitch checked={isEnsembleEnabled} onChange={onToggleEnsemble} label="Toggle Team analysis" />}
+                    />
+                )}
                 <SettingsRow
                     icon={<ShieldCheck className="h-4 w-4" />}
                     title="Accuracy Mode"

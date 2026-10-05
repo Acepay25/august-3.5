@@ -132,10 +132,11 @@ describe('App journal routing (source contract)', () => {
         expect(appSrc).toMatch(/onInitialTradeConsumed=\{handleReasoningTradeConsumed\}/);
     });
 
-    it('palette "Open Journal" routes to the journal surface via openJournal', () => {
-        // The palette row stays a call site in App; the transition it drives
-        // (setSurface('journal')) now lives in the router.
-        expect(appSrc).toMatch(/label: 'Open Journal',[\s\S]{0,80}run: \(\) => openJournal\(\)/);
+    it('journal routing survives the palette deletion', () => {
+        // Stage 3 deleted the command palette; the journal's routes are the
+        // surface list (pinned above) and the #/journal hash (pinned below).
+        // No palette remnant may come back as a second entry.
+        expect(appSrc).not.toMatch(/Open Journal|commandPaletteActions/);
         expect(routerSrc).toMatch(/setSurface\('journal'\)/);
     });
 
@@ -164,8 +165,11 @@ describe('App journal routing (source contract)', () => {
     it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {
         expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
         expect(routerSrc).toMatch(/if \(next === 'journal'\) \{\s*openJournal\(\);/);
-        // …and App must be reading both back OFF the hook, not keeping a
-        // private copy — a second surface state is how they would diverge.
-        expect(appSrc).toMatch(/const \{[\s\S]{0,400}openJournal, handleSurfaceSelect,[\s\S]{0,40}\} = useSurfaceRouter\(/);
+        // App reads the router off the hook rather than keeping a private
+        // copy — a second surface state is how they would diverge. openJournal
+        // itself is called INSIDE the router on every journal entry (the
+        // palette call site that also destructured it died with the palette,
+        // stage 3), so App no longer names it.
+        expect(appSrc).toMatch(/const \{[\s\S]{0,200}handleSurfaceSelect,[\s\S]{0,40}\} = useSurfaceRouter\(/);
     });
 });

@@ -54,6 +54,9 @@ interface SettingsMenuProps {
     // Accuracy Mode
     isAccuracyModeEnabled: boolean;
     onToggleAccuracyMode: () => void;
+    /** Team (ensemble) analysis — the palette's toggle rehomed here (stage 3). */
+    isEnsembleEnabled?: boolean;
+    onToggleEnsembleEnabled?: () => void;
     accuracySubMode: AccuracySubMode;
     setAccuracySubMode?: (subMode: AccuracySubMode) => void;
     // Hybrid & Capturing
@@ -557,6 +560,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <GeneralTab tab={{
                                         isAccuracyModeEnabled: props.isAccuracyModeEnabled,
                                         onToggleAccuracyMode: props.onToggleAccuracyMode,
+                                        isEnsembleEnabled: props.isEnsembleEnabled,
+                                        onToggleEnsemble: props.onToggleEnsembleEnabled,
                                         accuracySubMode: props.accuracySubMode,
                                         setAccuracySubMode: props.setAccuracySubMode,
                                         isHybridIntelligenceEnabled: props.isHybridIntelligenceEnabled,
