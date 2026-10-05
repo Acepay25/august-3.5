@@ -6,7 +6,6 @@ import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 // startup so the desk view mounts with the correct class.
 reapplyIdleMotionClass();
 import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, LoggedTrade } from './types';
-import * as ensembleService from './services/providers/ensembleService';
 import { subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { useUserProfileLoader } from './hooks/useUserProfileLoader';
@@ -20,7 +19,6 @@ import { buildProposedTradeMessage, type TradeProposal } from './services/trade/
 import * as chatStore from './services/trade/chatStore';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
-import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
 
 // Modular Imports
@@ -69,7 +67,6 @@ const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTra
 const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
 const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
 const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyModeModal').then(m => ({ default: m.AccuracyModeModal })));
-const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboards/AdvancedAnalyticsSidePanel'));
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
@@ -92,7 +89,6 @@ import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { isProviderReady } from './utils/providerUtils';
 import { DEFAULT_LEVERAGE } from './utils/conversationUtils';
-import { parsePrice as parsePriceCanonical } from './utils/analysisUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
 import { deriveMessageDisplayText } from './utils/messageDisplayText';
@@ -110,8 +106,6 @@ import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, listSkillDraft
 import { listLearningProposals } from './utils/learningQueue';
 import { approveSkillDraft, skillApprovalToast } from './services/learning/skillApproval';
 import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
-import { extractLastJson } from './utils/jsonUtils';
-import { parseLevelProbabilities } from './schemas/tradeAnalysis';
 import useNetworkStatus from './hooks/useNetworkStatus';
 import { useSupervisorBootstrap } from './hooks/useSupervisorBootstrap';
 import { useLearningHeartbeat } from './hooks/useLearningHeartbeat';
@@ -189,7 +183,6 @@ const App: React.FC = () => {
         isSavedAnalysesVisible, setIsSavedAnalysesVisible,
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
-        isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen,
         isVersionHistoryVisible, setIsVersionHistoryVisible,
         isLivePostMortemVisible, setIsLivePostMortemVisible,
         showMismatchModal, setShowMismatchModal,
@@ -199,7 +192,6 @@ const App: React.FC = () => {
 
         isLoading, setIsLoading,
         isHybridLoading, setIsHybridLoading,
-        isCalculatingAIProbabilities, setIsCalculatingAIProbabilities,
  setIsPostMortemTypingComplete,
         isAnalysisInProgress, setIsAnalysisInProgress,
         isPostMortemInProgress, setIsPostMortemInProgress,
@@ -223,13 +215,9 @@ const App: React.FC = () => {
     // panels once the user opens them at least once. They stay mounted
     // thereafter so the open/close animation is instant on the second open.
     const [isStrategySearchEverOpened, setIsStrategySearchEverOpened] = useState(false);
-    const [isAdvancedAnalyticsEverOpened, setIsAdvancedAnalyticsEverOpened] = useState(false);
     React.useEffect(() => {
         if (isStrategySearchVisible) setIsStrategySearchEverOpened(true);
     }, [isStrategySearchVisible]);
-    React.useEffect(() => {
-        if (isAdvancedAnalyticsOpen) setIsAdvancedAnalyticsEverOpened(true);
-    }, [isAdvancedAnalyticsOpen]);
 
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
     const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
@@ -466,12 +454,12 @@ const App: React.FC = () => {
     const {
         currentHybridData, setCurrentHybridData,
  setHybridConnectionStatus,
-        latestMonteCarloResult, setLatestMonteCarloResult,
-        latestBacktestResult, setLatestBacktestResult,
-        perAIMonteCarloResults, setPerAIMonteCarloResults,
-        currentSlOptimization, setCurrentSlOptimization,
+        setLatestMonteCarloResult,
+        setLatestBacktestResult,
+        setPerAIMonteCarloResults,
+        setCurrentSlOptimization,
  setCurrentSuggestedEntryPrice,
-        currentEntryTimingScore, setCurrentEntryTimingScore,
+        setCurrentEntryTimingScore,
         liveMarketConditions,
         liveMarketSymbol,
     } = marketData;
@@ -485,7 +473,6 @@ const App: React.FC = () => {
     // journal overlay is gone; the journal lives on its own surface, and the
     // deep-link tab/trade-id state is declared with the surface block below.)
     const {
-        selectedProbabilityMessageId, setSelectedProbabilityMessageId,
         strategyToView, setStrategyToView,
 
 
@@ -911,7 +898,7 @@ const App: React.FC = () => {
         invalidatePostMortemRuns();
     }, [handleCancelAnalysis, invalidatePostMortemRuns]);
 
-    const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);    const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
+    const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
     // The Send button must never look active when no provider can actually
     // run — accuracy mode doesn't conjure providers out of thin air (the
     // pipeline toasts "No AI Providers Enabled" on send).
@@ -1371,14 +1358,13 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
                 // close themselves. Close the gate-owned overlays here so one
                 // Esc never both closes an overlay AND cancels a running
                 // analysis — but never cancels while anything is open.
-                if (isAdvancedAnalyticsOpen) setIsAdvancedAnalyticsOpen(false);
                 if (isVisionDataVisible) setIsVisionDataVisible(false);
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
@@ -1397,7 +1383,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -1660,7 +1646,6 @@ const App: React.FC = () => {
         handleLoadConversation,
 
         handleDeleteConversationFromSidebar,
-        handleDeleteSelectedConversations,
 
     } = useConversationHousekeeping({
         conversationHistory, setConversationHistory,
@@ -2097,105 +2082,6 @@ const App: React.FC = () => {
             };
         updateMessages(prev => [...prev, row], activeConversationId ?? null);
     }, [updateMessages, activeConversationId]);
-
-    // reads messages via messagesRef (not the `messages` closure) so
-    // this handler keeps a stable identity across stream chunks — a fresh
-    // identity here would re-create chatContext (and re-render every visible
-    // transcript row) on each chunk.
-    const handleCalculateAIProbabilities = useCallback(async (messageId: string, mode: 'AI' | 'Algo' = 'AI') => {
-        const msg = messages.find(m => m.id === messageId);
-        if (!msg || !msg.analysis) return;
-
-        // Algo Mode Logic
-        if (mode === 'Algo') {
-            if (msg.analysis.marketSnapshot) {
-                try {
-                    // Entry→TP distances (% of entry) so the decay is
-                    // distance-aware instead of a fixed step. The entry→SL
-                    // distance rides the same math (5th arg) so the engine
-                    // can produce a REAL barrier-race stop probability
-                    // instead of the `100 − TP1` upper bound. parsePrice is
-                    // the canonical range-aware parser — this file's local
-                    // regex-strip copy yielded NaN on range TPs ("96000 -
-                    // 96500"), silently degrading the engine to its
-                    // fixed-step fallback.
-                    const entry = parsePriceCanonical(msg.analysis.entryPoints?.[0]?.price || '') || 0;
-                    const tpPct = (msg.analysis.takeProfit ?? [])
-                        .map(tp => parsePriceCanonical(tp.price || ''))
-                        .filter(p => Number.isFinite(p) && Number.isFinite(entry) && entry > 0)
-                        .map(p => Math.abs(p - entry) / entry * 100);
-                    const slPrice = parsePriceCanonical(msg.analysis.stopLoss || '');
-                    const slDistancePct = Number.isFinite(slPrice) && Number.isFinite(entry) && entry > 0 && slPrice !== entry
-                        ? Math.abs(slPrice - entry) / entry * 100
-                        : undefined;
-                    const algoProbs = ProbabilityEngineService.calculateAlgoProbabilities(
-                        msg.analysis.marketSnapshot,
-                        loggedTrades,
-                        msg.analysis.direction as 'Long' | 'Short' | 'Neutral',
-                        tpPct.length >= 2 ? tpPct : undefined,
-                        slDistancePct
-                    );
-                    updateMessages(prev => prev.map(m =>
-                        m.id === messageId
-                            ? { ...m, analysis: { ...m.analysis!, levelProbabilities: algoProbs } }
-                            : m
-                    ));
-                } catch (error) {
-                    console.error('Algo probability calculation failed:', error);
-                    toast.error('Probability calculation failed', 'The algo engine hit an error with this trade\'s data. Try the AI mode instead.');
-                }
-            } else {
-                console.warn('Cannot run Algo mode: No snapshot available for trade', messageId);
-                toast.warning('No market data', 'This trade has no saved market snapshot, so the algo engine cannot run. Use AI mode instead.');
-            }
-            return;
-        }
-
-        // AI Mode Logic
-        setIsCalculatingAIProbabilities(true);
-        try {
-            const stream = ensembleService.recalculateProbabilities(
-                msg.analysis,
-                moderatorConfig,
-                moderatorModel,
-                msg.analysis.marketSnapshot // Pass snapshot for historical consistency
-            );
-
-            let fullJson = '';
-            for await (const chunk of stream) {
-                fullJson += chunk;
-            }
-
-            const parsed = extractLastJson(fullJson);
-            if (parsed) {
-                // Schema-validated normalization (accepts wrapped or bare shape)
-                const probs = parseLevelProbabilities(parsed);
-
-                if (probs) {
-                    // Tag with mode
-                    probs.calculationMode = 'AI';
-
-                    updateMessages(prev => prev.map(m =>
-                        m.id === messageId
-                            ? { ...m, analysis: { ...m.analysis!, levelProbabilities: probs } }
-                            : m
-                    ));
-                    console.log('Successfully updated AI probabilities for:', messageId);
-                } else {
-                    console.warn('Parsed JSON did not contain expected probability fields:', parsed);
-                    toast.warning('Probability update failed', 'The AI response was missing the expected probability fields. No changes were applied.');
-                }
-            } else {
-                console.warn('Failed to extract valid JSON from AI response:', fullJson);
-                toast.warning('Probability update failed', 'The AI response could not be parsed. No changes were applied.');
-            }
-        } catch (error) {
-            console.error('Failed to calculate AI probabilities:', error);
-            toast.error('Probability update failed', 'An error occurred while recalculating probabilities. Please try again.');
-        } finally {
-            setIsCalculatingAIProbabilities(false);
-        }
-    }, [messages, loggedTrades, updateMessages, toast, moderatorConfig, moderatorModel]);
 
     // ─── Stable identities for overlay/panel callbacks ─────────────────────
     // Inline arrows here were recreated on every App render, busting
@@ -2769,8 +2655,10 @@ const App: React.FC = () => {
                 onOpenWatchList={() => setIsWatchListVisible(true)}
                 watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                 watchOpenR={watchOpenR}
-                onOpenJobs={() => setIsJobsDrawerVisible(true)}
-                onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+                onOpenActivity={() => setIsJobsDrawerVisible(true)}
+                onOpenLiveMarket={handleOpenLiveMarket}
+                onOpenVisionData={() => setIsVisionDataVisible(true)}
+                hasVisionData={currentVisionData.length > 0}
                 onExpandNavRail={isNavRailOpen ? undefined : toggleNavRail}
             />
 
@@ -2820,9 +2708,17 @@ const App: React.FC = () => {
                     }}
                 />
             </React.Suspense>
-            {/* Background-jobs drawer — visible autonomy. */}
+            {/* Background-jobs drawer — visible autonomy. Stage 3 widened it
+                into the Activity drawer: the rail's automations section lives
+                here now, one drawer for everything the app does on its own. */}
             <React.Suspense fallback={null}>
-                <JobsDrawer open={isJobsDrawerVisible} onClose={() => setIsJobsDrawerVisible(false)} />
+                <JobsDrawer
+                    open={isJobsDrawerVisible}
+                    onClose={() => setIsJobsDrawerVisible(false)}
+                    automations={automations.configs}
+                    onOpenAutomation={(id) => { setIsJobsDrawerVisible(false); automations.openAutomation(id); }}
+                    onCreateAutomation={() => { setIsJobsDrawerVisible(false); automations.setEditor({ mode: 'create' }); }}
+                />
             </React.Suspense>
             {showMismatchModal && mismatchData && (
                 <OutcomeMismatchModal
@@ -2834,39 +2730,6 @@ const App: React.FC = () => {
                 />
             )}
 
-
-            {/* Advanced Analytics Side Panel — lazy-on-demand mount. */}
-            {isAdvancedAnalyticsEverOpened && (
-                <AdvancedAnalyticsSidePanel
-                    enabledProviders={readyProviders.map(p => p.id)}
-                    monteCarloResult={latestMonteCarloResult}
-                    backtestResult={latestBacktestResult}
-                    isCalculating={isAnalysisInProgress || isCalculatingAIProbabilities}
-                    perAIMonteCarloResults={perAIMonteCarloResults}
-                    entryTimingScore={currentEntryTimingScore}
-                    slOptimization={currentSlOptimization}
-                    levelProbabilities={(() => {
-                        // Use selected message if available, otherwise fall back to latest
-                        const selectedMsg = selectedProbabilityMessageId
-                            ? analysisMessages.find(m => m.id === selectedProbabilityMessageId)
-                            : null;
-                        const targetMsg = selectedMsg || (analysisMessages.length > 0 ? analysisMessages[analysisMessages.length - 1] : null);
-                        return targetMsg?.analysis?.levelProbabilities || null;
-                    })()}
-                    selectedCoinName={(() => {
-                        const selectedMsg = selectedProbabilityMessageId
-                            ? analysisMessages.find(m => m.id === selectedProbabilityMessageId)
-                            : null;
-                        return selectedMsg?.analysis?.coinName || null;
-                    })()}
-                    onClearSelection={() => setSelectedProbabilityMessageId(null)}
-                    isExternallyOpen={isAdvancedAnalyticsOpen}
-                    onClose={() => setIsAdvancedAnalyticsOpen(false)}
-                    onRegenerateProbabilities={(mode, messageId) => {
-                        if (messageId) void handleCalculateAIProbabilities(messageId, mode);
-                    }}
-                />
-            )}
 
             {/* Main row: the nav rail and the surfaces share it. The rail sits BESIDE
                 the content rather than spanning the header too, so the header
@@ -2884,21 +2747,7 @@ const App: React.FC = () => {
                     onOpenApprovals={() => setIsApprovalInboxVisible(true)}
                     approvalsCount={approvalItems.length}
                     onSwitchUser={handleSwitchUser}
-                    conversations={conversationHistory}
-                    activeConversationId={activeConversationId}
-                    hasVisionData={currentVisionData.length > 0}
-                    isFreshSession={messages.length === 0}
-                    onNewConversation={handleStartNewConversation}
-                    onLoadConversation={handleLoadConversation}
-                    onDeleteConversation={handleDeleteConversationFromSidebar}
-                    onDeleteConversations={handleDeleteSelectedConversations}
-                    onOpenLiveMarket={handleOpenLiveMarket}
-                    onOpenVisionData={() => setIsVisionDataVisible(true)}
-                    onOpenWatchList={() => setIsWatchListVisible(true)}
                     onOpenSettings={() => setIsSettingsMenuVisible(true)}
-                    automations={automations.configs}
-                    onOpenAutomation={(id) => automations.openAutomation(id)}
-                    onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
                 />
                 {/* Surfaces: pages, not modals. The Chat surface is gone — the
                     trade surface's Chart AI dock carries the chats, panels and
@@ -3090,6 +2939,20 @@ const App: React.FC = () => {
                                         else if (activeThread.kind === 'group') openGroupInTrade(activeThread.groupId);
                                         else setSurface('trade');
                                     }}
+                                    conversations={conversationHistory}
+                                    activeConversationId={activeConversationId}
+                                    onLoadConversation={(id) => {
+                                        // A loaded conversation's general rows land
+                                        // in the desk pane's slice, so the selection
+                                        // follows — otherwise the pane kept showing
+                                        // the previous thread while the transcript
+                                        // silently swapped underneath (stage-3 fix
+                                        // for the silent-session-swap defect).
+                                        handleLoadConversation(id);
+                                        selectTeamThread();
+                                    }}
+                                    onDeleteConversation={handleDeleteConversationFromSidebar}
+                                    onNewChat={handleStartNewConversation}
                                 />
                             </React.Suspense>
                         )}

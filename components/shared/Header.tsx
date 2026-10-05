@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, PinIcon, ActivityIcon, CloudOffIcon, HistoryIcon, SearchIcon, PanelLeftOpen } from './Icons';
+import { LoadingIcon, CheckIcon, EyeIcon, PinIcon, ActivityIcon, CloudOffIcon, HistoryIcon, AlertTriangleIcon, PanelLeftOpen } from './Icons';
 import { useUpdateStatusDot } from './UpdateButton';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { baseOf } from '../../utils/symbol';
@@ -30,12 +30,17 @@ interface HeaderProps {
      *  to it instead of naming a symbol of its own. */
     liveMarketSymbol?: string;
     // Toolbar entries that stayed in the header when the drawer was retired.
-    onOpenJobs?: () => void;
+    /** Opens the Activity drawer: background jobs, skill audits, automations. */
+    onOpenActivity?: () => void;
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     watchOpenR?: string;
-    /** Open the command palette. */
-    onOpenCommandPalette?: () => void;
+    /** Session-popover footer links. The rail's "Live Market" and "View Vision
+     *  Data" rows landed here (stage 3): the popover is already the market-
+     *  context home, so the full-screen market view is one hop from it. */
+    onOpenLiveMarket?: () => void;
+    onOpenVisionData?: () => void;
+    hasVisionData?: boolean;
     /** Present only while the NavRail is hidden (D2 amendment): the collapsed
      *  rail is 0px, so the expand affordance moves here. The DSH pattern —
      *  the hidden sidebar's expand button also carries the update-status dot,
@@ -47,21 +52,20 @@ interface HeaderProps {
 // with stable props it only renders when something it actually shows changes.
 export const Header: React.FC<HeaderProps> = memo(({
     saveStatus,
-    isAnalysisInProgress,
     isPostMortemInProgress,
-    currentVisionData,
     surface,
     setIsLivePostMortemVisible,
     onOpenVersionHistory,
     isOnline = true,
-    pendingQueueCount = 0,
     liveMarketConditions,
     liveMarketSymbol,
     onOpenWatchList,
     watchOpenCount = 0,
     watchOpenR,
-    onOpenJobs,
-    onOpenCommandPalette,
+    onOpenActivity,
+    onOpenLiveMarket,
+    onOpenVisionData,
+    hasVisionData = false,
     onExpandNavRail,
 }) => {
     const navUpdateDot = useUpdateStatusDot();
@@ -273,6 +277,24 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                         </div>
                                                     </div>
                                                 )}
+                                                {(onOpenLiveMarket || (onOpenVisionData && hasVisionData)) && (
+                                                    <div className="mt-3 flex items-center gap-3 border-t border-white/5 pt-2">
+                                                        {onOpenLiveMarket && (
+                                                            <button type="button" data-testid="session-open-live-market"
+                                                                onClick={() => { setIsSessionModalOpen(false); onOpenLiveMarket(); }}
+                                                                className="text-ui-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline">
+                                                                Live market view
+                                                            </button>
+                                                        )}
+                                                        {onOpenVisionData && hasVisionData && (
+                                                            <button type="button" data-testid="session-open-vision-data"
+                                                                onClick={() => { setIsSessionModalOpen(false); onOpenVisionData(); }}
+                                                                className="text-ui-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline">
+                                                                Vision data
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -298,21 +320,31 @@ export const Header: React.FC<HeaderProps> = memo(({
                             <CloudOffIcon className="h-4 w-4 text-amber-500" />
                         </span>
                     )}
+                    {saveStatus === 'ERROR' && (
+                        <span role="status" aria-label="Save failed">
+                            <AlertTriangleIcon className="h-4 w-4 text-rose-500" />
+                        </span>
+                    )}
 
                     {/* Desktop: Segmented Quick Action Tray. Approvals is NOT
                         here — the activity rail owns that drawer (WS-5.2), and
-                        this tray used to repeat it under a second name. */}
-                    {(onOpenJobs || onOpenWatchList) && (
-                        <div className="hidden sm:inline-flex items-center rounded-xl border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
-                            {onOpenJobs && (
+                        this tray used to repeat it under a second name. The
+                        Activity entry is the drawer's only opener and sits
+                        outside the desktop-only tray: touch never had a path
+                        to the job queue, and the Activity drawer is where the
+                        rail's automations section landed (stage 3). */}
+                    {(onOpenActivity || onOpenWatchList) && (
+                        <div className="inline-flex items-center rounded-xl border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
+                            {onOpenActivity && (
                                 <button
                                     type="button"
-                                    onClick={onOpenJobs}
+                                    data-testid="header-activity"
+                                    onClick={onOpenActivity}
                                     className="inline-flex items-center rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
-                                    title="Background jobs — evals & learning passes"
-                                    aria-label="Background jobs"
+                                    title="Activity — background jobs, skill audits, automations"
+                                    aria-label="Activity"
                                 >
-                                    <span>Jobs</span>
+                                    <span>Activity</span>
                                 </button>
                             )}
                             {onOpenWatchList && (
@@ -333,21 +365,6 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 </button>
                             )}
                         </div>
-                    )}
-
-                    {/* Desktop: Command Palette Trigger */}
-                    {onOpenCommandPalette && (
-                        <button
-                            type="button"
-                            onClick={onOpenCommandPalette}
-                            className="hidden md:inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-zinc-800/40 px-2.5 py-1 text-xs text-zinc-400 hover:border-white/15 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
-                            title="Command palette (Ctrl+K / Cmd+K)"
-                            aria-label="Command palette"
-                        >
-                            <SearchIcon className="h-3.5 w-3.5 text-zinc-500" />
-                            <span className="text-ui-dense">Search</span>
-                            <kbd className="rounded border border-white/10 bg-zinc-800 px-1.5 py-0.2 font-mono text-ui-2xs text-zinc-400">⌘K</kbd>
-                        </button>
                     )}
 
                     {/* System Intelligence */}

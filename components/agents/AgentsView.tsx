@@ -37,7 +37,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Gavel, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
@@ -52,6 +52,7 @@ import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { AutomationConfig } from '../../types/automation';
+import type { Conversation } from '../../types';
 import type { BotLearningStat } from '../../services/agents/botLearning';
 import {
     deskThread, markThreadOpened, previewTextFor, threadForProvider, unreadCount,
@@ -125,6 +126,16 @@ interface AgentsViewProps {
     /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop. */
     surfaceEnterFrom?: SurfaceEnterDirection;
     onHydratePins?: (pins: string[]) => void;
+    /** The App-side conversations (useConversations). Stage 3 made this rail
+     *  the ONE conversation home: these render as their own section here
+     *  instead of the nav rail's SESSIONS list. Loading one resets the
+     *  selection to the desk pane, which is where its messages render. */
+    conversations?: Conversation[];
+    activeConversationId?: string | null;
+    onLoadConversation?: (id: string) => void;
+    onDeleteConversation?: (id: string) => void;
+    /** Start a new App conversation (the old nav-rail "New chat" row). */
+    onNewChat?: () => void;
 }
 
 const PIN_KEY = (user: string): string => `agent_pins_v1_${user}`;
@@ -137,7 +148,12 @@ const relTime = (iso: string | null | undefined): string => {
     if (!iso) return '';
     const ms = Date.now() - Date.parse(iso);
     if (!Number.isFinite(ms) || ms < 0) return '';
-    const m = Math.round(ms / 60000);
+    return relTimeMs(ms);
+};
+
+const relTimeMs = (ms: number): string => {
+    if (!ms) return '';
+    const m = Math.round((Date.now() - ms) / 60000);
     if (m < 1) return 'now';
     if (m < 60) return `${m}m`;
     const h = Math.round(m / 60);
@@ -369,6 +385,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     onRenameBot,
     onEditSeatOverrides,
     onOpenCoach,
+    conversations = [], activeConversationId = null, onLoadConversation, onDeleteConversation, onNewChat,
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
@@ -490,13 +507,42 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const otherBots = botRows.filter(r => !pinnedIds.has(r.bot.id));
     const pinnedGroups = groupRows.filter(g => pinnedIds.has(g.id));
     const unpinnedGroups = groupRows.filter(g => !pinnedIds.has(g.id));
+    // Bots flagged by attentionMap cannot do their job (dead provider, missing
+    // model, no key). At rest they collapsed under one disclosure — the amber
+    // ⚠ stays on each row inside it, but no longer shouts from the resting list.
+    const [showInactive, setShowInactive] = useState(false);
     const listedBots = sortByName
         ? [...otherBots].sort((a, b) => a.bot.name.localeCompare(b.bot.name)) : otherBots;
+    const activeBots = listedBots.filter(r => !attentionMap?.[r.bot.id]);
+    const inactiveBots = listedBots.filter(r => !!attentionMap?.[r.bot.id]);
     const listedGroups = sortByName
         ? [...unpinnedGroups].sort((a, b) => groupDisplayName(a, bots).localeCompare(groupDisplayName(b, bots)))
         : unpinnedGroups;
     const deskMessages = useMemo(() => deskThread(messages, bots), [messages, bots]);
     const lastChartMessage = deskMessages[deskMessages.length - 1];
+
+    // App-side conversations, newest first, filtered by the same rail query.
+    // The title is the first thing the trader said — the conversation has no
+    // separate name field, and a preview IS its identity in every list that
+    // shows one.
+    const conversationRows = useMemo(() => {
+        const rows = conversations.map(conv => {
+            const firstUser = (conv.messages || []).find(m => m.role === MessageRole.USER && m.text.trim());
+            const last = conv.messages?.[conv.messages.length - 1];
+            const lastMs = last?.createdAt ? Date.parse(last.createdAt) : NaN;
+            return {
+                id: conv.id,
+                title: firstUser ? firstUser.text : 'New conversation',
+                atMs: Number.isFinite(lastMs) ? lastMs : (conv.timestamp || 0),
+            };
+        }).filter(r => matches(r.title))
+            .sort((a, b) => b.atMs - a.atMs);
+        return rows;
+    }, [conversations, matches]);
+    const [showAllConversations, setShowAllConversations] = useState(false);
+    const visibleConversationRows = showAllConversations
+        ? conversationRows
+        : conversationRows.slice(0, 8);
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
     const activeGroup = selection.kind === 'group' ? groups.find(g => g.id === selection.groupId) ?? null : null;
@@ -662,6 +708,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         ? `Message @${activeBot.name}…`
         : activeGroup ? 'Message the room…' : 'How can I help you today?';
 
+    // The + New menu: one creator, four honest verbs. The old chip row made
+    // "Agents" and "Rooms" look like navigation when both only opened create
+    // dialogs — and "+ New" was the same NewBotDialog a third time.
+    const [newMenuAt, setNewMenuAt] = useState<{ x: number; y: number } | null>(null);
+    const newMenuItems: RowMenuItem[] = [
+        ...(onNewChat ? [{ label: 'New chat', onSelect: () => onNewChat() }] : []),
+        { label: 'New agent', onSelect: () => onNewBot() },
+        { label: 'New room', onSelect: () => onNewGroup() },
+        ...(onOpenCoach ? [{ label: coachCount > 0 ? `Coach inbox (${coachCount})` : 'Coach inbox', onSelect: () => onOpenCoach() }] : []),
+    ];
+
     const selectThread = useCallback((t: ThreadSelection): void => {
         onSelect(t);
         setRailOpen(false); // on mobile the drawer was the point of the tap
@@ -709,30 +766,20 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </button>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-2 pb-2 pt-0.5">
-                    <button type="button" onClick={onNewBot} data-testid="rail-new"
+                <div className="flex shrink-0 items-center px-2 pb-2 pt-0.5">
+                    <button type="button" data-testid="rail-new" aria-haspopup="menu" aria-expanded={!!newMenuAt}
+                        onPointerDown={e => e.stopPropagation()}
+                        onClick={e => {
+                            const r = e.currentTarget.getBoundingClientRect();
+                            setNewMenuAt(m => m ? null : { x: r.left, y: r.bottom + 4 });
+                        }}
                         className="flex items-center gap-1 rounded-full border border-zinc-700/80 bg-zinc-800/60 px-2 py-0.5 text-ui-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 hover:text-white">
                         <Plus className="h-3 w-3" /> New
+                        <ChevronDown className={`h-2.5 w-2.5 transition-transform ${newMenuAt ? 'rotate-180' : ''}`} />
                     </button>
-                    <button type="button" onClick={onNewBot}
-                        className="flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-900/50 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200">
-                        <Bot className="h-3 w-3" /> Agents
-                    </button>
-                    <button type="button" onClick={onNewGroup}
-                        className="flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-900/50 px-2 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200">
-                        <Users className="h-3 w-3" /> Rooms
-                    </button>
-                    {/* The Coach inbox is not a thread on this surface — it is a
-                        Learn tab. The pill is the hop, and the count says
-                        whether the hop is due. */}
-                    {onOpenCoach && (
-                        <button type="button" onClick={onOpenCoach}
-                            aria-label="Coach — awaiting your decision"
-                            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs transition-colors ${
-                                coachCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-zinc-800/80 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-                            }`} data-testid="rail-coach">
-                            <Gavel className="h-3 w-3" /> Coach{coachCount > 0 ? ` · ${coachCount}` : ''}
-                        </button>
+                    {newMenuAt && createPortal(
+                        <RowMenu x={newMenuAt.x} y={newMenuAt.y} items={newMenuItems} onClose={() => setNewMenuAt(null)} />,
+                        document.body,
                     )}
                 </div>
 
@@ -760,7 +807,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             <h4 className="text-ui-xs font-bold uppercase tracking-wider text-zinc-600">
                                 Chats and tasks
                             </h4>
-                            {(listedBots.length > 1 || listedGroups.length > 1) && (
+                            {(activeBots.length > 1 || listedGroups.length > 1) && (
                                 <button type="button" data-testid="rail-sort"
                                     onClick={() => setSortByName(v => !v)}
                                     title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
@@ -775,7 +822,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 No agents yet. Create one and it appears here with its own thread.
                             </p>
                         )}
-                        {listedBots.map(renderBotRow)}
+                        {activeBots.map(renderBotRow)}
+                        {inactiveBots.length > 0 && (
+                            <>
+                                <button type="button" data-testid="rail-inactive-toggle"
+                                    onClick={() => setShowInactive(v => !v)}
+                                    aria-expanded={showInactive}
+                                    className="mt-1 flex w-full items-center gap-1 px-1 py-1 text-ui-dense text-zinc-600 transition-colors hover:text-zinc-400">
+                                    <ChevronDown className={`h-3 w-3 transition-transform ${showInactive ? '' : '-rotate-90'}`} />
+                                    {inactiveBots.length} inactive agent{inactiveBots.length === 1 ? '' : 's'}
+                                </button>
+                                {showInactive && inactiveBots.map(renderBotRow)}
+                            </>
+                        )}
                         {listedGroups.map(g => (
                             <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
                                 title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
@@ -802,6 +861,58 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 )} />
                         ))}
                     </section>
+
+                    {onLoadConversation && (
+                        <section data-testid="rail-conversations">
+                            <h4 className="px-1 pb-1 text-ui-xs font-bold uppercase tracking-wider text-zinc-600">
+                                Conversations
+                            </h4>
+                            {visibleConversationRows.length === 0 ? (
+                                <p className="px-1 py-3 text-ui-dense leading-5 text-zinc-600">
+                                    No conversations yet. Everything you ask the desk lands here.
+                                </p>
+                            ) : (
+                                visibleConversationRows.map(r => {
+                                    const active = r.id === activeConversationId;
+                                    return (
+                                        <div key={r.id}
+                                            className={`group relative rounded-control ${active ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'}`}>
+                                            <button type="button" data-testid="conversation-row"
+                                                onClick={() => onLoadConversation(r.id)}
+                                                className="flex w-full items-start gap-2 px-2 py-1.5 text-left">
+                                                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                                                    active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
+                                                }`}>
+                                                    <MessageSquare className="h-3 w-3" />
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-ui-sm font-semibold text-zinc-200">{r.title}</span>
+                                                </span>
+                                                <span className="shrink-0 pt-0.5 font-mono text-ui-2xs text-zinc-600">
+                                                    {relTimeMs(r.atMs)}
+                                                </span>
+                                            </button>
+                                            {onDeleteConversation && !active && (
+                                                <button type="button" data-testid="conversation-delete"
+                                                    aria-label={`Delete conversation: ${r.title.slice(0, 40)}`}
+                                                    onClick={e => { e.stopPropagation(); onDeleteConversation(r.id); }}
+                                                    className="absolute right-1.5 top-1.5 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-rose-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                                    <Trash2 className="h-3 w-3" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                            {conversationRows.length > 8 && (
+                                <button type="button" data-testid="conversations-show-more"
+                                    onClick={() => setShowAllConversations(v => !v)}
+                                    className="w-full px-1 py-1.5 text-left text-ui-dense text-zinc-600 transition-colors hover:text-zinc-300">
+                                    {showAllConversations ? 'Show less' : `Show all (${conversationRows.length})`}
+                                </button>
+                            )}
+                        </section>
+                    )}
                 </div>
 
                 {/* Identity is the NAV RAIL's row (nav-account: name, initial,
@@ -848,7 +959,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </button>
                                 )}
                                 <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200">
-                                    {activeBot ? `@${activeBot.name}` : 'Chart AI'}
+                                    {activeBot
+                                        ? `@${activeBot.name}`
+                                        /* The desk pane IS the active chat session —
+                                            loaded App conversations included — so the
+                                            title names the session, not a brand. The
+                                            dock row above keeps the "Chart AI" name. */
+                                        : (activeSession?.title?.trim() || 'Desk')}
                                 </span>
                                 {activeBot && (
                                     <StatusPill

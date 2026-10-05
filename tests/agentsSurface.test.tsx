@@ -69,7 +69,6 @@ describe('AgentsView layout', () => {
         render(<AgentsView {...base} bots={bots} onDeleteBot={onDeleteBot}
             botRoutines={{ b1: [{ id: 'r1', name: 'Morning brief', enabled: true } as never] }}
             onRunRoutine={onRunRoutine} />);
-        fireEvent.click(screen.getByTestId('rail-new'));
         fireEvent.click(screen.getByLabelText('Delete Sweeper'));
         expect(onDeleteBot).toHaveBeenCalledWith('b1');
     });
@@ -255,10 +254,11 @@ describe('WS-6 rail completeness', () => {
         expect(screen.getByTestId('agents-view').textContent).toContain('skip the short');
     });
 
-    it('has no coach pane — the Coach inbox is a Learn tab, reached by the hop', () => {
+    it('has no coach pane — the Coach inbox is a Learn tab, reached from the New menu', () => {
         render(<AgentsView {...base} onOpenCoach={() => {}} coachCount={2} />);
         expect(screen.queryByTestId('coach-pane')).toBeNull();
-        expect(screen.getByTestId('rail-coach').textContent).toContain('Coach · 2');
+        fireEvent.click(screen.getByTestId('rail-new'));
+        expect(screen.getByRole('menuitem', { name: /Coach inbox \(2\)/ })).toBeTruthy();
     });
 
     it('renames a bot from its own row', () => {
@@ -478,13 +478,15 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         expect(discOf('Ledger')).not.toContain('border-amber-500/40');
     });
 
-    it('creates both kinds of thread from the rail header', () => {
+    it('creates both kinds of thread from the New menu', () => {
         const onNewBot = vi.fn();
         const onNewGroup = vi.fn();
         render(<AgentsView {...base} onNewBot={onNewBot} onNewGroup={onNewGroup} />);
         fireEvent.click(screen.getByTestId('rail-new'));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'New agent' }));
         expect(onNewBot).toHaveBeenCalledTimes(1);
-        fireEvent.click(screen.getByRole('button', { name: /Rooms/ }));
+        fireEvent.click(screen.getByTestId('rail-new'));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'New room' }));
         expect(onNewGroup).toHaveBeenCalledTimes(1);
     });
 
@@ -513,10 +515,14 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
     it('counts what the Coach hop is waiting on, and jumps to the Learn tab', () => {
         const onOpenCoach = vi.fn();
         const { rerender } = render(<AgentsView {...base} onOpenCoach={onOpenCoach} />);
-        expect(screen.getByTestId('rail-coach').textContent?.trim()).toBe('Coach');
+        fireEvent.click(screen.getByTestId('rail-new'));
+        expect(screen.getByRole('menuitem', { name: 'Coach inbox' })).toBeTruthy();
+        // Close the toggle before re-rendering, or the next click re-opens a
+        // menu that is already open and the click after that closes it.
+        fireEvent.click(screen.getByTestId('rail-new'));
         rerender(<AgentsView {...base} coachCount={2} onOpenCoach={onOpenCoach} />);
-        expect(screen.getByTestId('rail-coach').textContent?.trim()).toBe('Coach · 2');
-        fireEvent.click(screen.getByTestId('rail-coach'));
+        fireEvent.click(screen.getByTestId('rail-new'));
+        fireEvent.click(screen.getByRole('menuitem', { name: /Coach inbox \(2\)/ }));
         expect(onOpenCoach).toHaveBeenCalledTimes(1);
     });
 });

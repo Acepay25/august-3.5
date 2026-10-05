@@ -147,13 +147,16 @@ describe('Chat and Chart AI share one analysis turn', () => {
         // a full debate into a list it never reads: the probe caught it waiting
         // forever for a reply that had already been written somewhere else.
         expect(appSrc).toMatch(/const handleRunAnalysisFromAgents = useCallback/);
-        // The end marker moved: `handleForkDebate` was deleted in the 2026-10-03
-        // removal of the unwired handler batch, so the slice now ends at the
-        // next handler in the file. The subject — handleRunAnalysisFromAgents —
-        // is unchanged, and the assertions below still cover exactly it.
+        // The end marker moved twice: `handleForkDebate` was deleted in the
+        // 2026-10-03 removal of the unwired handler batch, and stage 3 deleted
+        // `handleCalculateAIProbabilities` (its only consumer was the
+        // never-openable AdvancedAnalyticsSidePanel). The slice now ends at
+        // the next surviving handler. The subject —
+        // handleRunAnalysisFromAgents — is unchanged, and the assertions
+        // below still cover exactly it.
         const agentsHandler = appSrc.slice(
             appSrc.indexOf('const handleRunAnalysisFromAgents'),
-            appSrc.indexOf('const handleCalculateAIProbabilities'),
+            appSrc.indexOf('const handleCloseJournal'),
         );
         expect(agentsHandler).toMatch(/onSettled: \(aiMessage\) =>/);
         expect(agentsHandler).not.toMatch(/automation:/);

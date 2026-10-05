@@ -843,14 +843,20 @@ async function main() {
                 return {
                     expanded: el.getAttribute('data-expanded'),
                     width: Math.round(el.getBoundingClientRect().width),
-                    // Five surfaces + Approvals + Switch profile.
+                    // Five surfaces + Approvals. Stage 3 made the rail nav-only:
+                    // Switch profile lives on the account row (nav-switch-user),
+                    // conversations on the Chat surface's rail, automations in
+                    // the Activity drawer.
                     rows: el.querySelectorAll('[data-testid="surface-menu"] button').length,
+                    switchUser: !!el.querySelector('[data-testid="nav-switch-user"]'),
                 };
             });
             check('the nav rail is mounted without opening any menu', rail !== null,
                 rail ? `width ${rail.width}` : 'no [data-testid="nav-rail"]');
-            check('the rail carries every surface row, Approvals and Switch profile',
-                rail !== null && rail.rows === 7, rail ? `${rail.rows} rows` : 'no rail');
+            check('the rail carries every surface row plus Approvals',
+                rail !== null && rail.rows === 6, rail ? `${rail.rows} rows` : 'no rail');
+            check('Switch profile lives on the account row',
+                rail !== null && rail.switchUser, 'nav-switch-user');
 
             // Ctrl/Cmd+B must collapse and restore it — the documented binding.
             // D2 amendment: collapsing HIDES the rail (0px); the expand
