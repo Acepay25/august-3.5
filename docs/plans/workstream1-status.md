@@ -242,7 +242,63 @@ coin count, forged-tool count, checklist item count) — same entry as
 `trade_chat_sessions_v1` bytes. A cap on the EXPORT only stops the backup carrying
 them; it does not stop the device carrying them.
 
-## Then
+## HANDOFF — in progress, tree is GREEN at `757f0da` (2026-10-05)
+**Read this block first if you are a fresh session.** Rules are in RUN RULES above;
+decisions 1-3 are in DECISIONS; the audit evidence is in
+`docs/plans/workstream1-stepB-evidence.md` (§a-§e). Below is exactly where the
+run stopped and what the next session picks up.
+
+### Done and committed on this branch
+| commit | item |
+|---|---|
+| `0de06ca` | **Decision 1 core** — `isApprovedSkill` beside `skillEnabledFlag`, read by retrieval + soft/hard enforcement; grandfather migration (`grandfatherExistingApprovals`, mark-only, idempotent, backup-first runner `services/learning/approvalMigration.ts` wired into `useUserProfileLoader`); two Settings switches (`starterLibraryEnabled`, `skillEnforcementEnabled`) in `utils/harnessSettings`; proofs in `tests/approvalGate.test.ts` + `tests/approvalMigration.test.ts` (a red run reproduced the audit's claims: an unapproved confirmed-avoid row DID veto and DID inject before the gate). |
+| `d0c7b7d` | **Decision 1 rewrites** — a model rewrite asks: `requestRewriteApproval` (snapshot+revoke+queue with old/new/evidence), `approvePendingRewrite` / `revertPendingRewrite` (two actions in both queue panels, kind `rewrite`), wired into the supervisor's two paths and shadow promotion; a structural test scans `services/{learning,analysis,trade}` and fails if a writer moves a trigger/body without an approval primitive. |
+| `757f0da` | **Decision 2** — the supervisor is auto-triage only: it never ingests a draft, consumes a reject, confirms/retires a tool, writes an amendment, or applies a proposal. Startup sweep deleted. Triage ledger `supervisor_triaged_v1` stops re-reads. `overrideApproveSkill` is now the only library writer and records its created file for the undo button. All supervisor tests rewritten to the new contract. |
+
+### Green at the tip
+`npm run test` exit 0 — `Test Files 480 passed | 1 skipped (481)`; `tsc --noEmit` 0;
+eslint 0 errors. Render-probe/boot-probe/installer-smoke NOT re-run since `0de06ca`.
+
+### What is NOT yet done (the run stopped here; resume in this order)
+1. **Decisions 3, 4, 5 of the 2026-10-05 batch** (see DECISIONS): promotion (the
+   `deriveStatus` ladder + `SkillEvalService.ts` A/B) and idle suspend/revive must
+   become approval requests in the queue (no writes without the trader); the two
+   Settings switches still have NO UI (the data layer is in, `harnessSettings.ts`, but
+   no control renders them — add "Starter library" and "Enforce learned rules" to the
+   existing settings, default on, and verify by probe/click); the migration's backup
+   path + one-line restore instruction is NOT yet written into this file.
+2. **Post-mortem consolidation** (decision 2 of the earlier batch): one writer instead
+   of five (`usePostMortem.ts:614` trade, `:636-645` trade_summaries, `:560-571`
+   conversation message, `:537-554` thinking turns, `:661` globalMemory) and a single
+   entry/stop accessor; no stored-data migration; land it whole with tests. This is
+   the prerequisite for Step C's record work.
+3. **The §d cleanups**, each its own small commit: share the kind→applier branch
+   between the two queue panels; remove the weaker `verdict.enhanced` branch of
+   `applyProposalRewrite`; merge `EXPORT_RAW_KEY_CAP_BYTES` into `EXPORT_KEY_CAPS`;
+   drop the unused imports (`SkillMemoryService.ts:11,53`) and the local `fmtUsd`
+   (`TradeView.tsx:147`).
+4. **Redo §(e)** for the TRADE REVIEW SYSTEM spec (Phases 1-8 at v1 scope), not the UI
+   spec — a compact item → exists(file:line) → complete/partial/absent → extend/build
+   table appended to the evidence file.
+5. **Step C** in the master-prompt order, v1 scope: record (with going-forward MAE/MFE
+   capture, no backfill, "insufficient data" for old rows + a read-only diagnostic
+   script the trader runs on their own export), review on terminal events, pattern
+   mining on demand, rule proposals through the existing queue under the new gate,
+   injection in a token budget, minimal Learning-tab UI, on-demand weekly digest. OFF:
+   live paper shadow, analyst calibration routing, SFT/GRPO export.
+
+### Hard facts the next session will need
+- The activation gate is a READ-side predicate; writers that change a live trigger
+  must call `requestRewriteApproval` (or be human) — the structural test enforces it.
+- `approvedBy` is `'human' | 'grandfathered' | 'supervisor'`; only human/grandfathered
+  (or `prior: 'book'` with the shelf toggle on) are approval.
+- Anything in the triaged queue still waits on the trader: pendingCount counts only
+  UNTRIAGED items, and the panel's "N waiting" reflects that.
+- 31 fixture insertions across 12 suites carry `approvedBy: grandfathered`; adding a
+  new skill fixture that is expected to be LIVE means adding that line.
+- The grandfather runner is wired into `useUserProfileLoader` and takes a backup
+  first — it must never be pointed at a real profile by a test (all suites mock
+  BackupService).
 Backup pre-flight + registration → real export/restore round trip with byte
 equality → agentsSurface flake rate (10 solo + 1 under load) → **Step B audit,
 then STOP for approval.** Dock chain (below) only if room remains.
