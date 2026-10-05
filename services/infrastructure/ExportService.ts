@@ -378,6 +378,10 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     // owner like the rest — unbacked on native would mean stamping the library again
     // after a restore, which is harmless but silently re-writes every skill file.
     'approvals_grandfathered_v1',
+    // The supervisor's triage ledger (skillSupervisor.ts `TRIAGE_KEY`): what the
+    // model has already read and said about each queue item, so a triage-only pass
+    // does not re-review it forever. Raw localStorage owner.
+    'supervisor_triaged_v1',
 ];
 
 /** One exported store may not exceed this. The notebook's own hard ceiling is

@@ -8,17 +8,20 @@
  * removes the surface-mount dependency; the dock's own call stays as a
  * harmless no-op.
  *
- * Also runs the STARTUP SWEEP: on boot and on every user switch, if any
- * approval queue is non-empty, schedule one pass. runSupervisorPass
- * self-guards (pause toggle, in-flight overlap, missing provider), so this
- * is a nudge, not a stampede.
+ * The boot SWEEP is gone (contract change, 2026-10-05). It scheduled a pass 12 s
+ * after every launch and every user switch, which combined with `autoEnabled`
+ * defaulting to true meant a book draft was judged and landed roughly ten
+ * seconds after boot. The supervisor now TRIAGES rather than applies, so that
+ * fire was spending the trader's money to produce a note nobody asked for; it is
+ * removed rather than debounced. Queue events still schedule a pass (debounced)
+ * and the panel's "Run now" is explicit — a pass happens when something changes
+ * or when you ask for one, not merely because the app opened.
  */
 
 import { useEffect } from 'react';
 import {
     countPendingSupervision,
     ensureSupervisorListeners,
-    runSupervisorPass,
 } from '../services/learning/skillSupervisor';
 import * as supStore from '../services/learning/supervisorStore';
 
@@ -32,13 +35,5 @@ export const useSupervisorBootstrap = (activeUsername: string | null): void => {
         // Seed the backlog count immediately: the "N items waiting" state must
         // be true from the first render, not only once a pass has run.
         supStore.setPending(countPendingSupervision(activeUsername));
-        if (countPendingSupervision(activeUsername) === 0) return;
-        // Debounced like the queue events: the app is still booting, and a
-        // pass mid-boot would race the notebook init. 12s is the event
-        // debounce (10s) plus slack.
-        const timer = window.setTimeout(() => {
-            void runSupervisorPass(activeUsername);
-        }, 12_000);
-        return () => window.clearTimeout(timer);
     }, [activeUsername]);
 };

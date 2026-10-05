@@ -53,9 +53,7 @@ import {
     applySkillEvidence,
     listSkills,
     setSkillStatus,
-    stampSkillApproval,
-    serializeSkill,
-    titleFromMeta,
+    isApprovedSkill,
     type SkillMeta,
 } from '../services/learning/SkillMemoryService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
@@ -63,6 +61,7 @@ import { gateEvidenceBackedDraft } from '../services/learning/draftGates';
 import { recordEvalVerdict, evaluateSkill, type SkillAnalysisRunner } from '../services/learning/SkillEvalService';
 import { initMemoryFiles, getMemoryFiles, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
+import { approveSkillDraft } from '../services/learning/skillApproval';
 import { getRecentMemoryInjections } from '../services/learning/MemoryInjectionService';
 import { shouldSkillHoldout } from '../utils/skillHoldout';
 import { buildBotSharedMemoryContext, recordBotTurnOutcome, mineBotTurnQuery, botOriginForMessage } from '../services/agents/botLearning';
@@ -176,15 +175,25 @@ describe('the loop, end to end', () => {
         expect(gate.action).toBe('queued');
         expect(listSkillDrafts(USER)).toHaveLength(1);
 
-        // 3. The LLM supervisor approves it — the human Save button never fires.
+        // 3. The LLM supervisor TRIAGES it — records a verdict and changes nothing.
         verdictJson({ action: 'approve', reason: 'mechanical trigger, falsifiable, not covered' });
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
+        // The inbox is untouched: the model said yes, the trader has not spoken.
+        expect(listSkillDrafts(USER)).toHaveLength(1);
+        expect(listSkills()).toHaveLength(0);
+
+        // 3b. THE TRADER'S YES. The draft is approved through the human path
+        //     (`approveSkillDraft`), which is the only thing that now creates a skill.
+        const queuedDraft = listSkillDrafts(USER)[0];
+        const approval = await approveSkillDraft(queuedDraft, USER, []);
+        expect(approval.created).toBe(true);
         expect(listSkillDrafts(USER)).toHaveLength(0);
 
         const skills = listSkills();
         expect(skills).toHaveLength(1);
         const skill = skills[0];
         expect(skill.meta.status).toBe('candidate');
+        expect(isApprovedSkill(skill.meta)).toBe(true);
         // Cold-start break: an approved draft must be INJECTABLE to earn its
         // first counted sample, or the loop never turns (see SkillMeta.prior).
         expect(skill.meta.prior).toBe('gated');
@@ -193,23 +202,6 @@ describe('the loop, end to end', () => {
         //    records the attribution the evidence join depends on.
         const setup = { coin: 'BTCUSDT', direction: 'Short', family: 'Family A' };
         const slug = skill.file.name.replace(/\.md$/i, '');
-
-        // 3b. THE ACTIVATION GATE. The worth gate CREATED this row and the supervisor
-        //     said yes on the trader's behalf — which is triage, not approval. Until a
-        //     human says so, the rule reaches no prompt and no veto. This is the one
-        //     step where this loop stopped being "zero human clicks", and it is the
-        //     point of the gate: the trader's own yes is what makes a rule live.
-        expect(getMemoryFilesContext(setup, undefined, 'analyst', 'opening', { runId: RUN }))
-            .not.toContain(slug);
-        // Not the grandfather pass: this row carries `approvedBy: supervisor`, and a
-        // model approval is deliberately not a human one, so the migration leaves it
-        // alone. The trader's own yes is what turns it on.
-        const toStamp = parseSkillMarkdown(skill.file.content)!;
-        stampSkillApproval(toStamp, 'human');
-        await updateMemoryFile(skill.file.id, {
-            content: serializeSkill(toStamp, titleFromMeta(toStamp)),
-        }, USER);
-
         const opening = getMemoryFilesContext(setup, undefined, 'analyst', 'opening', { runId: RUN });
         expect(opening).toContain(slug);
         expect(opening).toContain('untested');
