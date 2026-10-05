@@ -1321,9 +1321,6 @@ async function main() {
                 const exported = JSON.stringify(backup[key] || null);
                 const report = await mod.importPreferencesData(backup);
                 const after = localStorage.getItem(key) || '';
-                let parsed = [];
-                try { parsed = JSON.parse(after); } catch { /* reported below */ }
-                const entry = (parsed[0]?.entries || []).find(e => e.id === 'pe1') || {};
                 return {
                     key,
                     exportedHasImage: exported.includes('data:image/png'),
