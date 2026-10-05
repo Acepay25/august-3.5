@@ -50,6 +50,10 @@ interface StrategyStudioProps {
     currentRegime?: string;
     /** Seat used by the manual A/B eval (the same one Settings → Memory uses). */
     memoryConfig?: ProviderConfig | null;
+    /** Opens the playbook StrategySearch overlay. Stage 3 made Studio the
+     *  overlay's only opener: the command palette that used to carry it is
+     *  gone, and this surface is where a playbook search belongs. */
+    onOpenStrategySearch?: () => void;
     onClose?: () => void;
 }
 
@@ -201,7 +205,7 @@ const readPins = (): Set<string> => {
     }
 };
 
-const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, currentRegime, memoryConfig, onClose }) => {
+const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, currentRegime, memoryConfig, onOpenStrategySearch, onClose }) => {
     const toast = useToastActions();
     React.useEffect(() => {
         const user = username || getActiveUsername();
@@ -440,6 +444,17 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                         onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
                     />
                 </label>
+                {onOpenStrategySearch && (
+                    <button
+                        type="button"
+                        data-testid="studio-open-strategy-search"
+                        onClick={onOpenStrategySearch}
+                        className="inline-flex shrink-0 items-center rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                        title="Search the playbook strategy library and apply frameworks"
+                    >
+                        Strategies
+                    </button>
+                )}
             </div>
 
             {/* Regime×family matrix. The heatmap is the primary read once any

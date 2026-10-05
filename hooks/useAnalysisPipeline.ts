@@ -3407,11 +3407,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
     };
 
     // ─── Chat Management ───────────────────────────────────────────────────
-    const handleClearChat = async () => {
+    const handleClearChat = async (conversationId?: string) => {
         const ok = confirmDialog
             ? await confirmDialog({ title: 'Clear chat?', message: 'Clear current chat messages?', destructive: true })
             : confirm('Clear current chat messages?');
-        if (ok) updateMessages(() => []);
+        // An explicit id clears THAT conversation — the Chat rail's row menu
+        // clears a row without loading it first. Default stays the active one.
+        if (ok) updateMessages(() => [], conversationId ?? null);
     };
 
     const handleDeleteMessages = async (ids: string[]) => {

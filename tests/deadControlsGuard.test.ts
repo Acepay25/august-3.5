@@ -72,8 +72,11 @@ describe('a control renders only when it can act', () => {
         );
     });
 
-    it('the palette offers desk view only when a debate exists to project', () => {
-        expect(appSrc).toMatch(/\.\.\.\(isDeskSceneOpen \|\| deskSceneMessage \? \[\{/);
+    it('the desk toggle keeps its gate after the palette died', () => {
+        // The palette used to gate the same way; it is deleted (stage 3), so
+        // the dock's 2D button — pinned above — is the only toggle left, and
+        // no palette-shaped duplicate may re-arm itself in App.
+        expect(appSrc).not.toMatch(/'desk-view'|Open desk view/);
     });
 
     it('Learn does not mount StrategyStudio a second time', () => {
@@ -89,14 +92,15 @@ describe('a control renders only when it can act', () => {
         expect(read('index.css')).not.toMatch(/effort-meter/);
     });
 
-    it('every command-palette action id is unique', () => {
-        const start = appSrc.indexOf('const commandPaletteActions = useMemo');
-        // The array literal ends where the memo's dependency list begins.
-        const block = appSrc.slice(start, appSrc.indexOf('\n    ], [', start));
-        expect(block.length).toBeGreaterThan(1000);
-        const ids = [...block.matchAll(/^\s+id: '([^']+)'/gm)].map(m => m[1]);
-        expect(ids.length).toBeGreaterThan(5);
-        expect(new Set(ids).size).toBe(ids.length);
+    it('the command palette stays deleted — no half-remnant re-arms it', () => {
+        // Stage 3 removed the palette (a fixed action list that duplicated
+        // chrome and could not search anything); every sole-path action got a
+        // real home. This pins the absence so a partial revert cannot strand
+        // one of those homes with a second competing entry point.
+        expect(existsSync('components/shared/CommandPalette.tsx')).toBe(false);
+        expect(appSrc).not.toMatch(/commandPaletteActions|CommandPalette|PaletteAction/);
+        // The keyboard binding went with it: Ctrl+K must not toggle a ghost.
+        expect(appSrc).not.toMatch(/'k'\)\s*\{[^}]*setIsCommandPaletteOpen/);
     });
 });
 

@@ -20,6 +20,7 @@ import { readFileSync } from 'fs';
 
 const appSrc = readFileSync('App.tsx', 'utf8');
 const tradeViewSrc = readFileSync('components/trade/TradeView.tsx', 'utf8');
+const agentsViewSrc = readFileSync('components/agents/AgentsView.tsx', 'utf8');
 // The dock feature now spans the shell + the extracted orchestrator/
 // transcript/composer modules — the contract follows the code.
 const panelSrc = [
@@ -50,8 +51,12 @@ describe('App: both affordances call the bridge', () => {
         ));
     });
 
-    it('handleScrollToBottom resolves the LAST AI entry of the active dock session and calls the bridge', () => {
-        expect(appSrc).toMatch(/const handleScrollToBottom = \(\) => \{[\s\S]{0,900}chatStore\.getSnapshot\(\)[\s\S]{0,400}e\.role === 'ai' && !e\.notice[\s\S]{0,400}scrollToMessageRef\.current\?\.\(targetId\);/);
+    it('jump-to-latest lives on the Chat transcript as a scroll pill', () => {
+        // Stage 3 deleted the palette's jump action; the pill rehomed it on
+        // the Chat surface's scroller (the dock's bridge still serves
+        // Locate, pinned below).
+        expect(agentsViewSrc).toMatch(/data-testid="jump-to-latest"/);
+        expect(agentsViewSrc).toMatch(/scrollHeight - el\.scrollTop - el\.clientHeight > 240/);
     });
 
     it('the bridge is threaded into TradeView', () => {

@@ -134,6 +134,9 @@ interface AgentsViewProps {
     activeConversationId?: string | null;
     onLoadConversation?: (id: string) => void;
     onDeleteConversation?: (id: string) => void;
+    /** Empty one conversation (keep the row, drop its messages) — the
+     *  command palette's "Clear current chat" rehomed onto the row menu. */
+    onClearConversation?: (id: string) => void;
     /** Start a new App conversation (the old nav-rail "New chat" row). */
     onNewChat?: () => void;
 }
@@ -385,7 +388,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     onRenameBot,
     onEditSeatOverrides,
     onOpenCoach,
-    conversations = [], activeConversationId = null, onLoadConversation, onDeleteConversation, onNewChat,
+    conversations = [], activeConversationId = null, onLoadConversation, onDeleteConversation, onClearConversation, onNewChat,
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
@@ -435,6 +438,20 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameDraft, setRenameDraft] = useState('');
     const scroller = useRef<HTMLDivElement | null>(null);
+    // Jump-to-latest (the command palette's "Jump to latest analysis"
+    // rehomed): the pill shows only when the trader has scrolled away from
+    // the newest row, and one click returns.
+    const [showJump, setShowJump] = useState(false);
+    const onScrollerScroll = useCallback((): void => {
+        const el = scroller.current;
+        if (!el) return;
+        setShowJump(el.scrollHeight - el.scrollTop - el.clientHeight > 240);
+    }, []);
+    const jumpToLatest = useCallback((): void => {
+        const el = scroller.current;
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+        setShowJump(false);
+    }, []);
     const paneRef = useRef<HTMLElement | null>(null);
     // The ONLY animation on this pane for the Chart AI hop: one right-pinned
     // translateX keyframe that mirrors the hamburger. The WAAPI morph that
@@ -712,6 +729,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // "Agents" and "Rooms" look like navigation when both only opened create
     // dialogs — and "+ New" was the same NewBotDialog a third time.
     const [newMenuAt, setNewMenuAt] = useState<{ x: number; y: number } | null>(null);
+    const [convMenuAt, setConvMenuAt] = useState<{ id: string; x: number; y: number } | null>(null);
     const newMenuItems: RowMenuItem[] = [
         ...(onNewChat ? [{ label: 'New chat', onSelect: () => onNewChat() }] : []),
         { label: 'New agent', onSelect: () => onNewBot() },
@@ -892,12 +910,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                     {relTimeMs(r.atMs)}
                                                 </span>
                                             </button>
-                                            {onDeleteConversation && !active && (
-                                                <button type="button" data-testid="conversation-delete"
-                                                    aria-label={`Delete conversation: ${r.title.slice(0, 40)}`}
-                                                    onClick={e => { e.stopPropagation(); onDeleteConversation(r.id); }}
-                                                    className="absolute right-1.5 top-1.5 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-rose-300 focus-visible:opacity-100 group-hover:opacity-100">
-                                                    <Trash2 className="h-3 w-3" />
+                                            {(onDeleteConversation || onClearConversation) && !active && (
+                                                <button type="button" data-testid="conversation-menu"
+                                                    aria-label={`Conversation options: ${r.title.slice(0, 40)}`}
+                                                    onPointerDown={e => e.stopPropagation()}
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        setConvMenuAt(m => m?.id === r.id ? null : { id: r.id, x: rect.right - MENU_W, y: rect.bottom + 4 });
+                                                    }}
+                                                    className="absolute right-1.5 top-1.5 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                                    <Ellipsis className="h-3 w-3" />
                                                 </button>
                                             )}
                                         </div>
@@ -912,6 +935,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 </button>
                             )}
                         </section>
+                    )}
+                    {convMenuAt && createPortal(
+                        <RowMenu
+                            x={convMenuAt.x}
+                            y={convMenuAt.y}
+                            items={[
+                                ...(onClearConversation ? [{ label: 'Clear messages', onSelect: () => onClearConversation(convMenuAt.id) }] : []),
+                                ...(onDeleteConversation ? [{ label: 'Delete conversation', onSelect: () => onDeleteConversation(convMenuAt.id), danger: true }] : []),
+                            ]}
+                            onClose={() => setConvMenuAt(null)}
+                        />,
+                        document.body,
                     )}
                 </div>
 
@@ -1010,7 +1045,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 )}
                             </div>
                         </div>
-                        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+                        <div className="relative min-h-0 flex-1">
+                        <div ref={scroller} onScroll={onScrollerScroll} className="h-full overflow-y-auto custom-scrollbar">
                             {thread.length === 0 ? (
                                 <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">
                                     <Bot className="mb-3 h-8 w-8 text-zinc-500" />
@@ -1039,6 +1075,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     })}
                                 </div>
                             )}
+                        </div>
+                        {showJump && (
+                            <button type="button" data-testid="jump-to-latest" onClick={jumpToLatest}
+                                className="absolute bottom-3 right-4 z-10 flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800/95 px-3 py-1 text-ui-dense font-medium text-zinc-200 shadow-lg transition-colors hover:bg-zinc-700">
+                                ↓ Latest
+                            </button>
+                        )}
                         </div>
 
                         {/* ── Composer pill ── */}
