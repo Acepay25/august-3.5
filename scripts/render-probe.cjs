@@ -1293,6 +1293,63 @@ async function main() {
                 (await page.evaluate(() => [...document.querySelectorAll('button')]
                     .map(b => (b.getAttribute('aria-label') || b.textContent || '').trim())
                     .filter(Boolean).slice(0, 10).join(' | '))).slice(0, 200));
+
+            // ── decision 3: the chat backup round trip, in a real browser ────
+            // The unit suites prove stripChatSessionImages and the live-image
+            // reconciliation against a jsdom localStorage. This runs the SAME two
+            // exported functions in Chromium on the app's own dev-server modules,
+            // so the question asked of it is the one a unit test cannot answer:
+            // does restoring a stripped backup over live data keep the screenshot
+            // that is still on the device? Reached through the app's module graph
+            // rather than a downloaded file, because the panel's file round trip is
+            // a Blob + dialog the probe cannot observe; everything under test is the
+            // same code the panel calls.
+            const restoreProbe = await page.evaluate(async (marker) => {
+                const user = localStorage.getItem('last_active_user') || 'default';
+                const key = `trade_chat_sessions_v1_${user}`;
+                const dataUrl = 'data:image/png;base64,' + 'A'.repeat(20000) + marker;
+                const live = [{
+                    id: 'probe-session', title: 'Probe chat', createdAt: 1, updatedAt: 2,
+                    entries: [
+                        { id: 'pe1', role: 'user', text: 'probe text before', tools: [], image: dataUrl },
+                        { id: 'pe2', role: 'ai', text: 'probe text after', tools: [] },
+                    ],
+                }];
+                localStorage.setItem(key, JSON.stringify(live));
+                const mod = await import('/services/infrastructure/ExportService.ts');
+                const backup = await mod.exportPreferencesData();
+                const exported = JSON.stringify(backup[key] || null);
+                const report = await mod.importPreferencesData(backup);
+                const after = localStorage.getItem(key) || '';
+                let parsed = [];
+                try { parsed = JSON.parse(after); } catch { /* reported below */ }
+                const entry = (parsed[0]?.entries || []).find(e => e.id === 'pe1') || {};
+                return {
+                    key,
+                    exportedHasImage: exported.includes('data:image/png'),
+                    exportedHasStub: exported.includes('imageOmitted'),
+                    liveStillHasImage: after.includes(marker),
+                    liveTextKept: after.includes('probe text before'),
+                    failed: report.failedKeys.length,
+                    // The key under test, not the whole run: a live app carries
+                    // plain-string and probe-owned keys that the restore allow-list
+                    // is SUPPOSED to skip, and asserting zero skips browser-wide
+                    // would only prove the guard works.
+                    chatSkipped: report.skippedKeys.includes(key),
+                    chatFailed: report.failedKeys.includes(key),
+                    skippedCount: report.skippedKeys.length,
+                };
+            });
+            check('the exported chat copy carries no image bytes but does carry the stub',
+                restoreProbe.exportedHasImage === false && restoreProbe.exportedHasStub === true,
+                JSON.stringify(restoreProbe));
+            check('restoring that copy keeps the screenshot already on the device',
+                restoreProbe.liveStillHasImage === true && restoreProbe.liveTextKept === true,
+                JSON.stringify(restoreProbe));
+            check('the chat row itself was written by the restore, not skipped or failed',
+                restoreProbe.failed === 0 && !restoreProbe.chatSkipped && !restoreProbe.chatFailed,
+                JSON.stringify(restoreProbe));
+
             await page.evaluate(() => { window.location.hash = ''; });
         }
 
