@@ -180,45 +180,26 @@ const applySkillDecision = async (
         });
         return;
     }
-    if (verdict.action === 'reject') {
-        takeSkillDraft(draft.id, username);
-        tombstoneSkillDraftKey(draftTriggerKey(draft.coin, draft.crafted), username);
-        store.setDecision(eventId, {
-            verdict: 'rejected',
-            reason: verdict.reason,
-            atMs: Date.now(),
-        });
-        return;
-    }
-    // approve / enhance → the same ingest the human "Save as skill" runs.
-    const enhanced = verdict.action === 'enhance' ? verdict.enhanced : undefined;
-    const finalCrafted = {
-        ...draft.crafted,
-        ...(enhanced?.name ? { name: enhanced.name } : {}),
-        ...(enhanced?.kind ? { kind: enhanced.kind } : {}),
-        ...(enhanced?.when ? { when: enhanced.when } : {}),
-        ...(enhanced?.ifCondition ? { ifCondition: enhanced.ifCondition } : {}),
-        ...(enhanced?.thenAction ? { thenAction: enhanced.thenAction } : {}),
-        ...(enhanced?.description ? { description: enhanced.description } : {}),
-        ...(enhanced?.prediction ? { prediction: sanitizePrediction(enhanced.prediction) ?? draft.crafted.prediction } : {}),
-    };
-    takeSkillDraft(draft.id, username);
-    // The verdict reason rides INTO the skill file: the event log is
-    // session-scoped, so this is the only thing that will still say WHY the
-    // model accepted this rule after a reload.
-    await ingestCraftedSkillFromDraft(finalCrafted, draft.coin, username, verdict.reason, 'supervisor');
-    // Record WHICH file the ingest created/updated so the panel's
-    // override-reject can remove it.
-    const created = getMemoryFiles().files.filter(isSkillFile).find(f => {
-        const meta = parseSkillMarkdown(f.content);
-        return meta?.ifCondition?.toLowerCase() === finalCrafted.ifCondition.toLowerCase();
-    });
+    // AUTO-TRIAGE, NOT AUTO-APPLY (contract change, 2026-10-05). The model reads
+    // the queue and says what it thinks; the trader's Save/Discard is the only thing
+    // that creates or removes a skill. So "approve" no longer ingests, and "reject"
+    // no longer consumes the draft and tombstones its trigger key — that was the
+    // model retiring the trader's own proposal without asking. Both record the
+    // verdict in the triage ledger so a pass does not re-read the same item forever.
+    const suggestion = verdict.action === 'enhance' && verdict.enhanced?.ifCondition
+        ? ` I would write it as: IF ${verdict.enhanced.ifCondition}`
+        : '';
+    const note = `${verdict.reason}${suggestion} (triaged — nothing was created or removed; your inbox is unchanged).`;
+    // The LEDGER stores the DECISION verb, so `triageNote` answers "what did the
+    // model conclude" — writing the raw action ("reject") would never match it.
+    writeTriage(username, draft.id, JSON.stringify({
+        verdict: verdict.action === 'reject' ? 'rejected' : verdict.action === 'enhance' ? 'enhanced' : 'approved',
+        reason: note,
+    }));
     store.setDecision(eventId, {
-        verdict: verdict.action === 'enhance' ? 'enhanced' : 'approved',
-        reason: verdict.reason,
+        verdict: verdict.action === 'reject' ? 'rejected' : verdict.action === 'enhance' ? 'enhanced' : 'approved',
+        reason: note,
         atMs: Date.now(),
-        createdFileId: created?.id,
-        createdFileName: created?.name,
     });
 };
 
@@ -267,11 +248,13 @@ const superviseToolCandidate = async (tool: ReturnType<typeof loadForgedTools>[n
         store.setDecision(eventId, { verdict: 'skipped', reason: 'Review did not complete — the candidate stays for the human.', atMs: Date.now() });
         return;
     }
-    if (verdict.action === 'reject') retireForgedTool(tool.id);
-    else approveForgedTool(tool.id);
+    // Triage only: approving a tool makes it callable by every desk seat, and
+    // retiring one removes it — both are decisions the model does not get to make
+    // on its own. The candidate keeps its status; the verdict is recorded.
+    writeTriage(getActiveUsername(), tool.id, JSON.stringify({ verdict: verdict.action === "reject" ? "rejected" : verdict.action === "enhance" ? "enhanced" : "approved", reason: verdict.reason }));
     store.setDecision(eventId, {
         verdict: verdict.action === 'reject' ? 'rejected' : verdict.action === 'enhance' ? 'enhanced' : 'approved',
-        reason: verdict.reason,
+        reason: `${verdict.reason} (triaged — the tool stays a candidate until you act.)`,
         atMs: Date.now(),
     });
 };
@@ -303,41 +286,58 @@ const superviseAmendment = async (
         store.setDecision(eventId, { verdict: 'skipped', reason: 'Review did not complete — the amendment stays for the human.', atMs: Date.now() });
         return;
     }
-    // A refused queue write is recorded and rethrown by `memoryAmendments` —
-    // that is what stops a dropped correction being silent. But this is the
-    // middle of a supervisor RUN, and letting it escape would abandon every
-    // remaining item in the queue and leave this one with no decision at all.
-    // So the failure keeps its owner (the health report leads with it) and the
-    // item keeps an honest outcome: still pending, still the human's call.
-    try {
-        if (verdict.action === 'reject') {
-            rejectAmendment(amendment.id);
-        } else {
-            const resolved = approveAmendment(amendment.id);
-            const file = getMemoryFiles().files.find(f => f.id === amendment.fileId);
-            if (resolved && file) {
-                const next = amendment.kind === 'supersede'
-                    ? `${file.content}\n\n## Correction (${resolved.resolvedAt})\n\n${amendment.proposedContent}`
-                    : amendment.proposedContent;
-                await updateMemoryFile(amendment.fileId, { content: next }, username);
-            }
-        }
-    } catch (e) {
-        store.setDecision(eventId, {
-            verdict: 'skipped',
-            reason: `Could not save the resolution (${e instanceof Error ? e.message : String(e)}) — the amendment stays for you.`,
-            atMs: Date.now(),
-        });
-        return;
-    }
+    // Triage only. An amendment EDITS a notebook file the trader reads, so applying
+    // one — or rejecting it — is a write to their own memory the model does not get
+    // to make alone. The pending amendment stays pending; the verdict is recorded.
+    writeTriage(username, amendment.id, JSON.stringify({ verdict: verdict.action === "reject" ? "rejected" : verdict.action === "enhance" ? "enhanced" : "approved", reason: verdict.reason }));
     store.setDecision(eventId, {
         verdict: verdict.action === 'reject' ? 'rejected' : verdict.action === 'enhance' ? 'enhanced' : 'approved',
-        reason: verdict.reason,
+        reason: `${verdict.reason} (triaged — the amendment stays pending until you act.)`,
         atMs: Date.now(),
     });
 };
 
 const APPLYABLE_PROPOSALS = new Set(['displacement', 'revival', 'demote', 'rescope', 'contradiction']);
+
+/**
+ * THE TRIAGE LEDGER — the supervisor's own notes on queue items it has already
+ * read. Auto-triage means it may look at everything and act on nothing, so it
+ * needs to know what it has seen: without this, a pass would re-review the same
+ * draft forever and spend a call per item per pass.
+ *
+ * Raw localStorage (like `supervisor_auto_v1`), keyed by user + item, so it is
+ * registered in `RAW_LOCAL_STORAGE_PREFIXES`. Losing it costs a re-read, never a
+ * wrong decision: the worst case is the supervisor says again what it said.
+ */
+const TRIAGE_KEY = 'supervisor_triaged_v1';
+const triageKey = (username: string, itemId: string): string => `${TRIAGE_KEY}_${username}:${itemId}`;
+
+const readTriage = (username: string, itemId: string): string | null => {
+    try {
+        return localStorage.getItem(triageKey(username, itemId));
+    } catch { return null; }
+};
+const writeTriage = (username: string, itemId: string, note: string): void => {
+    try {
+        localStorage.setItem(triageKey(username, itemId), note);
+    } catch { /* private mode: the item is simply re-read next pass */ }
+};
+
+/** What the trader is shown for an item the model has already judged, and what
+ *  keeps it out of the next pass. */
+export const triageNote = (
+    username: string,
+    itemId: string,
+): { verdict: 'approved' | 'enhanced' | 'rejected'; reason: string } | null => {
+    const raw = readTriage(username, itemId);
+    if (!raw) return null;
+    try {
+        const p = JSON.parse(raw) as { verdict?: string; reason?: string };
+        const verdict = p.verdict === 'rejected' || p.verdict === 'enhanced' || p.verdict === 'approved'
+            ? p.verdict : null;
+        return verdict && typeof p.reason === 'string' ? { verdict, reason: p.reason } : null;
+    } catch { return null; }
+};
 
 /** Deterministic applyability — displacement/revival/demote have exact
  *  actuation paths; rescope/contradiction need a model-authored rewrite. */
@@ -474,33 +474,35 @@ const superviseLearningProposal = async (
         return;
     }
     if (verdict.action === 'reject') {
-        dismissLearningProposal(proposal.id, username);
-        store.setDecision(eventId, { verdict: 'rejected', reason: verdict.reason, atMs: Date.now() });
+        // Triage, not dismissal: a reject used to remove the proposal outright,
+        // which quietly deleted the trader's own pending change.
+        writeTriage(username, proposal.id, JSON.stringify({ verdict: 'rejected', reason: verdict.reason }));
+        store.setDecision(eventId, {
+            verdict: 'rejected',
+            reason: `${verdict.reason} (triaged — I would drop this, but the proposal stays queued for you.)`,
+            atMs: Date.now(),
+        });
         return;
     }
     const payload = (proposal.payload ?? {}) as Record<string, unknown>;
-    let ok = false;
-    if (MECHANICAL_PROPOSALS.has(proposal.kind)) {
-        const { applyDisplacementProposal, applyRevivalProposal, applyDemoteProposal } = await import('./SkillMemoryService');
-        // These now say WHY they refused; the auto path has no human to tell, so
-        // it keeps its own generic line — but `applied` is the only thing that may
-        // drain the proposal.
-        if (proposal.kind === 'displacement') ok = (await applyDisplacementProposal(String(payload.displacedSlug || proposal.skillSlug || ''), username)).applied;
-        else if (proposal.kind === 'revival') ok = (await applyRevivalProposal(proposal.skillSlug || '', username)).applied;
-        else if (proposal.kind === 'demote') ok = (await applyDemoteProposal(proposal.skillSlug || '', username)).applied;
-    } else {
-        // rescope / contradiction: a re-scope that CARRIES its clauses is already
-        // a rewrite, so "approve" is enough to act on it. Without stored clauses
-        // only an "enhance" verdict supplies the wording these kinds need, and a
-        // bare approve stays queued for the human.
-        ok = (verdict.action === 'enhance'
-                || (verdict.action === 'approve' && !!storedClausesOf(proposal)))
-            && await applyProposalRewrite(proposal, verdict, username);
-    }
-    if (ok) dismissLearningProposal(proposal.id, username);
+    // AUTO-TRIAGE: the supervisor records what it thinks about a proposal and leaves
+    // it queued. Displacing, reviving, demoting, re-scoping and rewriting are all
+    // changes to what the trader believes and trades on — none of them are the
+    // model's to make alone. The queue row keeps its text, its payload and its
+    // buttons, which is where the decision now lives.
+    const carried = storedClausesOf(proposal);
+    const suggestion = verdict.action === 'enhance' && verdict.enhanced?.ifCondition
+        ? ` I would write: IF ${verdict.enhanced.ifCondition} THEN ${verdict.enhanced.thenAction ?? '…'}`
+        : carried
+            ? ` It already carries clauses: IF ${carried.ifCondition} THEN ${carried.thenAction ?? '…'}`
+            : '';
+    writeTriage(username, proposal.id, JSON.stringify({
+        verdict: verdict.action === 'enhance' ? 'enhanced' : 'approved',
+        reason: verdict.reason,
+    }));
     store.setDecision(eventId, {
-        verdict: ok ? (verdict.action === 'enhance' ? 'enhanced' : 'approved') : 'skipped',
-        reason: ok ? verdict.reason : 'The change could not be applied — the proposal stays for the human.',
+        verdict: verdict.action === 'enhance' ? 'enhanced' : 'approved',
+        reason: `${verdict.reason}${suggestion} (triaged — nothing was applied; the proposal stays queued for you.)`,
         atMs: Date.now(),
     });
 };
@@ -571,10 +573,11 @@ export const __setSupervisionSpendForTests = (n: number): void => {
  *  queues, counted exactly the way the pass walks them — so the UI's "N items
  *  waiting" and the boot sweep answer the same question the pass asks. */
 export const countPendingSupervision = (username: string): number =>
-    listSkillDrafts(username).length
-    + loadForgedTools().filter(t => t.status === 'candidate').length
-    + listAmendments('pending').length
-    + listLearningProposals(username).filter(p => APPLYABLE_PROPOSALS.has(p.kind)).length;
+    listSkillDrafts(username).filter(d => !readTriage(username, d.id)).length
+    + loadForgedTools().filter(t => t.status === 'candidate' && !readTriage(username, t.id)).length
+    + listAmendments('pending').filter(a => !readTriage(username, a.id)).length
+    + listLearningProposals(username)
+        .filter(p => APPLYABLE_PROPOSALS.has(p.kind) && !readTriage(username, p.id)).length;
 
 /** One supervision pass over pending queue items, capped at
  *  {@link MAX_ITEMS_PER_PASS} calls. Never throws, never overlaps itself,
@@ -605,24 +608,31 @@ export const runSupervisorPass = async (username = getActiveUsername(), opts: { 
         };
         for (const draft of listSkillDrafts(username)) {
             if (controller.signal.aborted || spent()) break;
+            // Already triaged: the model said what it would say, and the draft is
+            // still waiting on the human. Re-reading it would spend a call to repeat
+            // itself — the one cost auto-triage does not get to pay freely.
+            if (readTriage(username, draft.id)) continue;
             await superviseSkillDraft(draft, config, username);
             handled += 1;
             recordSpend();
         }
         for (const tool of loadForgedTools().filter(t => t.status === 'candidate')) {
             if (controller.signal.aborted || spent()) break;
+            if (readTriage(username, tool.id)) continue;
             await superviseToolCandidate(tool, config);
             handled += 1;
             recordSpend();
         }
         for (const amendment of listAmendments('pending')) {
             if (controller.signal.aborted || spent()) break;
+            if (readTriage(username, amendment.id)) continue;
             await superviseAmendment(amendment, config, username);
             handled += 1;
             recordSpend();
         }
         for (const proposal of listLearningProposals(username).filter(p => APPLYABLE_PROPOSALS.has(p.kind))) {
             if (controller.signal.aborted || spent()) break;
+            if (readTriage(username, proposal.id)) continue;
             await superviseLearningProposal(proposal, config, username);
             handled += 1;
             recordSpend();
@@ -780,6 +790,27 @@ export const overrideApproveSkill = async (
     const result = await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, username, `Approved by you over the supervisor's verdict.${modelReason}`, 'human');
     // 'duplicate' counts: the trigger IS live, which is what the human meant by
     // approving it. Anything else wrote nothing, so nothing is claimed.
-    if (result.created || result.reason === 'duplicate') store.markOverridden(eventId, 'approved');
+    if (result.created || result.reason === 'duplicate') {
+        store.markOverridden(eventId, 'approved');
+        // Record the file THIS override created so a later Reject can remove it.
+        // Under auto-triage the supervisor never creates one, so `createdFileId`
+        // used to always be set by the supervisor's own approve — the override
+        // path had nothing to point at, and "Reject — undo this" was a no-op.
+        if (result.created) {
+            const created = getMemoryFiles().files.filter(isSkillFile).find(f =>
+                (parseSkillMarkdown(f.content)?.ifCondition ?? '').toLowerCase()
+                === (draft.crafted.ifCondition ?? '').toLowerCase());
+            const decision = ev?.decision;
+            if (created && decision) {
+                store.setDecision(eventId, {
+                    ...decision,
+                    verdict: 'approved',
+                    overriddenByUser: true,
+                    createdFileId: created.id,
+                    createdFileName: created.name,
+                });
+            }
+        }
+    }
     return result;
 };

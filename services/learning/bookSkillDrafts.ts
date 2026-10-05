@@ -4,15 +4,22 @@
  *
  * Each entry is the machine-checkable core of one book's playbook, written as
  * an IF/THEN skill. They are queued as PENDING DRAFTS (the same inbox the
- * post-mortem crafts use) — nothing enters the live library until the trader
- * approves it in the Coach inbox / Settings → Skills. One-time and idempotent:
- * a localStorage flag guards the seeding, so approving or dismissing a draft
- * is never undone by a later boot, and user edits are never clobbered.
+ * post-mortem crafts use). One-time and idempotent: a localStorage flag guards
+ * the seeding, so approving or dismissing a draft is never undone by a later
+ * boot, and user edits are never clobbered.
  *
  * This is deliberately separate from seedStrategies.ts (which lands book
  * priors directly as `candidate` skills). These came from the trader's OWN
  * PDF library, so they go through the human gate rather than the auto-prior
  * path.
+ *
+ * "The human gate" is now true in fact, not only in this comment (it was NOT
+ * from 2026-09-14 until 2026-10-05): the supervisor reviewed these drafts on the
+ * ~12 s boot sweep and INGESTED its own "approve" verdict as a live skill with
+ * `approvedBy: 'supervisor'`, so a book playbook could be live roughly ten
+ * seconds after launch without anyone clicking anything. The supervisor is now
+ * triage-only (it records a verdict and changes nothing) and the boot sweep was
+ * removed, so a draft here stays a draft until the trader presses Save.
  */
 
 import { queueSkillDraft, listSkillDrafts } from '../../utils/skillDrafts';

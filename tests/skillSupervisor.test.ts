@@ -27,7 +27,7 @@ import { queueLearningProposal, listLearningProposals } from '../utils/learningQ
 import { proposeForgedTool, loadForgedTools } from '../services/tools/toolForge';
 import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import {
-    parseSkillMarkdown, isSkillFile, ingestCraftedSkillFromDraft, listSkills, setSkillStatus,
+    parseSkillMarkdown, isSkillFile, ingestCraftedSkillFromDraft, listSkills,
     isApprovedSkill,
 } from '../services/learning/SkillMemoryService';
 import type { ProviderConfig } from '../types/provider';
@@ -82,61 +82,58 @@ beforeEach(async () => {
     await initMemoryFiles(USER);
 });
 
-describe('runSupervisorPass — skill drafts', () => {
-    it('an approve verdict ingests the draft as a candidate skill (the human "Save as skill" path)', async () => {
+describe("runSupervisorPass — skill drafts (TRIAGE: nothing is created, removed or tombstoned)", () => {
+    it("an approve verdict records the judgement and LEAVES the draft in the inbox", async () => {
         queueSkillDraft({ tradeId: 'd1', coin: 'BTCUSDT', crafted: crafted() }, USER);
         verdictJson({ action: 'approve', reason: 'mechanical trigger, falsifiable claim, not covered' });
         const handled = await runSupervisorPass(USER, { manual: true });
         expect(handled).toBe(1);
-        expect(listSkillDrafts(USER)).toHaveLength(0);
-        const skills = skillFiles();
-        expect(skills).toHaveLength(1);
-        expect(skills[0].status).toBe('candidate');
-        expect(skills[0].ifCondition).toBe('BTC long reclaim after a liquidity sweep of the prior low');
+        // CONTRACT CHANGE (2026-10-05): this used to ingest a candidate skill stamped
+        // approvedBy: supervisor. The trader asks that nothing model-generated becomes
+        // active without their yes, so the draft stays and the verdict is a note.
+        expect(listSkillDrafts(USER)).toHaveLength(1);
+        expect(skillFiles()).toHaveLength(0);
         const decided = store.getSnapshot().events.find(e => e.decision);
         expect(decided?.decision?.verdict).toBe('approved');
-        expect(decided?.decision?.createdFileId).toBeTruthy();
+        expect(decided?.decision?.reason).toMatch(/triaged/i);
+        expect(decided?.decision?.createdFileId).toBeUndefined();
     });
 
-    it('the verdict reason is persisted ON the skill — the audit survives the session log', async () => {
-        queueSkillDraft({ tradeId: 'd-why', coin: 'BTCUSDT', crafted: crafted() }, USER);
-        verdictJson({ action: 'approve', reason: 'mechanical reclaim trigger, falsifiable, not covered by the catalog' });
-        await runSupervisorPass(USER, { manual: true });
-        expect(listSkills()[0].meta.whyAccepted)
-            .toBe('mechanical reclaim trigger, falsifiable, not covered by the catalog');
-        // Round-trips through the file itself, not an in-memory sidecar.
-        expect(getMemoryFiles().files.find(f => f.id === listSkills()[0].file.id)!.content)
-            .toContain('whyAccepted:');
-    });
-
-    it('an enhance verdict applies the enhanced fields (activation description lands in the meta)', async () => {
+    it('an enhance verdict SUGGESTS its wording without applying it', async () => {
         queueSkillDraft({ tradeId: 'd2', coin: 'BTCUSDT', crafted: crafted() }, USER);
         verdictJson({
             action: 'enhance',
             reason: 'solid core; sharper IF and a real activation key',
             enhanced: {
                 ifCondition: 'BTC reclaims the swept prior low on a 15m CLOSE',
-                description: 'Enter BTC longs when a liquidity sweep is reclaimed on a 15m close — use after a sweep into a tested support.',
+                description: 'Enter BTC longs when a liquidity sweep is reclaimed on a 15m close.',
             },
         });
         await runSupervisorPass(USER, { manual: true });
-        expect(listSkillDrafts(USER)).toHaveLength(0);
-        const skills = skillFiles();
-        expect(skills[0].ifCondition).toBe('BTC reclaims the swept prior low on a 15m CLOSE');
-        expect(skills[0].description).toContain('liquidity sweep is reclaimed');
+        expect(listSkillDrafts(USER)).toHaveLength(1);
+        expect(skillFiles()).toHaveLength(0);
+        // The suggestion is in the note the trader reads — that is the whole value.
+        const decided = store.getSnapshot().events.find(e => e.decision);
+        expect(decided?.decision?.reason).toContain('BTC reclaims the swept prior low on a 15m CLOSE');
+        expect(decided?.decision?.reason).toMatch(/triaged/i);
     });
 
-    it('a reject verdict tombstones the trigger exactly like the human Discard', async () => {
+    it('a reject verdict does NOT consume the draft and does NOT tombstone its trigger', async () => {
         const draft = queueSkillDraft({ tradeId: 'd3', coin: 'BTCUSDT', crafted: crafted() }, USER);
-        if (!draft) throw new Error('queueSkillDraft stored nothing — the supervisor had no draft to act on');
+        if (!draft) throw new Error('queueSkillDraft stored nothing');
         verdictJson({ action: 'reject', reason: 'duplicate of an existing catalog entry' });
         await runSupervisorPass(USER, { manual: true });
-        expect(listSkillDrafts(USER)).toHaveLength(0);
+        // A reject used to remove the draft and tombstone the trigger key: the model
+        // retiring the trader's own proposal without asking.
+        expect(listSkillDrafts(USER)).toHaveLength(1);
         expect(skillFiles()).toHaveLength(0);
-        expect(isDraftTombstoned(draftTriggerKey('BTCUSDT', draft.crafted), USER)).toBe(true);
+        expect(isDraftTombstoned(draftTriggerKey('BTCUSDT', draft.crafted), USER)).toBe(false);
+        const decided = store.getSnapshot().events.find(e => e.decision);
+        expect(decided?.decision?.verdict).toBe('rejected');
+        expect(decided?.decision?.reason).toMatch(/triaged/i);
     });
 
-    it('a MALFORMED verdict never auto-applies — the draft stays queued for the human', async () => {
+    it('a MALFORMED verdict never even records a judgement — the draft stays queued', async () => {
         queueSkillDraft({ tradeId: 'd4', coin: 'BTCUSDT', crafted: crafted() }, USER);
         verdictJson('this is not json at all');
         await runSupervisorPass(USER, { manual: true });
@@ -146,20 +143,28 @@ describe('runSupervisorPass — skill drafts', () => {
         expect(decided?.decision?.createdFileId).toBeUndefined();
     });
 
-    it('the pause toggle blocks automatic passes; manual runs still work', async () => {
+    it('the pause toggle blocks automatic passes; a manual run triages without applying', async () => {
         queueSkillDraft({ tradeId: 'd5', coin: 'BTCUSDT', crafted: crafted() }, USER);
         store.setAutoEnabled(false);
         expect(await runSupervisorPass(USER)).toBe(0);
         expect(listSkillDrafts(USER)).toHaveLength(1);
         verdictJson({ action: 'approve', reason: 'mechanical, uncovered, claim holds' });
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
-        expect(listSkillDrafts(USER)).toHaveLength(0);
+        expect(listSkillDrafts(USER)).toHaveLength(1);
         store.setAutoEnabled(true);
+    });
+
+    it('does not re-read an item it has already triaged', async () => {
+        queueSkillDraft({ tradeId: 'd5b', coin: 'BTCUSDT', crafted: crafted() }, USER);
+        verdictJson({ action: 'approve', reason: 'mechanical, uncovered, claim holds' });
+        expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
+        expect(await runSupervisorPass(USER, { manual: true })).toBe(0);
+        expect(listSkillDrafts(USER)).toHaveLength(1);
     });
 });
 
-describe('runSupervisorPass — forged tool candidates', () => {
-    it('approves a sound tool candidate to confirmed', async () => {
+describe('runSupervisorPass — forged tool candidates (triage only)', () => {
+    it('approving a tool does NOT confirm it', async () => {
         proposeForgedTool({
             name: 'fear-greed',
             description: 'Current crypto fear & greed index — use when the user asks about market sentiment.',
@@ -168,10 +173,13 @@ describe('runSupervisorPass — forged tool candidates', () => {
         }, 'test');
         verdictJson({ action: 'approve', reason: 'read-only, https, sensible params' });
         await runSupervisorPass(USER, { manual: true });
-        expect(loadForgedTools().find(t => t.proposal.name === 'fear-greed')?.status).toBe('confirmed');
+        // A confirmed tool is callable by every desk seat. That is the trader's call.
+        expect(loadForgedTools().find(t => t.proposal.name === 'fear-greed')?.status).toBe('candidate');
+        expect(store.getSnapshot().events.find(e => e.itemKind === 'tool' && e.decision)?.decision?.verdict)
+            .toBe('approved');
     });
 
-    it('retires a rejected tool candidate', async () => {
+    it('rejecting a tool does NOT retire it', async () => {
         proposeForgedTool({
             name: 'shady-scan',
             description: 'Scans everything.',
@@ -180,45 +188,45 @@ describe('runSupervisorPass — forged tool candidates', () => {
         }, 'test');
         verdictJson({ action: 'reject', reason: 'description does not say when a model would use this' });
         await runSupervisorPass(USER, { manual: true });
-        expect(loadForgedTools().find(t => t.proposal.name === 'shady-scan')?.status).toBe('retired');
+        expect(loadForgedTools().find(t => t.proposal.name === 'shady-scan')?.status).toBe('candidate');
     });
 });
 
 describe('user overrides', () => {
-    it('overrideRejectSkill removes the created candidate + tombstones the trigger', async () => {
-        queueSkillDraft({ tradeId: 'd6', coin: 'BTCUSDT', crafted: crafted() }, USER);
-        verdictJson({ action: 'approve', reason: 'mechanical, uncovered, claim holds' });
+    it('overrideApproveSkill ingests a triaged draft from its stored snapshot — the human path still writes', async () => {
+        queueSkillDraft({ tradeId: 'd7', coin: 'BTCUSDT', crafted: crafted() }, USER);
+        verdictJson({ action: 'reject', reason: 'not convinced' });
         await runSupervisorPass(USER, { manual: true });
         const ev = store.getSnapshot().events.find(e => e.decision)!;
+        // The model said no; the trader says yes. This is the only path that creates a
+        // skill now, and it stamps the human approval itself.
+        await overrideApproveSkill(ev.id, USER);
+        expect(skillFiles()).toHaveLength(1);
+        expect(isApprovedSkill(listSkills()[0].meta)).toBe(true);
+        const overridden = store.getSnapshot().events.find(e => e.id === ev.id);
+        expect(overridden?.decision?.verdict).toBe('approved');
+    });
+
+    it('overrideRejectSkill removes the human-created candidate + tombstones the trigger', async () => {
+        queueSkillDraft({ tradeId: 'd6', coin: 'BTCUSDT', crafted: crafted() }, USER);
+        verdictJson({ action: 'reject', reason: 'not convinced' });
+        await runSupervisorPass(USER, { manual: true });
+        const ev = store.getSnapshot().events.find(e => e.decision)!;
+        await overrideApproveSkill(ev.id, USER);
         expect(skillFiles()).toHaveLength(1);
         await overrideRejectSkill(ev.id, USER);
         expect(skillFiles()).toHaveLength(0);
         expect(isDraftTombstoned(draftTriggerKey('BTCUSDT', crafted()), USER)).toBe(true);
         const overridden = store.getSnapshot().events.find(e => e.id === ev.id);
         expect(overridden?.decision?.overriddenByUser).toBe(true);
-        expect(overridden?.decision?.verdict).toBe('rejected');
-    });
-
-    it('overrideApproveSkill ingests a rejected draft from its stored snapshot', async () => {
-        queueSkillDraft({ tradeId: 'd7', coin: 'BTCUSDT', crafted: crafted() }, USER);
-        verdictJson({ action: 'reject', reason: 'not convinced' });
-        await runSupervisorPass(USER, { manual: true });
-        const ev = store.getSnapshot().events.find(e => e.decision)!;
-        await overrideApproveSkill(ev.id, USER);
-        expect(skillFiles()).toHaveLength(1);
-        const overridden = store.getSnapshot().events.find(e => e.id === ev.id);
-        expect(overridden?.decision?.verdict).toBe('approved');
     });
 
     it('overrideApproveSkill does NOT report approved when the ingest could not write', async () => {
-        const { getMemoryFiles } = await import('../services/learning/MemoryFilesService');
         queueSkillDraft({ tradeId: 'd7b', coin: 'BTCUSDT', crafted: crafted() }, USER);
         verdictJson({ action: 'reject', reason: 'not convinced' });
         await runSupervisorPass(USER, { manual: true });
         const ev = store.getSnapshot().events.find(e => e.decision)!;
 
-        // No harness folder survives, so ensureHarnessFoldersUnlocked bails at
-        // its `looksLikeHarness` check and the skills folder is never created.
         const mf = getMemoryFiles();
         mf.folders = [{ id: 'custom', name: 'my-notes', order: 0 }] as typeof mf.folders;
         mf.files = [];
@@ -228,17 +236,14 @@ describe('user overrides', () => {
         expect(result).toEqual({ created: false, reason: 'no-skills-folder' });
         expect(skillFiles()).toHaveLength(0);
         const after = store.getSnapshot().events.find(e => e.id === ev.id);
-        // The bug: markOverridden ran unconditionally, so the log claimed a
-        // human override had been applied when nothing had been written.
         expect(after?.decision?.overriddenByUser).not.toBe(true);
     });
 });
 
-// ─── WS-2: proposal actuation ────────────────────────────────────────────────
-// rescope/contradiction are the two kinds that need a model-AUTHORED rewrite —
-// there is nothing mechanical to apply. The model must either supply a clause
-// that clears the same IF/THEN bar a fresh draft clears, or leave the proposal
-// queued for the human. A bare "approve" is not allowed to silently drain it.
+// ─── WS-2: proposal triage ──────────────────────────────────────────────────
+// Every lifecycle proposal is a change to what the trader believes and trades
+// on. The supervisor judges them and writes the judgement down; the queue row
+// keeps its buttons, which is where the decision now lives.
 
 const seedSkill = async (over: Partial<ReturnType<typeof crafted>> = {}): Promise<string> => {
     await ingestCraftedSkillFromDraft({ ...crafted(), ...over } as never, 'BTCUSDT', USER);
@@ -252,8 +257,8 @@ const queueRescope = (skillSlug: string, fingerprint = 'rs-1'): void => {
     }, USER);
 };
 
-describe('runSupervisorPass — rescope / contradiction proposals', () => {
-    it('an enhance verdict writes the rewritten clause and drains the proposal', async () => {
+describe('runSupervisorPass — rescope / contradiction proposals (triage only)', () => {
+    it('an enhance verdict writes nothing to the skill and leaves the proposal queued', async () => {
         const slug = await seedSkill();
         queueRescope(slug);
         verdictJson({
@@ -265,138 +270,46 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
             },
         });
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
-        // A supervisor rewrite lands the text but withdraws its approval, so what
-        // stays queued is ONE decision for the trader — not the drained proposal.
-        expect(listLearningProposals(USER).filter(q => q.kind === "rewrite")).toHaveLength(1);
-        const meta = listSkills()[0].meta;
-        expect(meta.ifCondition).toBe('BTC long reclaim after a liquidity sweep while the 4h trend is up');
-        expect(meta.thenAction).toContain('trending tapes only');
+        // The skill still says what it said. The suggestion is in the note.
+        expect(listSkills()[0].meta.ifCondition).toBe(crafted().ifCondition);
+        expect(listLearningProposals(USER)).toHaveLength(1);
         const decided = store.getSnapshot().events.find(e => e.decision);
         expect(decided?.decision?.verdict).toBe('enhanced');
+        expect(decided?.decision?.reason).toContain('the 4h trend is up');
+        expect(decided?.decision?.reason).toMatch(/triaged/i);
     });
 
-    it('the clauses the PROPOSER stored land, not the judge\'s restatement of them', async () => {
+    it('a reject verdict leaves the proposal queued — it does not dismiss it', async () => {
+        const slug = await seedSkill();
+        queueRescope(slug);
+        verdictJson({ action: 'reject', reason: 'the losing trades were a regime shift, not a broken trigger' });
+        await runSupervisorPass(USER, { manual: true });
+        // Dismissal was the model deleting the trader's own pending change.
+        expect(listLearningProposals(USER)).toHaveLength(1);
+        expect(listSkills()[0].meta.ifCondition).toBe(crafted().ifCondition);
+        const decided = store.getSnapshot().events.find(e => e.decision);
+        expect(decided?.decision?.reason).toMatch(/stays queued for you/i);
+    });
+
+    it('a proposal whose clauses are stored is quoted back in the note, unchanged', async () => {
         const slug = await seedSkill();
         const stored = {
             ifCondition: 'BTC sweeps the prior low and reclaims while the 4h trend is up',
             thenAction: 'Enter long once the reclaim candle closes above the swept level, trending tapes only',
-            predicate: 'close > open',
         };
         queueLearningProposal({
             kind: 'rescope', skillSlug: slug, fingerprint: 'rs-stored',
             text: 'The seat proposed this narrowing.',
             payload: { source: 'model:desk', ...stored },
         }, USER);
-        verdictJson({
-            action: 'enhance',
-            reason: 'agreed, and here is my own wording of it',
-            enhanced: {
-                ifCondition: 'a different wording the judge invented here',
-                thenAction: 'and a different action the judge invented too',
-            },
-        });
-        await runSupervisorPass(USER, { manual: true });
-        const meta = listSkills()[0].meta;
-        expect(meta.ifCondition).toBe(stored.ifCondition);
-        expect(meta.thenAction).toBe(stored.thenAction);
-        // The stored predicate travels with the clauses — the machine clause that
-        // proved the OLD trigger must not survive the re-scope.
-        expect(meta.predicate).toBeDefined();
-        // A supervisor rewrite lands the text but withdraws its approval, so what
-        // stays queued is ONE decision for the trader — not the drained proposal.
-        expect(listLearningProposals(USER).filter(q => q.kind === "rewrite")).toHaveLength(1);
-    });
-
-    it('an "approve" verdict applies the stored clauses — they are already a rewrite', async () => {
-        const slug = await seedSkill();
-        queueLearningProposal({
-            kind: 'rescope', skillSlug: slug, fingerprint: 'rs-approve',
-            text: 'The seat proposed this narrowing.',
-            payload: {
-                source: 'model:desk',
-                ifCondition: 'BTC sweeps the prior low and reclaims while the 4h trend is up',
-                thenAction: 'Enter long once the reclaim candle closes above the swept level, trending tapes only',
-            },
-        }, USER);
         verdictJson({ action: 'approve', reason: 'the stored re-scope is justified by the evidence' });
         await runSupervisorPass(USER, { manual: true });
-        expect(listSkills()[0].meta.ifCondition)
-            .toBe('BTC sweeps the prior low and reclaims while the 4h trend is up');
-        // A supervisor rewrite lands the text but withdraws its approval, so what
-        // stays queued is ONE decision for the trader — not the drained proposal.
-        expect(listLearningProposals(USER).filter(q => q.kind === "rewrite")).toHaveLength(1);
-    });
-
-    it('a rewrite of a CONFIRMED skill demotes it — the new claim must re-prove itself', async () => {
-        const slug = await seedSkill();
-        await setSkillStatus(listSkills()[0].file.id, 'confirmed', USER);
-        queueRescope(slug);
-        verdictJson({
-            action: 'enhance',
-            reason: 'narrow to the reclaim close',
-            enhanced: {
-                ifCondition: 'BTC reclaims the swept prior low on a 15m CLOSE',
-                thenAction: 'Enter long only after that reclaim close prints, never on the wick',
-            },
-        });
-        await runSupervisorPass(USER, { manual: true });
-        expect(listSkills()[0].meta.status).toBe('candidate');
-    });
-
-    it('a bare "approve" carries no clause — the proposal STAYS queued for the human', async () => {
-        const slug = await seedSkill();
-        queueRescope(slug);
-        verdictJson({ action: 'approve', reason: 'the rescope looks justified on the evidence' });
-        await runSupervisorPass(USER, { manual: true });
-        expect(listLearningProposals(USER)).toHaveLength(1);
         expect(listSkills()[0].meta.ifCondition).toBe(crafted().ifCondition);
         const decided = store.getSnapshot().events.find(e => e.decision);
-        expect(decided?.decision?.verdict).toBe('skipped');
-        expect(decided?.decision?.reason).toMatch(/stays for the human/);
+        expect(decided?.decision?.reason).toContain(stored.ifCondition);
     });
 
-    it('a vague rewrite fails the same IF/THEN bar a draft must clear', async () => {
-        const slug = await seedSkill();
-        queueRescope(slug);
-        verdictJson({
-            action: 'enhance',
-            reason: 'tighten it a bit',
-            // Passes the schema's length floor but is exactly the boilerplate
-            // the deterministic gate exists to refuse.
-            enhanced: {
-                ifCondition: 'Be careful with BTC longs after a sweep',
-                thenAction: 'Manage risk and size down on the reclaim entry',
-            },
-        });
-        await runSupervisorPass(USER, { manual: true });
-        expect(listLearningProposals(USER)).toHaveLength(1);
-        expect(listSkills()[0].meta.ifCondition).toBe(crafted().ifCondition);
-    });
-
-    it('a reject verdict dismisses the proposal without touching the skill', async () => {
-        const slug = await seedSkill();
-        queueRescope(slug);
-        verdictJson({ action: 'reject', reason: 'the losing trades were a regime shift, not a broken trigger' });
-        await runSupervisorPass(USER, { manual: true });
-        expect(listLearningProposals(USER)).toHaveLength(0);
-        expect(listSkills()[0].meta.ifCondition).toBe(crafted().ifCondition);
-    });
-
-    it('a rewrite aimed at a skill that no longer exists leaves the queue intact', async () => {
-        queueRescope('ghost-skill');
-        verdictJson({
-            action: 'enhance',
-            reason: 'narrow the trigger mechanically',
-            enhanced: {
-                ifCondition: 'BTC reclaims the swept prior low on a 15m CLOSE',
-                thenAction: 'Enter long only after that reclaim close prints',
-            },
-        });
-        await runSupervisorPass(USER, { manual: true });
-        expect(listLearningProposals(USER)).toHaveLength(1);
-    });
-
-    it('one pass drains both queues and leaves the rewrite INACTIVE, awaiting your approval', async () => {
+    it('one pass triages a draft AND a proposal, changing neither', async () => {
         const slug = await seedSkill({ name: 'Fade the SOL range low' });
         queueSkillDraft({
             tradeId: 'd8', coin: 'ETHUSDT',
@@ -421,21 +334,13 @@ describe('runSupervisorPass — rescope / contradiction proposals', () => {
                 },
             },
         );
-        const handled = await runSupervisorPass(USER, { manual: true });
-        expect(handled).toBe(2);
-        expect(listSkillDrafts(USER)).toHaveLength(0);
-        // CONTRACT REWRITE: "both queues emptied through the model alone" is no longer
-        // the claim. The draft is consumed and the proposal is judged, but a rewrite of
-        // a live rule withdraws its approval and leaves ONE decision for the trader.
-        expect(listLearningProposals(USER).filter(p => p.kind === 'rewrite')).toHaveLength(1);
-        expect(listLearningProposals(USER).filter(p => p.kind !== 'rewrite')).toHaveLength(0);
-        const rewritten = listSkills().find(s => s.meta.ifCondition
-            === 'SOL breaks the 4h range low while funding is still positive');
-        expect(rewritten).toBeTruthy();
-        // The text landed… and nothing else did: an unapproved rewrite is inert.
-        expect(isApprovedSkill(rewritten!.meta)).toBe(false);
-        // The version it replaced is kept, so Revert has something to go back to.
-        expect(rewritten!.meta.previousVersion?.ifCondition).toBeTruthy();
+        expect(await runSupervisorPass(USER, { manual: true })).toBe(2);
+        // Both queues are exactly as they were, and the library has not moved.
+        expect(listSkillDrafts(USER)).toHaveLength(1);
+        expect(listLearningProposals(USER)).toHaveLength(1);
+        expect(listSkills()).toHaveLength(1);
+        expect(listSkills()[0].meta.ifCondition).toBe(crafted().ifCondition);
+        expect(store.getSnapshot().events.filter(e => e.decision)).toHaveLength(2);
     });
 });
 
@@ -461,13 +366,17 @@ describe('per-pass call budget', () => {
         expect(countPendingSupervision(USER)).toBe(MAX_ITEMS_PER_PASS + 3);
         verdictJson({ action: 'approve', reason: 'mechanical trigger, falsifiable, not covered' });
         expect(await runSupervisorPass(USER, { manual: true })).toBe(MAX_ITEMS_PER_PASS);
-        expect(listSkillDrafts(USER)).toHaveLength(3);
+        // Under triage a reviewed draft STAYS in the inbox; what drains is the
+        // unread backlog (the pending count), not the queue itself.
+        expect(listSkillDrafts(USER)).toHaveLength(MAX_ITEMS_PER_PASS + 3);
+        expect(countPendingSupervision(USER)).toBe(3);
         expect(store.getSnapshot().pendingCount).toBe(3);
         expect(store.getSnapshot().events.some(e => e.text.includes('3 item(s) still waiting'))).toBe(true);
-        // The next sweep finishes the job — deferral is not abandonment.
+        // The next sweep finishes the reading — deferral is not abandonment.
         expect(await runSupervisorPass(USER, { manual: true })).toBe(3);
-        expect(listSkillDrafts(USER)).toHaveLength(0);
+        expect(countPendingSupervision(USER)).toBe(0);
         expect(store.getSnapshot().pendingCount).toBe(0);
+        expect(listSkillDrafts(USER)).toHaveLength(MAX_ITEMS_PER_PASS + 3);
     });
 });
 
@@ -494,7 +403,9 @@ describe('per-session budget (WS-2.4)', () => {
         expect(store.getSnapshot().events.some(e => e.text.includes('Hourly budget spent'))).toBe(true);
 
         expect(await runSupervisorPass(USER, { manual: true })).toBe(1);
-        expect(listSkillDrafts(USER)).toHaveLength(0);
+        // Triaged, so it stays in the inbox — but it has been READ (spend recorded).
+        expect(listSkillDrafts(USER)).toHaveLength(1);
+        expect(countPendingSupervision(USER)).toBe(0);
     });
 });
 
@@ -503,7 +414,7 @@ describe('per-session budget (WS-2.4)', () => {
 // would have used — and a proposal the model APPLIED is deliberately excluded,
 // because that rewrite landed on a file that has its own undo.
 describe('overrideVerdict — per-kind override', () => {
-    it('walks a confirmed forged tool back to retired, once only', async () => {
+    it('a triaged tool candidate can still be walked to retired by the human', async () => {
         proposeForgedTool({
             name: 'fear-greed', description: 'Crypto fear & greed index.',
             urlTemplate: 'https://api.alternative.me/fng/', parameters: {},
@@ -511,26 +422,25 @@ describe('overrideVerdict — per-kind override', () => {
         verdictJson({ action: 'approve', reason: 'read-only, https, sensible params' });
         await runSupervisorPass(USER, { manual: true });
         const ev = store.getSnapshot().events.find(e => e.itemKind === 'tool' && e.decision)!;
-        expect(loadForgedTools().find(t => t.id === ev.itemId)?.status).toBe('confirmed');
-
+        // The supervisor triaged it; the tool is still a candidate.
+        expect(loadForgedTools().find(t => t.id === ev.itemId)?.status).toBe('candidate');
+        // The override on an "approved" decision is the walk-BACK: retire it.
         expect(await overrideVerdict(ev.id, USER)).toBe(true);
         expect(loadForgedTools().find(t => t.id === ev.itemId)?.status).toBe('retired');
         expect(store.getSnapshot().events.find(e => e.id === ev.id)!.decision?.overriddenByUser).toBe(true);
         // Reversing an override would flip the tool back without being asked.
         expect(await overrideVerdict(ev.id, USER)).toBe(false);
+        expect(loadForgedTools().find(t => t.id === ev.itemId)?.status).toBe('retired');
     });
 
-    it('puts a lifecycle proposal the model dropped back into the queue', async () => {
+    it('leaves a rejected proposal in the queue — triage does not drop it', async () => {
         queueLearningProposal({
             kind: 'contradiction', skillSlug: 'btc-range', fingerprint: 'ov-1',
             text: 'Two enabled skills disagree about range-low breaks — settle which trigger holds.',
         }, USER);
         verdictJson({ action: 'reject', reason: 'the two rules cover different regimes' });
         await runSupervisorPass(USER, { manual: true });
-        expect(listLearningProposals(USER)).toHaveLength(0);
-        const ev = store.getSnapshot().events.find(e => e.itemKind === 'proposal' && e.decision)!;
-
-        expect(await overrideVerdict(ev.id, USER)).toBe(true);
+        // The model would drop it; under triage the trader's proposal stays queued.
         expect(listLearningProposals(USER).map(p => p.fingerprint)).toContain('ov-1');
     });
 });
