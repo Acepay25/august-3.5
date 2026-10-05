@@ -1105,21 +1105,23 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                             ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
                             : 'border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
                     }`}>
-                    ƒ Indicators
+                    ƒSMA
                 </button>
                 {/* Drawing tools live in the TradingView-style LEFT RAIL over
                     the plot (ChartToolRail) — the top bar keeps timeframes. */}
                 <span className="ml-auto flex items-center gap-2 pr-1">
-                    {levels.length > 0 && (
-                        <span className="text-ui-xs uppercase tracking-widest text-zinc-500" title="Current verdict levels drawn on the chart">
-                            verdict overlay · {levels.map(l => l.label).join(' ')}
-                        </span>
-                    )}
                     <span className={`h-1.5 w-1.5 rounded-full ${status === 'live' ? 'bg-emerald-500' : status === 'loading' ? 'animate-pulse bg-cyan-400' : 'bg-rose-500'}`} aria-label={`chart ${status}`} />
-                    <span className="text-ui-xs uppercase tracking-widest text-zinc-600">{symbol} · Binance · {interval}</span>
                 </span>
             </TimeframeBar>
             <div className="relative min-h-0 flex-1 bg-zinc-950">
+                {/* The verdict-overlay tag floats INSIDE the plot now — the
+                    toolbar badge it replaced duplicated the symbol picker, the
+                    active timeframe and the feed dot at once. */}
+                {levels.length > 0 && (
+                    <span className="pointer-events-none absolute right-3 top-2 z-10 rounded-full border border-white/[0.06] bg-zinc-900/70 px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-500" title="Current verdict levels drawn on the chart" data-testid="verdict-overlay-chip">
+                        verdict overlay · {levels.map(l => l.label).join(' ')}
+                    </span>
+                )}
                 <ChartToolRail
                     tool={tool}
                     onSelectTool={t => { setTool(t); setDraft(null); setTextEdit(null); }}

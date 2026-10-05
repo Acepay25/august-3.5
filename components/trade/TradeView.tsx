@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PanelRight, TrendingDown, TrendingUp } from '../shared/Icons';
+import { PanelRight, PinIcon, TrendingDown, TrendingUp } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
@@ -49,7 +49,6 @@ import { useRightPanel } from '../../hooks/useRightPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
-import StatusPill from '../ui/StatusPill';
 import type { AgentBot } from '../../services/agents/agentRoster';
 
 interface TradeViewProps {
@@ -122,6 +121,12 @@ interface TradeViewProps {
     onTradeModeChange?: (mode: TradeMode) => void;
     /** Jump straight to the Chat surface from the dock header. */
     onOpenChat?: () => void;
+    /** Opens the WatchListPanel (pinned signals) — its one chrome home since
+        stage 3 moved it off the app header. The count badge mirrors the
+        header's old one. */
+    onOpenWatchList?: () => void;
+    watchOpenCount?: number;
+    watchOpenR?: string;
     /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop.
      *  Consumed by useSurfaceEnter; see hooks/useSurfaceEnter.ts. */
     surfaceEnterFrom?: SurfaceEnterDirection;
@@ -318,7 +323,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, botThreadRows, onBotTurnCommit, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, botThreadRows, onBotTurnCommit, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
@@ -850,15 +855,35 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     >
                         Screener
                     </button>
-                    <StatusPill
+                    {onOpenWatchList && (
+                        <button
+                            type="button"
+                            onClick={onOpenWatchList}
+                            aria-label={`Pinned signals, ${watchOpenCount} open`}
+                            title={watchOpenR ? `Pinned signals · ${watchOpenR}` : 'Pinned signals'}
+                            data-testid="trade-pinned-trigger"
+                            className="relative shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                        >
+                            <PinIcon className="h-3 w-3" />
+                            {watchOpenCount > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-center text-ui-2xs font-mono font-bold leading-4 text-zinc-900">
+                                    {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
+                                </span>
+                            )}
+                        </button>
+                    )}
+                    {/* The feed state is ONE dot with the detail on hover: the
+                        word ("connecting"/"polling") rendered the same fact the
+                        beacon already colored, at chrome size. */}
+                    <span
                         data-testid="feed-status"
-                        kicker
-                        title={feed.status === 'live' ? 'Websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 5s'}
-                        tone={feed.status === 'live' ? 'up' : feed.status === 'connecting' ? 'neutral' : 'warn'}
-                        icon={<span aria-hidden="true" className={`beacon ${feed.status === 'live' ? '' : 'is-quiet'}`.trim()} />}
+                        role="status"
+                        aria-label={`Market feed ${feed.status}`}
+                        title={feed.status === 'live' ? 'Live — websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 5s'}
+                        className="flex shrink-0 items-center"
                     >
-                        {feed.status === 'live' ? 'live' : feed.status === 'connecting' ? 'connecting' : 'polling'}
-                    </StatusPill>
+                        <span aria-hidden="true" className={`beacon ${feed.status === 'live' ? '' : 'is-quiet'}`.trim()} />
+                    </span>
                 </div>
                 <div className="shrink-0 text-right leading-none">
                     <div
@@ -886,9 +911,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 without leaving the chart; Funding carries its own countdown +
                 depleting-window bar (amber + pulse inside 30 min). */}
             <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
-                <Stat label="Mark" value={Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'} />
+                {/* Mark and 24h Change live once — in the hero price above.
+                    The strip keeps only numbers the hero does not show. */}
                 <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
-                <Stat label="24h Change" value={Number.isFinite(changePct) ? `${changePct! >= 0 ? '+' : ''}${fmtPercent(changePct!, 2)}` : '—'} />
                 <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
                 <div className="flex w-[210px] shrink-0 flex-col px-3.5">

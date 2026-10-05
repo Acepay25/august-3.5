@@ -607,13 +607,25 @@ async function main() {
         // Self-contained on purpose: `navTo`/`openMenu`/`pollFor` are declared
         // further down, and reaching for them from here hits their temporal
         // dead zone (const declarations).
-        const chatJump = await page.evaluate(() => {
-            const b = document.querySelector('[data-testid="dock-open-chat"]');
-            if (!b) return 'missing';
-            if (b.disabled) return 'disabled';
-            b.click();
-            return 'clicked';
+        // Stage 3 moved the hop into the customization (⋯) menu. The click
+        // and the item lookup are TWO evaluates with a settle between them:
+        // the menu is a React portal and one synchronous pass would query
+        // before the commit.
+        const menuOpened = await page.evaluate(() => {
+            const menuBtn = document.querySelector('[aria-label="Customization"]');
+            if (!menuBtn) return 'no menu button';
+            menuBtn.click();
+            return 'opened';
         });
+        await page.waitForTimeout(400);
+        const chatJump = menuOpened === 'opened'
+            ? await page.evaluate(() => {
+                const b = document.querySelector('[data-testid="dock-open-chat"]');
+                if (!b) return 'missing';
+                b.click();
+                return 'clicked';
+            })
+            : menuOpened;
         const landedOnChat = await page.locator('[data-testid="agents-view"]')
             .waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
         check('the dock header jumps straight to Chat',
