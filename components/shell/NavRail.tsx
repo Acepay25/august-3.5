@@ -12,11 +12,9 @@
  * dot). Expanding brings back the full 280px panel. Ctrl/Cmd+B toggles either
  * way; below 1024px the rail is hidden whatever the user last chose.
  *
- * One tree, hidden rather than unmounted. The rows keep rendering inside the
- * collapsed box — inert, invisible, 0px wide — the same hide-vs-close contract
- * the Chart AI dock follows: collapsing changes what is *readable*, not what
- * exists, so the tree's state survives the round trip and expansion reveals
- * the same nodes, not a rebuild.
+ * Stage 3 made the rail nav-only: conversation history lives in the Chat
+ * surface's rail (AgentsView), automations live in the Activity drawer, and
+ * the account row owns profile actions. One column, one concern.
  *
  * The brand gradient is reserved: the active-surface bar and the account-row
  * status dot are the only places it appears outside the wordmark.
@@ -26,13 +24,10 @@ import React from 'react';
 import { PanelLeftClose, Settings, BotIcon } from '../shared/Icons';
 import Tip from '../ui/Tip';
 import SurfaceMenuList, { type NavBadge } from './SurfaceMenuList';
-import { SidebarContent } from '../shared/Sidebar';
 import { UpdateButton, useUpdateStatusDot } from '../shared/UpdateButton';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 import type { AppSurface } from '../../hooks/useSurface';
-import type { Conversation } from '../../types';
-import type { AutomationConfig } from '../../types/automation';
 
 /** The collapsed column is 0px: the rail leaves the layout entirely and its
  *  expand affordance lives in the header (nav-rail-toggle-header). */
@@ -55,33 +50,21 @@ interface NavRailProps {
     onOpenApprovals?: () => void;
     approvalsCount?: number;
     onSwitchUser?: () => void;
-
-    conversations: Conversation[];
-    activeConversationId: string | null;
-    hasVisionData: boolean;
-    isFreshSession: boolean;
-    onNewConversation: () => void;
-    onLoadConversation: (id: string) => void;
-    onDeleteConversation: (id: string) => void;
-    onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
-    onOpenLiveMarket: () => void;
-    onOpenVisionData: () => void;
-    onOpenWatchList?: () => void;
     onOpenSettings: () => void;
-    automations: AutomationConfig[];
-    onOpenAutomation: (id: string | null) => void;
-    onCreateAutomation?: () => void;
 }
 
 /** The account row: who you are, where Settings lives, and how the updater is
  *  doing. Update status belongs on a quiet persistent surface rather than only
  *  in the full-screen overlay — the overlay is for downloading and ready, and
- *  nothing currently tells you that a check finished and found nothing. */
+ *  nothing currently tells you that a check finished and found nothing.
+ *  Clicking the identity opens Switch profile — profile actions belong on the
+ *  profile row, not as a sixth nav entry. */
 const AccountRow: React.FC<{
     expanded: boolean;
     activeUsername: string | null;
     onOpenSettings: () => void;
-}> = ({ expanded, activeUsername, onOpenSettings }) => {
+    onSwitchUser?: () => void;
+}> = ({ expanded, activeUsername, onOpenSettings, onSwitchUser }) => {
     const { isElectron } = useAutoUpdate();
     const updateDot = useUpdateStatusDot();
 
@@ -109,16 +92,26 @@ const AccountRow: React.FC<{
             data-testid="nav-account"
             className="flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-3 py-2.5"
         >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold uppercase text-zinc-300">
-                {/* The person's initial, not a bot glyph — this row is the one
-                    place the rail says who is signed in (the references all use
-                    an initials block here). */}
-                {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" />}
-            </div>
-            <div className="min-w-0 flex-1">
-                <div className="truncate text-ui-caption text-zinc-300">{activeUsername || 'No profile'}</div>
-                <div className="truncate text-ui-2xs text-zinc-600">Signed in</div>
-            </div>
+            <button
+                type="button"
+                data-testid="nav-switch-user"
+                onClick={onSwitchUser}
+                aria-label="Switch profile"
+                aria-disabled={!onSwitchUser || undefined}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:cursor-default disabled:hover:bg-transparent"
+                disabled={!onSwitchUser}
+            >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold uppercase text-zinc-300">
+                    {/* The person's initial, not a bot glyph — this row is the one
+                        place the rail says who is signed in (the references all use
+                        an initials block here). */}
+                    {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className="block truncate text-ui-caption text-zinc-300">{activeUsername || 'No profile'}</span>
+                    <span className="block truncate text-ui-2xs text-zinc-600">Signed in</span>
+                </span>
+            </button>
             <Tip label="Settings" shortcut="Ctrl+,">
                 <button
                     type="button"
@@ -144,21 +137,7 @@ const NavRail: React.FC<NavRailProps> = ({
     onOpenApprovals,
     approvalsCount,
     onSwitchUser,
-    conversations,
-    activeConversationId,
-    hasVisionData,
-    isFreshSession,
-    onNewConversation,
-    onLoadConversation,
-    onDeleteConversation,
-    onDeleteConversations,
-    onOpenLiveMarket,
-    onOpenVisionData,
-    onOpenWatchList,
     onOpenSettings,
-    automations,
-    onOpenAutomation,
-    onCreateAutomation,
 }) => {
     const width = expanded ? NAV_RAIL_EXPANDED_PX : NAV_RAIL_COLLAPSED_PX;
 
@@ -207,35 +186,9 @@ const NavRail: React.FC<NavRailProps> = ({
                     badges={badges}
                     approvalsCount={approvalsCount}
                     onOpenApprovals={onOpenApprovals}
-                    onSwitchUser={onSwitchUser}
                     onSelect={onSelectSurface}
                     collapsed={!expanded}
                 />
-
-                {/* Conversation history and the automations list need a label
-                    column to mean anything, so they only mount with the panel.
-                    The surfaces above deliberately do not. */}
-                {expanded && (
-                    <>
-                        <div className="mx-2 border-t border-white/[0.06]" />
-                        <SidebarContent
-                            conversations={conversations}
-                            activeConversationId={activeConversationId}
-                            hasVisionData={hasVisionData}
-                            isFreshSession={isFreshSession}
-                            onNewConversation={onNewConversation}
-                            onLoadConversation={onLoadConversation}
-                            onDeleteConversation={onDeleteConversation}
-                            onDeleteConversations={onDeleteConversations}
-                            onOpenLiveMarket={onOpenLiveMarket}
-                            onOpenVisionData={onOpenVisionData}
-                            onOpenWatchList={onOpenWatchList}
-                            automations={automations}
-                            onOpenAutomation={onOpenAutomation}
-                            onCreateAutomation={onCreateAutomation}
-                        />
-                    </>
-                )}
             </div>
 
             <div className="mt-auto">
@@ -244,7 +197,12 @@ const NavRail: React.FC<NavRailProps> = ({
                         <UpdateButton />
                     </div>
                 )}
-                <AccountRow expanded={expanded} activeUsername={activeUsername} onOpenSettings={onOpenSettings} />
+                <AccountRow
+                    expanded={expanded}
+                    activeUsername={activeUsername}
+                    onOpenSettings={onOpenSettings}
+                    onSwitchUser={onSwitchUser}
+                />
             </div>
         </aside>
     );

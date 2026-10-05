@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox, UsersRound} from '../shared/Icons';
+import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox} from '../shared/Icons';
 import Tip from '../ui/Tip';
 
 import type { AppSurface } from '../../hooks/useSurface';
@@ -60,7 +60,6 @@ interface SurfaceMenuListProps {
     onSelect: (surface: AppSurface) => void;
     onOpenApprovals?: () => void;
     approvalsCount?: number;
-    onSwitchUser?: () => void;
     badges?: Partial<Record<AppSurface, NavBadge>>;
     /** 56px rail mode: glyph only, no label column and no shortcut column. */
     collapsed?: boolean;
@@ -82,7 +81,6 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
     onSelect,
     onOpenApprovals,
     approvalsCount,
-    onSwitchUser,
     badges,
     collapsed = false,
 }) => (
@@ -147,7 +145,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 : row;
         })}
 
-        {(onOpenApprovals || onSwitchUser) && <div className="my-2 border-t border-white/[0.06]" />}
+        {onOpenApprovals && <div className="my-2 border-t border-white/[0.06]" />}
 
         {onOpenApprovals && (
             <button
@@ -174,20 +172,8 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
             </button>
         )}
 
-        {onSwitchUser && (
-            <button
-                type="button"
-                data-testid="nav-switch-user"
-                onClick={onSwitchUser}
-                aria-label="Switch profile"
-                className={`flex w-full items-center rounded-lg py-2 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
-                    collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5 text-left text-ui-caption'
-                }`}
-            >
-                <UsersRound className="h-4 w-4 shrink-0" />
-                {!collapsed && <span className="flex-1">Switch profile</span>}
-            </button>
-        )}
+        {/* Switch profile moved to the account row (NavRail): profile actions
+            belong on the profile row, not as a sixth nav entry. */}
     </nav>
 );
 

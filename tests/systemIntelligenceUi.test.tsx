@@ -32,7 +32,6 @@ vi.mock('../components/shared/UpdateButton', () => ({
     UpdateButton: (): null => null,
     useUpdateStatusDot: (): null => null,
 }));
-vi.mock('../components/shared/Sidebar', () => ({ SidebarContent: (): null => null }));
 vi.mock('../utils/thinkingLeakBin', () => ({ loadThinkingLeakBin: (): never[] => [], clearThinkingLeakBin: vi.fn() }));
 
 beforeEach(() => {

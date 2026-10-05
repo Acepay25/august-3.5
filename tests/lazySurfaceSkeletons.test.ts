@@ -58,13 +58,10 @@ describe('progress card breakpoint (fix 4)', () => {
 });
 
 describe('slDistancePct plumbed into the Algo probability engine (fix 6a)', () => {
-    it('App computes the entry→SL distance and passes it as the 5th arg', () => {
-        // App now reads the level through the canonical parser under its
-        // aliased import (parsePrice as parsePriceCanonical), with an explicit
-        // '' fallback so a missing stopLoss parses to NaN instead of throwing.
-        expect(appSrc).toMatch(/const slPrice = parsePriceCanonical\(msg\.analysis\.stopLoss \|\| ''\);/);
-        expect(appSrc).toMatch(/tpPct\.length >= 2 \? tpPct : undefined,\s*slDistancePct\s*\n\s*\);/);
-    });
+    // Stage 3 removed App's handleCalculateAIProbabilities (its only consumer
+    // was the never-openable AdvancedAnalyticsSidePanel), so the App-source
+    // assertions are gone with it. The engine contract below still pins the
+    // barrier-race math for whoever re-arms a caller.
 
     const engine = ProbabilityEngineService;
 

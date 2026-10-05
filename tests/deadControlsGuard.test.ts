@@ -15,7 +15,7 @@ const read = (p: string): string => readFileSync(p, 'utf8');
 
 const appSrc = read('App.tsx');
 const headerSrc = read('components/shared/Header.tsx');
-const sidebarSrc = read('components/shared/Sidebar.tsx');
+const railSrc = read('components/shell/NavRail.tsx');
 const panelSrc = read('components/trade/TradeChatPanel.tsx');
 const tradeSrc = read('components/trade/TradeView.tsx');
 const agentsSrc = read('components/agents/AgentsView.tsx');
@@ -28,9 +28,12 @@ describe('the bot roster has one owner', () => {
         expect(appSrc).not.toMatch(/syncBotsFromTeam/);
     });
 
-    it('Header and Sidebar declare no onOpenBotManager they cannot forward', () => {
+    it('Header declares no onOpenBotManager it cannot forward', () => {
         expect(headerSrc).not.toMatch(/onOpenBotManager/);
-        expect(sidebarSrc).not.toMatch(/onOpenBotManager/);
+        // The sidebar itself is gone (stage 3): conversation history lives in
+        // the Agents rail, and a second sidebar would be a second list that
+        // can disagree.
+        expect(existsSync('components/shared/Sidebar.tsx')).toBe(false);
     });
 
     it('the per-seat overrides are edited from the Agents rail', () => {
@@ -126,11 +129,13 @@ describe('the surfaces live in the persistent nav rail', () => {
     });
 
     it('the rail keeps the orphaned entry points the old rail had', () => {
-        // Approvals and Switch profile had no other home; a rail that lists
-        // only the surfaces would strand both.
+        // Approvals stays a nav row; Switch profile moved onto the account
+        // row (stage 3) — profile actions belong on the profile row, but the
+        // rail must still carry both affordances somewhere.
+        expect(railSrc).toMatch(/data-testid="nav-approvals"|data-testid="nav-switch-user"/);
         const menuSrc = read('components/shell/SurfaceMenuList.tsx');
         expect(menuSrc).toMatch(/data-testid="nav-approvals"/);
-        expect(menuSrc).toMatch(/data-testid="nav-switch-user"/);
+        expect(railSrc).toMatch(/data-testid="nav-switch-user"/);
         expect(appSrc).toMatch(/onSwitchUser=\{handleSwitchUser\}/);
     });
 

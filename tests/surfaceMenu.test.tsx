@@ -1,9 +1,9 @@
 /**
- * SurfaceMenuList — the five surfaces as the hamburger menu's first section,
- * after the always-visible icon rail went. Every row states its keyboard
- * shortcut in its accessible name (the visible kbd is invisible to a screen
- * reader once aria-label owns the name), the active row is marked, and the
- * rail's two leftover entry points — Approvals and Switch profile — sit below.
+ * SurfaceMenuList — the five surfaces of the expanded nav rail. Every row
+ * states its keyboard shortcut in its accessible name (the visible kbd is
+ * invisible to a screen reader once aria-label owns the name), the active row
+ * is marked, and Approvals sits below the surfaces. Switch profile moved to
+ * the account row (NavRail) in stage 3 — it is a profile action, not nav.
  */
 
 import React from 'react';
@@ -66,18 +66,10 @@ describe('approvals entry point (WS-5.2)', () => {
         expect(screen.getByTestId('nav-approvals').textContent).toBe('Approvals');
     });
 
-    it('renders no approvals or switch-profile row without the handler', () => {
+    it('renders no approvals row without the handler', () => {
         renderMenu();
         expect(screen.queryByTestId('nav-approvals')).toBeNull();
+        // Switch profile is NOT here any more — the account row owns it.
         expect(screen.queryByTestId('nav-switch-user')).toBeNull();
-    });
-});
-
-describe('profile switching', () => {
-    it('fires the handler the rail used to carry', () => {
-        const onSwitchUser = vi.fn();
-        renderMenu({ onSwitchUser });
-        fireEvent.click(screen.getByTestId('nav-switch-user'));
-        expect(onSwitchUser).toHaveBeenCalledTimes(1);
     });
 });
