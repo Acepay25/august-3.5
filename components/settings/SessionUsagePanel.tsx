@@ -122,12 +122,16 @@ const SessionUsagePanel: React.FC = () => {
                     Clear usage history
                 </button>
             )}
-            <HarnessControls />
         </div>
     );
 };
 
-const HarnessControls: React.FC = () => {
+/**
+ * The harness's model-behavior dials (effort, guard, cost caps, checklist).
+ * Stage 3 moved them out of the Data tab — they are analysis behavior, not
+ * storage — and they now render in Settings → Analysis.
+ */
+export const HarnessControls: React.FC = () => {
     const [settings, setSettings] = useState(getHarnessSettings);
     const [checklist, setChecklist] = useState(loadChecklistConfig);
     const persist = (next: Partial<ReturnType<typeof getHarnessSettings>>): void => {

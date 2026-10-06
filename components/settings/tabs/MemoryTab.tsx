@@ -9,8 +9,6 @@ import ProfileMemoryCard from '../ProfileMemoryCard';
 import type { SettingsTabProps } from './types';
 
 export interface MemoryTabProps extends SettingsTabProps {
-    isGlobalMemoryEnabled?: boolean;
-    setIsGlobalMemoryEnabled?: (enabled: boolean) => void;
     /** Pre-bound `onOpenLearn('queue')` — bound once in SettingsMenu so the
      *  narrowing survives into the callback the child gets. */
     openLearnQueue?: () => void;
@@ -19,8 +17,6 @@ export interface MemoryTabProps extends SettingsTabProps {
 const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
     const {
         memoryConfig,
-        isGlobalMemoryEnabled,
-        setIsGlobalMemoryEnabled,
         onOpenLearn,
         openLearnQueue,
     } = props;
@@ -47,17 +43,9 @@ const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
                             {memoryConfig.selectedModel || memoryConfig.name || 'memory model'}
                         </span>
                     )}
-                    {setIsGlobalMemoryEnabled && (
-                        <label className="flex cursor-pointer items-center gap-2" data-testid="global-memory-setting">
-                            <input
-                                type="checkbox"
-                                checked={!!isGlobalMemoryEnabled}
-                                onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)}
-                                className="h-3.5 w-3.5 accent-cyan-400"
-                            />
-                            <span className="text-ui-dense text-zinc-300">Global memory</span>
-                        </label>
-                    )}
+                    {/* The global-memory switch lives on the Learn surface
+                        (MemoryFilesManager) — the one writer. This strip kept
+                        a second checkbox bound to the same flag. */}
                     {onOpenLearn && (
                         <button type="button" onClick={() => onOpenLearn('memory')}
                             data-testid="open-learn-memory"

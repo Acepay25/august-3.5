@@ -14,6 +14,7 @@ import { buildMemoryHealthReport, type MemoryHealthReport } from '../../services
 import { isHygieneDue, runMemoryHygiene } from '../../services/learning/memoryHygiene';
 import { loadProviderConfigs } from '../../services/infrastructure/ProviderConfigService';
 import { listTombstones, type SkillTombstone } from '../../services/learning/skillGraveyard';
+import { phtClock } from '../../utils/timezone';
 import StatusPill from '../ui/StatusPill';
 
 interface MemoryHealthCardProps {
@@ -40,6 +41,11 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
     const [report, setReport] = useState<MemoryHealthReport | null>(null);
     const [due, setDue] = useState(false);
     const [running, setRunning] = useState(false);
+    /** When the LAST manual hygiene pass finished. A pass that merged and
+     *  suspended nothing writes no log line, so without this the card cannot
+     *  distinguish "I ran it" from "nothing happened" — silence is not a
+     *  receipt. */
+    const [lastRunAt, setLastRunAt] = useState<Date | null>(null);
     // A read that FAILED is not a read that found nothing. These used to be the
     // same state — `catch { setReport(null) }` — so a store that could not be
     // read rendered an indefinite "Reading memory…" spinner, which is the one
@@ -74,6 +80,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
         try {
             await runMemoryHygiene(username, { providerConfigs: await loadProviderConfigs() });
             await load();
+            setLastRunAt(new Date());
         } catch (e) {
             // Previously try/finally with no catch: a failed pass rejected out
             // of the click handler, so the button simply stopped working and
@@ -272,6 +279,11 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                         {running ? 'Running…' : due ? 'Run now' : 'Run again'}
                     </button>
                 </div>
+                {lastRunAt && !running && (
+                    <p className="mt-1 text-ui-xs text-zinc-600" data-testid="memory-hygiene-ran">
+                        Pass finished at {phtClock(lastRunAt)}.
+                    </p>
+                )}
                 {hygieneError && (
                     <p role="alert" data-testid="memory-hygiene-error"
                         className="mt-1.5 flex items-start gap-1.5 text-ui-xs leading-4 text-rose-300">

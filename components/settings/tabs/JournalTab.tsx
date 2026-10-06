@@ -10,10 +10,12 @@ import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import AutoJournalRulesCard from '../AutoJournalRulesCard';
 import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import type { SettingsTabProps } from './types';
+import type { JournalUIState } from '../../../hooks/useJournalUI';
 
 export interface JournalTabProps extends SettingsTabProps {
     onClose: () => void;
-    onOpenJournal?: (tab?: string) => void;
+    /** Routes to the Journal SURFACE tab (stage 3). */
+    onOpenJournal?: (tab?: JournalUIState['tab']) => void;
     useAlgorithmicSummary?: boolean;
     onToggleAlgorithmicSummary?: (enabled: boolean) => void;
     useAlgorithmicInsights?: boolean;
@@ -24,13 +26,6 @@ export interface JournalTabProps extends SettingsTabProps {
 
 const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
     const { onClose, onOpenJournal, onOpenLearn, username } = props;
-    const trades = props.loggedTrades ?? [];
-    const totalTrades = trades.length;
-    const winTrades = trades.filter(t => t.outcome === 'WIN').length;
-    const lossTrades = trades.filter(t => t.outcome === 'LOSS').length;
-    const pendingTrades = trades.filter(t => !t.outcome || t.outcome === 'PENDING' || t.outcome === 'ENTRY_NOT_HIT').length;
-    const decidedTrades = winTrades + lossTrades;
-    const winRate = decidedTrades > 0 ? Math.round((winTrades / decidedTrades) * 100) : 0;
 
     return (
         <div className="space-y-5 animate-fade-in">
@@ -52,29 +47,8 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                 </button>
             </div>
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Total Logged</span>
-                    <p className="mt-1 font-mono text-xl font-bold text-zinc-100">{totalTrades}</p>
-                </div>
-                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Win Rate</span>
-                    <p className="mt-1 font-mono text-xl font-bold text-emerald-400">{decidedTrades > 0 ? `${winRate}%` : '—'}</p>
-                </div>
-                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Wins / Losses</span>
-                    <p className="mt-1 font-mono text-xl font-bold text-zinc-200">
-                        <span className="text-emerald-400">{winTrades}</span>
-                        <span className="text-zinc-600 mx-1">/</span>
-                        <span className="text-rose-400">{lossTrades}</span>
-                    </p>
-                </div>
-                <div className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-3.5">
-                    <span className="text-ui-xs uppercase font-semibold tracking-wider text-zinc-500">Open / Pending</span>
-                    <p className="mt-1 font-mono text-xl font-bold text-amber-400">{pendingTrades}</p>
-                </div>
-            </div>
+            {/* Stage 3: the four stat tiles are gone — Profile owns the
+                identical numbers, and this tab is a launcher. */}
 
             {/* Quick navigation cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -32,6 +32,7 @@ import { Header } from './components/shared/Header';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
+import type { JournalUIState } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
 import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
@@ -134,7 +135,6 @@ import NavRail, { NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
 // (hash router + openJournal) only mounts it, so Suspense below is enough.
 const Journal = React.lazy(() => import('./components/journal/Journal').then(m => ({ default: m.Journal })));
 import { useModelCatalogRefresh } from './hooks/useModelCatalogRefresh';
-const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
 
 /**
  * Rebuilds a File from a data URL so persisted chart images can be
@@ -180,7 +180,6 @@ const App: React.FC = () => {
         isStrategySearchVisible, setIsStrategySearchVisible,
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
-        isVersionHistoryVisible, setIsVersionHistoryVisible,
         isLivePostMortemVisible, setIsLivePostMortemVisible,
         showMismatchModal, setShowMismatchModal,
         isVisionDataVisible, setIsVisionDataVisible,
@@ -195,7 +194,6 @@ const App: React.FC = () => {
         isSummaryInProgress, setIsSummaryInProgress,
         isInsightGenerating, setIsInsightGenerating,
         isAutoCapturing, setIsAutoCapturing,
-        isUpdateAutoCapturing, setIsUpdateAutoCapturing,
         isEntryNotHitCapturing, setIsEntryNotHitCapturing,
         isAutoCaptureBusy, setIsAutoCaptureBusy,
         isUpdateCaptureBusy, setIsUpdateCaptureBusy,
@@ -215,9 +213,6 @@ const App: React.FC = () => {
     React.useEffect(() => {
         if (isStrategySearchVisible) setIsStrategySearchEverOpened(true);
     }, [isStrategySearchVisible]);
-
-    // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
-    const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
 
     // Provider configuration (API keys, base URLs, custom providers), plus the
     // display/lookup maps derived from that catalog — see useProviderConfigs.
@@ -396,7 +391,7 @@ const App: React.FC = () => {
         journalFocusTradeId, setJournalFocusTradeId,
         journalOpenNonce,
         surfaceEnterFrom, setSurfaceEnterFrom,
-        handleSurfaceSelect,
+        handleSurfaceSelect, openJournal,
     } = useSurfaceRouter({
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
@@ -1353,7 +1348,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1364,7 +1359,6 @@ const App: React.FC = () => {
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isWatchListVisible) setIsWatchListVisible(false);
                 if (isApprovalInboxVisible) setIsApprovalInboxVisible(false);
-                if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
                 return;
             }
             if (isAnalysisInProgress || isPostMortemInProgress) {
@@ -1377,7 +1371,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -1471,7 +1465,7 @@ const App: React.FC = () => {
         visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
         isAccuracyModeEnabled, accuracySubMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing,
+        isHybridIntelligenceEnabled, isAutoCapturing,
         isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
         confidenceCalibration,
     });
@@ -1967,18 +1961,16 @@ const App: React.FC = () => {
         setSurface('trade');
     }, [setSurface]);
 
-    const handleOpenJournal = useCallback(() => {
-        // Open Settings directly to the Journal tab instead of the overlay
-        setIsSettingsMenuVisible(true);
-        setSettingsInitialTab('journal');
-    }, []);
+    // Settings → Journal's launcher cards route to the JOURNAL SURFACE.
+    // They used to call a handler that re-opened Settings at its own Journal
+    // tab — a launcher loop the audit caught (the surface was never reachable
+    // from Settings). One route now, the same one every other affordance uses.
+    const handleOpenJournal = useCallback((tab: JournalUIState['tab'] = 'log') => {
+        openJournal(tab);
+    }, [openJournal]);
 
     const handleOpenLiveMarket = useCallback(() => {
         setIsLiveMarketVisible(true);
-    }, []);
-
-    const handleOpenVersionHistory = useCallback(() => {
-        setIsVersionHistoryVisible(true);
     }, []);
 
     // Journal props were rebuilt per render (fresh array/object identities),
@@ -2039,7 +2031,6 @@ const App: React.FC = () => {
         setIsHybridIntelligenceEnabled,
         setIsEnsembleEnabled,
         setIsAutoCapturing,
-        setIsUpdateAutoCapturing,
         setIsEntryNotHitCapturing,
         setConfidenceCalibration,
         setAutopilotResolutions,
@@ -2175,16 +2166,6 @@ const App: React.FC = () => {
         return () => window.removeEventListener('august:try-skill', onTrySkill);
     }, []);
 
-    // Allow inner surfaces (Chart AI dock composer empty-state, header
-    // updates) to open Settings without prop-drilling through every layer.
-    useEffect(() => {
-        const onOpenSettings = (): void => {
-            setIsSettingsMenuVisible(true);
-        };
-        window.addEventListener('august:open-settings', onOpenSettings);
-        return () => window.removeEventListener('august:open-settings', onOpenSettings);
-    }, []);
-
 
     useWatchSideEffects({
         messagesRef,
@@ -2303,10 +2284,6 @@ const App: React.FC = () => {
             {/* Custom confirm dialog + undo toast (replaces window.confirm) */}
             {ConfirmDialogComponent}
 
-            {isVersionHistoryVisible && (
-                <VersionHistoryDashboard onClose={() => setIsVersionHistoryVisible(false)} />
-            )}
-
             {/* Desktop auto-update overlay (Electron only).
                 Renders null in the browser and whenever no update is in
                 progress, so it's a safe no-op outside Electron. */}
@@ -2396,12 +2373,8 @@ const App: React.FC = () => {
                 setIsHybridIntelligenceEnabled={setIsHybridIntelligenceEnabled}
                 isAutoCapturing={isAutoCapturing}
                 onToggleAutoCapturing={() => setIsAutoCapturing(!isAutoCapturing)}
-                isUpdateAutoCapturing={isUpdateAutoCapturing}
-                onToggleUpdateAutoCapturing={() => setIsUpdateAutoCapturing(!isUpdateAutoCapturing)}
                 isEntryNotHitCapturing={isEntryNotHitCapturing}
                 onToggleEntryNotHitCapturing={() => setIsEntryNotHitCapturing(!isEntryNotHitCapturing)}
-                isGlobalMemoryEnabled={isGlobalMemoryEnabled}
-                setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
                 isStrategiesEnabled={isStrategiesEnabled}
                 setIsStrategiesEnabled={setIsStrategiesEnabled}
                 memoryConfig={memoryConfig}
@@ -2439,8 +2412,6 @@ const App: React.FC = () => {
                 onUpdateModel={handleUpdateModel}
                 loggedTrades={loggedTrades}
                 onOpenJournal={handleOpenJournal}
-                settingsInitialTab={settingsInitialTab}
-                onSettingsInitialTabConsumed={() => setSettingsInitialTab(undefined)}
             />
             </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
@@ -2522,7 +2493,6 @@ const App: React.FC = () => {
                 isAnalysisInProgress={isAnalysisInProgress}
                 isPostMortemInProgress={isPostMortemInProgress}
                 currentVisionData={currentVisionData}
-                onOpenVersionHistory={handleOpenVersionHistory}
                 surface={surface}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 isOnline={isOnline}
@@ -2696,7 +2666,6 @@ const App: React.FC = () => {
                                 openNonce={journalOpenNonce}
                                 initialTradeId={journalFocusTradeId}
                                 onInitialTradeConsumed={handleReasoningTradeConsumed}
-                                isEmbedded={true}
                                 username={activeUsername || undefined}
                                 trades={loggedTrades}
                                 onDeleteTrades={handleDeleteTrades}

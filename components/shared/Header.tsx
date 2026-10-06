@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { LoadingIcon, CheckIcon, EyeIcon, ActivityIcon, CloudOffIcon, HistoryIcon, AlertTriangleIcon, PanelLeftOpen } from './Icons';
+import { LoadingIcon, CheckIcon, EyeIcon, ActivityIcon, CloudOffIcon, AlertTriangleIcon, PanelLeftOpen } from './Icons';
 import { useUpdateStatusDot } from './UpdateButton';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { baseOf } from '../../utils/symbol';
@@ -16,7 +16,6 @@ interface HeaderProps {
      *  you are, not a control that moves you somewhere. */
     surface: AppSurface;
     setIsLivePostMortemVisible: (visible: boolean) => void;
-    onOpenVersionHistory: () => void; // New prop for Changelog
     // Network status
     isOnline?: boolean;
     pendingQueueCount?: number;
@@ -52,7 +51,6 @@ export const Header: React.FC<HeaderProps> = memo(({
     isPostMortemInProgress,
     surface,
     setIsLivePostMortemVisible,
-    onOpenVersionHistory,
     isOnline = true,
     liveMarketConditions,
     liveMarketSymbol,
@@ -343,17 +341,6 @@ export const Header: React.FC<HeaderProps> = memo(({
                             </button>
                         </div>
                     )}
-
-                    {/* System Intelligence */}
-                    <button
-                        type="button"
-                        onClick={onOpenVersionHistory}
-                        className="p-2 text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800 rounded-lg transition-colors"
-                        title="System Intelligence"
-                        aria-label="System Intelligence"
-                    >
-                        <HistoryIcon className="h-5 w-5" />
-                    </button>
 
                     {isPostMortemInProgress && (
                         <button

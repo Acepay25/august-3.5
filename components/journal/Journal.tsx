@@ -7,14 +7,13 @@ import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import {CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon, BotIcon, BookmarkIcon, FileSpreadsheet, FileText} from '../shared/Icons';
+import {HistoryIcon, ChartBarIcon, BrainIcon, BotIcon, BookmarkIcon, FileSpreadsheet, FileText} from '../shared/Icons';
 import SavedAnalyses from './SavedAnalyses';
 import { EmptyState } from '../ui/EmptyState';
 
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome, SavedAnalysis } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
-import { buildHumanCalibration, humanCalibrationLine as humanCalLine } from '../../utils/preRead';
 import { getActiveUsername } from '../../utils/activeUser';
 import { ProviderConfig } from '../../types/provider';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -23,7 +22,6 @@ interface JournalProps {
     isVisible: boolean;
     onClose: () => void;
     initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning' | 'saved';
-    isEmbedded?: boolean;
     /** Deep link: auto-select this analysis run in the Think (reasoning) tab. */
     initialTradeId?: string;
     /** Monotonic counter bumped by App on every openJournal. Re-apply the
@@ -155,7 +153,7 @@ const ExportTray: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
 };
 
 const JournalInner: React.FC<JournalProps> = ({
-    isVisible, onClose, initialTab, isEmbedded = false,
+    isVisible, onClose, initialTab,
     initialTradeId, openNonce, onInitialTradeConsumed, username,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateTradeType, onUpdateOutcome, onUpdatePnL,
@@ -322,127 +320,64 @@ const JournalInner: React.FC<JournalProps> = ({
         ) : null
     );
 
-    if (isEmbedded) {
-        return (
-            <div className="flex flex-col h-full bg-zinc-950 overflow-hidden animate-fade-in">
-                <div className="shrink-0 px-8 pt-10 pb-2 flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                        <h2 className="font-serif text-3xl tracking-tight text-zinc-100">Journal</h2>
-                        {!documentOpen && (
-                            <p className="text-sm text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
-                        )}
-                    </div>
-                    {/* CSV / printable-report export — these buttons used to
-                        live only in the removed overlay branch, so the
-                        embedded journal silently lost trade export. */}
+    // The legacy overlay branch (backdrop + side-sheet + bottom tab bar) is
+    // deleted (stage 3): tests/journalSurfaceNavigation.test.tsx pins that
+    // App's ONLY <Journal> render is the embedded surface, so that chrome
+    // could never mount. This branch carries the export tray and tab strip.
+    return (
+        <div className="flex flex-col h-full bg-zinc-950 overflow-hidden animate-fade-in">
+            <div className="shrink-0 px-8 pt-10 pb-2 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <h2 className="font-serif text-3xl tracking-tight text-zinc-100">Journal</h2>
                     {!documentOpen && (
-                        <div className="shrink-0 flex items-center gap-2 pt-1">
-                            <ExportTray trades={trades} />
-                        </div>
+                        <p className="text-sm text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
                     )}
                 </div>
+                {/* CSV / printable-report export — these buttons used to
+                    live only in the removed overlay branch, so the
+                    embedded journal silently lost trade export. */}
                 {!documentOpen && (
-                <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-2 overflow-x-auto custom-scrollbar">
-                    {TABS.map((tab) => {
-                        const isActive = activeTab === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                role="tab"
-                                id={`journal-tab-${tab.id}`}
-                                aria-selected={isActive}
-                                aria-controls={`journal-panel-${activeTab}`}
-                                tabIndex={isActive ? 0 : -1}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
-                                    isActive
-                                        ? 'bg-zinc-800 text-zinc-100 shadow-sm'
-                                        : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
-                                }`}
-                            >
-                                <span className={isActive ? 'text-zinc-100' : 'text-zinc-500'}>{tab.icon}</span>
-                                <span>{tab.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
+                    <div className="shrink-0 flex items-center gap-2 pt-1">
+                        <ExportTray trades={trades} />
+                    </div>
                 )}
-                <div
-                    role="tabpanel"
-                    id={`journal-panel-${activeTab}`}
-                    aria-labelledby={`journal-tab-${activeTab}`}
-                    className="flex-1 overflow-hidden min-h-[480px]"
-                >
-                    {renderContent()}
-                </div>
             </div>
-        );
-    }
-
-    return (
-        <>
-            {/* Backdrop */}
+            {!documentOpen && (
+            <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-2 overflow-x-auto custom-scrollbar">
+                {TABS.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            id={`journal-tab-${tab.id}`}
+                            aria-selected={isActive}
+                            aria-controls={`journal-panel-${activeTab}`}
+                            tabIndex={isActive ? 0 : -1}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+                                isActive
+                                    ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
+                            }`}
+                        >
+                            <span className={isActive ? 'text-zinc-100' : 'text-zinc-500'}>{tab.icon}</span>
+                            <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+            )}
             <div
-                className="fixed inset-0 bg-black/70 z-40 animate-fade-in"
-                onClick={onClose}
-            />
-
-            {/* Main Panel - Full screen on mobile, side panel on desktop */}
-            <aside role="dialog" aria-modal="true" aria-label="Trading Journal" className=" fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[560px] lg:w-[640px] bg-zinc-950 z-50 flex flex-col border-l border-zinc-800 animate-slide-up sm:animate-slide-left">
-
-                {/* Modern Header */}
-                <header className="shrink-0 px-6 pt-6 pb-2">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="font-serif text-2xl tracking-tight text-zinc-100">Journal</h1>
-                            <p className="text-sm text-zinc-500 mt-2">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <ExportTray trades={trades} />
-                            <button
-                                onClick={onClose}
-                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
-                                aria-label="Close journal"
-                            >
-                                <CloseIcon />
-                            </button>
-                        </div>
-                    </div>
-                </header>
-
-                <div className="flex-1 overflow-hidden">
-                    {renderContent()}
-                </div>
-
-                {/* Bottom Navigation Bar - Mobile Optimized */}
-                <nav className="shrink-0 bg-zinc-950 border-t border-zinc-800 px-3 pb-safe">
-                    <div className="flex items-center justify-around py-3">
-                        {TABS.map((tab) => {
-                            const isActive = activeTab === tab.id;
-                            return (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl transition-[background-color,box-shadow] duration-[150ms] ease-[var(--ease-snappy)] min-w-[56px] ${isActive
-                                        ? 'bg-zinc-800 ring-1 ring-zinc-600'
-                                        : 'hover:bg-zinc-900'
-                                        }`}
-                                >
-                                    <div className={`transition-colors ${isActive ? tab.activeColor : tab.color}`}>
-                                        {tab.icon}
-                                    </div>
-                                    <span className={`text-ui-xs font-medium transition-colors ${isActive ? tab.activeColor : 'text-zinc-600'
-                                        }`}>
-                                        {tab.shortLabel}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </nav>
-            </aside>
-        </>
+                role="tabpanel"
+                id={`journal-panel-${activeTab}`}
+                aria-labelledby={`journal-tab-${activeTab}`}
+                className="flex-1 overflow-hidden min-h-[480px]"
+            >
+                {renderContent()}
+            </div>
+        </div>
     );
 };
 
@@ -456,7 +391,6 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = 
 
 const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
   const stats = useMemo(() => computeJournalStats(trades), [trades]);
-  const humanCal = useMemo(() => buildHumanCalibration(trades), [trades]);
   // Pass-mining counter-metric: the sweep resolves SKIPPED trades
   // post-hoc; the journal shows the two sides of discipline — passes the
   // market vindicated (CORRECT_PASS) and passes that cost a move
@@ -483,15 +417,6 @@ const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }
         sub={`best ${stats.bestWinStreak}W / ${-stats.bestLossStreak}L`}
       />
       <Stat label="Top strategy" value={top?.key ?? '—'} sub={top ? `${top.trades} trades · ${top.winRate}% WR` : undefined} />
-      {/* Pre-read capture: the human-Brier vs verdict-Brier row — only
-          when the user has committed priors. Anti-automation-bias display. */}
-      {humanCal && (
-        <Stat
-          label="Your calls vs verdict"
-          value={humanCal.humanBrier !== null ? humanCal.humanBrier.toFixed(2) : '—'}
-          sub={humanCalLine(humanCal) || `${humanCal.n} pre-read trade(s)`}
-        />
-      )}
       {/* the pass ledger — vindicated skips draft avoid-skills;
           missed opportunities are a counter-metric ONLY (we never teach
           the system to take more trades). */}

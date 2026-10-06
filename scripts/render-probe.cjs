@@ -1376,21 +1376,31 @@ async function main() {
         // overlay, or routes anywhere — each candidate gets a FRESH visit so one
         // control's effect cannot be credited to the next, and it is found by
         // label rather than index because a click can add or remove rows.
-        const sweepSurface = async (label, cap) => {
-            const visit = async () => {
+        const sweepSurface = async (label, cap, tabs = []) => {
+            const visit = async (tabTestId) => {
                 let how = await navTo(label);
                 if (how === 'not found') {
                     await openMenu();
                     await sleep(400);
                     await navTo(label);
                 }
+                if (tabTestId) {
+                    await page.evaluate((id) => document
+                        .querySelector(`[data-testid="${id}"]`)?.click(), tabTestId);
+                }
                 await sleep(1200);
             };
             const tried = new Set();
             const inert = [];
             const unverifiable = [];
-            for (let n = 0; n < cap; n += 1) {
-                await visit();
+            // A tabbed surface keeps everything off its default tab OUT of the
+            // DOM, so pressing only the tab buttons would sweep one view and
+            // call the other panels judged. Enter each tab and sweep what it
+            // reveals; the press budget is split across the views.
+            const perView = Math.max(2, Math.ceil(cap / (tabs.length + 1)));
+            for (const tabTestId of [null, ...tabs]) {
+            for (let n = 0; n < perView; n += 1) {
+                await visit(tabTestId);
                 // Pick from what is ON SCREEN NOW and click in the same
                 // evaluate, so the measurement is of the control that was
                 // actually pressed. Enumerating a name list up front and
@@ -1423,6 +1433,10 @@ async function main() {
                     // correct behavior for the chip that is already on.
                     const state = () => ({
                         text: main.innerText.trim(),
+                        // An inline editor is alive even though it adds no text:
+                        // "New folder" reveals an empty, focused <input>, and
+                        // innerText alone cannot tell that from a dead button.
+                        fields: main.querySelectorAll('input, textarea, [contenteditable="true"]').length,
                         hash: window.location.hash,
                         overlay: !!document.querySelector('[role="dialog"], [role="alertdialog"]'),
                     });
@@ -1446,11 +1460,13 @@ async function main() {
                     const main = document.querySelector('main') || document.body;
                     const now = {
                         text: (main.innerText || '').trim(),
+                        fields: main.querySelectorAll('input, textarea, [contenteditable="true"]').length,
                         hash: window.location.hash,
                         overlay: !!document.querySelector('[role="dialog"], [role="alertdialog"]'),
                     };
                     return {
                         moved: now.text !== base.text
+                            || now.fields !== base.fields
                             || (now.hash !== base.hash)
                             || (now.overlay && !base.overlay),
                     };
@@ -1463,6 +1479,7 @@ async function main() {
                 }
                 await dismissOverlays();
             }
+            }
             // The vacuity guard: a sweep that exercised almost nothing must not
             // report a clean bill of health.
             check(`${label} sweep really clicked controls (${tried.size})`,
@@ -1472,7 +1489,13 @@ async function main() {
                 `${inert.join(' | ')}${unverifiable.length ? `   [not judgeable: ${unverifiable.join(', ')}]` : ''}`
                     .slice(0, 400));
         };
-        await sweepSurface('Learn', 14);
+        // Learn is tabbed five ways. Sweeping only the default tab left the
+        // other four panels unjudged — the gate could not see a dead control
+        // inside Memory, Health, Coach or System.
+        await sweepSurface('Learn', 18, [
+            'learn-tab-queue', 'learn-tab-memory', 'learn-tab-health',
+            'learn-tab-coach', 'learn-tab-system',
+        ]);
         // Precondition, checked not assumed: if the seeded journal had not
         // loaded, every filter chip would look inert and the sweep would fail
         // for the wrong reason — or worse, pass by skipping everything.

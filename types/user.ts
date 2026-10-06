@@ -36,7 +36,6 @@ export interface UserSettings {
   isEnsembleEnabled?: boolean; // Ensemble debate mode (off = casual chat)
   isStrategiesEnabled?: boolean; // Master switch: inject uploaded strategy books into analysis prompts
   isAutoCapturing?: boolean; // Prompt for post-trade result capture
-  isUpdateAutoCapturing?: boolean; // Prompt for active trade updates
   isEntryNotHitCapturing?: boolean; // Prompt when entry price is not hit
   useAlgorithmicSummary?: boolean; // Journal AI Review: false = AI (default), true = algorithmic (free)
   useAlgorithmicInsights?: boolean; // Trade insight generation: false = AI (default), true = algorithmic

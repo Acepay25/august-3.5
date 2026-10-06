@@ -96,7 +96,6 @@ export interface UseUserProfileLoaderArgs {
     setIsHybridIntelligenceEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEnsembleEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setIsAutoCapturing: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsUpdateAutoCapturing: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEntryNotHitCapturing: React.Dispatch<React.SetStateAction<boolean>>;
     setConfidenceCalibration: React.Dispatch<React.SetStateAction<any>>;
     setAutopilotResolutions: React.Dispatch<React.SetStateAction<Record<string, any>>>;
@@ -139,7 +138,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsStrategiesEnabled, setIsAccuracyModeEnabled, setAccuracySubMode,
         setCustomInstructions, setIsPlaybookEnabledInPureAI, setIsFamiliesEnabledInPureAI,
         setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled,
-        setIsEnsembleEnabled, setIsAutoCapturing, setIsUpdateAutoCapturing,
+        setIsEnsembleEnabled, setIsAutoCapturing,
         setIsEntryNotHitCapturing, setConfidenceCalibration, setAutopilotResolutions,
         setInput, setImages, setExpandedPostMortems,
         setIsLoading, setActiveUsername, setExistingUsernames, setIsUserModalOpen,
@@ -229,7 +228,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
         setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
         setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
-        setIsUpdateAutoCapturing(profile.settings?.isUpdateAutoCapturing ?? false);
         setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
         setConfidenceCalibration(profile.settings?.confidenceCalibration);
 
@@ -247,7 +245,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsAccuracyModeEnabled, setAccuracySubMode, setCustomInstructions,
         setIsPlaybookEnabledInPureAI, setIsFamiliesEnabledInPureAI,
         setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled, setIsEnsembleEnabled,
-        setIsAutoCapturing, setIsUpdateAutoCapturing, setIsEntryNotHitCapturing,
+        setIsAutoCapturing, setIsEntryNotHitCapturing,
         setConfidenceCalibration, setMemoryConfig, setMemoryModel, setInsightKnowledgeBase,
     ]);
 
@@ -272,7 +270,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsMemoryEnabledInPureAI(false);
         setIsHybridIntelligenceEnabled(false);
         setIsAutoCapturing(false);
-        setIsUpdateAutoCapturing(false);
         setIsEntryNotHitCapturing(false);
         setActiveFrameworks(DEFAULT_FRAMEWORKS);
         setSummaryCharLimit(4000);
@@ -306,7 +303,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                     isMemoryEnabledInPureAI: false,
                     isHybridIntelligenceEnabled: false,
                     isAutoCapturing: false,
-                    isUpdateAutoCapturing: false,
                     isEntryNotHitCapturing: false,
                     useAlgorithmicSummary: false,
                     useAlgorithmicInsights: false,
@@ -324,7 +320,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsAutoCapturing, setIsEntryNotHitCapturing, setIsFamiliesEnabledInPureAI,
         setIsGlobalMemoryEnabled, setIsHybridIntelligenceEnabled,
         setIsMemoryEnabledInPureAI, setIsPlaybookEnabledInPureAI,
-        setIsUpdateAutoCapturing, setLoggedTrades, setMemoryConfig,
+        setLoggedTrades, setMemoryConfig,
         setMemoryModel, setSavedAnalyses, setSummarizationModel,
         setSummarizationProvider, setSummaryCharLimit, setTradeSummaries,
     ]);

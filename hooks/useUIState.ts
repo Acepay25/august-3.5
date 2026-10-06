@@ -29,7 +29,6 @@ interface UIStateShape {
     isSummaryInProgress: boolean;
     isInsightGenerating: boolean;
     isAutoCapturing: boolean;
-    isUpdateAutoCapturing: boolean;
     isEntryNotHitCapturing: boolean;
     // Transient capture spinners — SEPARATE from the persisted "prompt for
     // capture" settings above. Previously the modals drove the setting flags
@@ -63,7 +62,6 @@ const initialState: UIStateShape = {
     isSummaryInProgress: false,
     isInsightGenerating: false,
     isAutoCapturing: false,
-    isUpdateAutoCapturing: false,
     isEntryNotHitCapturing: false,
     isAutoCaptureBusy: false,
     isUpdateCaptureBusy: false,
@@ -106,7 +104,6 @@ const PROGRESS_KEYS: (keyof UIStateShape)[] = [
     'isSummaryInProgress',
     'isInsightGenerating',
     'isAutoCapturing',
-    'isUpdateAutoCapturing',
     'isEntryNotHitCapturing',
     'isAutoCaptureBusy',
     'isUpdateCaptureBusy',

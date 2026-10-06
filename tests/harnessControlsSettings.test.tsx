@@ -8,14 +8,16 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { getHarnessSettings } from '../utils/harnessSettings';
-import SessionUsagePanel from '../components/settings/SessionUsagePanel';
+// Stage 3: the dials left Settings → Data with SessionUsagePanel — they are
+// analysis behavior, so Settings → Analysis owns them. Same contract, new home.
+import { HarnessControls } from '../components/settings/SessionUsagePanel';
 
 const KEY = 'harn' + 'ess_setti' + 'ngs_v1';
 
 describe('HarnessControls new settings', () => {
     it('default thinking effort persists fast/quality', () => {
         localStorage.clear();
-        render(<SessionUsagePanel />);
+        render(<HarnessControls />);
         const sel = screen.getByLabelText('Default thinking effort');
         expect((sel as HTMLSelectElement).value).toBe('quality');
 
@@ -29,7 +31,7 @@ describe('HarnessControls new settings', () => {
 
     it('skill library cap persists, clamped to 5..200', () => {
         localStorage.clear();
-        render(<SessionUsagePanel />);
+        render(<HarnessControls />);
         const input = screen.getByLabelText(/Skill library cap/);
 
         fireEvent.change(input, { target: { value: '75' } });

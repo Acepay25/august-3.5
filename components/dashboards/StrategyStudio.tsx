@@ -397,7 +397,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 </div>
                 {onClose && (
                     <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
-                        Back to Chat
+                        Back to Trade
                     </button>
                 )}
             </div>

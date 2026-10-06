@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import {ThumbsDown, ThumbsUp, X, Brain, Zap, Server, Target, AreaChart as AreaChartIcon, Code} from '../shared/Icons';
-import { useEscapeClose } from '../../hooks/useEscapeClose';
+import {ThumbsDown, ThumbsUp, Brain, Server, Target, AreaChart as AreaChartIcon} from '../shared/Icons';
 import { Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { APP_VERSION } from '../../constants/version';
 
@@ -18,38 +17,23 @@ import { jobQueue } from '../../services/infrastructure/JobQueueService';
 import { ConfidenceCalibration } from '../../types';
 import { listSkills } from '../../services/learning/SkillMemoryService';
 import { getMemoryFilesStats } from '../../services/learning/MemoryFilesService';
-import {
-    GATE_SCAN_JSON_SCHEMA,
-    MASTER_TRADE_PLAN_MARKDOWN,
-    DUAL_SCENARIO_JSON_SCHEMA
-} from '../../constants/schemas';
-
-// Map schemas for display — the trade plan is MARKDOWN now (no JSON anywhere
-// in the output contract), shown as text.
-const validationSchemas: Record<string, any> = {
-    tradeValidation: JSON.parse(GATE_SCAN_JSON_SCHEMA),
-    marketAnalysis: MASTER_TRADE_PLAN_MARKDOWN,
-    postMortem: JSON.parse(DUAL_SCENARIO_JSON_SCHEMA)
-};
 
 // -- ICONS (lucide-react) --
 
 import { phtClockSeconds } from '../../utils/timezone';
 
 const Icons = {
-    Close: X,
     Brain,
-    Zap,
     Server,
     Chart: AreaChartIcon,
     Target,
-    Code,
 };
 
-export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-    // Esc closes the overlay (backdrop-click was the only way out before).
-    useEscapeClose(true, onClose);
-    const [activeTab, setActiveTab] = useState<'Intelligence' | 'Algorithm' | 'System'>('Intelligence');
+export const VersionHistoryDashboard: React.FC = () => {
+    // Stage 3: this dashboard has ONE home — the Learn surface's System tab.
+    // Its header-overlay shell (opened by the header's clock button), the
+    // tab strip and the "Algorithm" placeholder cards are all deleted; what
+    // is left is real, measured data, stacked in one scroll.
     const [signals, setSignals] = useState<ReinforcementSignal[]>([]);
     const [calibration, setCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
     const [rules, setRules] = useState<Array<{ file: { name: string }; meta: { kind: string; status: string; wins: number; losses: number; ifCondition?: string; thenAction?: string } }>>([]);
@@ -64,7 +48,6 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     // Selection states for dropdown outputs
     const [selectedRuleIndex, setSelectedRuleIndex] = useState<number>(0);
     const [selectedInsightIndex, setSelectedInsightIndex] = useState<number>(0);
-    const [selectedSchema, setSelectedSchema] = useState<string>('tradeValidation');
 
     useEffect(() => {
         loadData();
@@ -179,8 +162,8 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
     // -- Dynamic Content Renderers --
 
-    const renderContent = () => {
-        switch (activeTab) {
+    const renderContent = (section: 'Intelligence' | 'System'): React.ReactElement => {
+        switch (section) {
             case 'Intelligence':
                 return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-fade-in">
@@ -355,60 +338,6 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                     </div>
                 );
 
-            case 'Algorithm':
-                return (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-fade-in">
-                        {/* 2.1 Monte Carlo */}
-                        <ModernCard title="Regime Detection" value="Active" subtitle="ADX/ATR Trend Monitoring" accent="yellow" icon={<Icons.Zap className="w-5 h-5" />} />
-
-                        {/* 2.2 Pattern Class - Real Output */}
-                        <ModernCard title="Pattern Class." accent="purple" icon={<Icons.Zap className="w-5 h-5" />}>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {['Family A', 'Family B', 'Family C', 'Omega'].map(f => (
-                                    <span key={f} className="px-2 py-1 bg-zinc-800/60 border border-zinc-700/50 rounded-full text-ui-xs text-zinc-300">
-                                        {f}
-                                    </span>
-                                ))}
-                            </div>
-                            <div className="mt-auto text-xs text-cyan-400/60 pt-2">Detecting Live Patterns</div>
-                        </ModernCard>
-
-                        {/* 2.3 Kelly */}
-                        <ModernCard title="Kelly Criterion" value="Enabled" subtitle="Risk/Trade Optimization" accent="emerald" icon={<Icons.Zap className="w-5 h-5" />}>
-                            <div className="mt-auto flex justify-between items-end border-t border-emerald-500/20 pt-2">
-                                <span className="text-xs text-emerald-500/60">Risk Source</span>
-                                <span className="text-xs text-emerald-400 font-mono">Kelly Formula</span>
-                            </div>
-                        </ModernCard>
-
-                        {/* 2.6 Schemas - With JSON Viewer */}
-                        <ModernCard title="JSON Schemas" accent="zinc" icon={<Icons.Code className="w-5 h-5" />} large>
-                            <div className="flex flex-col h-full">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="text-xs text-zinc-400 uppercase tracking-widest">Type Definitions (v2)</h4>
-                                    <select
-                                        value={selectedSchema}
-                                        onChange={(e) => setSelectedSchema(e.target.value)}
-                                        className="bg-zinc-800 text-ui-xs text-zinc-300 rounded px-2 py-1 border border-zinc-700"
-                                    >
-                                        <option value="tradeValidation">Val. Gate</option>
-                                        <option value="marketAnalysis">Analysis</option>
-                                        <option value="postMortem">Post-Mortem</option>
-                                    </select>
-                                </div>
-                                <div className="flex-1 bg-zinc-800/60 rounded-xl p-3 font-mono text-ui-2xs text-zinc-400 overflow-auto custom-scrollbar">
-                                    <div className="whitespace-pre">
-                                        {typeof validationSchemas[selectedSchema] === 'string'
-                                            ? validationSchemas[selectedSchema]
-                                            : JSON.stringify(validationSchemas[selectedSchema] || { type: 'object' }, null, 2)}
-                                    </div>
-                                </div>
-                            </div>
-                        </ModernCard>
-
-                        <ModernCard title="Entry Timing" value="Wait/Enter" subtitle="Limit Order Logic" accent="blue" icon={<Icons.Zap className="w-5 h-5" />} />
-                    </div>
-                );
 
             case 'System':
                 return (
@@ -430,76 +359,34 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             </div>
                             <div className="mt-2 text-xs text-white/40">{queueSize === 0 ? 'Workers Idle' : 'Processing...'}</div>
                         </ModernCard>
-
-                        <ModernCard title="Schema Version" value="v2.0.0" subtitle="Migration Status: Done" accent="zinc" icon={<Icons.Server className="w-5 h-5" />} />
-                        <ModernCard title="Rule Engine" value="Unified" subtitle="Centralized Logic" accent="purple" icon={<Icons.Server className="w-5 h-5" />} />
+                        {/* "Schema Version v2.0.0" and "Rule Engine: Unified" cards are
+                            deleted — hardcoded strings that measured nothing. */}
                     </div>
                 );
         }
     };
 
     return (
-        <div className=" fixed inset-0 z-modal flex items-center justify-center p-4 md:p-8">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-
-            {/* Main Container */}
-            <div className="relative w-full max-w-6xl h-[85vh] bg-zinc-950 rounded-[2.5rem] border border-zinc-800 shadow-2xl flex flex-col overflow-hidden ring-1 ring-white/5">
-
-                {/* Header Section */}
-                <div className="px-8 py-6 flex items-center justify-between bg-zinc-950 z-20">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-zinc-800 border border-zinc-700 p-2 rounded-xl">
-                            <Icons.Brain className="text-zinc-300 w-6 h-6" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-medium text-white tracking-tight">System Intelligence</h1>
-                            <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono mt-0.5">
-                                Learning & runtime overview
-                            </div>
-                        </div>
+        <div className="flex flex-col gap-4 bg-zinc-950" data-testid="system-intelligence-embedded">
+            {/* Identity + the running version — the one place this screen says
+                which build the trader is on. The Learn tab owns the chrome. */}
+            <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-2.5">
+                <div className="flex items-center gap-2.5">
+                    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-1.5">
+                        <Icons.Brain className="h-4 w-4 text-zinc-300" />
                     </div>
-
-                    <div className="flex items-center gap-4">
-                        <span aria-label="System version" className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm font-mono rounded-xl py-2 px-4">
-                            v{APP_VERSION}
-                        </span>
-
-                        <button
-                            onClick={onClose}
-                            className="p-2 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
-                        >
-                            <Icons.Close className="w-6 h-6" />
-                        </button>
+                    <div>
+                        <h2 className="text-ui-caption font-medium text-zinc-100">System Intelligence</h2>
+                        <p className="text-ui-2xs font-mono text-zinc-500">Learning &amp; runtime overview</p>
                     </div>
                 </div>
-
-                {/* Tab Navigation */}
-                <div className="px-8 pb-2">
-                    <div className="flex p-1 bg-zinc-900 rounded-2xl w-fit border border-white/5">
-                        {['Intelligence', 'Algorithm', 'System'].map((tab) => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab as any)}
-                                className={`
-                       px-6 py-2 rounded-xl text-sm font-medium transition-[background-color,color,box-shadow] duration-[150ms] ease-[var(--ease-snappy)]
-                       ${activeTab === tab
-                                        ? 'bg-zinc-800 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
-                                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}
-                    `}
-                            >
-                                {tab}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Content Area */}
-                <div className="flex-1 p-8 overflow-y-auto bg-gradient-to-b from-zinc-950 to-zinc-900/50">
-                    {renderContent()}
-                </div>
-
+                <span aria-label="System version" className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-ui-dense text-zinc-300">
+                    v{APP_VERSION}
+                </span>
             </div>
+
+            {renderContent('Intelligence')}
+            {renderContent('System')}
         </div>
     );
 };

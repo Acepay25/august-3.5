@@ -10,6 +10,7 @@ import React from 'react';
 import { Activity, ChevronDown, Layers, ShieldCheck, Users, Wrench } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import DeskSeatMappingEditor from '../DeskSeatMappingEditor';
+import { HarnessControls } from '../SessionUsagePanel';
 import { SegmentedControl, SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import { setIdleMotionEnabled } from '../../../services/desk/idleMotion';
 import { saveHarnessSettings } from '../../../utils/harnessSettings';
@@ -32,8 +33,6 @@ export interface GeneralTabProps extends SettingsTabProps {
     setIsHybridIntelligenceEnabled?: (enabled: boolean) => void;
     isAutoCapturing?: boolean;
     onToggleAutoCapturing?: () => void;
-    isUpdateAutoCapturing?: boolean;
-    onToggleUpdateAutoCapturing?: () => void;
     isEntryNotHitCapturing?: boolean;
     onToggleEntryNotHitCapturing?: () => void;
     // Parent-local state, passed down (see header comment).
@@ -74,8 +73,6 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
         setIsMemoryEnabledInPureAI,
         isAutoCapturing,
         onToggleAutoCapturing,
-        isUpdateAutoCapturing,
-        onToggleUpdateAutoCapturing,
         isEntryNotHitCapturing,
         onToggleEntryNotHitCapturing,
     } = props;
@@ -221,20 +218,22 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                             </SettingsGroup>
                         )}
 
+                        {/* The harness's model-behavior dials — effort, guard,
+                            cost caps, checklist — moved here from the Data tab
+                            (stage 3): they are analysis behavior. */}
+                        <SettingsGroup title="Harness dials" description="Model effort, session guard and cost caps.">
+                            <HarnessControls />
+                        </SettingsGroup>
+
                         {onToggleAutoCapturing && (
                             <SettingsGroup title="Automated capture prompts" description="When to ask for trade results automatically. All default: off.">
                                 <SettingsRow
                                     title="Post-trade result capture"
-                                    description="Ask for the outcome after a trade settles."
+                                    description={isAutoCapturing
+                                        ? 'On — when the autopilot confirms a WIN/LOSS, the full capture modal opens so dollars and discipline tags reach the journal.'
+                                        : 'Off — an autopilot-confirmed outcome logs immediately (percent-only PnL).'}
                                     control={<ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} label="Toggle post-trade result capture" />}
                                 />
-                                {onToggleUpdateAutoCapturing && (
-                                    <SettingsRow
-                                        title="Active trade updates"
-                                        description="Ask to refresh an open position's status."
-                                        control={<ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} label="Toggle active trade update capture" />}
-                                    />
-                                )}
                                 {onToggleEntryNotHitCapturing && (
                                     <SettingsRow
                                         title="Entry not hit"
