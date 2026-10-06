@@ -75,6 +75,15 @@ jobs:
       - name: Render probe (rendered rows, inert controls, zero pageerrors)
         run: npm run render-probe
 
+      # The human-actuation path. `approveSkillDraft` and the queue's Apply were
+      # unit-green while NOTHING had ever pressed the button in a browser, so the
+      # read-back guard and the "it did not save" toasts were untested claims —
+      # and this probe existed and was still not wired to run. It drives the four
+      # draft outcomes (saved / name collision / duplicate / no folder) plus the
+      # queue Apply, and asserts the notebook BYTES after each click.
+      - name: Skill-approval probe (real clicks, notebook bytes after each)
+        run: npm run skill-approval-probe
+
   # ── DIAGNOSTIC ONLY, NEVER A GATE ─────────────────────────────────────────
   # The teardown race this hunts is INTERMITTENT and load-dependent: it took
   # PR #39 red on 4,165 passing tests, could not be reproduced locally in any
