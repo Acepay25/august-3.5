@@ -196,15 +196,99 @@ export const loadSessions = (): ChatSession[] => {
     }
 };
 
-const trimForStorage = (sessions: ChatSession[]): ChatSession[] => sessions
-    .slice(-MAX_SESSIONS)
-    .map(s => ({ ...s, entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry) }));
+const trimForStorage = (sessions: ChatSession[]): ChatSession[] => fitToByteBudget(
+    sessions
+        .slice(-MAX_SESSIONS)
+        .map(s => ({ ...s, entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry) })),
+);
+
+/**
+ * A COUNT cap is not a SIZE cap, and this store needs both.
+ *
+ * 12 sessions × 60 entries is unbounded in bytes: `MAX_IMAGE_CHARS` lets a single
+ * entry carry 1.2 MB, so the list can ask for hundreds of megabytes against a
+ * ~5 MB origin quota. The quota is SHARED — on web this store IS `localStorage`
+ * (see `PreferencesService`), so one fat chat makes every other store's write
+ * throw too, while the transcript still looks saved in memory. The count trim
+ * above could never catch that, because 3 sessions full of screenshots is already
+ * under it.
+ *
+ * Trim in the order that costs the trader least: oldest screenshots first (the
+ * TEXT of that exchange survives — a chart image can be re-taken, a past
+ * argument cannot), then entries past the count cap, then whole oldest sessions.
+ */
+export const MAX_STORED_CHARS = 3_500_000;
+
+const serialized = (sessions: ChatSession[]): string => {
+    try {
+        return JSON.stringify(sessions);
+    } catch {
+        // A cycle cannot be built by these readers, but a throw here must not
+        // become a lost transcript: an empty string trims everything, and the
+        // caller still has the in-memory copy.
+        return '';
+    }
+};
+
+const fitToByteBudget = (sessions: ChatSession[]): ChatSession[] => {
+    let size = serialized(sessions).length;
+    if (size <= MAX_STORED_CHARS) return sessions;
+    // Work on copies; sessions and entries are ordered oldest first, which is
+    // the order both passes sacrifice in.
+    const work: ChatSession[] = sessions.map(s => ({ ...s, entries: s.entries.map(e => ({ ...e })) }));
+
+    // Pass 1 — drop the oldest screenshot, one at a time. The words of that
+    // exchange stay: an image can be re-taken, a past argument cannot.
+    //
+    // Size is tracked by SUBTRACTING each removed image rather than re-serializing
+    // the whole list per drop: a base64 payload escapes identically inside JSON, so
+    // the arithmetic is exact where it matters, and re-measuring a half-gigabyte
+    // blob once per image is what made this loop unusable.
+    for (const s of work) {
+        for (const e of s.entries) {
+            if (size <= MAX_STORED_CHARS) return work;
+            if (!e.image) continue;
+            size -= e.image.length + '"image":'.length + 2;
+            e.image = undefined;
+        }
+    }
+
+    // Pass 2 — shave the oldest transcripts, newest entries first, down to ten.
+    for (const s of work) {
+        if (size <= MAX_STORED_CHARS) break;
+        if (s.entries.length <= 10) continue;
+        const removed = s.entries.slice(0, s.entries.length - 10);
+        s.entries = s.entries.slice(-10);
+        size -= removed.reduce((n, e) => n + (e.text?.length ?? 0) + e.id.length + 24, 0);
+    }
+
+    // Pass 3 — the only thing left to lose is whole oldest conversations.
+    while (size > MAX_STORED_CHARS && work.length > 1) {
+        const gone = work.shift()!;
+        size -= gone.entries.reduce((n, e) => n + (e.text?.length ?? 0) + e.id.length + 24, 0);
+    }
+    return work;
+};
+
+/** Strip every image — the retry that keeps a transcript saving at all. */
+const withoutAnyImages = (sessions: ChatSession[]): ChatSession[] =>
+    sessions.map(s => ({ ...s, entries: s.entries.map(e => (e.image ? { ...e, image: undefined } : e)) }));
 
 export const saveSessions = (sessions: ChatSession[]): void => {
+    const key = storageKey();
+    const trimmed = trimForStorage(sessions);
     try {
-        localStorage.setItem(storageKey(), JSON.stringify(trimForStorage(sessions)));
+        localStorage.setItem(key, serialized(trimmed));
     } catch {
-        /* quota / private mode — chats stay in memory this session */
+        // Quota or private mode. Retry with the screenshots gone rather than
+        // reporting silence: losing the transcript is worse than losing the
+        // images, and a swallowed throw meant BOTH stores failed quietly.
+        try {
+            localStorage.setItem(key, serialized(withoutAnyImages(trimmed)));
+            console.warn('[chatSessions] saved without screenshots after a quota failure');
+        } catch {
+            console.error('[chatSessions] transcript NOT persisted (quota or private mode)');
+        }
     }
 };
 
