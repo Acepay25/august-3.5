@@ -3686,3 +3686,54 @@ export const reviewSkillEffectiveness = (opts: SkillEffectivenessReviewOptions =
         .filter((s): s is SkillEffectiveness => s !== null)
         .sort((a, b) => (a.hitRate ?? 2) - (b.hitRate ?? 2)); // weakest first
 };
+
+/**
+ * Apply a queued proposal by its KIND — the one dispatcher both approval
+ * surfaces call.
+ *
+ * The Skills queue and the Coach inbox each carried their own copy of this
+ * branch, and they had already begun to drift in how they read the payload.
+ * That is the failure mode this exists to remove: a proposal the human approved
+ * in one place must not act differently because the other surface dispatches on
+ * kind with a slightly different clause. Step C adds kinds; with one dispatcher
+ * a new kind is wired once.
+ *
+ * Never throws: a failed write comes back as `write-failed` so the caller keeps
+ * the row on screen rather than draining a proposal the library never took.
+ */
+export const applyLearningProposalByKind = async (
+    proposal: { kind: string; skillSlug?: string; payload?: unknown },
+    username: string,
+): Promise<ProposalApplyResult> => {
+    const slug = (name: string | undefined, fallback: string | undefined): string => name || fallback || '';
+    try {
+        switch (proposal.kind) {
+            case 'displacement': {
+                const p = proposal.payload as { displacedSlug?: string; challenger?: unknown } | undefined;
+                return await applyDisplacementProposal(slug(p?.displacedSlug, proposal.skillSlug), username, p?.challenger as never);
+            }
+            case 'revival': {
+                const p = proposal.payload as { slug?: string } | undefined;
+                return await applyRevivalProposal(slug(p?.slug, proposal.skillSlug), username);
+            }
+            case 'demote': {
+                const p = proposal.payload as { slug?: string } | undefined;
+                return await applyDemoteProposal(slug(p?.slug, proposal.skillSlug), username);
+            }
+            case 'rescope': {
+                // The clauses the PROPOSER wrote, applied as written. This is what
+                // makes `revise_skill` actionable by a person at all.
+                const c = proposal.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
+                return await applyRescopeProposal(proposal.skillSlug || '', {
+                    ifCondition: c?.ifCondition,
+                    thenAction: c?.thenAction,
+                    predicate: c?.predicate,
+                }, username);
+            }
+            default:
+                return { applied: false, reason: 'no-clauses' };
+        }
+    } catch (e) {
+        return { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
+    }
+};

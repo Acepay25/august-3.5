@@ -12,10 +12,7 @@ import {
     type ProposalApplyResult,
 } from '../../utils/learningQueue';
 import {
-    applyDisplacementProposal,
-    applyRevivalProposal,
-    applyDemoteProposal,
-    applyRescopeProposal,
+    applyLearningProposalByKind,
     approvePendingRewrite,
     revertPendingRewrite,
 } from '../../services/learning/SkillMemoryService';
@@ -218,30 +215,10 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
         setBusyId(p.id);
         setFailure(null);
         const username = getActiveUsername();
-        let result: ProposalApplyResult;
-        try {
-            if (p.kind === 'displacement') {
-                const payload = p.payload as { displacedSlug?: string; challenger?: never } | undefined;
-                result = await applyDisplacementProposal(payload?.displacedSlug || p.skillSlug || '', username, payload?.challenger as never);
-            } else if (p.kind === 'revival') {
-                result = await applyRevivalProposal((p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '', username);
-            } else if (p.kind === 'demote') {
-                result = await applyDemoteProposal((p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '', username);
-            } else if (p.kind === 'rescope') {
-                // The clauses the PROPOSER wrote, applied as written — the same
-                // call the queue strip makes, so both surfaces act identically.
-                const c = p.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
-                result = await applyRescopeProposal(p.skillSlug || '', {
-                    ifCondition: c?.ifCondition,
-                    thenAction: c?.thenAction,
-                    predicate: c?.predicate,
-                }, username);
-            } else {
-                result = { applied: false, reason: 'no-clauses' };
-            }
-        } catch (e) {
-            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
-        }
+        // One dispatcher for both approval surfaces — see
+        // applyLearningProposalByKind. A proposal acted on from here and from
+        // the Skills queue must not be able to disagree.
+        const result = await applyLearningProposalByKind(p, username);
         setBusyId(null);
         // A refusal keeps the card: it is the human's only copy of this proposal,
         // and the reason is the writer's, not a guess made from a bare false.

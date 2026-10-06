@@ -10,10 +10,7 @@ import {
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import StatusPill from '../ui/StatusPill';
 import {
-    applyDisplacementProposal,
-    applyRevivalProposal,
-    applyDemoteProposal,
-    applyRescopeProposal,
+    applyLearningProposalByKind,
     approvePendingRewrite,
     revertPendingRewrite,
 } from '../../services/learning/SkillMemoryService';
@@ -85,33 +82,10 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
         setBusyId(p.id);
         setFailure(null);
         const username = getActiveUsername();
-        let result: ProposalApplyResult;
-        try {
-            if (p.kind === 'displacement') {
-                const payload = p.payload as { displacedSlug?: string; challenger?: never } | undefined;
-                const displaced = payload?.displacedSlug || p.skillSlug || '';
-                result = await applyDisplacementProposal(displaced, username, payload?.challenger as never);
-            } else if (p.kind === 'revival') {
-                const slug = (p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '';
-                result = await applyRevivalProposal(slug, username);
-            } else if (p.kind === 'demote') {
-                const slug = (p.payload as { slug?: string } | undefined)?.slug || p.skillSlug || '';
-                result = await applyDemoteProposal(slug, username);
-            } else if (p.kind === 'rescope') {
-                // The clauses the PROPOSER wrote, applied as written. This is
-                // what makes `revise_skill` actionable by a person at all.
-                const c = p.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
-                result = await applyRescopeProposal(p.skillSlug || '', {
-                    ifCondition: c?.ifCondition,
-                    thenAction: c?.thenAction,
-                    predicate: c?.predicate,
-                }, username);
-            } else {
-                result = { applied: false, reason: 'no-clauses' };
-            }
-        } catch (e) {
-            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
-        }
+        // One dispatcher for both approval surfaces — see
+        // applyLearningProposalByKind. A proposal acted on from here and from
+        // the Skills queue must not be able to disagree.
+        const result = await applyLearningProposalByKind(p, username);
         setBusyId(null);
         // Never drain a row the library did not act on, and never claim a bare
         // "failed": the reason comes from the writer that refused.
