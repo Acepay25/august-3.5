@@ -213,12 +213,15 @@ export function useConfirmDialog() {
                     </div>
                 </div>
             )}
-            {/* Undo toast */}
+            {/* Undo toast — role=status because it APPEARS on its own after a
+                confirmed delete; without a live region a screen reader never
+                hears "Action completed", and the 5s grace window closes. */}
             {undoVisible && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[101] animate-fade-in">
+                <div role="status" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[101] animate-fade-in">
                     <div className="flex items-center gap-4 px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl shadow-2xl">
                         <span className="text-sm text-zinc-200">Action completed</span>
                         <button
+                            type="button"
                             onClick={handleUndo}
                             className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
                         >
