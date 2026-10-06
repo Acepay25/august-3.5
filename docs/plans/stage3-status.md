@@ -1,67 +1,81 @@
 # Stage 3 — status (read this first, then `stage3-arrangement.md`)
 
-Branch `stage3-ui-arrangement`. A–E, F1, F2, F3a, F3b, F4a committed.
-Gates per commit: `typecheck` + `test` (4623 passing, 483 files) + `lint`
-(0 errors) + `build`; `render-probe` green after E, F2 and (E+)Learn's tabbed
-sweep; `boot-probe` green after E. **Nothing here is unverified in the app.**
+Branch `stage3-ui-arrangement`, HEAD `9021242`. A–E and F1–F4 committed.
+Phase **G is struck** (user decision, recorded in `stage3-arrangement.md`).
 
-Phases A–E: `2abdd22` `2089d28` `3d824ba` `a5a8319` `20b64cf`.
-Phase F: `a9add1f` F1 · `f80adc2` F2 · `34079eb` F3a · `cddd52a` F3b · `78ad437` F4a.
+Gates on this tree: typecheck 0, vitest 483 files / 4633 tests 0 fail, eslint 0
+errors, `vite build` ok, `render-probe` ok (last run after F2), `boot-probe` ok.
+**NOTHING IS MERGED** — merge awaits user confirmation.
 
-## Remaining, with the exact resume point
+## Trial merges (throwaway worktrees, no refs moved)
 
-1. **F4b — amber model-fallback warning on the Chat surface.** The warning
-   already exists and is shared: `components/trade/panels/ChatComposer.tsx:104-111`
-   (`data-testid="model-fallback-warning"`, driven by props `modelIssue` +
-   `provider`). It is dock-only today because the Chat surface's composer is the
-   separate one inside `components/agents/AgentsView.tsx` (~:529-547, where the
-   paperclip was handled in Phase C). The work is plumbing `modelIssue`/`provider`
-   to that composer — do NOT duplicate the JSX. Verify with `render-probe`
-   (a press/absence check on the testid), not just unit tests.
-2. **F4c — Journal → Models tab reading planId-linked rows.** `LoggedTrade.planId`
-   now exists and is stamped; `ModelPerformanceDashboard` still groups only by
-   `modelsUsed`. Decide the actual feature before coding (planId gives
-   plan-level, not model-level, attribution — it may belong in the Stats tab).
-3. **G (strikeable) — Playbooks merge.** `StrategiesManager` upload → Studio;
-   Settings → Playbooks becomes a pointer card.
-4. PnL unit unification (F3 item) was NOT implemented as "compute dollars at
-   resolution": no margin/position size is captured anywhere
-   (`investmentAmount: undefined` at `hooks/useTradeLogging.ts`), so a derived
-   dollar would be indistinguishable from a captured one. `rowPnlUsd`
-   (`services/validation/SessionGuardService.ts:70`) stays the single derivation,
-   and rows/exports label the unit. Needs a product decision: capture margin in
-   DataCaptureModal, or accept percent-only rows.
+| Target | Merge | typecheck | vitest |
+|---|---|---|---|
+| `main` | fast-forward, no conflicts | 0 errors | 483 files / 4633 pass |
+| `workstream1-trade-review` | fast-forward, no conflicts | 0 errors | 483 files / 4633 pass |
+
+`merge-base(main, stage3) = c9b03ed` = `workstream1-trade-review`'s tip, and
+`stage3..main` is empty — both targets are ancestors of this branch, so the
+merges cannot conflict and the gate runs are the only real information. Worktrees
+were created at `../wt-trial-*` with `node_modules` junctions, removed junction-
+first afterwards; the real `node_modules` was verified intact.
+
+## Still open in Phase F
+
+1. **F4b — the amber model-fallback warning on the Chat surface composer.**
+   Not done. The warning lives at `components/trade/panels/ChatComposer.tsx:104-111`
+   and is fed by `modelIssue` computed in `components/trade/TradeChatPanel.tsx:493-502`
+   from `selectedChatModel` + `providers`. The Chat surface composer is the one
+   inlined in `components/agents/AgentsView.tsx` (~:1104-1150), which receives
+   NEITHER `providers` NOR `selectedChatModel` today. Correct shape: extract the
+   `modelIssue` computation into `utils/providerUtils.ts` (it already owns
+   `resolveChatModelSelection` / `findChatModelOwner` / `chatModelIdOf`), thread
+   the two props into AgentsView, render the shared banner component — do not
+   copy the JSX. Verify with `render-probe` (stale-model fixture → the testid
+   must appear), not unit tests alone.
+2. **F4c — Journal → Models tab reading planId-linked rows.** Not done, and the
+   premise needs a decision first: `planId` is plan-level, the Models tab is
+   model-level, so planId adds no attribution there. What is actually missing is
+   a plan-level view (per-plan: how the plan performed), which belongs in Stats.
 
 ## Facts paid for — do not rediscover
 
-- Journal: embedded branch only (`isEmbedded` prop deleted); overlay + the
-  "your calls vs verdict" stat deleted (nothing writes `userPriorCall`; see the
-  purge note at `hooks/useWatchAndAutopilot.ts:110`).
-- `VersionHistoryDashboard`: no props, no overlay shell, no tab strip; only mount
-  is Learn → System. Its Algorithm placeholders and the hardcoded "Schema Version
-  v2.0.0"/"Rule Engine" cards are gone.
-- Settings → Journal routes through `openJournal` (App's one `handleOpenJournal`);
-  the `settingsInitialTab` chain is deleted. `isUpdateAutoCapturing` is deleted
-  everywhere incl. `types/user.ts` — `UpdateTradeModal` has no auto trigger.
+- Journal: embedded branch only (`isEmbedded` deleted); the overlay + the
+  "your calls vs verdict" stat are gone (nothing writes `userPriorCall`).
+- `VersionHistoryDashboard`: no props, no overlay, no tab strip; only mount is
+  Learn → System. Hardcoded placeholder cards deleted.
+- Settings → Journal routes through `openJournal`; `settingsInitialTab` and
+  `isUpdateAutoCapturing` are deleted everywhere including `types/user.ts`.
   `isAutoCapturing` IS wired (`confirmAutopilotOutcome` → capture modal).
-- `utils/recentTradesBrief.ts` is the ONLY place the journal is read in explicit
-  log-time order; `computeJournalStats` counts the trailing run of whatever order
-  it is handed, so sort before calling it. Dollar/percent PnL stay separate.
-- `get_trade_log`: budget 4000 (a 20-row window measures ~2.7k — pinned by
-  `tests/tradeLogTool.test.ts`), NOT in `CACHEABLE_TOOLS` on purpose, and absent
-  from `MARKET_TOOLS` (journal, not market).
-- Only the recent-form **tally** is injected into prompts
-  (`services/learning/MemoryRetrievalService.ts` `recentFormBlock`, pushed for all
-  stages/audiences + provenance `journal/recent-form`). Twenty rows would spend
-  the stage budget skills/rules compete for; the rows are a tool call away.
-- MAE/MFE: measured in `verifyHistoricalOutcome` (only place tape+entry+exit index
-  coexist), raw price %, scaled by the ONE helper
-  `toLeveragedExcursionPct` (`services/backtesting/outcomeEngine.ts`) — the
-  post-mortem's local copy was removed. Absent ≠ 0.
+- `utils/recentTradesBrief.ts` owns explicit log-time ordering;
+  `computeJournalStats` counts the trailing run of whatever order it is handed,
+  so sort before calling it. Dollar and percent PnL never merge.
+- **realizedR is the canonical outcome label**, computed by
+  `realizedRFromPrices` (`services/backtesting/outcomeEngine.ts`) — used by BOTH
+  the post-mortem's candle validation and the autopilot's
+  `verifyHistoricalOutcome`. `rMultiple` is the older leveraged-percent figure.
+- MAE/MFE scaled only by `toLeveragedExcursionPct` (same module). Rows carry
+  `rSource` / `excursionSource` (`autopilot` | `postMortem`); first writer wins,
+  the post-mortem will not clobber an autopilot measurement.
+- Recent-form brief is AUDIENCE-SPLIT: analysts get neutral day-level rows
+  (no win rate, no streak, no net PnL — ~1.2k chars, 20 rows); moderator and
+  post-mortem get `tallyLine`. Both are fingerprinted into the injection record
+  (`journal/recent-form`, `fingerprint`), reachable from a row's `sourceRunId`.
+- `get_trade_log`: 4000-char budget (a 20-row read measures ~2.7k), deliberately
+  NOT cached, not a MARKET_TOOL.
+- Training JSONL: `utils/reportExport.ts`, `TRAINING_SCHEMA_VERSION = 1`, nests
+  `decision` / `outcome` / `lesson` / `provenance`, `incomplete` + `missing[]`.
+  Never derives dollars. Entry candles are reconstructed from
+  `decision.symbol` + `decision.analysisCreatedAt` + entry via
+  `fetchFuturesOHLCVFromTime` — not stored.
+- The "Log this trade" dedupe keys on `LoggedTrade.planId` / `Message.planId`.
+  The headline-text match is gone; pre-F3a rows carry no planId and can therefore
+  be re-logged — accepted, and the only known data gap from this phase.
 - `render-probe`: `sweepSurface(label, cap, tabs)` enters each tab; a newly
-  revealed `input/textarea/[contenteditable]` counts as a live press. Learn
-  presses 16; floor is `min(cap, 6)` — do not lower it. Journal tabs are reached
-  by **id** (`#journal-tab-analytics`), not a testid.
-- `trainingRecordFor` (`utils/reportExport.ts`): every key present on every line,
-  null for unknown; never derives dollars it does not have; debate turns counted
-  only.
+  revealed input/textarea counts as a live press. Journal tabs are reached by id
+  (`#journal-tab-analytics`). Learn presses 16; floor `min(cap, 6)` — do not lower.
+- SQLite needs NO migration for the new fields: save spreads everything non-column
+  into the `meta` TEXT column, read spreads `...meta` back. Proven by
+  `tests/sqliteService.test.ts` ("stage-3 trade fields round-trip"), which also
+  asserts zero `ALTER TABLE trades` statements and that a legacy row's missing
+  keys stay `undefined`.
