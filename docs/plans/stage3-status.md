@@ -1,11 +1,15 @@
 # Stage 3 — status (read this first, then `stage3-arrangement.md`)
 
-Branch `stage3-ui-arrangement`, HEAD `9021242`. A–E and F1–F4 committed.
-Phase **G is struck** (user decision, recorded in `stage3-arrangement.md`).
+**MERGED AND PUSHED 2026-10-06.** `stage3-ui-arrangement` fast-forwarded `main`
+`c9b03ed → 2c42cfe`; `origin/main` = `2c42cfe`, zero divergence, no force used.
+Phases A–E and F1–F4 (incl. F4b) are on main; **F4c dropped** and **G struck** per
+user decision — both recorded in `stage3-arrangement.md`.
 
-Gates on this tree: typecheck 0, vitest 483 files / 4633 tests 0 fail, eslint 0
-errors, `vite build` ok, `render-probe` ok (last run after F2), `boot-probe` ok.
-**NOTHING IS MERGED** — merge awaits user confirmation.
+Gates were run in a clean worktree holding the merged `main` (not on the feature
+branch): typecheck 0, `typecheck:electron` 0, vitest 484 files / 4641 tests 0
+fail, eslint 0 errors, `vite build` ok, `render-probe` OK, `boot-probe` OK. The
+worktree was created with `git worktree add ../wt-merge-main main`, deps by
+junction, and removed junction-first; `node_modules` verified intact.
 
 ## Trial merges (throwaway worktrees, no refs moved)
 
@@ -20,9 +24,15 @@ merges cannot conflict and the gate runs are the only real information. Worktree
 were created at `../wt-trial-*` with `node_modules` junctions, removed junction-
 first afterwards; the real `node_modules` was verified intact.
 
-## Still open in Phase F
+## Still open
 
-1. **F4b — the amber model-fallback warning on the Chat surface composer.**
+1. **Live-journal counts (requested pre-merge, not obtained).** The rows are under
+   the packaged app's `app://` IndexedDB origin (`AppData\Roamingugust-trading`),
+   unreadable headlessly; the dev profile copy at `http://localhost:3000` held only
+   `FuturesAI-DB → userProfiles (0)` and `august_offline_queue (0)`. Two exact
+   routes: the DevTools snippet over the `trades` store, or a Settings → Data
+   export file counted through the real `trainingRecordFor`.
+2. **F4b — the amber model-fallback warning on the Chat surface composer.**
    Not done. The warning lives at `components/trade/panels/ChatComposer.tsx:104-111`
    and is fed by `modelIssue` computed in `components/trade/TradeChatPanel.tsx:493-502`
    from `selectedChatModel` + `providers`. The Chat surface composer is the one
