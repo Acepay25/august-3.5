@@ -9,6 +9,12 @@ import type { ProviderConfig } from '../../types/provider';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import { baseOf } from '../../utils/symbol';
 import { phtStamp } from '../../utils/timezone';
+import {
+    RECENT_TRADES_WINDOW,
+    buildRecentTradesBrief,
+    selectRecentTrades,
+    tallyLine,
+} from '../../utils/recentTradesBrief';
 import type { FinishReason } from '../../utils/finishReason';
 import { truncatesOutput } from '../../utils/finishReason';
 import { fenceUntrusted } from '../../utils/untrusted';
@@ -353,6 +359,13 @@ const TOOL_BUDGETS: Record<string, number> = {
     // read_tool_output, which is only offered to seats that can call it
     // (see spillReceiptAllowed).
     get_chart_view: 8000,
+    // A 20-row journal read is the whole point of the tool, so it must arrive
+    // whole: a row is `2026-10-04T14:32:07.000Z BTCUSDT Long LOSS · +180.0% ·
+    // -1.20R · breakout · [moved_stop]` ≈ 90 chars, plus the JSON quotes,
+    // indentation and the tally line. Twenty rows measured ~2.7k, which the
+    // 2400 default would have cut to 17 rows SILENTLY to the seat — the exact
+    // failure the get_chart_view budget exists to prevent.
+    get_trade_log: 4000,
 };
 
 /**
@@ -606,6 +619,7 @@ const TOOL_LABELS: Record<string, string> = {
     revise_skill: 'skill revision',
     recall: 'notebook recall',
     get_setup_history_stats: 'setup history',
+    get_trade_log: 'trade log',
     run_screener: 'screener',
     run_monte_carlo: 'monte carlo',
     recall_chat: 'session search',
@@ -681,6 +695,14 @@ const rawToolDigest = (name: string, content: string): string => {
             if (sample <= 0) return 'no logged trades';
             const wr = typeof parsed.winRate === 'number' ? `${Math.round(parsed.winRate * 100)}% win` : '';
             return `${parsed.wins}W/${parsed.losses}L${wr ? ` (${wr})` : ''}`;
+        }
+        if (name === 'get_trade_log') {
+            const returned = typeof parsed.returned === 'number' ? parsed.returned : 0;
+            if (returned === 0) return 'no journal rows matched';
+            const scope = typeof parsed.coin === 'string' ? parsed.coin
+                : typeof parsed.outcome === 'string' ? parsed.outcome
+                    : 'journal';
+            return `${returned} logged ${returned === 1 ? 'trade' : 'trades'} · ${scope}`;
         }
     } catch {
         // Not JSON — fall through to the generic line.
@@ -1155,6 +1177,25 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 properties: {
                     symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
                     direction: { type: 'string', enum: ['Long', 'Short', 'Neutral'], description: 'Trade direction to filter by.' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_trade_log',
+            description:
+                'The journal itself, oldest-first: one compact row per logged trade with the ISO time it was logged, outcome, PnL in the unit actually captured ($ or leveraged %), price-measured R, the strategy named at analysis time and any discipline tags. Use it to browse WHAT YOU ACTUALLY DID rather than an aggregate of it — "how have my last ten trades gone", "every loss on SOL this month", "was I overtrading last week". Aggregates for one setup type are get_setup_history_stats.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    limit: { type: 'integer', description: 'Most recent rows to return, 1-50 (default 20).' },
+                    coin: { type: 'string', description: 'Base coin, e.g. BTC or BTCUSDT. Omit for the whole journal.' },
+                    outcome: { type: 'string', enum: ['WIN', 'LOSS', 'PENDING', 'ENTRY_NOT_HIT', 'SKIPPED'], description: 'Only rows with this outcome.' },
+                    strategy: { type: 'string', description: 'Substring of the strategy named at analysis time, or an exact strategy family.' },
+                    since: { type: 'string', description: 'ISO date or datetime — only trades logged at or after it, e.g. 2026-10-01.' },
                 },
                 additionalProperties: false,
             },
@@ -2766,6 +2807,31 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     : { coin, direction: direction ?? 'any', sample: 0, note: `No closed trades logged for ${coin}${direction ? ` ${direction}` : ''}.` }, null, 2);
                 break;
             }
+            case 'get_trade_log': {
+                const rawLimit = Number(call.arguments.limit);
+                const limit = Number.isFinite(rawLimit)
+                    ? Math.max(1, Math.min(50, Math.floor(rawLimit)))
+                    : RECENT_TRADES_WINDOW;
+                const filter = {
+                    coin: asString(call.arguments.coin) || undefined,
+                    outcome: asString(call.arguments.outcome) || undefined,
+                    strategy: asString(call.arguments.strategy) || undefined,
+                    since: asString(call.arguments.since) || undefined,
+                };
+                const rows = selectRecentTrades(context.trades ?? [], { ...filter, limit });
+                const brief = buildRecentTradesBrief(rows);
+                content = JSON.stringify({
+                    ...filter,
+                    limit,
+                    returned: rows.length,
+                    tally: tallyLine(brief, `Last ${rows.length} logged trades`),
+                    rows: brief.rows.map(r => r.line),
+                    ...(rows.length === 0
+                        ? { note: 'No journal row matches that filter. That is not evidence of inactivity — only of no match.' }
+                        : {}),
+                }, null, 2);
+                break;
+            }
             default:
                 content = `Unknown tool: ${call.name}`;
                 return { toolCallId: call.id, name: call.name, ok: false, content };
@@ -2818,6 +2884,10 @@ export const ARBITER_ALLOWED_TOOLS = [
     'recall',
     'recall_chat',
     'get_setup_history_stats',
+    // The arbiter judges claims about the trader's own record. Aggregate-only
+    // access left it unable to check "my last five losses were all revenge
+    // trades" against the rows the trader can see.
+    'get_trade_log',
     'get_session_context',
     'web_search',
     // The arbiter is the seat most likely to be handed a clipped evidence pack
