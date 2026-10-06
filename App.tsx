@@ -86,7 +86,7 @@ const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import ModelPicker from './components/shared/ModelPicker';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
-import { isProviderReady } from './utils/providerUtils';
+import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
 import { DEFAULT_LEVERAGE } from './utils/conversationUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
@@ -2780,6 +2780,13 @@ const App: React.FC = () => {
                                         <ModelPicker providers={providerConfigs} value={selectedChatModel}
                                             onChange={setSelectedChatModel} onRefreshModels={refreshModelCatalog} compact />
                                     )}
+                                    modelFallback={(() => {
+                                        // Same helper the dock uses, over the same
+                                        // list the picker offers: a stale pick warns
+                                        // here as loudly as it does in the dock.
+                                        const f = computeChatModelFallback(providerConfigs, selectedChatModel);
+                                        return f.issue && f.provider ? { issue: f.issue, provider: f.provider } : null;
+                                    })()}
                                     onOpenInDock={() => {
                                         // Chat → Chart AI: the chart arrives from
                                         // the RIGHT. This path deliberately does

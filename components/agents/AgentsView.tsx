@@ -38,6 +38,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
+import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
+import type { ProviderConfig } from '../../types/provider';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
@@ -120,6 +122,11 @@ interface AgentsViewProps {
      *  own trigger labelled with the current selection) rather than a button
      *  that leaves the surface to reach Settings. */
     modelPicker?: React.ReactNode;
+    /** Why the stored chat model cannot answer, and what will instead (stage 3
+     *  F4b). The Chat surface runs the same solo pick as the dock, so it must
+     *  carry the same amber warning — hidden while a bot is selected, because a
+     *  bot answers from its own config and the pick is irrelevant to it. */
+    modelFallback?: { issue: string; provider: ProviderConfig } | null;
     /** Focus this same thread in the Chart AI dock — the two surfaces show
      *  one conversation, and this is how you hop between them. */
     onOpenInDock?: () => void;
@@ -381,7 +388,7 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, onOpenInDock, surfaceEnterFrom = null,
+    lastOpenedMap = {}, modelPicker, modelFallback = null, onOpenInDock, surfaceEnterFrom = null,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
     botStats,
     providerReady = false,
@@ -1103,6 +1110,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                         {/* ── Composer pill ── */}
                         <div className="shrink-0 px-4 pb-4">
+                            {!activeBot && modelFallback && (
+                                <ModelFallbackBanner modelIssue={modelFallback.issue} provider={modelFallback.provider} />
+                            )}
                             <div className="chat-column rounded-2xl border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"

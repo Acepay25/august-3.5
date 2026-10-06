@@ -93,6 +93,26 @@ interface ChatComposerProps {
     contextAt: number | null;
 }
 
+/**
+ * The amber "your pick is not answering" banner. Exported because the Chat
+ * surface composer is a different component and must say the same thing in the
+ * same words when the same stored model goes stale — one surface warning and
+ * one silently answering from another model is the bug this splits.
+ */
+export const ModelFallbackBanner: React.FC<{
+    modelIssue: string | null;
+    provider: ProviderConfig | null;
+}> = ({ modelIssue, provider }) => (
+    modelIssue && provider ? (
+        <div className="mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-ui-dense leading-4 text-amber-300" data-testid="model-fallback-warning" role="status">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 flex-1">
+                {modelIssue} Answering with <strong className="font-semibold">{provider.name} · {formatModelDisplayName(provider.selectedModel)}</strong> — re-pick a model in the dropdown.
+            </span>
+        </div>
+    ) : null
+);
+
 const ChatComposer: React.FC<ChatComposerProps> = ({
     symbol, interval, isPanel, ready, busy, draft, setDraft, send, runFullAnalysis, onRunAnalysis,
     effort, changeEffort, showEffortMenu, setShowEffortMenu, modelIssue, provider, selectedChatModel,
@@ -101,14 +121,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     panelCount, pickerOpen, onTogglePicker, botName, contextAt,
 }) => (
     <div className="shrink-0 px-3 pb-3 pt-1">
-        {modelIssue && provider && (
-            <div className="mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-ui-dense leading-4 text-amber-300" data-testid="model-fallback-warning">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0 flex-1">
-                    {modelIssue} Answering with <strong className="font-semibold">{provider.name} · {formatModelDisplayName(provider.selectedModel)}</strong> — re-pick a model in the dropdown.
-                </span>
-            </div>
-        )}
+        <ModelFallbackBanner modelIssue={modelIssue} provider={provider} />
         <ComposerWorkspaceRow
             symbol={symbol}
             interval={interval}

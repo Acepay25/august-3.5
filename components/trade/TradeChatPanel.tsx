@@ -60,7 +60,7 @@ import type { ChartSnapshot, ChartInterval } from './TradingChart';
 import BiasChips from './BiasChips';
 import { saveBot, type AgentBot } from '../../services/agents/agentRoster';
 import { resolveAgentContext, SINGLE_AGENT_MEMORY_BUDGET, type ResolvedAgentContext } from '../../services/agents/agentContext';
-import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, resolveChatModelSelection, findChatModelOwner, chatModelIdOf } from '../../utils/providerUtils';
+import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, computeChatModelFallback } from '../../utils/providerUtils';
 import { listSkills } from '../../services/learning/SkillMemoryService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import {
@@ -486,20 +486,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // can't silently route to the wrong one). Legacy bare model ids resolve
     // heuristically; when nothing matches, the first ready provider answers
     // so the dock never dies — but NEVER silently: modelIssue explains it.
-    const resolvedSelection = useMemo(() => resolveChatModelSelection(providers, selectedChatModel), [providers, selectedChatModel]);
-    const provider = resolvedSelection ?? getFirstReadyProvider(providers);
-    // A stored pick can go stale (provider edited, disabled, key removed,
-    // deleted) — the fallback must be VISIBLE, not silent.
-    const modelIssue = useMemo((): string | null => {
-        if (!selectedChatModel || resolvedSelection || !provider) return null;
-        if (isPanel || activeSession?.botId) return null; // panels answer from seats; bots from their own config
-        const owner = findChatModelOwner(providers, selectedChatModel);
-        const modelId = chatModelIdOf(selectedChatModel);
-        if (!owner) {
-            return `The selected model "${modelId}" is no longer configured on any provider.`;
-        }
-        return `The provider for "${modelId}" (${owner.config.name}) is disabled or has no API key.`;
-    }, [selectedChatModel, resolvedSelection, provider, providers, isPanel, activeSession?.botId]);
+    // One computation, shared with the Chat surface composer: a stale pick must
+    // read the same in both places.
+    const fallback = useMemo(() => computeChatModelFallback(providers, selectedChatModel), [providers, selectedChatModel]);
+    const provider = fallback.provider;
+    // Panels answer from seats and bots from their own config, so a stale solo
+    // pick is not their problem — but for the solo path the fallback must be
+    // VISIBLE, never silent.
+    const modelIssue = isPanel || activeSession?.botId ? null : fallback.issue;
 
     /** Resolve a `${providerId}:${modelId}` seat to a runnable config. */
     const configForSeat = useCallback((providerId: string, modelId: string): ProviderConfig | null => {
