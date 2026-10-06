@@ -381,7 +381,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                     {isLast && isRunning && (
                                         <div className="flex items-center gap-3">
                                             {workingBotId && (
-                                                <p className="pl-1 text-ui-sm italic text-zinc-500" data-testid="group-thinking">
+                                                <p className="pl-1 text-ui-sm italic text-zinc-500" data-testid="group-thinking" role="status">
                                                     {members.find(m => m.id === workingBotId)?.name} is thinking…
                                                 </p>
                                             )}

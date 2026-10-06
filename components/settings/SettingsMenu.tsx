@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
 import { AIProvider, AccuracySubMode, LoggedTrade } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
@@ -291,7 +293,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         if (id === 'journal') return props.loggedTrades && props.loggedTrades.length > 0 ? String(props.loggedTrades.length) : undefined;
         return undefined;
     };
-    const dialogRef = useRef<HTMLDivElement>(null);
     const initialTabResolvedRef = useRef(false);
     /** A tab the parent explicitly ASKED FOR outranks the heuristic landing.
      *  Recorded here because the requested prop is consumed immediately, so by
@@ -332,25 +333,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         requestCloseRef.current = requestClose;
     }, [requestClose]);
 
-    useEffect(() => {
-        if (!isVisible) return;
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                requestCloseRef.current();
-                return;
-            }
-            if (event.key !== 'Tab' || !dialogRef.current) return;
-            const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-            if (!focusable.length) return;
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isVisible]);
+    // Shared trap + Esc: cycles focus, focuses the first control, and returns
+    // focus to the rail/header control that opened Settings.
+    const dialogRef = useFocusTrap<HTMLDivElement>(isVisible);
+    useEscapeClose(isVisible, () => requestCloseRef.current());
 
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
