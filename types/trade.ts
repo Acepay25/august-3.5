@@ -39,7 +39,22 @@ export interface LoggedTrade {
   sourceRunId?: string;
   tradeType?: 'scalp' | 'swing';  // Denormalized for filtering/stats
   outcome: TradeOutcome;
+  /** When this row was LOGGED. Not the outcome time — see `outcomeResolvedAt`. */
   timestamp: string;
+  /**
+   * The id of the plan this trade came from (`Message.planId`, minted by the
+   * dock's `present_trade` and shared with the level-watch). Absent on rows
+   * logged before stage 3 and on trades the trader logged by hand.
+   */
+  planId?: string;
+  /**
+   * When the outcome BECAME KNOWN — the autopilot's detection time, or the
+   * moment a human set the outcome. Distinct from `timestamp` (when the row was
+   * written): a trade confirmed an hour after it was logged must not read as if
+   * the result was known at log time, and a replayed run must be able to tell
+   * the two apart.
+   */
+  outcomeResolvedAt?: string;
   leverage?: number;
   postMortem?: string;
   postMortemCreatedAt?: string; // Timestamp for post-mortem analysis

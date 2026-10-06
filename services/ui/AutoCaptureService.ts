@@ -11,7 +11,7 @@ import { parsePrice } from '../../utils/analysisUtils';
 import { BenchmarkAlpha, settleBenchmarkAlpha } from '../analysis/benchmarkAlpha';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
-import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';
+import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions } from '../backtesting/outcomeEngine';
 import {
     calculateIndicators,
     calculateVWAP,
@@ -77,6 +77,11 @@ export interface HistoricalOutcomeResult {
      *  Undefined for open/unverifiable trades; the block may itself carry an
      *  unavailableReason instead of a number when the benchmark fetch failed. */
     benchmark?: BenchmarkAlpha;
+    /** Worst move against / best move offered, measured over [entry, exit] on
+     *  the tape that decided this outcome. RAW price percent, undefined when the
+     *  trade never resolved or there were no candles to measure — never a 0,
+     *  which would read as "the position never moved". */
+    excursions?: { maePercent: number; mfePercent: number };
     verificationDetails: string;
 }
 
@@ -514,6 +519,15 @@ export const verifyHistoricalOutcome = async (
             });
         }
 
+        // MAE/MFE over exactly the candles the position held. Measured here
+        // because this is the one place the tape, the entry index and the exit
+        // index are all in scope at once. RAW price percent on purpose — the
+        // writer scales it by the row's leverage, the same way the post-mortem's
+        // candle validation does, so both settle the field identically.
+        const excursions = candlesFromAnalysis !== undefined
+            ? computeTradeExcursions(klines, entryTriggeredAtIndex, candlesFromAnalysis, entryPrice, isLong)
+            : null;
+
         return {
             verified: true,
             outcome,
@@ -527,6 +541,7 @@ export const verifyHistoricalOutcome = async (
             analysisSnapshot: analysisSnapshot || undefined,
             outcomeSnapshot: outcomeSnapshot || undefined,
             benchmark,
+            excursions: excursions || undefined,
             verificationDetails: details
         };
 

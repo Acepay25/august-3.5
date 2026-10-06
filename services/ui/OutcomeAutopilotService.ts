@@ -42,6 +42,11 @@ export interface AutopilotResolution {
     detectedAt: string;
     timeToOutcome?: string;
     slOptimizationData?: SLOptimizationData;
+    /** MAE/MFE the verification measured over the held window, RAW price percent
+     *  (the row scales by its own leverage when it writes). Carried through so a
+     *  trade confirmed by the autopilot is not excursion-less unless no post-
+     *  mortem ever runs on it. */
+    excursions?: { maePercent: number; mfePercent: number };
 }
 
 interface Registration {
@@ -549,6 +554,7 @@ class OutcomeAutopilotServiceClass {
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome,
             slOptimizationData: this.computeSLOptimization(reg, result),
+            excursions: result.excursions,
         };
     }
 
@@ -576,6 +582,7 @@ class OutcomeAutopilotServiceClass {
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome || result.slHit?.timeAfterAnalysis,
             slOptimizationData: this.computeSLOptimization(reg, result),
+            excursions: result.excursions,
         };
     }
 

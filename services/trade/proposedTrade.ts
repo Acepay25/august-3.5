@@ -123,4 +123,7 @@ export const buildProposedTradeMessage = (p: TradeProposal, id: string): Message
     analysis: buildProposedTradeAnalysis(p),
     outcome: TradeOutcome.PENDING,
     isDebating: false,
+    // The headline carries the plan id for the reader; the FIELD carries it for
+    // the journal row and the dedupe, so neither has to re-parse prose.
+    ...(p.planId ? { planId: p.planId } : {}),
 });

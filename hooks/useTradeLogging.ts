@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message, MessageRole, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
+import { toLeveragedExcursionPct } from '../services/backtesting/outcomeEngine';
 import * as MemoryService from '../services/learning/MemoryService';
 import { insightTextForTrade } from '../utils/tradeInsightBrief';
 import { ProviderConfig } from '../types/provider';
@@ -245,7 +246,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; }) => {
         // Persist the market regime captured at analysis time (7-value
         // hybrid regime normalized to the 4-key trade regime). Falls back to
         // undefined when no snapshot exists.
@@ -253,12 +254,26 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ? mapRegimeToKey((message.analysis?.marketSnapshot as any).regime.regime as any)
             : undefined;
 
+        const leverageUsed = activeConversationLeverage || DEFAULT_LEVERAGE;
+        // Excursions arrive as RAW price percent from whichever engine measured
+        // them; the row stores them the same way the post-mortem writes them —
+        // leveraged — so one trade cannot have two "worst move" numbers.
+        const mae = toLeveragedExcursionPct(feedback.excursions?.maePercent, leverageUsed);
+        const mfe = toLeveragedExcursionPct(feedback.excursions?.mfePercent, leverageUsed);
+
         const loggedTrade: LoggedTrade = {
             id: message.id,
             analysis: message.analysis!,
             outcome: outcome,
             timestamp: new Date().toISOString(),
-            leverage: activeConversationLeverage || DEFAULT_LEVERAGE,
+            /** The plan this row came from — the same id the level-watch armed
+             *  on. Set at LOG time, so it exists before any post-mortem runs. */
+            ...(message.planId ? { planId: message.planId } : {}),
+            /** When the outcome became known, not when the row was written: an
+             *  autopilot detection at T logged at T+1h must not read as if the
+             *  result was known at log time. */
+            outcomeResolvedAt: feedback.outcomeResolvedAt ?? new Date().toISOString(),
+            leverage: leverageUsed,
             investmentAmount: undefined,
             pnlAmount: feedback.pnlAmount,
             pnlPercent: feedback.pnlPercent,
@@ -272,6 +287,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             marketSnapshot: message.analysis?.marketSnapshot, // Persist for Algo Mode
             marketRegime,
             slOptimizationData: feedback.slOptimizationData, // Autopilot-observed SL behavior
+            // Spread-conditional: an unmeasured excursion stays a gap. Writing 0
+            // would claim the position never moved against the trader.
+            ...(mae !== undefined ? { maxAdverseExcursion: mae } : {}),
+            ...(mfe !== undefined ? { maxFavorableExcursion: mfe } : {}),
             modelsUsed: message.modelsUsed,
             thoughtProcesses: message.thoughtProcesses,
 
@@ -300,7 +319,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 message.analysis?.entryPoints?.[0]?.price,
                 message.analysis?.stopLoss,
                 feedback.pnlPercent,
-                activeConversationLeverage || DEFAULT_LEVERAGE,
+                leverageUsed,
             ),
         };
 
@@ -516,9 +535,14 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
                 // Log the trade AFTER successful capture
                 logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, {
+                    // Detection facts ride the candidate; the verification that
+                    // just ran has the better excursion read. `...feedback`
+                    // stays last so the trader's own numbers win.
+                    ...dataCaptureCandidate.feedback,
                     ...feedback,
                     // Carry the skill-vs-tide alpha settled during verification.
                     benchmark: result.historicalOutcome?.benchmark,
+                    excursions: result.historicalOutcome?.excursions ?? dataCaptureCandidate.feedback?.excursions,
                 });
 
                 // Start post-mortem with auto-captured data
@@ -547,7 +571,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const handleDataCaptureSkip = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; journalTags?: CaptureJournalTags; }) => {
         // User chose to skip - log trade and start post-mortem without additional data
         if (dataCaptureCandidate) {
-            logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, feedback);
+            logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, {
+                ...dataCaptureCandidate.feedback,
+                ...feedback,
+            });
             startPostMortemAnalysis({ ...dataCaptureCandidate, feedback }, undefined, undefined);
             setDataCaptureCandidate(null);
         }
@@ -734,7 +761,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         message: Message,
         outcome: TradeOutcome.WIN | TradeOutcome.LOSS,
         pnlPercent?: number,
-        slOptimizationData?: SLOptimizationData
+        slOptimizationData?: SLOptimizationData,
+        /** What the detector actually measured, carried onto the row instead of
+         *  being dropped at the confirm click. */
+        resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number } },
     ) => {
         // pnlPercent is a PERCENT (e.g. +200), not dollars — it must not be
         // written into pnlAmount, which dashboards sum as USD. It is carried
@@ -743,12 +773,20 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // full capture (dollars, discipline tags) instead of logging the
         // percent-only row — the dashboard unit split's root cause.
         if (isAutoCapturing === true) {
-            setDataCaptureCandidate({ message, outcome, feedback: undefined });
+            setDataCaptureCandidate({
+                message,
+                outcome,
+                // The detection facts ride the candidate so the capture modal's
+                // own payload cannot silently drop them.
+                feedback: { outcomeResolvedAt: resolved?.at, excursions: resolved?.excursions },
+            });
             return;
         }
         void logTradeWithFeedback(message, outcome, {
             pnlPercent,
             slOptimizationData,
+            outcomeResolvedAt: resolved?.at,
+            excursions: resolved?.excursions,
         });
         // Every other logging path (capture modal auto/skip, entry-not-hit)
         // starts the post-mortem right after logging — the autopilot

@@ -95,6 +95,15 @@ describe('buildProposedTradeMessage', () => {
     it('carries the plan id onto the logged text (proposal ↔ watch ↔ journal)', () => {
         const m = buildProposedTradeMessage({ symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110], planId: 'btc-abc' }, 'proposed-2');
         expect(m.text).toContain('plan btc-abc');
+        // The FIELD, not only the prose: the journal row is stamped from here at
+        // log time and the dedupe compares on it. A reader parsing the headline
+        // to find the plan is the failure this replaces.
+        expect(m.planId).toBe('btc-abc');
+    });
+    it('leaves planId absent rather than empty when no plan was minted', () => {
+        const m = buildProposedTradeMessage({ symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] }, 'proposed-3');
+        expect(m.planId).toBeUndefined();
+        expect('planId' in m).toBe(false);
     });
 });
 

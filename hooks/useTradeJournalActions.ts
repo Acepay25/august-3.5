@@ -337,7 +337,11 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
     // previously the only fix was delete + re-log. Backfills the thinking
     // records so outcome-correlated reasoning stays accurate.
     const handleUpdateTradeOutcome = useCallback((id: string, outcome: TradeOutcome) => {
-        setLoggedTrades(prev => prev.map(t => t.id === id ? { ...t, outcome } : t));
+        // A human correcting the outcome IS the moment it became known — later
+        // than any detector's stamp, which is now stale by definition.
+        setLoggedTrades(prev => prev.map(t => (t.id === id
+            ? { ...t, outcome, outcomeResolvedAt: new Date().toISOString() }
+            : t)));
         const trade = loggedTradesRef.current.find(t => t.id === id);
         if (trade) {
             const tradeId = getThinkingTradeId(trade.analysis?.createdAt, id);
