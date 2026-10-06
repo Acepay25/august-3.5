@@ -403,7 +403,6 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl"></span>
                     <div>
                         <h2 className="text-lg font-semibold text-white">AI Model Performance</h2>
                         <p className="text-xs text-zinc-500">

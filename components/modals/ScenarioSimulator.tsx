@@ -216,7 +216,6 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-zinc-900">
                     <div className="flex items-center gap-4">
-                        <span className="text-2xl"></span>
                         <div>
                             <h2 className="text-lg font-black text-white tracking-tight">
                                 SCENARIO SIMULATOR
@@ -289,7 +288,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Entry Price
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => adjust(setEntry, entry, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower entry price" onClick={() => adjust(setEntry, entry, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
@@ -299,7 +298,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     className="w-full bg-zinc-800 border border-zinc-700/50 rounded-lg px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
                                                     step="any"
                                                 />
-                                                <button onClick={() => adjust(setEntry, entry, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise entry price" onClick={() => adjust(setEntry, entry, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -311,7 +310,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Stop Loss
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => adjust(setStopLoss, stopLoss, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower stop loss" onClick={() => adjust(setStopLoss, stopLoss, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
@@ -321,7 +320,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     className="w-full bg-zinc-800 border border-rose-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-rose-200 focus:outline-none focus:border-rose-500/60"
                                                     step="any"
                                                 />
-                                                <button onClick={() => adjust(setStopLoss, stopLoss, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise stop loss" onClick={() => adjust(setStopLoss, stopLoss, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -333,7 +332,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Target 1
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => adjust(setTarget1, target1, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower first target" onClick={() => adjust(setTarget1, target1, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
@@ -343,7 +342,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     className="w-full bg-zinc-800 border border-emerald-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-emerald-200 focus:outline-none focus:border-emerald-500/60"
                                                     step="any"
                                                 />
-                                                <button onClick={() => adjust(setTarget1, target1, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise first target" onClick={() => adjust(setTarget1, target1, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -355,7 +354,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Target 2 (Optional)
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => adjust(setTarget2, target2, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower second target" onClick={() => adjust(setTarget2, target2, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
@@ -366,7 +365,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     step="any"
                                                     placeholder="—"
                                                 />
-                                                <button onClick={() => adjust(setTarget2, target2, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise second target" onClick={() => adjust(setTarget2, target2, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>

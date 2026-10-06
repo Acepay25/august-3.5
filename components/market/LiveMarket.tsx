@@ -517,7 +517,6 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             {marketInsights.observations.length > 0 && (
                                 <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-base"></span>
                                         <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Key Observations</span>
                                     </div>
                                     <ul className="space-y-1.5">
@@ -562,7 +561,6 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                     <ul className="space-y-1.5">
                                         {marketInsights.riskFactors.map((risk, i) => (
                                             <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                                                <span className="text-amber-400 mt-1"></span>
                                                 <span>{risk}</span>
                                             </li>
                                         ))}

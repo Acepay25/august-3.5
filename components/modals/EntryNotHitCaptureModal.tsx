@@ -35,7 +35,6 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-950/30">
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl"></span>
                         <div>
                             <h3 className="text-lg font-bold text-cyan-400">
                                 Entry Not Hit - Capture Data
@@ -55,7 +54,6 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 {/* Info Section */}
                 <div className="p-5 border-b border-white/5 bg-zinc-800">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
-                        <span className="text-lg"></span>
                         <div>
                             <p className="text-sm text-zinc-300">
                                 Trade recorded as <span className="text-cyan-400 font-semibold">Entry Not Hit</span>
