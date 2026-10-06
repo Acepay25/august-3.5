@@ -57,11 +57,22 @@ export const saveChecklistConfig = (cfg: ChecklistConfig): ChecklistConfig => {
  * Completion summary stored on the trade: how many items were checked and
  * of how many. `checked` is the set of item ids the user ticked.
  */
+/** One recorded pre-trade checklist, per item. */
+export interface ChecklistResult {
+    done: number;
+    total: number;
+    /** Every item in checklist order, ticked or not. The COUNT could never say
+     *  which guard was skipped — and "the loss came after skipping 'news
+     *  checked'" is the only version of this that teaches anything. */
+    items: Array<{ id: string; label: string; checked: boolean }>;
+}
+
 export const summarizeChecklist = (
     items: ChecklistItem[],
     checked: Set<string>,
-): { done: number; total: number } => ({
+): ChecklistResult => ({
     done: items.filter(i => checked.has(i.id)).length,
     total: items.length,
+    items: items.map(i => ({ id: i.id, label: i.label, checked: checked.has(i.id) })),
 });
 
