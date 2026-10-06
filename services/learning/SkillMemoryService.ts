@@ -3070,9 +3070,10 @@ export const syncSkillRuleLine = (meta: SkillMeta): void => {
  * Apply a re-scope the HUMAN approved, from the clauses the proposer STORED.
  *
  * `rescope` was the one proposal kind no person could act on: both panels kept
- * it out of their APPLYABLE sets, and the only rewriter in the tree
- * (`applyProposalRewrite` in skillSupervisor) reads `verdict.enhanced` — a
- * rewrite the model authors at apply time — and never looks at
+ * it out of their APPLYABLE sets, and the only rewriter that existed
+ * (skillSupervisor's `applyProposalRewrite`, since deleted as unreferenced dead
+ * code) read `verdict.enhanced` — a rewrite the model authors at apply time — and
+ * never looked at
  * `proposal.payload.ifCondition/thenAction/predicate`, which is exactly what
  * `revise_skill` writes. So a seat could propose a tightening, a human could
  * agree with it, and the row could only be Dismissed.

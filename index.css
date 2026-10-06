@@ -1621,12 +1621,15 @@ select:focus-visible,
 
 /* Minimum touch target size (44x44px recommended by WCAG).
    Micro-chips (9-10px text: badges, RR ratio, small inline pills) are exempt —
-   the blanket rule used to inflate them to 44px, making dense cards jumpy. */
+   the blanket rule used to inflate them to 44px, making dense cards jumpy.
+   The old `:not([class*='text-[9px]'])` exemptions are gone: `text-[9px]` and
+   `text-[10px]` cannot appear in this tree at all — tests/typeRamp.test.ts bans
+   every literal in that range — so the clauses exempted nothing. */
 @media (max-width: 640px) {
 
-  button:not([class*='text-[9px]']):not([class*='text-[10px]']),
-  a:not([class*='text-[9px]']):not([class*='text-[10px]']),
-  [role="button"]:not([class*='text-[9px]']):not([class*='text-[10px]']) {
+  button,
+  a,
+  [role="button"] {
     min-height: 44px;
     min-width: 44px;
   }
