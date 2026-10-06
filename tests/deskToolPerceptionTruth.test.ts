@@ -87,6 +87,8 @@ describe("the Chart AI dock can recover a clipped result", () => {
     // The real list, not a copy that can drift.
     expect(names).toContain("read_tool_output");
     expect(names).toContain("get_chart_view");
+    // The journal is readable as rows from the dock, not only as aggregates.
+    expect(names).toContain("get_trade_log");
   });
 });
 

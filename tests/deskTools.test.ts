@@ -43,6 +43,9 @@ describe('DeskToolsService', () => {
             'get_price_snapshot',
             'get_indicators',
             'get_setup_history_stats',
+            // Rows, not aggregates: the seat must be able to read the journal
+            // the trader reads (tests/deskTools.test.ts pins the catalog order).
+            'get_trade_log',
             'recall',
             'recall_chat',
             'scan_setups',
