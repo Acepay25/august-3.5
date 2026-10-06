@@ -120,8 +120,9 @@ dead calibration stat deleted (`Journal.tsx:347-410,452-458`); Studio "Back to C
    warning added to the Chat surface composer (dock-only today, `ChatComposer.tsx:105`);
    Journal→Models tab stays the per-model home.
 
-**G (strikeable) — Playbooks merge.** StrategiesManager upload moves into Studio;
-Settings→Playbooks becomes a pointer card. One library home.
+**G — STRUCK 2026-10-06 (user decision).** The Playbooks→Studio merge is not
+happening: StrategiesManager stays where it is and Settings → Playbooks stays a
+real tab. Nothing else in stage 3 depended on it.
 
 ## Tests
 
