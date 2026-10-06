@@ -6,7 +6,8 @@
  * the ambient bridge type never drift apart.
  *
  * States:
- *   idle        — no update activity
+ *   idle        — no update activity (never checked, or reset)
+ *   upToDate    — a check completed and the running build is the newest release
  *   checking    — checking GitHub releases for a newer version
  *   available   — a newer version is available, awaiting download
  *   downloading — update package is downloading (see `progress`)
@@ -15,7 +16,7 @@
  *   error       — the update flow failed (see `error`)
  */
 export interface ElectronUpdateStatus {
-    status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error';
+    status: 'idle' | 'checking' | 'available' | 'upToDate' | 'downloading' | 'downloaded' | 'installing' | 'error';
     progress: number;
     version: string | null;
     error: string | null;

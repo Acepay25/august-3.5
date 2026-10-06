@@ -20,6 +20,27 @@ export interface ProfileTabProps extends SettingsTabProps {
 
 
 
+/**
+ * What the manual check control says for each updater phase. Exported and pure
+ * because the whole point is one honest sentence per state: a clean check must
+ * read "Up to date", and before `upToDate` existed the check fell back to
+ * `idle` — which is also "never checked" — so pressing the button looked like
+ * it did nothing at all.
+ */
+export const updateCheckStatusLabel = (status: string | undefined): string => {
+    switch (status) {
+        case 'checking': return 'Checking…';
+        case 'upToDate': return 'Up to date';
+        case 'available':
+        case 'downloading':
+        case 'downloaded':
+        case 'installing':
+            return 'Update in progress';
+        case 'error': return 'Check failed — try again';
+        default: return 'Check for updates';
+    }
+};
+
 /** The Settings-side updater entry (stage-2 Phase-4's "check for updates"
  *  row): a quiet text button beside the version line. The rail's account row
  *  owns the updater's day-to-day states; this is the discoverable check. */
@@ -28,7 +49,7 @@ const CheckForUpdatesRow: React.FC = () => {
     const [busy, setBusy] = React.useState(false);
     if (!isElectron) return null;
     const phase = updateStatus?.status ?? 'idle';
-    const label = phase === 'checking' ? 'Checking…' : 'Check for updates';
+    const label = updateCheckStatusLabel(phase);
     return (
         <button
             type="button"

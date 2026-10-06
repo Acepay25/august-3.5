@@ -164,6 +164,45 @@ export const HarnessControls: React.FC = () => {
                 />
             </label>
             <label className="block text-ui-dense text-zinc-400">
+                Starter playbook library
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    The curated vetted-literature shelf. Turning this off withdraws
+                    approval from every starter skill at once, so none is injected.
+                </span>
+                <span className="mt-1 flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={settings.starterLibraryEnabled !== false}
+                        onChange={e => persist({ starterLibraryEnabled: e.target.checked })}
+                        data-testid="harness-starter-library"
+                        className="h-3.5 w-3.5 accent-cyan-400"
+                    />
+                    <span className="text-ui-dense text-zinc-300">
+                        {settings.starterLibraryEnabled !== false ? 'Approved — injected' : 'Withdrawn'}
+                    </span>
+                </span>
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
+                Skill enforcement
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    The off-switch over code-side enforcement: the confidence caps and
+                    the confirmed-avoid veto that can halt a verdict. Injection itself is
+                    governed by the approval gate, not by this.
+                </span>
+                <span className="mt-1 flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={settings.skillEnforcementEnabled !== false}
+                        onChange={e => persist({ skillEnforcementEnabled: e.target.checked })}
+                        data-testid="harness-skill-enforcement"
+                        className="h-3.5 w-3.5 accent-cyan-400"
+                    />
+                    <span className="text-ui-dense text-zinc-300">
+                        {settings.skillEnforcementEnabled !== false ? 'Enforced' : 'Not enforced'}
+                    </span>
+                </span>
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
                 Prompt A/B (control lane)
                 <select
                     value={String(settings.promptAbRate)}
