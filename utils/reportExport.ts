@@ -138,3 +138,65 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
+
+/**
+ * One model-ready training record for a logged trade.
+ *
+ * Flat and STABLE in shape: every key is present on every line, with null where
+ * the app never learned the fact. A ragged JSONL (keys appearing only when set)
+ * makes the reader guess whether absence means "not recorded" or "not in this
+ * schema version" — the exact ambiguity the rest of this app refuses.
+ */
+export const trainingRecordFor = (t: LoggedTrade): Record<string, unknown> => ({
+    id: t.id,
+    planId: t.planId ?? null,
+    loggedAt: t.timestamp,
+    outcomeResolvedAt: t.outcomeResolvedAt ?? null,
+    symbol: t.analysis?.coinName ?? null,
+    direction: t.analysis?.direction ?? null,
+    strategy: t.analysis?.strategy ?? null,
+    strategyFamily: t.analysis?.strategyFamily ?? null,
+    verdictProbability: typeof t.analysis?.probability === 'number' ? t.analysis.probability : null,
+    entry: t.analysis?.entryPoints?.[0]?.price ?? null,
+    stopLoss: t.analysis?.stopLoss ?? null,
+    takeProfits: (t.analysis?.takeProfit ?? []).map(tp => tp.price),
+    leverage: t.leverage ?? null,
+    tradeType: t.tradeType ?? null,
+    marketRegime: t.marketRegime ?? null,
+    outcome: t.outcome,
+    pnlAmount: typeof t.pnlAmount === 'number' ? t.pnlAmount : null,
+    pnlPercent: typeof t.pnlPercent === 'number' ? t.pnlPercent : null,
+    rMultiple: typeof t.rMultiple === 'number' ? t.rMultiple : null,
+    realizedR: typeof t.realizedR === 'number' ? t.realizedR : null,
+    maxAdverseExcursion: typeof t.maxAdverseExcursion === 'number' ? t.maxAdverseExcursion : null,
+    maxFavorableExcursion: typeof t.maxFavorableExcursion === 'number' ? t.maxFavorableExcursion : null,
+    extendedSLZoneBreach: t.extendedSLZoneBreach ?? false,
+    mistakeTags: t.mistakeTags ?? [],
+    emotionalState: t.emotionalState ?? null,
+    followedPlan: typeof t.followedPlan === 'boolean' ? t.followedPlan : null,
+    planDeviationNote: t.planDeviationNote ?? null,
+    checklist: t.checklistCompleted ?? null,
+    rootCauseClass: t.rootCauseClass ?? null,
+    postMortem: t.postMortem ?? null,
+    modelsUsed: t.modelsUsed ?? null,
+    moderator: t.moderatorModel ? { provider: t.moderatorProvider ?? null, model: t.moderatorModel } : null,
+    sourceRunId: t.sourceRunId ?? null,
+    promptVersion: t.promptVersion ?? null,
+    promptLane: t.promptLane ?? null,
+    // Size discipline: the transcript is megabytes per row and belongs in the
+    // reasoning export, not in a line-oriented training file. Count it, keep
+    // the verdict text, and let the reader ask for the rest by run id.
+    debateTurnCount: t.debateTurns?.length ?? 0,
+    moderatorSynthesis: t.moderatorSynthesis ?? null,
+});
+
+/**
+ * Export the journal as JSONL — one training record per line — for offline
+ * fine-tuning. Deliberately includes UNRESOLVED rows with `outcome` telling you
+ * so: dropping them would silently bias the corpus toward trades that settled,
+ * which is a different question than the one a finetune answers.
+ */
+export const exportTrainingDataJSONL = (trades: LoggedTrade[]): void => {
+    const body = trades.map(t => JSON.stringify(trainingRecordFor(t))).join('\n');
+    downloadBlob(`${body}${body ? '\n' : ''}`, `august-training-data-${dateStamp()}.jsonl`, 'application/x-ndjson');
+};

@@ -174,8 +174,10 @@ export interface LoggedTrade {
   maxFavorableExcursion?: number;
   /** Why a SKIPPED trade was passed on ("watched, chose not to") — passes become data. */
   skipReason?: string;
-  /** Pre-trade checklist completion at log time: items checked / shown. */
-  checklistCompleted?: { done: number; total: number };
+  /** Pre-trade checklist at log time: every item with whether it was ticked,
+   *  plus the counts. The item is the lesson; the count alone could not say
+   *  which guard got skipped. */
+  checklistCompleted?: import('../utils/checklist').ChecklistResult;
   /** Pre-read capture: the user's committed prior call from
    *  BEFORE the verdict reveal, copied from the source message at log time.
    *  Feeds the journal's user-prior vs verdict vs outcome calibration row. */
@@ -201,7 +203,7 @@ export interface CaptureJournalTags {
   followedPlan?: boolean;
   planDeviationNote?: string;
   /** Pre-trade checklist completion: items checked / items shown. */
-  checklistCompleted?: { done: number; total: number };
+  checklistCompleted?: import('../utils/checklist').ChecklistResult;
   /** Why a pass was taken — rides the capture modal's skip path. */
   skipReason?: string;
 }
