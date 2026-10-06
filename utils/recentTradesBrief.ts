@@ -182,6 +182,46 @@ export const buildRecentTradesBrief = (trades: LoggedTrade[]): RecentTradesBrief
     };
 };
 
+/**
+ * The tape without the verdict: one line per trade, day-level time, outcome and
+ * R — and NO win rate, no streak, no net PnL. An analyst seat is shown this so
+ * it can check a claim about the record; it is not shown the framing, because
+ * "you are three losses deep" is a nudge, and a nudge delivered by the system
+ * into every opening prompt is not evidence, it is priming. The moderator and
+ * the post-mortem, whose job IS to weigh the trader's recent form, get
+ * `tallyLine` instead.
+ */
+export const neutralRowsText = (brief: RecentTradesBrief): string => {
+    if (brief.rows.length === 0) return 'Logged trades: none.';
+    const day = (iso: string): string => iso.slice(0, 10);
+    return [
+        `Logged trades, oldest first (${brief.rows.length}):`,
+        ...brief.rows.map(r => {
+            const r_ = typeof r.realizedR === 'number'
+                ? ` ${r.realizedR >= 0 ? '+' : ''}${r.realizedR.toFixed(2)}R`
+                : '';
+            const pnl = typeof r.pnlDollars === 'number' ? ` $${r.pnlDollars.toFixed(2)}`
+                : typeof r.pnlPercent === 'number' ? ` ${r.pnlPercent >= 0 ? '+' : ''}${r.pnlPercent.toFixed(1)}%`
+                    : '';
+            return `- ${day(r.loggedAt)} ${r.symbol} ${r.direction} ${r.outcome}${pnl}${r_}${r.tags.length ? ` [${r.tags.join(',')}]` : ''}`;
+        }),
+    ].join('\n');
+};
+
+/** Stable id for one rendered brief. The injection telemetry records it per run,
+ *  and a trade row carries `sourceRunId`, so "which brief did this decision see"
+ *  is answerable from the stored data rather than from what the code does today. */
+export const briefFingerprint = (text: string): string => {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    // 8 hex chars is enough to distinguish the two variants and any window shift,
+    // and short enough to sit in an injection row without becoming a column.
+    return (h >>> 0).toString(16).padStart(8, '0');
+};
+
 export const buildTradeLogBrief = (trades: LoggedTrade[], filter: TradeLogFilter = {}): RecentTradesBrief =>
     buildRecentTradesBrief(selectRecentTrades(trades, filter));
 

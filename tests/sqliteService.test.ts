@@ -385,3 +385,80 @@ describe('SqliteService fingerprint publishing after COMMIT', () => {
     expect(loaded?.tradeLog.map(t => t.id)).toEqual(['t1']);
   });
 });
+
+// ── Stage 3 F3: the fields a model-ready row needs must SURVIVE the store ───
+// These four ride the `meta` JSON column (save: everything not a core column;
+// read: `...meta`), so NO schema migration is required — which is exactly what
+// this proves rather than assumes. A pre-stage-3 row simply has the keys absent,
+// and absence reads as "unknown", never as 0.
+describe('SqliteService stage-3 trade fields round-trip', () => {
+  const fullRow = {
+    id: 't-full',
+    timestamp: '2026-10-04T10:00:00.000Z',
+    outcome: 'LOSS',
+    analysis: {
+      direction: 'Short', coinName: 'SOLUSDT',
+      entryPoints: [{ price: '180', description: 'entry' }],
+      stopLoss: '185', takeProfit: [{ price: '170', percentage: '-100%' }],
+      probability: 71, strategy: 'Range fade', strategyFamily: 'fade',
+      createdAt: '2026-10-04T09:55:00.000Z',
+    },
+    leverage: 20,
+    planId: 'sol-m3k2',
+    outcomeResolvedAt: '2026-10-04T14:20:00.000Z',
+    maxAdverseExcursion: 162.5,
+    maxFavorableExcursion: 74,
+    excursionSource: 'autopilot',
+    realizedR: -1.62,
+    rSource: 'postMortem',
+    checklistCompleted: {
+      done: 2,
+      total: 5,
+      items: [
+        { id: 'mental-state', label: 'Mental state checked (calm, not chasing)', checked: false },
+        { id: 'news', label: 'High-impact news checked', checked: true },
+        { id: 'sl-tp', label: 'SL/TP defined before entry', checked: true },
+        { id: 'size', label: 'Size computed for this stop', checked: false },
+        { id: 'invalidation', label: 'Invalidation known (what kills the thesis)', checked: false },
+      ],
+    },
+  };
+
+  it('writes, reloads and reads back planId, resolvedAt, MAE/MFE and per-item checklist', async () => {
+    await sqlite.sqliteSaveUserProfile({ ...baseProfile('ana'), tradeLog: [fullRow as any] } as UserProfile);
+    // A second read path: the per-trade writer, then the per-user reader.
+    await sqlite.sqliteSaveTrade('ana', { ...fullRow, id: 't-single' } as any);
+    const loaded = await sqlite.sqliteGetTrades('ana');
+    const reloaded = loaded.find(t => t.id === 't-single')!;
+    expect(reloaded.planId).toBe('sol-m3k2');
+    expect(reloaded.outcomeResolvedAt).toBe('2026-10-04T14:20:00.000Z');
+    expect(reloaded.maxAdverseExcursion).toBe(162.5);
+    expect(reloaded.maxFavorableExcursion).toBe(74);
+    expect(reloaded.excursionSource).toBe('autopilot');
+    expect(reloaded.realizedR).toBe(-1.62);
+    expect(reloaded.rSource).toBe('postMortem');
+    // Per-item results, not the count: WHICH guard was skipped is the lesson.
+    expect(reloaded.checklistCompleted?.items).toHaveLength(5);
+    expect(reloaded.checklistCompleted?.items.find(i => i.id === 'news')?.checked).toBe(true);
+    expect(reloaded.checklistCompleted?.items.filter(i => !i.checked)).toHaveLength(3);
+    expect(reloaded.checklistCompleted?.done).toBe(2);
+  });
+
+  it('needs no ALTER on the trades table — the fields ride the meta column', async () => {
+    await sqlite.sqliteSaveTrade('ana', fullRow as any);
+    const alters = fakeDb.runLog.filter(sql => /ALTER TABLE trades/i.test(sql));
+    expect(alters).toHaveLength(0);
+    const insert = fakeDb.runLog.find(sql => /INSERT OR REPLACE INTO trades/i.test(sql)) ?? '';
+    expect(insert).toContain('meta');
+  });
+
+  it('leaves a legacy row with absent fields absent rather than zero-filled', async () => {
+    await sqlite.sqliteSaveTrade('ana', trade('t-legacy', 'WIN') as any);
+    const legacy = (await sqlite.sqliteGetTrades('ana')).find(t => t.id === 't-legacy')!;
+    expect(legacy.planId).toBeUndefined();
+    expect(legacy.outcomeResolvedAt).toBeUndefined();
+    expect(legacy.maxAdverseExcursion).toBeUndefined();
+    expect(legacy.checklistCompleted).toBeUndefined();
+    expect(legacy.realizedR).toBeUndefined();
+  });
+});

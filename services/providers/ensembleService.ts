@@ -3457,7 +3457,7 @@ const runPostMortemDebate = (
     // is the fourth loss in a row" drafts a playbook rule where the real lesson
     // is discipline. Only when the structured slice is absent — that path
     // already carries the same line, and repeating it teaches nothing.
-    const formBlock = structuredMemoryContext ? '' : recentFormBlock(streamTrades);
+    const formBlock = structuredMemoryContext ? '' : recentFormBlock(streamTrades, undefined, 'moderator');
     const tradeHistoryContext = (structuredMemoryContext ||
         (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged."))
         + (formBlock ? `\n\n${formBlock}` : '');

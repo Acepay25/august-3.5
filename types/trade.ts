@@ -168,6 +168,15 @@ export interface LoggedTrade {
    * so it is the only R safe to accumulate into the skill ledger.
    */
   realizedR?: number;
+  /**
+   * Which writer measured `realizedR`, and which measured the excursion pair
+   * below. The outcome autopilot and the post-mortem compute the SAME arithmetic
+   * over (possibly) different tape, so a row must never silently trade one
+   * answer for the other: first writer wins, and the field says who. Absent on
+   * rows written before stage 3.
+   */
+  rSource?: 'autopilot' | 'postMortem';
+  excursionSource?: 'autopilot' | 'postMortem';
   /** Worst move against the position while it was open, as leveraged percent. Candle-exact; distinct from the approximate `slOptimizationData.maxAdverseExcursion`. */
   maxAdverseExcursion?: number;
   /** Best price the trade offered before exit, as leveraged percent (MFE). With pnlPercent it yields capture efficiency. Candle-exact over the live window. */

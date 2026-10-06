@@ -21,7 +21,7 @@ export interface UseWatchAndAutopilotArgs {
     stableHandleSendMessage: (...args: any[]) => any;
     handleLoadConversation: (id: string) => void;
     setIsWatchListVisible: (open: boolean) => void;
-    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number } }) => void;
+    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number }) => void;
     confirmAutopilotEntryNotHit: (msg: Message) => void;
     handleInitiateLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
     /** Latest-ref bridge: the pipeline's resolution callbacks read the
@@ -183,6 +183,7 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
             confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData, {
                 at: resolution.detectedAt,
                 excursions: resolution.excursions,
+                realizedR: resolution.realizedR,
             });
         }
         OutcomeAutopilotService.markProcessed(messageId);

@@ -11,7 +11,7 @@ import { parsePrice } from '../../utils/analysisUtils';
 import { BenchmarkAlpha, settleBenchmarkAlpha } from '../analysis/benchmarkAlpha';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
-import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions } from '../backtesting/outcomeEngine';
+import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions, realizedRFromPrices } from '../backtesting/outcomeEngine';
 import {
     calculateIndicators,
     calculateVWAP,
@@ -82,6 +82,9 @@ export interface HistoricalOutcomeResult {
      *  trade never resolved or there were no candles to measure — never a 0,
      *  which would read as "the position never moved". */
     excursions?: { maePercent: number; mfePercent: number };
+    /** Realized R measured from price levels (raw move ÷ raw stop distance) —
+     *  the canonical outcome label, present whenever an exit price resolved. */
+    realizedR?: number;
     verificationDetails: string;
 }
 
@@ -527,6 +530,12 @@ export const verifyHistoricalOutcome = async (
         const excursions = candlesFromAnalysis !== undefined
             ? computeTradeExcursions(klines, entryTriggeredAtIndex, candlesFromAnalysis, entryPrice, isLong)
             : null;
+        // Realized R from the same price levels the outcome was called on — the
+        // canonical outcome label. Computed here so an autopilot-confirmed row
+        // carries R without waiting for a post-mortem that may never run.
+        const realizedR = priceAtHit !== undefined
+            ? realizedRFromPrices(entryPrice, stopLoss, priceAtHit, isLong)
+            : null;
 
         return {
             verified: true,
@@ -542,6 +551,7 @@ export const verifyHistoricalOutcome = async (
             outcomeSnapshot: outcomeSnapshot || undefined,
             benchmark,
             excursions: excursions || undefined,
+            realizedR: realizedR ?? undefined,
             verificationDetails: details
         };
 

@@ -601,10 +601,20 @@ Please investigate this discrepancy in your analysis.
                 const mae = toLeveragedExcursionPct(priceValidation?.maePercent, t.leverage);
                 const mfe = toLeveragedExcursionPct(priceValidation?.mfePercent, t.leverage);
                 const r = priceValidation?.rrRatio;
+                // First writer wins, with the source recorded. The autopilot
+                // already measured this pair over the window it closed the
+                // position in; a post-mortem re-run must not swap the row's
+                // numbers out from under a surface that read them — and it must
+                // not pretend otherwise by leaving a stale `excursionSource`.
+                const keepAutopilot = t.excursionSource === 'autopilot'
+                    && (typeof t.maxAdverseExcursion === 'number' || typeof t.maxFavorableExcursion === 'number');
+                const keepR = t.rSource === 'autopilot' && typeof t.realizedR === 'number';
                 return {
-                    ...(mae !== undefined ? { maxAdverseExcursion: mae } : {}),
-                    ...(mfe !== undefined ? { maxFavorableExcursion: mfe } : {}),
-                    ...(typeof r === 'number' && Number.isFinite(r) ? { realizedR: r } : {}),
+                    ...(mae !== undefined && !keepAutopilot ? { maxAdverseExcursion: mae } : {}),
+                    ...(mfe !== undefined && !keepAutopilot ? { maxFavorableExcursion: mfe } : {}),
+                    ...(!keepAutopilot ? { excursionSource: 'postMortem' as const } : {}),
+                    ...(typeof r === 'number' && Number.isFinite(r) && !keepR ? { realizedR: r } : {}),
+                    ...(!keepR && typeof r === 'number' && Number.isFinite(r) ? { rSource: 'postMortem' as const } : {}),
                 };
             };
             setLoggedTrades(prev => prev.map(t => (t.id === candidate.message.id ? {

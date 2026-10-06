@@ -1,15 +1,15 @@
 /**
- * Recent form in the injected memory — the one line, in every stage, that says
- * what the last 20 trades did.
+ * Recent form in the injected memory — and the shape each audience is allowed.
  *
- * Two failures this pins, both of which the repo has already been bitten by:
- * a block that spends the stage budget on rows a seat can pull itself, and a
- * replayed run reading trades that had not been logged yet at its own cutoff.
+ * Three failures this pins: an analyst being handed streak/win-rate framing
+ * (priming), a replayed run reading trades logged after its own cutoff, and a
+ * brief that cannot be traced back from the decision it informed.
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import { TradeOutcome, type LoggedTrade } from '../types';
 import { listRetrievedMemorySources, recentFormBlock } from '../services/learning/MemoryRetrievalService';
+import { briefFingerprint, buildRecentTradesBrief, neutralRowsText, selectRecentTrades } from '../utils/recentTradesBrief';
 
 vi.mock('../services/learning/MemoryFilesService', () => ({
     getMemoryFiles: () => ({ files: [], folders: [] }),
@@ -18,31 +18,44 @@ vi.mock('../services/learning/MemoryFilesService', () => ({
 
 const trade = (over: Partial<LoggedTrade> = {}): LoggedTrade => ({
     id: over.id ?? `t-${Math.random().toString(36).slice(2)}`,
-    analysis: { coinName: 'BTCUSDT', direction: 'Long', probability: 60, strategy: 'Breakout', stopLoss: '', takeProfit: [] } as unknown as LoggedTrade['analysis'],
+    analysis: {
+        coinName: 'BTCUSDT', direction: 'Long', probability: 60,
+        strategy: 'Breakout', stopLoss: '', takeProfit: [],
+    } as unknown as LoggedTrade['analysis'],
     outcome: TradeOutcome.WIN,
     timestamp: '2026-10-01T10:00:00.000Z',
     ...over,
 } as LoggedTrade);
 
-describe('recentFormBlock', () => {
-    it('is empty when there is no journal, not a zero-filled lie', () => {
-        expect(recentFormBlock([])).toBe('');
-        expect(recentFormBlock(undefined)).toBe('');
+const ten = Array.from({ length: 12 }, (_, i) => trade({
+    timestamp: new Date(Date.UTC(2026, 9, 1, 0, i)).toISOString(),
+    outcome: i % 3 === 0 ? TradeOutcome.LOSS : TradeOutcome.WIN,
+    realizedR: i % 3 === 0 ? -1 : 1.5,
+    pnlPercent: i % 3 === 0 ? -100 : 200,
+}));
+
+describe('recentFormBlock — analyst seats get the tape, not the verdict', () => {
+    it('says nothing about streak, win rate or net PnL to an analyst', () => {
+        const block = recentFormBlock(ten, undefined, 'analyst');
+        expect(block).toContain('**Your logged trades**');
+        expect(block).not.toMatch(/streak/i);
+        expect(block).not.toMatch(/win rate/i);
+        expect(block).not.toMatch(/net /i);
+        // …but it is still the record, row by row.
+        expect(block.split('\n').length).toBeGreaterThan(4);
+        expect(block).toContain('BTCUSDT Long WIN');
     });
 
-    it('carries the tally and no rows — the rows are one tool call away', () => {
-        const many = Array.from({ length: 30 }, (_, i) => trade({
-            timestamp: new Date(Date.UTC(2026, 9, 1, 0, i)).toISOString(),
-            outcome: i % 2 === 0 ? TradeOutcome.WIN : TradeOutcome.LOSS,
-        }));
-        const block = recentFormBlock(many);
+    it('gives the moderator the framing an analyst is denied', () => {
+        const block = recentFormBlock(ten, undefined, 'moderator');
         expect(block).toContain('**Recent form**');
-        expect(block).toContain('10W/10L');
-        expect(block).toContain('50.0% win rate');
-        // One header line plus the label: not 20 rows pasted into every prompt.
-        expect(block.split('\n')).toHaveLength(2);
-        expect(block).not.toContain('2026-10-01T00:00:00.000Z BTCUSDT');
-        expect(block.length).toBeLessThan(220);
+        expect(block).toMatch(/win rate/i);
+        expect(block).toMatch(/streak/i);
+    });
+
+    it('is empty when there is no journal, not a zero-filled lie', () => {
+        expect(recentFormBlock([])).toBe('');
+        expect(recentFormBlock(undefined, undefined, 'moderator')).toBe('');
     });
 
     it('honours the point-in-time cutoff a replayed run is assembled under', () => {
@@ -50,17 +63,45 @@ describe('recentFormBlock', () => {
             trade({ timestamp: '2026-09-01T00:00:00.000Z', outcome: TradeOutcome.WIN }),
             trade({ timestamp: '2026-10-01T00:00:00.000Z', outcome: TradeOutcome.LOSS }),
         ];
-        const cutoff = Date.parse('2026-09-15T00:00:00.000Z');
-        const seen = recentFormBlock(rows, cutoff);
-        expect(seen).toContain('1W/0L');
-        expect(seen).not.toContain('0W/1L');
-        expect(recentFormBlock(rows)).toContain('1W/1L');
+        const analyst = recentFormBlock(rows, Date.parse('2026-09-15T00:00:00.000Z'), 'analyst');
+        expect(analyst).toContain('WIN');
+        expect(analyst).not.toContain('LOSS');
+        const tally = recentFormBlock(rows, Date.parse('2026-09-15T00:00:00.000Z'), 'moderator');
+        expect(tally).toContain('1W/0L');
     });
 
-    it('is listed as a retrieved source when it is injected', () => {
-        const sources = listRetrievedMemorySources(undefined, [trade()], 'analyst');
-        expect(sources.some(s => s.path === 'journal/recent-form' && s.kind === 'similar')).toBe(true);
-        expect(listRetrievedMemorySources(undefined, [], 'analyst')
+    it('is listed as a retrieved source, per audience', () => {
+        expect(listRetrievedMemorySources(undefined, [trade()], 'analyst')
+            .some(s => s.path === 'journal/recent-form')).toBe(true);
+        expect(listRetrievedMemorySources(undefined, [], 'moderator')
             .some(s => s.path === 'journal/recent-form')).toBe(false);
+    });
+
+    it('fits the stage budget an analyst pays for it in', () => {
+        // 20 rows at day granularity is the whole promise; if this grows back
+        // toward the full ISO line it is competing with skills for bytes again.
+        const wide = Array.from({ length: 40 }, (_, i) => trade({
+            timestamp: new Date(Date.UTC(2026, 9, 1, 0, i)).toISOString(),
+        }));
+        const block = recentFormBlock(wide, undefined, 'analyst');
+        // label line + window line + 20 rows, and nothing beyond the window.
+        expect(block.split('\n')).toHaveLength(22);
+        expect(block.length).toBeLessThan(1400);
+    });
+});
+
+describe('briefFingerprint', () => {
+    it('identifies the exact brief a run saw, and differs by audience', () => {
+        const analyst = recentFormBlock(ten, undefined, 'analyst');
+        const moderator = recentFormBlock(ten, undefined, 'moderator');
+        expect(briefFingerprint(analyst)).toBe(briefFingerprint(analyst));
+        expect(briefFingerprint(analyst)).not.toBe(briefFingerprint(moderator));
+        expect(briefFingerprint(analyst)).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it('changes when the window changes, so a stale corpus cannot claim it', () => {
+        const a = neutralRowsText(buildRecentTradesBrief(selectRecentTrades(ten, { limit: 5 })));
+        const b = neutralRowsText(buildRecentTradesBrief(selectRecentTrades(ten, { limit: 10 })));
+        expect(briefFingerprint(a)).not.toBe(briefFingerprint(b));
     });
 });
