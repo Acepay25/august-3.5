@@ -18,6 +18,11 @@ export type PostMortemCandidate = {
         correctedEntry?: string;
         correctedStopLoss?: string;
         correctedTakeProfit?: string;
+        /** Facts the outcome detector already measured. They ride the candidate
+         *  so opening a capture modal on top of a detection cannot lose them —
+         *  the modal's own payload carries only what the trader types. */
+        outcomeResolvedAt?: string;
+        excursions?: { maePercent: number; mfePercent: number };
     };
 };
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeTradeExcursions } from '../services/backtesting/outcomeEngine';
+import { computeTradeExcursions, toLeveragedExcursionPct } from '../services/backtesting/outcomeEngine';
 import {
     countTradeOutcome,
     halveCounts,
@@ -183,5 +183,25 @@ describe('skill expectancy ledger', () => {
         expect(m.rSampled).toBeUndefined();
         expect(m.netR).toBeUndefined();
         expect(skillExpectancyR(m)).toBeUndefined();
+    });
+});
+
+describe('toLeveragedExcursionPct', () => {
+    // The row stores MAE/MFE as what the ACCOUNT did, the engine measures the
+    // price move. Both the post-mortem and the outcome autopilot write these two
+    // fields, so the scaling has exactly one owner — pinned here with values.
+    it('scales a raw price move by the leverage the row was logged with', () => {
+        expect(toLeveragedExcursionPct(2.5, 100)).toBe(250);
+        expect(toLeveragedExcursionPct(1.234, 3)).toBe(3.7);
+    });
+
+    it('treats a missing or non-positive leverage as 1x, never as zero', () => {
+        expect(toLeveragedExcursionPct(2.5, undefined)).toBe(2.5);
+        expect(toLeveragedExcursionPct(2.5, 0)).toBe(2.5);
+    });
+
+    it('passes an unmeasured excursion through as undefined, not 0', () => {
+        expect(toLeveragedExcursionPct(undefined, 100)).toBeUndefined();
+        expect(toLeveragedExcursionPct(NaN, 100)).toBeUndefined();
     });
 });

@@ -26,6 +26,7 @@ import { extractPostMortemFinalReport } from '../utils/postMortemReport';
 import { classifyRootCause } from '../utils/rootCause';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
+import { toLeveragedExcursionPct } from '../services/backtesting/outcomeEngine';
 import { recordLensMemoryFromTrade } from '../services/learning/lensMemoryRecord';
 import { getActiveUsername } from '../utils/activeUser';
 
@@ -590,17 +591,15 @@ Please investigate this discrepancy in your analysis.
             // `maxDrawdown` is NOT the MAE (the shared scan keeps accumulating
             // past the stop by design), and validation reports excursions in
             // RAW price % while `pnlPercent` on this row is LEVERAGED % — so
-            // they are scaled here to keep capture efficiency dimensionless.
-            const toLeveragedPct = (raw: number | undefined, leverage: number | undefined): number | undefined =>
-                raw !== undefined
-                    ? Math.round(raw * (leverage && leverage > 0 ? leverage : 1) * 10) / 10
-                    : undefined;
+            // they are scaled to keep capture efficiency dimensionless. The
+            // scaling is owned by outcomeEngine, because the outcome autopilot
+            // settles these same two fields and the row cannot hold two answers.
             // Spread-conditional, not `key: undefined` — a re-run whose
             // validation was skipped or never resolved an exit must leave the
             // numbers an earlier run earned in place.
             const learnedOnThisRun = (t: LoggedTrade): Partial<LoggedTrade> => {
-                const mae = toLeveragedPct(priceValidation?.maePercent, t.leverage);
-                const mfe = toLeveragedPct(priceValidation?.mfePercent, t.leverage);
+                const mae = toLeveragedExcursionPct(priceValidation?.maePercent, t.leverage);
+                const mfe = toLeveragedExcursionPct(priceValidation?.mfePercent, t.leverage);
                 const r = priceValidation?.rrRatio;
                 return {
                     ...(mae !== undefined ? { maxAdverseExcursion: mae } : {}),

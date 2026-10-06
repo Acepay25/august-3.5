@@ -342,6 +342,12 @@ export interface Message {
    *  Rides the message so the journal can show user-prior vs verdict vs
    *  outcome — the human-Brier vs ensemble-Brier anti-automation display. */
   userPriorCall?: UserPriorCall;
+  /** The stable id of the trade plan this message presents (minted by the dock
+   *  at `present_trade`, shared with the level-watch). Stamped onto the journal
+   *  row at log time, so a plan, its watch and its outcome stay joinable — and
+   *  so the "Log this trade" card dedupes on a field instead of on the rendered
+   *  headline text. */
+  planId?: string;
   /** Persisted model side-effects: proposal tools and file
    *  creations this run produced, for the status rows on
    *  the bubble ("Saved to memory · N entries", "⚠ Memory write noted").

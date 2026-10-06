@@ -424,3 +424,19 @@ export const computeTradeExcursions = (
   }
   return { maePercent, mfePercent };
 };
+
+/**
+ * MAE/MFE are measured as a RAW price move but stored on the trade row as a
+ * LEVERAGED percent — what the account actually did. One conversion, owned by
+ * the module that defines both units: the post-mortem's candle validation and
+ * the outcome autopilot settle the same two fields, and two implementations of
+ * this multiply is how a journal ends up with two different "worst move" numbers
+ * for one trade.
+ */
+export const toLeveragedExcursionPct = (
+  rawPercent: number | undefined,
+  leverage: number | undefined,
+): number | undefined =>
+  rawPercent === undefined || !Number.isFinite(rawPercent)
+    ? undefined
+    : Math.round(rawPercent * (leverage && leverage > 0 ? leverage : 1) * 10) / 10;

@@ -1754,9 +1754,12 @@ const App: React.FC = () => {
             // planId dedupe: the dock's per-card disposition map stops a
             // double-click on the SAME card, but re-presenting the plan (a
             // fresh card, or logging from another surface) still minted a
-            // byte-identical second card. The headline embeds the plan id, so
-            // one logged copy per plan is checkable at the writer.
-            if (proposal.planId && prev.some(m => m.text.includes(`· plan ${proposal.planId}`))) {
+            // byte-identical second card. The row now carries the id as a FIELD,
+            // so one logged copy per plan is checked on data, not on prose. The
+            // text match stays ONLY so a plan already logged before the field
+            // existed cannot be re-logged into a second journal row.
+            if (proposal.planId && prev.some(m => m.planId === proposal.planId
+                || m.text.includes(`· plan ${proposal.planId}`))) {
                 return prev;
             }
             return [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)];
