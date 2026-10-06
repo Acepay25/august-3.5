@@ -17,7 +17,17 @@ describe('buildModelsUsedRecord', () => {
             { config: { id: 'p1' }, model: 'm-b', thoughtsKey: 'p1:m-b' },
             { config: { id: 'p2' }, model: 'm-c', thoughtsKey: 'p2:m-c' },
         ]);
-        expect(rec).toEqual({ p1: 'm-a', 'p1:m-b': 'm-b', p2: 'm-c' });
+        // The provider key names BOTH models. It used to keep only the first, so
+        // every read that goes by provider dropped the second seat's trades.
+        expect(rec).toEqual({ p1: 'm-a, m-b', 'p1:m-b': 'm-b', p2: 'm-c' });
+    });
+
+    it('does not invent a second key when two roles ran the same model', () => {
+        const rec = buildModelsUsedRecord([
+            { config: { id: 'p1' }, model: 'm-a', thoughtsKey: 'p1:m-a' },
+            { config: { id: 'p1' }, model: 'm-a', thoughtsKey: 'p1:m-a-2' },
+        ]);
+        expect(rec).toEqual({ p1: 'm-a' });
     });
 });
 
