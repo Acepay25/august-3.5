@@ -82,6 +82,41 @@ export function chatModelIdOf(selection: string): string {
     return value.includes('::') ? value.slice(value.indexOf('::') + 2) : value;
 }
 
+export interface ChatModelFallback {
+    /** Why the stored pick cannot answer, or null when it can. */
+    issue: string | null;
+    /** The provider that WILL answer — the pick when it resolves, else the
+     *  first ready provider. */
+    provider: ProviderConfig | null;
+}
+
+/**
+ * Resolve a chat-model pick and say out loud when the app is NOT honouring it.
+ *
+ * A stored pick goes stale for ordinary reasons — the provider was edited,
+ * disabled, lost its key, or the model was deleted. The answer must not die and
+ * it must not silently come from a different model either, so every composer
+ * that offers a picker shows this reason above the send button. It lives here
+ * rather than in the dock because the Chat surface runs the same selection: two
+ * copies of this branch is how one surface warns and the other lies.
+ */
+export function computeChatModelFallback(
+    configs: ProviderConfig[],
+    selection: string,
+): ChatModelFallback {
+    const resolved = resolveChatModelSelection(configs, selection);
+    const provider = resolved ?? getFirstReadyProvider(configs);
+    if (!selection || resolved || !provider) return { issue: null, provider };
+    const owner = findChatModelOwner(configs, selection);
+    const modelId = chatModelIdOf(selection);
+    return {
+        provider,
+        issue: owner
+            ? `The provider for "${modelId}" (${owner.config.name}) is disabled or has no API key.`
+            : `The selected model "${modelId}" is no longer configured on any provider.`,
+    };
+}
+
 /**
  * A provider config by id — the single lookup used everywhere a seat,
  * bot, or automation references its provider by id.

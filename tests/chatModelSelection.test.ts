@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { chatModelIdOf, findChatModelOwner, resolveChatModelSelection } from '../utils/providerUtils';
+import { chatModelIdOf, computeChatModelFallback, findChatModelOwner, resolveChatModelSelection } from '../utils/providerUtils';
 import type { ProviderConfig } from '../types/provider';
 
 const prov = (id: string, over: Partial<ProviderConfig> = {}): ProviderConfig => ({
@@ -73,5 +73,44 @@ describe('resolveChatModelSelection', () => {
         expect(findChatModelOwner(providers, 'no-such-model')).toBeNull();
         // A healthy pick is ready.
         expect(findChatModelOwner(providers, 'prov-a::glm-5')?.ready).toBe(true);
+    });
+});
+
+describe('computeChatModelFallback — the words both composers show', () => {
+    it('says nothing when the pick answers, or when nothing is picked', () => {
+        const providers = [prov('prov-a', { selectedModel: 'glm-5', models: ['glm-5'] })];
+        expect(computeChatModelFallback(providers, 'prov-a::glm-5')).toEqual({
+            issue: null,
+            provider: expect.objectContaining({ id: 'prov-a' }),
+        });
+        expect(computeChatModelFallback(providers, '').issue).toBeNull();
+    });
+
+    it('names the disabled provider when the model still exists somewhere', () => {
+        const providers = [
+            prov('prov-a', { selectedModel: 'glm-5', models: ['glm-5'] }),
+            prov('prov-b', { isEnabled: false, apiKey: '', selectedModel: 'glm-5', models: ['glm-5'] }),
+            prov('prov-c', { selectedModel: 'other', models: ['other'] }),
+        ];
+        const f = computeChatModelFallback(providers, 'prov-b::glm-5');
+        // The provider exists and lists it, so the honest sentence is about the
+        // provider — not a claim that the model was deleted.
+        expect(f.issue).toContain('is disabled or has no API key');
+        expect(f.issue).toContain('PROV-B');
+        // And it reports who WILL answer, which the banner names.
+        expect(f.provider?.id).toBe('prov-a');
+    });
+
+    it('says the model is no longer configured when no provider lists it', () => {
+        const providers = [prov('prov-a', { selectedModel: 'glm-5', models: ['glm-5'] })];
+        const f = computeChatModelFallback(providers, 'prov-z::deleted-model');
+        expect(f.issue).toBe('The selected model "deleted-model" is no longer configured on any provider.');
+    });
+
+    it('stays silent when nothing can answer at all — no banner, no lie', () => {
+        const providers = [prov('prov-a', { isEnabled: false, apiKey: '', selectedModel: 'glm-5', models: ['glm-5'] })];
+        const f = computeChatModelFallback(providers, 'prov-a::glm-5');
+        expect(f.provider).toBeNull();
+        expect(f.issue).toBeNull();
     });
 });

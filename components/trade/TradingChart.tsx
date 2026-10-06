@@ -1090,7 +1090,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     const toolActive = tool !== 'cursor';
 
     return (
-        <div className="flex h-full min-h-0 flex-col" data-testid="trading-chart">
+        <div className="flex h-full min-h-0 flex-col" data-testid="trading-chart" data-symbol={symbol}>
             {/* The timeframe bar is shared with the Chat surface, so the customizable
                 set and its persisted selection are one thing rather than two. The chart
                 keeps its own extras as children. */}

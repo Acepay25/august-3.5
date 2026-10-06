@@ -1368,6 +1368,38 @@ async function main() {
             await page.evaluate(() => { window.location.hash = ''; });
         }
 
+        // ── The stale-model banner, on the surface that shipped without one ─
+        // The dock has warned about a dead chat-model pick for a while; the Chat
+        // surface ran the SAME pick with NO warning. Unit tests can prove the
+        // component renders — only the real app proves App's prop actually
+        // reaches it. Both states are measured: a check that reads the same
+        // either way is measuring nothing.
+        const bannerOnChat = async (stale) => {
+            await page.evaluate((v) => {
+                if (v) localStorage.setItem('casual_chat_model', v);
+                else localStorage.removeItem('casual_chat_model');
+            }, stale ? 'probe-provider::probe-stale-model' : null);
+            await page.reload();
+            await sleep(1800);
+            const how = await navTo('Chat');
+            await sleep(1200);
+            const text = await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="model-fallback-warning"]');
+                return el ? (el.textContent || '').trim() : null;
+            });
+            return { how, text };
+        };
+        const withStale = await bannerOnChat(true);
+        check('a stale chat-model pick warns on the Chat surface',
+            withStale.how === 'clicked' && !!withStale.text
+            && /no longer configured|disabled or has no API key/.test(withStale.text)
+            && /Answering with/.test(withStale.text),
+            `${withStale.how} · ${(withStale.text || 'no banner rendered').slice(0, 140)}`);
+        const withoutStale = await bannerOnChat(false);
+        check('and goes quiet once the pick is not stale',
+            withoutStale.how === 'clicked' && withoutStale.text === null,
+            `${withoutStale.how} · still reading: ${String(withoutStale.text).slice(0, 120)}`);
+
         // ── Dead-control sweep ───────────────────────────────────────────
         // Mounting a surface proves the surface renders, not that its buttons
         // work. This is the shape of the Approvals hole: the pane was there, the
@@ -1595,8 +1627,13 @@ async function main() {
                 const onTrade = await page.locator('[data-testid="trade-view"]')
                     .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
                 const shown = onTrade ? await page.evaluate(() => {
-                    const el = document.querySelector('[data-testid="trade-view"]');
-                    return (el?.textContent || '').match(/[A-Z]{2,10}USDT/)?.[0] ?? null;
+                    // Ask the chart WHICH coin it is drawing. Reading the panel's
+                    // text with a /[A-Z]{2,10}USDT/ scrape glues adjacent labels
+                    // together ("USDTBTCUSDT") whenever two symbols sit without a
+                    // separator between them — a measurement that fails on the
+                    // DOM's whitespace rather than on the app's behavior.
+                    const el = document.querySelector('[data-testid="trading-chart"]');
+                    return el?.getAttribute('data-symbol') ?? null;
                 }) : null;
                 check('the coin chosen in Chat is the coin the chart draws',
                     shown === picked, `chose ${picked}, chart shows ${shown}`);
