@@ -1107,7 +1107,10 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on('update-not-available', () => {
-        updateInfo = { ...updateInfo, status: 'idle', version: null };
+        // 'upToDate', NOT 'idle' — idle is also the never-checked state, so
+        // collapsing the two made "no update exists" indistinguishable from
+        // "the check never ran", and no surface could report a manual check.
+        updateInfo = { ...updateInfo, status: 'upToDate', version: null };
         sendUpdateStatus();
     });
 

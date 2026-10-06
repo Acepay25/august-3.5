@@ -58,6 +58,10 @@ export const useUpdateStatusDot = (): React.ReactNode => {
                 Number.isFinite(progress) && progress > 0 ? `Downloading — ${progress}%` : 'Downloading…',
                 'bg-cyan-500/30', true,
             );
+        case 'upToDate':
+            // The check ran and found nothing. Silent before this: the default
+            // branch returned null, so a manual check looked like it did nothing.
+            return dot('You\'re up to date', 'bg-emerald-500/60');
         case 'downloaded':
             return dot('Ready to restart', 'bg-emerald-500');
         case 'installing':

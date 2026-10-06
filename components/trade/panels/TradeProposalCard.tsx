@@ -12,6 +12,8 @@
 import React from 'react';
 import { CheckCircle } from '../../shared/Icons';
 import type { TradeProposal } from '../../../services/trade/proposedTrade';
+import { computeRrRatio } from '../../../services/trade/proposedTrade';
+import { fmtRiskReward } from '../../../utils/riskReward';
 
 export interface TradeProposalCardProps {
     proposal: TradeProposal;
@@ -27,6 +29,13 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
         <div className="flex items-center gap-2">
             <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
             <span className="font-mono text-ui-sm font-bold text-zinc-100">{proposal.symbol}</span>
+            {/* The number that gates "Log this trade" — from the canonical
+                planned-R:R util, the same chip the Chat surface header shows. */}
+            {computeRrRatio(proposal) > 0 && (
+                <span className="rounded-control border border-white/[0.04] bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs font-medium text-zinc-300">
+                    {fmtRiskReward(computeRrRatio(proposal), 1)} R:R
+                </span>
+            )}
             <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{proposal.confidence} confidence</span>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 rounded-control border border-white/[0.04] bg-white/[0.02] p-2 font-mono text-ui-dense tabular-nums">
