@@ -4,7 +4,6 @@
 // Moved verbatim from the inline body in SettingsMenu.tsx.
 import React from 'react';
 import { BackupManager } from '../BackupManager';
-import SessionUsagePanel from '../SessionUsagePanel';
 import { StorageLocationCard } from '../StorageLocationCard';
 import { SettingsPageHeader } from './shared';
 import type { SettingsTabProps } from './types';
@@ -26,7 +25,6 @@ const ActionsTab: React.FC<{ tab: ActionsTabProps }> = ({ tab: props }) => {
 
             <StorageLocationCard />
 
-            <SessionUsagePanel />
 
             {/* Backups — list/export/restore/delete the 30-min auto-backups */}
             {username && onProfileRestored && (

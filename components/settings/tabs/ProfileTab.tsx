@@ -7,6 +7,7 @@
 import React from 'react';
 import { ArrowUpRight, Database, HardDrive, User, Users } from '../../shared/Icons';
 import { APP_NAME, APP_VERSION } from '../../../constants/version';
+import { useAutoUpdate } from '../../../hooks/useAutoUpdate';
 import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import type { SettingsTab } from '../SettingsMenu';
 import type { SettingsTabProps } from './types';
@@ -16,6 +17,30 @@ export interface ProfileTabProps extends SettingsTabProps {
     onExportData?: () => Promise<void> | void;
     setActiveTab: (tab: SettingsTab) => void;
 }
+
+
+
+/** The Settings-side updater entry (stage-2 Phase-4's "check for updates"
+ *  row): a quiet text button beside the version line. The rail's account row
+ *  owns the updater's day-to-day states; this is the discoverable check. */
+const CheckForUpdatesRow: React.FC = () => {
+    const { isElectron, updateStatus, checkForUpdates } = useAutoUpdate();
+    const [busy, setBusy] = React.useState(false);
+    if (!isElectron) return null;
+    const phase = updateStatus?.status ?? 'idle';
+    const label = phase === 'checking' ? 'Checking…' : 'Check for updates';
+    return (
+        <button
+            type="button"
+            data-testid="profile-check-updates"
+            disabled={busy || phase === 'checking' || phase === 'downloading' || phase === 'installing'}
+            onClick={() => { setBusy(true); void checkForUpdates().finally(() => setBusy(false)); }}
+            className="rounded border border-white/10 px-1.5 py-0.5 text-ui-2xs text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200 disabled:opacity-50"
+        >
+            {label}
+        </button>
+    );
+};
 
 const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
     const { username, providerConfigs, providerConfigsLoaded, onSwitchUser, onExportData, setActiveTab } = props;
@@ -38,11 +63,14 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
                 </span>
                 <div className="min-w-0 flex-1">
                     <div className="truncate text-base font-semibold text-zinc-100">{username || 'Trader'}</div>
-                    <div className="mt-0.5 text-ui-dense text-zinc-500">
-                        {APP_NAME} v{APP_VERSION}
-                        {providerConfigsLoaded
-                            ? ` · ${readyProviders} ${readyProviders === 1 ? 'provider' : 'providers'} connected`
-                            : ' · loading providers…'}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-ui-dense text-zinc-500">
+                        <span>
+                            {APP_NAME} v{APP_VERSION}
+                            {providerConfigsLoaded
+                                ? ` · ${readyProviders} ${readyProviders === 1 ? 'provider' : 'providers'} connected`
+                                : ' · loading providers…'}
+                        </span>
+                        <CheckForUpdatesRow />
                     </div>
                 </div>
                 {onSwitchUser && (

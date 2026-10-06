@@ -46,7 +46,8 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                 </h4>
                 <div className="flex items-center gap-1">
                     {(['all', 'used', 'learned'] as const).map(t => (
-                        <button key={t} onClick={() => setGraphTab(t)}
+                        <button key={t} type="button" onClick={() => setGraphTab(t)}
+                            aria-pressed={graphTab === t}
                             className={`px-2 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${graphTab === t ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}>
                             {t}
                         </button>

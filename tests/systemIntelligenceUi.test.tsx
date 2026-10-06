@@ -45,7 +45,7 @@ afterEach(cleanup);
 
 describe('System Intelligence UI', () => {
     it('shows the actual static version and honest empty metrics, including no high-confidence outcomes', async () => {
-        render(<VersionHistoryDashboard onClose={vi.fn()} />);
+        render(<VersionHistoryDashboard />);
         await waitFor(() => expect(screen.getByText('No data')).toBeInTheDocument());
         const version = screen.getByLabelText('System version');
         expect(version.tagName).toBe('SPAN');
@@ -56,7 +56,8 @@ describe('System Intelligence UI', () => {
         expect(screen.getByText('Awaiting first resolved trade')).toBeInTheDocument();
         expect(screen.getByText('No files')).toBeInTheDocument();
         expect(screen.getByText('Log resolved high-confidence trades to calibrate')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'System' }));
+        // Stage 3 deleted the tab strip — the runtime cards are always on
+        // screen, so these assertions no longer need a click to reach them.
         const storage = screen.getByText('Unified Storage').parentElement!;
         expect(storage).toHaveTextContent('0Items');
         expect(screen.getByText('Workers Idle')).toBeInTheDocument();
@@ -66,26 +67,22 @@ describe('System Intelligence UI', () => {
         data.highRate = 0;
         data.tradeLogs = [{}, {}];
         data.totalInsights = 3;
-        render(<VersionHistoryDashboard onClose={vi.fn()} />);
+        render(<VersionHistoryDashboard />);
         expect(await screen.findByText('0%')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'System' }));
         await waitFor(() => expect(screen.getByText('Unified Storage').parentElement).toHaveTextContent('5Items'));
     });
 
-    it('labels the header destination accurately and uses the History icon', () => {
-        const open = vi.fn();
+    it('the header no longer carries System Intelligence — Learn → System owns it', () => {
+        // Stage 3: the clock icon opened a full-screen overlay from global
+        // chrome; the dashboard is now embedded on the Learn surface's
+        // System tab, and the header keeps no second path.
         render(<Header
             saveStatus="SAVED" isAnalysisInProgress={false}
             isPostMortemInProgress={false} currentVisionData={[]}
             surface="trade"
             setIsLivePostMortemVisible={vi.fn()}
-            onOpenVersionHistory={open}
         />);
-        const button = screen.getByRole('button', { name: 'System Intelligence' });
-        expect(button).toHaveAttribute('title', 'System Intelligence');
-        expect(button.querySelector('svg')).toHaveClass('lucide-history');
-        fireEvent.click(button);
-        expect(open).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('button', { name: 'System Intelligence' })).toBeNull();
         expect(screen.queryByRole('button', { name: /Changelog/ })).toBeNull();
     });
 });

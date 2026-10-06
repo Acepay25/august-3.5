@@ -5,7 +5,7 @@ import { AIProvider, AccuracySubMode, LoggedTrade } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
 import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
-import { DiagnosticsPanel } from './DiagnosticsPanel';
+import type { JournalUIState } from '../../hooks/useJournalUI';
 import { EmptyState } from '../ui/EmptyState';
 import {AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon, User, FileText, Brain, BookOpen, Database, Eye, Search, ChevronRight} from '../shared/Icons';
 import { getIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
@@ -39,14 +39,9 @@ const TabFallback: React.FC = () => (
 
 export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies' | 'skills';
 
-const SETTINGS_TABS: SettingsTab[] = ['profile', 'general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies', 'skills'];
-
 /** Tabs whose embedded manager owns the whole scroll container (their own
  *  padding, their own sticky headers) — the workspace adds none. */
 const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'memory', 'instructions', 'strategies', 'skills'];
-
-const isSettingsTab = (value?: string): value is SettingsTab =>
-    !!value && SETTINGS_TABS.includes(value as SettingsTab);
 
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -65,13 +60,9 @@ interface SettingsMenuProps {
     setIsHybridIntelligenceEnabled?: (enabled: boolean) => void;
     isAutoCapturing?: boolean;
     onToggleAutoCapturing?: () => void;
-    isUpdateAutoCapturing?: boolean;
-    onToggleUpdateAutoCapturing?: () => void;
     isEntryNotHitCapturing?: boolean;
     onToggleEntryNotHitCapturing?: () => void;
     // Memory
-    isGlobalMemoryEnabled?: boolean;
-    setIsGlobalMemoryEnabled?: (enabled: boolean) => void;
     // Uploaded strategy books (Settings → Strategies)
     isStrategiesEnabled?: boolean;
     setIsStrategiesEnabled?: (enabled: boolean) => void;
@@ -103,7 +94,9 @@ interface SettingsMenuProps {
     username?: string;
     /** Called after a backup restore replaces the profile (App reloads it). */
     onProfileRestored?: (username: string) => void;
-    onOpenJournal?: (tab?: string) => void;
+    /** Routes to the JOURNAL SURFACE (stage 3) — Settings holds no journal of
+     *  its own; these were the launcher cards' only path to it. */
+    onOpenJournal?: (tab?: JournalUIState['tab']) => void;
     summaryCharLimit?: number;
     onUpdateSummaryCharLimit?: (limit: number) => void;
     useAlgorithmicSummary?: boolean;
@@ -147,9 +140,6 @@ interface SettingsMenuProps {
     // tests/deadControlsGuard.test.ts forbids them in this file, comment
     // included.
     onUpdateModel?: (providerId: string, oldModelId: string, newModelId: string) => Promise<void>;
-    // Settings initial tab (set by handleOpenJournal to open Journal tab directly)
-    settingsInitialTab?: string;
-    onSettingsInitialTabConsumed?: () => void;
 }
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
@@ -255,10 +245,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // card points beginners there anyway). The old default was the most
     // technical tab (provider CRUD).
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
-        // If settingsInitialTab is provided (e.g., from handleOpenJournal), use it
-        if (isSettingsTab(props.settingsInitialTab)) {
-            return props.settingsInitialTab;
-        }
         const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
         return hasReadyProvider ? 'general' : 'models';
     });
@@ -313,14 +299,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
      *  is nothing left for it to see, and it used to overwrite the choice. */
     const explicitTabChosenRef = useRef(false);
 
-    // Handle settingsInitialTab prop changes (e.g., when handleOpenJournal sets it)
-    useEffect(() => {
-        if (isSettingsTab(props.settingsInitialTab)) {
-            setActiveTab(props.settingsInitialTab);
-            explicitTabChosenRef.current = true;
-            props.onSettingsInitialTabConsumed?.();
-        }
-    }, [props.settingsInitialTab]);
+    const navClick = useCallback((id: SettingsTab): void => {
+        // A click IS the explicit choice: without this the landing effect
+        // below can still overwrite it when providerConfigsLoaded arrives late.
+        explicitTabChosenRef.current = true;
+        setActiveTab(id);
+    }, []);
 
     // Closing with a staged (unsaved) provider draft would silently discard
     // the user's edits — confirm first (Escape, backdrop, and the X all route
@@ -438,7 +422,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <NavTabButton
                                                     key={entry.id}
                                                     active={activeTab === entry.id}
-                                                    onClick={() => setActiveTab(entry.id)}
+                                                    onClick={() => navClick(entry.id)}
                                                     icon={entry.icon}
                                                     label={entry.label}
                                                     badge={navBadge(entry.id)}
@@ -467,8 +451,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <span>Developer</span>
                                         <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500 transition-transform duration-150 ease-[var(--ease-snappy)] group-open:rotate-90" aria-hidden="true" />
                                     </summary>
-                                    <div className="mt-2">
-                                        <DiagnosticsPanel />
+                                    <div className="mt-2 px-2 pb-1 text-ui-dense leading-5 text-zinc-500">
+                                        Runtime errors and the thinking-leak bin moved
+                                        to <span className="text-zinc-300">Learn → System</span>.
                                     </div>
                                 </details>
                                 <p className="text-ui-xs text-zinc-600 text-center font-mono">
@@ -580,8 +565,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         setIsMemoryEnabledInPureAI: props.setIsMemoryEnabledInPureAI,
                                         isAutoCapturing: props.isAutoCapturing,
                                         onToggleAutoCapturing: props.onToggleAutoCapturing,
-                                        isUpdateAutoCapturing: props.isUpdateAutoCapturing,
-                                        onToggleUpdateAutoCapturing: props.onToggleUpdateAutoCapturing,
                                         isEntryNotHitCapturing: props.isEntryNotHitCapturing,
                                         onToggleEntryNotHitCapturing: props.onToggleEntryNotHitCapturing,
                                     }} />
@@ -618,8 +601,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <Suspense fallback={<TabFallback />}>
                                     <MemoryTab tab={{
                                         memoryConfig: props.memoryConfig,
-                                        isGlobalMemoryEnabled: props.isGlobalMemoryEnabled,
-                                        setIsGlobalMemoryEnabled: props.setIsGlobalMemoryEnabled,
                                         onOpenLearn,
                                         openLearnQueue,
                                     }} />

@@ -295,7 +295,6 @@ async function seedProfile(page) {
                     isMemoryEnabledInPureAI: false,
                     isHybridIntelligenceEnabled: false,
                     isAutoCapturing: false,
-                    isUpdateAutoCapturing: false,
                     isEntryNotHitCapturing: false,
                     useAlgorithmicSummary: false,
                     useAlgorithmicInsights: false,

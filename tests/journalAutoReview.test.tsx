@@ -56,7 +56,6 @@ const tradeLoggingParams = (onJournalAutoRefresh: ReturnType<typeof vi.fn>) => (
     setIsAutoCapturing: vi.fn(),
     setIsHybridLoading: vi.fn(),
     setIsEntryNotHitCapturing: vi.fn(),
-    setIsUpdateAutoCapturing: vi.fn(),
     setIsInsightGenerating: vi.fn(),
     setCurrentHybridData: vi.fn(),
     startPostMortemAnalysis: vi.fn(),

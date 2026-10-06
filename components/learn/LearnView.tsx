@@ -19,7 +19,7 @@
  */
 
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { BookOpen, ClipboardCheck, Gauge, ListChecks } from '../shared/Icons';
+import { BookOpen, ClipboardCheck, Gauge, ListChecks, Server } from '../shared/Icons';
 import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import SupervisorStream from './SupervisorStream';
@@ -31,8 +31,13 @@ const MemoryFilesManager = lazy(() => import('./MemoryFilesManager'));
 const HarnessLessonsBrowser = lazy(() =>
     import('../settings/HarnessLessonsBrowser').then(m => ({ default: m.HarnessLessonsBrowser })));
 const LearningDashboard = lazy(() => import('../dashboards/LearningDashboard'));
+const VersionHistoryDashboardLazy = lazy(() =>
+    import('../dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
+const SessionUsagePanel = lazy(() => import('../settings/SessionUsagePanel'));
+const DiagnosticsPanel = lazy(() =>
+    import('../settings/DiagnosticsPanel').then(m => ({ default: m.DiagnosticsPanel })));
 
-type LearnTab = 'queue' | 'memory' | 'health' | 'coach';
+type LearnTab = 'queue' | 'memory' | 'health' | 'coach' | 'system';
 
 export type { LearnTab };
 
@@ -43,6 +48,10 @@ const TABS: Array<{ id: LearnTab; label: string; Icon: React.FC<{ className?: st
     { id: 'memory', label: 'Memory', Icon: BookOpen },
     { id: 'health', label: 'Health', Icon: Gauge },
     { id: 'coach', label: 'Coach', Icon: ClipboardCheck },
+    // Stage 3: the runtime/calibration diagnostics that lived in a
+    // header-overlay (System Intelligence) and the Data tab's usage
+    // dashboards land here — the learning loop's own telemetry.
+    { id: 'system', label: 'System', Icon: Server },
 ];
 
 const Fallback: React.FC = () => (
@@ -161,6 +170,25 @@ const LearnView: React.FC<LearnViewProps> = ({
                     the panel in; it brings its own max-width column. */}
                 {tab === 'coach' && renderCoach && (
                     <div data-testid="learn-coach">{renderCoach()}</div>
+                )}
+
+                {/* System: the learning loop's runtime telemetry. The header
+                    overlay ("System Intelligence", stage-3-deleted chrome)
+                    embeds here with its decorative Algorithm cards cut; the
+                    usage dashboards moved out of Settings → Data; the
+                    Developer <details>' error log rounds it out. */}
+                {tab === 'system' && (
+                    <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 overflow-y-auto p-3" data-testid="learn-system">
+                        <Suspense fallback={<Fallback />}>
+                            <VersionHistoryDashboardLazy />
+                        </Suspense>
+                        <Suspense fallback={<Fallback />}>
+                            <SessionUsagePanel />
+                        </Suspense>
+                        <Suspense fallback={<Fallback />}>
+                            <DiagnosticsPanel />
+                        </Suspense>
+                    </div>
                 )}
             </div>
         </div>

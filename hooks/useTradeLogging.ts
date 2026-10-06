@@ -49,6 +49,11 @@ export interface UseTradeLoggingParams {
     /** "Prompt when entry price is not hit" setting — gates whether the
      *  capture modal interrupts, or the ENTRY_NOT_HIT is logged silently. */
     isEntryNotHitCapturing: boolean;
+    /** Stage 3 wired this one: ON = the capture prompt opens when the
+     *  autopilot confirms an outcome (see confirmAutopilotOutcome). Defaults
+     *  off — today's behavior. ("Active trade updates" had no real trigger —
+     *  nothing auto-initiates a trade update — so its toggle was deleted.) */
+    isAutoCapturing?: boolean;
     setIsInsightGenerating: (v: boolean) => void;
     // Market data setters:
     setCurrentHybridData: (v: any) => void;
@@ -70,7 +75,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         memoryModel, memoryConfig, useAlgorithmicInsights,
         onJournalAutoRefresh,
         setIsAutoCaptureBusy, setIsHybridLoading, setIsEntryNotHitCaptureBusy,
-        setIsUpdateCaptureBusy, isEntryNotHitCapturing, setIsInsightGenerating,
+        setIsUpdateCaptureBusy, isEntryNotHitCapturing, isAutoCapturing, setIsInsightGenerating,
         setCurrentHybridData, startPostMortemAnalysis, handleSendMessage,
         toast, setPostMortemCandidate, setConfidenceCalibration,
     } = params;
@@ -734,6 +739,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // pnlPercent is a PERCENT (e.g. +200), not dollars — it must not be
         // written into pnlAmount, which dashboards sum as USD. It is carried
         // on pnlPercent instead; dollar PnL stays unset (Not Captured).
+        // Stage 3: "Post-trade result capture" ON asks the trader for the
+        // full capture (dollars, discipline tags) instead of logging the
+        // percent-only row — the dashboard unit split's root cause.
+        if (isAutoCapturing === true) {
+            setDataCaptureCandidate({ message, outcome, feedback: undefined });
+            return;
+        }
         void logTradeWithFeedback(message, outcome, {
             pnlPercent,
             slOptimizationData,
@@ -749,7 +761,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             outcome,
             pnlPercent,
         });
-    }, [logTradeWithFeedback, pushTradeClosedEvent]);
+    }, [logTradeWithFeedback, pushTradeClosedEvent, isAutoCapturing]);
 
     const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
         logEntryNotHitTrade({ message });

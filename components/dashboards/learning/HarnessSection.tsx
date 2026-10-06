@@ -117,6 +117,8 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
                     {([0, 30, 90] as const).map(d => (
                         <button
                             key={d}
+                            type="button"
+                            aria-pressed={windowDays === d}
                             onClick={() => onWindowDaysChange(d)}
                             className={`px-2 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                 windowDays === d ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
