@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { BotIcon, UserIcon, UploadIcon, TrashIcon, CloseIcon } from '../shared/Icons';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { DISCLAIMER_FIRST_RUN } from '../../constants/disclaimer';
 
 interface UserProfileManagerProps {
@@ -27,6 +28,9 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
   // profile operation be dismissed halfway through.
   const canClose = !isFreshBlank && !isBusy;
   useEscapeClose(Boolean(onClose) && isVisible && canClose, () => onClose?.());
+  // Reachable by keyboard before this, but Tab walked straight out of the
+  // dialog into the page behind it.
+  const trapRef = useFocusTrap<HTMLDivElement>(isVisible);
 
   if (!isVisible) return null;
 
@@ -84,7 +88,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-modal flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" aria-busy={isBusy} onClick={(e) => { if (e.target === e.currentTarget && canClose && !pendingRef.current) onClose?.(); }}>
+    <div ref={trapRef} className="fixed inset-0 bg-black z-modal flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" aria-busy={isBusy} onClick={(e) => { if (e.target === e.currentTarget && canClose && !pendingRef.current) onClose?.(); }}>
       <div className="relative w-full max-w-md bg-zinc-900 rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="relative px-8 py-10 text-center border-b border-white/5">

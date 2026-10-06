@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { TrashIcon, CloseIcon } from './Icons';
 
 /**
@@ -58,7 +60,6 @@ export function useConfirmDialog() {
     const [state, setState] = useState<ConfirmState>({ ...DEFAULTS, open: false });
     const [typedInput, setTypedInput] = useState('');
     const [undoVisible, setUndoVisible] = useState(false);
-    const dialogRef = useRef<HTMLDivElement>(null);
     const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onUndoRef = useRef<(() => void | Promise<void>) | undefined>(undefined);
 
@@ -118,31 +119,12 @@ export function useConfirmDialog() {
         }
     }, []);
 
-    useEffect(() => {
-        if (!state.open) return;
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                handleCancel();
-                return;
-            }
-            if (event.key !== 'Tab' || !dialogRef.current) return;
-            const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-            if (focusable.length === 0) return;
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-            } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-            }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [state.open, handleCancel]);
+    // One shared trap, not a second implementation: it cycles Tab, focuses the
+    // first control on open AND restores focus to whatever opened the dialog —
+    // the hand-rolled handler it replaces did the first two and stranded focus
+    // on a removed node afterwards.
+    const dialogRef = useFocusTrap<HTMLDivElement>(state.open);
+    useEscapeClose(state.open, handleCancel);
 
     // Cleanup any pending undo timer on unmount.
     useEffect(() => {
