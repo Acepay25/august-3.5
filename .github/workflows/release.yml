@@ -1,3 +1,5 @@
+# Third-party actions are pinned to COMMIT SHAs, not mutable tags: a tag can be
+# moved by whoever owns it, and these files build and sign what users install.
 name: Build & Release
 
 # Verify gates are duplicated here on purpose: release.yml can be dispatched
@@ -25,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
 
       # Cheap-first: a bad tag must fail BEFORE any step that consumes
       # secrets (the Android-signing detection below reads ANDROID_*).
@@ -74,7 +76,7 @@ jobs:
           Write-Host 'Provisioned android/release.keystore + android/keystore.properties (picked up by app/build.gradle)'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5
         with:
           node-version: 22
           cache: npm
