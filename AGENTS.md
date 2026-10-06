@@ -44,6 +44,14 @@ npm run render-probe        # drive the running app in Chromium; assert rendered
                             #   server. `boot-probe` asks "does it start"; this
                             #   asks "did every message actually appear, and does
                             #   every button do something".
+npm run skill-approval-probe  # drive the HUMAN ACTUATION path in Chromium: the
+                            #   four skill-draft outcomes and the learning queue's
+                            #   Apply, asserting the notebook BYTES after each click.
+                            #   Unit tests prove `approveSkillDraft` returns ok; only
+                            #   this proves a pressed "Save as skill" wrote a file,
+                            #   that a name collision produced `-2.md` instead of an
+                            #   unhandled rejection, and that a failed write leaves
+                            #   the draft in the inbox. CI runs it after render-probe.
 npm run installer-smoke     # drive the PACKAGED exe; the strongest gate here
 npm run electron:dev        # Vite dev server + Electron window
 npm run electron:build      # Build + package Windows installer
