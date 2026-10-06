@@ -15,7 +15,7 @@ import { fetchOHLCV, fetchOHLCVFromTime, Kline } from '../analysis/MarketDataSer
 // Single canonical price parser (ranges + annotations). A local copy here
 // stripped annotations differently ("94500 4h" → 945004), skewing SL/TP math.
 import { parsePrice } from '../../utils/analysisUtils';
-import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions } from './outcomeEngine';
+import { scanTradeOutcome, resolveOutcomeFromScan, computeTradeExcursions, realizedRFromPrices } from './outcomeEngine';
 import type { OutcomeResolution } from './outcomeEngine';
 
 /**
@@ -1358,7 +1358,11 @@ export const validateTradeOutcome = async (
         if (exitPrice !== undefined && slDistance > 0) {
             const pnl = isLong ? (exitPrice - entryPrice) : (entryPrice - exitPrice);
             pnlPercent = (pnl / entryPrice) * 100;
-            rrRatio = pnl / slDistance;
+            // The shared helper, not this call site's own divide: `realizedR` is
+            // the label the skill ledger accumulates, and the outcome autopilot
+            // resolves the same trade through the same arithmetic.
+            const r = realizedRFromPrices(entryPrice, stopLoss, exitPrice, isLong);
+            rrRatio = r ?? undefined;
         }
 
         // Calculate time to outcome

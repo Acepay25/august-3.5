@@ -139,56 +139,110 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
+export const TRAINING_SCHEMA_VERSION = 1;
+
 /**
  * One model-ready training record for a logged trade.
  *
- * Flat and STABLE in shape: every key is present on every line, with null where
- * the app never learned the fact. A ragged JSONL (keys appearing only when set)
- * makes the reader guess whether absence means "not recorded" or "not in this
- * schema version" — the exact ambiguity the rest of this app refuses.
+ * Shape rules, in the order they matter:
+ *  - STABLE: every key exists on every line, `null` where the app never learned
+ *    the fact, and `schemaVersion` on the record itself — absence must never be
+ *    ambiguous between "not recorded" and "older schema".
+ *  - THREE NESTS THAT MUST NOT BE FLATTENED TOGETHER: `decision` is what the
+ *    model knew AT ENTRY TIME, `outcome` is what the market said later, `lesson`
+ *    is the post-hoc reading. Training a verdict on its own outcome is leaking
+ *    the answer into the input, and the fields that make that possible
+ *    (`outcomeResolvedAt`, `postMortem`, `rootCauseClass`) sit away from inputs.
+ *  - UNRESOLVED and METRIC-LESS rows are INCLUDED and FLAGGED (`incomplete`,
+ *    `missing[]`). Dropping them biases the corpus toward trades that happened to
+ *    settle; writing 0 for a missing R teaches that the exit landed on the entry.
+ *  - UNITS ARE NEVER MERGED: `pnlAmount` is captured dollars, `pnlPercent` is a
+ *    leveraged position percent (an autopilot read). Nothing here converts one
+ *    into the other, because a derived figure would be indistinguishable from a
+ *    captured one.
+ *
+ * Entry-time candles are RECONSTRUCTABLE rather than stored: `decision` carries
+ * the symbol, the analysis-time timestamp (`analysisCreatedAt`) and the entry
+ * price — exactly what `fetchFuturesOHLCVFromTime(symbol, tf, analysisCreatedAt)`
+ * takes, the same tape path the post-mortem's candle validation walks. The bars
+ * themselves are megabytes per trade and are reachable by
+ * `provenance.sourceRunId`, not by line.
  */
-export const trainingRecordFor = (t: LoggedTrade): Record<string, unknown> => ({
-    id: t.id,
-    planId: t.planId ?? null,
-    loggedAt: t.timestamp,
-    outcomeResolvedAt: t.outcomeResolvedAt ?? null,
-    symbol: t.analysis?.coinName ?? null,
-    direction: t.analysis?.direction ?? null,
-    strategy: t.analysis?.strategy ?? null,
-    strategyFamily: t.analysis?.strategyFamily ?? null,
-    verdictProbability: typeof t.analysis?.probability === 'number' ? t.analysis.probability : null,
-    entry: t.analysis?.entryPoints?.[0]?.price ?? null,
-    stopLoss: t.analysis?.stopLoss ?? null,
-    takeProfits: (t.analysis?.takeProfit ?? []).map(tp => tp.price),
-    leverage: t.leverage ?? null,
-    tradeType: t.tradeType ?? null,
-    marketRegime: t.marketRegime ?? null,
-    outcome: t.outcome,
-    pnlAmount: typeof t.pnlAmount === 'number' ? t.pnlAmount : null,
-    pnlPercent: typeof t.pnlPercent === 'number' ? t.pnlPercent : null,
-    rMultiple: typeof t.rMultiple === 'number' ? t.rMultiple : null,
-    realizedR: typeof t.realizedR === 'number' ? t.realizedR : null,
-    maxAdverseExcursion: typeof t.maxAdverseExcursion === 'number' ? t.maxAdverseExcursion : null,
-    maxFavorableExcursion: typeof t.maxFavorableExcursion === 'number' ? t.maxFavorableExcursion : null,
-    extendedSLZoneBreach: t.extendedSLZoneBreach ?? false,
-    mistakeTags: t.mistakeTags ?? [],
-    emotionalState: t.emotionalState ?? null,
-    followedPlan: typeof t.followedPlan === 'boolean' ? t.followedPlan : null,
-    planDeviationNote: t.planDeviationNote ?? null,
-    checklist: t.checklistCompleted ?? null,
-    rootCauseClass: t.rootCauseClass ?? null,
-    postMortem: t.postMortem ?? null,
-    modelsUsed: t.modelsUsed ?? null,
-    moderator: t.moderatorModel ? { provider: t.moderatorProvider ?? null, model: t.moderatorModel } : null,
-    sourceRunId: t.sourceRunId ?? null,
-    promptVersion: t.promptVersion ?? null,
-    promptLane: t.promptLane ?? null,
-    // Size discipline: the transcript is megabytes per row and belongs in the
-    // reasoning export, not in a line-oriented training file. Count it, keep
-    // the verdict text, and let the reader ask for the rest by run id.
-    debateTurnCount: t.debateTurns?.length ?? 0,
-    moderatorSynthesis: t.moderatorSynthesis ?? null,
-});
+export const trainingRecordFor = (t: LoggedTrade): Record<string, unknown> => {
+    const decision = {
+        symbol: t.analysis?.coinName ?? null,
+        direction: t.analysis?.direction ?? null,
+        strategy: t.analysis?.strategy ?? null,
+        strategyFamily: t.analysis?.strategyFamily ?? null,
+        verdictProbability: typeof t.analysis?.probability === 'number' ? t.analysis.probability : null,
+        entry: t.analysis?.entryPoints?.[0]?.price ?? null,
+        stopLoss: t.analysis?.stopLoss ?? null,
+        takeProfits: (t.analysis?.takeProfit ?? []).map(tp => tp.price),
+        leverage: t.leverage ?? null,
+        tradeType: t.tradeType ?? null,
+        marketRegime: t.marketRegime ?? null,
+        /** The tape's anchor: analysis time, not log time. */
+        analysisCreatedAt: t.analysis?.createdAt ?? null,
+        planId: t.planId ?? null,
+        checklist: t.checklistCompleted ?? null,
+        followedPlan: typeof t.followedPlan === 'boolean' ? t.followedPlan : null,
+    };
+    const resolved = t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
+    const outcome = {
+        outcome: t.outcome,
+        resolved,
+        outcomeResolvedAt: t.outcomeResolvedAt ?? null,
+        pnlAmount: typeof t.pnlAmount === 'number' ? t.pnlAmount : null,
+        pnlPercent: typeof t.pnlPercent === 'number' ? t.pnlPercent : null,
+        /** The canonical outcome label (price levels only). `rMultiple` is the
+         *  older leveraged-percent derivation: kept for history, not preferred. */
+        realizedR: typeof t.realizedR === 'number' ? t.realizedR : null,
+        rMultiple: typeof t.rMultiple === 'number' ? t.rMultiple : null,
+        rSource: t.rSource ?? null,
+        maxAdverseExcursion: typeof t.maxAdverseExcursion === 'number' ? t.maxAdverseExcursion : null,
+        maxFavorableExcursion: typeof t.maxFavorableExcursion === 'number' ? t.maxFavorableExcursion : null,
+        excursionSource: t.excursionSource ?? null,
+        extendedSLZoneBreach: t.extendedSLZoneBreach ?? false,
+    };
+    const lesson = {
+        mistakeTags: t.mistakeTags ?? [],
+        emotionalState: t.emotionalState ?? null,
+        planDeviationNote: t.planDeviationNote ?? null,
+        rootCauseClass: t.rootCauseClass ?? null,
+        postMortem: t.postMortem ?? null,
+    };
+    return {
+        schemaVersion: TRAINING_SCHEMA_VERSION,
+        id: t.id,
+        loggedAt: t.timestamp,
+        incomplete: !resolved || outcome.realizedR === null
+            || (outcome.pnlAmount === null && outcome.pnlPercent === null)
+            || outcome.maxAdverseExcursion === null || lesson.postMortem === null
+            || decision.checklist === null,
+        missing: [
+            ...(!resolved ? ['outcome'] : []),
+            ...(outcome.realizedR === null ? ['realizedR'] : []),
+            ...(outcome.pnlAmount === null && outcome.pnlPercent === null ? ['pnl'] : []),
+            ...(outcome.maxAdverseExcursion === null ? ['excursions'] : []),
+            ...(lesson.postMortem === null ? ['postMortem'] : []),
+            ...(decision.checklist === null ? ['checklist'] : []),
+        ],
+        decision,
+        outcome,
+        lesson,
+        provenance: {
+            modelsUsed: t.modelsUsed ?? null,
+            moderator: t.moderatorModel ? { provider: t.moderatorProvider ?? null, model: t.moderatorModel } : null,
+            sourceRunId: t.sourceRunId ?? null,
+            promptVersion: t.promptVersion ?? null,
+            promptLane: t.promptLane ?? null,
+            // Size discipline: the transcript belongs in the reasoning export.
+            // Count it; the bodies stay behind the run id.
+            debateTurnCount: t.debateTurns?.length ?? 0,
+            moderatorSynthesis: t.moderatorSynthesis ?? null,
+        },
+    };
+};
 
 /**
  * Export the journal as JSONL — one training record per line — for offline

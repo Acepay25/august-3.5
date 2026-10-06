@@ -27,7 +27,9 @@ import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { baseOf } from '../../utils/symbol';
 import {
     RECENT_TRADES_WINDOW,
+    briefFingerprint,
     buildRecentTradesBrief,
+    neutralRowsText,
     selectRecentTrades,
     tallyLine,
 } from '../../utils/recentTradesBrief';
@@ -547,16 +549,28 @@ const cap = (text: string, n: number): string =>
     text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
 
 /**
- * Recent form: one tally line over the last 20 logged trades — the trader's
- * CURRENT streak, which is a different fact from the all-time pattern-memory
- * library and from the setup-cluster average.
+ * Recent form — what the last 20 logged trades did, in the shape the reader may
+ * use it in.
  *
- * Only the tally rides in the prompt on purpose. The 20 rows are ~2.7k
- * characters of detail any seat can already pull with `get_trade_log`; pasting
- * them into every round would spend the stage budget that skills and rules
- * compete for, to say what one line says.
+ * Two renderings, one builder:
+ *  - analyst seats get the TAPE: neutral rows, no win rate, no streak. A seat
+ *    arguing this setup must be able to check "my last losses were all revenge
+ *    trades" against the record, but handing every opening prompt "you are three
+ *    losses deep" is priming dressed as evidence — which is why loss-priming
+ *    lives in its own deliberate, coin-scoped slice.
+ *  - the moderator (and the post-mortem, which reuses its path) gets the TALLY:
+ *    streak, win rate, net PnL. Weighing recent form is its actual job.
+ *
+ * Rows are day-level and ~50 chars each, so the window costs roughly what a
+ * matched skill costs rather than what a market packet does; the full ISO row
+ * stays behind `get_trade_log`. Both renderings are fingerprinted into the
+ * injection record, which a trade reaches through its own `sourceRunId`.
  */
-export const recentFormBlock = (trades?: LoggedTrade[], asOfMs?: number): string => {
+export const recentFormBlock = (
+    trades?: LoggedTrade[],
+    asOfMs?: number,
+    audience: 'analyst' | 'moderator' = 'analyst',
+): string => {
     if (!trades || trades.length === 0) return '';
     const visible = asOfMs === undefined
         ? trades
@@ -566,7 +580,13 @@ export const recentFormBlock = (trades?: LoggedTrade[], asOfMs?: number): string
         });
     const brief = buildRecentTradesBrief(selectRecentTrades(visible, { limit: RECENT_TRADES_WINDOW }));
     if (brief.rows.length === 0) return '';
-    return `**Recent form**\n${tallyLine(brief, 'Last 20 logged trades')}`;
+    // Two shapes on purpose. An analyst arguing THIS setup gets the tape — rows,
+    // no aggregate framing — because a streak handed to every opening prompt is
+    // priming, not evidence. The moderator, whose job is to weigh recent form
+    // against the debate, gets the tally.
+    return audience === 'moderator'
+        ? `**Recent form**\n${tallyLine(brief, 'Last 20 logged trades')}`
+        : `**Your logged trades**\n${neutralRowsText(brief)}`;
 };
 
 /** Cross-block dedup key: lowercase alphanumerics only. */
@@ -616,7 +636,7 @@ export function listRetrievedMemorySources(
     if (riskRulesBlock()) out.push({ path: 'rules/risk-rules', kind: 'rules' });
     if (uncoveredMistakeLine(query)) out.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
     if (similarTradesBlock(query, trades)) out.push({ path: 'journal/similar-trades', kind: 'similar' });
-    if (recentFormBlock(trades)) out.push({ path: 'journal/recent-form', kind: 'similar' });
+    if (recentFormBlock(trades, undefined, audience)) out.push({ path: 'journal/recent-form', kind: 'similar' });
     return out;
 };
 
@@ -667,7 +687,7 @@ export function getMemoryFilesContext(
     const budget = stageBudgetChars(stage, options?.contextWindowTokens);
     const blocks: string[] = [];
     /** What ACTUALLY made it into the prompt — recorded for attribution. */
-    const injected: Array<{ path: string; kind: string; chars?: number }> = [];
+    const injected: Array<{ path: string; kind: string; chars?: number; fingerprint?: string }> = [];
     let used = 0;
     /** Characters that existed but did not fit. Reported to the model rather
      *  than cut silently: a silent trim makes an absent lesson look like a
@@ -733,8 +753,19 @@ export function getMemoryFilesContext(
     if (mistakeChars > 0) injected.push({ path: 'rules/recurring-mistakes', kind: 'rules', chars: mistakeChars });
     // Every stage, both audiences: a seat arguing this setup should know the
     // trader is 3 losses deep before it argues, not after.
-    const formChars = push(recentFormBlock(trades, options?.asOfMs));
-    if (formChars > 0) injected.push({ path: 'journal/recent-form', kind: 'similar', chars: formChars });
+    const formBlock = recentFormBlock(trades, options?.asOfMs, audience);
+    const formChars = push(formBlock);
+    if (formChars > 0) {
+        // The fingerprint says WHICH brief this run saw, per audience. A trade
+        // row carries its `sourceRunId`, so a decision can be traced back to the
+        // exact context it was made in instead of the code that made it.
+        injected.push({
+            path: 'journal/recent-form',
+            kind: 'similar',
+            chars: formChars,
+            fingerprint: briefFingerprint(formBlock),
+        });
+    }
     if (stage === 'verdict') {
         const similarChars = push(similarTradesBlock(query, trades, options?.asOfMs));
         if (similarChars > 0) injected.push({ path: 'journal/similar-trades', kind: 'similar', chars: similarChars });

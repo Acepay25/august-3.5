@@ -23,6 +23,7 @@ export type PostMortemCandidate = {
          *  the modal's own payload carries only what the trader types. */
         outcomeResolvedAt?: string;
         excursions?: { maePercent: number; mfePercent: number };
+        realizedR?: number;
     };
 };
 

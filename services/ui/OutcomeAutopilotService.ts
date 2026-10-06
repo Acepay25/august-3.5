@@ -47,6 +47,9 @@ export interface AutopilotResolution {
      *  trade confirmed by the autopilot is not excursion-less unless no post-
      *  mortem ever runs on it. */
     excursions?: { maePercent: number; mfePercent: number };
+    /** Realized R measured from price levels — set whenever the exit resolved,
+     *  so an autopilot row carries the canonical outcome label by itself. */
+    realizedR?: number;
 }
 
 interface Registration {
@@ -555,6 +558,7 @@ class OutcomeAutopilotServiceClass {
             timeToOutcome: result.timeToOutcome,
             slOptimizationData: this.computeSLOptimization(reg, result),
             excursions: result.excursions,
+            realizedR: result.realizedR,
         };
     }
 
@@ -583,6 +587,7 @@ class OutcomeAutopilotServiceClass {
             timeToOutcome: result.timeToOutcome || result.slHit?.timeAfterAnalysis,
             slOptimizationData: this.computeSLOptimization(reg, result),
             excursions: result.excursions,
+            realizedR: result.realizedR,
         };
     }
 

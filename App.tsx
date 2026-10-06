@@ -1751,20 +1751,19 @@ const App: React.FC = () => {
     // when it resolves — so a chat-proposed trade is scored like any analysis.
     const handleLogProposedTrade = useCallback((proposal: TradeProposal): void => {
         updateMessages(prev => {
-            // planId dedupe: the dock's per-card disposition map stops a
-            // double-click on the SAME card, but re-presenting the plan (a
-            // fresh card, or logging from another surface) still minted a
-            // byte-identical second card. The row now carries the id as a FIELD,
-            // so one logged copy per plan is checked on data, not on prose. The
-            // text match stays ONLY so a plan already logged before the field
-            // existed cannot be re-logged into a second journal row.
-            if (proposal.planId && prev.some(m => m.planId === proposal.planId
-                || m.text.includes(`· plan ${proposal.planId}`))) {
+            // planId dedupe, keyed on the JOURNAL ROW (`LoggedTrade.planId`) and
+            // the pending card's own field — never on the headline string. The
+            // dock's per-card map stops a double-click on one card; re-presenting
+            // the same plan from another surface used to mint a byte-identical
+            // second card because the only trace of the plan was prose.
+            if (proposal.planId
+                && (loggedTrades.some(t => t.planId === proposal.planId)
+                    || prev.some(m => m.planId === proposal.planId))) {
                 return prev;
             }
             return [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)];
         });
-    }, [updateMessages]);
+    }, [updateMessages, loggedTrades]);
 
     /** The dock holds a settled verdict's message id, not a copy of the
      *  analysis — a persisted chat session would otherwise store a whole

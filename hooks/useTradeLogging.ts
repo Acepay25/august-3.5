@@ -246,7 +246,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number; }) => {
         // Persist the market regime captured at analysis time (7-value
         // hybrid regime normalized to the 4-key trade regime). Falls back to
         // undefined when no snapshot exists.
@@ -291,6 +291,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             // would claim the position never moved against the trader.
             ...(mae !== undefined ? { maxAdverseExcursion: mae } : {}),
             ...(mfe !== undefined ? { maxFavorableExcursion: mfe } : {}),
+            // Provenance, not decoration: the post-mortem measures the same pair
+            // over its own window, and the row must say which one it is holding
+            // rather than letting the later writer swap it in silently.
+            ...(mae !== undefined || mfe !== undefined ? { excursionSource: 'autopilot' as const } : {}),
+            ...(typeof feedback.realizedR === 'number' && Number.isFinite(feedback.realizedR)
+                ? { realizedR: feedback.realizedR, rSource: 'autopilot' as const }
+                : {}),
             modelsUsed: message.modelsUsed,
             thoughtProcesses: message.thoughtProcesses,
 
@@ -543,6 +550,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     // Carry the skill-vs-tide alpha settled during verification.
                     benchmark: result.historicalOutcome?.benchmark,
                     excursions: result.historicalOutcome?.excursions ?? dataCaptureCandidate.feedback?.excursions,
+                    realizedR: result.historicalOutcome?.realizedR ?? dataCaptureCandidate.feedback?.realizedR,
                 });
 
                 // Start post-mortem with auto-captured data
@@ -764,7 +772,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         slOptimizationData?: SLOptimizationData,
         /** What the detector actually measured, carried onto the row instead of
          *  being dropped at the confirm click. */
-        resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number } },
+        resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number },
     ) => {
         // pnlPercent is a PERCENT (e.g. +200), not dollars — it must not be
         // written into pnlAmount, which dashboards sum as USD. It is carried
@@ -778,7 +786,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 outcome,
                 // The detection facts ride the candidate so the capture modal's
                 // own payload cannot silently drop them.
-                feedback: { outcomeResolvedAt: resolved?.at, excursions: resolved?.excursions },
+                feedback: {
+                    outcomeResolvedAt: resolved?.at,
+                    excursions: resolved?.excursions,
+                    realizedR: resolved?.realizedR,
+                },
             });
             return;
         }
@@ -787,6 +799,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             slOptimizationData,
             outcomeResolvedAt: resolved?.at,
             excursions: resolved?.excursions,
+            realizedR: resolved?.realizedR,
         });
         // Every other logging path (capture modal auto/skip, entry-not-hit)
         // starts the post-mortem right after logging — the autopilot

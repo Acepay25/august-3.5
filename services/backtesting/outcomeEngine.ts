@@ -440,3 +440,31 @@ export const toLeveragedExcursionPct = (
   rawPercent === undefined || !Number.isFinite(rawPercent)
     ? undefined
     : Math.round(rawPercent * (leverage && leverage > 0 ? leverage : 1) * 10) / 10;
+
+/**
+ * Realized R from PRICE levels only: the raw move the position actually made,
+ * divided by the raw entry→stop distance it risked.
+ *
+ * This is the one outcome label the journal treats as canonical
+ * (`LoggedTrade.realizedR`), because it never divides a leveraged account
+ * percent by an unleveraged price distance — the mistake that inflated R by the
+ * leverage factor on every autopilot row. Extracted from the post-mortem's
+ * candle validation so the outcome autopilot resolves a trade with the SAME
+ * arithmetic: two implementations of this divide is how one trade ends up with
+ * two R numbers, and the skill ledger accumulates this one.
+ *
+ * Returns null when any input is unusable or the stop distance is zero — an
+ * unmeasurable R stays absent; 0 would claim the exit landed on the entry.
+ */
+export const realizedRFromPrices = (
+  entryPrice: number,
+  stopPrice: number,
+  exitPrice: number,
+  isLong: boolean,
+): number | null => {
+  if (![entryPrice, stopPrice, exitPrice].every(Number.isFinite)) return null;
+  const slDistance = Math.abs(entryPrice - stopPrice);
+  if (entryPrice <= 0 || slDistance <= 0) return null;
+  const move = isLong ? exitPrice - entryPrice : entryPrice - exitPrice;
+  return move / slDistance;
+};

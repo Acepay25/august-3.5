@@ -21,6 +21,10 @@ export interface InjectedSource {
      *  the per-source cost half of budget economics. Absent on legacy
      *  records (cost falls back to the block-class average). */
     chars?: number;
+    /** Identity of the exact rendered block, for blocks whose TEXT varies while
+     *  their `path` stays fixed (the recent-form brief differs by audience and
+     *  by window). Lets a stored decision be traced to the context it saw. */
+    fingerprint?: string;
     /** Adherence linkage: TRUE when the verdict actually CITED this
      *  skill (followed), FALSE when it was injected and ignored
      *  (overridden), undefined on legacy records / non-skill sources —
