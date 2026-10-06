@@ -9,16 +9,12 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 const mockIngest = vi.hoisted(() => vi.fn());
 const mockIngestDraft = vi.hoisted(() => vi.fn());
-const mockApplyRevival = vi.hoisted(() => vi.fn(async (): Promise<ProposalApplyResult> => ({ applied: true })));
-const mockApplyRescope = vi.hoisted(() => vi.fn(async () => ({ applied: true })));
+const mockDispatch = vi.hoisted(() => vi.fn(async (): Promise<ProposalApplyResult> => ({ applied: true })));
 
 vi.mock('../services/learning/SkillMemoryService', () => ({
     ingestCraftedSkill: mockIngest,
     ingestCraftedSkillFromDraft: mockIngestDraft,
-    applyDisplacementProposal: vi.fn(async () => ({ applied: true })),
-    applyRevivalProposal: mockApplyRevival,
-    applyDemoteProposal: vi.fn(async () => ({ applied: true })),
-    applyRescopeProposal: mockApplyRescope,
+    applyLearningProposalByKind: mockDispatch,
 }));
 
 import CoachThreadPanel from '../components/chat/CoachThreadPanel';
@@ -91,12 +87,13 @@ describe('CoachThreadPanel', () => {
     });
 
     it('proposal Apply calls the actuation path and dismisses on success', async () => {
-        const { applyRevivalProposal } = await import('../services/learning/SkillMemoryService');
+        const { applyLearningProposalByKind } = await import('../services/learning/SkillMemoryService');
         const p = queueLearningProposal({ kind: 'revival', text: 'Revive?', fingerprint: 'rev|x', skillSlug: 'x', payload: { slug: 'x' } })!;
         render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
         fireEvent.click(screen.getByTestId(`coach-proposal-apply-${p.id}`));
         await vi.waitFor(() => {
-            expect(applyRevivalProposal).toHaveBeenCalledWith('x', expect.any(String));
+            expect(applyLearningProposalByKind).toHaveBeenCalledWith(
+                expect.objectContaining({ kind: 'revival', skillSlug: 'x' }), expect.any(String));
             expect(screen.queryByTestId(`coach-proposal-${p.id}`)).toBeNull();
         });
     });
@@ -131,13 +128,15 @@ describe('CoachThreadPanel', () => {
         render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
         fireEvent.click(screen.getByTestId(`coach-proposal-apply-${p.id}`));
         await vi.waitFor(() => {
-            expect(mockApplyRescope).toHaveBeenCalledWith('y', clauses, expect.any(String));
+            expect(mockDispatch).toHaveBeenCalledWith(
+                expect.objectContaining({ skillSlug: 'y', payload: expect.objectContaining(clauses) }),
+                expect.any(String));
             expect(screen.queryByTestId(`coach-proposal-${p.id}`)).toBeNull();
         });
     });
 
     it('an apply that wrote nothing keeps the card and names WHY', async () => {
-        mockApplyRevival.mockResolvedValueOnce({ applied: false, reason: 'no-target' });
+        mockDispatch.mockResolvedValueOnce({ applied: false, reason: 'no-target' });
         const p = queueLearningProposal({ kind: 'revival', text: 'Revive?', fingerprint: 'rev|gone', skillSlug: 'gone', payload: { slug: 'gone' } })!;
         render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
         fireEvent.click(screen.getByTestId(`coach-proposal-apply-${p.id}`));

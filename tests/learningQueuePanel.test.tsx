@@ -22,17 +22,16 @@ import LearningQueuePanel from '../components/skills/LearningQueuePanel';
 import { queueLearningProposal, listLearningProposals } from '../utils/learningQueue';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
 import * as supervisorStore from '../services/learning/supervisorStore';
-import { applyRescopeProposal } from '../services/learning/SkillMemoryService';
+import { applyLearningProposalByKind } from '../services/learning/SkillMemoryService';
 
-const mockApplyRescope = vi.mocked(applyRescopeProposal);
+const mockDispatch = vi.mocked(applyLearningProposalByKind);
 
 vi.mock('../services/learning/SkillMemoryService', () => ({
-    // The panel imports the whole applier set; only rescope is under test here,
-    // and the others are stubbed so the module resolves.
-    applyDisplacementProposal: vi.fn(async () => ({ applied: true })),
-    applyRevivalProposal: vi.fn(async () => ({ applied: true })),
-    applyDemoteProposal: vi.fn(async () => ({ applied: true })),
-    applyRescopeProposal: vi.fn(async () => ({ applied: true })),
+    // The panel no longer dispatches on kind itself — one dispatcher does it for
+    // both approval surfaces — so this is the collaborator under test. Which
+    // applier a kind reaches is pinned against the real store in
+    // tests/learningQueueApply.test.ts, not re-derived here.
+    applyLearningProposalByKind: vi.fn(async () => ({ applied: true })),
 }));
 
 const USER = 'queue-panel-user';
@@ -117,8 +116,13 @@ describe('rescope apply (A2 slice 1)', () => {
         seedRescope();
         render(<LearningQueuePanel />);
         fireEvent.click(await screen.findByRole('button', { name: /^Apply/ }));
-        await waitFor(() => expect(mockApplyRescope)
-            .toHaveBeenCalledWith('btc-sweep', clauses, USER));
+        // The panel's contract: hand the STORED proposal to the dispatcher
+        // untouched, with the active user. Clause fidelity is tested at the
+        // dispatcher against the real notebook.
+        await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith(
+            expect.objectContaining({ skillSlug: 'btc-sweep', payload: expect.objectContaining(clauses) }),
+            USER,
+        ));
     });
 
     it('a rescope with no clauses in its payload offers Dismiss only', () => {
@@ -133,7 +137,7 @@ describe('rescope apply (A2 slice 1)', () => {
 
     it('a refused rescope names the reason it was refused', async () => {
         seedRescope();
-        mockApplyRescope.mockResolvedValueOnce({ applied: false, reason: 'below-bar' });
+        mockDispatch.mockResolvedValueOnce({ applied: false, reason: 'below-bar' });
         render(<LearningQueuePanel />);
         fireEvent.click(await screen.findByRole('button', { name: /^Apply/ }));
         // The row is the human's only copy of the proposal, so it stays — and the

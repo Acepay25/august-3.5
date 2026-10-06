@@ -39,6 +39,7 @@ import {
     applyDisplacementProposal,
     applyRevivalProposal,
     applyDemoteProposal,
+    applyLearningProposalByKind,
 } from '../services/learning/SkillMemoryService';
 import {
     queueLearningProposal,
@@ -168,5 +169,57 @@ describe('learning queue apply paths', () => {
         expect(listLearningProposals(USER)).toHaveLength(2);
         dismissLearningProposal(second!.id, USER);
         expect(listLearningProposals(USER).map(p => p.fingerprint)).toEqual(['fp-1']);
+    });
+});
+
+// The panels used to carry their own copy of this dispatch — and did drift in
+// how they read `payload`. Both now call one function, so the kind→applier
+// mapping is pinned HERE, against the real notebook, once.
+describe('applyLearningProposalByKind — the one dispatcher both approval surfaces call', () => {
+    it('rescope applies the clauses the PROPOSER stored, verbatim', async () => {
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, 'sweep.md', skillMd('confirmed', 'old trigger clause'), USER);
+
+        const res = await applyLearningProposalByKind({
+            kind: 'rescope',
+            skillSlug: 'sweep',
+            payload: {
+                source: 'model:desk',
+                ifCondition: 'funding positive 8 sessions and the daily low was swept',
+                thenAction: 'go long only after a 1h close back above the swept level',
+            },
+        }, USER);
+
+        expect(res).toEqual({ applied: true });
+        const meta = parseSkillMarkdown(findSkill('sweep.md')!.content)!;
+        expect(meta.ifCondition).toBe('funding positive 8 sessions and the daily low was swept');
+        expect(meta.thenAction).toBe('go long only after a 1h close back above the swept level');
+    });
+
+    it('a kind with nothing to act on comes back refused, not thrown', async () => {
+        const res = await applyLearningProposalByKind({ kind: 'contradiction', skillSlug: 'a' }, USER);
+        expect(res).toEqual({ applied: false, reason: 'no-clauses' });
+    });
+
+    it('a rescope whose payload carries no clauses is refused, and the row stays for the human', async () => {
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, 'bare.md', skillMd('confirmed', 'untouched clause'), USER);
+        const res = await applyLearningProposalByKind({ kind: 'rescope', skillSlug: 'bare', payload: {} }, USER);
+        expect(res.applied).toBe(false);
+        const meta = parseSkillMarkdown(findSkill('bare.md')!.content)!;
+        expect(meta.ifCondition).toBe('untouched clause');
+    });
+
+    it('the payload slug wins over the skillSlug fallback', async () => {
+        const archive = await ensureSkillsArchiveFolderUnlocked(USER);
+        await createMemoryFile(archive!.id, 'real-twin.md', skillMd('retired', 'twin trigger clause'), USER);
+        const res = await applyLearningProposalByKind({
+            kind: 'revival',
+            skillSlug: 'a-stale-slug',
+            payload: { slug: 'real-twin' },
+        }, USER);
+        expect(res).toEqual({ applied: true });
+        expect(findSkill('real-twin.md')!.folderId).toBe(
+            getMemoryFiles().folders.find(f => f.name === 'skills')!.id);
     });
 });
