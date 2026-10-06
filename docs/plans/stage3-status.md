@@ -27,26 +27,17 @@ first afterwards; the real `node_modules` was verified intact.
 ## Still open
 
 1. **Live-journal counts (requested pre-merge, not obtained).** The rows are under
-   the packaged app's `app://` IndexedDB origin (`AppData\Roamingugust-trading`),
+   the packaged app's `app://` IndexedDB origin (`%APPDATA%\august-trading\IndexedDB`),
    unreadable headlessly; the dev profile copy at `http://localhost:3000` held only
    `FuturesAI-DB → userProfiles (0)` and `august_offline_queue (0)`. Two exact
    routes: the DevTools snippet over the `trades` store, or a Settings → Data
    export file counted through the real `trainingRecordFor`.
-2. **F4b — the amber model-fallback warning on the Chat surface composer.**
-   Not done. The warning lives at `components/trade/panels/ChatComposer.tsx:104-111`
-   and is fed by `modelIssue` computed in `components/trade/TradeChatPanel.tsx:493-502`
-   from `selectedChatModel` + `providers`. The Chat surface composer is the one
-   inlined in `components/agents/AgentsView.tsx` (~:1104-1150), which receives
-   NEITHER `providers` NOR `selectedChatModel` today. Correct shape: extract the
-   `modelIssue` computation into `utils/providerUtils.ts` (it already owns
-   `resolveChatModelSelection` / `findChatModelOwner` / `chatModelIdOf`), thread
-   the two props into AgentsView, render the shared banner component — do not
-   copy the JSX. Verify with `render-probe` (stale-model fixture → the testid
-   must appear), not unit tests alone.
-2. **F4c — Journal → Models tab reading planId-linked rows.** Not done, and the
-   premise needs a decision first: `planId` is plan-level, the Models tab is
-   model-level, so planId adds no attribution there. What is actually missing is
-   a plan-level view (per-plan: how the plan performed), which belongs in Stats.
+2. **F4b — DONE in `2c42cfe`, not open.** The reason now lives in
+   `computeChatModelFallback` (`utils/providerUtils.ts`) and the banner in the
+   exported `ModelFallbackBanner` (`components/trade/panels/ChatComposer.tsx`);
+   `AgentsView` takes a typed `modelFallback` prop from App and hides it while a
+   bot is selected. render-probe asserts both states in the running app.
+3. **F4c — DROPPED by the user 2026-10-06** (`planId` is plan-level, the Models tab is model-level). Never implemented, by decision.
 
 ## Facts paid for — do not rediscover
 
