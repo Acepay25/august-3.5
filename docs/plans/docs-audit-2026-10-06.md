@@ -10,7 +10,7 @@ file:line they cited.
 | Doc | Verdict | Why |
 |---|---|---|
 | `docs/plans/workstream1-stepB-evidence.md` | DELETE | 5 completion claims contradicted by HEAD |
-| `final-sweep-report.md` | DELETE | claims SHA-pinned actions **[V]** and a `bg-grid` treatment **[V]** that don't exist; cites 4 deleted files |
+| `final-sweep-report.md` | DELETE after rehoming its 2 live recommendations | `:159` claims a "restrained grid treatment" while `:134` admits `.bg-grid` may be unused (0 occurrences in `index.css`) **[V]**; 6 lines cite `ChatInput`/`MessageItem`/`ConversationHistory`/`ChatArea`, none of which exist in git **[V]**. Its release-security finding is CORRECT and still open — `:103` says the workflow "does not show immutable action pinning" and `:105` recommends pinning; do NOT record that as a false claim **[V]** |
 | `plan.md` | DELETE after rehoming residue | 22/35 implemented; calls live `/index.css` a dead reference **[V]** |
 | `performance-audit-report.md` | ARCHIVE | all fixes landed; G/J moot; "responseCache fine" was deleted in `b80c6fa` |
 | `UI_UX_AUDIT_REPORT.md` | REHOME then delete | Section A premise two refactors dead, but ~12 live a11y gaps |
@@ -48,7 +48,9 @@ its *content* reached main by merge, which makes the concern moot, not false.
   double-written (`ExportService.ts:375` + `:736`); write-time bounds still count
   items not bytes (`chatSessions.ts:199`, `toolForge.ts:50`, `checklist.ts`);
   no shadow-promotion e2e; the two supervisor switches have no UI.
-- **security/release**: actions are not SHA-pinned (`release.yml:28,77`).
+- **security/release**: actions are still not SHA-pinned — `release.yml:28,77` plus
+  `ci.yml:19,22,102,105,137` use mutable `@v5` tags **[V]**. This is `final-sweep-report.md`'s
+  one still-valid recommendation; rehome it before deleting that doc.
 - **residue from plan.md**: no logger (`MODERATOR_ERROR` live at
   `debateMarkers.ts:24`), no key pool, SQLCipher off (`SqliteService.ts:113`).
 
