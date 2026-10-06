@@ -5,6 +5,7 @@ import { ChatMessage, warmProviderConnection, sendChatRequest } from './GenericP
 import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache, ARBITER_ALLOWED_TOOLS } from '../analysis/DeskToolsService';
 import { createDebateMailbox, synthesizeReplyToLine, formatDmEventLine } from '../analysis/DebateMailbox';
 import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learning/EvidencePackService';
+import { recentFormBlock } from '../learning/MemoryRetrievalService';
 import { persuasionProfile } from '../analysis/convictionDrift';
 import { clipNote, harnessTurn } from '../../utils/harnessMarks';
 import type { HermesBot } from '../../types/bot';
@@ -3452,8 +3453,14 @@ const runPostMortemDebate = (
 ): AsyncGenerator<string, void, unknown> => {
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
 
-    const tradeHistoryContext = structuredMemoryContext ||
-        (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.");
+    // Recent form belongs in the post-mortem: a blame split that ignores "this
+    // is the fourth loss in a row" drafts a playbook rule where the real lesson
+    // is discipline. Only when the structured slice is absent — that path
+    // already carries the same line, and repeating it teaches nothing.
+    const formBlock = structuredMemoryContext ? '' : recentFormBlock(streamTrades);
+    const tradeHistoryContext = (structuredMemoryContext ||
+        (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged."))
+        + (formBlock ? `\n\n${formBlock}` : '');
 
     const moderatorPrompt = buildPostMortemDebatePrompt(seats, debateTitle, attributionExampleName, originalMessage, outcome, imageContext, tradeHistoryContext);
 

@@ -1510,6 +1510,29 @@ async function main() {
         check('the seeded journal is populated before it is swept',
             journalHow === 'clicked' && !/No trades logged yet/i.test(journalText),
             journalText.slice(0, 120));
+
+        // Journal → Stats carries the same "last 20" the seats are shown. This
+        // is the only gate that can see it: the card renders from a list, and a
+        // unit test mounting the component would pass with zero rows drawn.
+        const statsTabPresent = await page.evaluate(() => {
+            const tab = document.querySelector('#journal-tab-analytics');
+            if (tab) tab.click();
+            return !!tab;
+        });
+        // Checked, not assumed: without this a wrong selector would report
+        // "no card" and read as a broken feature rather than a broken probe.
+        check('the Stats tab is reachable from the Journal', statsTabPresent === true,
+            statsTabPresent ? 'clicked' : 'no #journal-tab-analytics control');
+        const last20 = page.locator('[data-testid="journal-last-20"]');
+        const hasLast20 = await pollFor(async () => (await last20.count()) === 1);
+        check('Journal → Stats shows the Last 20 card', hasLast20 === true, `${hasLast20}`);
+        if (hasLast20) {
+            const rows = await last20.locator('li').count();
+            check('the Last 20 card draws a row per logged trade', rows >= 1, `${rows} rows`);
+            const cardText = await last20.innerText();
+            check('the card states the tally in the units actually captured',
+                /\d+W \/ \d+L/.test(cardText), cardText.slice(0, 160));
+        }
         await sweepSurface('Journal', 12);
 
         // ── The instrument picker, and the claim it makes ────────────────

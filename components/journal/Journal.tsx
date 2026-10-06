@@ -14,6 +14,8 @@ import { EmptyState } from '../ui/EmptyState';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome, SavedAnalysis } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
+import { RECENT_TRADES_WINDOW, buildTradeLogBrief } from '../../utils/recentTradesBrief';
+import { phtClock, phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
 import { ProviderConfig } from '../../types/provider';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -278,6 +280,7 @@ const JournalInner: React.FC<JournalProps> = ({
                     <WeeklyReviewCard username={activeUsername} />
                     <MonthlyReportCard username={activeUsername} />
                     <JournalAnalyticsSummary trades={trades} />
+                    <LastTwentyCard trades={trades} />
                     <EquityCurveDashboard trades={trades} />
                     <WinRateDashboard trades={trades} />
                 </div>
@@ -428,6 +431,73 @@ const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }
         />
       )}
     </div>
+  );
+};
+
+/**
+ * The last 20 rows as the seats read them — log time, outcome, PnL in whichever
+ * unit was actually captured, price-measured R, strategy and discipline tags.
+ * Oldest first, so it reads as a tape and the streak at the bottom is the
+ * trader's current form. Same module the model gets (`utils/recentTradesBrief`),
+ * so the two can never disagree.
+ */
+const LastTwentyCard: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
+  const brief = useMemo(() => buildTradeLogBrief(trades), [trades]);
+  if (brief.rows.length === 0) return null;
+
+  const outcomeClass = (outcome: string): string =>
+    outcome === TradeOutcome.WIN ? 'text-emerald-400'
+      : outcome === TradeOutcome.LOSS ? 'text-rose-400'
+        : 'text-zinc-500';
+
+  return (
+    <section className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-4" data-testid="journal-last-20">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 className="text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Last {RECENT_TRADES_WINDOW} logged trades
+        </h3>
+        <p className="font-mono text-ui-dense text-zinc-400">
+          {brief.wins}W / {brief.losses}L
+          {brief.winRate !== null ? ` · ${brief.winRate.toFixed(1)}%` : ''}
+          {brief.avgRealizedR !== null ? ` · avg ${brief.avgRealizedR >= 0 ? '+' : ''}${brief.avgRealizedR.toFixed(2)}R` : ''}
+          {brief.netPnLDollars !== null ? ` · net ${brief.netPnLDollars >= 0 ? '+' : '-'}$${Math.abs(brief.netPnLDollars).toFixed(2)}` : ''}
+          {brief.streak !== 0 ? ` · streak ${Math.abs(brief.streak)}${brief.streak > 0 ? 'W' : 'L'}` : ''}
+        </p>
+      </div>
+      <ol className="mt-3 space-y-1">
+        {brief.rows.map(r => (
+          <li key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-white/[0.04] pb-1 text-ui-dense last:border-0">
+            <span className="font-mono text-ui-2xs text-zinc-600 whitespace-nowrap">
+              {phtDayKey(Date.parse(r.loggedAt))} {phtClock(r.loggedAt)}
+            </span>
+            <span className="font-semibold text-zinc-200">{r.symbol} <span className="text-zinc-500 font-normal">{r.direction}</span></span>
+            <span className={`font-bold uppercase tracking-wider text-ui-2xs ${outcomeClass(r.outcome)}`}>
+              {r.outcome === TradeOutcome.ENTRY_NOT_HIT ? 'NO ENTRY' : r.outcome}
+            </span>
+            {typeof r.pnlDollars === 'number' && (
+              <span className={r.pnlDollars >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                {r.pnlDollars >= 0 ? '+' : '-'}${Math.abs(r.pnlDollars).toFixed(2)}
+              </span>
+            )}
+            {typeof r.pnlDollars !== 'number' && typeof r.pnlPercent === 'number' && (
+              <span className={r.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'} title="Leveraged percent — dollars were never captured">
+                {r.pnlPercent >= 0 ? '+' : ''}{r.pnlPercent.toFixed(1)}%
+              </span>
+            )}
+            {typeof r.pnlDollars !== 'number' && typeof r.pnlPercent !== 'number' && (
+              <span className="text-zinc-600">pnl not captured</span>
+            )}
+            {typeof r.realizedR === 'number' && (
+              <span className="font-mono text-ui-2xs text-zinc-400">{r.realizedR >= 0 ? '+' : ''}{r.realizedR.toFixed(2)}R</span>
+            )}
+            {r.strategy && <span className="text-zinc-500 truncate max-w-[18ch]">{r.strategy}</span>}
+            {r.tags.length > 0 && (
+              <span className="text-amber-300/80">{r.tags.join(' · ')}</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 };
 

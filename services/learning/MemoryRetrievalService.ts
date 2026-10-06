@@ -25,6 +25,12 @@ import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { regimeRankFactor } from '../../utils/regimeSentinel';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { baseOf } from '../../utils/symbol';
+import {
+    RECENT_TRADES_WINDOW,
+    buildRecentTradesBrief,
+    selectRecentTrades,
+    tallyLine,
+} from '../../utils/recentTradesBrief';
 import { normalizeStrategyFamily } from '../../types/strategy';
 import { familyEdgeFactor, matrixSummaryBlock } from './strategyRegimeMatrix';
 import { getMemoryFiles, searchNotebookNotes } from './MemoryFilesService';
@@ -540,6 +546,29 @@ const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: Lo
 const cap = (text: string, n: number): string =>
     text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
 
+/**
+ * Recent form: one tally line over the last 20 logged trades — the trader's
+ * CURRENT streak, which is a different fact from the all-time pattern-memory
+ * library and from the setup-cluster average.
+ *
+ * Only the tally rides in the prompt on purpose. The 20 rows are ~2.7k
+ * characters of detail any seat can already pull with `get_trade_log`; pasting
+ * them into every round would spend the stage budget that skills and rules
+ * compete for, to say what one line says.
+ */
+export const recentFormBlock = (trades?: LoggedTrade[], asOfMs?: number): string => {
+    if (!trades || trades.length === 0) return '';
+    const visible = asOfMs === undefined
+        ? trades
+        : trades.filter(t => {
+            const ms = Date.parse(t.timestamp ?? '');
+            return Number.isFinite(ms) && ms <= asOfMs;
+        });
+    const brief = buildRecentTradesBrief(selectRecentTrades(visible, { limit: RECENT_TRADES_WINDOW }));
+    if (brief.rows.length === 0) return '';
+    return `**Recent form**\n${tallyLine(brief, 'Last 20 logged trades')}`;
+};
+
 /** Cross-block dedup key: lowercase alphanumerics only. */
 const dedupKey = (line: string): string =>
     line.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -587,6 +616,7 @@ export function listRetrievedMemorySources(
     if (riskRulesBlock()) out.push({ path: 'rules/risk-rules', kind: 'rules' });
     if (uncoveredMistakeLine(query)) out.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
     if (similarTradesBlock(query, trades)) out.push({ path: 'journal/similar-trades', kind: 'similar' });
+    if (recentFormBlock(trades)) out.push({ path: 'journal/recent-form', kind: 'similar' });
     return out;
 };
 
@@ -701,6 +731,10 @@ export function getMemoryFilesContext(
     if (riskChars > 0) injected.push({ path: 'rules/risk-rules', kind: 'rules', chars: riskChars });
     const mistakeChars = push(uncoveredMistakeLine(query));
     if (mistakeChars > 0) injected.push({ path: 'rules/recurring-mistakes', kind: 'rules', chars: mistakeChars });
+    // Every stage, both audiences: a seat arguing this setup should know the
+    // trader is 3 losses deep before it argues, not after.
+    const formChars = push(recentFormBlock(trades, options?.asOfMs));
+    if (formChars > 0) injected.push({ path: 'journal/recent-form', kind: 'similar', chars: formChars });
     if (stage === 'verdict') {
         const similarChars = push(similarTradesBlock(query, trades, options?.asOfMs));
         if (similarChars > 0) injected.push({ path: 'journal/similar-trades', kind: 'similar', chars: similarChars });
