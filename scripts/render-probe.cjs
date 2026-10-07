@@ -1712,6 +1712,35 @@ async function main() {
             `plain: outline=${focus.plain.outline} shadow=${focus.plain.shadow}; `
             + `ringed: outline=${focus.ringed.outline} shadow=${focus.ringed.shadow}`);
 
+        // ── The composer: clicked must show nothing, tabbed must show the ring ─
+        // A browser matches :focus-visible on a text field after a MOUSE CLICK —
+        // correct for "can I type here", wrong for "did the keyboard move focus
+        // here", and the visible result was a blue box every time the trader
+        // clicked into the composer. utils/navModality.ts answers the second
+        // question and index.css obeys it. Measured with real input events, in
+        // both orders, because a click that leaks a box and a Tab that shows no
+        // box are the same bug seen from two sides.
+        const composer = page.locator('[data-testid="composer-input"]');
+        const composerState = () => composer.evaluate((el) => {
+            const cs = window.getComputedStyle(el);
+            return {
+                focused: document.activeElement === el,
+                nav: document.documentElement.dataset.navModality ?? '',
+                outline: cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0,
+            };
+        });
+        await composer.click();
+        const clickedState = await composerState();
+        check('clicking the composer paints no focus box',
+            clickedState.focused && clickedState.nav === 'pointer' && clickedState.outline === false,
+            JSON.stringify(clickedState));
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Shift+Tab');
+        const tabbedState = await composerState();
+        check('and tabbing back to it paints one',
+            tabbedState.focused && tabbedState.nav === 'keyboard' && tabbedState.outline === true,
+            JSON.stringify(tabbedState));
+
         check('zero pageerrors across the whole run', pageErrors.length === 0,
             pageErrors.length ? `\n---\n${pageErrors.join('\n---\n').slice(0, 3000)}` : '');
 
