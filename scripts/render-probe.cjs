@@ -783,7 +783,7 @@ async function main() {
             // identical to Agents for exactly that reason. Assert the overlay
             // root and read its own text; an empty inbox still renders an
             // EmptyState, so "nothing needs you" is content, not a blank panel.
-            { label: 'Approvals', expect: '[data-testid="approval-inbox"]', overlay: true },
+            { label: 'Trade approvals', expect: '[data-testid="approval-inbox"]', overlay: true },
             { label: 'Learn', expect: '[data-testid="learn-view"]' },
         ];
         /** Some menu entries open a dialog rather than switch a surface (the
@@ -855,7 +855,9 @@ async function main() {
                 return {
                     expanded: el.getAttribute('data-expanded'),
                     width: Math.round(el.getBoundingClientRect().width),
-                    // Five surfaces + Approvals. Stage 3 made the rail nav-only:
+                    // Five surfaces + Trade approvals (named for what the drawer holds — skill
+                    // drafts wait on Learn, and two rows called "Approvals" made
+                    // the list a person wanted unfindable). Rail is nav-only:
                     // Switch profile lives on the account row (nav-switch-user),
                     // conversations on the Chat surface's rail, automations in
                     // the Activity drawer.
@@ -865,7 +867,7 @@ async function main() {
             });
             check('the nav rail is mounted without opening any menu', rail !== null,
                 rail ? `width ${rail.width}` : 'no [data-testid="nav-rail"]');
-            check('the rail carries every surface row plus Approvals',
+            check('the rail carries every surface row plus Trade approvals',
                 rail !== null && rail.rows === 6, rail ? `${rail.rows} rows` : 'no rail');
             check('Switch profile lives on the account row',
                 rail !== null && rail.switchUser, 'nav-switch-user');

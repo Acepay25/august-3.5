@@ -21,8 +21,10 @@ import { requestSkillTry as trySkillInChat } from '../chat/skillDeepLink';
  * LearningQueuePanel (loop E /) — "the gate proposes, the inbox
  * disposes." Five lifecycle passes (cap displacement, graveyard revival,
  * zero-evidence demote, regime/recurrence re-scope, contradiction/belief
- * challenge) queue proposals; mounted as the top strip of the Strategy
- * Studio. Without it the queue is write-only and every proposal is lost.
+ * challenge) queue proposals; mounted as Learn's Skill queue tab. Without it
+ * the queue is write-only and every proposal is lost. (The comment used to say
+ * it mounted in the Strategy Studio; the Studio shows skills, it does not
+ * approve them — its rows only Pin and Try in chat.)
  *
  * Nobody HAS to act here. The skill supervisor reviews every one of these
  * automatically: displacement/revival/demote through their deterministic
