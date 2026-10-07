@@ -443,7 +443,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         placeholder={`New thread in ${groupDisplayName(group, bots)}… (@name to direct, @everyone for all)`}
                         data-testid="group-composer"
                         aria-label="New group thread"
-                        className="min-w-0 flex-1 bg-transparent text-[14px] text-zinc-100 placeholder-zinc-600 outline-none"
+                        className="min-w-0 flex-1 bg-transparent text-ui-base text-zinc-100 placeholder-zinc-600"
                     />
                     {isRunning && onCancelRun ? (
                         <button
