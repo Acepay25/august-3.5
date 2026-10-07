@@ -48,7 +48,12 @@ const TABS: Array<{ id: LearnTab; label: string; Icon: React.FC<{ className?: st
     { id: 'queue', label: 'Skill queue', Icon: ListChecks },
     { id: 'memory', label: 'Memory', Icon: BookOpen },
     { id: 'health', label: 'Health', Icon: Gauge },
-    { id: 'coach', label: 'Coach', Icon: ClipboardCheck },
+    // Named for the decision it holds, not the persona that explains it.
+    // A person hunting for 'where do I approve the skill the model proposed'
+    // has no reason to open a tab called Coach — and this is the ONLY place a
+    // pending skill draft can be allowed or discarded. The id stays `coach`
+    // (the probe and three tests key off it, and the panel is the Coach thread).
+    { id: 'coach', label: 'Skill approvals', Icon: ClipboardCheck },
     // Stage 3: the runtime/calibration diagnostics that lived in a
     // header-overlay (System Intelligence) and the Data tab's usage
     // dashboards land here — the learning loop's own telemetry.
