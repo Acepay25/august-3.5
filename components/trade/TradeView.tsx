@@ -28,7 +28,7 @@ import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import { drawingsControl, capDrawings } from '../../services/trade/drawingsControl';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { getActiveUsername } from '../../utils/activeUser';
-import { fmtPercent, fmtPrice } from '../../utils/formatters';
+import { fmtPercent, fmtPrice, fmtUsd } from '../../utils/formatters';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { formatLevelHitForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
@@ -149,7 +149,6 @@ interface StripData {
     oiValue: number;
 }
 
-const fmtUsd = (n: number): string => n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(2)}`;
 // fmtPrice now comes from utils/formatters (audit 2026-09-16 dedupe — the
 // hero/strip/ladder copy pair was byte-identical).
 
@@ -420,6 +419,23 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
     }, [mode, isBelowLg]);
+    // `role="tablist"` is a promise: the switcher is ONE stop in the tab
+    // sequence and the arrows move the selection inside it. It advertised the
+    // pattern and handled no key at all, so a keyboard user could only walk the
+    // three tabs with Tab — and never reach Book from Chart. Selecting on arrow
+    // (not just focusing) is deliberate: these three panes are alternatives, and
+    // landing on one is the same act as clicking it.
+    const stepMode = (delta: number): void => {
+        const at = TRADE_MODES.indexOf(mode);
+        const next = TRADE_MODES[(at + delta + TRADE_MODES.length) % TRADE_MODES.length];
+        pickMode(next);
+        modeTabRefs.current[next]?.focus();
+    };
+    const jumpMode = (edge: 'first' | 'last'): void => {
+        const next = edge === 'first' ? TRADE_MODES[0] : TRADE_MODES[TRADE_MODES.length - 1];
+        pickMode(next);
+        modeTabRefs.current[next]?.focus();
+    };
     // App's activity-bar toggle below lg: apply each new nonce exactly once.
     const lastModeReqNRef = useRef<number | undefined>(undefined);
     useEffect(() => {
@@ -948,6 +964,12 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     ref={switcherRef}
                     role="tablist"
                     aria-label="Trade surface mode"
+                    onKeyDown={(e) => {
+                        if (e.key === 'ArrowRight') { e.preventDefault(); stepMode(1); }
+                        else if (e.key === 'ArrowLeft') { e.preventDefault(); stepMode(-1); }
+                        else if (e.key === 'Home') { e.preventDefault(); jumpMode('first'); }
+                        else if (e.key === 'End') { e.preventDefault(); jumpMode('last'); }
+                    }}
                     data-testid="trade-mode-switcher"
                     className="relative flex shrink-0 items-center self-start rounded-full border border-white/[0.06] bg-zinc-800/60 p-1 ml-3 mb-1"
                 >
@@ -965,6 +987,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             type="button"
                             role="tab"
                             aria-selected={mode === m}
+                            tabIndex={mode === m ? 0 : -1}
                             data-testid={`trade-mode-${m}`}
                             onClick={() => pickMode(m)}
                             className={`relative z-10 rounded-full px-4 py-1 text-ui-dense font-semibold uppercase tracking-wider transition-colors duration-150 ease-[var(--ease-snappy)] active:scale-[0.97] ${

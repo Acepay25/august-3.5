@@ -295,6 +295,39 @@ describe('TradeView mobile 3-mode surface (<lg)', { timeout: 45_000 }, () => {
         expect(screen.getByTestId('trade-chart-pane').className).not.toContain('hidden');
     });
 
+    it('arrows move the selection and the focus, because role="tablist" promises them', async () => {
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        const chart = await screen.findByTestId('trade-mode-chart');
+        const ai = screen.getByTestId('trade-mode-ai');
+        const book = screen.getByTestId('trade-mode-book');
+
+        // Roving tabindex: the tablist is ONE stop in the tab sequence, and the
+        // stop is whichever tab is selected. Without it Tab walks all three and
+        // the arrows have nothing coherent to hand off from.
+        expect(chart.tabIndex).toBe(0);
+        expect(ai.tabIndex).toBe(-1);
+        expect(book.tabIndex).toBe(-1);
+
+        fireEvent.keyDown(chart, { key: 'ArrowRight' });
+        expect(ai.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(ai);
+
+        // Wraps at both ends, and reaches the extremes directly.
+        fireEvent.keyDown(ai, { key: 'ArrowRight' });
+        fireEvent.keyDown(book, { key: 'ArrowRight' });
+        expect(chart.getAttribute('aria-selected')).toBe('true');
+        fireEvent.keyDown(chart, { key: 'End' });
+        expect(book.getAttribute('aria-selected')).toBe('true');
+        expect(localStorage.getItem(modeKey())).toBe('book');
+        fireEvent.keyDown(book, { key: 'ArrowLeft' });
+        fireEvent.keyDown(ai, { key: 'Home' });
+        expect(chart.getAttribute('aria-selected')).toBe('true');
+        expect(document.activeElement).toBe(chart);
+
+        // A keyboard arrow is a selection, not a scroll: the pane must swap.
+        expect(screen.getByTestId('trade-chart-pane').className).not.toContain('hidden');
+    });
+
     it('lg+ never renders the switcher and keeps the desktop panes active', async () => {
         stubViewport(1280);
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
