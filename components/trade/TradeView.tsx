@@ -878,7 +878,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             aria-label={`Pinned signals, ${watchOpenCount} open`}
                             title={watchOpenR ? `Pinned signals · ${watchOpenR}` : 'Pinned signals'}
                             data-testid="trade-pinned-trigger"
-                            className="relative shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                            className="relative shrink-0 hit-target rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
                         >
                             <PinIcon className="h-3 w-3" />
                             {watchOpenCount > 0 && (

@@ -291,7 +291,7 @@ const Row: React.FC<{
                         )}
                         {onPin && (
                             <button type="button" onClick={onPin} aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
-                                className={`rounded p-0.5 transition-opacity ${
+                                className={`hit-target rounded p-0.5 transition-opacity ${
                                     pinned ? 'text-zinc-400 opacity-100' : 'text-zinc-600 opacity-0 group-hover:opacity-100'
                                 }`}>
                                 <Pin className="h-3 w-3" />
@@ -305,7 +305,7 @@ const Row: React.FC<{
                                     const r = e.currentTarget.getBoundingClientRect();
                                     setMenuAt(m => m ? null : { x: r.right - MENU_W, y: r.bottom + 4 });
                                 }}
-                                className="rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                className="hit-target rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
                                 <Ellipsis className="h-3 w-3" />
                             </button>
                         )}
@@ -683,14 +683,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {onRenameBot && (
                             <button type="button" aria-label={`Rename ${r.bot.name}`} data-testid="rail-rename"
                                 onClick={() => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); }}
-                                className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                 <Pencil className="h-3 w-3" />
                             </button>
                         )}
                         {onDeleteBot && (
                             <button type="button" aria-label={`Delete ${r.bot.name}`}
                                 onClick={() => onDeleteBot(r.bot.id)}
-                                className="rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
+                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
                                 <Trash2 className="h-3 w-3" />
                             </button>
                         )}
@@ -815,7 +815,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             const r = e.currentTarget.getBoundingClientRect();
                             setNewMenuAt(m => m ? null : { x: r.left, y: r.bottom + 4 });
                         }}
-                        className="flex items-center gap-1 rounded-full border border-zinc-700/80 bg-zinc-800/60 px-2 py-0.5 text-ui-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 hover:text-white">
+                        className="flex items-center gap-1 hit-target rounded-full border border-zinc-700/80 bg-zinc-800/60 px-2 py-0.5 text-ui-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 hover:text-white">
                         <Plus className="h-3 w-3" /> New
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${newMenuAt ? 'rotate-180' : ''}`} />
                     </button>
@@ -888,14 +888,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         {onEditGroup && (
                                             <button type="button" aria-label={`Edit ${groupDisplayName(g, bots)}`}
                                                 onClick={() => onEditGroup(g.id)} data-testid="rail-edit-group"
-                                                className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                                 <Pencil className="h-3 w-3" />
                                             </button>
                                         )}
                                         {onDeleteGroup && (
                                             <button type="button" aria-label={`Delete ${groupDisplayName(g, bots)}`}
                                                 onClick={() => onDeleteGroup(g.id)} data-testid="rail-delete-group"
-                                                className="rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
+                                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
                                                 <Trash2 className="h-3 w-3" />
                                             </button>
                                         )}

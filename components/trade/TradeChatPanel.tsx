@@ -874,12 +874,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     {/* Segmented chat actions: new + history */}
                     <div className="flex items-center rounded-control border border-white/[0.04] bg-white/[0.02] p-0.5">
                         <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
-                            className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                            className="hit-target rounded p-1 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
                             <Plus className="h-3.5 w-3.5" />
                         </button>
                         <button type="button" onClick={() => { setHistoryOpen(v => !v); setHistoryQuery(''); setHistorySel(0); setHistoryShowAll(false); }}
                             aria-label="Past conversations" aria-expanded={historyOpen} title="Past conversations"
-                            className={`rounded p-1 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.08] text-zinc-100' : 'text-zinc-400'}`}>
+                            className={`hit-target rounded p-1 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.08] text-zinc-100' : 'text-zinc-400'}`}>
                             <History className="h-3.5 w-3.5" />
                         </button>
                     </div>
