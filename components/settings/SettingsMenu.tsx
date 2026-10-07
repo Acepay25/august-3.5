@@ -217,8 +217,14 @@ const NAV_GROUPS: NavGroup[] = [
     {
         title: 'Knowledge',
         entries: [
+            // Named for what it holds. This tab is the forged-tool approval queue
+            // (`tabs/SkillsTab.tsx`, badged by `pendingForged`) — it was called
+            // "Skills", which is why a person looking for their learned skills
+            // opened it, found tool requests, and concluded the skills had
+            // vanished. The id stays `skills`: the badge and render branch key
+            // off it, and renaming it churns gates for no user-visible gain.
+            { id: 'skills', label: 'Tool approvals', icon: <BookOpen className={NAV_ICON} />, keywords: 'forged tool approval candidate request https' },
             { id: 'memory', label: 'Memory', icon: <Brain className={NAV_ICON} />, keywords: 'notebook amendment supervisor profile memory files global' },
-            { id: 'skills', label: 'Skills', icon: <BookOpen className={NAV_ICON} />, keywords: 'forged tool approval candidate library learned' },
             { id: 'strategies', label: 'Playbooks', icon: <BookOpen className={NAV_ICON} />, keywords: 'strategy book pdf upload studio families import' },
         ],
     },
