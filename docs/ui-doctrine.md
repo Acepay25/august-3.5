@@ -51,6 +51,7 @@ When a change violates two rules, the theme wins over the component.
 | a segmented control | the pressed-state button pattern; **not** `.seg-thumb` on a container |
 | a chat measure | `.chat-column` (880px) |
 | an empty-state backdrop | `.chat-hero-grid` |
+| a keyboard focus indicator | nothing at all — `index.css` outlines every focusable element on `:focus-visible`, and an editable control keeps that outline unless **it declares its own ring** (`focus-visible:ring-*` in its own class list is what makes the outline step aside, for that field alone) |
 
 `.seg-thumb` is the absolutely-positioned sliding **sibling** in a segmented
 control. Put it on the container and it resolves against the nearest positioned
@@ -59,19 +60,18 @@ ancestor and inflates to fill the surface.
 ## Type and numbers
 
 - [ ] **Sizes come from the `text-ui-*` ramp, never a `text-[Npx]` literal.**
-      The ramp is `--text-ui-{xl,lg,base,caption,sm,xs,2xs}` in `index.css`,
-      every step an offset from one dial, `--ui-font-size` (14px). Roles, not
-      sizes: `text-ui-xs` says "micro-label", `text-[10px]` says nothing and
-      cannot be scaled — moving the dial leaves a hard-coded literal exactly
-      where it was. **Status: 9px and 10px are fully migrated** (622 sites, and
-      `tests/typeRamp.test.ts` fails if either comes back). 11px is still a
-      literal on purpose: the ramp has no step there, so it needs someone to
-      decide which role it means. 12px and 13px are the exception — they map
-      exactly to `text-ui-sm` (base − 2) and `text-ui-caption` (base − 1), so
-      those convert with no pixel movement; they are ordinary body and caption
-      copy rather than micro-labels, so the pass that takes them is its own
-      job. Convert as you touch them; do not add new literals. `2xs` (9px) is
-      the dense-data exception and should not be reached for without a reason.
+      The ramp is `--text-ui-{xl,lg,base,caption,sm,dense,xs,2xs}` in `index.css`
+      (= 18/16/14/13/12/11/10/9px at the default dial), every step an offset from
+      one dial, `--ui-font-size` (14px). Roles, not sizes: `text-ui-xs` says
+      "micro-label", `text-[10px]` says nothing and cannot be scaled — moving the
+      dial leaves a hard-coded literal exactly where it was. **Status: every step
+      the ramp can express is migrated — 9, 10, 11, 12 and 13px are all banned by
+      `tests/typeRamp.test.ts` and none appears in the source** (`dense` was the
+      step 11px needed; `sm`/`caption` took 12/13px with no pixel movement). The
+      literals that remain are the sizes with NO role: 8px (under the `2xs`
+      floor) and 15px (between `base` and `lg`). Convert as you touch them, and
+      do not add new ones. `2xs` (9px) is the dense-data exception and should not
+      be reached for without a reason.
 - [ ] Geist Variable for UI, DM Serif Text **only** for hero/display moments,
       JetBrains Mono for data.
 - [ ] Every numeric readout is `font-mono tabular-nums`. A price, P&L or R that
@@ -98,8 +98,10 @@ ancestor and inflates to fill the surface.
 ## Structure
 
 - [ ] A surface's information architecture follows the thing it models. Learn is
-      Queue → Skills → Memory → Health because that is the order the learning
-      loop runs in.
+      Queue → Memory → Health → Coach → System (`components/learn/LearnView.tsx`)
+      because that is the order the learning loop runs in: a proposal arrives, it
+      lands in the notebook, the notebook's health is checked, the coach talks you
+      through what was learned, and the knobs governing all four come last.
 - [ ] One home per concern. If a component appears in two surfaces, one of them
       mounts the other's component — nobody reimplements a table.
 - [ ] No dead-end state. A surface with nothing selected says something true and
@@ -120,3 +122,8 @@ ancestor and inflates to fill the surface.
       suite passed.
 - [ ] New/merged surface ⇒ a jsdom smoke test (pattern:
       `tests/learnSurface.test.tsx`, `tests/agentsSurface.test.tsx`).
+- [ ] Anything that touches `index.css` focus or theme rules ⇒ `npm run
+      render-probe`. jsdom mounts markup and never resolves a stylesheet, so a
+      rule that silently removes an outline (or repaints a surface) passes the
+      whole suite; the probe Tab-focuses real fields in a browser and reads the
+      computed indicator back in both states.

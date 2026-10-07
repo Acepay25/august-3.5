@@ -1,10 +1,13 @@
 # Privacy
 
 August Trading is a **local-first** desktop/web app. Your journal, your charts and
-your notebooks live on your machine. This document describes the two places data
-does leave it, and what never leaves at all.
+your notebooks live on your machine. This document describes the places data does
+leave it, and what never leaves at all.
 
-Last reviewed: 2026-09-26.
+Last reviewed: 2026-10-07. Five outbound paths exist: public market data, the AI
+providers you configure, the GitHub update check, the keyless web search a model
+can call, and HTTPS tools you or a model authored — the last two only ever run on
+something you approved.
 
 ## What never leaves your machine
 
@@ -65,12 +68,30 @@ Practical consequences worth stating plainly:
 The app checks GitHub for a newer release. That is an ordinary HTTPS request to
 GitHub carrying no personal data.
 
+### 4. Web search, when a model asks for it
+
+A seat can call the `web_search` desk tool. It queries **DuckDuckGo** without an
+API key (`api.duckduckgo.com`, falling back to `html.duckduckgo.com`), so the
+search query itself leaves your machine — it is composed by the model from your
+prompt, so treat it like a message to a third party. No other part of your
+journal, notebook or drawings travels with it.
+
+### 5. HTTPS tools you or a model authored
+
+`toolForge` lets a tool be authored in-app — by you, or proposed by a model and
+then approved by you — that makes one HTTPS request to a host named in its URL
+template. Those calls go to that third party and carry whatever parameters the
+tool passes. An unapproved proposal never executes. The destination is validated
+on every run: `https` only, private/loopback and cloud-metadata hosts refused,
+and a redirect re-validated against the same rules rather than trusted because
+the first request was.
+
 ## Analytics and tracking
 
 There are none. No telemetry, no crash reporting, no usage analytics, no
-third-party scripts. Nothing in this app phones home except the two categories
-above, both of which are either a public market-data request or a message you
-sent on purpose.
+third-party scripts. Everything that leaves the machine is one of the five paths
+above: a public market-data request, a message you sent on purpose, the update
+check, a search a model asked for, or a tool you approved.
 
 ## Deleting your data
 

@@ -133,3 +133,82 @@ Per-model expansion standardisation, the clarification rung (already named with 
 - I reported "neither proposal card nor verdict card shows R:R". True of those two files, wrong as a
   summary: `AgentsView.tsx:347-349` already prints the chip in the conversation home.
 - `final-sweep-report.md` RECOMMENDS action pinning (`:103,105`); it does not claim it exists.
+
+---
+
+# Verification round 2 — 2026-10-07 (every md plan, against HEAD)
+
+Three read-only agents re-checked the plan-shaped docs line by line; every claim
+below was re-verified in code by the main agent before being written here.
+
+## Two "do now" items had shipped incompletely — both are now done
+
+1. **Item 6 (composer focus ring) was NOT done, and its premise was understated.**
+   `index.css` stripped the global `:focus-visible` outline from EVERY
+   `input/textarea/select/[contenteditable]`, on the theory that each one draws
+   its own `focus-visible:ring-*`. 25 sites carry a ring against ~114 editable
+   controls, so most fields — the composer's textarea included — had no keyboard
+   focus indicator at all, and `index.css:1572` documented the opposite ("Editable
+   controls keep the outline too"). Fixed by scoping the strip to the class that
+   declares the ring, deleting the composer's redundant `focus:outline-none`, and
+   adding a render-probe check that Tab-focuses real fields and measures the
+   computed indicator in both states. Verified against the bad artifact:
+   re-injecting the unscoped strip makes the new check fail.
+2. **Item 10's deletions were partial.** `closeAllOverlays`/`resetProgress`,
+   `OVERLAY_KEYS`/`PROGRESS_KEYS` and both reducer cases were still in
+   `hooks/useUIState.ts` with no dispatcher anywhere. Deleted.
+
+Also landed this round: `LoadingIcon` replaces the invisible
+`<span class="animate-spin">` in `ModelPerformanceDashboard`, and the last two
+14px literals became `text-ui-base` (same pixel at base = 14).
+
+## A subagent claim corrected before it entered this file
+
+An agent reported that `parseTradeAnalysis` "is imported only by tests" and that
+production uses `sanitizeTradeAnalysis`. Wrong: `utils/analysisUtils.ts:39`
+defines `sanitizeTradeAnalysis` AS a call to `parseTradeAnalysis`, so the zod
+boundary is on the live path. plan.md 3.8 is satisfied, not open.
+
+## What each doc's remaining items actually are
+
+- **stage2-implementation-plan.md** — Phases 0-2 landed. Phase 3: `TypingIndicator`
+  was deliberately not built (ROI item 3 — `role="status"` shipped on
+  `GroupChatView.tsx:384` instead), and the clarification rung was dropped as
+  already named in `utils/runContract.ts`. Phase 4: the update-check result
+  shipped (`ProfileTab.tsx:33` `upToDate`), the chart `role="img"` and the Trade
+  mobile tablist arrow keys remain deferred by the ROI list. Entry/Stop/TP label
+  divergence across `WatchListPanel`/`TradeLog`/`SavedAnalyses` is the deferred
+  label-unification item. So: no unbuilt work remains that has not been ruled on.
+- **stage1-ui-ux-spec.md** — its Part B citations name files that no longer exist
+  (`components/shared/Sidebar.tsx`, `DebateStage.tsx`, `KeyLevelsCard`'s `fmtPx`).
+  Archive, per the disposition above.
+- **plan.md** — 22/35 then; still open and unruled: no log sink for packaged
+  Electron (`console.*` everywhere), SQLCipher off (`SqliteService.ts:113`),
+  `App.tsx` at 2999 lines, `types/enums.ts:43` `DebateSpeaker = string | 'Moderator'`
+  (a degenerate union, worse than the one it replaced). The first three are
+  deferred/documented; the last is a one-line decision.
+- **UI_UX_AUDIT_REPORT.md** — the live residue after this round is small:
+  `VisionDataViewer` (no trap/Esc/role), `AnalystLensSettings.tsx:193` inline
+  `<style>` colour island, and `overflow-hidden` + `overflow-y-auto` on
+  `AccuracyModeModal`/`OutcomeMismatchModal`. Everything else in it names deleted
+  files. `ToggleSwitch` needs nothing — it is a button, so the global outline
+  covers it; the agent that flagged it had not read `index.css:1567`.
+- **performance-audit-report.md** — every item fixed; the invisible spinner above
+  was its last tail. Archive.
+- **docs/desk/README.md** — 9/19 claims wrong (`pixelSize`, a `--avatar-px` token
+  that exists nowhere). Rewrite or delete; not done, because a rewrite is a doc
+  this repo no longer needs a second of (AGENTS.md + the code carry the same rules).
+- **README.md / PRIVACY.md / docs/ui-doctrine.md / docs/learning-loop-map.md /
+  docs/plans/workstream1-status.md** — corrected this round: README linked two
+  deleted files; PRIVACY said "two places data leaves" and missed the keyless
+  DuckDuckGo search and the approved forged HTTPS tools; ui-doctrine's type-ramp
+  status said 11/12/13px were still literals (they are banned and migrated) and
+  listed a Learn tab row that predates Coach and System; learning-loop-map still
+  described a startup sweep and an auto-applying supervisor, both removed
+  2026-10-05, and pointed at anchors that have moved.
+
+## Still the user's call (unchanged)
+
+`useRightPanel.ts:126` computes `fullscreen | push` while `TradeView.tsx:1056`
+hardcodes `push`. And no doc has been deleted yet: the DELETE/ARCHIVE rows in the
+disposition table above need a word from you before anything goes away.

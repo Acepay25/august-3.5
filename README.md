@@ -87,11 +87,11 @@ installer, and only then uploads the signed bytes with `gh release upload`.
 
 - `AGENTS.md` — conventions for coding agents working in this repo
 - `changelog.md` — plain-English log of change rounds (newest first)
-- `DEBATE_FLOW_PLAN.md` — verified map of the debate engine + enhancement plan
-  (local, untracked: working notes gitignored via the session-docs rules, not
-  shipped in the repo checkout)
-- `PROMPTS.md` — verbatim inventory of prompts sent to models
-  (local, untracked: same gitignored working-notes policy)
+- `docs/ui-doctrine.md` — the rules the interface actually obeys, as a checklist
+  you can apply to a diff
+- `docs/learning-loop-map.md` — how skills, rules, notebook memory and the
+  supervisor get written, retrieved and injected
+- `PRIVACY.md` — every path by which data leaves the machine
 
 ## License
 

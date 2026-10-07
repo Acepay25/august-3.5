@@ -82,8 +82,11 @@ panels shipped unmounted for exactly this reason and no test noticed. Any change
 to how a conversation renders must be checked with `npm run render-probe`, which
 counts rendered rows in a real browser instead of asserting a component returned
 the right thing. It now sweeps all six nav surfaces, the approvals inbox, the
-Agents desk pane, and Settings → Data (back up / export / import), and asserts
-zero pageerrors throughout. Two rules learned the hard way, both encoded in it:
+Agents desk pane, and Settings → Data (back up / export / import), Tab-focuses
+editable fields and reads back the computed keyboard focus indicator — the only
+gate that can see `index.css`, since jsdom mounts markup without resolving a
+stylesheet — and asserts zero pageerrors throughout. Two rules learned the hard
+way, both encoded in it:
 **overlays mount outside `<main>`**, so measuring `<main>` after opening one
 re-reports the previous surface and passes vacuously — assert the overlay's own
 root; and **a check whose measurement is identical across two different states

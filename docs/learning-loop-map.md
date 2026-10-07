@@ -17,19 +17,27 @@ trade closes (hooks/useTradeLogging.ts)
       · ingestIfThenFromTrade       → deterministic IF/THEN skills
       · cluster ≥ MIN_CLUSTER_FOR_SKILL and no matching skill
           → skillWorthGate.evaluateSkillWorth (LLM) → draft
-post-mortem completes (hooks/usePostMortem.ts:655)
+post-mortem completes (hooks/usePostMortem.ts, the writeback path)
   → MemoryService.updateGlobalMemory → AlgorithmicMemoryService (deterministic)
   → craftSkillFromPostMortem → gateEvidenceBackedDraft → queueSkillDraft
-  → SkillEvalScheduler kick (SkillMemoryService.ts:2458, budget 2/session)
+  → SkillEvalScheduler kick (runDueSkillEvalWithDefaultRunner, called from
+    SkillMemoryService's syncClosedTradeToNotebook; its own session budget caps
+    the runs)
 skill supervisor (services/learning/skillSupervisor.ts)
-  · listeners + startup sweep installed at App level
-    (hooks/useSupervisorBootstrap.ts) — no surface mount required
+  · queue listeners installed at App level (hooks/useSupervisorBootstrap.ts) —
+    no surface mount required. There is NO startup sweep (contract change,
+    2026-10-05): a pass runs when something changes or when the panel says
+    "Run now", never merely because the app opened.
   · one streamed call per item, MAX_ITEMS_PER_PASS = 12
-  · approve/enhance → ingestCraftedSkillFromDraft → candidate skill
-    (whyAccepted persisted; verdict reason survives the session log)
-  · reject → tombstone; unparseable → stays queued for the human
-  · rescope/contradiction → applied only when the model authors a clause
-    that clears the same validateIfThen bar a fresh draft must clear
+  · AUTO-TRIAGE, NOT AUTO-APPLY (skillSupervisor.ts:185-196). approve/enhance
+    records a verdict and a suggested rewrite in the triage ledger; it does NOT
+    ingest. The only thing that creates a skill is the human — Save in the
+    inbox, or overrideApproveSkill (skillSupervisor.ts:716).
+  · reject → records the verdict; it no longer tombstones the trader's own
+    draft. Unparseable → stays queued for the human.
+  · rescope/contradiction → a proposal row; applying it goes through
+    applyLearningProposalByKind (SkillMemoryService.ts), which reads the
+    clauses the proposer STORED rather than a rewrite authored at apply time.
 next analysis
   → assemblePipelineMemoryContext (hooks/analysisPipeline/memoryContext.ts)
       → getMemoryFilesContext (per-stage budget) → recordMemoryInjection
