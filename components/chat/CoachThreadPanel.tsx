@@ -139,7 +139,7 @@ const DraftCard: React.FC<{
                 </span>
                 <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
-                        <p className="truncate text-[14px] font-semibold text-zinc-100">{d.crafted.name}</p>
+                        <p className="truncate text-ui-base font-semibold text-zinc-100">{d.crafted.name}</p>
                         <span className="ml-auto shrink-0 text-ui-dense text-zinc-500">{timeAgo(d.createdAt)}</span>
                     </div>
                     <p className="mt-1 text-ui-sm leading-relaxed text-zinc-400">

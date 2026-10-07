@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef, Fragment } from 'react';
 import { clamp100 } from '../../utils/math';
-import { Cpu } from '../shared/Icons';
+import { Cpu, LoadingIcon } from '../shared/Icons';
 import { AIProvider, LoggedTrade } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
@@ -418,7 +418,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                         : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white'
                         }`}
                 >
-                    <span className={`inline-block ${isRefreshing ? 'animate-spin' : ''}`}></span>
+                    {isRefreshing && <LoadingIcon className="size-3.5" />}
                     {isRefreshing ? 'Refreshing...' : 'Refresh'}
                 </button>
             </div>
