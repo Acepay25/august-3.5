@@ -143,7 +143,7 @@ const TradeDetailView: React.FC<{
 
                     <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
                         {postMortem ? (
-                            <MarkdownContent content={postMortem} className="text-[15px] text-zinc-200 leading-8" />
+                            <MarkdownContent content={postMortem} className="text-ui-lede text-zinc-200 leading-8" />
                         ) : (
                             <EmptyState
                                 compact

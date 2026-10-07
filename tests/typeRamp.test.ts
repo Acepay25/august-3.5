@@ -27,6 +27,46 @@ const walk = (dir: string): string[] => readdirSync(dir).flatMap(name => {
     return statSync(full).isDirectory() ? walk(full) : [full];
 });
 
+/**
+ * Headings are the ramp's too.
+ *
+ * The 9-13px ban above covers body copy, and every one of the sizes it bans is
+ * a role. Headings were the gap: a title could carry `text-[26px]` and pass, so
+ * the surface name and the card under it had no declared relationship — and the
+ * accessibility dial, which multiplies each element's own font-size, simply
+ * could not reach them. Same rule, same reason.
+ */
+describe('headings are on the ramp', () => {
+    const OPEN_TAG = /<h[1-6][\s\S]{0,400}?>/g;
+    const LITERAL = /text-\[[0-9.]+px\]/;
+
+    const offenders = SOURCES.flatMap(path => {
+        const src = readFileSync(path, 'utf8');
+        return [...src.matchAll(OPEN_TAG)]
+            .filter(tag => LITERAL.test(tag[0]))
+            .map(tag => `${path}: ${tag[0].replace(/\s+/g, ' ').slice(0, 78)}`);
+    });
+
+    it('carries no pixel literal on any heading tag', () => {
+        expect(offenders).toEqual([]);
+    });
+
+    // Guard the guard: a scan that matched no headings at all would pass
+    // vacuously, which is the failure mode this repo has already been bitten by.
+    it('really looked at the headings in the tree', () => {
+        const found = SOURCES.reduce((n, path) =>
+            n + [...readFileSync(path, 'utf8').matchAll(/<h[1-6][ >]/g)].length, 0);
+        expect(found).toBeGreaterThan(50);
+    });
+
+    it('declares the display roles the hero headings ask for', () => {
+        const css = readFileSync('index.css', 'utf8');
+        expect(css).toContain('--text-ui-lede: calc(var(--ui-font-size) + 1px)');
+        expect(css).toContain('--text-ui-display: calc(var(--ui-font-size) + 12px)');
+        expect(css).toContain('--text-ui-hero: calc(var(--ui-font-size) + 18px)');
+    });
+});
+
 const SOURCES = [...walk('components'), 'App.tsx']
     .filter(p => /\.tsx?$/.test(p) && !p.includes('.test.'));
 

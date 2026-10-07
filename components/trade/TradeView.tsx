@@ -905,7 +905,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     <div
                         key={tickFlash.seq}
                         data-testid="hero-price"
-                        className={`-mx-1 rounded px-1 font-mono text-[22px] font-semibold tabular-nums ${changeTone} ${tickFlash.cls}`.trim()}
+                        className={`-mx-1 rounded px-1 font-mono text-ui-price font-semibold tabular-nums ${changeTone} ${tickFlash.cls}`.trim()}
                     >
                         {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
                     </div>

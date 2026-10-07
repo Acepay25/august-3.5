@@ -285,7 +285,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                                     <span className="text-ui-xs sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold bg-zinc-700 text-zinc-400">N/A</span>
                                                 )}
                                             </h4>
-                                            <span className={`text-[8px] sm:text-ui-xs font-bold uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/30 border border-white/10`}>{family.tag}</span>
+                                            <span className={`text-ui-micro sm:text-ui-xs font-bold uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/30 border border-white/10`}>{family.tag}</span>
                                         </div>
                                         <p className="text-sm sm:text-base font-bold opacity-90 mb-1 sm:mb-2">"{family.nickname}"</p>
                                         <p className="text-xs sm:text-sm opacity-80 mb-3 sm:mb-5 leading-relaxed">{family.personality}</p>

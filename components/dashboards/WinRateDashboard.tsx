@@ -498,7 +498,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 <span className="text-lg sm:text-xl font-black block" style={{ color }}>
                                     {family.total > 0 ? fmtPercent(family.winRate, 0) : '-'}
                                 </span>
-                                <span className="text-[8px] sm:text-ui-2xs opacity-60 text-zinc-400">
+                                <span className="text-ui-micro sm:text-ui-2xs opacity-60 text-zinc-400">
                                     {family.wins}W / {family.total}T
                                 </span>
                             </div>

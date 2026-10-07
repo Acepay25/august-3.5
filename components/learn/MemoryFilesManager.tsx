@@ -346,7 +346,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             </div>
                         ) : suggestionsFile?.content.trim() ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
-                                <MarkdownContent content={suggestionsFile.content} className="text-[15px] leading-8" />
+                                <MarkdownContent content={suggestionsFile.content} className="text-ui-lede leading-8" />
                             </div>
                         ) : (
                             <p className="text-sm text-zinc-500 text-center py-16 px-8">
@@ -423,14 +423,14 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
-                                <MarkdownContent content={draft || '(empty file)'} className="text-[15px] leading-8" />
+                                <MarkdownContent content={draft || '(empty file)'} className="text-ui-lede leading-8" />
                             </div>
                         ) : (
                             <textarea
                                 value={draft}
                                 onChange={e => { setDraft(e.target.value); setIsDirty(true); }}
                                 spellCheck={false}
-                                className="flex-1 w-full resize-none bg-transparent px-8 py-8 lg:px-10 lg:py-10 text-[15px] leading-8 text-zinc-200 font-mono focus:outline-none custom-scrollbar"
+                                className="flex-1 w-full resize-none bg-transparent px-8 py-8 lg:px-10 lg:py-10 text-ui-lede leading-8 text-zinc-200 font-mono focus:outline-none custom-scrollbar"
                                 placeholder="# Write what the model should know…"
                                 aria-label={`Edit ${selectedFile.name}`}
                             />

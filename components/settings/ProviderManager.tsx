@@ -649,7 +649,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         </>
                                     ) : (
                                         <>
-                                            <h3 className="truncate text-[15px] font-semibold text-zinc-100">{nameDraft.trim() || selected.name}</h3>
+                                            <h3 className="truncate text-ui-lede font-semibold text-zinc-100">{nameDraft.trim() || selected.name}</h3>
                                             <button onClick={() => setIsEditingName(true)} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit name" aria-label="Edit provider name">
                                                 <Pencil className="h-3 w-3" />
                                             </button>

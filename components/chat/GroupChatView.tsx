@@ -155,7 +155,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                     ))}
                 </span>
                 <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold text-zinc-100">
+                    <p className="truncate text-ui-lede font-semibold text-zinc-100">
                         {groupDisplayName(group, bots)}
                     </p>
                 </div>
@@ -275,7 +275,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         <p className="mb-3 text-ui-xs font-bold uppercase tracking-[0.2em] text-zinc-600">
                             {members.length} bots · every member answers in turn
                         </p>
-                        <h1 className="mb-2 text-center font-serif text-[26px] tracking-tight text-zinc-100 sm:text-[32px]">
+                        <h1 className="mb-2 text-center font-serif text-ui-display tracking-tight text-zinc-100 sm:text-ui-hero">
                             Start a new thread
                         </h1>
                         <p className="mb-8 max-w-md text-center text-ui-sm leading-relaxed text-zinc-500">
