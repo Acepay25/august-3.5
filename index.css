@@ -312,6 +312,15 @@
 @utility z-pipeline { z-index: var(--z-pipeline); }
 @utility z-header { z-index: var(--z-header); }
 
+/* The hit-target floor. A control you must click measures at least 24px on its
+   short side; named once because it is the same rule on dozens of row chips,
+   icon buttons and disclosure headers, and because the 44px touch bump below
+   `lg` already covers phone widths — it is only the desktop layout that lets a
+   16px strip through. scripts/render-probe.cjs measures the rendered box and
+   fails on any clickable under 24px, which is the only gate in the repo that
+   can see a target size at all: jsdom reports every element as 0x0. */
+@utility hit-target { min-width: 1.5rem; min-height: 1.5rem; }
+
 /* Historical note: the app used to be monochrome, with semantic color opted
    in per-subtree via .analysis-card/.status-surface (the block that lived
    here re-declared stock Tailwind hues). The theme above is now
