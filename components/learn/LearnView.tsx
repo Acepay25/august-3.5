@@ -26,6 +26,7 @@ import SupervisorStream from './SupervisorStream';
 import LearningQueuePanel from '../skills/LearningQueuePanel';
 import AmendmentsInbox from './AmendmentsInbox';
 import MemoryHealthCard from './MemoryHealthCard';
+import PatternMemoryCard from './PatternMemoryCard';
 
 const MemoryFilesManager = lazy(() => import('./MemoryFilesManager'));
 const HarnessLessonsBrowser = lazy(() =>
@@ -75,11 +76,19 @@ interface LearnViewProps {
     renderCoach?: () => React.ReactNode;
     /** Decisions waiting, shown as the Coach tab's badge. */
     coachCount?: number;
+    /** The journal review's pattern synthesis — moved out of the Journal's
+     *  trade log (2026-10-07). App supplies the review text, its loading flag
+     *  and the regenerate handler; without them the card still reads the
+     *  notebook file, minus the regenerate affordance. */
+    reviewSummary?: string | null;
+    reviewLoading?: boolean;
+    onRegenerateReview?: () => void;
 }
 
 const LearnView: React.FC<LearnViewProps> = ({
     username, trades, memoryConfig = null, initialTab, onInitialTabConsumed,
     renderCoach, coachCount = 0,
+    reviewSummary = null, reviewLoading = false, onRegenerateReview,
 }) => {
     const showCoach = !!renderCoach;
     const tabs = showCoach ? TABS : TABS.filter(t => t.id !== 'coach');
@@ -143,7 +152,15 @@ const LearnView: React.FC<LearnViewProps> = ({
 
                 {tab === 'memory' && (
                     <Suspense fallback={<Fallback />}>
-                        <div className="mx-auto w-full max-w-4xl p-3">
+                        <div className="mx-auto w-full max-w-4xl space-y-3 p-3">
+                            {/* The synthesis first — it is what the memory is FOR;
+                                the notebook browser below holds the raw files. */}
+                            <PatternMemoryCard
+                                trades={trades}
+                                finalSummary={reviewSummary}
+                                isLoading={reviewLoading}
+                                onRegenerate={onRegenerateReview}
+                            />
                             <MemoryFilesManager username={username} memoryConfig={memoryConfig} />
                         </div>
                     </Suspense>
