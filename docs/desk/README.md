@@ -37,7 +37,12 @@ remaining anchors in the order the shared builder emits them.
 Each role preset is a fixed tuple of `[skin, hat, accent]`. The renderer
 draws:
 
-1. A 16-wide × 20-tall pixel grid scaled by `--avatar-px` (default 6 → 96×120).
+1. A 16-wide × 20-tall pixel grid (`PIXEL_GRID_W`/`PIXEL_GRID_H` in
+   `components/desk/pixelAvatars.ts`) scaled by the seat's `pixelSize` PROP —
+   `PixelSeat.tsx` defaults it to **5**, so a seat is 80×100 CSS px. There is no
+   `--avatar-px` custom property; the only token the seat writes is
+   `--avatar-cell-h`, set inline so the thinking-monitor overlay in `index.css`
+   can line itself up with row 18 of the grid.
 2. A backdrop desk tile (88×40, dark zinc) drawn at the seat anchor.
 3. A monitor tile (28×18) drawn on the desk — flickers while `live`.
 4. The avatar body — head, shoulders, optional cap/visor, a name plate.
