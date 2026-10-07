@@ -60,3 +60,14 @@ export const fmtPercent = (n: number, digits: number): string =>
     Number.isFinite(n)
         ? `${n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`
         : '—';
+
+/**
+ * Notional volume — 24h quote volume, open interest — as $B / $M / $K. One
+ * home, because this arithmetic lived inside a view file, which is how two
+ * panels end up disagreeing about what the same number rounds to.
+ */
+export const fmtUsd = (n: number): string =>
+    n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B`
+        : n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M`
+            : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K`
+                : `$${n.toFixed(2)}`;
