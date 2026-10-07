@@ -18,7 +18,7 @@ const renderMenu = (props: Partial<React.ComponentProps<typeof SurfaceMenuList>>
 describe('the surface menu', () => {
     it('lists every surface, and marks + names the active one', () => {
         renderMenu();
-        for (const label of ['Trade', 'Journal', 'Studio', 'Chat', 'Learn']) {
+        for (const label of ['Trade', 'Journal', 'Skills', 'Chat', 'Learn']) {
             // Prefix match: the accessible name also carries the shortcut.
             expect(screen.getByRole('button', { name: new RegExp(`^${label}`) })).toBeTruthy();
         }
@@ -56,14 +56,14 @@ describe('approvals entry point (WS-5.2)', () => {
         renderMenu({ onOpenApprovals, approvalsCount: 3 });
         const btn = screen.getByTestId('nav-approvals');
         expect(btn.textContent).toContain('3');
-        expect(btn.getAttribute('aria-label')).toBe('Approvals, 3 waiting');
+        expect(btn.getAttribute('aria-label')).toBe('Trade approvals, 3 waiting');
         fireEvent.click(btn);
         expect(onOpenApprovals).toHaveBeenCalledTimes(1);
     });
 
     it('keeps the inbox reachable with an empty tray, minus the count pill', () => {
         renderMenu({ onOpenApprovals: () => {}, approvalsCount: 0 });
-        expect(screen.getByTestId('nav-approvals').textContent).toBe('Approvals');
+        expect(screen.getByTestId('nav-approvals').textContent).toBe('Trade approvals');
     });
 
     it('renders no approvals row without the handler', () => {

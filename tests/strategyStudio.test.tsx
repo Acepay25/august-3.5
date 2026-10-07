@@ -86,3 +86,33 @@ describe('StrategyStudio (browse + annotate the playbook library)', () => {
         expect(closed).toBe(true);
     });
 });
+
+describe('a skill the human approved through the real path', () => {
+    it('shows up in the library list', async () => {
+        const USER = 'studio-approve-1';
+        localStorage.clear();
+        await initMemoryFiles(USER);
+        const { ingestCraftedSkillFromDraft } = await import('../services/learning/SkillMemoryService');
+        const r = await ingestCraftedSkillFromDraft({
+            name: 'Session-open fade short',
+            kind: 'avoid',
+            when: 'price fades into the session open after an overnight high',
+            steps: ['Confirm the overnight high', 'Skip the short'],
+            inputs: [],
+            validate: 'Confirm the high on the live chart',
+            output: 'A short avoided',
+            approval: 'A human approves before it is applied',
+            ifCondition: 'BTC short into the session-open fade',
+            thenAction: 'skip the short',
+        } as never, 'BTCUSDT', USER, undefined, 'human');
+        const { listSkills } = await import('../services/learning/SkillMemoryService');
+        const found = listSkills().map(x => x.file.name);
+        // eslint-disable-next-line no-console
+        console.log('INGEST', JSON.stringify(r), 'LIST', JSON.stringify(found));
+        render(<ToastProvider><StrategyStudio trades={[trade]} username={USER} /></ToastProvider>);
+        const table = await screen.findByTestId('strategy-studio-skills');
+        // eslint-disable-next-line no-console
+        console.log('TABLE_TEXT', JSON.stringify(table.textContent));
+        expect(table.textContent).toMatch(/fade\s*short/i);
+    });
+});

@@ -531,7 +531,7 @@ const TradeLogRowImpl: React.FC<{
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => onSelect(trade.id)}
-                    className="form-checkbox h-4 w-4 bg-zinc-950 border-zinc-600 text-zinc-300 rounded focus-visible:ring-zinc-500 cursor-pointer"
+                    className="form-checkbox hit-target bg-zinc-950 border-zinc-600 text-zinc-300 rounded focus-visible:ring-zinc-500 cursor-pointer"
                 />
             </div>
             <button type="button" onClick={() => onOpenDetail(trade.id)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
@@ -823,7 +823,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     <button
                         type="button"
                         onClick={askClearAll}
-                        className="text-xs text-zinc-500 hover:text-rose-400 transition-colors"
+                        className="hit-target text-xs text-zinc-500 hover:text-rose-400 transition-colors"
                         title="Delete all logged trades (typed confirm)"
                     >
                         Clear all

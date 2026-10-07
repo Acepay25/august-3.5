@@ -143,9 +143,14 @@ export const ChartToolRail: React.FC<ChartToolRailProps> = ({
                     aria-label="More line tools"
                     aria-expanded={trendFlyout}
                     onClick={() => setTrendFlyout(v => !v)}
-                    className="absolute -right-0.5 bottom-0 h-2.5 w-2.5 rounded-full border border-zinc-900 bg-zinc-700 text-zinc-300 transition-colors hover:bg-zinc-600"
+                    className="hit-target group/caret absolute -right-2.5 -bottom-2 grid place-items-center rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/60"
                 >
-                    <span className="mx-auto block h-0 w-0 border-x-[2.5px] border-b-[3px] border-x-transparent border-b-zinc-300" aria-hidden />
+                    {/* The caret stays a 10px corner glyph (TradingView's split-button
+                        look); the button around it is the invisible 24px hit-target
+                        floor the render probe enforces. */}
+                    <span className="block h-2.5 w-2.5 rounded-full border border-zinc-900 bg-zinc-700 transition-colors group-hover/caret:bg-zinc-600">
+                        <span className="mx-auto block h-0 w-0 border-x-[2.5px] border-b-[3px] border-x-transparent border-b-zinc-300" aria-hidden />
+                    </span>
                 </button>
                 {trendFlyout && (
                     <>

@@ -16,11 +16,17 @@
  * the emerald/rose/amber edge verdicts and the candidate/confirmed/retired
  * badges, which is what the global dark theme already means by those hues.
  *
- * WS-5.1: the library is a FILTERABLE TABLE, not a tile grid. Skill rows are
- * tabular data (status, W/L, verdict, origin, dates), and the doctrine is
- * explicit — "tables over tiles where data is tabular". One row per playbook,
- * disclosure in the detail pane; below md/lg/xl the least important columns
- * drop out, and the frame scrolls as the last resort so the page never breaks.
+ * The library is a FILTERABLE CARD GRID — one card per playbook carrying the
+ * claim, the evidence line, and the management actions. WS-5.1 had argued for
+ * a table ("tables over tiles where data is tabular"), and the 2026-10
+ * arrangement pass reversed it: the table answered narrow viewports by
+ * DROPPING the columns (kind, verdict, expectancy, origin) a trader filtering
+ * the library had most likely come for, while every row carried five action
+ * buttons — a shape that is cards whether or not it admits it. A card keeps
+ * its whole read at every width and reflows instead; deeper disclosure
+ * (prove-on-history, manual A/B, the full body) stays one click away in the
+ * detail pane. Filters are chips and the sort is a two-segment control,
+ * because a closed <select> hides the active filter.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -80,6 +86,21 @@ const bodyOf = (content: string): string => content.split(/^---\s*$/m).slice(2).
  *  and retired are both "not in play yet", which is the neutral chip, with
  *  retired struck through (the same reading STATUS_BADGE gives the detail
  *  pane; the pill itself is the shared component, not a hand-rolled triple). */
+/**
+ * The name a person can actually recognize.
+ *
+ * `titleFromMeta` composes "Avoid BTCUSDT Short trend" from the fields the
+ * matcher needs, so a skill approved from the inbox — which the human saw as
+ * "Session-open fade short" — arrived in this list under a name that matched
+ * nothing they had read, and with no family or direction yet it rendered as
+ * "Avoid BTCUSDT" over a line of raw markdown. That reads as "my approved skill
+ * is missing". The slug is the same string the approval wrote, so humanizing it
+ * gives the row back the label the decision was made under.
+ */
+export const humanizeSkillName = (slug: string): string =>
+    slug.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+        .replace(/^\w/, c => c.toUpperCase());
+
 const statusTone = (status: SkillMeta['status']): PillTone =>
     (status === 'confirmed' ? 'up' : 'neutral');
 
@@ -102,10 +123,23 @@ const fmtDay = (iso: string | undefined): string => {
         : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-/** Shared cell chrome: one line of data, hairline-separated, no card inside. */
-const TH = 'whitespace-nowrap px-3 py-2 text-left text-ui-xs font-bold uppercase tracking-wider text-zinc-600';
-const TD = 'whitespace-nowrap px-3 py-2 align-middle';
-const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-1.5 py-1 text-ui-dense transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] focus:outline-none';
+/** Card action buttons. Sized past the render probe's 24px hit-target floor
+ *  with room to spare — an icon-only control at py-1 measures ~25px, one
+ *  rounding error from a red gate. */
+const ACTION_BTN = 'inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent px-2 py-1.5 text-ui-dense transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] focus:outline-none';
+
+/** Filter chips — the <select> replacements. A closed select hides the active
+ *  filter, and a list that is mysteriously short is exactly that defect; the
+ *  chip row keeps every state on the page. Chip array literals stay on ONE
+ *  line: the wrapped tuple-map form is what unbalanced this file's JSX once
+ *  already. */
+const CHIP = 'rounded-control border px-2 py-1.5 text-ui-dense transition-colors duration-[120ms] ease-[var(--ease-snappy)] focus:outline-none';
+const CHIP_ON = 'border-zinc-600 bg-zinc-800 text-zinc-100';
+const CHIP_OFF = 'border-transparent text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200';
+const STATUS_CHIPS: Array<[SkillMeta['status'] | 'all', string]> = [['all', 'All'], ['confirmed', 'Confirmed'], ['candidate', 'Candidate'], ['retired', 'Retired']];
+/** "Evidence", not "Popular": the tally it sorts by is settled trades — a
+ *  label promising popularity would promise a number nothing here computes. */
+const SORT_SEGMENTS = [['evidence', 'Evidence'], ['newest', 'Newest']] as const;
 
 /** How full a heatmap cell is: hue from the edge, alpha from the edge AND the
  *  evidence weight, so a 9-trade 78% stays visibly fainter than a 60-trade
@@ -214,6 +248,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
 
     const [query, setQuery] = useState('');
     const [familyFilter, setFamilyFilter] = useState<StrategyFamily | 'all'>('all');
+    const [sortMode, setSortMode] = useState<'evidence' | 'newest'>('evidence');
     const [statusFilter, setStatusFilter] = useState<SkillMeta['status'] | 'all'>('all');
     const [isImporting, setIsImporting] = useState(false);
     const [skills, setSkills] = useState<SkillCardData[]>([]);
@@ -300,15 +335,42 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 const pa = pinnedIds.has(a.fileId) ? 0 : 1;
                 const pb = pinnedIds.has(b.fileId) ? 0 : 1;
                 if (pa !== pb) return pa - pb;
-                // Confirmed first, then most evidence, then newest; retired sinks.
-                const rank = (m: SkillMeta): number => (m.status === 'confirmed' ? 2 : m.status === 'candidate' ? 1 : 0);
+                // Retired sinks under both sorts: removing it from view is the
+                // filter's job; the sort only decides where it waits.
                 const ra = a.meta?.status === 'retired' ? 1 : 0;
                 const rb = b.meta?.status === 'retired' ? 1 : 0;
                 if (ra !== rb) return ra - rb;
-                return rank(b.meta!) - rank(a.meta!)
-                    || (b.meta!.wins + b.meta!.losses) - (a.meta!.wins + a.meta!.losses);
+                if (sortMode === 'newest') {
+                    // approvedAt is the only recency a skill actually carries —
+                    // one ingested without a human decision carries none, so it
+                    // sorts oldest rather than pretending to be new.
+                    const ta = a.meta?.approvedAt ? Date.parse(a.meta.approvedAt) : Number.NEGATIVE_INFINITY;
+                    const tb = b.meta?.approvedAt ? Date.parse(b.meta.approvedAt) : Number.NEGATIVE_INFINITY;
+                    if (ta !== tb) return tb - ta;
+                } else {
+                    // Evidence: confirmed outranks candidate, then settled trades.
+                    const rank = (m: SkillMeta): number => (m.status === 'confirmed' ? 2 : m.status === 'candidate' ? 1 : 0);
+                    const byRank = rank(b.meta!) - rank(a.meta!);
+                    if (byRank !== 0) return byRank;
+                }
+                return (b.meta!.wins + b.meta!.losses) - (a.meta!.wins + a.meta!.losses);
             });
-    }, [skills, query, statusFilter, familyFilter, pinnedIds]);
+    }, [skills, query, statusFilter, familyFilter, pinnedIds, sortMode]);
+
+    /** Family chips only for families the library actually holds — a chip
+     *  that filters nothing is a control promising a gesture the data cannot
+     *  answer. Recomputed with `skills`, so imports and deletes keep it true. */
+    const familyChips = useMemo<Array<[StrategyFamily | 'all', string]>>(() => {
+        const present = new Set<StrategyFamily>();
+        for (const s of skills) {
+            const f = s.meta ? skillFamily(s.meta) : undefined;
+            if (f) present.add(f);
+        }
+        return [
+            ['all', 'All families'],
+            ...STRATEGY_FAMILIES.filter(f => present.has(f)).map(f => [f, f.replace(/_/g, ' ')] as [StrategyFamily, string]),
+        ];
+    }, [skills]);
 
     const selected = selectedId ? skills.find(s => s.fileId === selectedId) ?? null : null;
 
@@ -387,7 +449,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         <div className="flex h-full flex-col bg-zinc-950 text-zinc-100">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
                 <div>
-                    <h2 className="font-serif text-[17px] tracking-tight text-zinc-100">Strategy Studio</h2>
+                    <h2 className="font-serif text-ui-xl tracking-tight text-zinc-100">Skills</h2>
                     <p className="text-ui-dense text-zinc-500">
                         {rows.length === skills.length
                             ? `${skills.length} playbooks`
@@ -402,7 +464,10 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 )}
             </div>
 
-            {/* Toolbar: search + filters + import. */}
+            {/* Toolbar row 1: search + import + strategies. The filters and
+                the sort live in the chip row below it — a closed <select>
+                hides the active filter, and a list that is mysteriously short
+                is exactly the defect a chip row cannot hide. */}
             <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-5 py-2.5">
                 <input
                     value={query}
@@ -410,24 +475,6 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                     placeholder="Search playbooks, coins, families…"
                     className="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
                 />
-                <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value as SkillMeta['status'] | 'all')}
-                    className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-dense uppercase tracking-wide text-zinc-300 focus:outline-none"
-                >
-                    <option value="all">Any status</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="candidate">Candidate</option>
-                    <option value="retired">Retired</option>
-                </select>
-                <select
-                    value={familyFilter}
-                    onChange={e => setFamilyFilter(e.target.value as StrategyFamily | 'all')}
-                    className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-dense uppercase tracking-wide text-zinc-300 focus:outline-none"
-                >
-                    <option value="all">Any family</option>
-                    {STRATEGY_FAMILIES.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
-                </select>
                 <label
                     className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
                     title="Import skill .md files — they must carry valid skill frontmatter"
@@ -457,6 +504,30 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 )}
             </div>
 
+            {/* Filters + sort. The status chips are the whole lifecycle; the
+                family chips only list families the library holds. "Evidence"
+                is the standing order (status, then settled-trade count);
+                "Newest" reads approvedAt. */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-white/5 px-5 py-2">
+                <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter by status">
+                    <span className="text-ui-2xs font-bold uppercase tracking-wider text-zinc-600">Status</span>
+                    {STATUS_CHIPS.map(([value, label]) => (
+                        <button key={value} type="button" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)} className={`${CHIP} ${statusFilter === value ? CHIP_ON : CHIP_OFF}`}>{label}</button>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter by family">
+                    <span className="text-ui-2xs font-bold uppercase tracking-wider text-zinc-600">Family</span>
+                    {familyChips.map(([value, label]) => (
+                        <button key={value} type="button" aria-pressed={familyFilter === value} onClick={() => setFamilyFilter(value)} className={`${CHIP} ${familyFilter === value ? CHIP_ON : CHIP_OFF}`}>{label}</button>
+                    ))}
+                </div>
+                <div className="ml-auto flex shrink-0 overflow-hidden rounded-control border border-white/10" role="group" aria-label="Sort playbooks">
+                    {SORT_SEGMENTS.map(([value, label]) => (
+                        <button key={value} type="button" aria-pressed={sortMode === value} onClick={() => setSortMode(value)} className={`px-2.5 py-1.5 text-ui-dense font-bold uppercase tracking-wider transition-colors duration-[120ms] ease-[var(--ease-snappy)] focus:outline-none ${sortMode === value ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'}`}>{label}</button>
+                    ))}
+                </div>
+            </div>
+
             {/* Regime×family matrix. The heatmap is the primary read once any
                 family has evidence; the moderator's prose block covers the same
                 tally, so it only stands in while the matrix is still empty. */}
@@ -475,225 +546,204 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                             : 'No playbooks match — clear the filters, or close trades with post-mortems to grow skill memory.'}
                     </p>
                 ) : (
-                    /* WS-5.1: the library is a TABLE. Nine data columns + one
-                       action column, one row per playbook. Mobile degrades by
-                       DROPPING the least important columns (md/lg/xl) rather
-                       than shrinking the reads that matter; the frame's own
-                       overflow-x is the last-resort guard, so a narrow viewport
-                       scrolls the table inside its border instead of breaking
-                       the page. Every deeper read lives in the detail pane, not
-                       in a stacked card — only the skill's claim rides under its
-                       name, because a slug without its claim is not readable. */
-                    <div className="overflow-x-auto custom-scrollbar rounded-control border border-zinc-800/80">
-                        <table className="w-full border-collapse text-left text-ui-dense" data-testid="strategy-studio-skills">
-                            <thead>
-                                <tr className="border-b border-zinc-800/80 bg-zinc-900">
-                                    <th className={TH}>Skill</th>
-                                    <th className={TH}>Status</th>
-                                    <th className={`${TH} hidden md:table-cell`}>Kind</th>
-                                    <th className={`${TH} hidden lg:table-cell`}>Setup</th>
-                                    <th className={`${TH} text-right`}>W/L</th>
-                                    <th className={`${TH} hidden md:table-cell`}>A/B verdict</th>
-                                    <th className={`${TH} hidden xl:table-cell text-right`}>Expectancy</th>
-                                    <th className={`${TH} hidden xl:table-cell`}>Origin</th>
-                                    <th className={`${TH} hidden lg:table-cell`}>Last eval</th>
-                                    <th className={`${TH} text-right`}>
-                                        <span className="sr-only">Row actions</span>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map(s => {
-                                    const meta = s.meta!;
-                                    const fam = skillFamily(meta);
-                                    const edge = fam ? familyRegimeEdge(fam, currentRegime) : null;
-                                    const slug = s.name;
-                                    const lift = liftByName.get(`${slug}.md`) ?? liftByName.get(slug);
-                                    const retired = meta.status === 'retired';
-                                    const statusBadge = STATUS_BADGE[meta.status] ?? STATUS_BADGE.candidate;
-                                    const kindBadge = KIND_BADGE[meta.kind ?? 'avoid'] ?? KIND_BADGE.avoid;
-                                    const sample = Math.round(meta.wins + meta.losses);
-                                    const pinned = pinnedIds.has(s.fileId);
-                                    const armed = armedDelete === s.fileId;
-                                    const title = titleFromMeta(meta);
-                                    const claim = meta.description || descriptionOf(s.body) || slug;
-                                    const winRate = sample > 0 ? meta.wins / sample : 0;
-                                    const expectancy = skillExpectancyR(meta);
-                                    // The per-row regime edge and attribution lift
-                                    // stay as hover reads, not columns: the family ×
-                                    // regime heatmap above owns the edge number and
-                                    // the Health tab owns the lift, so repeating them
-                                    // per row is the duplication the doctrine is
-                                    // explicit about ("one home per concern").
-                                    const edgeTitle = edge && edge.samples >= 8
-                                        ? `${fam?.replace(/_/g, ' ') ?? 'family'} · ${currentRegime ?? 'regime'} edge ${Math.round(edge.winRate * 100)}% over ${edge.samples}`
-                                        : `${fam?.replace(/_/g, ' ') ?? 'family'} · no regime evidence`;
-                                    const verdictTitle = [
-                                        meta.evalVerdict ? `A/B verdict: ${meta.evalVerdict}` : 'never evaluated',
-                                        meta.evalDetail ? `${meta.evalDetail} flips aligned` : '',
-                                        lift?.lift !== null && lift?.lift !== undefined
-                                            ? `attribution lift ${lift.lift >= 0 ? '+' : ''}${Math.round(lift.lift)}pt`
-                                            : '',
-                                    ].filter(Boolean).join(' · ');
-                                    return (
-                                        <tr
-                                            key={s.fileId}
-                                            data-skill-row
-                                            data-testid={`skill-row-${slug}`}
-                                            onClick={() => setSelectedId(s.fileId)}
-                                            onKeyDown={e => {
-                                                // Only the row itself — Enter on a
-                                                // focused action button belongs to
-                                                // that button, not to "open".
-                                                if (e.key === 'Enter' && e.target === e.currentTarget) setSelectedId(s.fileId);
-                                            }}
-                                            tabIndex={0}
-                                            className={`cursor-pointer border-b border-zinc-800/80 transition-[background-color,opacity] duration-[120ms] ease-[var(--ease-snappy)] last:border-b-0 hover:bg-white/[0.04] focus:outline-none focus-visible:bg-white/[0.06] ${retired ? 'opacity-60 hover:opacity-100' : ''}`}
+                    /* The library is a CARD GRID, one card per playbook: the
+                       claim, the evidence line, and the management actions are
+                       the whole browse read, and a card keeps all of it at
+                       every width — the table it replaces answered narrow
+                       viewports by dropping the columns (kind, verdict,
+                       expectancy, origin) a trader filtering the library had
+                       most likely come for. Every deeper read lives in the
+                       detail pane, one click away on the card itself. */
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="strategy-studio-skills">
+                        {rows.map(s => {
+                            const meta = s.meta!;
+                            const fam = skillFamily(meta);
+                            const edge = fam ? familyRegimeEdge(fam, currentRegime) : null;
+                            const slug = s.name;
+                            const lift = liftByName.get(`${slug}.md`) ?? liftByName.get(slug);
+                            const retired = meta.status === 'retired';
+                            const statusBadge = STATUS_BADGE[meta.status] ?? STATUS_BADGE.candidate;
+                            const kindBadge = KIND_BADGE[meta.kind ?? 'avoid'] ?? KIND_BADGE.avoid;
+                            const sample = Math.round(meta.wins + meta.losses);
+                            const pinned = pinnedIds.has(s.fileId);
+                            const armed = armedDelete === s.fileId;
+                            const title = humanizeSkillName(slug) || titleFromMeta(meta);
+                            // The claim rides under the name. Stripped of the
+                            // `**When:**` emphasis the body carries, because a
+                            // card that renders markup reads as a broken card.
+                            const claim = (meta.description || descriptionOf(s.body) || slug)
+                                .replace(/\*\*(.+?)\*\*/g, '$1')
+                                .replace(/^[\s`*_]+/, '').trim();
+                            const winRate = sample > 0 ? meta.wins / sample : 0;
+                            const expectancy = skillExpectancyR(meta);
+                            // The per-card regime edge and attribution lift
+                            // stay as hover reads, not panels: the family ×
+                            // regime heatmap above owns the edge number and
+                            // the Health tab owns the lift, so repeating them
+                            // per card is the duplication the doctrine is
+                            // explicit about ("one home per concern").
+                            const edgeTitle = edge && edge.samples >= 8
+                                ? `${fam?.replace(/_/g, ' ') ?? 'family'} · ${currentRegime ?? 'regime'} edge ${Math.round(edge.winRate * 100)}% over ${edge.samples}`
+                                : `${fam?.replace(/_/g, ' ') ?? 'family'} · no regime evidence`;
+                            const verdictTitle = [
+                                meta.evalVerdict ? `A/B verdict: ${meta.evalVerdict}` : 'never evaluated',
+                                meta.evalDetail ? `${meta.evalDetail} flips aligned` : '',
+                                lift?.lift !== null && lift?.lift !== undefined
+                                    ? `attribution lift ${lift.lift >= 0 ? '+' : ''}${Math.round(lift.lift)}pt`
+                                    : '',
+                            ].filter(Boolean).join(' · ');
+                            return (
+                                <article
+                                    key={s.fileId}
+                                    data-skill-row
+                                    data-testid={`skill-row-${slug}`}
+                                    onClick={() => setSelectedId(s.fileId)}
+                                    onKeyDown={e => {
+                                        // Only the card itself — Enter on a
+                                        // focused action button belongs to
+                                        // that button, not to "open".
+                                        if (e.key === 'Enter' && e.target === e.currentTarget) setSelectedId(s.fileId);
+                                    }}
+                                    tabIndex={0}
+                                    className={`group flex cursor-pointer flex-col gap-2 rounded-bubble border bg-zinc-900/60 p-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-[120ms] ease-[var(--ease-snappy)] hover:bg-zinc-900 focus:outline-none focus-visible:border-zinc-600 ${retired ? 'opacity-60 hover:opacity-100' : ''} ${armed ? 'border-rose-500/40 ring-1 ring-rose-500/30' : 'border-zinc-800/80 hover:border-zinc-700'}`}
+                                >
+                                    {/* Name + the claim it makes, the two badges
+                                        stacked to the right: status is the
+                                        lifecycle, kind is what the playbook
+                                        does to the book. */}
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <div className="truncate text-ui-sm font-semibold text-zinc-100" title={title}>{title}</div>
+                                            <div className="mt-0.5 line-clamp-2 text-ui-xs leading-4 text-zinc-500" title={claim}>{claim}</div>
+                                        </div>
+                                        <div className="flex shrink-0 flex-col items-end gap-1">
+                                            <StatusPill kicker tone={statusTone(meta.status)} className={retired ? 'line-through' : ''}>
+                                                {statusBadge.label}
+                                            </StatusPill>
+                                            <StatusPill kicker tone={meta.kind === 'avoid' ? 'down' : 'neutral'}>
+                                                {kindBadge.label}
+                                            </StatusPill>
+                                        </div>
+                                    </div>
+                                    {/* Setup: what the playbook trades, the
+                                        family tinted by the current regime's
+                                        edge (the heatmap above owns that number). */}
+                                    <div className="flex flex-wrap items-center gap-x-1.5 text-ui-xs text-zinc-500" title={edgeTitle}>
+                                        <span className="font-mono text-zinc-300">{meta.coin ?? '—'}</span>
+                                        {meta.direction && <span>{meta.direction}</span>}
+                                        {meta.timeframe && <span className="text-zinc-600">{` · ${meta.timeframe}`}</span>}
+                                        {fam && <span className={edgeTone(edge)}>{` · ${fam.replace(/_/g, ' ')}`}</span>}
+                                    </div>
+                                    {/* Evidence: W/L, the latest A/B verdict,
+                                        expectancy — or the honest "not yet
+                                        measured" sample count, never 0R. */}
+                                    <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-2">
+                                        <span
+                                            data-testid={`studio-wl-${slug}`}
+                                            title={`${meta.wins}W / ${meta.losses}L`}
+                                            className={`font-mono text-ui-dense tabular-nums ${sample === 0 ? 'text-zinc-600' : winRate >= 0.6 ? 'text-emerald-400' : winRate <= 0.4 ? 'text-rose-400' : 'text-zinc-300'}`}
                                         >
-                                            {/* Name + the claim it makes. */}
-                                            <td className={`${TD} max-w-[260px]`}>
-                                                <div className="truncate text-ui-sm font-semibold text-zinc-100" title={title}>{title}</div>
-                                                <div className="truncate text-ui-xs text-zinc-500">{claim}</div>
-                                            </td>
-                                            <td className={TD}>
-                                                <StatusPill kicker tone={statusTone(meta.status)} className={retired ? 'line-through' : ''}>
-                                                    {statusBadge.label}
-                                                </StatusPill>
-                                            </td>
-                                            <td className={`${TD} hidden md:table-cell`}>
-                                                <StatusPill kicker tone={meta.kind === 'avoid' ? 'down' : 'neutral'}>
-                                                    {kindBadge.label}
-                                                </StatusPill>
-                                            </td>
-                                            {/* Setup: what the playbook trades, and
-                                                the family it belongs to tinted by the
-                                                current regime's edge. */}
-                                            <td className={`${TD} hidden lg:table-cell text-zinc-500`}>
-                                                <span className="font-mono text-zinc-300">{meta.coin ?? '—'}</span>
-                                                {meta.direction && <span> {meta.direction}</span>}
-                                                {meta.timeframe && <span className="text-zinc-600"> · {meta.timeframe}</span>}
-                                                {fam && (
-                                                    <span className={edgeTone(edge)} title={edgeTitle}>{` · ${fam.replace(/_/g, ' ')}`}</span>
-                                                )}
-                                            </td>
-                                            <td className={`${TD} text-right`}>
-                                                <span
-                                                    data-testid={`studio-wl-${slug}`}
-                                                    title={`${meta.wins}W / ${meta.losses}L`}
-                                                    className={`font-mono text-ui-dense tabular-nums ${sample === 0 ? 'text-zinc-600' : winRate >= 0.6 ? 'text-emerald-400' : winRate <= 0.4 ? 'text-rose-400' : 'text-zinc-300'}`}
-                                                >
-                                                    {Math.round(meta.wins)}W {Math.round(meta.losses)}L
-                                                    <span className="ml-1 text-zinc-600">n={sample}</span>
-                                                </span>
-                                            </td>
-                                            <td className={`${TD} hidden md:table-cell`}>
-                                                {meta.evalVerdict ? (
-                                                    <StatusPill tone={VERDICT_TONE[meta.evalVerdict]} title={verdictTitle}>
-                                                        {meta.evalVerdict}
-                                                    </StatusPill>
-                                                ) : (
-                                                    <span className="font-mono text-zinc-700" title="never evaluated">—</span>
-                                                )}
-                                            </td>
-                                            {/* Expectancy, or the honest "not yet
-                                                measured" sample count — never 0R. */}
-                                            <td className={`${TD} hidden xl:table-cell text-right`}>
-                                                <span
-                                                    className={`font-mono text-ui-dense tabular-nums ${expectancy === undefined ? 'text-zinc-600' : expectancy > 0 ? 'text-emerald-400' : expectancy < 0 ? 'text-rose-400' : 'text-zinc-300'}`}
-                                                    title={expectancy === undefined
-                                                        ? `unmeasured — ${meta.rSampled ?? 0}/${EXPECTANCY_MIN_R_SAMPLE} counted outcomes carry realized R`
-                                                        : 'average realized R per measured outcome'}
-                                                >
-                                                    {expectancy === undefined
-                                                        ? `${meta.rSampled ?? 0}/${EXPECTANCY_MIN_R_SAMPLE} R`
-                                                        : `${expectancy > 0 ? '+' : ''}${expectancy}R`}
-                                                </span>
-                                            </td>
-                                            <td className={`${TD} hidden xl:table-cell text-zinc-500`}>
-                                                <span>{meta.source ?? '—'}</span>
-                                                {meta.originBotName && (
-                                                    <span className="text-zinc-600">{` · from @${meta.originBotName}`}</span>
-                                                )}
-                                            </td>
-                                            <td
-                                                className={`${TD} hidden lg:table-cell font-mono text-ui-dense tabular-nums`}
-                                                title={`last A/B eval: ${meta.lastEvalAt ?? 'never'} · last content write: ${meta.modifiedAt ?? 'unknown'}`}
-                                            >
-                                                <span className={meta.lastEvalAt ? 'text-zinc-400' : 'text-zinc-600'}>
-                                                    {fmtDay(meta.lastEvalAt ?? meta.modifiedAt)}
-                                                </span>
-                                            </td>
-                                            {/* Management: try / pin / retire-or-restore /
-                                                open / delete. Each stops the row click so
-                                                a button never doubles as "open". */}
-                                            <td className={`${TD} text-right`}>
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button
-                                                        type="button"
-                                                        title="Try in chat"
-                                                        aria-label="Try in chat"
-                                                        data-testid={`studio-try-${slug}`}
-                                                        onClick={e => { e.stopPropagation(); trySkillInChat(slug); onClose?.(); }}
-                                                        className={`${ACTION_BTN} border-zinc-700 bg-zinc-800 font-medium text-zinc-200 hover:bg-zinc-700`}
-                                                    >
-                                                        Try
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        title={pinned ? 'Unpin' : 'Pin to top'}
-                                                        aria-label={pinned ? `Unpin ${s.name}` : `Pin ${s.name} to top`}
-                                                        aria-pressed={pinned}
-                                                        data-testid={`studio-pin-${slug}`}
-                                                        onClick={e => { e.stopPropagation(); togglePin(s.fileId); }}
-                                                        className={`${ACTION_BTN} ${pinned ? 'border-zinc-600 bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200'}`}
-                                                    >
-                                                        <Pin className="h-3.5 w-3.5" aria-hidden="true" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        title={retired ? 'Restore' : 'Retire'}
-                                                        aria-label={retired ? `Restore ${s.name}` : `Retire ${s.name}`}
-                                                        data-testid={`studio-retire-${slug}`}
-                                                        onClick={e => { e.stopPropagation(); toggleRetire(s); }}
-                                                        className={`${ACTION_BTN} text-zinc-500 hover:text-zinc-200`}
-                                                    >
-                                                        {retired
-                                                            ? <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                                                            : <PowerOff className="h-3.5 w-3.5" aria-hidden="true" />}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        aria-label={`Open ${s.name}`}
-                                                        title="Open details"
-                                                        data-testid={`studio-open-${slug}`}
-                                                        onClick={e => { e.stopPropagation(); setSelectedId(s.fileId); }}
-                                                        className={`${ACTION_BTN} hidden md:inline-flex text-zinc-500 hover:text-zinc-200`}
-                                                    >
-                                                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        aria-label={armed ? `Confirm delete ${s.name}` : `Delete ${s.name}`}
-                                                        aria-pressed={armed}
-                                                        title={armed ? 'Click again to delete for good' : 'Delete this playbook (two clicks)'}
-                                                        data-testid={`studio-delete-${slug}`}
-                                                        onClick={e => { e.stopPropagation(); requestRowDelete(s); }}
-                                                        onBlur={() => setArmedDelete(null)}
-                                                        className={`${ACTION_BTN} font-semibold ${armed
-                                                            ? 'border-rose-500/50 bg-rose-500/10 text-rose-300'
-                                                            : 'text-zinc-500 hover:border-rose-500/40 hover:text-rose-300'}`}
-                                                    >
-                                                        {armed
-                                                            ? <span className="text-ui-xs uppercase tracking-wider">Confirm</span>
-                                                            : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                            {Math.round(meta.wins)}W {Math.round(meta.losses)}L
+                                            <span className="ml-1 text-zinc-600">n={sample}</span>
+                                        </span>
+                                        {meta.evalVerdict ? (
+                                            <StatusPill tone={VERDICT_TONE[meta.evalVerdict]} title={verdictTitle}>
+                                                {meta.evalVerdict}
+                                            </StatusPill>
+                                        ) : (
+                                            <span className="font-mono text-zinc-700" title="never evaluated">—</span>
+                                        )}
+                                        <span
+                                            className={`font-mono text-ui-dense tabular-nums ${expectancy === undefined ? 'text-zinc-600' : expectancy > 0 ? 'text-emerald-400' : expectancy < 0 ? 'text-rose-400' : 'text-zinc-300'}`}
+                                            title={expectancy === undefined
+                                                ? `unmeasured — ${meta.rSampled ?? 0}/${EXPECTANCY_MIN_R_SAMPLE} counted outcomes carry realized R`
+                                                : 'average realized R per measured outcome'}
+                                        >
+                                            {expectancy === undefined
+                                                ? `${meta.rSampled ?? 0}/${EXPECTANCY_MIN_R_SAMPLE} R`
+                                                : `${expectancy > 0 ? '+' : ''}${expectancy}R`}
+                                        </span>
+                                    </div>
+                                    {/* Origin + the evidence clock. */}
+                                    <div className="flex items-center justify-between gap-2 text-ui-2xs text-zinc-600">
+                                        <span className="truncate">
+                                            {meta.source ?? '—'}
+                                            {meta.originBotName && <span className="text-zinc-700">{` · from @${meta.originBotName}`}</span>}
+                                        </span>
+                                        <span
+                                            className={`shrink-0 font-mono tabular-nums ${meta.lastEvalAt ? 'text-zinc-500' : 'text-zinc-700'}`}
+                                            title={`last A/B eval: ${meta.lastEvalAt ?? 'never'} · last content write: ${meta.modifiedAt ?? 'unknown'}`}
+                                        >
+                                            {fmtDay(meta.lastEvalAt ?? meta.modifiedAt)}
+                                        </span>
+                                    </div>
+                                    {/* Management: try / pin / retire-or-restore /
+                                        open / delete. Each stops the card click
+                                        so a button never doubles as "open". */}
+                                    <div className="flex items-center gap-1 border-t border-white/5 pt-2">
+                                        <button
+                                            type="button"
+                                            title="Try in chat"
+                                            aria-label="Try in chat"
+                                            data-testid={`studio-try-${slug}`}
+                                            onClick={e => { e.stopPropagation(); trySkillInChat(slug); onClose?.(); }}
+                                            className={`${ACTION_BTN} border-zinc-700 bg-zinc-800 font-medium text-zinc-200 hover:bg-zinc-700`}
+                                        >
+                                            Try
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title={pinned ? 'Unpin' : 'Pin to top'}
+                                            aria-label={pinned ? `Unpin ${s.name}` : `Pin ${s.name} to top`}
+                                            aria-pressed={pinned}
+                                            data-testid={`studio-pin-${slug}`}
+                                            onClick={e => { e.stopPropagation(); togglePin(s.fileId); }}
+                                            className={`${ACTION_BTN} ${pinned ? 'border-zinc-600 bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200'}`}
+                                        >
+                                            <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title={retired ? 'Restore' : 'Retire'}
+                                            aria-label={retired ? `Restore ${s.name}` : `Retire ${s.name}`}
+                                            data-testid={`studio-retire-${slug}`}
+                                            onClick={e => { e.stopPropagation(); toggleRetire(s); }}
+                                            className={`${ACTION_BTN} text-zinc-500 hover:text-zinc-200`}
+                                        >
+                                            {retired
+                                                ? <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                                                : <PowerOff className="h-3.5 w-3.5" aria-hidden="true" />}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={`Open ${s.name}`}
+                                            title="Open details"
+                                            data-testid={`studio-open-${slug}`}
+                                            onClick={e => { e.stopPropagation(); setSelectedId(s.fileId); }}
+                                            className={`${ACTION_BTN} text-zinc-500 hover:text-zinc-200`}
+                                        >
+                                            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={armed ? `Confirm delete ${s.name}` : `Delete ${s.name}`}
+                                            aria-pressed={armed}
+                                            title={armed ? 'Click again to delete for good' : 'Delete this playbook (two clicks)'}
+                                            data-testid={`studio-delete-${slug}`}
+                                            onClick={e => { e.stopPropagation(); requestRowDelete(s); }}
+                                            onBlur={() => setArmedDelete(null)}
+                                            className={`${ACTION_BTN} ml-auto font-semibold ${armed
+                                                ? 'border-rose-500/50 bg-rose-500/10 text-rose-300'
+                                                : 'text-zinc-500 hover:border-rose-500/40 hover:text-rose-300'}`}
+                                        >
+                                            {armed
+                                                ? <span className="text-ui-xs uppercase tracking-wider">Confirm</span>
+                                                : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                                        </button>
+                                    </div>
+                                </article>
+                            );
+                        })}
                     </div>
                 )}
             </div>
