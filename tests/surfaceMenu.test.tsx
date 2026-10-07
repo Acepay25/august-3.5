@@ -18,7 +18,7 @@ const renderMenu = (props: Partial<React.ComponentProps<typeof SurfaceMenuList>>
 describe('the surface menu', () => {
     it('lists every surface, and marks + names the active one', () => {
         renderMenu();
-        for (const label of ['Trade', 'Journal', 'Studio', 'Chat', 'Learn']) {
+        for (const label of ['Trade', 'Journal', 'Skills', 'Chat', 'Learn']) {
             // Prefix match: the accessible name also carries the shortcut.
             expect(screen.getByRole('button', { name: new RegExp(`^${label}`) })).toBeTruthy();
         }

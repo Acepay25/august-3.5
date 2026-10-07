@@ -774,7 +774,7 @@ async function main() {
         const surfaces = [
             { label: 'Trade', expect: '[data-testid="trade-view"]' },
             { label: 'Journal', expect: null },
-            { label: 'Studio', expect: null },
+            { label: 'Skills', expect: null },
             { label: 'Chat', expect: '[data-testid="agents-view"]' },
             // The sixth control in the menu; it opens the approval inbox as a
             // fixed overlay that mounts OUTSIDE <main> (App renders it as a
@@ -1742,6 +1742,61 @@ async function main() {
         check('and tabbing back to it paints one',
             tabbedState.focused && tabbedState.nav === 'keyboard' && tabbedState.outline === true,
             JSON.stringify(tabbedState));
+
+        // ── Hit targets: a control you have to click cannot be a 16px strip ──
+        // Measured at desktop width on purpose: below `lg` the 44px touch bump in
+        // index.css already lifts every control, which is why the same rows that
+        // measure 21-25px tall here measure fine at phone width. jsdom reports
+        // every box as 0x0, so no unit test in the suite can see a target size at
+        // all — this is the only gate that has ever looked.
+        const FLOOR_PX = 24;
+        const offendersBySurface = [];
+        for (const surface of surfaces) {
+            await navTo(surface.label);
+            await sleep(900);
+            const bad = await page.evaluate(({ floor }) => {
+                const scopes = ['main', 'aside[data-testid="nav-rail"]', 'header'];
+                const seen = new Set();
+                const out = [];
+                for (const scope of scopes) {
+                    for (const host of document.querySelectorAll(scope)) {
+                        for (const el of host.querySelectorAll(
+                            'button, a[href], input:not([type="hidden"]), select, [role="tab"], [role="switch"], [role="checkbox"], [role="menuitem"], [role="button"]')) {
+                            if (seen.has(el)) continue;
+                            seen.add(el);
+                            // The property is the AREA YOU CAN CLICK, not the box of
+                            // the tag: a checkbox inside a label is hit through the
+                            // label, so measuring the 16px input would report a
+                            // target no user ever has to aim at.
+                            const target = (el.tagName === 'INPUT' || el.tagName === 'SELECT')
+                                ? (el.closest('label') || el)
+                                : el;
+                            const r = target.getBoundingClientRect();
+                            if (r.width < 1 || r.height < 1) continue;
+                            const cs = window.getComputedStyle(el);
+                            if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') continue;
+                            if (el.disabled || el.getAttribute('aria-hidden') === 'true') continue;
+                            if (/\bsr-only\b/.test(String(el.className))) continue;
+                            const min = Math.min(r.width, r.height);
+                            if (min >= floor) continue;
+                            out.push({
+                                name: (el.getAttribute('aria-label') || (el.textContent || '').trim() || el.tagName.toLowerCase()).slice(0, 34),
+                                w: Math.round(r.width), h: Math.round(r.height),
+                            });
+                        }
+                    }
+                }
+                return out;
+            }, { floor: FLOOR_PX });
+            if (bad.length) offendersBySurface.push({ label: surface.label, bad });
+        }
+        const offenderText = offendersBySurface.map(o =>
+            `${o.label}: ${o.bad.map(b => `${b.name} ${b.w}x${b.h}`).join(' | ')}`).join('\n').slice(0, 1200);
+        check(`every clickable control measures at least ${FLOOR_PX}px on its short side`,
+            offendersBySurface.length === 0,
+            offendersBySurface.length
+                ? `${offendersBySurface.reduce((n, o) => n + o.bad.length, 0)} sub-${FLOOR_PX}px target(s) on ${offendersBySurface.length} surface(s):\n${offenderText}`
+                : '');
 
         check('zero pageerrors across the whole run', pageErrors.length === 0,
             pageErrors.length ? `\n---\n${pageErrors.join('\n---\n').slice(0, 3000)}` : '');

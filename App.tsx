@@ -1454,7 +1454,7 @@ const App: React.FC = () => {
             // Alt+1..5 jumps the nav-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
-                '1': 'trade', '2': 'journal', '3': 'studio', '4': 'agents', '5': 'learn',
+                '1': 'trade', '2': 'journal', '3': 'skills', '4': 'agents', '5': 'learn',
             };
             if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
                 e.preventDefault();
@@ -2174,7 +2174,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const onOpenSkill = (): void => {
             setIsSettingsMenuVisible(false);
-            setSurface('studio');
+            setSurface('skills');
         };
         window.addEventListener('august:open-skill', onOpenSkill);
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
@@ -2374,7 +2374,7 @@ const App: React.FC = () => {
             <SettingsMenu
                 isVisible={isSettingsMenuVisible}
                 onClose={() => setIsSettingsMenuVisible(false)}
-                onOpenStrategyStudio={() => { setSurface('studio'); setIsSettingsMenuVisible(false); }}
+                onOpenStrategyStudio={() => { setSurface('skills'); setIsSettingsMenuVisible(false); }}
                 onOpenLearn={(tab) => { setLearnTab(tab ?? null); setSurface('learn'); setIsSettingsMenuVisible(false); }}
                 summaryCharLimit={summaryCharLimit}
                 onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
@@ -2734,7 +2734,7 @@ const App: React.FC = () => {
                                 />
                             </React.Suspense>
                         )}
-                        {surface === 'studio' && (
+                        {surface === 'skills' && (
                             <React.Suspense fallback={<SurfaceSkeleton />}>
                                 <StrategyStudio
                                     trades={loggedTrades}
@@ -2994,7 +2994,7 @@ const App: React.FC = () => {
                 conversation row menu, jump-to-latest into the transcript's
                 scroll-to-bottom pill. Every other entry was a duplicate. */}
 
-            {/* Strategy Studio is a surface now (surface === 'studio' in the
+            {/* Strategy Studio is a surface now (surface === 'skills' in the
                 main row) — no overlay state to manage. */}
 
             {/* Side-by-side compare */}

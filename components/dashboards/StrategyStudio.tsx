@@ -80,6 +80,21 @@ const bodyOf = (content: string): string => content.split(/^---\s*$/m).slice(2).
  *  and retired are both "not in play yet", which is the neutral chip, with
  *  retired struck through (the same reading STATUS_BADGE gives the detail
  *  pane; the pill itself is the shared component, not a hand-rolled triple). */
+/**
+ * The name a person can actually recognize.
+ *
+ * `titleFromMeta` composes "Avoid BTCUSDT Short trend" from the fields the
+ * matcher needs, so a skill approved from the inbox — which the human saw as
+ * "Session-open fade short" — arrived in this list under a name that matched
+ * nothing they had read, and with no family or direction yet it rendered as
+ * "Avoid BTCUSDT" over a line of raw markdown. That reads as "my approved skill
+ * is missing". The slug is the same string the approval wrote, so humanizing it
+ * gives the row back the label the decision was made under.
+ */
+export const humanizeSkillName = (slug: string): string =>
+    slug.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+        .replace(/^\w/, c => c.toUpperCase());
+
 const statusTone = (status: SkillMeta['status']): PillTone =>
     (status === 'confirmed' ? 'up' : 'neutral');
 
@@ -515,8 +530,13 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                     const sample = Math.round(meta.wins + meta.losses);
                                     const pinned = pinnedIds.has(s.fileId);
                                     const armed = armedDelete === s.fileId;
-                                    const title = titleFromMeta(meta);
-                                    const claim = meta.description || descriptionOf(s.body) || slug;
+                                    const title = humanizeSkillName(slug) || titleFromMeta(meta);
+                                    // The claim rides under the name. Stripped of the
+                                    // `**When:**` emphasis the body carries, because a
+                                    // row that renders markup reads as a broken row.
+                                    const claim = (meta.description || descriptionOf(s.body) || slug)
+                                        .replace(/\*\*(.+?)\*\*/g, '$1')
+                                        .replace(/^[\s`*_]+/, '').trim();
                                     const winRate = sample > 0 ? meta.wins / sample : 0;
                                     const expectancy = skillExpectancyR(meta);
                                     // The per-row regime edge and attribution lift
