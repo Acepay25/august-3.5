@@ -296,14 +296,14 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                             <PromptDiffView baseText={selectedEntry.fallback} currentText={draft} />
                         ) : isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
-                                <MarkdownContent content={draft || '(empty prompt)'} className="text-[15px] leading-8" />
+                                <MarkdownContent content={draft || '(empty prompt)'} className="text-ui-lede leading-8" />
                             </div>
                         ) : (
                             <textarea
                                 value={draft}
                                 onChange={e => { setDraft(e.target.value); setIsDirty(true); }}
                                 spellCheck={false}
-                                className="flex-1 w-full resize-none bg-transparent px-8 py-8 lg:px-10 lg:py-10 text-[15px] leading-8 text-zinc-200 font-mono focus:outline-none custom-scrollbar"
+                                className="flex-1 w-full resize-none bg-transparent px-8 py-8 lg:px-10 lg:py-10 text-ui-lede leading-8 text-zinc-200 font-mono focus:outline-none custom-scrollbar"
                                 placeholder="(empty override — the built-in default is used)"
                                 aria-label={`Edit ${selectedEntry.name}`}
                             />

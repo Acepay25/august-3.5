@@ -183,3 +183,46 @@ describe('motion lockout (WS-5.4)', () => {
         expect(report, `${offenders.length} file(s) still use transition-all`).toBe('');
     });
 });
+
+/**
+ * Clipped text has to name its fallback (arrangement pass, 2026-10-07).
+ *
+ * `truncate` and `line-clamp` are the two classes that can make information
+ * unreadable while the layout still looks perfect: the row renders, the
+ * sentence stops mid-word, and nothing on screen says the rest exists. Measured
+ * across the tree, 105 of 125 clipped elements carried no `title`, no
+ * `aria-label` and no `Tip` — which is most of what "this looks messy" means in
+ * practice, and no other gate can see it (jsdom lays nothing out).
+ *
+ * This is a RATCHET, not a clean bill: the baseline is the count at the time it
+ * was written, so the number can only fall. Fixing a file should lower the
+ * constant in the same commit that fixes it, and leaving it pinned while the
+ * count drops is the failure mode this repo already calls the "green check that
+ * encodes the bug".
+ */
+describe('clipped text names its fallback', () => {
+    const CLIPPED = /truncate|line-clamp/;
+    const FALLBACK = /title=|aria-label=|aria-labelledby=/;
+    const BASELINE = 105;
+
+    const offenders: string[] = [];
+    for (const path of tsxFilesUnder('components')) {
+        const src = readFileSync(resolve(path), 'utf8');
+        for (const match of src.matchAll(/<[a-zA-Z][a-zA-Z0-9]*[\s\S]{0,600}?>/g)) {
+            const tag = match[0];
+            if (!CLIPPED.test(tag)) continue;
+            if (FALLBACK.test(tag)) continue;
+            offenders.push(`${relative(process.cwd(), path)}: ${tag.replace(/\s+/g, ' ').slice(0, 72)}`);
+        }
+    }
+
+    it(`holds the clipped-without-fallback count at or under ${BASELINE}`, () => {
+        expect(offenders.length, offenders.slice(0, 12).join(' | ')).toBeLessThanOrEqual(BASELINE);
+    });
+
+    // Guard the guard: a scan matching no clipped tags at all would pass
+    // vacuously, and this suite has been bitten by that exact shape before.
+    it('finds the clipped elements it is counting', () => {
+        expect(offenders.length).toBeGreaterThan(10);
+    });
+});

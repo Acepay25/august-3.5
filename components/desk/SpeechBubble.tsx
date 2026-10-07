@@ -97,7 +97,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
                         className="mt-1 inline-flex items-center gap-1 rounded border border-white/10 bg-zinc-950/70 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-300"
                         title="Sealed conviction (0-100)"
                     >
-                        <span className="text-[8px] uppercase tracking-widest text-zinc-500">Conv</span>
+                        <span className="text-ui-micro uppercase tracking-widest text-zinc-500">Conv</span>
                         <span className="tabular-nums">{conviction}</span>
                         <span className="h-1 w-8 overflow-hidden rounded-full bg-zinc-800">
                             <span className="block h-full rounded-full" style={{ width: `${conviction}%`, background: accent }} />

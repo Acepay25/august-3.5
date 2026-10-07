@@ -68,10 +68,14 @@ ancestor and inflates to fill the surface.
       the ramp can express is migrated — 9, 10, 11, 12 and 13px are all banned by
       `tests/typeRamp.test.ts` and none appears in the source** (`dense` was the
       step 11px needed; `sm`/`caption` took 12/13px with no pixel movement). The
-      literals that remain are the sizes with NO role: 8px (under the `2xs`
-      floor) and 15px (between `base` and `lg`). Convert as you touch them, and
-      do not add new ones. `2xs` (9px) is the dense-data exception and should not
-      be reached for without a reason.
+      literals are gone: 8px became `micro` (base − 6) and 15px became `lede`
+      (base + 1), each exact at the default dial, on the same pattern `dense`
+      used for 11px. `tests/typeRamp.test.ts` now also bans a pixel literal on
+      ANY heading tag, so hero and card titles cannot drift back. Display type
+      has roles too — `display` (base + 12) and `hero` (base + 18). Do not add a
+      new literal: name the role, or add the step deliberately and say why.
+      `2xs` (9px) and `micro` (8px) are the dense-data floors and should not be
+      reached for without a reason.
 - [ ] Geist Variable for UI, DM Serif Text **only** for hero/display moments,
       JetBrains Mono for data.
 - [ ] Every numeric readout is `font-mono tabular-nums`. A price, P&L or R that

@@ -511,7 +511,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                                     {/* Outcome Distribution Bar */}
                                     <div className="mt-3">
-                                        <div className="flex justify-between text-[8px] text-zinc-500 mb-1">
+                                        <div className="flex justify-between text-ui-micro text-zinc-500 mb-1">
                                             <span>TP1: {scenarioResult.monteCarlo.probabilities.tp1Hit}%</span>
                                             <span>TP2: {scenarioResult.monteCarlo.probabilities.tp2Hit}%</span>
                                             <span>SL: {scenarioResult.monteCarlo.probabilities.slHit}%</span>

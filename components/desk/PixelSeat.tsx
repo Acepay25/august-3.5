@@ -237,7 +237,7 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                     {roleTag && (
                         <span
                             title={roleTag}
-                            className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-zinc-500"
+                            className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 py-0.5 font-mono text-ui-micro uppercase tracking-wider text-zinc-500"
                         >
                             {roleTag}
                         </span>
