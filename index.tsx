@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './components/shared/Toast';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+import { installNavModalityTracking } from './utils/navModality';
 
 // Self-hosted fonts (offline-capable, no external CDN dependency)
 // Minara-derived type pairing: Geist for UI, DM Serif Text for display
@@ -61,6 +62,11 @@ const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
+
+// Which modality is allowed to paint a focus indicator, before anything mounts:
+// the listeners are window-level and capture-phase, so a control that stops a
+// keydown from bubbling still cannot hide that the mouse was used.
+installNavModalityTracking();
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(

@@ -1569,6 +1569,19 @@ body,
   outline-offset: var(--focus-ring-offset);
 }
 
+/* Editable fields are the exception the spec makes to modality-awareness: a
+   browser matches `:focus-visible` on them after a MOUSE CLICK too, because a
+   clicked field is a field you are about to type in. That answers "could this be
+   typed in", not "did the keyboard just move focus here", and only the second
+   question is what a focus ring exists to answer — so `utils/navModality.ts`
+   tracks it on `html[data-nav-modality]` and the outline obeys that instead.
+   Clicking into the composer paints no box; tabbing to it paints the same ring
+   every other control gets. Typing an ordinary character leaves the flag alone,
+   so a click followed by typing does not light up one keystroke later. */
+html:not([data-nav-modality="keyboard"]) :is(input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"]):focus-visible {
+  outline: none;
+}
+
 /* Only a field that OWNS its focus treatment gives up the global outline, and
    the `focus-visible:ring-*` utility in its own class list IS that declaration
    — so the selector reads the class list instead of a registry someone has to
@@ -1578,9 +1591,10 @@ body,
    sites in the tree carry a ring. Those fields lost their only keyboard
    indicator — the composer's textarea among them, which also set
    `focus:outline-none`. Nothing gated this: jsdom never resolves a stylesheet,
-   so `scripts/render-probe.cjs` now Tab-focuses real fields in a browser and
-   measures the computed indicator in BOTH states, because a check that reads
-   the same for a ringed field and a plain one is measuring nothing. */
+   so `scripts/render-probe.cjs` focuses real fields in a browser and measures
+   the computed indicator in every state — clicked plain field (no box), tabbed
+   plain field (box), ringed field (its own ring, never a second box) — because
+   a check that reads the same across two different states measures nothing. */
 input[class*="focus-visible:ring"]:focus-visible,
 textarea[class*="focus-visible:ring"]:focus-visible,
 select[class*="focus-visible:ring"]:focus-visible,

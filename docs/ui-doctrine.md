@@ -51,7 +51,7 @@ When a change violates two rules, the theme wins over the component.
 | a segmented control | the pressed-state button pattern; **not** `.seg-thumb` on a container |
 | a chat measure | `.chat-column` (880px) |
 | an empty-state backdrop | `.chat-hero-grid` |
-| a keyboard focus indicator | nothing at all — `index.css` outlines every focusable element on `:focus-visible`, and an editable control keeps that outline unless **it declares its own ring** (`focus-visible:ring-*` in its own class list is what makes the outline step aside, for that field alone) |
+| a keyboard focus indicator | nothing at all — `index.css` outlines every focusable element on `:focus-visible`. Two things switch an editable field's outline off, and both are correct: the field declares its own ring (`focus-visible:ring-*` in its own class list), or focus did **not** arrive from the keyboard (`utils/navModality.ts` sets `html[data-nav-modality]`, because a browser matches `:focus-visible` on a text field after a mouse click too — a clicked composer must show no box) |
 
 `.seg-thumb` is the absolutely-positioned sliding **sibling** in a segmented
 control. Put it on the container and it resolves against the nearest positioned

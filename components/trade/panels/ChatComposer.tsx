@@ -141,6 +141,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         <div className="rounded-2xl border border-white/[0.08] bg-surface-raised px-3 py-2.5">
             <textarea
                 ref={composerRef}
+                data-testid="composer-input"
                 rows={1}
                 value={draft}
                 disabled={!ready}
