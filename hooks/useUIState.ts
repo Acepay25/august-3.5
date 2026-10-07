@@ -76,39 +76,7 @@ const initialState: UIStateShape = {
 type UIAction =
     | { type: 'SET'; key: keyof UIStateShape; value: boolean }
     | { type: 'SET_FUNCTIONAL'; key: keyof UIStateShape; fn: (prev: boolean) => boolean }
-    | { type: 'TOGGLE'; key: keyof UIStateShape }
-    | { type: 'CLOSE_ALL_OVERLAYS' }
-    | { type: 'RESET_PROGRESS' };
-
-/** Keys that are overlays (modals, drawers, panels) — closed by CLOSE_ALL_OVERLAYS */
-const OVERLAY_KEYS: (keyof UIStateShape)[] = [
-    'isStrategySearchVisible',
-    'isSavedAnalysesVisible',
-    'isSettingsMenuVisible',
-    'isLiveMarketVisible',
-    'isVersionHistoryVisible',
-    'isLivePostMortemVisible',
-    'showMismatchModal',
-    'isVisionDataVisible',
-    'showAccuracyModal',
-];
-
-/** Keys that are progress/loading flags — reset by RESET_PROGRESS */
-const PROGRESS_KEYS: (keyof UIStateShape)[] = [
-    'isLoading',
-    'isHybridLoading',
-    'isCalculatingAIProbabilities',
-    'isPostMortemTypingComplete',
-    'isAnalysisInProgress',
-    'isPostMortemInProgress',
-    'isSummaryInProgress',
-    'isInsightGenerating',
-    'isAutoCapturing',
-    'isEntryNotHitCapturing',
-    'isAutoCaptureBusy',
-    'isUpdateCaptureBusy',
-    'isEntryNotHitCaptureBusy',
-];
+    | { type: 'TOGGLE'; key: keyof UIStateShape };
 
 function uiReducer(state: UIStateShape, action: UIAction): UIStateShape {
     switch (action.type) {
@@ -120,22 +88,6 @@ function uiReducer(state: UIStateShape, action: UIAction): UIStateShape {
 
         case 'TOGGLE':
             return { ...state, [action.key]: !state[action.key] };
-
-        case 'CLOSE_ALL_OVERLAYS': {
-            const next = { ...state };
-            for (const key of OVERLAY_KEYS) {
-                next[key] = false;
-            }
-            return next;
-        }
-
-        case 'RESET_PROGRESS': {
-            const next = { ...state };
-            for (const key of PROGRESS_KEYS) {
-                next[key] = false;
-            }
-            return next;
-        }
 
         default:
             return state;
@@ -180,15 +132,9 @@ export function useUIState() {
         return map;
     }, [dispatch]);
 
-    // Convenience actions
-    const closeAllOverlays = useCallback(() => dispatch({ type: 'CLOSE_ALL_OVERLAYS' }), []);
-    const resetProgress = useCallback(() => dispatch({ type: 'RESET_PROGRESS' }), []);
-
     return {
         ...state,
         ...setters,
-        closeAllOverlays,
-        resetProgress,
     };
 }
 
