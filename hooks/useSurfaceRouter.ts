@@ -48,12 +48,10 @@ export interface SurfaceRouter {
     setSurface: (s: AppSurface) => void;
     journalTab: JournalUIState['tab'];
     setJournalTab: (tab: JournalUIState['tab']) => void;
-    journalFocusTradeId: string | undefined;
-    setJournalFocusTradeId: (id: string | undefined) => void;
     journalOpenNonce: number;
     surfaceEnterFrom: 'left' | 'right' | null;
     setSurfaceEnterFrom: (from: 'left' | 'right' | null) => void;
-    openJournal: (tab?: JournalUIState['tab'], focusTradeId?: string) => void;
+    openJournal: (tab?: JournalUIState['tab']) => void;
     handleSurfaceSelect: (next: AppSurface) => void;
 }
 
@@ -70,21 +68,17 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
     // (hooks/useSurface.ts). The trade surface is home.
     const { surface, setSurface } = useSurface();
     const [journalTab, setJournalTab] = useState<JournalUIState['tab']>('log');
-    const [journalFocusTradeId, setJournalFocusTradeId] = useState<string | undefined>(undefined);
-    /** Monotonic counter bumped on EVERY openJournal. The mounted Journal and
-     *  its ReasoningDashboard key their deep-link effects on this nonce instead
-     *  of value-diffing their props: a second "View reasoning" for the SAME
-     *  tab/trade while the journal is already open changed no value and was
-     *  silently dropped (id-dedup) or applied late. */
+    /** Monotonic counter bumped on EVERY openJournal. The mounted Journal keys
+     *  its tab re-apply effect on this nonce instead of value-diffing its
+     *  props: re-opening the SAME tab while the journal is already open
+     *  changed no value and was silently dropped (id-dedup) or applied late. */
     const [journalOpenNonce, setJournalOpenNonce] = useState(0);
     const applyingHashRef = useRef(false);
 
     /** The single "open the journal" entry point for every affordance:
-     *  command palette, mobile drawer, Header action, home dashboard,
-     *  reasoning deep-link and the #/journal hash. */
-    const openJournal = useCallback((tab: JournalUIState['tab'] = 'log', focusTradeId?: string): void => {
+     *  the surface list, Settings' launcher, and the #/journal hash. */
+    const openJournal = useCallback((tab: JournalUIState['tab'] = 'log'): void => {
         setJournalTab(tab);
-        setJournalFocusTradeId(focusTradeId);
         setJournalOpenNonce(n => n + 1);
         // Overlays sit above surfaces — close them so the journal actually
         // lands visible.
@@ -119,10 +113,12 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
         const apply = (): void => {
             const route = parseAppHash(window.location.hash);
             applyingHashRef.current = true;
-            if (route.view === 'journal' && route.tab === 'learning') {
+            if (route.view === 'journal' && /^#\/journal\/learning/i.test(window.location.hash)) {
                 // WS-5.1: the Journal's old "Learn" tab moved onto the Learn
                 // surface, so a bookmarked #/journal/learning lands where the
-                // content actually lives now rather than a deleted tab.
+                // content actually lives now rather than a deleted tab. Matched
+                // on the RAW hash because parseAppHash folds dead tabs to the
+                // ledger — the fold must not strand this bookmark on Journal.
                 setLearnTab('health');
                 setSurface('learn');
                 setIsSettingsMenuVisible(false);
@@ -185,7 +181,6 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
     return {
         surface, setSurface,
         journalTab, setJournalTab,
-        journalFocusTradeId, setJournalFocusTradeId,
         journalOpenNonce,
         surfaceEnterFrom, setSurfaceEnterFrom,
         openJournal, handleSurfaceSelect,
