@@ -605,34 +605,54 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                         if (e.key === 'Enter' && e.target === e.currentTarget) setSelectedId(s.fileId);
                                     }}
                                     tabIndex={0}
-                                    className={`group flex cursor-pointer flex-col gap-2 rounded-bubble border bg-zinc-900/60 p-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-[120ms] ease-[var(--ease-snappy)] hover:bg-zinc-900 focus:outline-none focus-visible:border-zinc-600 ${retired ? 'opacity-60 hover:opacity-100' : ''} ${armed ? 'border-rose-500/40 ring-1 ring-rose-500/30' : 'border-zinc-800/80 hover:border-zinc-700'}`}
+                                    className={`group flex cursor-pointer flex-col gap-2 rounded-control p-3 text-left transition-[background-color,box-shadow,opacity] duration-[120ms] ease-[var(--ease-snappy)] hover:bg-zinc-900/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${retired ? 'opacity-60 hover:opacity-100' : ''} ${armed ? 'bg-zinc-900 ring-1 ring-rose-500/40' : ''}`}
                                 >
                                     {/* Name + the claim it makes, the two badges
                                         stacked to the right: status is the
                                         lifecycle, kind is what the playbook
                                         does to the book. */}
                                     <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                            <div className="truncate text-ui-sm font-semibold text-zinc-100" title={title}>{title}</div>
-                                            <div className="mt-0.5 line-clamp-2 text-ui-xs leading-4 text-zinc-500" title={claim}>{claim}</div>
+                                        {/* The reference's icon tile: a 40px square carrying what the
+                                            playbook DOES to the book — PowerOff for an avoid (the trade
+                                            not taken), RotateCcw for a repeat. Deliberately NEUTRAL ink:
+                                            emerald and rose mean gain and loss in this theme, and a
+                                            skill's kind is neither. aria-hidden because the kind badge
+                                            beside it already says it. */}
+                                        <span aria-hidden="true"
+                                            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
+                                            {meta.kind === 'avoid'
+                                                ? <PowerOff className="h-4 w-4" />
+                                                : <RotateCcw className="h-4 w-4" />}
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate text-ui-base font-semibold text-zinc-100" title={title}>{title}</div>
+                                            <div className="mt-0.5 line-clamp-2 text-ui-sm leading-5 text-zinc-500" title={claim}>{claim}</div>
                                         </div>
-                                        <div className="flex shrink-0 flex-col items-end gap-1">
+                                    </div>
+                                    {/* Setup: what the playbook trades, the
+                                        family tinted by the current regime's
+                                        edge (the heatmap above owns that number). */}
+                                    {/* Setup + lifecycle on one line. The old version
+                                        printed a literal em dash for a skill with no
+                                        coin, so every book-seeded card opened with
+                                        "— · trend following"; and the two status pills
+                                        sat beside the NAME, which truncated titles like
+                                        "Book avoid holding fade throu…". A card's name
+                                        outranks its badges. */}
+                                    <div className="flex flex-wrap items-center gap-x-1.5 text-ui-xs text-zinc-500" title={edgeTitle}>
+                                        <span className="font-mono text-zinc-300">
+                                            {[meta.coin, meta.direction].filter(Boolean).join(' ') || 'any setup'}
+                                        </span>
+                                        {meta.timeframe && <span className="text-zinc-600">{` · ${meta.timeframe}`}</span>}
+                                        {fam && <span className={edgeTone(edge)}>{` · ${fam.replace(/_/g, ' ')}`}</span>}
+                                        <span className="ml-auto flex shrink-0 items-center gap-1">
                                             <StatusPill kicker tone={statusTone(meta.status)} className={retired ? 'line-through' : ''}>
                                                 {statusBadge.label}
                                             </StatusPill>
                                             <StatusPill kicker tone={meta.kind === 'avoid' ? 'down' : 'neutral'}>
                                                 {kindBadge.label}
                                             </StatusPill>
-                                        </div>
-                                    </div>
-                                    {/* Setup: what the playbook trades, the
-                                        family tinted by the current regime's
-                                        edge (the heatmap above owns that number). */}
-                                    <div className="flex flex-wrap items-center gap-x-1.5 text-ui-xs text-zinc-500" title={edgeTitle}>
-                                        <span className="font-mono text-zinc-300">{meta.coin ?? '—'}</span>
-                                        {meta.direction && <span>{meta.direction}</span>}
-                                        {meta.timeframe && <span className="text-zinc-600">{` · ${meta.timeframe}`}</span>}
-                                        {fam && <span className={edgeTone(edge)}>{` · ${fam.replace(/_/g, ' ')}`}</span>}
+                                        </span>
                                     </div>
                                     {/* Evidence: W/L, the latest A/B verdict,
                                         expectancy — or the honest "not yet
@@ -650,9 +670,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                             <StatusPill tone={VERDICT_TONE[meta.evalVerdict]} title={verdictTitle}>
                                                 {meta.evalVerdict}
                                             </StatusPill>
-                                        ) : (
-                                            <span className="font-mono text-zinc-700" title="never evaluated">—</span>
-                                        )}
+                                        ) : null}
                                         <span
                                             className={`font-mono text-ui-dense tabular-nums ${expectancy === undefined ? 'text-zinc-600' : expectancy > 0 ? 'text-emerald-400' : expectancy < 0 ? 'text-rose-400' : 'text-zinc-300'}`}
                                             title={expectancy === undefined
@@ -667,7 +685,11 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                     {/* Origin + the evidence clock. */}
                                     <div className="flex items-center justify-between gap-2 text-ui-2xs text-zinc-600">
                                         <span className="truncate">
-                                            {meta.source ?? '—'}
+                                            {/* No source is a fact worth printing
+                                                silently: the old `?? '—'` put a bare
+                                                em dash under every book-seeded card,
+                                                which reads as a broken field. */}
+                                            {meta.source ?? 'seeded'}
                                             {meta.originBotName && <span className="text-zinc-700">{` · from @${meta.originBotName}`}</span>}
                                         </span>
                                         <span
