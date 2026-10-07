@@ -631,8 +631,29 @@ const App: React.FC = () => {
         try { localStorage.setItem(NAV_RAIL_KEY, isNavRailExpanded ? 'expanded' : 'collapsed'); }
         catch { /* private mode */ }
     }, [isNavRailExpanded]);
-    const isNavRailOpen = isNavRailExpanded && !isNavViewportNarrow;
-    const toggleNavRail = useCallback(() => setIsNavRailExpanded(prev => !prev), []);
+    // Below NAV_RAIL_AUTO_COLLAPSE_PX the rail is not a column, it is a wall —
+    // so a user-OPENED rail at those widths is an overlay instead. Without the
+    // second flag the narrow override won whatever the header button did, and
+    // "Expand navigation" was rendered, advertised with aria-controls, and did
+    // nothing: at 390px the five surfaces were reachable only by Alt+1..5.
+    const [isNavOverlayOpen, setIsNavOverlayOpen] = useState(false);
+    const isNavRailOpen = isNavRailExpanded && (!isNavViewportNarrow || isNavOverlayOpen);
+    const isNavOverlay = isNavViewportNarrow && isNavRailOpen;
+    const toggleNavRail = useCallback(() => {
+        // Toggle the EFFECTIVE state, not the stored preference: at narrow
+        // widths the preference can read `expanded` while the rail is closed.
+        const willOpen = !isNavRailOpen;
+        if (isNavViewportNarrow) {
+            setIsNavOverlayOpen(willOpen);
+            if (willOpen) setIsNavRailExpanded(true);
+        } else {
+            setIsNavRailExpanded(willOpen);
+            setIsNavOverlayOpen(false);
+        }
+    }, [isNavRailOpen, isNavViewportNarrow]);
+    // Closing the drawer leaves the stored choice alone, so widening the window
+    // puts the rail back where the user left it.
+    const closeNavOverlay = useCallback(() => setIsNavOverlayOpen(false), []);
 
     // Chart AI dock routing (the Chat surface is gone — roster clicks open
     // sessions inside the trade surface instead). Nonce-keyed so re-clicking
@@ -2585,6 +2606,8 @@ const App: React.FC = () => {
                 <NavRail
                     expanded={isNavRailOpen}
                     onToggleExpanded={toggleNavRail}
+                    overlay={isNavOverlay}
+                    onCloseOverlay={closeNavOverlay}
                     activeUsername={activeUsername}
                     surface={surface}
                     onSelectSurface={handleSurfaceSelect}

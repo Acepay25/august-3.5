@@ -26,6 +26,7 @@ import Tip from '../ui/Tip';
 import SurfaceMenuList, { type NavBadge } from './SurfaceMenuList';
 import { UpdateButton, useUpdateStatusDot } from '../shared/UpdateButton';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 import type { AppSurface } from '../../hooks/useSurface';
 
@@ -42,6 +43,16 @@ export const NAV_RAIL_AUTO_COLLAPSE_PX = 1024;
 interface NavRailProps {
     expanded: boolean;
     onToggleExpanded: () => void;
+    /** Below NAV_RAIL_AUTO_COLLAPSE_PX the rail cannot sit beside the content —
+     *  280px of a 390px screen is not a column, it is a wall. So at those widths
+     *  an open rail is an OVERLAY: fixed, above a backdrop, dismissed by choosing
+     *  a surface, by the backdrop, or by Escape. Without this the header's
+     *  "Expand navigation" button was rendered on the strength of the rail being
+     *  closed and did nothing at all, because the narrow-viewport override won
+     *  whatever the user pressed — the surfaces were then reachable only by
+     *  Alt+1..5. */
+    overlay?: boolean;
+    onCloseOverlay?: () => void;
 
     activeUsername: string | null;
     surface: AppSurface;
@@ -130,6 +141,8 @@ const AccountRow: React.FC<{
 const NavRail: React.FC<NavRailProps> = ({
     expanded,
     onToggleExpanded,
+    overlay,
+    onCloseOverlay,
     activeUsername,
     surface,
     onSelectSurface,
@@ -140,8 +153,29 @@ const NavRail: React.FC<NavRailProps> = ({
     onOpenSettings,
 }) => {
     const width = expanded ? NAV_RAIL_EXPANDED_PX : NAV_RAIL_COLLAPSED_PX;
+    const isOverlay = Boolean(overlay) && expanded;
+
+    // A drawer you can open is a drawer you must be able to put down without
+    // hunting for the same button that opened it.
+    useEscapeClose(isOverlay, () => onCloseOverlay?.());
+
+    // Using the drawer IS the intent; leaving it open over the surface it just
+    // moved you to would cover the thing you asked for.
+    const chooseSurface = (next: AppSurface): void => { onSelectSurface(next); if (isOverlay) onCloseOverlay?.(); };
+    const openApprovals = (): void => { onOpenApprovals?.(); if (isOverlay) onCloseOverlay?.(); };
+    const openSettings = (): void => { onOpenSettings(); if (isOverlay) onCloseOverlay?.(); };
+    const switchUser = (): void => { onSwitchUser?.(); if (isOverlay) onCloseOverlay?.(); };
 
     return (
+        <>
+            {isOverlay && (
+                <div
+                    data-testid="rail-backdrop"
+                    aria-hidden="true"
+                    onClick={onCloseOverlay}
+                    className="fixed inset-0 z-drawer bg-black/60"
+                />
+            )}
         <aside
             data-testid="nav-rail"
             data-expanded={expanded ? 'true' : 'false'}
@@ -156,7 +190,7 @@ const NavRail: React.FC<NavRailProps> = ({
                flips at once, so the shrink happens offstage) and `inert`, the
                dock's hide-vs-close pair: a zero-width box whose rows stayed
                focusable would eat Tab presses against nothing. */
-            className={`z-drawer flex shrink-0 flex-col overflow-hidden bg-zinc-900 transition-[width] duration-[150ms] ease-[var(--ease-snappy)] ${
+            className={`${isOverlay ? 'fixed inset-y-0 left-0 z-modal' : 'z-drawer'} flex shrink-0 flex-col overflow-hidden bg-zinc-900 transition-[width] duration-[150ms] ease-[var(--ease-snappy)] ${
                 /* The border belongs to the expanded state only: a 0px box
                    that kept even a transparent hairline would still measure
                    1px and leave a stray edge on the page ground. */
@@ -185,8 +219,8 @@ const NavRail: React.FC<NavRailProps> = ({
                     surface={surface}
                     badges={badges}
                     approvalsCount={approvalsCount}
-                    onOpenApprovals={onOpenApprovals}
-                    onSelect={onSelectSurface}
+                    onOpenApprovals={openApprovals}
+                    onSelect={chooseSurface}
                     collapsed={!expanded}
                 />
             </div>
@@ -200,11 +234,12 @@ const NavRail: React.FC<NavRailProps> = ({
                 <AccountRow
                     expanded={expanded}
                     activeUsername={activeUsername}
-                    onOpenSettings={onOpenSettings}
-                    onSwitchUser={onSwitchUser}
+                    onOpenSettings={openSettings}
+                    onSwitchUser={onSwitchUser ? switchUser : undefined}
                 />
             </div>
         </aside>
+        </>
     );
 };
 
