@@ -10,13 +10,22 @@ import { PREDICATE_GRAMMAR_HINT } from '../analysis/skillPredicate';
 
 export const SKILL_CRAFT_FALLBACK = `You turn a closed-trade post-mortem into ONE reusable trading skill.
 
-A skill is a procedure, not a diary sentence. Grok-style fields:
-1. when to use it
-2. required inputs
-3. sequence of work (steps)
-4. how to validate
-5. what to return (the ticket action)
-6. what requires human approval
+A skill is a PROCEDURE another agent will follow, not a diary sentence. It has
+to carry these parts:
+
+1. when to use it — the concrete trigger
+2. when NOT to use it — the situations that LOOK like this one and are not
+3. required inputs
+4. the sequence of work (steps), each with the exact check or tool call
+5. the pitfalls you have actually seen: "X happens -> do Y instead"
+6. how to verify the procedure worked, not just that it was followed
+7. how to validate the trigger still holds
+8. what to return (the ticket action)
+9. what requires human approval
+
+A one-line rule is a SEED, not a finished skill. If the post-mortem only
+supports "when X, avoid", still fill whenNot and pitfalls with what you
+observed — an empty section is how a skill degrades back into a rule.
 
 KIND:
 - avoid — the trade lost or the lesson is "do not take this"
@@ -24,20 +33,24 @@ KIND:
 
 IF/THEN must be mechanical (price, candle close, level, volume, regime). No vibes.
 
-A skill may be JUST a rule (when X, avoid / take it only when Y) or a full
-STRATEGY. When the post-mortem supports a complete trade plan, state it in the
+A skill may carry a full STRATEGY beside the rule. When the post-mortem supports a complete trade plan, state it in the
 "strategy" object so the app can build a ticket from it — entry, stop, target,
 sizing, and the conditions that must hold. Use plain price/level/condition
 language, not numbers you invented. Omit "strategy" entirely when the lesson
-is only "do not take this".
+is only "do not take this" — but the whenNot / pitfalls / verification sections
+are still expected, because that is where the lesson actually lives.
 
 Output ONLY JSON:
 {
   "name": "short kebab-or-title (max 8 words)",
   "kind": "avoid" | "repeat",
   "when": "trigger in one sentence",
+  "whenNot": ["looks like this but is not this — why"],
   "inputs": ["coin", "direction", "timeframe or family"],
-  "steps": ["step 1", "step 2", "step 3"],
+  "steps": ["step 1 with the exact check", "step 2", "step 3"],
+  "pitfalls": ["observed failure -> what to do instead"],
+  "verification": "how the agent confirms the procedure worked",
+  "relatedSkills": ["slug of a skill this one overlaps or contradicts"],
   "validate": "how to know the IF still holds",
   "output": "what the next ticket should do",
   "approval": "when a human must confirm (size, new coin, conflicting skill)",
@@ -54,30 +67,54 @@ Output ONLY JSON:
   "predicate": ${JSON.stringify(PREDICATE_GRAMMAR_HINT)}
 }`;
 
-export const formatCraftedSkillBody = (skill: CraftedSkill): string => [
-    `**When:** ${skill.when}`,
-    `**What I look at:** ${skill.inputs.join(', ') || 'matching setup'}`,
-    '**What I do:**',
-    ...skill.steps.map((s, i) => `${i + 1}. ${s}`),
-    `**How I know it still holds:** ${skill.validate}`,
-    // The structured plan, when the craft carried one. A skill that is more
-    // than a rule has to SHOW the plan, or the fields die in the schema and
-    // the next seat never sees them.
-    ...(skill.strategy ? ([
-        '**My plan:**',
-        ...(skill.strategy.entry ? [`- Entry: ${skill.strategy.entry}`] : []),
-        ...(skill.strategy.invalidation ? [`- Invalidation: ${skill.strategy.invalidation}`] : []),
-        ...(skill.strategy.stop ? [`- Stop: ${skill.strategy.stop}`] : []),
-        ...(skill.strategy.target ? [`- Target: ${skill.strategy.target}`] : []),
-        ...(skill.strategy.sizing ? [`- Size: ${skill.strategy.sizing}`] : []),
-        ...(skill.strategy.conditions?.length
-            ? [`- Requires: ${skill.strategy.conditions.join('; ')}`]
-            : []),
-    ]) : []),
-    `**What I hand back:** ${skill.output}`,
-    `**When I ask a human:** ${skill.approval}`,
-    `**My rule:** when ${skill.ifCondition}, I ${skill.thenAction}`,
-].filter(Boolean).join('\n');
+export const formatCraftedSkillBody = (skill: CraftedSkill): string => {
+    // The bold core is kept EXACTLY as it was, because it is a vocabulary and
+    // not a style: `utils/ifThenSkill.ts:formatSkillProcedure` writes the same
+    // `**What I do:**` line, `syncSkillRuleLine` rewrites the `**My rule:**`
+    // line and a test pins that the two are byte-identical, and a dozen
+    // fixtures seed bodies in this shape. Replacing it would have broken the
+    // convention rather than improved it.
+    //
+    // What the core could not express is appended as sections — when NOT to
+    // reach for this, the failure that was actually seen, and how to confirm
+    // the procedure worked. Those three are the difference between a skill and
+    // a rule, and a model will not write them unless the prompt asks (see
+    // SKILL_CRAFT_FALLBACK) and the file has somewhere to put them.
+    // `services/learning/skillDocument.ts` reads both shapes back.
+    const bullets = (items: (string | undefined)[]): string[] =>
+        items.filter((x): x is string => !!x && x.trim().length > 0).map(x => `- ${x.trim()}`);
+    const section = (title: string, lines: string[]): string[] =>
+        [`## ${title}`, '', ...(lines.length ? lines : ['- none recorded — the next craft should say'])];
+
+    return [
+        `**When:** ${skill.when}`,
+        `**What I look at:** ${skill.inputs.join(', ') || 'matching setup'}`,
+        '**What I do:**',
+        ...skill.steps.map((st, i) => `${i + 1}. ${st}`),
+        `**How I know it still holds:** ${skill.validate}`,
+        ...(skill.strategy ? [
+            '**My plan:**',
+            ...(skill.strategy.entry ? [`- Entry: ${skill.strategy.entry}`] : []),
+            ...(skill.strategy.invalidation ? [`- Invalidation: ${skill.strategy.invalidation}`] : []),
+            ...(skill.strategy.stop ? [`- Stop: ${skill.strategy.stop}`] : []),
+            ...(skill.strategy.target ? [`- Target: ${skill.strategy.target}`] : []),
+            ...(skill.strategy.sizing ? [`- Size: ${skill.strategy.sizing}`] : []),
+            ...(skill.strategy.conditions?.length
+                ? [`- Requires: ${skill.strategy.conditions.join('; ')}`]
+                : []),
+        ] : []),
+        `**What I hand back:** ${skill.output}`,
+        `**When I ask a human:** ${skill.approval}`,
+        `**My rule:** when ${skill.ifCondition}, I ${skill.thenAction}`,
+        '',
+        ...section('When NOT to use', bullets(skill.whenNot ?? [])),
+        '',
+        ...section('Pitfalls', bullets(skill.pitfalls ?? [])),
+        '',
+        ...section('Verification', bullets([skill.verification])),
+        ...(skill.relatedSkills?.length ? ['', ...section('Related skills', bullets(skill.relatedSkills))] : []),
+    ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+};
 
 export const craftSkillFromPostMortem = async (
     trade: LoggedTrade,

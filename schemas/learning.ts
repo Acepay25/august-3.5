@@ -166,6 +166,22 @@ export const CraftedSkillSchema = z.object({
     /** What must be true for this strategy to be tradable at all right now. */
     conditions: z.array(z.string().max(120)).max(6).default([]),
   }).partial().optional(),
+  // ── The parts that make it a procedure rather than a rule ──────────────
+  //
+  // `when` says when to reach for the skill; nothing said when to put it
+  // back down, and nothing recorded the failure mode the post-mortem had
+  // just witnessed. Those are the two sections that separate a skill from a
+  // trigger, and a model will not produce them unless it is asked — so the
+  // fields exist, the prompt asks, and the body formatter renders them.
+  // All optional: a legacy craft or a pure avoid-rule stays valid.
+  /** Situations that look like this one but are NOT it. */
+  whenNot: z.array(z.string().max(160)).max(6).optional(),
+  /** Known failure → what avoids or fixes it. */
+  pitfalls: z.array(z.string().max(200)).max(6).optional(),
+  /** How the agent confirms the procedure actually worked. */
+  verification: z.string().max(240).optional(),
+  /** Cross-references by slug, so a family of skills can be navigated. */
+  relatedSkills: z.array(z.string().max(60)).max(6).optional(),
   // Birth certificate: the falsifiable claim the skill must
   // pre-register. Optional at the schema edge (legacy crafts + refinements
   // carry none) — the persistence layer fills a deterministic default so
