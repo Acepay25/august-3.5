@@ -190,7 +190,7 @@ async function clickCoachControl(page, testId) {
     try {
         await page.waitForSelector('[data-testid="learn-tab-coach"]', { timeout: 6000 });
         await page.click('[data-testid="learn-tab-coach"]');
-    } catch { await clickByText(page, 'Coach'); }
+    } catch { await clickByText(page, 'Skill approvals'); }
     await sleep(1500);
     try {
         await page.waitForSelector(`[data-testid="${testId}"]`, { timeout: 8000 });
@@ -256,7 +256,7 @@ async function openCoachAndAllow(page, draftId) {
         await page.waitForSelector('[data-testid="learn-tab-coach"]', { timeout: 6000 });
         await page.click('[data-testid="learn-tab-coach"]');
         tab = { ok: true, used: 'learn-tab-coach' };
-    } catch { tab = await clickByText(page, 'Coach'); }
+    } catch { tab = await clickByText(page, 'Skill approvals'); }
     await sleep(1500);
     const testId = `coach-draft-allow-${draftId}`;
     let clicked = false;

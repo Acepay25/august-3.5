@@ -30,7 +30,7 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
             <button type="button" className="absolute inset-0 cursor-default" aria-label="Close approvals overlay" onClick={onClose} />
             <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                    <h2 className="text-sm font-semibold text-zinc-100">Trade approvals</h2>
+                    <h2 className="text-sm font-semibold text-zinc-100">Approvals</h2>
                     <span className="text-ui-dense text-zinc-500">{items.length}</span>
                     <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close approvals">
                         <CloseIcon className="h-4 w-4" />
@@ -41,8 +41,8 @@ const ApprovalInbox: React.FC<ApprovalInboxProps> = ({
                         <EmptyState
                             compact
                             icon={<Inbox className="h-5 w-5" />}
-                            title="No trade approvals waiting"
-                            description="The supervisor works the skill drafts on its own. What lands here is autopilot gating, ungrounded tickets, dropped seats, and anything it could not decide."
+                            title="Nothing needs your decision"
+                            description="Trade items land here when the autopilot wants permission to log or replace one. Skill drafts appear here too, but their own home is Learn → Skill approvals — that is where the IF/THEN text and the discard-with-cooldown live."
                         />
                     ) : items.map(item => (
                         <div key={item.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">

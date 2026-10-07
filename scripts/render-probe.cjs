@@ -783,7 +783,7 @@ async function main() {
             // identical to Agents for exactly that reason. Assert the overlay
             // root and read its own text; an empty inbox still renders an
             // EmptyState, so "nothing needs you" is content, not a blank panel.
-            { label: 'Trade approvals', expect: '[data-testid="approval-inbox"]', overlay: true },
+            { label: 'Approvals', expect: '[data-testid="approval-inbox"]', overlay: true },
             { label: 'Learn', expect: '[data-testid="learn-view"]' },
         ];
         /** Some menu entries open a dialog rather than switch a surface (the
@@ -867,7 +867,7 @@ async function main() {
             });
             check('the nav rail is mounted without opening any menu', rail !== null,
                 rail ? `width ${rail.width}` : 'no [data-testid="nav-rail"]');
-            check('the rail carries every surface row plus Trade approvals',
+            check('the rail carries every surface row plus Approvals',
                 rail !== null && rail.rows === 6, rail ? `${rail.rows} rows` : 'no rail');
             check('Switch profile lives on the account row',
                 rail !== null && rail.switchUser, 'nav-switch-user');
@@ -1797,6 +1797,27 @@ async function main() {
             offendersBySurface.length
                 ? `${offendersBySurface.reduce((n, o) => n + o.bad.length, 0)} sub-${FLOOR_PX}px target(s) on ${offendersBySurface.length} surface(s):\n${offenderText}`
                 : '');
+
+        // ── Phone width: the page itself must never scroll sideways ────────
+        // Only the DOCUMENT property is asserted. A wide table inside its own
+        // `overflow-x-auto` frame is the doctrine's last-resort guard and is
+        // allowed to extend past the viewport; the page breaking is a different
+        // thing, and it was real: the Skills surface measured 707px of shell
+        // inside a 430px viewport while the library was a ten-column table that
+        // answered narrow viewports by dropping columns.
+        await page.setViewportSize({ width: 430, height: 860 });
+        const wideAtPhone = [];
+        for (const surface of surfaces) {
+            await navTo(surface.label);
+            await sleep(1200);
+            const m = await page.evaluate(() => ({
+                vw: window.innerWidth,
+                scrollW: document.documentElement.scrollWidth,
+            }));
+            if (m.scrollW > m.vw + 2) wideAtPhone.push(`${surface.label}: ${m.scrollW}px in ${m.vw}px`);
+        }
+        check('no surface scrolls the page sideways at phone width',
+            wideAtPhone.length === 0, wideAtPhone.join(' | '));
 
         check('zero pageerrors across the whole run', pageErrors.length === 0,
             pageErrors.length ? `\n---\n${pageErrors.join('\n---\n').slice(0, 3000)}` : '');

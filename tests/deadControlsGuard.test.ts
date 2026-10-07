@@ -166,7 +166,7 @@ describe('the Coach inbox has one host', () => {
     });
 
     it('Learn mounts the one CoachThreadPanel', () => {
-        expect(learnSrc).toMatch(/id: 'coach', label: 'Coach'/);
+        expect(learnSrc).toMatch(/id: 'coach', label: 'Skill approvals'/);
         expect(learnSrc).toMatch(/renderCoach\(\)/);
         const coachMounts = (appSrc.match(/<CoachThreadPanel\b/g) ?? []).length;
         expect(coachMounts).toBe(1);
