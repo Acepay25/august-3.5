@@ -48,8 +48,10 @@ import {
     applyReviewRecommendation,
     applyNotebookSkillsToAnalysis,
     MIN_SAMPLE_FOR_VETO,
+    SHADOW_WINDOW_TRADES,
     type SkillMeta,
 } from '../services/learning/SkillMemoryService';
+import { listLearningProposals } from '../utils/learningQueue';
 import { initMemoryFiles, createMemoryFile, getMemoryFiles, updateMemoryFile } from '../services/learning/MemoryFilesService';
 import { recordEvalVerdict, evaluateSkill } from '../services/learning/SkillEvalService';
 import { setPreferenceObject } from '../services/infrastructure/PreferencesService';
@@ -772,5 +774,85 @@ approvedBy: grandfathered
         // Still a size-down warning, never a hard veto.
         expect(next.riskVeto).toBeUndefined();
         expect(next.validationWarnings?.join(' ')).toMatch(/NOTEBOOK SKILL/);
+    });
+});
+
+/**
+ * Shadow refinement end-to-end through the REAL notebook store.
+ *
+ * A refined rule parks in `meta.shadow` and is never injected, so the
+ * incumbent and the rewrite faced identical outcomes. At window close one of
+ * two things happens to a file on disk, and until now nothing proved either:
+ * the rewrite takes the slot (and goes INACTIVE pending a human), or it is
+ * discarded as an overfit reaction to bad luck and the skill is untouched.
+ */
+describe('shadow refinement settles against the notebook', () => {
+    beforeEach(async () => {
+        store = {};
+        // The learning queue is a localStorage store (utils/learningQueue.ts
+        // reads and writes it directly, not through Preferences), so resetting
+        // the mocked prefs alone leaks a queued rewrite into the next test —
+        // which is exactly how the two negative cases here failed while the
+        // promotion case passed.
+        localStorage.clear();
+        await initMemoryFiles(USER);
+    });
+
+    const shadowOf = (wins: number, losses: number, seenFrom = SHADOW_WINDOW_TRADES - 1): string =>
+        `shadow: ${JSON.stringify({
+            kind: 'avoid',
+            ifCondition: 'BTC short setup below the daily VWAP',
+            thenAction: 'skip the short and log the reason',
+            body: 'tightened after three losing shorts',
+            startedAt: new Date(Date.now() - 6 * 86_400_000).toISOString(),
+            seen: seenFrom,
+            wins,
+            losses,
+        })}\n`;
+
+    it('promotes the rewrite when the live rule lost its own window — and hands it to the human rather than leaving it live', async () => {
+        const fileId = await seedSkill('shadow-promote.md', shadowOf(6, 3));
+        const win = makeTrade('sh-w1', 'WIN' as TradeOutcome);
+        await applySkillEvidence(win, USER, [win]);
+
+        const meta = readMeta(fileId);
+        expect(meta.ifCondition).toBe('BTC short setup below the daily VWAP');
+        expect(meta.thenAction).toBe('skip the short and log the reason');
+        expect(meta.shadow).toBeUndefined();
+        // The contract a model rewrote the live rule: approval is withdrawn, so
+        // nothing is injected on the trader's authority.
+        expect(meta.approvedBy).toBeUndefined();
+        const queued = listLearningProposals(USER).filter(p => p.kind === 'rewrite');
+        expect(queued).toHaveLength(1);
+        expect(queued[0].text).toMatch(/INACTIVE until you approve/);
+        expect(queued[0].text).toContain('WAS: IF BTC short setup');
+        expect(queued[0].text).toContain('NOW: IF BTC short setup below the daily VWAP');
+        // And it is on disk, not just in the returned meta.
+        expect(getMemoryFiles().files.find(f => f.id === fileId)!.content)
+            .toContain('skip the short and log the reason');
+    });
+
+    it('discards the rewrite when the live rule held up, leaving the skill exactly as it was', async () => {
+        const fileId = await seedSkill('shadow-discard.md', shadowOf(2, 7));
+        const loss = makeTrade('sh-l1', 'LOSS' as TradeOutcome);
+        await applySkillEvidence(loss, USER, [loss]);
+
+        const meta = readMeta(fileId);
+        expect(meta.shadow).toBeUndefined();
+        expect(meta.ifCondition).toBe('BTC short setup');
+        expect(meta.approvedBy).toBe('grandfathered');
+        expect(listLearningProposals(USER).filter(p => p.kind === 'rewrite')).toHaveLength(0);
+    });
+
+    it('settles NOTHING before the window rips, so a two-trade mood cannot rewrite a rule', async () => {
+        const fileId = await seedSkill('shadow-ripe.md', shadowOf(6, 3, 4));
+        const win = makeTrade('sh-r1', 'WIN' as TradeOutcome);
+        await applySkillEvidence(win, USER, [win]);
+
+        const meta = readMeta(fileId);
+        expect(meta.shadow?.seen).toBe(5);
+        expect(meta.ifCondition).toBe('BTC short setup');
+        expect(meta.approvedBy).toBe('grandfathered');
+        expect(listLearningProposals(USER)).toHaveLength(0);
     });
 });
