@@ -402,7 +402,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         <div className="flex h-full flex-col bg-zinc-950 text-zinc-100">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
                 <div>
-                    <h2 className="font-serif text-[17px] tracking-tight text-zinc-100">Strategy Studio</h2>
+                    <h2 className="font-serif text-ui-xl tracking-tight text-zinc-100">Skills</h2>
                     <p className="text-ui-dense text-zinc-500">
                         {rows.length === skills.length
                             ? `${skills.length} playbooks`
