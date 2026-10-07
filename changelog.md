@@ -38,6 +38,62 @@ Plain-English log of change rounds. Newest first.
   it, because the updater only moves between versions. The changelog now carries
   the version it describes, and a test fails if it does not match `package.json`.
 
+- **Six surfaces, one rail.** Navigation became a persistent rail with hash
+  routing, and the hamburger that used to hide the app's structure went. Nothing
+  could have caught a surface that mounts blank — jsdom renders it fine — until
+  the browser probe was taught to walk all six and count what actually appeared.
+
+- **The journal answers "how did that trade go" once.** `realizedR` is the
+  canonical outcome; percent and dollars stay labeled by the source that computed
+  them, and both excursion writers — the autopilot and the post-mortem — go
+  through one helper that turns raw price movement into leveraged movement and
+  stamps which of them got there first. Before this, the post-mortem could
+  overwrite the autopilot's figure with the same idea in different units.
+
+- **What a seat sees of your recent form depends on who is asking.** Analyst
+  seats get neutral rows — oldest first, no streak, no win rate — because a
+  streak in front of an analyst invites it to lean on the run rather than the
+  setup. The moderator gets the tally, and every run records the fingerprint of
+  the brief it was actually shown, so a verdict can be read back against what the
+  model had in front of it.
+
+- **The journal exports as training data with its silences marked.** One flat
+  JSONL line per logged trade, a schema version on every line, `null` where the
+  app never learned the fact, incomplete rows flagged instead of dropped, and
+  decision-time inputs kept apart from outcome and lesson. The full debate
+  transcript is deliberately not in there — megabytes per row belongs in the
+  reasoning export — and each line keeps its run id so the rest is still askable.
+
+- **A full browser storage could no longer quietly stop the app remembering.**
+  Chat transcripts are bounded by bytes rather than by entry count: one screenshot
+  entry can exceed a megabyte, so a count cap looked protective while a handful of
+  images starved every other store sharing the origin. A quota failure now warns
+  instead of being swallowed.
+
+- **Most of the app had lost its keyboard focus ring.** A rule in `index.css`
+  removed the global focus outline from every input, textarea, select and
+  contenteditable on the assumption that each one draws its own ring — 25 sites
+  carry one against roughly 114 editable fields — so the composer and most form
+  controls showed a keyboard user nothing, while the comment above the rule
+  insisted they were covered. The rule now steps aside only for a field that
+  declares a ring, and the browser probe measures the computed indicator in both
+  states, because a stylesheet rule is exactly what jsdom cannot see.
+
+- **Two gates existed and enforced nothing.** Every GitHub Action across the three
+  workflows is pinned to a commit SHA — the release workflow was building the
+  signing input from mutable tags — and the skill-approval probe, written to prove
+  that pressing "Save as skill" actually writes a file, had never been invoked by
+  CI.
+
+- **Docs that had become unsafe were corrected or removed.** `PRIVACY.md` said two
+  paths leave the machine when five do (a keyless web search a seat can call, and
+  an HTTPS tool you approved, both absent); the four stale root audit reports are
+  gone, one of them still telling a reader the app's stylesheet was a dead
+  reference; and the learning-loop map no longer describes a supervisor that
+  auto-applies skills or a sweep that fires ten seconds after launch — both
+  retired deliberately, and the map now points at symbols instead of line numbers
+  it could not keep honest.
+
 ## v1.2.0 — The model is told the truth about what it can see, and every level it draws is finally measured
 
 Sixteen rounds, and one theme running through almost all of them: **something asserted a
