@@ -1569,16 +1569,22 @@ body,
   outline-offset: var(--focus-ring-offset);
 }
 
-/* Editable controls keep the outline too. These fields own their focus
-   treatment with a `focus-visible:ring-*` utility, and a global outline
-   stacked on top of that ring draws a second box around every input — so the
-   outline steps aside and the field's own ring is the indicator. (The comment
-   here used to call the global ring "gold"; it has been the cyan accent for
-   some time, which is the sort of drift a named token removes.) */
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-[contenteditable]:focus-visible {
+/* Only a field that OWNS its focus treatment gives up the global outline, and
+   the `focus-visible:ring-*` utility in its own class list IS that declaration
+   — so the selector reads the class list instead of a registry someone has to
+   keep. A ring plus the outline is a double box, which is why this rule exists;
+   applied to every editable control it was the other way round, since ~114
+   inputs, textareas, selects and contenteditables share the strip and only 25
+   sites in the tree carry a ring. Those fields lost their only keyboard
+   indicator — the composer's textarea among them, which also set
+   `focus:outline-none`. Nothing gated this: jsdom never resolves a stylesheet,
+   so `scripts/render-probe.cjs` now Tab-focuses real fields in a browser and
+   measures the computed indicator in BOTH states, because a check that reads
+   the same for a ringed field and a plain one is measuring nothing. */
+input[class*="focus-visible:ring"]:focus-visible,
+textarea[class*="focus-visible:ring"]:focus-visible,
+select[class*="focus-visible:ring"]:focus-visible,
+[contenteditable][class*="focus-visible:ring"]:focus-visible {
   outline: none;
 }
 

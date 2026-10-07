@@ -1640,6 +1640,78 @@ async function main() {
             }
         }
 
+        // ── The keyboard focus indicator, in BOTH states ───────────────────
+        // `:focus-visible` in index.css gives every focusable element a 2px
+        // outline, and a second rule then took it away from
+        // input/textarea/select/[contenteditable] on the theory that each of
+        // those fields draws its own `focus-visible:ring-*`. 25 sites in the
+        // tree carry a ring against ~114 editable controls, so unscoped that
+        // rule deleted the ONLY focus indicator from most of the app — the
+        // composer's textarea included, and it set `focus:outline-none` on top.
+        // No unit test could see it: jsdom mounts markup, it never resolves a
+        // stylesheet. Only a browser that focuses a control and reads back the
+        // computed outline can. Both states are measured because the rule is a
+        // trade — too wide and fields go unmarked, removed and a ringed field
+        // draws a double box — so a check that reads the same either way is
+        // measuring nothing.
+        const readFocus = () => page.evaluate(() => {
+            const probe = (el) => {
+                el.focus();
+                const cs = window.getComputedStyle(el);
+                return {
+                    name: el.getAttribute('data-testid') || el.getAttribute('aria-label')
+                        || el.getAttribute('placeholder') || el.tagName.toLowerCase(),
+                    visible: el.matches(':focus-visible'),
+                    ownsRing: /focus-visible:ring/.test(typeof el.className === 'string' ? el.className : ''),
+                    outline: cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0,
+                    shadow: cs.boxShadow !== 'none',
+                };
+            };
+            const rows = [];
+            for (const el of document.querySelectorAll(
+                'input:not([type="hidden"]),textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]')) {
+                const r = el.getBoundingClientRect();
+                if (r.width < 2 || r.height < 2) continue;
+                const before = window.getComputedStyle(el);
+                if (before.visibility === 'hidden' || before.display === 'none') continue;
+                rows.push(probe(el));
+            }
+            // The stylesheet pair, on controls this screen happens not to have:
+            // a field that declares no ring must keep the outline, and one that
+            // declares a ring must keep the ring WITHOUT a second box.
+            const synthetic = (cls) => {
+                const el = document.createElement('textarea');
+                el.className = `bg-transparent ${cls}`.trim();
+                el.style.cssText = 'position:fixed;left:0;top:-200px;width:120px;height:28px;';
+                document.body.appendChild(el);
+                const out = probe(el);
+                el.remove();
+                return out;
+            };
+            return { real: rows, plain: synthetic(''), ringed: synthetic('focus-visible:ring-2 focus-visible:ring-cyan-500/50') };
+        });
+
+        await navTo('Trade');
+        await page.locator('[data-testid="trade-view"]').waitFor({ timeout: 10000 }).catch(() => {});
+        // Keyboard modality: :focus-visible is modality-aware, and a JS-driven
+        // focus() only inherits it if the last real input was the keyboard.
+        await page.keyboard.press('Tab');
+        await sleep(300);
+        const focus = await readFocus();
+        const unmarked = focus.real.filter(f => !f.visible
+            ? false
+            : (!f.ownsRing && !f.outline && !f.shadow));
+        check('every editable field on the trade screen shows a keyboard focus indicator',
+            focus.real.length > 0 && unmarked.length === 0,
+            `${focus.real.length} field(s) measured, ${unmarked.length} with no indicator`
+            + (unmarked.length ? `: ${unmarked.map(u => u.name).join(', ')}` : ''));
+        check('and the strip is scoped, not gone — a ringed field keeps its ring and no outline',
+            focus.plain.visible && focus.ringed.visible
+            && focus.plain.outline === true
+            && focus.ringed.outline === false && focus.ringed.shadow === true,
+            `plain: outline=${focus.plain.outline} shadow=${focus.plain.shadow}; `
+            + `ringed: outline=${focus.ringed.outline} shadow=${focus.ringed.shadow}`);
+
         check('zero pageerrors across the whole run', pageErrors.length === 0,
             pageErrors.length ? `\n---\n${pageErrors.join('\n---\n').slice(0, 3000)}` : '');
 

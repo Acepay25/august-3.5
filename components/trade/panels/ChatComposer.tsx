@@ -149,7 +149,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                     if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); void send(draft); }
                 }}
                 placeholder={ready ? 'Ask anything…' : isPanel ? 'Add at least 2 panel models above' : 'Configure a provider in Settings first'}
-                className="max-h-28 min-h-[24px] w-full resize-none bg-transparent text-ui-caption leading-5 text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
+                className="max-h-28 min-h-[24px] w-full resize-none bg-transparent text-ui-caption leading-5 text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
             />
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {/* `flex-wrap` + nowrap chips: the toolbar was ALWAYS over-
