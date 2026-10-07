@@ -12,6 +12,25 @@ feature shape, plus this run's backlog). Nothing was changed to produce it.
 **Test Files 478 passed | 1 skipped (479)**; `npm run lint` exit 0, **0 errors /
 861 warnings**; `npm run build` exit 0; `tsc --noEmit` 0; probe 25/25.
 
+### Four statements below are no longer true of HEAD (checked 2026-10-07)
+
+Read the correction, not the row it replaces.
+
+1. **`:266` "the two Settings switches still have NO UI"** — they do. Both ride in
+   `components/settings/SessionUsagePanel.tsx` (`harness-starter-library`,
+   `harness-skill-enforcement`), and the enforcement one is read at
+   `services/learning/SkillMemoryService.ts:3380,3480`.
+2. **`:34` and `:277` name `applyProposalRewrite`** — the function is gone from
+   `skillSupervisor.ts`. A queued proposal is now applied by one dispatcher,
+   `applyLearningProposalByKind` in `services/learning/SkillMemoryService.ts`,
+   which both panels call.
+3. **`:220` and `:330` leave "bound `trade_chat_sessions` bytes at write time" to
+   the backlog** — done. `services/trade/chatSessions.ts` fits the store to a byte
+   budget (`MAX_STORED_CHARS`) and drops image bytes before transcripts before it
+   ever drops a session, then warns instead of swallowing the quota failure.
+4. **`:110` "Slice 3 DONE — `applyProposalRewrite` now takes the clauses"** — the
+   contract survives, the function does not; see 2.
+
 ## Done
 | commit | item |
 |---|---|
