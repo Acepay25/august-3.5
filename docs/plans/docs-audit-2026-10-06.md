@@ -9,11 +9,11 @@ file:line they cited.
 
 | Doc | Verdict | Why |
 |---|---|---|
-| `docs/plans/workstream1-stepB-evidence.md` | DELETE | 5 completion claims contradicted by HEAD |
-| `final-sweep-report.md` | DELETE after rehoming its 2 live recommendations | `:159` claims a "restrained grid treatment" while `:134` admits `.bg-grid` may be unused (0 occurrences in `index.css`) **[V]**; 6 lines cite `ChatInput`/`MessageItem`/`ConversationHistory`/`ChatArea`, none of which exist in git **[V]**. Its release-security finding is CORRECT and still open — `:103` says the workflow "does not show immutable action pinning" and `:105` recommends pinning; do NOT record that as a false claim **[V]** |
-| `plan.md` | DELETE after rehoming residue | 22/35 implemented; calls live `/index.css` a dead reference **[V]** |
-| `performance-audit-report.md` | ARCHIVE | all fixes landed; G/J moot; "responseCache fine" was deleted in `b80c6fa` |
-| `UI_UX_AUDIT_REPORT.md` | REHOME then delete | Section A premise two refactors dead, but ~12 live a11y gaps |
+| `docs/plans/workstream1-stepB-evidence.md` | DELETE (not yet) | 5 completion claims contradicted by HEAD; its file:line receipts are the record of what was actually verified, so it waits for a word |
+| `final-sweep-report.md` | DELETED 2026-10-07 | `:159` claims a "restrained grid treatment" while `:134` admits `.bg-grid` may be unused (0 occurrences in `index.css`) **[V]**; 6 lines cite `ChatInput`/`MessageItem`/`ConversationHistory`/`ChatArea`, none of which exist in git **[V]**. Its release-security finding was CORRECT — `:103` says the workflow "does not show immutable action pinning" and `:105` recommends pinning; do NOT record that as a false claim. It shipped in `0a02ed3` **[V]** |
+| `plan.md` | DELETED 2026-10-07 | 22/35 implemented; calls live `/index.css` a dead reference **[V]** |
+| `performance-audit-report.md` | DELETED 2026-10-07 | all fixes landed; G/J moot; "responseCache fine" was deleted in `b80c6fa` |
+| `UI_UX_AUDIT_REPORT.md` | DELETED 2026-10-07 (3 gaps rehomed below) | Section A premise two refactors dead, but ~12 live a11y gaps |
 | `PLAN_LEARNING_LOOP_AND_UI.md` | ARCHIVE | implemented history; cap name + line counts wrong |
 | `docs/plans/stage1-ui-ux-spec.md` | ARCHIVE | C1 (`fmtUsd`) and C9 claims false |
 | `docs/plans/stage2-implementation-plan.md` | LIVE — Phase 3/4 owed | Phase 3 unbuilt **[V]**: no `TypingIndicator` anywhere |
@@ -54,8 +54,17 @@ its *content* reached main by merge, which makes the concern moot, not false.
 - **residue from plan.md**: no logger (`MODERATOR_ERROR` live at
   `debateMarkers.ts:24`), no key pool, SQLCipher off (`SqliteService.ts:113`).
 
-No deletions have been performed yet — nothing goes away before its actionable
-residue has somewhere to live.
+All four gitignored root reports were deleted on 2026-10-07 after their residue
+was re-verified in code: the action pinning `final-sweep-report.md` recommended
+is shipped (`.github/workflows/ci.yml:21,113` pin `actions/checkout` by SHA),
+`performance-audit-report.md`'s last open item was the invisible spinner (now
+`LoadingIcon`), and `plan.md` still told a reader that the `/index.css` link at
+`index.html:25` was DEAD — it is the app's stylesheet, edited the same week.
+That claim was the most dangerous sentence in the repo, so removing the file
+that carried it was the fix. The tracked docs slated DELETE/ARCHIVE
+(`workstream1-stepB-evidence.md`, `stage1-ui-ux-spec.md`,
+`PLAN_LEARNING_LOOP_AND_UI.md`, `workstream1-stepB-gap-audit.md`) are untouched,
+because a deletion of a tracked file is a commit and yours to approve.
 
 ---
 
