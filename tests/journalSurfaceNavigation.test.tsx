@@ -128,8 +128,11 @@ describe('App journal routing (source contract)', () => {
         const journalRenders = appSrc.match(/<Journal\b/g) ?? [];
         expect(journalRenders.length).toBe(1);
         expect(appSrc).toMatch(/<Journal[\s\S]{0,400}initialTab=\{journalTab\}/);
-        expect(appSrc).toMatch(/initialTradeId=\{journalFocusTradeId\}/);
-        expect(appSrc).toMatch(/onInitialTradeConsumed=\{handleReasoningTradeConsumed\}/);
+        // The reasoning deep link retired 2026-10-03; its last consumer (the
+        // Think tab) was deleted 2026-10-07 when the Journal became the trade
+        // ledger. The focus-trade chain must not come back as dead plumbing.
+        expect(appSrc).not.toMatch(/initialTradeId=/);
+        expect(appSrc).not.toMatch(/onInitialTradeConsumed=/);
     });
 
     it('journal routing survives the palette deletion', () => {

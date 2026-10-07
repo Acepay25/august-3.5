@@ -12,7 +12,10 @@ export const parseAppHash = (hash: string): AppHashRoute => {
     const [head, rest] = raw.split('/');
     if (head === 'journal') {
         const tab = rest as JournalUIState['tab'] | undefined;
-        const allowed: JournalUIState['tab'][] = ['log', 'performance', 'analytics', 'learning', 'memory', 'models', 'reasoning'];
+        // Stale tabs (performance/learning/memory/models/reasoning) fold to
+        // the ledger — a dead tab must never serialize itself back into the
+        // URL or render a blank panel.
+        const allowed: JournalUIState['tab'][] = ['log', 'analytics', 'saved'];
         return { view: 'journal', tab: tab && allowed.includes(tab) ? tab : 'log' };
     }
     if (head === 'market') return { view: 'market' };

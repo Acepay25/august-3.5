@@ -3,37 +3,33 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import TradeLogContent from './TradeLog';
 import WinRateDashboard from '../dashboards/WinRateDashboard';
 import EquityCurveDashboard from '../dashboards/EquityCurveDashboard';
-import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
-import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import {HistoryIcon, ChartBarIcon, BrainIcon, BotIcon, BookmarkIcon, FileSpreadsheet, FileText} from '../shared/Icons';
+import {HistoryIcon, ChartBarIcon, BookmarkIcon, FileSpreadsheet, FileText} from '../shared/Icons';
 import SavedAnalyses from './SavedAnalyses';
 import { EmptyState } from '../ui/EmptyState';
 
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
-import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome, SavedAnalysis } from '../../types';
+import { LoggedTrade, TradeOutcome, SavedAnalysis } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
 import { RECENT_TRADES_WINDOW, buildTradeLogBrief } from '../../utils/recentTradesBrief';
 import { phtClock, phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
-import { ProviderConfig } from '../../types/provider';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface JournalProps {
     isVisible: boolean;
     onClose: () => void;
-    initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning' | 'saved';
-    /** Deep link: auto-select this analysis run in the Think (reasoning) tab. */
-    initialTradeId?: string;
+    /** The Journal covers all logged trades: the ledger, the stats read over
+     *  it, and the saved analyses. The old models/reasoning/learning/memory
+     *  tabs are gone (2026-10-07) — a stale hash or old bookmark folds to the
+     *  ledger in resolveTab. */
+    initialTab: 'log' | 'analytics' | 'saved';
     /** Monotonic counter bumped by App on every openJournal. Re-apply the
-     *  deep-linked tab whenever THIS moves — a second "View reasoning" for
-     *  the same tab value while mounted changes no prop and was silently
-     *  dropped by value-diffing. */
+     *  requested tab whenever THIS moves — re-opening the SAME tab while
+     *  mounted changes no prop and was silently dropped by value-diffing. */
     openNonce?: number;
-    /** Called once the deep-linked trade has been consumed by the dashboard. */
-    onInitialTradeConsumed?: () => void;
-    /** Active user — scopes reasoning-record lookups (falls back to localStorage). */
+    /** Active user — scopes per-user lookups (falls back to localStorage). */
     username?: string;
 
     // Trade Log Props
@@ -53,32 +49,6 @@ interface JournalProps {
     /** Edit PnL (dollar + percent) from the expanded card. */
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
 
-    // PerformanceReview Props
-    finalSummary: string | null;
-    individualSummaries: TradeSummary[];
-    isLoading: boolean;
-    isInsightGenerating?: boolean;
-    newlyAddedInsightIds?: Set<string>;
-    summarizationProvider: AIProvider;
-    summarizationModel: string;
-    onSetSummarizationProvider: (provider: AIProvider) => void;
-    onSetSummarizationModel: (modelId: string) => void;
-    /** Ready provider configs available for summarization (dynamic, user-configured). */
-    providers?: ProviderConfig[];
-
-    summaryCharLimit: number;
-    onUpdateSummaryCharLimit: (limit: number) => void;
-    onRegenerateSummary: () => void;
-    onDeleteInsight?: (id: string) => void;
-    useAlgorithmicSummary: boolean;
-    onToggleAlgorithmicSummary: (use: boolean) => void;
-    useAlgorithmicInsights?: boolean;
-    onToggleAlgorithmicInsights?: (use: boolean) => void;
-    onRewriteInsightsWithAI?: (ids?: string[]) => void;
-
-    // Analytics Props
-    familyWinRates: Record<string, { total: number; wins: number; winRate: number }>;
-
     // Saved-analyses tab. Stage 3: the archive overlay and the Analysis
     // Gallery had only the command palette as an opener; the journal is now
     // the one home for bookmarked analyses (delete included) and Locate hops
@@ -89,17 +59,10 @@ interface JournalProps {
     onLocateSavedAnalysis?: (messageId: string) => void;
     ocrModelIdToName?: Record<string, string>;
 
-    // Memory Props
-    globalMemory?: GlobalMemory;
-    threadSummary?: string;
-
-    // Model Performance Props
-    enabledProviders?: AIProvider[];
-    selectedModels?: Record<string, string>;
 }
 
 // Tab configuration
-type TabId = 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning' | 'saved';
+type TabId = 'log' | 'analytics' | 'saved';
 
 interface TabConfig {
     id: TabId;
@@ -110,13 +73,16 @@ interface TabConfig {
     activeColor: string;
 }
 
-const resolveTab = (tab: TabId): TabId => (tab === 'performance' ? 'log' : tab);
+/** Dead tabs fold to the ledger. 'performance' predates this file's tab
+ *  rename; 'learning'/'memory' moved to the Learn surface with the Studio
+ *  merge; 'models' and 'reasoning' were deleted outright on 2026-10-07 —
+ *  a stale hash or old bookmark lands on the trades, never a blank panel. */
+const resolveTab = (tab: string): TabId =>
+    tab === 'analytics' || tab === 'saved' ? (tab as TabId) : 'log';
 
 const TABS: TabConfig[] = [
     { id: 'log', label: 'History', shortLabel: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'models', label: 'Models', shortLabel: 'AI', icon: <BotIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
     { id: 'saved', label: 'Saved', shortLabel: 'Saved', icon: <BookmarkIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
 ];
 
@@ -156,38 +122,23 @@ const ExportTray: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
 
 const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab,
-    initialTradeId, openNonce, onInitialTradeConsumed, username,
+    openNonce, username,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateTradeType, onUpdateOutcome, onUpdatePnL,
-    // Performance Review Pass-through
-    finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
-    // Analytics Pass-through
-    familyWinRates = {},
     // Saved-analyses tab pass-through
     savedAnalyses, onDeleteSavedAnalyses, onClearAllSavedAnalyses, onLocateSavedAnalysis, ocrModelIdToName = {},
-    // Memory Pass-through
-    globalMemory = null, threadSummary = '',
-    // Model Performance Props
-    enabledProviders,
-    selectedModels = {},
-    useAlgorithmicInsights = false, onToggleAlgorithmicInsights = () => {}, // NEW
-    onRewriteInsightsWithAI = () => {} // NEW
 }) => {
     const [activeTab, setActiveTab] = useState<TabId>(resolveTab(initialTab));
     const [documentOpen, setDocumentOpen] = useState(false);
 
     useEffect(() => {
-        if (activeTab !== 'log' && activeTab !== 'reasoning') setDocumentOpen(false);
+        if (activeTab !== 'log') setDocumentOpen(false);
     }, [activeTab]);
 
     // Active user for reasoning-record lookups. Threaded from App; falls back
     // to the legacy localStorage key the analysis pipeline writes.
     const activeUsername = username
         || (typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default');
-
-    // Derive enabled providers from dynamic configs when not passed explicitly
-    const effectiveEnabledProviders: AIProvider[] = enabledProviders
-        ?? providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map(p => p.id);
 
     // Esc closes the overlay (the biggest navigation dead-end in the app).
     useEscapeClose(isVisible, onClose);
@@ -252,26 +203,6 @@ const JournalInner: React.FC<JournalProps> = ({
                 onUpdateOutcome={onUpdateOutcome}
                 onUpdatePnL={onUpdatePnL}
                 username={activeUsername}
-                finalSummary={finalSummary || null}
-                individualSummaries={individualSummaries || []}
-                isReviewLoading={isLoading}
-                isInsightGenerating={isInsightGenerating}
-                insightProgress={insightProgress}
-                newlyAddedInsightIds={newlyAddedInsightIds}
-                summarizationProvider={summarizationProvider}
-                summarizationModel={summarizationModel}
-                onSetSummarizationProvider={onSetSummarizationProvider}
-                onSetSummarizationModel={onSetSummarizationModel}
-                providers={providers}
-                summaryCharLimit={summaryCharLimit}
-                onUpdateSummaryCharLimit={onUpdateSummaryCharLimit}
-                onRegenerateSummary={onRegenerateSummary}
-                onDeleteInsight={onDeleteInsight}
-                useAlgorithmicSummary={useAlgorithmicSummary}
-                onToggleAlgorithmicSummary={onToggleAlgorithmicSummary}
-                useAlgorithmicInsights={useAlgorithmicInsights}
-                onToggleAlgorithmicInsights={onToggleAlgorithmicInsights}
-                onRewriteInsightsWithAI={onRewriteInsightsWithAI}
                 onDocumentOpenChange={setDocumentOpen}
             />
         ) : activeTab === 'analytics' ? (
@@ -284,20 +215,6 @@ const JournalInner: React.FC<JournalProps> = ({
                     <EquityCurveDashboard trades={trades} />
                     <WinRateDashboard trades={trades} />
                 </div>
-            </div>
-        ) : activeTab === 'models' ? (
-            <div className="p-8 sm:p-8">
-                <ModelPerformanceDashboard enabledProviders={effectiveEnabledProviders} trades={trades} selectedModels={selectedModels} />
-            </div>
-        ) : activeTab === 'reasoning' ? (
-            <div className="h-full overflow-hidden">
-                <ReasoningDashboard
-                    username={activeUsername}
-                    initialTradeId={initialTradeId}
-                    openNonce={openNonce}
-                    onInitialTradeConsumed={onInitialTradeConsumed}
-                    onDocumentOpenChange={setDocumentOpen}
-                />
             </div>
         ) : activeTab === 'saved' ? (
             <div className="h-full overflow-y-auto">
