@@ -8,11 +8,12 @@ import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 
 /** Journal panel route state — consumed only for its `tab` vocabulary since
  *  the surface router owns opening (journalState was deleted after the dead
- *  overlay branch went; audit 2026-09-15). focusTradeId deep-links the
- *  Think tab to one analysis. */
+ *  overlay branch went; audit 2026-09-15). The tab set is the Journal's own:
+ *  ledger, stats, saved. The old models/reasoning/learning/memory tabs are
+ *  gone — model stats and the reasoning browser were deleted with them
+ *  (2026-10-07) and the pattern memory lives on the Learn surface. */
 export interface JournalUIState {
-    tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
-    focusTradeId?: string;
+    tab: 'log' | 'analytics' | 'saved';
 }
 
 export function useJournalUI() {

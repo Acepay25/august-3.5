@@ -5,7 +5,7 @@
 // `tab` props object to the name `props`, so the body's `props.` references
 // are the same keys the IIFE closed over — no renames.
 import React from 'react';
-import { Activity, ArrowUpRight, Bot, Brain, BrainCircuit, FileText } from '../../shared/Icons';
+import { Activity, ArrowUpRight, Brain, BrainCircuit, FileText } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import AutoJournalRulesCard from '../AutoJournalRulesCard';
 import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
@@ -32,7 +32,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <SettingsPageHeader
                     title="Journal"
-                    description="Review past trades, AI pattern memory, and model performance metrics."
+                    description="Review past trades and the pattern memory they build."
                 />
                 <button
                     type="button"
@@ -50,8 +50,10 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
             {/* Stage 3: the four stat tiles are gone — Profile owns the
                 identical numbers, and this tab is a launcher. */}
 
-            {/* Quick navigation cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Quick navigation cards. The Model Performance card died with
+                the Journal's Models tab (2026-10-07) — there is nothing left
+                for it to open. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                     type="button"
                     onClick={() => {
@@ -71,7 +73,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                     type="button"
                     onClick={() => {
                         onClose();
-                        onOpenLearn?.('health');
+                        onOpenLearn?.('memory');
                     }}
                     className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
                 >
@@ -80,21 +82,6 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                         <Brain className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
                     </div>
                     <p className="mt-1.5 text-ui-dense text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => {
-                        onClose();
-                        onOpenJournal?.('models');
-                    }}
-                    className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
-                >
-                    <div className="flex items-center justify-between w-full">
-                        <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Model Performance</span>
-                        <Bot className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
-                    </div>
-                    <p className="mt-1.5 text-ui-dense text-zinc-400">Compare win rates and accuracy across different AI providers and models.</p>
                 </button>
             </div>
 

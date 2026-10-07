@@ -1,9 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import {AlertTriangle, Bookmark, ShieldAlert, X, Zap, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon, RefreshIcon} from '../shared/Icons';
-import { AIProvider, LoggedTrade, TradeOutcome, TradeSummary } from '../../types';
-import { ProviderConfig } from '../../types/provider';
+import {AlertTriangle, Bookmark, ShieldAlert, X, Zap, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon} from '../shared/Icons';
+import { LoggedTrade, TradeOutcome } from '../../types';
 
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
@@ -16,7 +15,6 @@ import { tallyFinCom } from '../../services/providers/debateScience';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import MarkdownContent from '../shared/MarkdownContent';
-import { getMemoryFiles, toPatternMemoryMarkdown, patternMemoryStatsFromTrades } from '../../services/learning/MemoryFilesService';
 import { phtDayYear } from '../../utils/timezone';
 
 interface TradeLogContentProps {
@@ -37,26 +35,6 @@ interface TradeLogContentProps {
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     /** Active user — scopes the reasoning-record lookup per trade. */
     username?: string;
-    finalSummary?: string | null;
-    individualSummaries?: TradeSummary[];
-    isReviewLoading?: boolean;
-    isInsightGenerating?: boolean;
-    insightProgress?: { done: number; total: number } | null;
-    newlyAddedInsightIds?: Set<string>;
-    summarizationProvider?: AIProvider;
-    summarizationModel?: string;
-    onSetSummarizationProvider?: (provider: AIProvider) => void;
-    onSetSummarizationModel?: (modelId: string) => void;
-    providers?: ProviderConfig[];
-    summaryCharLimit?: number;
-    onUpdateSummaryCharLimit?: (limit: number) => void;
-    onRegenerateSummary?: () => void;
-    onDeleteInsight?: (id: string) => void;
-    useAlgorithmicSummary?: boolean;
-    onToggleAlgorithmicSummary?: (use: boolean) => void;
-    useAlgorithmicInsights?: boolean;
-    onToggleAlgorithmicInsights?: (use: boolean) => void;
-    onRewriteInsightsWithAI?: (ids?: string[]) => void;
     onDocumentOpenChange?: (open: boolean) => void;
 }
 
@@ -566,79 +544,13 @@ const TradeLogRowImpl: React.FC<{
 
 const TradeLogRow = React.memo(TradeLogRowImpl);
 
-const PatternMemoryDetailView: React.FC<{
-    markdown: string;
-    isLoading: boolean;
-    onBack: () => void;
-    onRegenerate: () => void;
-}> = ({ markdown, isLoading, onBack, onRegenerate }) => (
-    <div className="flex flex-col h-full bg-zinc-950">
-        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-            <div className="px-8 pt-2 pb-16 w-full max-w-4xl mx-auto">
-                <button
-                    onClick={onBack}
-                    className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-8"
-                    aria-label="Back to trade list"
-                >
-                    <ChevronLeftIcon className="w-4 h-4" /> Back
-                </button>
-
-                <div className="flex items-start justify-between gap-3 mb-2">
-                    <h2 className="text-2xl font-semibold text-zinc-100 tracking-tight">pattern-memory.md</h2>
-                    <button
-                        type="button"
-                        onClick={onRegenerate}
-                        disabled={isLoading}
-                        className="p-2 text-zinc-500 hover:text-zinc-100 rounded-lg hover:bg-zinc-900 transition-colors disabled:opacity-50"
-                        title="Regenerate synthesis"
-                    >
-                        <RefreshIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                </div>
-                <p className="text-sm text-zinc-500 mt-2 mb-8">Rewritten by the Memory model when the journal updates</p>
-
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
-                        {isLoading && !markdown.trim() ? (
-                            <div className="flex items-center gap-2 text-sm text-zinc-500">
-                                <LoadingIcon className="w-4 h-4" /> Synthesizing…
-                            </div>
-                        ) : (
-                            <MarkdownContent content={markdown} className="text-[15px] text-zinc-200 leading-8" />
-                        )}
-                </div>
-            </div>
-        </div>
-    </div>
-);
-
 const TradeLogContent: React.FC<TradeLogContentProps> = ({
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateTradeType, onUpdateOutcome, onUpdatePnL, username,
-    finalSummary = null,
-    individualSummaries = [],
-    isReviewLoading = false,
-    isInsightGenerating = false,
-    insightProgress = null,
-    newlyAddedInsightIds,
-    summarizationProvider = '',
-    summarizationModel = '',
-    onSetSummarizationProvider = () => {},
-    onSetSummarizationModel = () => {},
-    providers = [],
-    summaryCharLimit = 1000,
-    onUpdateSummaryCharLimit = () => {},
-    onRegenerateSummary = () => {},
-    onDeleteInsight,
-    useAlgorithmicSummary = false,
-    onToggleAlgorithmicSummary = () => {},
-    useAlgorithmicInsights = false,
-    onToggleAlgorithmicInsights = () => {},
-    onRewriteInsightsWithAI = () => {},
     onDocumentOpenChange,
 }) => {
     // Drill-down navigation: the trade currently on the full detail screen
     // (null = the list is showing).
     const [detailTradeId, setDetailTradeId] = useState<string | null>(null);
-    const [showPatternMemory, setShowPatternMemory] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
     const [tradeTypeFilter, setTradeTypeFilter] = useState<'all' | 'scalp' | 'swing'>('all');
@@ -664,9 +576,9 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
     const detailTrade = trades.find(t => t.id === detailTradeId);
 
     useEffect(() => {
-        onDocumentOpenChange?.(showPatternMemory || !!detailTradeId);
+        onDocumentOpenChange?.(!!detailTradeId);
         return () => onDocumentOpenChange?.(false);
-    }, [showPatternMemory, detailTradeId, onDocumentOpenChange]);
+    }, [detailTradeId, onDocumentOpenChange]);
 
     const filteredTrades = useMemo(() => (trades || []).filter(trade => {
         if (tradeTypeFilter !== 'all') {
@@ -689,14 +601,6 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
         0,
     ), [trades]);
 
-    const patternMemoryMarkdown = useMemo(() => {
-        const store = getMemoryFiles();
-        const folder = store.folders.find(f => f.name === 'profile');
-        const file = store.files.find(f => f.name === 'pattern-memory.md' && (!folder || f.folderId === folder.id));
-        if (file?.content.trim()) return file.content;
-        return toPatternMemoryMarkdown(finalSummary, patternMemoryStatsFromTrades(trades));
-    }, [finalSummary, isReviewLoading, showPatternMemory, trades]);
-
     const handleSelect = useCallback((id: string) => {
         setSelectedIds(prev =>
             prev.includes(id) ? prev.filter(tradeId => tradeId !== id) : [...prev, id]
@@ -709,17 +613,6 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
     // below them, which crashed row-click with "Rendered fewer hooks than
     // expected" (a trade detail render has 2 fewer hooks than the list).
     const openDetailForTrade = useCallback((id: string) => setDetailTradeId(id), []);
-
-    if (showPatternMemory) {
-        return (
-            <PatternMemoryDetailView
-                markdown={patternMemoryMarkdown}
-                isLoading={isReviewLoading}
-                onBack={() => setShowPatternMemory(false)}
-                onRegenerate={onRegenerateSummary}
-            />
-        );
-    }
 
     // Full-screen trade detail (Back button returns to the list).
     // Must sit AFTER every hook — opening a trade used to return here before
@@ -877,20 +770,6 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
             <div className="flex-1 overflow-hidden px-8 pb-8">
                 {totalTrades === 0 && trades.length === 0 ? (
                     <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
-                        <button
-                            type="button"
-                            onClick={() => setShowPatternMemory(true)}
-                            className="flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors border-b border-zinc-800 text-left shrink-0 w-full"
-                        >
-                            <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <span className="text-sm font-medium text-zinc-100">pattern-memory.md</span>
-                                <p className="text-xs text-zinc-500 mt-1 truncate">
-                                    {isReviewLoading ? 'Synthesizing…' : 'Pattern synthesis'}
-                                </p>
-                            </div>
-                            <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
-                        </button>
                         <EmptyState
                             icon={<Bookmark className="w-8 h-8" />}
                             title="No trades logged yet"
@@ -924,20 +803,6 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     />
                 ) : (
                     <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
-                        <button
-                            type="button"
-                            onClick={() => setShowPatternMemory(true)}
-                            className="flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors border-b border-zinc-800 text-left shrink-0 w-full"
-                        >
-                            <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <span className="text-sm font-medium text-zinc-100">pattern-memory.md</span>
-                                <p className="text-xs text-zinc-500 mt-1 truncate">
-                                    {isReviewLoading ? 'Synthesizing…' : 'Pattern synthesis'}
-                                </p>
-                            </div>
-                            <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
-                        </button>
                         <Virtuoso
                             style={{ height: '100%' }}
                             data={filteredTrades}

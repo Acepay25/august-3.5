@@ -388,7 +388,6 @@ const App: React.FC = () => {
     const {
         surface, setSurface,
         journalTab,
-        journalFocusTradeId, setJournalFocusTradeId,
         journalOpenNonce,
         surfaceEnterFrom, setSurfaceEnterFrom,
         handleSurfaceSelect, openJournal,
@@ -1406,13 +1405,6 @@ const App: React.FC = () => {
     // Opens the Trading Journal's Think tab focused on the reasoning records
     // of the clicked analysis card. The reasoning set is keyed by the
     // analysis createdAt, so resolve it via the card (message) id.
-    // Stable identity for the Journal's deep-link consumer. An inline arrow
-    // here would change on every render and refire ReasoningDashboard's load
-    // effect (it lists this prop in its deps), re-querying the store during
-    // every streaming debate update while the Think tab is open.
-    const handleReasoningTradeConsumed = useCallback(() => {
-        setJournalFocusTradeId(undefined);
-    }, []);
 
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const handleLocateMessage = useCallback((messageId: string) => {
@@ -1625,7 +1617,6 @@ const App: React.FC = () => {
         setInput(data); // PREFILL INPUT, DO NOT SEND IMMEDIATELY
     };
 
-    const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
     const handleUpdateSummaryCharLimit = (limit: number) => setSummaryCharLimit(limit);
 
 
@@ -1634,8 +1625,6 @@ const App: React.FC = () => {
         handleDeleteTrades,
         handleClearAllTrades,
         handleManualInsightsUpdate,
-        handleDeleteInsight,
-        handleRewriteInsightsWithAI,
         handleUpdateTradeLeverage,
         handleUpdateTradeType,
         handleUpdateTradeOutcome,
@@ -1995,19 +1984,6 @@ const App: React.FC = () => {
     const handleOpenLiveMarket = useCallback(() => {
         setIsLiveMarketVisible(true);
     }, []);
-
-    // Journal props were rebuilt per render (fresh array/object identities),
-    // which refired ModelPerformanceDashboard's full trade-log rescan on every
-    // App render while the journal was open. Memoize on readyProviders so they
-    // only change when the provider configuration actually changes.
-    const journalEnabledProviders = useMemo(
-        () => readyProviders.map(p => p.id),
-        [readyProviders]
-    );
-    const journalSelectedModels = useMemo(
-        () => Object.fromEntries(readyProviders.map(p => [p.id, p.selectedModel])),
-        [readyProviders]
-    );
 
     // ─── Outcome Autopilot ────────────────────────────────────────────────
     // Register PENDING analyses for automatic SL/TP detection; resolutions
@@ -2689,8 +2665,6 @@ const App: React.FC = () => {
                                 onClose={handleCloseJournal}
                                 initialTab={journalTab}
                                 openNonce={journalOpenNonce}
-                                initialTradeId={journalFocusTradeId}
-                                onInitialTradeConsumed={handleReasoningTradeConsumed}
                                 username={activeUsername || undefined}
                                 trades={loggedTrades}
                                 onDeleteTrades={handleDeleteTrades}
@@ -2703,29 +2677,6 @@ const App: React.FC = () => {
                 onUpdateTradeType={handleUpdateTradeType}
                                 onUpdateOutcome={handleUpdateTradeOutcome}
                                 onUpdatePnL={handleUpdateTradePnL}
-                                finalSummary={finalTradeSummary}
-                                individualSummaries={tradeSummaries}
-                                isLoading={isLoading}
-                                isInsightGenerating={isInsightGenerating}
-                                insightProgress={insightProgress}
-                                newlyAddedInsightIds={newlyAddedInsightIds}
-                                summarizationProvider={summarizationProvider}
-                                summarizationModel={summarizationModel}
-                                onSetSummarizationProvider={handleSetSummarizationProvider}
-                                onSetSummarizationModel={setSummarizationModel}
-                                providers={providerConfigs}
-                                summaryCharLimit={summaryCharLimit}
-                                onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
-                                onRegenerateSummary={handleRegenerateFinalSummary}
-                                onDeleteInsight={handleDeleteInsight}
-                                useAlgorithmicSummary={useAlgorithmicSummary}
-                                onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
-                                useAlgorithmicInsights={useAlgorithmicInsights}
-                                onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
-                                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
-                                familyWinRates={familyWinRates}
-                                enabledProviders={journalEnabledProviders}
-                                selectedModels={journalSelectedModels}
                                 savedAnalyses={savedAnalyses}
                                 onDeleteSavedAnalyses={handleDeleteSavedAnalyses}
                                 onClearAllSavedAnalyses={handleClearAllSavedAnalyses}
@@ -2756,6 +2707,9 @@ const App: React.FC = () => {
                                     onInitialTabConsumed={learnTabConsumed}
                                     renderCoach={renderCoachInbox}
                                     coachCount={coachCount}
+                                    reviewSummary={finalTradeSummary}
+                                    reviewLoading={isLoading}
+                                    onRegenerateReview={handleRegenerateFinalSummary}
                                 />
                             </React.Suspense>
                         )}
