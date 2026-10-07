@@ -8,7 +8,6 @@
  */
 
 import { LoggedTrade, MemoryFile, TradeOutcome } from '../../types';
-import { ProviderConfig } from '../../types/provider';
 import {
     appendDiaryEntry,
     createMemoryFileUnlocked,
@@ -50,7 +49,6 @@ import { recordMemoryInjection, skillAdherenceForRun } from './MemoryInjectionSe
 import { sanitizePredicate } from '../analysis/skillPredicate';
 import { resolveMemoryConfig } from './MemoryModelService';
 import {
-    sanitizePrediction,
     serializePrediction,
     parsePredictionLine,
     defaultPrediction,
