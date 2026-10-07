@@ -9,7 +9,11 @@
  * buttons, not a parallel icon set — a surface that could render in one width
  * and not the other is exactly the drift a single list prevents.
  *
- * Below the surfaces sit Approvals (one drawer, counted) and Switch profile.
+ * Below the surfaces sit Trade approvals (one drawer, counted) and Switch
+ * profile. It is named for what it holds: the drawer is the auto-journal and
+ * replace-or-expire queue in utils/approvalInbox, NOT the skill drafts, which
+ * wait on Learn → Skill queue. Two inboxes both called "Approvals" is how the
+ * list a person is hunting for becomes unfindable.
  */
 
 import React from 'react';
@@ -40,7 +44,7 @@ export const SURFACE_ITEMS: Array<{
 }> = [
     { id: 'trade', label: 'Trade', shortcut: 'Alt+1', Icon: ActivityIcon },
     { id: 'journal', label: 'Journal', shortcut: 'Alt+2', Icon: FileTextIcon },
-    { id: 'studio', label: 'Studio', shortcut: 'Alt+3', Icon: LayersIcon },
+    { id: 'skills', label: 'Skills', shortcut: 'Alt+3', Icon: LayersIcon },
     // The surface is called Chat; the id stays `agents` because a dozen gates
     // pin it independently of the label (surfaceMenu.test asserts
     // onSelect('agents'), and agents-view / agents-rail / chart-ai-row are
@@ -152,7 +156,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 type="button"
                 data-testid="nav-approvals"
                 onClick={onOpenApprovals}
-                aria-label={approvalsCount ? `Approvals, ${approvalsCount} waiting` : 'Approvals'}
+                aria-label={approvalsCount ? `Trade approvals, ${approvalsCount} waiting` : 'Trade approvals'}
                 className={`flex w-full items-center rounded-lg py-2 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
                     collapsed ? 'justify-center px-2 text-zinc-400' : 'gap-2.5 px-2.5 text-left text-ui-caption text-zinc-400'
                 }`}
@@ -163,7 +167,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                         <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" />
                     )}
                 </span>
-                {!collapsed && <span className="flex-1">Approvals</span>}
+                {!collapsed && <span className="flex-1">Trade approvals</span>}
                 {!collapsed && !!approvalsCount && (
                     <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950">
                         {approvalsCount > 99 ? '99+' : approvalsCount}

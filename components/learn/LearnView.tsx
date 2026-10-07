@@ -44,7 +44,7 @@ export type { LearnTab };
 const TAB_KEY = 'learn_tab_v1';
 
 const TABS: Array<{ id: LearnTab; label: string; Icon: React.FC<{ className?: string }> }> = [
-    { id: 'queue', label: 'Queue', Icon: ListChecks },
+    { id: 'queue', label: 'Skill queue', Icon: ListChecks },
     { id: 'memory', label: 'Memory', Icon: BookOpen },
     { id: 'health', label: 'Health', Icon: Gauge },
     { id: 'coach', label: 'Coach', Icon: ClipboardCheck },

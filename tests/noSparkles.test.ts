@@ -50,7 +50,7 @@ describe('the Sparkles glyph is gone', () => {
         // Sparkles WAS the Studio marker in the nav rail. Removing it without
         // replacing it would have left the surface with no icon at all.
         const shell = readFileSync('components/shell/SurfaceMenuList.tsx', 'utf8');
-        const studio = /id:\s*'studio'[^}]*Icon:\s*(\w+)/.exec(shell);
+        const studio = /id:\s*'skills'[^}]*Icon:\s*(\w+)/.exec(shell);
         expect(studio, 'the Studio nav row has no icon').not.toBeNull();
         expect(studio![1]).not.toBe('SparklesIcon');
         expect(studio![1]).toMatch(/^\w+$/);

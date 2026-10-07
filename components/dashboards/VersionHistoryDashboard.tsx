@@ -219,7 +219,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                         <select
                                             value={selectedRuleIndex}
                                             onChange={(e) => setSelectedRuleIndex(Number(e.target.value))}
-                                            className="w-full bg-transparent text-xs text-zinc-300 focus:outline-none cursor-pointer"
+                                            className="hit-target w-full bg-transparent text-xs text-zinc-300 focus:outline-none cursor-pointer"
                                         >
                                             {rules.map((s, idx) => (
                                                 <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">

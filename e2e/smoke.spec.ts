@@ -183,16 +183,18 @@ test('the nav rail reaches the journal and back to the trade chart', async ({ pa
     // and dismissed around every jump — the rail is persistent, so its `<nav
     // aria-label="Surfaces">` rows are simply clickable. Matched by prefix
     // because each row's accessible name also carries its shortcut
-    // ("Journal, shortcut Alt+2"), which an exact string cannot hit.
+    // ("Journal, shortcut Alt+2"), which an exact string cannot hit. The
+    // anchor includes the punctuation ("Trade," / "Trade.") so the approvals
+    // row — named "Trade approvals" for the drawer it opens — stays out.
     const surfaces = () => page.getByRole('navigation', { name: 'Surfaces' });
 
     await surfaces().getByRole('button', { name: /^Journal/ }).click();
     await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible({ timeout: 10_000 });
-    await surfaces().getByRole('button', { name: /^Trade/ }).click();
+    await surfaces().getByRole('button', { name: /^Trade[.,]/ }).click();
     await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 10_000 });
     // Where you are is marked on the row now, not spelled out in a toggle's
     // label: `aria-current="page"` is the contract the rail owns.
-    await expect(surfaces().getByRole('button', { name: /^Trade/ })).toHaveAttribute('aria-current', 'page');
+    await expect(surfaces().getByRole('button', { name: /^Trade[.,]/ })).toHaveAttribute('aria-current', 'page');
 });
 
 test('the collapsed rail expands, marks the surface, and fills the viewport', async ({ page }) => {
@@ -216,7 +218,7 @@ test('the collapsed rail expands, marks the surface, and fills the viewport', as
 
     const surfaces = page.getByRole('navigation', { name: 'Surfaces' });
     await expect(surfaces.getByRole('button', { name: /^Journal/ })).toBeVisible();
-    await expect(surfaces.getByRole('button', { name: /^Trade/ })).toHaveAttribute('aria-current', 'page');
+    await expect(surfaces.getByRole('button', { name: /^Trade[.,]/ })).toHaveAttribute('aria-current', 'page');
     // Approvals and Settings are the rail's two non-surface actions. Live Market
     // used to be listed here: it is an app-level overlay now
     // (`isLiveMarketVisible`), not a navigation entry, so asserting it in the
