@@ -97,8 +97,15 @@ describe('MarkdownRenderer', () => {
         const wrapper = container.querySelector('table')!.parentElement as HTMLElement;
         expect(wrapper.className).not.toMatch(/rounded|border/);
         const th = container.querySelector('th') as HTMLElement;
+        // Normal case and body size — the reference header is body-weight
+        // emphasis, NOT an uppercase micro-label. The plan's `text-ui-2xs
+        // uppercase` reading came from index.css:250's comment, but that token's
+        // one real use is a `kbd` micro-label (:1139).
+        expect(th.className).toContain('text-ui-caption');
+        expect(th.className).toContain('font-medium');
+        expect(th.className).not.toContain('uppercase');
+        expect(th.className).not.toContain('text-ui-2xs');
         expect(th.className).toContain('bg-zinc-800');
-        expect(th.className).toContain('text-ui-2xs');
         expect(th.className).toContain('border-zinc-700');
         const td = container.querySelector('td') as HTMLElement;
         expect(td.className).toContain('border-zinc-700/60');
