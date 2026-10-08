@@ -127,7 +127,8 @@ const ROLLING_WINDOW_SIZE = 20;      // Number of recent trades to track
 /**
  * Consecutive losses that count as a cold streak.
  *
- * EXPORTED, and used by UnderperformerFeedbackService — which already imported
+ * EXPORTED, and previously consumed by UnderperformerFeedbackService (since
+ * deleted — it had no importers).
  * this module and then re-declared the same rule locally. Two independent
  * definitions of one business rule is how they drift: today both read 3, and
  * changing only the feedback trigger to 4 would have made "feedback fires" and

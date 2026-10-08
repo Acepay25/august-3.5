@@ -18,6 +18,14 @@ import { describe, it, expect } from "vitest";
  *
  * The repo already documents the rule in AGENTS.md under "Canonical
  * single-source modules"; this makes the drift checkable rather than aspirational.
+ *
+ * The second half of this file used to assert that `UnderperformerFeedbackService`
+ * CONSUMED the constant rather than redeclaring it. That module has since been
+ * deleted outright — it had zero importers, so its feedback generator never ran
+ * and nothing could have read its status. The rule it was policing is now
+ * enforced for every module at once by the declaration scan below, which is the
+ * stronger form anyway: a new redeclaration anywhere under `services/` fails,
+ * not just one in a named file.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -48,15 +56,10 @@ describe("cold-streak threshold is declared once", () => {
     ]);
   });
 
-  it("the feedback service consumes it rather than redeclaring it", async () => {
+  it("and the canonical value is still the one the rule assumes", async () => {
     const { COLD_STREAK_THRESHOLD } = await import(
       "../services/backtesting/ModelPerformanceService"
     );
-    const src = readFileSync("services/learning/UnderperformerFeedbackService.ts", "utf8");
-    // It imports the canonical value AND has no local declaration. Asserting
-    // only the import would still pass if a shadowing local were added back.
-    expect(src).toMatch(/COLD_STREAK_THRESHOLD/);
-    expect(src).not.toMatch(/^\s*const COLD_STREAK_THRESHOLD/m);
     expect(COLD_STREAK_THRESHOLD).toBe(3);
   });
 });

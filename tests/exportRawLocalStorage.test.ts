@@ -349,7 +349,13 @@ describe('every raw-localStorage store is registered in ExportService', () => {
         // PREF_KEYS is parsed out of the source with an indentation-sensitive
         // regex; if that ever stops matching, every `PREF_KEYS.X` call site
         // would degrade to `*` and the scan would quietly pass.
-        expect(Object.keys(PREF_KEYS).length).toBeGreaterThan(30);
+        // Floor was 30; six definition-only keys (PROVIDER_PAIR_STATS,
+        // INVALIDATION_RULES, POST_MORTEM_INSIGHTS, LEARNING_WRITE_APPROVAL,
+        // LEARNING_PENDING_RULES, PRICE_ALERTS) were deleted — nothing in the
+        // app ever wrote them, and they were in the export sweep purely because
+        // they were listed here. 24 keeps the guard real without pinning it to
+        // the exact size of a table whose job is to shrink.
+        expect(Object.keys(PREF_KEYS).length).toBeGreaterThan(24);
     });
 
     it('registers every key whose owner writes localStorage directly', () => {

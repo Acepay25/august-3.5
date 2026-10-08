@@ -28,7 +28,6 @@ import {
     appendLensMemoryLine,
     readLensMemory,
     summarizeLensMemory,
-    lensMemoryDoctrineLine,
     lensFileForRole,
 } from '../services/learning/lensMemory';
 
@@ -51,7 +50,7 @@ describe('lensFileForRole', () => {
     });
 });
 
-describe('readLensMemory / summarizeLensMemory / lensMemoryDoctrineLine', () => {
+describe('readLensMemory / summarizeLensMemory', () => {
     beforeEach(async () => {
         store = {};
         await initMemoryFiles(USERNAME);
@@ -60,10 +59,9 @@ describe('readLensMemory / summarizeLensMemory / lensMemoryDoctrineLine', () => 
     it('returns empty strings when the file does not exist yet', () => {
         expect(readLensMemory(AnalystRole.MACRO_VOLATILITY)).toBe('');
         expect(summarizeLensMemory(AnalystRole.MACRO_VOLATILITY)).toBe('');
-        expect(lensMemoryDoctrineLine(AnalystRole.MACRO_VOLATILITY)).toBe('');
     });
 
-    it('appends lines, reads them back, and surfaces a one-line doctrine summary', async () => {
+    it('appends lines and reads them back', async () => {
         await appendLensMemoryLine(AnalystRole.MACRO_VOLATILITY, 'BTC 4H regime: ranging for 5 days', USERNAME);
         await appendLensMemoryLine(AnalystRole.MACRO_VOLATILITY, 'Session: NY, no follow-through on breakouts', USERNAME);
 
@@ -74,9 +72,6 @@ describe('readLensMemory / summarizeLensMemory / lensMemoryDoctrineLine', () => 
 
         const summary = summarizeLensMemory(AnalystRole.MACRO_VOLATILITY, 1000);
         expect(summary).toContain('BTC 4H regime');
-
-        const doctrine = lensMemoryDoctrineLine(AnalystRole.MACRO_VOLATILITY);
-        expect(doctrine).toBe('Macro Lens Memory');
     });
 
     it('truncates the summary to the requested cap', async () => {

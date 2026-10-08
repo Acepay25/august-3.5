@@ -81,17 +81,6 @@ export const summarizeLensMemory = (role: string | AnalystRole, max = LENS_MEMOR
     return `${content.slice(0, max).trimEnd()}\n…`;
 };
 
-/** One-line summary for the doctrine block. Reads the first markdown
- *  heading (line starting with `# `) and returns up to 160 chars. Returns ''
- *  when the file is empty. */
-export const lensMemoryDoctrineLine = (role: string | AnalystRole): string => {
-    const content = readLensMemory(role);
-    if (!content) return '';
-    const heading = content.split('\n').find(l => l.startsWith('# '))?.replace(/^#\s+/, '').trim();
-    if (!heading) return '';
-    return heading.length > 160 ? `${heading.slice(0, 159).trimEnd()}…` : heading;
-};
-
 /** Append a line to a lens file. Creates the file (and folder) on first write.
  *  Used by the regime recorder, the pattern-frequency stat collector, and the
  *  risk-stats writer. Caller must already hold the username (typically via

@@ -200,7 +200,7 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
     it('restores allow-listed keys with identical behavior', async () => {
         const alerts = [{ id: 'a1', symbol: 'BTCUSDT' }];
         const report = await importPreferencesData({
-            [PREF_KEYS.PRICE_ALERTS]: alerts,
+            [PREF_KEYS.OUTCOME_AUTOPILOT_STATE]: alerts,
             // username-scoped memory notebook — swept by export, must restore
             'memory_files_v1_alice': { files: [{ name: 'notebook' }] },
             'desk_tools_forged_v1': [],
@@ -208,11 +208,11 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         });
         expect(report.skippedKeys).toEqual([]);
         expect(report.keysWritten).toBe(4);
-        expect(prefStore[PREF_KEYS.PRICE_ALERTS]).toEqual(alerts);
+        expect(prefStore[PREF_KEYS.OUTCOME_AUTOPILOT_STATE]).toEqual(alerts);
         expect(prefStore['memory_files_v1_alice']).toEqual({ files: [{ name: 'notebook' }] });
         expect(prefStore['desk_tools_forged_v1']).toEqual([]);
         expect(prefStore['lastCrashError']).toBe('boom');
-        expect(writtenKeys).toContain(PREF_KEYS.PRICE_ALERTS);
+        expect(writtenKeys).toContain(PREF_KEYS.OUTCOME_AUTOPILOT_STATE);
     });
 
     it('restores the per-user learning/automation keys and the exported singleton keys (allow-list data-loss fix)', async () => {
@@ -257,8 +257,8 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         }).mockImplementationOnce(async () => {
             throw new Error('quota exceeded');
         });
-        const report = await importPreferencesData({ [PREF_KEYS.PRICE_ALERTS]: [] });
-        expect(report.failedKeys).toEqual([PREF_KEYS.PRICE_ALERTS]);
+        const report = await importPreferencesData({ [PREF_KEYS.OUTCOME_AUTOPILOT_STATE]: [] });
+        expect(report.failedKeys).toEqual([PREF_KEYS.OUTCOME_AUTOPILOT_STATE]);
         expect(report.keysWritten).toBe(0);
     });
 });

@@ -83,8 +83,3 @@ export const resolveAgentContext = (
  *  so a new surface does not invent a fifth budget number; a roster merge
  *  divides the same total instead. */
 export const SINGLE_AGENT_MEMORY_BUDGET = BOT_MEMORY_TOTAL_CHAR_BUDGET;
-
-/** The transcript label for a row this agent answered with. Kept next to the
- *  resolver so the identity stamped on a row and the identity the row was
- *  answered as cannot drift apart. */
-export const agentRowLabel = (ctx: ResolvedAgentContext): string => ctx.name;

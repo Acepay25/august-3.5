@@ -137,19 +137,3 @@ export const aggregateSimilarInsights = (insights: TradeInsight[]): TradeInsight
     return merged;
 };
 
-/**
- * Main Orchestrator
- */
-export const consolidateMemory = (knowledgeBase: InsightKnowledgeBase): InsightKnowledgeBase => {
-    // 1. Prune
-    const prunedInsights = pruneOutdatedInsights(knowledgeBase);
-
-    // 2. Aggregate
-    const aggregatedInsights = aggregateSimilarInsights(prunedInsights);
-
-    return {
-        ...knowledgeBase,
-        insights: aggregatedInsights,
-        lastUpdated: new Date().toISOString()
-    };
-};
