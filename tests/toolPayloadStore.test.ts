@@ -152,6 +152,49 @@ describe('a storage failure is recorded, not swallowed', () => {
     });
 });
 
+describe('an upgrade into a corrupt store reads empty, it does not throw', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        localStorage.setItem('last_active_user', USER);
+        vi.resetModules();
+    });
+
+    it('a store holding a bare string reads as no payloads', async () => {
+        // The upgrade path that matters: a key this app does not recognise the
+        // shape of. `readAll` runs INSIDE the streaming loop, so a throw here
+        // would take the transcript write down with it — the exact hole the
+        // store's doc comment names.
+        const store = await import('../services/trade/toolPayloadStore');
+        localStorage.setItem(keyFor(USER), '"just a string"');
+        expect(store.listToolPayloads()).toEqual([]);
+        expect(store.readToolPayload('c-1')).toBeNull();
+        expect(store.payloadStoreSize()).toBe(0);
+    });
+
+    it('rows that are not payload-shaped are dropped, valid rows survive', async () => {
+        const store = await import('../services/trade/toolPayloadStore');
+        localStorage.setItem(keyFor(USER), JSON.stringify([
+            null,
+            3,
+            { noToolCallId: true },
+            { toolCallId: 'ok', name: 'get_indicators', label: 'indicators', ok: true, artifact: null, text: 'kept bytes', at: 1 },
+        ]));
+        const all = store.listToolPayloads();
+        expect(all).toHaveLength(1);
+        expect(all[0].toolCallId).toBe('ok');
+    });
+
+    it('the recovery path works: write over a corrupt key', async () => {
+        // Export → clear → import is the supported recovery; a plain successful
+        // write over the corrupt key is the same mechanism the app itself uses.
+        const store = await import('../services/trade/toolPayloadStore');
+        localStorage.setItem(keyFor(USER), '{not json at all');
+        expect(store.listToolPayloads()).toEqual([]);
+        expect(store.saveToolPayload(payload() as never)).toBe(true);
+        expect(store.readToolPayload('c-1')?.text).toBe('real order book output');
+    });
+});
+
 describe('the payload id is the join key, never the position', () => {
     it('a payload stores its toolCallId, which is what the row pairs on', async () => {
         // `results` inside the desk loop is [...replays, ...extra, ...forged,

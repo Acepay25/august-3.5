@@ -19,6 +19,7 @@ import AnalyzedRow from '../../shared/AnalyzedRow';
 import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
 import ToolActionsRow from '../../chat/ToolActionsRow';
+import { getPayloadWriteFailure } from '../../../services/trade/toolPayloadStore';
 
 /** What this turn's work actually was, named from the transcript it already
  *  produced — no model call, no new store.
@@ -126,6 +127,21 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     // outside the desk loop) — leftovers render at the end.
     buf.push(...entry.tools.slice(markerCount));
     flush('tools-tail');
+
+    // 2.11 — the sticky payload write failure needs a READER, or the record the
+    // store keeps is invisible. A row that opens onto "full result not kept"
+    // cannot tell a CLIP (a pause, the bytes exist under a ta-… id) from a store
+    // that REFUSED the write (the bytes are gone). This line says which, only
+    // where tool rows exist — payloads are written by tool calls alone — and it
+    // names the ceiling, not a stack trace.
+    const writeFailure = entry.tools.length > 0 ? getPayloadWriteFailure() : null;
+    const writeFailureNote = writeFailure
+        ? writeFailure.kind === 'quota'
+            ? 'Some tool output was not kept — browser storage refused the write.'
+            : writeFailure.kind === 'budget'
+                ? 'Some tool output was not kept — the payload store is at its ceiling.'
+                : 'Some tool output was not kept — a tool result could not be saved.'
+        : null;
     return (
         <div className="border-l border-white/[0.08] pl-3 ml-1 my-1.5 space-y-1.5">
             {hasWork && (
@@ -136,6 +152,11 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                     title={workSummaryLabel(entry.tools, reasoning.trim().length > 0) ?? undefined}
                 >
                     {nodes}
+                    {writeFailureNote && (
+                        <p className="text-ui-dense leading-5 text-zinc-500" data-testid="payload-write-failure">
+                            {writeFailureNote}
+                        </p>
+                    )}
                 </AnalyzedRow>
             )}
             {hasActions && <ToolActionsRow actions={entry.actions!} />}
