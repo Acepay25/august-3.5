@@ -69,7 +69,10 @@ export const marketRegimeToLedger = (raw: string | undefined | null): LedgerRegi
     if (isLedgerRegime(r)) return r;
     if (r.includes('trend')) return 'trending';
     if (r.includes('volatil') || r.includes('chop')) return 'volatile';
-    if (r.includes('rang')) return 'ranging';
+    // 'consolidat' joins the range vocabulary deliberately: the other mapper
+    // here (ModelPerformanceService.mapRegimeToKey) already reads it as ranging,
+    // and a label the ledger could not read was a trade that never counted.
+    if (r.includes('rang') || r.includes('consolidat')) return 'ranging';
     if (r.includes('compress') || r.includes('squeeze')) return 'compression';
     return null;
 };
@@ -124,6 +127,94 @@ export const recordRegimeDay = async (
 /** Distinct coins in the sync cache, alphabetical. */
 export const listLedgerCoins = (): string[] =>
     [...new Set(cache.map(e => e.coin))].sort();
+
+/**
+ * The regime observed for one coin on one day — the ledger's own day key (a
+ * PHT calendar day, `utils/timezone`), so a trade timestamp and a ledger row
+ * written from a hybrid run land on the same bucket.
+ *
+ * When the exact day was never observed, the NEAREST EARLIER observation within
+ * `lookbackDays` answers instead: a regime label from yesterday still describes
+ * the tape, and a label from three weeks ago does not. Nothing near enough
+ * returns null — a gap stays a gap rather than becoming an inferred regime the
+ * matrix will count as evidence.
+ */
+export const regimeOnDay = (
+    coin: string | undefined,
+    dateKey: string,
+    lookbackDays = 3,
+): { regime: LedgerRegime; ageDays: number } | null => {
+    const norm = normalizeLedgerCoin(coin || '');
+    if (!norm || !dateKey) return null;
+    const mine = cache
+        .filter(e => e.coin === norm && e.date <= dateKey)
+        .sort((a, b) => b.date.localeCompare(a.date));
+    for (let age = 0; age <= lookbackDays; age++) {
+        const wanted = shiftDays(dateKey, age);
+        const hit = mine.find(e => e.date === wanted);
+        if (hit) return { regime: hit.regime, ageDays: age };
+    }
+    return null;
+};
+
+/**
+ * The regime a CLOSED trade was settled in, and how we know.
+ *
+ * `LoggedTrade.marketRegime` is only written when a live hybrid snapshot
+ * existed at log time, so most historical rows carry nothing — and every
+ * regime-conditional reader (the family × regime matrix, regime-gated skills,
+ * the per-regime evidence decay) silently skips them. This resolves the same
+ * question once, in the one order every caller agrees on:
+ *
+ *   snapshot → ledger (this coin, this day or the nearest earlier one)
+ *            → the analysis's own pattern text
+ *
+ * The ledger is the harness's own observation, so `source: 'ledger'` is
+ * evidence — which is also why it is stamped rather than quietly folded into
+ * `marketRegime`, so a reader can tell an observed regime from a resolved one.
+ */
+export type RegimeSource = 'snapshot' | 'ledger' | 'analysis';
+
+/** A union, not two independent fields: `source` describes where `regime` came
+ *  from, so a resolved regime without a source (or the reverse) is a state no
+ *  caller should have to defend against. `regime: null` is the honest gap. */
+export type ResolvedRegime =
+    | { regime: LedgerRegime; source: RegimeSource; ledgerAgeDays?: number }
+    | { regime: null; source: null };
+
+const dayKeyOf = (timestamp: string | undefined): string => {
+    if (!timestamp) return '';
+    const ms = new Date(timestamp).getTime();
+    return Number.isFinite(ms) ? phtDayKey(ms) : '';
+};
+
+export const resolveTradeRegime = (trade: {
+    coin?: string;
+    timestamp?: string;
+    marketRegime?: string;
+    analysis?: { coinName?: string; marketConditions?: { pattern?: string }; marketSnapshot?: unknown } | undefined;
+}): ResolvedRegime => {
+    const fromField = marketRegimeToLedger(trade.marketRegime);
+    if (fromField) return { regime: fromField, source: 'snapshot' };
+
+    // `marketRegime` can be absent while the snapshot it came from is still on
+    // the row (older writers stored the snapshot but not the derived key).
+    const snap = (trade.analysis?.marketSnapshot as { regime?: { regime?: string } } | undefined)?.regime?.regime;
+    const fromSnap = marketRegimeToLedger(snap);
+    if (fromSnap) return { regime: fromSnap, source: 'snapshot' };
+
+    // The coin is read from either place on purpose: a chat-side caller holds a
+    // message analysis (`analysis.coinName`) and a journal-side caller holds a
+    // LoggedTrade, and a resolver that silently missed the second one would
+    // report "no regime observed" for a trade the ledger has days of data on.
+    const hit = regimeOnDay(trade.coin || trade.analysis?.coinName, dayKeyOf(trade.timestamp));
+    if (hit) return { regime: hit.regime, source: 'ledger', ledgerAgeDays: hit.ageDays };
+
+    const fromText = marketRegimeToLedger(trade.analysis?.marketConditions?.pattern);
+    if (fromText) return { regime: fromText, source: 'analysis' };
+
+    return { regime: null, source: null };
+};
 
 const shiftDays = (isoDate: string, days: number): string => {
     // Whole-day arithmetic on a midnight-UTC anchor — zone-invariant for fixed

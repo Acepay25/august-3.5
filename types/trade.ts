@@ -121,8 +121,18 @@ export interface LoggedTrade {
   extendedSLZoneBreach?: boolean;
   /**
    * Market regime at time of trade for accurate performance tracking.
+   * Absent means NO regime was observed — readers must skip the row, never
+   * default it to 'ranging'.
    */
   marketRegime?: 'trending' | 'ranging' | 'volatile' | 'compression';
+  /**
+   * How `marketRegime` was learned: from the live hybrid packet, from the
+   * regime ledger (this coin's nearest observation, day-granular), or from the
+   * analysis's own pattern text. Provenance, not decoration — a regime
+   * resolved from a ledger row three days old is weaker evidence than one the
+   * packet named at log time, and a reader may want to treat them apart.
+   */
+  marketRegimeSource?: 'snapshot' | 'ledger' | 'analysis';
   /**
    * Post-mortem insight quality scores per provider (0-100).
    * Used to track which models provide actionable post-mortem insights.
