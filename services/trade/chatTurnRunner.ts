@@ -717,7 +717,11 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         if (controller.signal.aborted) {
             // Stamp the work time even on an explicit Stop: a stopped turn is
             // exactly where the user most wants to see how long it ran.
-            patch(e => ({ ...e, streaming: false, workedMs: workedMsFor(turnStartedAt) }));
+            // Also stamp the interrupt + the prompt, so the row renders an
+            // in-flow "Run stopped" notice with Edit prompt / Try again. A
+            // stopped turn is NOT a failure — it is a half-written answer the
+            // user chose to cut, and the only way forward is to re-run or edit.
+            patch(e => ({ ...e, streaming: false, workedMs: workedMsFor(turnStartedAt), interrupted: true }));
             return full;
         }
         // Settle-time repair: the live gate only strips TAG-delimited thinking

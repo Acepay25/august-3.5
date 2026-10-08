@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { Zap } from '../../shared/Icons';
+import { Pencil, RotateCcw, Zap } from '../../shared/Icons';
 import type { Message } from '../../../types/message';
 import type { LiveEntry } from '../../../services/trade/chatStore';
 import { parseKeyLevels, type MessageLevelLines } from '../../../services/trade/keyLevels';
@@ -45,6 +45,10 @@ interface ChatTranscriptListProps {
     entries: LiveEntry[];
     /** The shell's send — retry chips re-run a user bubble through it. */
     send: (raw: string, retryOf?: string) => Promise<void>;
+    /** Prefill the composer with the interrupted prompt — "Edit prompt" on an
+     *  interrupted run. Optional: a surface with no composer omits the control
+     *  rather than drawing a dead one. */
+    setDraftText?: (text: string) => void;
     /** entryId → App-side analysis message id for ensemble runs launched
      *  from the dock (Locate's scroll target). */
     analysisMessageIds: Record<string, string>;
@@ -68,7 +72,7 @@ interface ChatTranscriptListProps {
 }
 
 const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
-    entries, send, analysisMessageIds, getAnalysisMessage, symbol, getMark, onChatLevels,
+    entries, send, setDraftText, analysisMessageIds, getAnalysisMessage, symbol, getMark, onChatLevels,
     onToggleWatch, pinnedMessageIds, onLogProposedTrade,
 }) => {
     /** Re-render trigger for the module-scope proposal dispositions (see
@@ -158,6 +162,34 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatSeatLabel(e.speaker.split(':')[1] ?? e.speaker)}</p>
                             )}
                             <ChatWorkTimeline entry={e} />
+                            {/* An interrupted run is a half-written answer with no
+                                way forward — say so IN FLOW, and offer the two
+                                recoveries (re-ask, or edit what was asked). The
+                                `retryOf` re-dispatch is the same one the post-mortem
+                                retry uses. */}
+                            {e.interrupted && !e.streaming && (
+                                <div className="flex flex-wrap items-center gap-1.5" data-testid="interrupted-run-notice">
+                                    <span className="text-ui-xs text-zinc-500">Run stopped</span>
+                                    <button type="button"
+                                        onClick={() => {
+                                            const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
+                                            if (asked) setDraftText?.(asked);
+                                        }}
+                                        className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                                        <Pencil className="h-3 w-3" aria-hidden="true" />
+                                        <span>Edit prompt</span>
+                                    </button>
+                                    <button type="button"
+                                        onClick={() => {
+                                            const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
+                                            void send(asked, entries[i - 1]?.id);
+                                        }}
+                                        className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                                        <span>Try again</span>
+                                    </button>
+                                </div>
+                            )}
                             <div className="text-ui-sm leading-5 text-zinc-200">
                                 {shownText
                                     ? <FadingText text={shownText} streaming={!!e.streaming} />

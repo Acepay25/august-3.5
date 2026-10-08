@@ -19,6 +19,7 @@
  *    while the answer streams. `toolActions` is the persistent trail.
  */
 import React from 'react';
+import { Pencil, RotateCcw } from './Icons';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
 import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip } from './chatChips';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
@@ -55,6 +56,13 @@ export interface ChatRowView {
      *  from that stamp — without it, a failed post-mortem is a dead row whose
      *  only recovery was re-logging the trade by hand. */
     postMortemFailed?: boolean;
+    /** This run was interrupted (explicit Stop, or a failure mid-turn). The row
+     *  renders an in-flow notice offering Edit prompt / Try again rather than
+     *  leaving a half-written answer with no way forward. */
+    interrupted?: boolean;
+    /** The prompt that was interrupted, so "Edit prompt" can prefill the
+     *  composer with what the user actually asked rather than a blank box. */
+    interruptedPrompt?: string;
 }
 
 export interface ChatTranscriptRowProps {
@@ -66,6 +74,8 @@ export interface ChatTranscriptRowProps {
     getMark?: () => number | null;
     onChatLevels?: (payload: never, ownerId?: string) => void;
     onRetry?: () => void;
+    /** Prefill the composer with the interrupted prompt — "Edit prompt". */
+    onEditPrompt?: (prompt: string) => void;
     pinned?: boolean;
     onTogglePin?: () => void;
     onLogTrade?: (analysis: TradeAnalysis) => void;
@@ -75,7 +85,7 @@ export interface ChatTranscriptRowProps {
 }
 
 const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
-    row, symbol, getMark, onChatLevels, onRetry, pinned, onTogglePin, onLogTrade, canLogTrade, children,
+    row, symbol, getMark, onChatLevels, onRetry, onEditPrompt, pinned, onTogglePin, onLogTrade, canLogTrade, children,
 }) => {
     const isUser = row.role === 'user';
     // Only a CLOSED key-levels fence yields levels; an open one is stripped
@@ -164,6 +174,38 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
 
                 Thumbs up/down are DELIBERATELY absent — cut this pass as a
                 product decision, not finished and disabled. */}
+            {/* An interrupted run is a dead end without this. Rendered IN FLOW
+                (not a hover chip) because the whole point is that the user finds
+                out the run stopped and can fix it. `ChatTranscriptRow.tsx:130`'s
+                post-mortem retry is the precedent — same placement, same reuse of
+                the `retryOf` re-dispatch. The hover `RetryChip` stays for
+                successful rows.
+
+                Requires at least ONE handler: a "Run stopped" label with no
+                button beside it is a dead notice — it names a problem and offers
+                no way out, which is worse than saying nothing. */}
+            {!isUser && row.interrupted && (onRetry || (onEditPrompt && row.interruptedPrompt)) && (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="interrupted-run-notice">
+                    <span className="text-ui-xs text-zinc-500">Run stopped</span>
+                    {onEditPrompt && row.interruptedPrompt && (
+                        <button type="button"
+                            onClick={() => onEditPrompt(row.interruptedPrompt!)}
+                            className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                            <Pencil className="h-3 w-3" aria-hidden="true" />
+                            <span>Edit prompt</span>
+                        </button>
+                    )}
+                    {onRetry && (
+                        <button type="button"
+                            onClick={onRetry}
+                            className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                            <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                            <span>Try again</span>
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className="mt-1 flex items-center gap-1">
                 {isUser && onRetry && <RetryChip onRetry={onRetry} />}
                 <CopyChip text={row.text} />
