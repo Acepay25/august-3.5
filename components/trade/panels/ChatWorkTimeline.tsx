@@ -14,11 +14,46 @@ import React from 'react';
 import { Lightbulb } from '../../shared/Icons';
 import type { ToolAction } from '../../../types/message';
 import { tipForSeed } from '../../../utils/tradingTips';
-import { splitReasoningAroundTools } from '../../../utils/traceText';
+import { splitReasoningAroundTools, stripTraceMarkers } from '../../../utils/traceText';
 import AnalyzedRow from '../../shared/AnalyzedRow';
 import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
 import ToolActionsRow from '../../chat/ToolActionsRow';
+
+/** What this turn's work actually was, named from the transcript it already
+ *  produced — no model call, no new store.
+ *
+ *  `pairToolLines` yields the human labels the transcript shows ("order book",
+ *  "indicators", "notebook recall"), so the block title is built from the same
+ *  strings the rows below it display: what you read in the summary is exactly
+ *  what you get when you open it. Duplicates are folded (four order-book calls
+ *  are one mention), reasoning is named once, and the result is capped so a
+ *  tool-heavy turn does not become a paragraph. */
+export const workSummaryLabel = (tools: string[], hasReasoning: boolean): string | null => {
+    const parts: string[] = [];
+    if (hasReasoning) parts.push('Read the chart');
+    const seen = new Set<string>();
+    for (const raw of tools) {
+        const line = stripTraceMarkers(raw ?? '').trim();
+        if (!line) continue;
+        // Strip the trailing outcome/detail so "order book · buy wall at 88k"
+        // contributes "order book", not the whole line.
+        const called = /^calling\s+(.+?)(…|$)/i.exec(line);
+        const head = (called ? called[1] : (line.split(' · ')[0] ?? '')).trim();
+        if (!head) continue;
+        const key = head.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        parts.push(head);
+        // Keep SCANNING past the cap: "+N more" has to name how many were
+        // actually left out, not how many the loop happened to reach.
+    }
+    if (parts.length === 0) return null;
+    const shown = parts.slice(0, 4);
+    const more = parts.length - shown.length;
+    const label = shown.join(', ');
+    return more > 0 ? `${label} +${more}` : label;
+};
 
 /** The shape this actually reads. The dock passes its `LiveEntry` straight
  *  in; the Chat surface adapts a pipeline `Message` onto the same fields.
@@ -32,6 +67,8 @@ export interface ChatWorkView {
     /** The answer text so far — "running" means work with nothing to show yet. */
     text?: string;
     actions?: ToolAction[];
+    /** Frozen work time in ms, persisted at settle — survives a reload. */
+    workedMs?: number;
 }
 
 export interface ChatWorkTimelineProps {
@@ -82,7 +119,16 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     flush('tools-tail');
     return (
         <div className="border-l border-white/[0.08] pl-3 ml-1 my-1.5 space-y-1.5">
-            {hasWork && <AnalyzedRow running={running} toolsCount={entry.tools.length}>{nodes}</AnalyzedRow>}
+            {hasWork && (
+                <AnalyzedRow
+                    running={running}
+                    toolsCount={entry.tools.length}
+                    persistedMs={entry.workedMs}
+                    title={workSummaryLabel(entry.tools, reasoning.trim().length > 0) ?? undefined}
+                >
+                    {nodes}
+                </AnalyzedRow>
+            )}
             {hasActions && <ToolActionsRow actions={entry.actions!} />}
         </div>
     );

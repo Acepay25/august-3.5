@@ -51,6 +51,18 @@ export interface StoredChatEntry {
      *  onto this answer. Optional: entries stored before this field existed
      *  simply show no strip rather than a wrong one. */
     at?: number;
+    /** Wall-clock ms the ANSWERING work took — the "Analyzed for Ns" number,
+     *  frozen when the turn settled so it survives a reload.
+     *
+     *  FIELD-LEVEL ASYMMETRY, deliberate: this lives on the ENTRY because
+     *  `sanitizeEntry` (:145) spreads `...e`, so a new entry field survives
+     *  `loadSessions` with NO loader change. A new SESSION field would not —
+     *  `loadSessions` (:179-193) rebuilds every session field explicitly and
+     *  would strip it on the next write. That is why the pin set for a
+     *  `ChatSession` is stored in its own `agent_pins_v1_<user>` key instead.
+     *  Optional so entries written before this existed simply show no
+     *  duration rather than a wrong one. */
+    workedMs?: number;
 }
 
 export type SessionKind = 'solo' | 'panel' | 'group';
@@ -327,6 +339,12 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
         actions: m.toolActions,
         image: m.images?.[0],
+        // The pipeline path's frozen work time, so a dock row built from a
+        // pipeline Message still shows its "Analyzed for Ns" after a reload.
+        // Only the Chat rail writes `runStats` (useBotMailbox / botRoutine) —
+        // the dock stamps `workedMs` directly on the entry, so an undefined
+        // here is normal for a dock-native turn, not a missing value.
+        workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
         // A row with an unparseable timestamp keeps `at` undefined rather than
         // stamping it as 0: the memory-attribution window join treats a real
         // stamp as meaningful and 0 as noise.

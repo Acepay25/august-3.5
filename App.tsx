@@ -1958,7 +1958,7 @@ const App: React.FC = () => {
      *  answer. Two calls rather than one, so the question is visible in the
      *  other surface while it is still being answered.
      */
-    const commitDockBotTurn = useCallback((bot: AgentBot, prompt: string, answer?: string): void => {
+    const commitDockBotTurn = useCallback((bot: AgentBot, prompt: string, answer?: string, workedMs?: number): void => {
         const at = new Date().toISOString();
         const row: Message = answer === undefined
             ? { id: `dbu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: MessageRole.USER, text: prompt, createdAt: at }
@@ -1969,6 +1969,12 @@ const App: React.FC = () => {
                 createdAt: at,
                 modelsUsed: { [bot.providerId]: bot.modelId },
                 botId: bot.id,
+                // The work time the dock's own block measured, committed onto the
+                // message so the Chat surface's collapsed block shows the same
+                // "Analyzed for Ns" this dock row did — and so it survives a
+                // reload. Without it the Chat rail's runStats is the only source
+                // and a dock-native answer shows no duration there.
+                ...(typeof workedMs === 'number' ? { runStats: { runId: `dock-${bot.id}-${Date.now()}`, startedAt: at, finishedAt: at, durationMs: workedMs } } : {}),
             };
         updateMessages(prev => [...prev, row], activeConversationId ?? null);
     }, [updateMessages, activeConversationId]);
