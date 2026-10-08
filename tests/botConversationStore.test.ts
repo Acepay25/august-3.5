@@ -138,11 +138,20 @@ describe('a turn asked in the dock reaches the Chat surface', () => {
         expect(appSrc).toMatch(/botId: bot\.id/);
     });
 
-    it('commits the question when the turn starts, and the answer when it settles', () => {
+    it('commits the question when the turn starts, and the answer + its work time when it settles', () => {
         // Two calls, not one: the question should be visible in the other
         // surface WHILE it is being answered.
         expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text\);/);
-        expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text, settledText\);/);
+        expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text, settledText, workedMsFor\(soloStartedAt\)\);/);
+    });
+
+    it('commits the measured work time so the other surface shows the same duration', () => {
+        // The dock's block measured the turn; committing `workedMs` as the
+        // answer's runStats is what lets the Chat surface's collapsed block
+        // show the same "Analyzed for Ns" — and keeps it after a reload. A dock
+        // turn with no stamp shows no duration there at all.
+        expect(appSrc).toMatch(/durationMs: workedMs/);
+        expect(appSrc).toMatch(/answer\?: string, workedMs\?: number/);
     });
 
     it('commits only a REAL answer, never the stop placeholder', () => {

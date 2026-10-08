@@ -7,6 +7,14 @@ export interface AnalyzedRowProps {
     running?: boolean;
     className?: string;
     toolsCount?: number;
+    /** The turn's frozen work time in ms, persisted at settle. Used ONLY when
+     *  the clock is not ticking: precedence is live tick > this > nothing.
+     *  A reloaded turn has no live clock, so this is what keeps its
+     *  "Analyzed for Ns" on screen. */
+    persistedMs?: number;
+    /** What the work was, named from real data — "Read the chart, order book
+     *  and notebook". Rendered after the duration; omitted when unknown. */
+    title?: string;
     children: React.ReactNode;
 }
 
@@ -18,7 +26,7 @@ export interface AnalyzedRowProps {
  * covers the pre-answer work phase only — it starts at turn start and
  * freezes when the answer text begins.
  */
-const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', toolsCount, children }) => {
+const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', toolsCount, persistedMs, title, children }) => {
     const [open, setOpen] = useState(running);
     const wasRunningRef = useRef(running);
     const startedAtRef = useRef<number | null>(running ? Date.now() : null);
@@ -54,7 +62,13 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
         return () => window.clearInterval(id);
     }, [running]);
 
-    const seconds = running ? liveSeconds : settledSeconds;
+    // Precedence is deliberate: a LIVE tick outranks everything, then the clock
+    // this component froze when the turn settled, and only then the persisted
+    // value a reloaded turn carries. A persisted number must never fight a
+    // running timer, and a missing one must never print "0s".
+    const seconds = running
+        ? liveSeconds
+        : settledSeconds ?? (typeof persistedMs === 'number' ? Math.max(0, Math.round(persistedMs / 1000)) : null);
     const label = running ? 'Analyzing' : 'Analyzed';
 
     return (
@@ -69,6 +83,7 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
                 <Brain className="reasoning-row-glyph" aria-hidden="true" />
                 <span className="reasoning-row-label">
                     {label}{seconds !== null ? ` for ${seconds}s` : ''}
+                    {title && <span className="font-normal opacity-75">{' · '}{title}</span>}
                     {toolsCount !== undefined && toolsCount > 0 && (
                         <span className="font-normal opacity-75">
                             {' · '}{toolsCount} {toolsCount === 1 ? 'tool' : 'tools'}

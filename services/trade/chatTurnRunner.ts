@@ -68,6 +68,7 @@ import { formatModelDisplayName } from '../../utils/providerUtils';
 import { isVisionModel } from '../../utils/modelUtils';
 import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 import { effortForTask, type ReasoningEffort } from '../providers/reasoningControls';
 import type { Attachment } from '../../hooks/useChatAttachments';
 
@@ -174,6 +175,22 @@ export const __clearPacketCacheForTests = (): void => packetCache.clear();
 
 const newId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+/** How long the answering work took, frozen at settle. `start` is the epoch-ms the
+ *  turn began; the caller passes the timestamp captured when the entry was created,
+ *  so every settle path in one turn reports the SAME duration instead of each
+ *  measuring from its own `Date.now()`. Returns undefined when no start is known —
+ *  the renderer then shows no duration rather than a wrong one. */
+const workedMsFor = (start: number | null | undefined): number | undefined =>
+    typeof start === 'number' && Number.isFinite(start) ? Math.max(0, Date.now() - start) : undefined;
+
+/** The epoch-ms an entry was created, read back out of the live store. Used to
+ *  anchor one turn's duration to when its bubble was painted rather than to each
+ *  settle path's own `Date.now()`. */
+const entryAtRef = (sid: string, entryId: string): number | undefined => {
+    const found = chatStore.getSnapshot().sessions.find(s => s.id === sid)?.entries.find(e => e.id === entryId);
+    return found?.at;
+};
+
 /** Everything the orchestrator needs from the panel shell, stated once.
  *  chatStore is imported directly (the module store — turn state is read
  *  FRESH at call time so a double-send inside one React tick still sees the
@@ -240,7 +257,7 @@ export interface ChatTurnRunnerDeps {
      *  it; a later price touch comes back as a [HARNESS SIGNAL] turn). */
     onPlanPresented?: (plan: WatchPlan, turn?: PanelTurnContext) => void;
     /** Commit a bot turn asked HERE into the canonical conversation. */
-    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string) => void;
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
     /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
      *  debate verdict back as an AI entry). */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
@@ -594,6 +611,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // this context — so a turn running in the background while the user
         // watches another session/symbol still writes into ITS transcript.
         const turnCtx: PanelTurnContext = { sid, entryId, symbol, interval };
+        // ONE clock for every settle path in this seat turn. The entry's own `at`
+        // is the honest start (stamped when the bubble was painted), so a Stop, a
+        // failure and a clean finish all report the same "Analyzed for Ns".
+        const turnStartedAt: number = entryAtRef(sid, entryId) ?? Date.now();
         const patch = (fn: (e: LiveEntry) => LiveEntry): void => {
             mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: s.entries.map(e => (e.id === entryId ? fn(e) : e)) }));
         };
@@ -664,7 +685,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // "streamed only its reasoning…" on a deliberate stop click (and
         // callers' catch blocks labelled it "could not answer").
         if (controller.signal.aborted) {
-            patch(e => ({ ...e, streaming: false }));
+            // Stamp the work time even on an explicit Stop: a stopped turn is
+            // exactly where the user most wants to see how long it ran.
+            patch(e => ({ ...e, streaming: false, workedMs: workedMsFor(turnStartedAt) }));
             return full;
         }
         // Settle-time repair: the live gate only strips TAG-delimited thinking
@@ -694,6 +717,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 ...e,
                 streaming: false,
                 text: rest,
+                workedMs: workedMsFor(turnStartedAt),
                 tools: rest ? e.tools : [...e.tools, 'The model streamed only its reasoning this turn — no separate answer came through. Try a lower thinking effort, or ask again.'],
             }));
             // The panel room still carries the analysis for the peers.
@@ -705,7 +729,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const peeled = full.trim() !== settled.output;
         const leaked = peeled && !!(settled.thinking.trim() || reasoning.trim());
         const finalText = leaked ? (settled.output || full) : full;
-        patch(e => ({ ...e, streaming: false, text: finalText, reasoning: leaked ? (settled.thinking || e.reasoning) : (e.reasoning || reasoning) }));
+        patch(e => ({ ...e, streaming: false, text: finalText, workedMs: workedMsFor(turnStartedAt), reasoning: leaked ? (settled.thinking || e.reasoning) : (e.reasoning || reasoning) }));
         return finalText;
     };
 
@@ -740,7 +764,11 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             }));
         if (reviewable.length > 0) {
             void runTraderLearner(user, model, reviewable.map(s => s.transcript)).catch(() => { /* best-effort */ });
-            if (recordSessionForReview(user, 3)) {
+            // Opt-in capability (utils/harnessSettings.autoDraftingEnabled). Checked
+            // BEFORE the counter advances: while it is off the loop must not accrue
+            // a debt of studied sessions that fires a burst of drafts the moment
+            // someone flips the switch.
+            if (getHarnessSettings().autoDraftingEnabled && recordSessionForReview(user, 3)) {
                 void runSessionSkillReview(user, reviewable, model, trades).catch(() => { /* best-effort */ });
             }
         }
@@ -824,6 +852,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // their own entries added later in the loop.
         const isSolo = session.kind !== 'panel';
         const soloAiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now() };
+        // The solo turn's clock, from the bubble's own stamp — every settle path
+        // in this turn reports the SAME duration.
+        const soloStartedAt: number | undefined = soloAiEntry.at;
         mutate(sid, s => ({
             ...s,
             title: s.entries.some(e => e.role === 'user') ? s.title : titleFromMessage(text),
@@ -897,10 +928,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // "The chart copilot could not answer…".
                 if (!controller.signal.aborted) {
                     const message = e instanceof Error ? e.message : String(e);
-                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, text: `The chart copilot could not answer: ${message}`, streaming: false } : en) }));
+                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, text: `The chart copilot could not answer: ${message}`, streaming: false, workedMs: workedMsFor(soloStartedAt) } : en) }));
                 }
             } finally {
-                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false } : en)) }));
+                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false, ...(en.workedMs === undefined ? { workedMs: workedMsFor(soloStartedAt) } : {}) } : en)) }));
                 endRunOwned(sid, controller);
                 maybeReviewSessions(supervisorCfg);
                 // THE TURN HAS TO TEACH THE BOT. `recordBotTurnOutcome` writes
@@ -924,7 +955,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                     // the "could not answer" text would put a failed turn into
                     // the conversation as though the bot had said something.
                     if (settledText.trim() && !/^Running the full ensemble/.test(settledText)) {
-                        onBotTurnCommit?.(bot, text, settledText);
+                        onBotTurnCommit?.(bot, text, settledText, workedMsFor(soloStartedAt));
                     }
                 }
                 if (bot && usernameNow) {
@@ -1025,6 +1056,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 ];
                 let full = '';
                 let seatFailed = false;
+                // This seat's own clock, from the moment ITS bubble was painted —
+                // a panel's seats start at different times, so each reports its
+                // own duration rather than the room's.
+                const seatStartedAt: number | undefined = aiEntry.at;
                 const seatActions: string[] = [];
                 try {
                     full = await runSeatTurn({
@@ -1055,7 +1090,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                         // text used to keep streaming:true forever, which then
                         // blocked the whole store from persisting.
                         mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
-                            ? { ...en, streaming: false, ...(en.text ? {} : { text: `(this seat failed to answer: ${msg})` }) }
+                            ? { ...en, streaming: false, workedMs: workedMsFor(seatStartedAt), ...(en.text ? {} : { text: `(this seat failed to answer: ${msg})` }) }
                             : en)) }));
                     }
                 }
@@ -1143,6 +1178,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const noticeLine = harnessNoticeLine(signalText);
         const noticeEntry: LiveEntry = { id: newId('n'), role: 'ai', text: '', tools: [noticeLine], notice: true, at: Date.now() };
         const aiEntry: LiveEntry = { id: newId('a'), role: 'ai', text: '', tools: [], streaming: true, at: Date.now(), ...(bot ? { speaker: bot.name } : {}) };
+        const harnessStartedAt: number | undefined = aiEntry.at;
         mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: [...s.entries, noticeEntry, aiEntry] }));
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
@@ -1164,10 +1200,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // A Stop of a harness warning is not a failure to narrate.
             if (!controller.signal.aborted) {
                 const message = e instanceof Error ? e.message : String(e);
-                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id && !en.text ? { ...en, text: `The harness warning failed: ${message}`, streaming: false } : en)) }));
+                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id && !en.text ? { ...en, text: `The harness warning failed: ${message}`, streaming: false, workedMs: workedMsFor(harnessStartedAt) } : en)) }));
             }
         } finally {
-            mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false } : en)) }));
+            mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false, ...(en.workedMs === undefined ? { workedMs: workedMsFor(harnessStartedAt) } : {}) } : en)) }));
             endRunOwned(sid, controller);
         }
     };

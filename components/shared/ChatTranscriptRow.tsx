@@ -45,6 +45,10 @@ export interface ChatRowView {
     toolLines?: string[];
     /** Persistent side-effect status rows. */
     actions?: ToolAction[];
+    /** Frozen work time in ms from `Message.runStats` — what the collapsed
+     *  block shows after the live clock is gone. Persisted, so it survives a
+     *  reload of a settled answer. */
+    workedMs?: number;
     analysis?: TradeAnalysis;
     /** This row is a post-mortem that FAILED. The harness stamps the failed
      *  candidate on the message (usePostMortem) and the CTA below re-runs it
@@ -87,6 +91,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
         streaming: row.streaming,
         text: row.text,
         actions: row.actions,
+        workedMs: row.workedMs,
     };
 
     return (

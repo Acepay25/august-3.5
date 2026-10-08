@@ -83,7 +83,7 @@ interface TradeViewProps {
     coachCount?: number;
     /** A bot's existing conversation, so a bot opened in the dock inherits it. */
     botThreadRows?: Message[];
-    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string) => void;
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
     /** Resolve the analysis message `onRunAnalysis` created, so the dock can
      *  show what its settled verdict was built on. Threaded straight through to
      *  `TradeChatPanel` — the chart surface owns no verdict rendering itself.
@@ -1058,6 +1058,14 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 {/* The book is suppressed while the dock is expanded: the row is already
                  *  chart + dock, and re-adding a fixed 300px column is what made the
                  *  total exceed the row and clip the transcript. */}
+                {/* The book is DETAIL THE USER PULLS: `sidebarOpen` is their own
+                    persisted choice (Ctrl/Cmd+B and the activity bar own it), so a
+                    global density preset must not override it — hiding a thing
+                    someone explicitly opened is not minimalism, it is the app
+                    deciding their screen is wrong. The row already gives way when
+                    the dock is expanded, which is the crowding fix that belongs
+                    here. Density owns what the APP pushes: the read-only market
+                    stats, the dashboards, the telemetry. */}
                 {((sidebarOpen && !dockExpanded) || isBelowLg) && (
                     <div
                         data-testid="trade-sidebar"

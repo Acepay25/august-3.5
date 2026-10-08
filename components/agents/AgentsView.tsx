@@ -203,6 +203,7 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
         toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
         actions: m.toolActions,
+        workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
         analysis: m.analysis,
         // The harness stamps the failed candidate on the message when a
         // post-mortem throws; the row exposes it so the CTA can offer the re-run.
