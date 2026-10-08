@@ -41,6 +41,19 @@ export interface HarnessSettings {
      *  could HALT a verdict with no way to say no. Default ON. Injection is governed
      *  by the approval gate, not by this. */
     skillEnforcementEnabled: boolean;
+    /**
+     * HOW MUCH of the app is on screen. A whole-view preset, not a per-pane
+     * toggle: 'focus' (the default) shows the chart, the conversation and the
+     * decisions; 'detail' additionally shows the telemetry the loop keeps —
+     * version history, session usage, diagnostics, the lesson browser, the
+     * market stats beside the chart.
+     *
+     * Nothing is deleted by this. A trader who wants the diagnosis opens it;
+     * a trader who wants a screen with one job on it does not have to ignore
+     * six panels to find it. (The reference apps do the same with layout
+     * presets and transcript modes rather than shipping one forced density.)
+     */
+    viewDensity: 'focus' | 'detail';
 }
 
 const KEY = 'harness_settings_v1';
@@ -87,6 +100,9 @@ export const getHarnessSettings = (): HarnessSettings => {
         // read as the app losing its rules.
         starterLibraryEnabled: stored.starterLibraryEnabled !== false,
         skillEnforcementEnabled: stored.skillEnforcementEnabled !== false,
+        // Focus is the shipped default, and only an explicit 'detail' opens the
+        // telemetry — an absent key must not resurrect the always-on screen.
+        viewDensity: stored.viewDensity === 'detail' ? 'detail' : 'focus',
     };
 };
 
@@ -95,7 +111,22 @@ export const saveHarnessSettings = (next: Partial<HarnessSettings>): HarnessSett
     try {
         localStorage.setItem(KEY, JSON.stringify(merged));
     } catch { /* ignore */ }
+    listeners.forEach(fn => { try { fn(merged); } catch { /* a subscriber must not break the save */ } });
     return merged;
+};
+
+/**
+ * The settings barometer. The status bar and every surface that rests or shows
+ * a panel on `viewDensity` read the same store, so the toggle in one place is
+ * honest in the other — a second copy of the density flag is how a UI ends up
+ * showing a panel the setting says is closed.
+ */
+type SettingsListener = (next: HarnessSettings) => void;
+const listeners = new Set<SettingsListener>();
+
+export const subscribeHarnessSettings = (fn: SettingsListener): (() => void) => {
+    listeners.add(fn);
+    return () => { listeners.delete(fn); };
 };
 
 /**

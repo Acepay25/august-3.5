@@ -24,6 +24,7 @@ import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import SupervisorStream from './SupervisorStream';
 import AmendmentsInbox from './AmendmentsInbox';
+import { useViewDensity } from '../shell/StatusBar';
 import MemoryHealthCard from './MemoryHealthCard';
 import PatternMemoryCard from './PatternMemoryCard';
 
@@ -94,6 +95,7 @@ const LearnView: React.FC<LearnViewProps> = ({
     renderCoach, renderActionApprovals, coachCount = 0,
     reviewSummary = null, reviewLoading = false, onRegenerateReview,
 }) => {
+    const { density, setDensity } = useViewDensity();
     const [tab, setTab] = useState<LearnTab>(() => {
         const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(TAB_KEY) : null;
         // A pending decision is the reason to open this surface, so the tab that
@@ -176,14 +178,18 @@ const LearnView: React.FC<LearnViewProps> = ({
                 {tab === 'health' && (
                     <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-3">
                         <MemoryHealthCard username={username} />
-                        <div data-testid="learn-signals">
+                        {density === 'detail' ? (
+                            <div data-testid="learn-signals">
+                                <Suspense fallback={<Fallback />}>
+                                    <LearningDashboard trades={trades} username={username} />
+                                </Suspense>
+                            </div>
+                        ) : null}
+                        {density === 'detail' ? (
                             <Suspense fallback={<Fallback />}>
-                                <LearningDashboard trades={trades} username={username} />
+                                <HarnessLessonsBrowser />
                             </Suspense>
-                        </div>
-                        <Suspense fallback={<Fallback />}>
-                            <HarnessLessonsBrowser />
-                        </Suspense>
+                        ) : null}
 
                         {/* What the loop has been doing, not what it knows: the
                             supervisor's running log used to sit beside the
@@ -193,20 +199,39 @@ const LearnView: React.FC<LearnViewProps> = ({
                             <SupervisorStream />
                         </div>
 
-                        {/* Runtime telemetry. This is the old System tab, kept as
-                            its own block so a density preset can rest all three
-                            together instead of deleting the diagnosis. */}
-                        <div className="flex flex-col gap-3" data-testid="learn-system">
-                            <Suspense fallback={<Fallback />}>
-                                <VersionHistoryDashboardLazy />
-                            </Suspense>
-                            <Suspense fallback={<Fallback />}>
-                                <SessionUsagePanel />
-                            </Suspense>
-                            <Suspense fallback={<Fallback />}>
-                                <DiagnosticsPanel />
-                            </Suspense>
-                        </div>
+
+                        {/* Runtime telemetry — the old System tab. Focus rests all
+                            three together (that is what a whole-view preset means:
+                            one decision, not six toggles) and says what is resting,
+                            so the shorter screen never reads as "the health data
+                            disappeared". Nothing here is deleted. */}
+                        {density === 'detail' ? (
+                            <div className="flex flex-col gap-3" data-testid="learn-system">
+                                <Suspense fallback={<Fallback />}>
+                                    <VersionHistoryDashboardLazy />
+                                </Suspense>
+                                <Suspense fallback={<Fallback />}>
+                                    <SessionUsagePanel />
+                                </Suspense>
+                                <Suspense fallback={<Fallback />}>
+                                    <DiagnosticsPanel />
+                                </Suspense>
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap items-center gap-2 rounded-control border border-zinc-800/80 bg-zinc-900 px-3 py-2.5" data-testid="learn-resting">
+                                <p className="text-ui-dense text-zinc-500">
+                                    Learning analytics, the lesson browser and the runtime telemetry are resting.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setDensity('detail')}
+                                    data-testid="learn-show-detail"
+                                    className="ml-auto inline-flex min-h-6 items-center rounded-control border border-white/10 px-2.5 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                                >
+                                    Show Detail
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 

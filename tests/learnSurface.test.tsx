@@ -29,6 +29,7 @@ import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { queueSkillDraft } from '../utils/skillDrafts';
 import * as supervisorStore from '../services/learning/supervisorStore';
 import { recordTombstone } from '../services/learning/skillGraveyard';
+import { getHarnessSettings, saveHarnessSettings } from '../utils/harnessSettings';
 
 const USER = 'learn-ui-user';
 
@@ -86,6 +87,8 @@ describe('Learn surface', () => {
     });
 
     it('switches to Health and renders the memory report', async () => {
+        // The report itself is always on; only the dashboards rest under Focus.
+        saveHarnessSettings({ viewDensity: 'detail' });
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => {
@@ -157,6 +160,7 @@ describe('Learn deep link', () => {
 
 describe('One learning surface (WS-5.1)', () => {
     it('Health carries the learning analytics that used to live in the Journal', async () => {
+        saveHarnessSettings({ viewDensity: 'detail' });
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => expect(screen.getByTestId('learn-signals')).toBeTruthy());
@@ -232,5 +236,40 @@ describe('The Approvals tab', () => {
             cleanup();
         }
         expect(screen.queryByTestId('learn-coach')).toBeNull();
+    });
+});
+
+/**
+ * Density is a whole-view preset, not six toggles: one setting decides whether
+ * the loop's dashboards are on screen, and the shorter screen must SAY what is
+ * resting. A panel that silently disappears is indistinguishable from a feature
+ * that broke, which is the difference between minimalism and loss.
+ */
+describe('Focus rests the telemetry without deleting it', () => {
+    it('hides the dashboards and names what is resting', async () => {
+        saveHarnessSettings({ viewDensity: 'focus' });
+        mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
+        await waitFor(() => expect(screen.getByTestId('memory-health-card')).toBeTruthy());
+        expect(screen.queryByTestId('learn-signals')).toBeNull();
+        expect(screen.queryByTestId('learn-system')).toBeNull();
+        expect(screen.getByTestId('learn-resting').textContent).toMatch(/resting/i);
+    });
+
+    it('the Show Detail press writes the shared setting and reveals them', async () => {
+        saveHarnessSettings({ viewDensity: 'focus' });
+        mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
+        fireEvent.click(await screen.findByTestId('learn-show-detail'));
+        await waitFor(() => expect(screen.getByTestId('learn-signals')).toBeTruthy());
+        expect(screen.getByTestId('learn-system')).toBeTruthy();
+        expect(getHarnessSettings().viewDensity).toBe('detail');
+    });
+
+    it('the notebook health never rests — it is the one panel with a press on it', async () => {
+        saveHarnessSettings({ viewDensity: 'focus' });
+        mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
+        await waitFor(() => expect(screen.getByTestId('memory-health-card')).toBeTruthy());
     });
 });

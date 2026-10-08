@@ -1008,6 +1008,33 @@ async function main() {
             await dismissOverlays();
         }
 
+        // The status bar is the shell's always-on region, so the gate checks it
+        // does what it advertises: one press on its density pair changes what a
+        // DIFFERENT surface renders. A bar that repaints only itself would pass
+        // every existing check and still be a lie about the view.
+        {
+            await openMenu(); await sleep(300);
+            await navTo('Learn'); await sleep(900);
+            const coachTab = page.locator('[data-testid="learn-tab-health"]');
+            if (await coachTab.count() === 1) await coachTab.click();
+            await sleep(1200);
+            const mounted = await page.locator('[data-testid="status-bar"]').count();
+            check('the status bar is mounted under every surface', mounted === 1, `${mounted}`);
+            const resting = await page.locator('[data-testid="learn-resting"]').count();
+            check('Focus rests the loop telemetry on Health', resting === 1, `${resting} resting notice`);
+            await page.click('[data-testid="status-density-detail"]');
+            const shown = await page.waitForSelector('[data-testid="learn-system"]', { timeout: 12000 })
+                .then(() => 1).catch(() => 0);
+            check('Detail opens it again, from the bar', shown === 1, `${shown} telemetry block(s)`);
+            const pressed = await page.getAttribute('[data-testid="status-density-detail"]', 'aria-pressed');
+            check('the bar reports the view it is actually giving', pressed === 'true', `aria-pressed=${pressed}`);
+            // Leave the machine in the shipped default for whatever runs next.
+            await page.click('[data-testid="status-density-focus"]');
+            await sleep(600);
+            const back = await page.locator('[data-testid="learn-resting"]').count();
+            check('and Focus closes it again — one setting, not two', back === 1, `${back}`);
+        }
+
         /** Poll a predicate instead of sleeping a fixed time. Every fixed sleep
          *  in this sweep eventually read a surface mid-mount and called it blank,
          *  which is a worse failure than a slow test: it blames the app. */
@@ -1773,7 +1800,8 @@ async function main() {
             await navTo(surface.label);
             await sleep(900);
             const bad = await page.evaluate(({ floor }) => {
-                const scopes = ['main', 'aside[data-testid="nav-rail"]', 'header'];
+                const scopes = ['main', 'aside[data-testid="nav-rail"]', 'header',
+                    'footer[data-testid="status-bar"]'];
                 const seen = new Set();
                 const out = [];
                 for (const scope of scopes) {
