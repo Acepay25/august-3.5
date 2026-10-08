@@ -41,9 +41,9 @@ describe('the dock offers what the Chat rail offers', () => {
     it('can reach the Coach inbox, with the same pending count the rail shows', () => {
         expect(newMenu()).toMatch(/onOpenCoach/);
         expect(panelSrc).toMatch(/data-testid="dock-coach-option"/);
-        expect(appSrc).toMatch(/onOpenCoach=\{openCoachInLearn\}/);
+        expect(appSrc).toMatch(/onOpenCoach=\{openApprovalsInLearn\}/);
         // One handler, two surfaces — not a second Coach route.
-        expect(appSrc.match(/onOpenCoach=\{openCoachInLearn\}/g)?.length).toBe(2);
+        expect(appSrc.match(/onOpenCoach=\{openApprovalsInLearn\}/g)?.length).toBe(2);
     });
 
     it('already creates bots, and keeps doing so', () => {

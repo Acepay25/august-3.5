@@ -148,6 +148,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const harnessSection = (
         <HarnessSection
             closedWindowed={closedWindowed}
+            totalClosed={trades.filter(isClosed).length}
             windowDays={windowDays}
             onWindowDaysChange={setWindowDays}
         />

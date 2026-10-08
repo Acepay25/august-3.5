@@ -257,7 +257,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         return hasReadyProvider ? 'general' : 'models';
     });
     // Bound once so the narrowing survives into the callback the children get.
-    const openLearnQueue = onOpenLearn ? () => onOpenLearn('queue') : undefined;
+    // The supervisor's running log moved to Learn -> Health when the queue tab
+    // was deleted, so this deep link lands there.
+    const openLearnQueue = onOpenLearn ? () => onOpenLearn('health') : undefined;
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
     // Idle motion (breath / fidget / blink / sway). Default ON. The

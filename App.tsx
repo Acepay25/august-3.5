@@ -55,7 +55,7 @@ const StrategySearch = React.lazy(() => import('./components/shared/StrategySear
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const WatchListPanel = React.lazy(() => import('./components/analysis/WatchListPanel'));
-const ApprovalInbox = React.lazy(() => import('./components/analysis/ApprovalInbox'));
+const ActionApprovalsPanel = React.lazy(() => import('./components/learn/ActionApprovals'));
 const JobsDrawer = React.lazy(() => import('./components/settings/JobsDrawer'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
@@ -201,7 +201,6 @@ const App: React.FC = () => {
         isRateLimited, setIsRateLimited,
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
-    const [isApprovalInboxVisible, setIsApprovalInboxVisible] = useState(false);
     /** Background-jobs drawer (status-stack pattern). */
     const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
     const [seatOverridesBot, setSeatOverridesBot] = useState<AgentBot | null>(null);
@@ -395,7 +394,6 @@ const App: React.FC = () => {
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
         isWatchListVisible, setIsWatchListVisible,
-        isApprovalInboxVisible, setIsApprovalInboxVisible,
         setLearnTab,
     });
     // The trade surface's collapsible left panel: the order book, opened and
@@ -1368,7 +1366,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isWatchListVisible || isDeskSceneOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1378,7 +1376,6 @@ const App: React.FC = () => {
                 if (isVisionDataVisible) setIsVisionDataVisible(false);
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isWatchListVisible) setIsWatchListVisible(false);
-                if (isApprovalInboxVisible) setIsApprovalInboxVisible(false);
                 return;
             }
             if (isAnalysisInProgress || isPostMortemInProgress) {
@@ -1391,7 +1388,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -1415,7 +1412,7 @@ const App: React.FC = () => {
     }, [messages]);
 
     // Saved-analysis Locate: the transcript lives on the Trade surface, so
-    // from the Journal this is the ApprovalInbox dance — land on Trade and
+    // from the Journal this is the show-the-trade dance — land on Trade and
     // scroll only if the dock's bridge is already mounted.
     const handleLocateSavedAnalysis = useCallback((messageId: string) => {
         const dockIsMounted = surface === 'trade';
@@ -2100,12 +2097,19 @@ const App: React.FC = () => {
         // amendments, everything else. The supervisor may already be working
         // through them, but a decision the model has not recorded yet is
         // something the user can still lose.
-        const learnPending = countPendingEverything(activeUsername || 'default');
-        if (learnPending > 0) {
-            next.learn = { count: learnPending, detail: `${learnPending} awaiting review` };
-        }
+        // No Learn count here any more: the Approvals row below it on the same
+        // rail routes into this surface and carries the one number.
         return next;
     }, [workingBotId, dmWorkingBotId, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce]);
+    // One number for one meaning. The rail's Approvals row used to count the
+    // drawer's items (which included skill drafts) while the Learn badge counted
+    // drafts + proposals + amendments — two figures for overlapping sets, both
+    // labelled as if they were the whole backlog. This is the union, and the
+    // Learn surface badge is gone, because the row routes INTO that surface.
+    const approvalsWaiting = useMemo(
+        () => approvalItems.filter(i => i.kind !== 'skill').length + coachCount,
+        [approvalItems, coachCount],
+    );
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
         void approveSkillDraft(draft, activeUsername || 'default', loggedTradesRef.current)
@@ -2139,7 +2143,9 @@ const App: React.FC = () => {
             <CoachThreadPanel onAllowDraft={coachAllowDraft} onDenyDraft={coachDenyDraft} />
         </React.Suspense>
     ), [coachAllowDraft, coachDenyDraft]);
-    const openCoachInLearn = useCallback(() => {
+    /** The one inbox. The nav rail's Approvals row and every "open the Coach"
+     *  affordance land here, so a decision has exactly one address. */
+    const openApprovalsInLearn = useCallback(() => {
         setLearnTab('coach');
         setSurface('learn');
     }, [setSurface]);
@@ -2249,6 +2255,28 @@ const App: React.FC = () => {
             handleDismissAutopilot(item.messageId);
         },
     }), [activeUsername, loggedTrades, handleConfirmAutopilot, handleDismissAutopilot, toast]);
+
+    const renderActionApprovals = useCallback(() => (
+        <React.Suspense fallback={null}>
+            <ActionApprovalsPanel
+                items={approvalItems}
+                onAllow={approvalHandlers.allow}
+                onDeny={approvalHandlers.deny}
+                onAlways={approvalHandlers.always}
+                onNever={approvalHandlers.never}
+                onOpen={(item) => {
+                    // The dock owns the only transcript scroller, and it
+                    // registers its bridge on mount — so from another surface
+                    // this can honestly do one thing: land the user on Trade.
+                    // Calling the bridge there would be a null deref that
+                    // silently scrolls nothing.
+                    const dockIsMounted = surface === 'trade';
+                    setSurface('trade');
+                    if (dockIsMounted) handleLocateMessage(item.messageId);
+                }}
+            />
+        </React.Suspense>
+    ), [approvalItems, approvalHandlers, surface, handleLocateMessage, setSurface]);
 
 
     // ... (Rest of component remains unchanged) ...
@@ -2528,28 +2556,6 @@ const App: React.FC = () => {
                     onConfirmAutopilot={(messageId, conversationId) => runWatchListAction(conversationId, { type: 'autopilot', messageId })}
                 />
             </React.Suspense>
-            <React.Suspense fallback={null}>
-                <ApprovalInbox
-                    isVisible={isApprovalInboxVisible}
-                    onClose={() => setIsApprovalInboxVisible(false)}
-                    items={approvalItems}
-                    onAllow={approvalHandlers.allow}
-                    onDeny={approvalHandlers.deny}
-                    onAlways={approvalHandlers.always}
-                    onNever={approvalHandlers.never}
-                    onOpen={(item) => {
-                        setIsApprovalInboxVisible(false);
-                        // The dock owns the only transcript scroller, and it
-                        // registers its bridge on mount — so from another
-                        // surface this can honestly do one thing: land the
-                        // user on Trade. Calling the bridge there would be a
-                        // null deref that silently scrolls nothing.
-                        const dockIsMounted = surface === 'trade';
-                        setSurface('trade');
-                        if (dockIsMounted) handleLocateMessage(item.messageId);
-                    }}
-                />
-            </React.Suspense>
             {/* Background-jobs drawer — visible autonomy. Stage 3 widened it
                 into the Activity drawer: the rail's automations section lives
                 here now, one drawer for everything the app does on its own. */}
@@ -2588,8 +2594,8 @@ const App: React.FC = () => {
                     surface={surface}
                     onSelectSurface={handleSurfaceSelect}
                     badges={navBadges}
-                    onOpenApprovals={() => setIsApprovalInboxVisible(true)}
-                    approvalsCount={approvalItems.length}
+                    onOpenApprovals={openApprovalsInLearn}
+                    approvalsCount={approvalsWaiting}
                     onSwitchUser={handleSwitchUser}
                     onOpenSettings={() => setIsSettingsMenuVisible(true)}
                 />
@@ -2633,7 +2639,7 @@ const App: React.FC = () => {
                                     botThreadRows={tradeBotThread}
                                     onBotTurnCommit={commitDockBotTurn}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
-                                    onOpenCoach={openCoachInLearn}
+                                    onOpenCoach={openApprovalsInLearn}
                                     coachCount={coachCount}
                                     surfaceEnterFrom={surfaceEnterFrom}
                                     verdict={deskSceneMessage?.analysis}
@@ -2706,6 +2712,7 @@ const App: React.FC = () => {
                                     initialTab={learnTab}
                                     onInitialTabConsumed={learnTabConsumed}
                                     renderCoach={renderCoachInbox}
+                                    renderActionApprovals={renderActionApprovals}
                                     coachCount={coachCount}
                                     reviewSummary={finalTradeSummary}
                                     reviewLoading={isLoading}
@@ -2744,7 +2751,7 @@ const App: React.FC = () => {
                                     onDeleteBot={deleteBot}
                                     onRenameBot={(botId, name) => updateBot(botId, { name })}
                                     onEditSeatOverrides={setSeatOverridesBot}
-                                    onOpenCoach={openCoachInLearn}
+                                    onOpenCoach={openApprovalsInLearn}
                                     onDeleteGroup={deleteGroup}
                                     onRetryPostMortem={handleRetryPostMortem}
                                     onEditGroup={groupId => {

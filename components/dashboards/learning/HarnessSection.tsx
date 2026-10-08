@@ -8,6 +8,10 @@ import { REGIMES } from './shared';
 interface HarnessSectionProps {
     /** Closed trades inside the active time window. */
     closedWindowed: LoggedTrade[];
+    /** Every closed trade, windowed or not. The caption under the window chips
+     *  reads "N of M" so a filter that changes nothing says so out loud instead
+     *  of leaving the trader to wonder whether the click landed. */
+    totalClosed: number;
     windowDays: 0 | 30 | 90;
     onWindowDaysChange: (days: 0 | 30 | 90) => void;
 }
@@ -16,7 +20,7 @@ interface HarnessSectionProps {
  * Harness accuracy (②): the similar-setup pool itself — pool stats,
  * drawdown, and the per-model × regime leaderboard.
  */
-export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, windowDays, onWindowDaysChange }) => {
+export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, totalClosed, windowDays, onWindowDaysChange }) => {
     const evidenceQuality = useMemo(() => computeEvidenceQualityStats(closedWindowed), [closedWindowed]);
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
@@ -120,7 +124,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
                             type="button"
                             aria-pressed={windowDays === d}
                             onClick={() => onWindowDaysChange(d)}
-                            className={`px-2 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
+                            className={`min-h-6 px-2.5 py-1 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                 windowDays === d ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
@@ -129,6 +133,10 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
                     ))}
                 </div>
             </div>
+            <p className="text-ui-dense text-zinc-600" data-testid="harness-window-note">
+                {closedWindowed.length} of {totalClosed} closed trades in view ·{' '}
+                {windowDays === 0 ? 'the whole journal' : `the last ${windowDays} days`}
+            </p>
 
             {/* Pool stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

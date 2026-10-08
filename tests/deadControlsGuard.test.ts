@@ -162,11 +162,11 @@ describe('the Coach inbox has one host', () => {
     it('Agents hops to the Coach instead of hosting a pane for it', () => {
         expect(agentsSrc).not.toMatch(/renderCoach\b/);
         expect(agentsSrc).toMatch(/onOpenCoach/);
-        expect(appSrc).toMatch(/onOpenCoach=\{openCoachInLearn\}/);
+        expect(appSrc).toMatch(/onOpenCoach=\{openApprovalsInLearn\}/);
     });
 
     it('Learn mounts the one CoachThreadPanel', () => {
-        expect(learnSrc).toMatch(/id: 'coach', label: 'Skill approvals'/);
+        expect(learnSrc).toMatch(/id: 'coach', label: 'Approvals'/);
         expect(learnSrc).toMatch(/renderCoach\(\)/);
         const coachMounts = (appSrc.match(/<CoachThreadPanel\b/g) ?? []).length;
         expect(coachMounts).toBe(1);

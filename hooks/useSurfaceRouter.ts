@@ -37,8 +37,6 @@ export interface SurfaceRouterOptions {
     setIsLiveMarketVisible: (visible: boolean) => void;
     isWatchListVisible: boolean;
     setIsWatchListVisible: (visible: boolean) => void;
-    isApprovalInboxVisible: boolean;
-    setIsApprovalInboxVisible: (visible: boolean) => void;
     /** The #/journal/learning bookmark used to land on the Learn surface. */
     setLearnTab: (tab: LearnTab | null) => void;
 }
@@ -60,7 +58,6 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
         isWatchListVisible, setIsWatchListVisible,
-        isApprovalInboxVisible, setIsApprovalInboxVisible,
         setLearnTab,
     } = opts;
 
@@ -85,9 +82,8 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
         setIsSettingsMenuVisible(false);
         setIsLiveMarketVisible(false);
         setIsWatchListVisible(false);
-        setIsApprovalInboxVisible(false);
         setSurface('journal');
-    }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible, setIsApprovalInboxVisible]);
+    }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
 
     /** Which edge the NEXT surface should appear to arrive from, for the
      *  Chat ⇄ Chart AI hop. Set on that hop only and consumed once — a stale
@@ -163,7 +159,7 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
             ? { view: 'settings' as const }
             : isLiveMarketVisible
                 ? { view: 'market' as const }
-                : isWatchListVisible || isApprovalInboxVisible
+                : isWatchListVisible
                     ? { view: 'watch' as const }
                     : surface === 'journal'
                         ? { view: 'journal' as const, tab: journalTab }
@@ -173,10 +169,7 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
         if (window.location.hash !== next) {
             history.replaceState(null, '', next);
         }
-        // isApprovalInboxVisible is READ by the route computation (watch
-        // precedence) — it was missing from the deps, so opening the inbox
-        // left a stale URL.
-    }, [surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible]);
+    }, [surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible]);
 
     return {
         surface, setSurface,
