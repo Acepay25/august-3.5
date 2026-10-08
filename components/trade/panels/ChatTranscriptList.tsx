@@ -122,7 +122,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                     {e.role === 'user' ? (
                         <div className="flex flex-col items-end gap-1">
                             {e.image && (
-                                <div className="group/msg flex flex-col items-end gap-0.5">
+                                <div className="flex flex-col items-end gap-0.5">
                                     <img src={e.image} alt="attached" className="max-h-40 rounded-lg border border-white/10 object-contain" />
                                     {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} />}
                                 </div>
@@ -139,7 +139,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 </div>
                             )}
                             {e.text && e.text !== '(chart screenshot)' && (
-                                <div className="group/msg flex max-w-[85%] items-start gap-1">
+                                <div className="flex max-w-[85%] items-start gap-1">
                                     {!answerStreaming && <CopyChip text={e.text} className="mt-2" />}
                                     {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} className="mt-2" />}
                                     <p className="min-w-0 rounded-bubble bg-zinc-800 px-3 py-2 text-ui-sm leading-5 text-zinc-100">{e.text}</p>
@@ -153,7 +153,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                             <span>{e.tools[0] ?? 'Harness event'}</span>
                         </p>
                     ) : (
-                        <div className="group/msg space-y-1">
+                        <div className="space-y-1">
                             {e.speaker && (
                                 <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatSeatLabel(e.speaker.split(':')[1] ?? e.speaker)}</p>
                             )}
