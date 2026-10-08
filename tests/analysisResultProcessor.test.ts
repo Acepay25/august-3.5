@@ -67,6 +67,8 @@ const mocks = vi.hoisted(() => ({
         // about approval or enforcement, it must not silently change them.
         starterLibraryEnabled: true,
         skillEnforcementEnabled: true,
+        // Focus is the shipped density; this suite does not render a surface.
+        viewDensity: 'focus' as const,
     })),
     getSessionGuardConfig: vi.fn(() => ({
         dailyLossLimitPct: 0.02,

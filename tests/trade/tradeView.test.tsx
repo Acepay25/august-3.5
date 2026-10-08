@@ -96,6 +96,7 @@ import * as chatStore from '../../services/trade/chatStore';
 import { getActiveUsername } from '../../utils/activeUser';
 import { streamChatWithDeskTools } from '../../services/analysis/DeskToolsService';
 import type { ProviderConfig } from '../../types/provider';
+import { saveHarnessSettings } from '../../utils/harnessSettings';
 
 const providers = [] as never[];
 
@@ -113,7 +114,21 @@ const LIVE = {
 const POLLING = { markIndex: null, ticker: null, depth: null, kline: null, status: 'polling' };
 
 describe('TradeView', () => {
+    it('Focus rests the read-only market stats and keeps the funding countdown', async () => {
+        saveHarnessSettings({ viewDensity: 'focus' });
+        render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
+        await screen.findByTestId('trade-chat-panel');
+        expect(screen.queryByText('Oracle')).toBeNull();
+        expect(screen.queryByText('Open Interest')).toBeNull();
+        // Funding is not decor: it carries a countdown and a depleting-window
+        // bar, so the one number with a deadline stays on screen in Focus.
+        expect(screen.getByText(/Funding · next in/)).toBeTruthy();
+    });
     it('mounts the stats strip, chart shell, book and chat dock', async () => {
+        // Detail, named rather than inherited: the read-only market context
+        // belongs to that preset now, and a test that reads a label must say
+        // which view it is asserting under.
+        saveHarnessSettings({ viewDensity: 'detail' });
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
         expect(await screen.findByTestId('trade-view')).toBeTruthy();
         expect(screen.getByLabelText('Trade symbol')).toBeTruthy();
