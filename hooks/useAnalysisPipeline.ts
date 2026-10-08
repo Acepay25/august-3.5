@@ -74,7 +74,6 @@ import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
-import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { threadForProvider } from '../utils/agentThreads';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
@@ -1282,7 +1281,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 detectedLearningCoin,
                 pendingDirection,
                 pendingPattern,
-                botMemoryContext,
                 memoryFilesContext,
                 moderatorMemoryContext,
                 rebuttalMemoryContext,
@@ -1291,7 +1289,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 regimeWeightingContext,
                 lossPrimingRows,
                 asOfMs: memoryAsOfMs,
-            } = assemblePipelineMemoryContext(
+            } = await assemblePipelineMemoryContext(
                 effectiveInput,
                 loggedTrades,
                 freshHybridData ?? null,

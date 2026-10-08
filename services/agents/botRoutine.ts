@@ -24,6 +24,7 @@ import type { ProviderConfig } from '../../types/provider';
 import type { Message } from '../../types';
 import { MessageRole } from '../../types/enums';
 import { threadForProvider } from '../../utils/agentThreads';
+import { isProviderReady } from '../../utils/providerUtils';
 import {
     DM_MAX_HOPS,
     buildBotSystemPrompt,
@@ -62,8 +63,11 @@ export const botRoutineProvider = (
 ): { bot: AgentBot; provider: ProviderConfig } | null => {
     const bot = findBotById(bots, botId);
     if (!bot) return null;
+    // P0-3: one readiness predicate everywhere. The inline
+    // `apiKey.trim().length > 0` clause skipped keyless local providers
+    // (Ollama/LM Studio), so routines skipped while DMs and rooms ran.
     const provider = providerConfigs.find(
-        c => c.id === bot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(bot.modelId),
+        c => c.id === bot.providerId && isProviderReady(c) && c.models.includes(bot.modelId),
     );
     return provider ? { bot, provider } : null;
 };
@@ -103,7 +107,7 @@ export const runBotRoutineTurn = async (
     for (const mark of marks) {
         const v = validateDM(deps.bots, bot, mark.handle, mark.text, BOT_ROUTINE_HOP,
             (pid, mid) => !!deps.providerConfigs.find(
-                c => c.id === pid && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(mid),
+                c => c.id === pid && isProviderReady(c) && c.models.includes(mid),
             ));
         if (v.ok) dmEnvelopes.push(v.envelope);
     }

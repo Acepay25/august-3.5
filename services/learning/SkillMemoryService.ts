@@ -22,6 +22,7 @@ import {
     updateMemoryFileUnlocked,
     withNotebookWriteLock,
 } from './MemoryFilesService';
+import { BotRegistry } from '../bots/BotRegistry';
 import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
@@ -42,7 +43,13 @@ import { isStaleByRegime } from '../../utils/regimeSentinel';
 import { validateIfThen, coveredByLiveSkill as coveredByLiveSkillWith, type CoverReader } from './skillClauseBar';
 import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
-import { listSkillDrafts } from '../../utils/skillDrafts';
+import {
+    listSkillDrafts,
+    shouldAttemptWorthGate,
+    recordWorthGateAttempt,
+    readWorthGateAttempt,
+    clearWorthGateAttempt,
+} from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { familiesRelate } from '../../utils/patternMatch';
 import { recordMemoryInjection, skillAdherenceForRun } from './MemoryInjectionService';
@@ -2328,6 +2335,11 @@ const ingestCraftedSkillUnlocked = async (
     trade: LoggedTrade,
     crafted: CraftedSkill,
     username: string,
+    /** P0-1: who approved this write. A human pressing Save on a post-mortem
+     *  draft IS consent — without this the trade-backed skill fails
+     *  `isApprovedSkill` and silently never injects. Auto-ingest callers omit
+     *  it and stay fail-closed, as before. */
+    approvedBy?: 'human',
 ): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
@@ -2391,6 +2403,10 @@ const ingestCraftedSkillUnlocked = async (
         losses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
         consecutiveLosses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
         tradeIds: [trade.id],
+        // P0-1: a human-approved Save carries its consent into the row so
+        // `isApprovedSkill` sees it. Auto-ingest (no approvedBy) keeps the
+        // fail-closed behavior — status/evidence alone are not consent.
+        ...(approvedBy ? { approvedBy, approvedAt: new Date().toISOString() } : {}),
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
         predicate: sanitizePredicate(crafted.predicate),
@@ -2411,8 +2427,9 @@ export const ingestCraftedSkill = (
     trade: LoggedTrade,
     crafted: CraftedSkill,
     username: string,
+    approvedBy?: 'human',
 ): Promise<void> =>
-    withNotebookWriteLock(() => ingestCraftedSkillUnlocked(trade, crafted, username));
+    withNotebookWriteLock(() => ingestCraftedSkillUnlocked(trade, crafted, username, approvedBy));
 
 /**
  * Ingest a user-approved skill draft that has NO closed trade behind it
@@ -3140,7 +3157,22 @@ export const applyRescopeProposal = async (
 /**
  * Closed-loop write: diary + mistakes + skill scores. Safe to call from
  * both trade-log and post-mortem (diary entries are de-duplicated by id).
+ *
+ * P0-2: idempotent by (user, trade id). The log path and the post-mortem
+ * path both call this for the same settled trade; without the guard the
+ * second call re-fired the worth-gate LLM, the eval window, and the matrix
+ * tally. Keyed on the USER as well as the id — two profiles legitimately
+ * hold trades with the same id, and a bare id would let one profile's
+ * settlement silently swallow the other's.
  */
+const settledTradeIds = new Set<string>();
+
+const settledKey = (username: string, tradeId: string): string => `${username}:${tradeId}`;
+
+/** Test hook — the guard is session state, so a suite that reuses one trade
+ *  id across cases must clear it (same pattern as supervisorStore). */
+export const __resetSettledTradesForTests = (): void => { settledTradeIds.clear(); };
+
 export const syncClosedTradeToNotebook = async (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
@@ -3151,6 +3183,17 @@ export const syncClosedTradeToNotebook = async (
      *  Omitted on the chart-AI path, which has no single authoring bot. */
     origin?: { botId: string; botName?: string },
 ): Promise<void> => {
+    // P0-2: mark BEFORE awaiting — a throw halfway must not make the next
+    // caller re-fold the same trade (same discipline as botLearning's fold).
+    const key = settledKey(username, trade.id);
+    if (settledTradeIds.has(key)) return;
+    settledTradeIds.add(key);
+    // Session-bounded, like botLearning's foldedTrades: a reload re-hydrates
+    // per-store guards (matrix tradeIds, evidence tradeIds) from disk.
+    if (settledTradeIds.size > 2000) {
+        const oldest = [...settledTradeIds].slice(0, settledTradeIds.size - 2000);
+        for (const id of oldest) settledTradeIds.delete(id);
+    }
     await appendDiaryEntry(trade, username);
     await syncRecurringMistakes(allTrades, username);
     await applySkillEvidence(trade, username, allTrades);
@@ -3187,19 +3230,35 @@ export const syncClosedTradeToNotebook = async (
                 return m ? skillMatchesSetup(m, setup) : false;
             });
             if (!hasMatch) {
-                const config = await resolveMemoryConfig(username);
+                // P1-4: the worth gate is a LIVE LLM call, so a cluster that
+                // cannot be judged must not re-bill on every close. This
+                // throttle only suppresses a retry over evidence the gate has
+                // ALREADY seen — a new trade in the cluster (or the human
+                // "Try now") re-opens it.
+                const clusterIds = cluster.map(t => t.id);
+                const config = shouldAttemptWorthGate(key, clusterIds, username)
+                    ? await resolveMemoryConfig(username)
+                    : null;
                 if (config) {
+                    // P1-4: stamp the attempt BEFORE the call. A gate that
+                    // throws still consumed a provider round trip, and stamping
+                    // after would let a failing cluster retry on every close.
+                    recordWorthGateAttempt(key, clusterIds, username);
                     const { getBotMemoryContext } = await import('../bots/BotMemoryService');
                     // The ACTING bot's memory when a bot authored this trade.
-                    // The bots[0] fallback below is a guess and only stands for
-                    // the chart-AI path, where no single bot owns the trade —
-                    // reading the first roster entry's notes for a skill that
+                    // The roster-head fallback below is a guess and only stands
+                    // for the chart-AI path, where no single bot owns the trade
+                    // — reading the first roster entry's notes for a skill that
                     // another bot earned judged it against the wrong teammate.
-                    const ctxBotId = origin?.botId || (() => {
+                    const ctxBotId = origin?.botId ?? await (async () => {
+                        // P0-3: the roster lives in Preferences via BotRegistry.
+                        // This used to read `localStorage.getItem('bots_v1_…')`
+                        // directly, which is a DIFFERENT store from Capacitor
+                        // Preferences on native — so on a device the read
+                        // returned nothing and the guess silently degraded.
                         try {
-                            const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${username}`) : null;
-                            const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string }> } : null;
-                            return data?.bots?.[0]?.id || trade.id;
+                            const bots = await BotRegistry.list();
+                            return bots[0]?.id || trade.id;
                         } catch { return trade.id; }
                     })();
                     // The default per-agent allowance: this judges the skill
@@ -3209,6 +3268,9 @@ export const syncClosedTradeToNotebook = async (
                     const botCtx = getBotMemoryContext(ctxBotId, setup);
                     const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
                     if (decision) {
+                        // The gate reached a verdict — the throttle has done its
+                        // job and must not outlive the question it was pacing.
+                        clearWorthGateAttempt(key, username);
                         const judgedClause = {
                             ifCondition: decision.ifCondition,
                             thenAction: decision.thenAction,
@@ -3255,11 +3317,15 @@ export const syncClosedTradeToNotebook = async (
                         }
                         // 'skip' stays skip — the gate said no.
                     }
+                } else if (readWorthGateAttempt(key, username)) {
+                    console.warn('[SkillMemory] Skill worth-gate throttled — no new evidence in this cluster since the last attempt.');
                 } else {
                     // No ready provider = the gate cannot run. Fail CLOSED:
                     // an unjudged skill is exactly what the gate exists to
-                    // prevent. The cluster stays eligible — the next closed
-                    // trade in it retries the gate once a provider is up.
+                    // prevent. The cluster stays eligible, but the attempt
+                    // above is already on record — so the retry happens when
+                    // the cluster gains a trade the gate has not judged, not
+                    // once per close.
                     console.warn('[SkillMemory] Skill worth-gate skipped (no ready provider) — skill creation deferred.');
                 }
             }

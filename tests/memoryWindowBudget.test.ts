@@ -152,7 +152,7 @@ describe('context-window-scaled memory budget', () => {
         const spy = vi.mocked(getMemoryFilesContext);
         spy.mockClear();
 
-        assemblePipelineMemoryContext('BTCUSDT Short Family A setup watch', [], null, undefined, undefined, 8_192);
+        await assemblePipelineMemoryContext('BTCUSDT Short Family A setup watch', [], null, undefined, undefined, 8_192);
 
         // Opening + verdict + rebuttal — all three notebook slices.
         expect(spy.mock.calls).toHaveLength(3);

@@ -62,7 +62,13 @@ export const approveSkillDraft = async (
     const trade = trades.find(t => t.id === draft.tradeId);
     let declined: 'no-skills-folder' | null = null;
     try {
-        if (trade) await ingestCraftedSkill(trade, draft.crafted, user);
+        // P0-1: a human pressing Save IS the approval fact, regardless of
+        // which ingest path carries the evidence. The trade-backed writer
+        // previously built its SkillMeta with no `approvedBy`/`prior`, so a
+        // post-mortem Save produced a skill that failed `isApprovedSkill`
+        // and silently never injected — while the card read "Active".
+        // Both branches now stamp 'human' so the gate sees the same fact.
+        if (trade) await ingestCraftedSkill(trade, draft.crafted, user, 'human');
         else {
             const r = await ingestCraftedSkillFromDraft(draft.crafted, draft.coin, user, undefined, 'human');
             // The ingest now says WHY it wrote nothing. The read-back below is

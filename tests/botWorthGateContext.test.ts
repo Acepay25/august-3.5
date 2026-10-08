@@ -23,10 +23,25 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
     removePreference: vi.fn(async (key: string) => { delete store[key]; }),
 }));
 
+// P0-3: the roster moved to Preferences via BotRegistry; the raw localStorage
+// read below only survives for pre-migration installs and is NEVER consulted
+// on native (Capacitor Preferences and localStorage are two different places
+// there).
+const { mockBots } = vi.hoisted(() => ({ mockBots: [] as Array<{ id: string }> }));
+vi.mock('../services/bots/BotRegistry', () => ({
+    BotRegistry: {
+        list: vi.fn(async () => mockBots),
+    },
+}));
+
 const { ctxCalls, worthCalls } = vi.hoisted(() => ({
     ctxCalls: [] as string[],
     worthCalls: [] as string[],
 }));
+
+/** P1-4: how many times the gate was actually INVOKED, so the throttle can be
+ *  asserted end-to-end (the context recorder above only proves it ran once). */
+const { gateRuns } = vi.hoisted(() => ({ gateRuns: { n: 0 } }));
 
 vi.mock('../services/bots/BotMemoryService', () => ({
     getBotMemoryContext: (botId: string) => { ctxCalls.push(botId); return `MEMORY OF ${botId}`; },
@@ -49,6 +64,7 @@ vi.mock('../services/learning/MemoryModelService', () => ({
 
 vi.mock('../services/learning/skillWorthGate', () => ({
     evaluateSkillWorth: async (_c: unknown, botContext: string) => {
+        gateRuns.n += 1;
         worthCalls.push(botContext);
         return null; // null ⇒ the deterministic fallback; this test only reads the context
     },
@@ -57,7 +73,7 @@ vi.mock('../services/learning/skillWorthGate', () => ({
 }));
 
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
-import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
+import { syncClosedTradeToNotebook, __resetSettledTradesForTests } from '../services/learning/SkillMemoryService';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
 import { TradeOutcome } from '../types';
 import type { LoggedTrade, TradeAnalysis } from '../types';
@@ -81,6 +97,9 @@ beforeEach(async () => {
     store = {};
     ctxCalls.length = 0;
     worthCalls.length = 0;
+    gateRuns.n = 0;
+    mockBots.length = 0;
+    __resetSettledTradesForTests();
     localStorage.clear();
     localStorage.setItem(LAST_ACTIVE_USER_KEY, USER);
     await initMemoryFiles(USER);
@@ -88,9 +107,7 @@ beforeEach(async () => {
 
 describe('syncClosedTradeToNotebook worth-gate context', () => {
     it("reads the acting bot's memory when a bot authored the trade", async () => {
-        localStorage.setItem(`bots_v1_${USER}`, JSON.stringify({
-            bots: [{ id: 'bot-first' }, { id: 'bot-acting' }],
-        }));
+        mockBots.push({ id: 'bot-first' }, { id: 'bot-acting' });
         await syncClosedTradeToNotebook(cluster[2], cluster, USER, { botId: 'bot-acting', botName: 'Acting' });
         expect(ctxCalls).toContain('bot-acting');
         expect(ctxCalls).not.toContain('bot-first');
@@ -98,10 +115,31 @@ describe('syncClosedTradeToNotebook worth-gate context', () => {
     });
 
     it('falls back to the roster head only when nobody authored it', async () => {
-        localStorage.setItem(`bots_v1_${USER}`, JSON.stringify({
-            bots: [{ id: 'bot-first' }, { id: 'bot-acting' }],
-        }));
+        mockBots.push({ id: 'bot-first' }, { id: 'bot-acting' });
         await syncClosedTradeToNotebook(cluster[2], cluster, USER);
         expect(ctxCalls).toContain('bot-first');
+    });
+
+    it('P1-4: throttles a re-attempt over evidence the gate already judged', async () => {
+        // The one-LLM-per-close bug: this cluster keeps producing trades and
+        // the gate cannot reach a verdict (evaluateSkillWorth returns null), so
+        // before the ledger every close re-billed the provider.
+        mockBots.push({ id: 'bot-first' });
+        await syncClosedTradeToNotebook(cluster[2], cluster, USER);
+        expect(gateRuns.n).toBe(1);
+
+        // Same cluster membership as the gate's last view. The settle guard
+        // would stop this anyway, so clear it — this asserts the GATE throttle,
+        // not the settle guard.
+        __resetSettledTradesForTests();
+        await syncClosedTradeToNotebook(cluster[2], cluster, USER);
+        expect(gateRuns.n).toBe(1); // ← the throttle fired
+
+        // A new trade in the cluster re-opens it: the gate has not judged this
+        // one, so the retry is real work, not a repeat.
+        __resetSettledTradesForTests();
+        const fresh = { ...cluster[0], id: 'g-new-1' };
+        await syncClosedTradeToNotebook(fresh, [...cluster, fresh], USER);
+        expect(gateRuns.n).toBe(2);
     });
 });

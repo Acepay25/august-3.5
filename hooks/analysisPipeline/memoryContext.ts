@@ -16,11 +16,10 @@ import { listRetrievedMemorySources, type MemoryRetrievalQuery, type RetrievedMe
 import { getBotMemoryContext } from '../../services/bots/BotMemoryService';
 import { BOT_MEMORY_TOTAL_CHAR_BUDGET } from '../../services/bots/botMemoryBudget';
 import { clipNote } from '../../utils/harnessMarks';
-import type { BotMemoryScope } from '../../types/bot';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../../services/learning/SetupMemoryService';
 import type { HybridDataPacket } from '../../services/analysis/HybridIntelligenceService';
-import { getActiveUsername } from '../../utils/activeUser';
 import type { LoggedTrade } from '../../types';
+import { BotRegistry } from '../../services/bots/BotRegistry';
 
 // Merged cap across ALL bots' memory context — the notebook
 // opening budget is 900 chars; bot memory should not dwarf it. The number
@@ -64,7 +63,7 @@ export interface PipelineMemoryContext {
     asOfMs?: number;
 }
 
-export const assemblePipelineMemoryContext = (
+export const assemblePipelineMemoryContext = async (
     effectiveInput: string,
     loggedTrades: LoggedTrade[],
     freshHybridData: HybridDataPacket | null | undefined,
@@ -76,7 +75,7 @@ export const assemblePipelineMemoryContext = (
     /** Model context window (tokens) — threads to the notebook slice's stage
      *  budgets. Omitted ⇒ default window, unchanged. */
     contextWindowTokens?: number,
-): PipelineMemoryContext => {
+): Promise<PipelineMemoryContext> => {
     const detectedLearningCoin = mineCoinFromPrompt(effectiveInput);
     const pendingDirection = mineDirectionFromPrompt(effectiveInput);
     const pendingPattern = minePatternFromPrompt(effectiveInput);
@@ -90,12 +89,14 @@ export const assemblePipelineMemoryContext = (
         pattern: pendingPattern,
         regime: freshHybridData?.regime?.regime,
     };
-    const botMemoryContext = (() => {
+    // P0-3: the roster moved to Preferences via BotRegistry; the raw
+    // localStorage read below only survives for pre-migration installs and is
+    // NEVER consulted on native (Capacitor Preferences and localStorage are
+    // two different places there).
+    const botMemoryContext = await (async () => {
         try {
-            const userKey = getActiveUsername();
-            const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
-            const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: BotMemoryScope }> } : null;
-            if (!data?.bots?.length) return '';
+            const allBots = await BotRegistry.list();
+            if (!allBots.length) return '';
             // The coin universe the note filter would otherwise guess at: a
             // lesson about a coin THIS TRADER keeps a journal for is another
             // coin's lesson, whatever the baseline majors list says.
@@ -110,7 +111,7 @@ export const assemblePipelineMemoryContext = (
             // nothing it learns is retrieved by others" — and this merge read
             // every bot while using the field only to size bytes, so an
             // isolated agent's private notes went to every seat.
-            const shareable = data.bots.filter(b => b?.id && (b.memoryScope ?? 'global') === 'global');
+            const shareable = allBots.filter(b => b?.id && (b.memoryScope ?? 'global') === 'global');
             if (shareable.length === 0) return '';
             // Divide the allowance instead of letting the first two bots spend
             // it: each got a fixed 900/1200 before, so with five bots the last

@@ -82,6 +82,41 @@ describe('strategyRegimeMatrix — accumulation', () => {
     await hydrateStrategyRegimeMatrix(USER);
     expect(familyRegimeEdge('breakout', 'compression')?.samples).toBe(1);
   });
+
+  it('P0-2: counts a re-settled trade once, not twice', async () => {
+    // The production shape: useTradeLogging settles the trade, then the
+    // post-mortem settles it AGAIN. Without the tradeIds guard the second
+    // call moved the tally twice, so MATRIX_MIN_SAMPLES (8) was reached on
+    // half the real evidence and familyEdgeFactor flipped early.
+    const settled = { ...trade(TradeOutcome.WIN, 'trend_following', 'trending'), id: 'settled-once' };
+    await recordSettledTradeForMatrix(settled, USER);
+    await recordSettledTradeForMatrix(settled, USER);
+    expect(familyRegimeEdge('trend_following', 'trending')).toEqual({ winRate: 1, samples: 1 });
+  });
+
+  it('P0-2: survives a reload — the guard is persisted with the tally', async () => {
+    const settled = { ...trade(TradeOutcome.LOSS, 'mean_reversion', 'ranging'), id: 'persisted-guard' };
+    await recordSettledTradeForMatrix(settled, USER);
+    // A fresh hydrate drops the in-memory cache; the id must come back off
+    // disk or a reload would let the same trade be counted a second time.
+    await hydrateStrategyRegimeMatrix(USER);
+    await recordSettledTradeForMatrix(settled, USER);
+    expect(familyRegimeEdge('mean_reversion', 'ranging')?.samples).toBe(1);
+  });
+
+  it('P0-2: concurrent settles all land (the RMW is serialized)', async () => {
+    // recordSettledTradeForMatrix is called fire-and-forget from the settle
+    // path. Unserialized, each caller read the pre-write cell and the last
+    // write won, silently dropping the rest.
+    await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        recordSettledTradeForMatrix(
+          { ...trade(TradeOutcome.WIN, 'breakout', 'compression'), id: `concurrent-${i}` },
+          USER,
+        )),
+    );
+    expect(familyRegimeEdge('breakout', 'compression')?.samples).toBe(5);
+  });
 });
 
 describe('strategyRegimeMatrix — ranking factor', () => {

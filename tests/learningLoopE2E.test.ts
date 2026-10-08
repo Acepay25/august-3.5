@@ -32,6 +32,17 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
     removePreference: vi.fn(async (key: string) => { delete store[key]; }),
 }));
 
+// P0-3: the roster moved to Preferences via BotRegistry; the raw localStorage
+// read below only survives for pre-migration installs and is NEVER consulted
+// on native (Capacitor Preferences and localStorage are two different places
+// there).
+const { mockBots } = vi.hoisted(() => ({ mockBots: [] as Array<{ id: string }> }));
+vi.mock('../services/bots/BotRegistry', () => ({
+    BotRegistry: {
+        list: vi.fn(async () => mockBots),
+    },
+}));
+
 // No memory model configured: refinement/derivative LLM phases skip and the
 // suite exercises the real bookkeeping paths instead.
 vi.mock('../services/learning/MemoryModelService', () => ({
@@ -142,6 +153,7 @@ const WORTH_CREATE = {
 
 beforeEach(async () => {
     store = {};
+    mockBots.length = 0;
     supStore.__resetForTests();
     localStorage.clear();
     // Retrieval records injections under getActiveUsername() — the same user
@@ -289,14 +301,14 @@ approvedBy: grandfathered
     });
 
     it('a bot lesson reaches the NEXT chart analysis for the same coin', async () => {
-        localStorage.setItem(`bots_v1_${USER}`, JSON.stringify({ bots: [{ id: 'bot-1', name: 'Macro' }] }));
+        mockBots.push({ id: 'bot-1' });
         await recordBotTurnOutcome(
             { id: 'bot-1', name: 'Macro', providerId: 'prov-e2e' },
             'BTC short?',
             'Verdict: avoid.\nLesson: BTC shorting a failed sweep is the wrong side — wait for the reclaim close.',
             { username: USER, trades: [] },
         );
-        const ctx = assemblePipelineMemoryContext('BTC short family a', [], null, RUN);
+        const ctx = await assemblePipelineMemoryContext('BTC short family a', [], null, RUN);
         expect(ctx.memoryFilesContext).toContain('failed sweep');
     });
 
