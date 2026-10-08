@@ -46,19 +46,26 @@ const mount = (): void => {
 };
 
 describe('Learn surface', () => {
-    it('offers the loop in its own order: Queue, Memory, Health — and no second Studio', () => {
+    it('offers one inbox, then where it lives, then whether it is sound', () => {
         mount();
-        for (const tab of ['queue', 'memory', 'health']) {
+        for (const tab of ['coach', 'memory', 'health']) {
             expect(screen.getByTestId(`learn-tab-${tab}`)).toBeTruthy();
         }
         // StrategyStudio is the one owner of the playbook table and has its own
         // surface (Alt+3). Mounting it here too gave it a second, half-wired
         // copy: no onClose, so "Try in chat" was dead on this tab.
         expect(screen.queryByTestId('learn-tab-skills')).toBeNull();
+        // The inbox leads and is the default, so what a trader sees on arrival is
+        // the decisions — the supervisor's log is telemetry and lives on Health.
+        expect(screen.getByTestId('learn-view').textContent).toContain('amendment');
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
         expect(screen.getByTestId('learn-view').textContent).toContain('Skill supervisor');
     });
 
-    it('the Queue tab shows what the model is deciding and what is waiting', async () => {
+    // The supervisor's running log sits on Health, NOT beside the drafts: it is
+    // what the loop is doing, not a decision waiting on you, and next to the
+    // inbox it made the queue read like a dashboard.
+    it('Health shows what the model is deciding and how many are waiting', async () => {
         queueSkillDraft({
             tradeId: 'q-1', coin: 'BTCUSDT',
             crafted: {
@@ -71,6 +78,7 @@ describe('Learn surface', () => {
         } as never, USER);
         supervisorStore.setPending(1);
         mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => {
             expect(screen.getByTestId('supervisor-status').textContent).toContain('1 waiting');
         });
@@ -115,19 +123,19 @@ const DeepLinkHarness: React.FC = () => {
 };
 
 const currentTab = (): string =>
-    ['queue', 'memory', 'health']
+    ['coach', 'memory', 'health']
         .find(t => screen.getByTestId(`learn-tab-${t}`).getAttribute('aria-current') === 'true') ?? 'none';
 
 describe('Learn deep link', () => {
-    beforeEach(() => { localStorage.setItem('learn_tab_v1', 'queue'); });
+    beforeEach(() => { localStorage.setItem('learn_tab_v1', 'coach'); });
 
     it('applies the link, and applies it again on a second click for the same tab', async () => {
         render(<DeepLinkHarness />);
         fireEvent.click(screen.getByTestId('link-health'));
         await waitFor(() => expect(currentTab()).toBe('health'));
 
-        fireEvent.click(screen.getByTestId('learn-tab-queue'));
-        await waitFor(() => expect(currentTab()).toBe('queue'));
+        fireEvent.click(screen.getByTestId('learn-tab-coach'));
+        await waitFor(() => expect(currentTab()).toBe('coach'));
 
         // The tab value never changed between the two clicks, so an effect that
         // value-diffs its prop stays put here.
@@ -140,10 +148,10 @@ describe('Learn deep link', () => {
     it('does not re-apply a consumed link when Learn is opened again', () => {
         render(<DeepLinkHarness />);
         fireEvent.click(screen.getByTestId('link-health'));
-        fireEvent.click(screen.getByTestId('learn-tab-queue'));
+        fireEvent.click(screen.getByTestId('learn-tab-coach'));
         fireEvent.click(screen.getByTestId('toggle-mount'));  // leave the surface
         fireEvent.click(screen.getByTestId('toggle-mount'));  // come back
-        expect(currentTab()).toBe('queue');
+        expect(currentTab()).toBe('coach');
     });
 });
 
@@ -187,16 +195,19 @@ const mountCoach = (coachCount = 0): void => {
     );
 };
 
-describe('The Coach tab (merged from the dock)', () => {
-    it('shows no Coach tab when no coach panel was handed in', () => {
+describe('The Approvals tab', () => {
+    // It is no longer conditional on a panel being handed in: the tab holds the
+    // autopilot's permission requests and the memory amendments too, so a
+    // surface that hides its own inbox when App renders nothing is worse than
+    // one that shows an empty list.
+    it('exists with or without the coach panel handed in', () => {
         mount();
-        expect(screen.queryByTestId('learn-tab-coach')).toBeNull();
+        expect(screen.getByTestId('learn-tab-coach')).toBeTruthy();
+        expect(screen.getByTestId('learn-tab-coach').getAttribute('aria-current')).toBe('true');
     });
 
-    it('switches to the panel App hands in', async () => {
+    it('is the default tab and renders the panel App hands in', async () => {
         mountCoach();
-        expect(screen.queryByTestId('fake-coach-pane')).toBeNull();
-        fireEvent.click(screen.getByTestId('learn-tab-coach'));
         await waitFor(() => expect(screen.getByTestId('fake-coach-pane')).toBeTruthy());
     });
 
@@ -209,12 +220,17 @@ describe('The Coach tab (merged from the dock)', () => {
         expect(screen.getByTestId('learn-tab-coach').getAttribute('title')).toBe('7 awaiting your decision');
     });
 
-    it('a stored coach choice with no panel falls back to Queue, not a blank pane', async () => {
-        localStorage.setItem('learn_tab_v1', 'coach');
-        mount();
-        await waitFor(() => {
-            expect(screen.getByTestId('learn-tab-queue').getAttribute('aria-current')).toBe('true');
-        });
+    // A stored id from before the tabs were merged must not strand the surface
+    // on a tab it no longer has.
+    it('a stored tab id that no longer exists falls back to Approvals', async () => {
+        for (const stale of ['queue', 'system', 'nonsense']) {
+            localStorage.setItem('learn_tab_v1', stale);
+            mount();
+            await waitFor(() => {
+                expect(screen.getByTestId('learn-tab-coach').getAttribute('aria-current')).toBe('true');
+            });
+            cleanup();
+        }
         expect(screen.queryByTestId('learn-coach')).toBeNull();
     });
 });

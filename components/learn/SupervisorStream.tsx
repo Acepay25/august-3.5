@@ -136,12 +136,12 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
                                         // ingest — nothing was written, whatever the
                                         // button said.
                                         : { kind: 'error', body: 'Nothing to approve — this entry kept no draft snapshot, so there was nothing to write.' })}
-                                    className="rounded-control border border-emerald-500/30 px-2 py-0.5 text-ui-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40">
+                                    className="rounded-control inline-flex min-h-6 items-center border border-emerald-500/30 px-2.5 py-1 text-ui-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40">
                                     Approve anyway
                                 </button>
                             ) : (
                                 <button type="button" disabled={busy} onClick={() => void override(overrideRejectSkill)}
-                                    className="rounded-control border border-rose-500/30 px-2 py-0.5 text-ui-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-40">
+                                    className="rounded-control inline-flex min-h-6 items-center border border-rose-500/30 px-2.5 py-1 text-ui-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-40">
                                     Reject — undo this
                                 </button>
                             )}

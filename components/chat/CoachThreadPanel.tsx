@@ -159,7 +159,7 @@ const DraftCard: React.FC<{
                     disabled={proofState === 'running'}
                     data-testid={`coach-draft-prove-${d.id}`}
                     title="Replay this coin's candle history and report what the matched detector behavior would have done"
-                    className="text-ui-dense text-zinc-500 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-ui-sm font-semibold text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     {proofState === 'running' ? 'Replaying history…' : 'Prove on history'}
                 </button>

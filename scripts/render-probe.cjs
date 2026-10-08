@@ -776,14 +776,15 @@ async function main() {
             { label: 'Journal', expect: null },
             { label: 'Skills', expect: null },
             { label: 'Chat', expect: '[data-testid="agents-view"]' },
-            // The sixth control in the menu; it opens the approval inbox as a
-            // fixed overlay that mounts OUTSIDE <main> (App renders it as a
-            // sibling of the header). Measuring <main> here re-reports whatever
-            // surface was open before — this run printed an Approvals byte count
-            // identical to Agents for exactly that reason. Assert the overlay
-            // root and read its own text; an empty inbox still renders an
-            // EmptyState, so "nothing needs you" is content, not a blank panel.
-            { label: 'Approvals', expect: '[data-testid="approval-inbox"]', overlay: true },
+            // The Approvals row used to open a fixed OVERLAY mounted outside
+            // <main>, which is why this entry asserted the overlay's own root:
+            // measuring <main> re-reported whatever surface was open before and
+            // passed vacuously — one run printed an Approvals byte count
+            // identical to Agents for exactly that reason. It is no longer an
+            // overlay: it routes into Learn's Approvals tab, so the check is now
+            // that the row LANDS on the inbox, which a <main> measurement can
+            // see. The lesson stays: assert the thing the click actually changes.
+            { label: 'Approvals', expect: '[data-testid="learn-coach"]', landsOn: 'Learn' },
             { label: 'Learn', expect: '[data-testid="learn-view"]' },
         ];
         /** Some menu entries open a dialog rather than switch a surface (the
@@ -973,6 +974,19 @@ async function main() {
                 const text = mounted
                     ? (await page.locator(surface.expect).innerText()).trim() : '';
                 check(`${surface.label} panel renders content`, text.length > 40, `${text.length} chars`);
+            } else if (surface.landsOn) {
+                // A nav entry that ROUTES into another surface (Approvals lands on
+                // Learn's inbox) cannot be judged by "did <main> change" — the
+                // surface before it may already have been the same one. Judge the
+                // thing the click actually promises: the inbox tab is selected.
+                const body = await waitSurfaceText();
+                check(`${surface.label} surface renders content`, body.length > 40, `${body.length} chars`);
+                const onInbox = await page.locator(
+                    '[data-testid="learn-tab-coach"][aria-current="true"]').count();
+                check(`${surface.label} lands on the ${surface.landsOn} inbox, not just its surface`,
+                    onInbox === 1, `${onInbox} selected Approvals tab`);
+                const mounted = await page.locator(surface.expect).count();
+                check(`${surface.label} mounts its own root`, mounted === 1, `${mounted}`);
             } else {
                 const body = await waitSurfaceText();
                 check(`${surface.label} surface renders content`, body.length > 40, `${body.length} chars`);
@@ -1523,12 +1537,12 @@ async function main() {
                 `${inert.join(' | ')}${unverifiable.length ? `   [not judgeable: ${unverifiable.join(', ')}]` : ''}`
                     .slice(0, 400));
         };
-        // Learn is tabbed five ways. Sweeping only the default tab left the
-        // other four panels unjudged — the gate could not see a dead control
-        // inside Memory, Health, Coach or System.
+        // Learn is tabbed three ways. Sweeping only the default tab left the
+        // others unjudged — the gate could not see a dead control inside Memory
+        // or Health. 18 rounds, because Health alone stacks six panels now that
+        // System's telemetry and the supervisor's log fold into it.
         await sweepSurface('Learn', 18, [
-            'learn-tab-queue', 'learn-tab-memory', 'learn-tab-health',
-            'learn-tab-coach', 'learn-tab-system',
+            'learn-tab-coach', 'learn-tab-memory', 'learn-tab-health',
         ]);
         // Precondition, checked not assumed: if the seeded journal had not
         // loaded, every filter chip would look inert and the sweep would fail
@@ -1752,6 +1766,10 @@ async function main() {
         const FLOOR_PX = 24;
         const offendersBySurface = [];
         for (const surface of surfaces) {
+            // Measured under its own destination already; scanning it again under
+            // the routing label would report every one of its controls twice and
+            // halve the count of offenders nobody can see.
+            if (surface.landsOn) continue;
             await navTo(surface.label);
             await sleep(900);
             const bad = await page.evaluate(({ floor }) => {

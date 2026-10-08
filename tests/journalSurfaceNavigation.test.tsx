@@ -161,8 +161,17 @@ describe('App journal routing (source contract)', () => {
         expect(true).toBe(true);
     });
 
-    it('the hash serializer depends on isApprovalInboxVisible (stale-URL fix)', () => {
-        expect(routerSrc).toMatch(/serializeAppHash\(route\)[\s\S]{0,400}\[surface, journalTab, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible, isApprovalInboxVisible\]/);
+    // The invariant the stale-URL fix bought: the effect's dep list names every
+    // flag the route computation READS. It is asserted as a set, so it survives
+    // an overlay being added or removed (the approvals drawer became a section
+    // of Learn's Approvals tab) but not a flag read in one and missed in the other.
+    it('the hash serializer depends on every flag the route reads', () => {
+        const reads = ['isSettingsMenuVisible', 'isLiveMarketVisible', 'isWatchListVisible'];
+        const deps = routerSrc.match(/\[surface, journalTab, ([^\]]+)\]/)?.[1] ?? '';
+        for (const flag of reads) {
+            expect(deps).toContain(flag);
+        }
+        expect(routerSrc).not.toMatch(/isApprovalInboxVisible/);
     });
 
     it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {

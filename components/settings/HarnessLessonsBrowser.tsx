@@ -24,7 +24,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
                 <button
                     type="button"
                     onClick={refresh}
-                    className="text-ui-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-300"
+                    className="inline-flex min-h-6 items-center px-2 text-ui-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-300"
                 >
                     Refresh
                 </button>
