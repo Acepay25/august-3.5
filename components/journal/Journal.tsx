@@ -16,6 +16,7 @@ import { RECENT_TRADES_WINDOW, buildTradeLogBrief } from '../../utils/recentTrad
 import { phtClock, phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useViewDensity } from '../shell/StatusBar';
 
 interface JournalProps {
     isVisible: boolean;
@@ -127,6 +128,10 @@ const JournalInner: React.FC<JournalProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<TabId>(resolveTab(initialTab));
     const [documentOpen, setDocumentOpen] = useState(false);
+    // One density setting for the whole app (utils/harnessSettings), read
+    // here so the Stats tab can rest its dashboards the same way Learn
+    // rests its telemetry.
+    const { density, setDensity } = useViewDensity();
 
     useEffect(() => {
         if (activeTab !== 'log') setDocumentOpen(false);
@@ -207,9 +212,32 @@ const JournalInner: React.FC<JournalProps> = ({
                     <WeeklyReviewCard username={activeUsername} />
                     <MonthlyReportCard username={activeUsername} />
                     <JournalAnalyticsSummary trades={trades} />
-                    <LastTwentyCard trades={trades} />
-                    <EquityCurveDashboard trades={trades} />
-                    <WinRateDashboard trades={trades} />
+                    {/* The three dashboards answer the same question at three
+                        resolutions — recent form, the curve, the win-rate table.
+                        Focus keeps the summary and the two cards you can
+                        actually generate and export from; Detail opens the rest.
+                        Same one setting as Learn, not a second toggle. */}
+                    {density === 'detail' ? (
+                        <>
+                            <LastTwentyCard trades={trades} />
+                            <EquityCurveDashboard trades={trades} />
+                            <WinRateDashboard trades={trades} />
+                        </>
+                    ) : (
+                        <div className="flex flex-wrap items-center gap-2 rounded-control border border-white/5 bg-zinc-900/60 px-3 py-2.5" data-testid="journal-analytics-resting">
+                            <p className="text-ui-dense text-zinc-500">
+                                Recent form, the equity curve and the win-rate table are resting.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setDensity('detail')}
+                                data-testid="journal-show-detail"
+                                className="ml-auto inline-flex min-h-6 items-center rounded-control border border-white/10 px-2.5 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                            >
+                                Show Detail
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         ) : activeTab === 'saved' ? (

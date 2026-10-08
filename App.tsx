@@ -2118,10 +2118,14 @@ const App: React.FC = () => {
     // drafts + proposals + amendments — two figures for overlapping sets, both
     // labelled as if they were the whole backlog. This is the union, and the
     // Learn surface badge is gone, because the row routes INTO that surface.
-    const approvalsWaiting = useMemo(
-        () => approvalItems.filter(i => i.kind !== 'skill').length + coachCount,
-        [approvalItems, coachCount],
-    );
+    const approvalsWaiting = useMemo(() => {
+        // The notebook's own pending total (drafts + proposals + amendments),
+        // plus the permissions the harness is asking for. A skill draft appears
+        // in approvalItems too, so it is counted once, from the store — not
+        // twice because two surfaces happened to list it.
+        const permissions = approvalItems.filter(i => i.kind !== 'skill').length;
+        return countPendingEverything(activeUsername || 'default') + permissions;
+    }, [approvalItems, activeUsername, skillDraftNonce, learningQueueNonce, memoryNonce]);
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
         void approveSkillDraft(draft, activeUsername || 'default', loggedTradesRef.current)

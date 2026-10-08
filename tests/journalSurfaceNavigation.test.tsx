@@ -174,6 +174,20 @@ describe('App journal routing (source contract)', () => {
         expect(routerSrc).not.toMatch(/isApprovalInboxVisible/);
     });
 
+    // Source contract, same style as the rest of this file: the Stats tab's
+    // three dashboards are gated on the ONE density setting the status bar and
+    // Learn write, so a second screen cannot quietly keep them always on.
+    it('the Stats tab rests its dashboards on the shared density setting', () => {
+        const src = readFileSync('components/journal/Journal.tsx', 'utf8');
+        expect(src).toMatch(/useViewDensity/);
+        expect(src).toMatch(/density === 'detail' \? \(\s*<>\s*<LastTwentyCard/);
+        expect(src).toContain('journal-analytics-resting');
+        expect(src).toContain('journal-show-detail');
+        // The resting notice names what is resting — a shorter screen that
+        // explains nothing reads as a broken one.
+        expect(src).toMatch(/equity curve and the win-rate table are resting/);
+    });
+
     it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {
         expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
         expect(routerSrc).toMatch(/if \(next === 'journal'\) \{\s*openJournal\(\);/);
