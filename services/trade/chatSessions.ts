@@ -63,6 +63,13 @@ export interface StoredChatEntry {
      *  Optional so entries written before this existed simply show no
      *  duration rather than a wrong one. */
     workedMs?: number;
+    /** One id per entry in `tools`, same order — the join key for the real
+     *  payload behind that row (`toolPayloadStore`). '' (or missing) means the
+     *  line has no payload: a `calling…`, an `already fetched this turn`, a guard
+     *  line. Kept beside `tools` rather than inside it because the digest text is
+     *  what the seat saw and the id is where the bytes are — two questions, and
+     *  the renderer zips them by position. */
+    toolIds?: string[];
 }
 
 export type SessionKind = 'solo' | 'panel' | 'group';

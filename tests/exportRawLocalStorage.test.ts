@@ -161,6 +161,9 @@ const AWAITING_BACKUP_DECISION = new Map<string, string>([
     // `harness_settings_v1` — which is NOT Preferences-owned as this file assumed:
     // `utils/harnessSettings.ts:79` writes localStorage directly, and an export
     // with an empty Preferences store proved it was absent from every backup.
+    // `trade_tool_payloads_v1` too — the real tool output behind an expanded
+    // transcript row (`services/trade/toolPayloadStore.ts`), written straight
+    // through localStorage once per tool call.
     ['trade_chat_active_v1', 'TRADING POINTER, still unbacked on purpose: chatStore.ts:160 writes a PLAIN string (a session id), which the sweep cannot JSON.parse, so it exports nothing — and mirroring a parsed value back would write `"s-1"` where the owner reads `s-1`. Needs a raw-string envelope in the backup format, not a prefix entry.'],
     ['thinking_leak_bin_v1', 'telemetry: withheld reasoning bin'],
     ['lastPromiseError', 'crash breadcrumb'],

@@ -55,6 +55,7 @@ import { isPassReply } from '../agents/groupRounds';
 import {
     titleFromMessage, PANEL_MAX_MODELS,
 } from './chatSessions';
+import { saveToolPayload } from './toolPayloadStore';
 import * as chatStore from './chatStore';
 import type { LiveEntry, LiveSession } from './chatStore';
 import {
@@ -655,7 +656,36 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 patch(e => ({ ...e, text: hidePass && panelCouldStillBePass(full) ? '' : full }));
             },
             onReasoning: (chunk: string) => { reasoning += chunk; patch(e => ({ ...e, reasoning: (e.reasoning ?? '') + chunk })); },
-            onToolEvent: (line: string) => patch(e => ({ ...e, tools: [...e.tools, line] })),
+            // Tool lines AND their ids are appended in the SAME patch. The id is
+            // the only safe join key for a payload: `results` inside the desk
+            // loop is assembled `[...replays, ...extra, ...forged, ...core]`, so
+            // its order does not match the `calling…` lines rendered here.
+            // Pairing by index would silently attach the wrong payload to a row.
+            // '' marks a line with no payload (calling…, already fetched, guard).
+            onToolEvent: (line: string) => patch(e => ({ ...e, tools: [...e.tools, line], toolIds: [...(e.toolIds ?? []), ''] })),
+            onToolPayload: (payload) => {
+                // Persist the real bytes, then record the id against the line
+                // that is ALREADY rendered for this call. The desk loop emits the
+                // digest (`onToolEvent`) before this, so the row exists and
+                // `tools`/`toolIds` are already the same length.
+                try {
+                    saveToolPayload(payload);
+                } catch {
+                    // Refused or unwritable. The store has RECORDED it and the
+                    // row will say so; a payload write must never take down the
+                    // transcript write it is riding inside.
+                }
+                patch(e => {
+                    const ids = [...(e.toolIds ?? [])];
+                    // Keep the two arrays the same length: a payload that arrives
+                    // with no matching digest line (a replay reusing an earlier
+                    // call id) pads with '' rather than shifting every later id
+                    // onto the wrong row.
+                    while (ids.length < e.tools.length) ids.push('');
+                    ids[Math.max(0, e.tools.length - 1)] = payload.toolCallId;
+                    return { ...e, toolIds: ids };
+                });
+            },
             onToolAction: action => {
                 patch(e => ({ ...e, actions: [...(e.actions ?? []), action] }));
                 // Mirror the side-effect into the caller's collector so a
