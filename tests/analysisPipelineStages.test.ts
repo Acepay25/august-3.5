@@ -52,7 +52,7 @@ describe('assemblePipelineMemoryContext', () => {
 
     it('derives the setup query and filters loss-priming rows by coin+direction', async () => {
         await initMemoryFiles('stage-user');
-        const ctx = assemblePipelineMemoryContext(
+        const ctx = await assemblePipelineMemoryContext(
             'Watching BTC short on the 15m — exhaustion risk',
             [
                 trade({ id: 'match-1' }),
@@ -84,7 +84,7 @@ describe('assemblePipelineMemoryContext', () => {
         } as SkillMeta;
         await createMemoryFile(skills.id, 'btc-short-avoid.md', serializeSkill(meta, titleFromMeta(meta)), 'stage-skill-user', true);
 
-        const ctx = assemblePipelineMemoryContext('BTC short fakeout watch', [], null);
+        const ctx = await assemblePipelineMemoryContext('BTC short fakeout watch', [], null);
         expect(ctx.memoryRetrieved.some(src => src.path === 'skills/btc-short-avoid.md')).toBe(true);
         expect(ctx.memoryFilesContext).toContain('btc-short-avoid');
     });

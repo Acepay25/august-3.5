@@ -25,6 +25,7 @@
  */
 
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { withSerializedPref } from '../infrastructure/serializedPrefs';
 import { STRATEGY_FAMILIES, StrategyFamily } from '../../types/strategy';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { LedgerRegime } from './regimeLedger';
@@ -33,6 +34,11 @@ import { TradeOutcome } from '../../types';
 export interface MatrixCell {
     w: number;
     l: number;
+    /** P0-2: settled trade ids already counted in this cell. Without this the
+     *  double `syncClosedTradeToNotebook` per trade (log path + post-mortem
+     *  path) counted every regime-carrying trade twice, reaching
+     *  MATRIX_MIN_SAMPLES on half the real evidence. */
+    tradeIds?: string[];
 }
 
 /** family → regime → tallies. Sparse: absent keys mean "no evidence". */
@@ -64,10 +70,18 @@ const sanitizeMatrix = (raw: unknown): StrategyRegimeMatrix => {
         const famCell: Partial<Record<LedgerRegime, MatrixCell>> = {};
         for (const [reg, cell] of Object.entries(regimes as Record<string, unknown>)) {
             if (!isRegime(reg) || !cell || typeof cell !== 'object') continue;
-            const c = cell as { w?: unknown; l?: unknown };
+            const c = cell as { w?: unknown; l?: unknown; tradeIds?: unknown };
             const w = typeof c.w === 'number' && Number.isFinite(c.w) && c.w >= 0 ? c.w : 0;
             const l = typeof c.l === 'number' && Number.isFinite(c.l) && c.l >= 0 ? c.l : 0;
-            if (w + l > 0) famCell[reg] = { w, l };
+            if (w + l > 0) famCell[reg] = {
+                w,
+                l,
+                // P0-2: persisted alongside the tally so the idempotency guard
+                // survives a reload. Capped — provenance, not history.
+                ...(Array.isArray(c.tradeIds)
+                    ? { tradeIds: c.tradeIds.filter((t): t is string => typeof t === 'string').slice(-40) }
+                    : {}),
+            };
         }
         if (Object.keys(famCell).length > 0) out[fam] = famCell;
     }
@@ -107,19 +121,29 @@ export const recordSettledTradeForMatrix = async (
         const family = familyForTrade(trade);
         const regime = trade.marketRegime;
         if (!family || !isRegime(regime)) return;
-        const list = sanitizeMatrix(await getPreferenceObject<unknown>(keyFor(username)));
-        const cell = list[family]?.[regime] ?? { w: 0, l: 0 };
-        const updated: StrategyRegimeMatrix = {
-            ...list,
-            [family]: {
-                ...list[family],
-                [regime]: trade.outcome === TradeOutcome.WIN
-                    ? { w: cell.w + 1, l: cell.l }
-                    : { w: cell.w, l: cell.l + 1 },
-            },
-        };
-        await setPreferenceObject(keyFor(username), updated);
-        if (cacheUser === username) cache = updated;
+        // P0-2: the read-modify-write runs inside the per-key serialized queue.
+        // This call is fire-and-forget from the settle path, so two settles
+        // landing together used to both read the pre-write cell and the second
+        // write silently dropped the first increment.
+        await withSerializedPref(keyFor(username), async () => {
+            const list = sanitizeMatrix(await getPreferenceObject<unknown>(keyFor(username)));
+            const cell = list[family]?.[regime] ?? { w: 0, l: 0 };
+            // P0-2: idempotent by trade id — a re-settled trade (log path then
+            // post-mortem path) must not move the tally twice.
+            if (cell.tradeIds?.includes(trade.id)) return;
+            const nextIds = [...(cell.tradeIds ?? []), trade.id].slice(-40);
+            const updated: StrategyRegimeMatrix = {
+                ...list,
+                [family]: {
+                    ...list[family],
+                    [regime]: trade.outcome === TradeOutcome.WIN
+                        ? { w: cell.w + 1, l: cell.l, tradeIds: nextIds }
+                        : { w: cell.w, l: cell.l + 1, tradeIds: nextIds },
+                },
+            };
+            await setPreferenceObject(keyFor(username), updated);
+            if (cacheUser === username) cache = updated;
+        });
     } catch { /* best-effort telemetry */ }
 };
 

@@ -35,7 +35,9 @@ vi.mock('../utils/activeUser', () => ({ getActiveUsername: () => 'test-user' }))
 import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import {
     ingestCraftedSkillFromDraft,
+    isApprovedSkill,
     listSkills,
+    parseSkillMarkdown,
 } from '../services/learning/SkillMemoryService';
 import { approveSkillDraft } from '../services/learning/skillApproval';
 import { applyRescopeProposal } from '../services/learning/SkillMemoryService';
@@ -90,6 +92,30 @@ describe('approving a draft creates the skill, and says so only when it did', ()
         queueDraft(craft());
         const result = await approveSkillDraft(listSkillDrafts(USER)[0], USER, []);
         expect(result).toEqual({ created: true, slug: 'funding-exhaustion-long.md' });
+    });
+
+    it('P0-1: approving a CLOSED-trade draft stamps human approval so the skill activates', async () => {
+        // The production shape: usePostMortem queues drafts with
+        // tradeId: closed.id and both approval callers pass the real journal.
+        // The trade-backed branch previously built its SkillMeta with no
+        // `approvedBy`/`prior`, so `isApprovedSkill` was false and the skill
+        // silently never injected — while the card read "Active".
+        queueDraft(craft(), 'trade-closed-1');
+        const draft = listSkillDrafts(USER)[0];
+        const closedTrade = {
+            id: 'trade-closed-1',
+            outcome: 'WIN',
+            analysis: { coinName: 'BTC', direction: 'Long', detectedPatternFamily: 'Family A' },
+            postMortem: 'IF funding positive 8 sessions THEN wait for the reclaim close. Lesson learned.',
+        } as unknown as LoggedTrade;
+
+        const result = await approveSkillDraft(draft, USER, [closedTrade]);
+
+        expect(result.created).toBe(true);
+        const skill = listSkills()[0];
+        expect(skill.meta.approvedBy).toBe('human');
+        expect(isApprovedSkill(skill.meta)).toBe(true);
+        expect(skill.meta.tradeIds).toContain('trade-closed-1');
     });
 });
 
