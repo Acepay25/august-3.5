@@ -774,6 +774,42 @@ body {
 /* The Analyzed wrapper nests the whole work timeline — give it more room
    than a single thought trace. */
 .analyzed-row .reasoning-row-body { max-height: 22rem; }
+
+/* ── A tool row that expands onto its real output ──────────────────────────
+   The hairline line is the summary; opening it shows the bytes the tool
+   actually returned, in the reference's bordered monospace box. Scoped to
+   `.tool-row` rather than reusing `.reasoning-row-body` so the two cannot
+   fight over max-height: that rule sets 22rem inside `.analyzed-row`, and a
+   tool payload wants the tighter 10rem the reference draws. */
+.tool-row > summary { cursor: pointer; list-style: none; }
+.tool-row > summary::-webkit-details-marker { display: none; }
+.tool-row-body {
+  max-height: 10rem;
+  overflow-y: auto;
+  margin: 2px 0 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-zinc-700);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.35);
+}
+.tool-row-output {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-ui-dense);
+  line-height: 1.5;
+  color: var(--color-zinc-300);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* The honest refusal, matching the `imageOmitted` row's precedent: a tool row
+   whose bytes were not kept SAYS so instead of opening onto a blank box that
+   reads as an empty result. */
+.tool-row-refused {
+  margin: 0;
+  font-size: var(--text-ui-dense);
+  line-height: 1.5;
+  color: var(--color-zinc-500);
+}
 @media (prefers-reduced-motion: reduce) {
   .reasoning-row-caret {
     animation: none;

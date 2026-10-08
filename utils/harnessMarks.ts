@@ -95,6 +95,22 @@ export const findClipIn = (text: string): ClipSeen | null => {
     return Number.isFinite(kept) && Number.isFinite(total) ? { kept, total } : null;
 };
 
+/** The artifact id a `clipReceipt` names — the "this id still holds the bytes"
+ *  half of the dialect, read back the same way `findClipIn` reads a plain clip.
+ *
+ *  Built FROM `CLIP_RECEIPT_PREFIX` rather than a hand-written marker: the id
+ *  shape is `ta-0000` from `toolArtifactStore`, and a component must never
+ *  regex a marker itself (`tests/harnessMarks.test.ts` fails on one). Returns
+ *  null when the text carries no receipt, so a caller cannot mistake ordinary
+ *  prose for a paged result. */
+export const findArtifactIdIn = (text: string): string | null => {
+    if (!text || !text.includes(CLIP_RECEIPT_PREFIX)) return null;
+    // The prefix escapes to `…\[clipped:`; the id sits in the quoted slot.
+    const m = /…\[clipped: full result is id "([^"]+)"/.exec(text);
+    const id = m?.[1]?.trim();
+    return id ? id : null;
+};
+
 // ─── Who is speaking inside a user-role turn ────────────────────────────────
 
 /**

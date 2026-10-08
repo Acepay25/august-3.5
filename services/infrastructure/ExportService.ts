@@ -369,6 +369,11 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     // bare `s-1`. Registering it would corrupt the very pointer it backs up — it
     // needs a raw-string envelope in the backup format first.
     'trade_chat_sessions_v1',
+    // The real tool output behind an expanded transcript row
+    // (`services/trade/toolPayloadStore.ts`), written straight through
+    // localStorage once per tool call. A raw owner like the rest: leaving it out
+    // would mean a restored backup shows every tool row with its payload gone.
+    'trade_tool_payloads_v1',
     'desk_tools_forged_v1',
     'trading_checklist_v1',
     'trade_tf_bar_v1',
@@ -410,6 +415,12 @@ export const EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024;
  *  an over-cap store is left out and named, and its live bytes are untouched. */
 const EXPORT_KEY_CAPS: ReadonlyArray<{ prefix: string; bytes: number }> = [
     { prefix: 'trade_chat_sessions_v1', bytes: EXPORT_RAW_KEY_CAP_BYTES },
+    // The real tool output behind an expanded transcript row. A side store on
+    // purpose: payloads inside `trade_chat_sessions_v1` entries would push the
+    // transcripts themselves out of the 512 KB backup cap. Capped below the
+    // store's own 1,000,000-char ceiling so a payload-heavy session cannot take
+    // the whole backup either — the live key is untouched when over.
+    { prefix: 'trade_tool_payloads_v1', bytes: 256 * 1024 },
     { prefix: 'trade_session_drawings_v1', bytes: 1024 * 1024 },
     { prefix: 'desk_tools_forged_v1', bytes: 256 * 1024 },
     { prefix: 'trading_checklist_v1', bytes: 64 * 1024 },

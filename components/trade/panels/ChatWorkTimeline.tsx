@@ -69,6 +69,8 @@ export interface ChatWorkView {
     actions?: ToolAction[];
     /** Frozen work time in ms, persisted at settle — survives a reload. */
     workedMs?: number;
+    /** One payload id per entry in `tools`, same order. */
+    toolIds?: string[];
 }
 
 export interface ChatWorkTimelineProps {
@@ -94,9 +96,16 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     const markerCount = segs.length - 1;
     const nodes: React.ReactNode[] = [];
     let buf: string[] = [];
+    // Payload ids in the SAME order the lines are pushed below, so `flush` can
+    // hand each `ToolActivityRow` the ids for exactly the lines it is given.
+    const idBuf: string[] = [...(entry.toolIds ?? [])];
     const flush = (key: string): void => {
         if (buf.length > 0) {
-            nodes.push(<ToolActivityRow key={key} lines={buf} running={running} />);
+            // The ids ride WITH their lines: pairing inside `pairToolLines` is
+            // FIFO by label, so a payload is attached by position in the buffer
+            // it was rendered from, never by a lookup that could drift.
+            const ids = buf.map(() => idBuf.shift() ?? '');
+            nodes.push(<ToolActivityRow key={key} lines={buf} running={running} payloadIds={ids} />);
             buf = [];
         }
     };

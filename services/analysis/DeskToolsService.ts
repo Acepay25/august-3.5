@@ -19,7 +19,7 @@ import type { FinishReason } from '../../utils/finishReason';
 import { truncatesOutput } from '../../utils/finishReason';
 import { fenceUntrusted } from '../../utils/untrusted';
 import {
-    clipNote, clipReceipt, dataUnavailable, findClipIn, harnessNoteLegend, harnessTurn,
+    clipNote, clipReceipt, dataUnavailable, findArtifactIdIn, findClipIn, harnessNoteLegend, harnessTurn,
     isDataUnavailable, MINIMAL_CLIP_NOTE, neutralizeHarnessNotes,
 } from '../../utils/harnessMarks';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
@@ -151,6 +151,33 @@ export interface DeskToolResult {
     /** Resolved coin for market-data tools — the transcript names it when a
      *  call targeted a symbol OTHER than the chart's. */
     symbol?: string;
+}
+
+/** One tool call's REAL output, handed to `onToolPayload` so the transcript can
+ *  expand a one-line row onto the bytes behind it instead of only the digest
+ *  the seat saw.
+ *
+ *  `text` is empty for a CLIPPED result on purpose: those bytes live under
+ *  `artifact`'s id in `toolArtifactStore`, and copying them here would store a
+ *  400,000-char payload twice. The renderer pages them with `readToolArtifact`. */
+export interface ToolPayload {
+    /** The call's own id — the ONLY safe join key. `results` is assembled as
+     *  `[...replays, ...extra, ...forged, ...core]`, so its order does NOT match
+     *  the `calling…` lines the transcript rendered. Pairing by index silently
+     *  attaches the wrong payload to a row. */
+    toolCallId: string;
+    /** Raw tool name (`get_order_book`) — the label is derived at render time. */
+    name: string;
+    /** The one-line digest this row shows collapsed. */
+    label: string;
+    ok: boolean;
+    /** Artifact id when this result was clipped and paged, else null. */
+    artifact: string | null;
+    /** Chars the seat was shown vs chars the result had, when clipped. */
+    kept?: number;
+    total?: number;
+    /** The full unclipped output. Empty when the result was clipped. */
+    text: string;
 }
 
 /** Rounds a seat may spend calling tools. This is a HANG GUARD, not a ration:
@@ -2636,6 +2663,19 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 break;
             }
             case 'scan_chart_skills': {
+                // Off unless the trader turned it on. A seat can ask for this by
+                // itself, so the switch needs an answer HERE rather than a quiet
+                // empty result — "no drafts" and "you have not enabled drafting"
+                // are different facts, and only one of them tells the trader what
+                // to do about it.
+                if (!getHarnessSettings().autoDraftingEnabled) {
+                    content = 'DRAFTING IS SWITCHED OFF. The app only studies charts for '
+                        + 'new playbooks when "Draft playbooks on its own" is enabled in '
+                        + 'Settings -> Session & Limits, and it is not. Nothing was read, '
+                        + 'nothing was drafted and no model call was made. Tell the trader '
+                        + 'where the switch is if they want this; do not ask again in this run.';
+                    break;
+                }
                 // The eighth learner: the model reads the WHOLE tape (a digest
                 // of up to 1000 candles + historical detector win-rates) and
                 // drafts IF/THEN skills. Every craft passes through the shared
@@ -3149,6 +3189,15 @@ export async function runDeskToolLoop(params: {
     getLiveMarkPrice?: () => number | null;
     getFormingCandle?: () => FormingCandle | null;
     onToolEvent?: (line: string) => void;
+    /** Fires once per RESULT that carries a payload, so the caller can persist
+     *  the real tool output behind the one-line digest the seat saw.
+     *
+     *  Deliberately separate from `onToolEvent`: that callback also carries
+     *  `calling…`, `already fetched this turn` and the repeated-call guard line,
+     *  none of which have a payload, and the streaming-loop tests bind its
+     *  one-argument shape. A payload is only emitted here, so a caller that
+     *  persists cannot accidentally store a line that has no bytes. */
+    onToolPayload?: (payload: ToolPayload) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
     trades?: LoggedTrade[];
@@ -3188,6 +3237,7 @@ export async function runDeskToolLoop(params: {
         getLiveMarkPrice,
         getFormingCandle,
         onToolEvent,
+        onToolPayload,
         onToolAction,
         speaker = '',
         nativeTools = config.apiFormat === 'chat_completions',
@@ -3458,7 +3508,25 @@ export async function runDeskToolLoop(params: {
         const chartSymbol = (defaultSymbol ?? '').trim().toUpperCase();
         for (const r of results) {
             const foreign = r.symbol && r.symbol.toUpperCase() !== chartSymbol ? r.symbol : null;
-            onToolEvent?.(digestToolResult(r.name, r.ok, r.content, foreign));
+            const label = digestToolResult(r.name, r.ok, r.content, foreign);
+            onToolEvent?.(label);
+            // The REAL bytes behind that one line. Keyed on `r.toolCallId`, never
+            // on a position in `results` — see ToolPayload. A clipped result
+            // ships no `text`: its bytes are paged by id instead, so nothing is
+            // stored twice.
+            if (onToolPayload) {
+                const artifact = findArtifactIdIn(r.content);
+                const seen = findClipIn(r.content);
+                onToolPayload({
+                    toolCallId: r.toolCallId,
+                    name: r.name,
+                    label,
+                    ok: r.ok,
+                    artifact,
+                    ...(seen ? { kept: seen.kept, total: seen.total } : {}),
+                    text: artifact ? '' : r.content,
+                });
+            }
         }
         // persist proposal/custom tool side-effects (the transcript's
         // "Saved to memory"-style status rows). The loop does not know seat
@@ -3550,6 +3618,9 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     /** Live tool-call visibility (Floor chips) — fires before and after each
      *  tool round with a short human-readable line. */
     onToolEvent?: (line: string) => void;
+    /** See the main options interface — same contract, so a payload can be
+     *  persisted from the streaming loop too. */
+    onToolPayload?: (payload: ToolPayload) => void;
     allowedTools?: string[];
     /** Closed-trade log for the `recall` notebook tool. */
     trades?: LoggedTrade[];

@@ -30,6 +30,7 @@ import {
     clipReceipt,
     dataUnavailable,
     findClipIn,
+    findArtifactIdIn,
     harnessNoteLegend,
     harnessTurn,
     isDataUnavailable,
@@ -95,6 +96,24 @@ describe('the spill receipt', () => {
         // If the two ever disagree, a receipt can be appended past the budget
         // that tailReserve exists to protect.
         expect(RECEIPT_CHARS).toBe(clipReceipt('ta-0000').length + 1);
+    });
+
+    it('the id it names is read back out of the text it was written into', () => {
+        // This is what lets a collapsed transcript row expand onto the bytes
+        // behind it. The extractor MUST be here, beside the emitter: a component
+        // that regexes the marker itself is a second implementation of the
+        // dialect, and it breaks silently when the receipt text changes.
+        const receipt = clipReceipt('ta-0abc');
+        expect(findArtifactIdIn(receipt)).toBe('ta-0abc');
+        // …including inside the longer body a real clipped result carries.
+        expect(findArtifactIdIn(`order book data\n${clipReceipt('ta-1234')}\ntrailing text`)).toBe('ta-1234');
+    });
+
+    it('returns null for text with no receipt, so prose cannot be mistaken for one', () => {
+        expect(findArtifactIdIn('')).toBeNull();
+        expect(findArtifactIdIn('the model mentioned read_tool_output in passing')).toBeNull();
+        // A plain clip note names no artifact — only the receipt does.
+        expect(findArtifactIdIn(clipNote({ source: 'order_book', kept: 4, total: 118 }))).toBeNull();
     });
 });
 
