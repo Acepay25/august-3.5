@@ -150,3 +150,51 @@ export const queueLearningProposal = (
 
 export const dismissLearningProposal = (id: string, username?: string): void =>
     write(listLearningProposals(username).filter(p => p.id !== id), username);
+
+// ─── The single applier ─────────────────────────────────────────────────────
+// Both approval surfaces (the Coach thread and the Skills queue strip) used to
+// hand-roll the same three steps: run the kind dispatcher, drain the row on
+// success, and turn a refusal into the writer's own message. Two copies of a
+// control flow that decides whether a human's press changed the notebook is two
+// places for them to disagree — which is the same class of bug that put
+// `rescope` in one panel and left it Dismiss-only in the other.
+//
+// The `getActiveUsername`/dispatcher imports are dynamic on purpose:
+// `learningQueue` is imported BY `SkillMemoryService` (for the proposal types),
+// so a static import back would close a runtime cycle.
+
+/** Apply one proposal and report what happened, without touching React state.
+ *  The caller owns busy/failure UI; this owns the decision. */
+export const applyProposalCard = async (
+    p: LearningProposal,
+    username: string,
+): Promise<ProposalApplyResult> => {
+    // Deliberately NOT wrapped in try/catch here: `applyLearningProposalByKind`
+    // already converts a thrown write into `{applied:false, reason:'write-failed'}`,
+    // and swallowing a second time would hide a genuine programming error
+    // behind a message meant for a storage refusal.
+    const { applyLearningProposalByKind } = await import('../services/learning/SkillMemoryService');
+    return applyLearningProposalByKind(p, username);
+};
+
+/** The two decisions a pending model rewrite offers, and only two: approve the
+ *  text now in the file, or put the old version back WITH the approval it had. */
+export const decideRewriteCard = async (
+    p: LearningProposal,
+    decision: 'approve' | 'revert',
+    username: string,
+): Promise<ProposalApplyResult> => {
+    const { approvePendingRewrite, revertPendingRewrite } =
+        await import('../services/learning/SkillMemoryService');
+    try {
+        const fn = decision === 'approve' ? approvePendingRewrite : revertPendingRewrite;
+        return await fn(p.skillSlug || '', username);
+    } catch (e) {
+        return { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
+    }
+};
+
+/** The one-line message a refusal shows. Wraps the reason→copy table so a
+ *  caller cannot reach for the raw reason and render it as prose. */
+export const applyFailureMessage = (result: ProposalApplyResult): string | null =>
+    result.applied ? null : proposalApplyFailureMessage(result.reason, result.error);

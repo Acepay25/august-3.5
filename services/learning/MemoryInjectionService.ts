@@ -13,6 +13,7 @@
 
 import { getPreferenceArray, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { withSerializedPref } from '../infrastructure/serializedPrefs';
+import { parseFollowedSkills, normalizeSkillSlug } from '../../utils/followedSkills';
 
 export interface InjectedSource {
     path: string;
@@ -72,23 +73,85 @@ export const recordMemoryInjection = async (
     username: string,
     record: Omit<MemoryInjectionRecord, 'ts'>,
 ): Promise<void> => {
-    try {
-        const key = keyFor(username);
-        // Serialized read-modify-write: per-stage/seat recorders run
-        // concurrently, and an unguarded read→append→write loses whichever
-        // append interleaved — a lost verdict record misroutes the followed
-        // trade into CONTROL and starves the skill of credit.
-        await withSerializedPref(key, async () => {
-            const prev = await getRecentMemoryInjections(username);
-            const next = [
-                { ...record, ts: new Date().toISOString() },
-                ...prev,
-            ].slice(0, MAX_INJECTION_RECORDS);
-            await setPreferenceObject(key, next);
+    const key = keyFor(username);
+    // Serialized read-modify-write: per-stage/seat recorders run
+    // concurrently, and an unguarded read→append→write loses whichever
+    // append interleaved — a lost verdict record misroutes the followed
+    // trade into CONTROL and starves the skill of credit.
+    const write = withSerializedPref(key, async () => {
+        const prev = await getRecentMemoryInjections(username);
+        const next = [
+            { ...record, ts: new Date().toISOString() },
+            ...prev,
+        ].slice(0, MAX_INJECTION_RECORDS);
+        await setPreferenceObject(key, next);
+    });
+    // P1-5: publish the in-flight write so the verdict-citation stamp can
+    // AWAIT the exact write it depends on instead of sleeping in 100 ms polls
+    // hoping the record landed. That race is the whole reason the poll existed:
+    // the verdict commit runs before retrieval's fire-and-forget write reaches
+    // Preferences.
+    const handoff = record.runId ? pendingKey(username, record.runId, record.stage) : null;
+    if (handoff) {
+        pendingWrites.set(handoff, write);
+        // The entry is a handoff for a caller that is already waiting; leaving
+        // it would pin a resolved promise per run for the session.
+        void write.catch(() => undefined).then(() => {
+            if (pendingWrites.get(handoff) === write) pendingWrites.delete(handoff);
         });
+    }
+    try {
+        await write;
     } catch {
         // Telemetry must never break prompt assembly.
     }
+};
+
+/** In-flight injection writes, keyed by user+run+stage. See
+ *  `awaitInjectionRecord` for why this exists instead of a disk poll. */
+const pendingWrites = new Map<string, Promise<void>>();
+
+const pendingKey = (username: string, runId: string, stage: string): string =>
+    `${username}|${runId}|${stage}`;
+
+/**
+ * Wait for THIS run's injection write to land, without polling disk.
+ *
+ * Returns as soon as the in-flight write for that exact (user, run, stage)
+ * settles — which in the common case is already true, because retrieval
+ * records the verdict slice while the moderator is still streaming. The
+ * bounded fallback only covers the case where the write has not STARTED yet
+ * (a caller racing ahead of retrieval): it re-checks the persisted records a
+ * few times, far less eagerly than the 10×100 ms sleep this replaced.
+ */
+export const awaitInjectionRecord = async (
+    username: string,
+    runId: string | undefined,
+    stage: string,
+    /** How many times to re-check when no write is in flight yet. */
+    attempts = 5,
+): Promise<MemoryInjectionRecord[]> => {
+    if (runId) {
+        const inflight = pendingWrites.get(pendingKey(username, runId, stage));
+        if (inflight) {
+            await inflight.catch(() => undefined);
+            return getRecentMemoryInjections(username);
+        }
+    }
+    let recs = await getRecentMemoryInjections(username);
+    if (!runId) return recs;
+    for (let i = 0; i < attempts; i++) {
+        if (recs.some(r => r.runId === runId && r.stage === stage)) return recs;
+        // The write may have been registered between checks.
+        const inflight = pendingWrites.get(pendingKey(username, runId, stage));
+        if (inflight) {
+            await inflight.catch(() => undefined);
+            return getRecentMemoryInjections(username);
+        }
+        await new Promise(res => setTimeout(res, 50));
+        recs = await getRecentMemoryInjections(username);
+    }
+    return recs;
 };
 
 export const getRecentMemoryInjections = async (
@@ -202,20 +265,15 @@ export const annotateVerdictCitations = async (
 ): Promise<void> => {
     try {
         const key = keyFor(username);
-        // The verdict-stage record is written fire-and-forget by retrieval;
-        // wait (briefly) for THIS run's record to land before stamping, so a
-        // slow Preferences write can't make us annotate the PREVIOUS run.
-        // These polls are plain reads — the mutation+write below goes through
-        // the serialized queue so a concurrent recordMemoryInjection can't
-        // slip between our read and our rewrite of the whole list.
-        let recs = await getRecentMemoryInjections(username);
-        if (runId) {
-            for (let i = 0; i < 10; i++) {
-                if (recs.some(r => r.runId === runId && r.stage === 'verdict')) break;
-                await new Promise(res => setTimeout(res, 100));
-                recs = await getRecentMemoryInjections(username);
-            }
-        }
+        // P1-5: the moderator now NAMES the skills it followed, so the join is
+        // exact for any verdict carrying the line. `null` = the line is absent
+        // (an older transcript) and the word-overlap heuristic below stands in.
+        const declared = parseFollowedSkills(verdictText || '');
+        // P1-5: await the EXACT in-flight write for this run instead of
+        // sleeping in ten 100 ms polls hoping the record landed. In the common
+        // case retrieval already recorded the verdict slice while the
+        // moderator was still streaming, so this returns immediately.
+        const recs = await awaitInjectionRecord(username, runId, 'verdict');
         if (recs.length === 0) return;
         const conditionBySlug = await loadSkillConditions();
         const text = (verdictText || '').toLowerCase();
@@ -223,6 +281,11 @@ export const annotateVerdictCitations = async (
         const verdictNorm = norm(text);
         const verdictWords = new Set(verdictNorm.split(' ').filter(w => w.length > 3));
         const cites = (slug: string): boolean => {
+            // P1-5: the declared line WINS when it is present. A model that
+            // named its skills has answered the question; the heuristic below
+            // is a guess about a question it already answered, and the guess is
+            // what misrouted real evidence.
+            if (declared) return declared.includes(normalizeSkillSlug(slug));
             const stem = slug.replace(/\.md$/i, '').toLowerCase();
             if (stem && text.toLowerCase().includes(stem)) return true;
             const title = norm(stem.replace(/[-_]/g, ' '));

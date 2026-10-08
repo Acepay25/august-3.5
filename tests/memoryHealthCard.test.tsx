@@ -48,6 +48,7 @@ const healthyReport = (): MemoryHealthReport => ({
     },
     diary: { files: 1, entries: 4 },
     bots: [],
+    gateThrottled: [],
     hygiene: [{ atMs: 1, text: 'Last pass: nothing to do.' }],
     flags: [],
 });

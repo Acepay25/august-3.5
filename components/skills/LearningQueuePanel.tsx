@@ -2,18 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
     listLearningProposals,
     dismissLearningProposal,
-    proposalApplyFailureMessage,
+    applyProposalCard,
+    decideRewriteCard,
+    applyFailureMessage,
     isApplyableProposal,
     type LearningProposal,
-    type ProposalApplyResult,
 } from '../../utils/learningQueue';
 import * as supervisorStore from '../../services/learning/supervisorStore';
 import StatusPill from '../ui/StatusPill';
-import {
-    applyLearningProposalByKind,
-    approvePendingRewrite,
-    revertPendingRewrite,
-} from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { requestSkillTry as trySkillInChat } from '../chat/skillDeepLink';
 
@@ -47,12 +43,7 @@ const KIND_LABEL: Record<string, string> = {
  *  panels read the same two answers, so neither can offer a button the other
  *  hides. */
 
-interface LearningQueuePanelProps {
-    /** Bump to force a refresh from outside (e.g. after approving a draft). */
-    refreshKey?: number;
-}
-
-const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) => {
+const LearningQueuePanel: React.FC = () => {
     const [proposals, setProposals] = useState<LearningProposal[]>([]);
     const [open, setOpen] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
@@ -72,8 +63,7 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
         refresh();
         window.addEventListener('august-learning-queue', refresh);
         return () => window.removeEventListener('august-learning-queue', refresh);
-        // refreshKey: parent-triggered reload (e.g. after a draft approval).
-    }, [refreshKey]);
+    }, []);
 
     const dismiss = (p: LearningProposal): void => {
         dismissLearningProposal(p.id, getActiveUsername());
@@ -84,15 +74,15 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
         setBusyId(p.id);
         setFailure(null);
         const username = getActiveUsername();
-        // One dispatcher for both approval surfaces — see
-        // applyLearningProposalByKind. A proposal acted on from here and from
-        // the Skills queue must not be able to disagree.
-        const result = await applyLearningProposalByKind(p, username);
+        // One dispatcher for both approval surfaces — see applyProposalCard.
+        // A proposal acted on from here and from the Coach thread must not be
+        // able to disagree.
+        const result = await applyProposalCard(p, username);
         setBusyId(null);
         // Never drain a row the library did not act on, and never claim a bare
         // "failed": the reason comes from the writer that refused.
         if (result.applied) dismiss(p);
-        else setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
+        else setFailure({ id: p.id, message: applyFailureMessage(result)! });
     };
 
     /** Approve a pending model rewrite, or put the old version back with its own
@@ -100,17 +90,10 @@ const LearningQueuePanel: React.FC<LearningQueuePanelProps> = ({ refreshKey }) =
     const decideRewrite = async (p: LearningProposal, decision: 'approve' | 'revert'): Promise<void> => {
         setBusyId(p.id);
         setFailure(null);
-        const username = getActiveUsername();
-        let result: ProposalApplyResult;
-        try {
-            const fn = decision === 'approve' ? approvePendingRewrite : revertPendingRewrite;
-            result = await fn(p.skillSlug || '', username);
-        } catch (e) {
-            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
-        }
+        const result = await decideRewriteCard(p, decision, getActiveUsername());
         setBusyId(null);
         if (result.applied) dismiss(p);
-        else setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
+        else setFailure({ id: p.id, message: applyFailureMessage(result)! });
     };
 
     if (proposals.length === 0) return null;

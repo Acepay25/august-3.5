@@ -145,3 +145,102 @@ export const tombstoneSkillDraftKey = (key: string, username?: string): void => 
         localStorage.setItem(tombstonesKey(username), JSON.stringify(next));
     } catch { /* ignore */ }
 };
+
+// ─── Worth-gate attempt ledger ──────────────────────────────────────────────
+// The worth gate is a LIVE LLM call. When it cannot run (no ready provider) the
+// cluster stays eligible and the next closed trade retries — which, before this
+// ledger, meant one billed attempt per close FOREVER on a cluster that keeps
+// producing trades and never gets a provider. The ledger records what the gate
+// was last asked about and which trades were in the cluster then, so a retry
+// happens only when the evidence actually changed (or a human asks).
+
+export interface WorthGateAttempt {
+    key: string;
+    /** ISO stamp of the most recent attempt for this cluster. */
+    lastAt: string;
+    /** How many times the gate has been asked about this cluster. */
+    attempts: number;
+    /** Ids that were IN the cluster at the last attempt. A retry needs a trade
+     *  the gate has not already judged. */
+    tradeIds: string[];
+}
+
+const gateAttemptsKey = (username?: string): string =>
+    `${KEY_PREFIX}_gate_attempts:${(username || 'default').trim() || 'default'}`;
+
+const readGateAttempts = (username?: string): WorthGateAttempt[] => {
+    try {
+        const raw = localStorage.getItem(gateAttemptsKey(username));
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+/** The last recorded attempt for a cluster, or null when the gate has never
+ *  been asked about it. */
+export const readWorthGateAttempt = (key: string, username?: string): WorthGateAttempt | null => {
+    if (!key || typeof localStorage === 'undefined') return null;
+    return readGateAttempts(username).find(a => a.key === key) ?? null;
+};
+
+/** Record that the gate was asked about `key` with this cluster. Bounded like
+ *  the tombstone ledger — an attempt record is a throttle, not a history. */
+export const recordWorthGateAttempt = (
+    key: string,
+    tradeIds: string[],
+    username?: string,
+): void => {
+    if (!key || typeof localStorage === 'undefined') return;
+    const prior = readGateAttempts(username).find(a => a.key === key);
+    const next: WorthGateAttempt[] = [
+        {
+            key,
+            lastAt: new Date().toISOString(),
+            attempts: (prior?.attempts ?? 0) + 1,
+            tradeIds: [...new Set(tradeIds)].slice(-40),
+        },
+        ...readGateAttempts(username).filter(a => a.key !== key),
+    ].slice(0, 50);
+    try {
+        localStorage.setItem(gateAttemptsKey(username), JSON.stringify(next));
+    } catch { /* ignore */ }
+};
+
+/**
+ * Should the worth gate run for this cluster right now?
+ *
+ * A retry needs NEW EVIDENCE: a trade id the gate has not already been shown.
+ * Without this, a cluster that keeps producing trades and never gets a provider
+ * bills one LLM call per close indefinitely. `force` is the human override (the
+ * Coach card's "Try now").
+ */
+export const shouldAttemptWorthGate = (
+    key: string,
+    clusterTradeIds: string[],
+    username?: string,
+    force = false,
+): boolean => {
+    if (force) return true;
+    const prior = readWorthGateAttempt(key, username);
+    if (!prior) return true;
+    const judged = new Set(prior.tradeIds);
+    return clusterTradeIds.some(id => !judged.has(id));
+};
+
+/** Every recorded gate attempt, newest first. */
+export const listWorthGateAttempts = (username?: string): WorthGateAttempt[] => {
+    if (typeof localStorage === 'undefined') return [];
+    return readGateAttempts(username);
+};
+
+/** Clear a cluster's attempt record — the gate ran and reached a verdict, so
+ *  the throttle no longer applies. */
+export const clearWorthGateAttempt = (key: string, username?: string): void => {
+    if (!key || typeof localStorage === 'undefined') return;
+    const rest = readGateAttempts(username).filter(a => a.key !== key);
+    try {
+        localStorage.setItem(gateAttemptsKey(username), JSON.stringify(rest));
+    } catch { /* ignore */ }
+};

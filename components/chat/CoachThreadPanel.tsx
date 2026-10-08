@@ -6,16 +6,12 @@ import { EmptyState } from '../ui/EmptyState';
 import {
     listLearningProposals,
     dismissLearningProposal,
-    proposalApplyFailureMessage,
+    applyProposalCard,
+    decideRewriteCard,
+    applyFailureMessage,
     isApplyableProposal,
     type LearningProposal,
-    type ProposalApplyResult,
 } from '../../utils/learningQueue';
-import {
-    applyLearningProposalByKind,
-    approvePendingRewrite,
-    revertPendingRewrite,
-} from '../../services/learning/SkillMemoryService';
 import { getActiveUsername } from '../../utils/activeUser';
 
 /**
@@ -34,8 +30,6 @@ interface CoachThreadPanelProps {
     onAllowDraft: (draft: SkillDraft) => void;
     /** Same handler the Inbox modal uses: take + tombstone the trigger. */
     onDenyDraft: (draft: SkillDraft) => void;
-    /** Focus a transcript card (jump-to-message from a draft's trade link). */
-    onOpenTrade?: (tradeId: string) => void;
 }
 
 const timeAgo = (iso: string): string => {
@@ -87,10 +81,9 @@ const proofCache = new Map<string, SkillProofResult>();
  *  `drafts.map`, hence the extraction. */
 const DraftCard: React.FC<{
     draft: SkillDraft;
-    onOpenTrade?: (tradeId: string) => void;
     onDiscard: () => void;
     onSave: () => void;
-}> = ({ draft: d, onOpenTrade, onDiscard, onSave }) => {
+}> = ({ draft: d, onDiscard, onSave }) => {
     const [proofState, setProofState] = useState<'idle' | 'running' | 'done'>('idle');
     const [proof, setProof] = useState<SkillProofResult | null>(null);
 
@@ -170,16 +163,7 @@ const DraftCard: React.FC<{
                 >
                     {proofState === 'running' ? 'Replaying history…' : 'Prove on history'}
                 </button>
-                {onOpenTrade && (
-                    <button
-                        type="button"
-                        onClick={() => onOpenTrade(d.tradeId)}
-                        className="ml-auto text-ui-dense text-zinc-500 hover:text-zinc-300"
-                    >
-                        View the trade
-                    </button>
-                )}
-                {!onOpenTrade && <span className="ml-auto" />}
+                <span className="ml-auto" />
                 <ActionButton onPress={onDiscard} testId={`coach-draft-deny-${d.id}`}>Discard</ActionButton>
                 <ActionButton onPress={onSave} variant="solid" testId={`coach-draft-allow-${d.id}`}>
                     Save as skill
@@ -189,7 +173,7 @@ const DraftCard: React.FC<{
     );
 };
 
-const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDenyDraft, onOpenTrade }) => {
+const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDenyDraft }) => {
     const [drafts, setDrafts] = useState<SkillDraft[]>([]);
     const [proposals, setProposals] = useState<LearningProposal[]>([]);
     const [busyId, setBusyId] = useState<string | null>(null);
@@ -215,10 +199,10 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
         setBusyId(p.id);
         setFailure(null);
         const username = getActiveUsername();
-        // One dispatcher for both approval surfaces — see
-        // applyLearningProposalByKind. A proposal acted on from here and from
-        // the Skills queue must not be able to disagree.
-        const result = await applyLearningProposalByKind(p, username);
+        // One dispatcher for both approval surfaces — see applyProposalCard.
+        // A proposal acted on from here and from the Skills queue must not be
+        // able to disagree.
+        const result = await applyProposalCard(p, username);
         setBusyId(null);
         // A refusal keeps the card: it is the human's only copy of this proposal,
         // and the reason is the writer's, not a guess made from a bare false.
@@ -226,7 +210,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
             dismissLearningProposal(p.id, username);
             refresh();
         } else {
-            setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
+            setFailure({ id: p.id, message: applyFailureMessage(result)! });
         }
     };
 
@@ -236,19 +220,13 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
         setBusyId(p.id);
         setFailure(null);
         const username = getActiveUsername();
-        let result: ProposalApplyResult;
-        try {
-            const fn = decision === 'approve' ? approvePendingRewrite : revertPendingRewrite;
-            result = await fn(p.skillSlug || '', username);
-        } catch (e) {
-            result = { applied: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
-        }
+        const result = await decideRewriteCard(p, decision, username);
         setBusyId(null);
         if (result.applied) {
             dismissLearningProposal(p.id, username);
             refresh();
         } else {
-            setFailure({ id: p.id, message: proposalApplyFailureMessage(result.reason, result.error) });
+            setFailure({ id: p.id, message: applyFailureMessage(result)! });
         }
     };
 
@@ -278,7 +256,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                     <GraduationCap className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                    <p className="text-[15px] font-semibold leading-tight text-zinc-100">Coach</p>
+                    <p className="text-ui-lede font-semibold leading-tight text-zinc-100">Coach</p>
                     <p className="text-ui-dense leading-tight text-zinc-500">
                         The learning loop&apos;s inbox — drafts and proposals waiting on your call
                     </p>
@@ -300,7 +278,6 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                 <DraftCard
                     key={d.id}
                     draft={d}
-                    onOpenTrade={onOpenTrade}
                     onDiscard={() => denyDraft(d)}
                     onSave={() => allowDraft(d)}
                 />
