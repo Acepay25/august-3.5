@@ -117,6 +117,26 @@ export interface ChatSession {
 
 export const MAX_SESSIONS = 12;
 export const MAX_ENTRIES = 60;
+/**
+ * The pinned-set cap. Derivation, not a magic number: MAX_SESSIONS (12) minus
+ * 2, so the newest two UNPINNED sessions always survive a pin spree — the
+ * chat the user just opened is never the one a pin evicts. A pin refused for
+ * this cap says so in the rail (`SessionSaveNotice.pinsDropped`); it is never
+ * silently dropped, because a pin that silently disappears is the feature
+ * lying about itself.
+ */
+export const MAX_PINNED_SESSIONS = 10;
+
+/** What a save did to the chats the user pinned. Returned so the rail can SAY
+ *  it — an invisible trim is the silent-loss defect this store's doctrine
+ *  exists to prevent. Null when nothing pinned was harmed. */
+export interface SessionSaveNotice {
+    /** Titles of pinned chats whose oldest entries were shaved to fit the byte
+     *  cap — the LAST resort, taken only when nothing unpinned was left. */
+    pinnedTrimmed: string[];
+    /** Pinned ids that did not fit the pinned cap. */
+    pinsDropped: string[];
+}
 /** The user asked for "max 5 models that talk to each other". */
 export const PANEL_MAX_MODELS = 5;
 /** Bound stored reasoning so 60 long-thinking turns can't sink the blob. */
@@ -215,11 +235,42 @@ export const loadSessions = (): ChatSession[] => {
     }
 };
 
-const trimForStorage = (sessions: ChatSession[]): ChatSession[] => fitToByteBudget(
-    sessions
-        .slice(-MAX_SESSIONS)
-        .map(s => ({ ...s, entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry) })),
-);
+const pinnedSet = (pinnedIds: readonly string[]): ReadonlySet<string> =>
+    new Set(pinnedIds.filter((id): id is string => typeof id === 'string' && !!id));
+
+/**
+ * The COUNT cap, pin-aware. `slice(-MAX_SESSIONS)` used to drop the oldest
+ * sessions outright — after pinning, precisely the chats the user chose to
+ * keep. Now: every pinned session survives (up to {@link MAX_PINNED_SESSIONS},
+ * newest-first when there are somehow more), filled out with the newest
+ * unpinned sessions up to MAX_SESSIONS.
+ *
+ * `pinnedIds` is the CALLER's pin source — the `agent_pins_v1_<user>` rail.
+ * This store does not reach into another module's key namespace.
+ */
+const fitToMaxSessions = (
+    sessions: ChatSession[],
+    pinned: ReadonlySet<string>,
+): { sessions: ChatSession[]; pinsDropped: string[] } => {
+    const sanitized = sessions.map(s => ({ ...s, entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry) }));
+    let keptPins = sanitized.filter(s => pinned.has(s.id));
+    let pinsDropped: string[] = [];
+    if (keptPins.length > MAX_PINNED_SESSIONS) {
+        // Keep the most-recently-updated pins; the stalest pins are the ones
+        // the user is least likely to come back to.
+        const ordered = [...keptPins].sort((a, b) => b.updatedAt - a.updatedAt);
+        keptPins = ordered.slice(0, MAX_PINNED_SESSIONS);
+        pinsDropped = ordered.slice(MAX_PINNED_SESSIONS).map(s => s.id);
+    }
+    const room = Math.max(0, MAX_SESSIONS - keptPins.length);
+    const unpinned = sanitized.filter(s => !pinned.has(s.id));
+    const keptUnpinned = unpinned.slice(Math.max(0, unpinned.length - room));
+    const keptIds = new Set([...keptPins, ...keptUnpinned].map(s => s.id));
+    // Preserve the incoming oldest-first order — the byte passes below
+    // sacrifice in that order, and re-sorting here would change which chat is
+    // "oldest" for reasons that have nothing to do with the chat.
+    return { sessions: sanitized.filter(s => keptIds.has(s.id)), pinsDropped };
+};
 
 /**
  * A COUNT cap is not a SIZE cap, and this store needs both.
@@ -234,7 +285,11 @@ const trimForStorage = (sessions: ChatSession[]): ChatSession[] => fitToByteBudg
  *
  * Trim in the order that costs the trader least: oldest screenshots first (the
  * TEXT of that exchange survives — a chart image can be re-taken, a past
- * argument cannot), then entries past the count cap, then whole oldest sessions.
+ * argument cannot), then entries past the count cap, then whole oldest
+ * sessions. PINNED sessions are skipped by passes 2 and 3 — and when nothing
+ * unpinned is left to lose, the last resort shaves the oldest PINNED chat and
+ * reports it, because "never touch a pinned chat" with no last resort
+ * dead-ends at a throwing setItem that loses the live transcript instead.
  */
 export const MAX_STORED_CHARS = 3_500_000;
 
@@ -249,15 +304,20 @@ const serialized = (sessions: ChatSession[]): string => {
     }
 };
 
-const fitToByteBudget = (sessions: ChatSession[]): ChatSession[] => {
+const fitToByteBudget = (
+    sessions: ChatSession[],
+    pinned: ReadonlySet<string>,
+): { sessions: ChatSession[]; pinnedTrimmed: string[] } => {
     let size = serialized(sessions).length;
-    if (size <= MAX_STORED_CHARS) return sessions;
+    if (size <= MAX_STORED_CHARS) return { sessions, pinnedTrimmed: [] };
     // Work on copies; sessions and entries are ordered oldest first, which is
     // the order both passes sacrifice in.
     const work: ChatSession[] = sessions.map(s => ({ ...s, entries: s.entries.map(e => ({ ...e })) }));
 
     // Pass 1 — drop the oldest screenshot, one at a time. The words of that
-    // exchange stay: an image can be re-taken, a past argument cannot.
+    // exchange stay: an image can be re-taken, a past argument cannot. A PIN is
+    // no reason to keep a screenshot; the pin protects the conversation, and
+    // this pass keeps every word of it.
     //
     // Size is tracked by SUBTRACTING each removed image rather than re-serializing
     // the whole list per drop: a base64 payload escapes identically inside JSON, so
@@ -265,7 +325,7 @@ const fitToByteBudget = (sessions: ChatSession[]): ChatSession[] => {
     // blob once per image is what made this loop unusable.
     for (const s of work) {
         for (const e of s.entries) {
-            if (size <= MAX_STORED_CHARS) return work;
+            if (size <= MAX_STORED_CHARS) return { sessions: work, pinnedTrimmed: [] };
             if (!e.image) continue;
             size -= e.image.length + '"image":'.length + 2;
             e.image = undefined;
@@ -273,31 +333,64 @@ const fitToByteBudget = (sessions: ChatSession[]): ChatSession[] => {
     }
 
     // Pass 2 — shave the oldest transcripts, newest entries first, down to ten.
+    // A pinned session is never the one shaved here.
     for (const s of work) {
         if (size <= MAX_STORED_CHARS) break;
+        if (pinned.has(s.id)) continue;
         if (s.entries.length <= 10) continue;
         const removed = s.entries.slice(0, s.entries.length - 10);
         s.entries = s.entries.slice(-10);
         size -= removed.reduce((n, e) => n + (e.text?.length ?? 0) + e.id.length + 24, 0);
     }
 
-    // Pass 3 — the only thing left to lose is whole oldest conversations.
+    // Pass 3 — whole oldest conversations, but never a PINNED one, and never
+    // the last session standing.
     while (size > MAX_STORED_CHARS && work.length > 1) {
-        const gone = work.shift()!;
+        const idx = work.findIndex(s => !pinned.has(s.id));
+        if (idx < 0) break;
+        const gone = work.splice(idx, 1)[0];
         size -= gone.entries.reduce((n, e) => n + (e.text?.length ?? 0) + e.id.length + 24, 0);
     }
-    return work;
+
+    // Last resort — every remaining session is pinned and the store is STILL
+    // over. Shave the oldest pinned chat's oldest entries (it keeps its newest
+    // ten, never wiped whole) and RECORD it, so the rail can say a pinned chat
+    // was trimmed. Silent here is the failure this whole path exists to avoid.
+    const pinnedTrimmed: string[] = [];
+    if (size > MAX_STORED_CHARS) {
+        for (const s of work) {
+            if (size <= MAX_STORED_CHARS) break;
+            if (s.entries.length <= 10) continue;
+            const removed = s.entries.slice(0, s.entries.length - 10);
+            s.entries = s.entries.slice(-10);
+            size -= removed.reduce((n, e) => n + (e.text?.length ?? 0) + e.id.length + 24, 0);
+            pinnedTrimmed.push(s.title);
+        }
+    }
+    return { sessions: work, pinnedTrimmed };
 };
 
 /** Strip every image — the retry that keeps a transcript saving at all. */
 const withoutAnyImages = (sessions: ChatSession[]): ChatSession[] =>
     sessions.map(s => ({ ...s, entries: s.entries.map(e => (e.image ? { ...e, image: undefined } : e)) }));
 
-export const saveSessions = (sessions: ChatSession[]): void => {
+/**
+ * Persist the chat list. `pinnedIds` is the caller's pin source
+ * (`agent_pins_v1_<user>`, bare ids); sessions in it are never the ones the
+ * byte budget sacrifices, and anything the budget DID cost a pinned chat is
+ * RETURNED, not logged — the rail needs it to say so. Returns null when
+ * nothing pinned was harmed.
+ */
+export const saveSessions = (sessions: ChatSession[], pinnedIds: readonly string[] = []): SessionSaveNotice | null => {
     const key = storageKey();
-    const trimmed = trimForStorage(sessions);
+    const pinned = pinnedSet(pinnedIds);
+    const { sessions: capped, pinsDropped } = fitToMaxSessions(sessions, pinned);
+    const { sessions: trimmed, pinnedTrimmed } = fitToByteBudget(capped, pinned);
+    const notice = (): SessionSaveNotice | null =>
+        pinsDropped.length > 0 || pinnedTrimmed.length > 0 ? { pinsDropped, pinnedTrimmed } : null;
     try {
         localStorage.setItem(key, serialized(trimmed));
+        return notice();
     } catch {
         // Quota or private mode. Retry with the screenshots gone rather than
         // reporting silence: losing the transcript is worse than losing the
@@ -305,8 +398,10 @@ export const saveSessions = (sessions: ChatSession[]): void => {
         try {
             localStorage.setItem(key, serialized(withoutAnyImages(trimmed)));
             console.warn('[chatSessions] saved without screenshots after a quota failure');
+            return notice();
         } catch {
             console.error('[chatSessions] transcript NOT persisted (quota or private mode)');
+            return notice();
         }
     }
 };

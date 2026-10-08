@@ -103,6 +103,24 @@ describe('AgentsView layout', () => {
         expect(screen.queryByText('Run')).toBeNull();
     });
 
+    it('tolerates foreign ids in its pin list (Stage 8 reuses the key)', () => {
+        // The Chart AI session rail stores `s-…` ids in THIS key namespace
+        // (`agent_pins_v1_<user>`). A mixed list is the steady state, not the
+        // edge case: bot ids, chat-session ids and anything else must all be
+        // no-ops for the roster rows, never a crash or a phantom row.
+        localStorage.setItem('agent_pins_v1_rober', JSON.stringify(['b1', 's-1720000000-abc', 'garbage', 42]));
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} groups={[group('g1', ['b1'])]} />);
+        expect(screen.getByTestId('agents-view')).toBeTruthy();
+        // Every real row still renders; the foreign ids render nothing.
+        expect(screen.getByTestId('rail-pinned').textContent).toContain('Macro');
+        expect(screen.getByTestId('chart-ai-row')).toBeTruthy();
+        // …and the pin TOGGLE on a real row still round-trips through the
+        // shared key without disturbing the foreign entries.
+        fireEvent.click(screen.getByRole('button', { name: 'Unpin Macro' }));
+        const pins: unknown = JSON.parse(localStorage.getItem('agent_pins_v1_rober') ?? '[]');
+        expect(pins).toEqual(['s-1720000000-abc', 'garbage', 42]);
+    });
+
     it('keeps group edit and delete reachable from the room row', () => {
         const onEditGroup = vi.fn();
         render(<AgentsView {...base} groups={[group('g1', ['b1'], 'War room')]} onEditGroup={onEditGroup} />);
