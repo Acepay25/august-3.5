@@ -22,7 +22,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 
 import { initMemoryFiles, createMemoryFile, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
-import { buildMemoryGraph, walkMemoryNeighbors } from '../services/learning/MemoryGraph';
+import { buildMemoryGraph } from '../services/learning/MemoryGraph';
 
 describe('Memory graph retrieval', () => {
   beforeEach(async () => {
@@ -45,8 +45,13 @@ When the market is ranging (ADX < 20, price inside a 2×ATR range):
     expect(ranging).toBeDefined();
     const applies = graph.edges.filter(e => e.from === ranging!.id && e.kind === 'appliesWhen');
     expect(applies.some(e => e.to.includes('ranging'))).toBe(true);
-    const hits = walkMemoryNeighbors(graph, { coin: 'ETHUSDT', direction: 'Long', regime: 'trending' });
-    expect(hits.some(h => h.node.path === 'market-conditions/ranging-day.md')).toBe(false);
+    // The EDGE is the claim under test (a trending setup does not link to a
+    // ranging playbook). This used to read `walkMemoryNeighbors`, a parallel
+    // graph walker with no production caller; the assertion now goes through
+    // the reader retrieval actually uses, so it cannot pass while the shipped
+    // path behaves differently.
+    const injected = getMemoryFilesContext({ coin: 'ETHUSDT', direction: 'Long', regime: 'trending' });
+    expect(injected).not.toContain('ranging-day.md');
   });
 
   it('retrieves a matching skill and skips a skill for a different coin', async () => {

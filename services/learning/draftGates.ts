@@ -1,6 +1,6 @@
 /**
  * draftGates — the shared quality bar EVERY skill-draft source passes before
- * queueing into the approval inbox. Six sources mint drafts (book seeds,
+ * queueing into the approval inbox. Seven sources mint drafts (book seeds,
  * session reviews, model proposals, post-mortem crafts, verdict citations,
  * pass mining, self-improvement distills) and they used to queue raw — only
  * the closed-trade sync ran the gates. That flooded the inbox with

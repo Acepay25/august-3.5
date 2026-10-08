@@ -34,16 +34,10 @@ export const PREF_KEYS = {
     MODEL_PERFORMANCE_DATA: 'model_performance_data',
     ROLLING_WINDOW_DATA: 'rolling_window_data',
     CONFIDENCE_CALIBRATION: 'confidence_calibration',
-    PROVIDER_PAIR_STATS: 'provider_pair_stats',
-    INVALIDATION_RULES: 'invalidation_rules',
-    POST_MORTEM_INSIGHTS: 'post_mortem_insights',
     CONFLUENCE_STATS: 'confluence_historical_stats',
     ATTRIBUTED_INSIGHTS: 'attributed_insights_kb',
-    LEARNING_WRITE_APPROVAL: 'learning_write_approval',
-    LEARNING_PENDING_RULES: 'learning_pending_rules_v1',
 
     // Alerts
-    PRICE_ALERTS: 'price_alerts',
     OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
     QUIET_HOURS: 'quiet_hours_v1',
 

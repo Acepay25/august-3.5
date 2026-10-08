@@ -73,7 +73,11 @@ describe('resolveAgentContext', () => {
     });
 
     it('reads the agent name from the roster, never from the model slug', async () => {
-        const { resolveAgentContext, agentRowLabel } = await load();
-        expect(agentRowLabel(resolveAgentContext(BOT))).toBe('Aria');
+        const { resolveAgentContext } = await load();
+        // Asserted on `.name` directly: this used to route through
+        // `agentRowLabel`, a one-line passthrough (`ctx => ctx.name`) with no
+        // production caller — the assertion is about the RESOLVER, so it should
+        // read the resolver's own output.
+        expect(resolveAgentContext(BOT).name).toBe('Aria');
     });
 });
