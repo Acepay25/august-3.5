@@ -108,8 +108,8 @@ export const DeskSeatMappingEditor: React.FC = () => {
             {ResetDialog}
             <div className="flex items-baseline justify-between gap-2">
                 <div>
-                    <h4 className="text-sm font-semibold text-zinc-100">Desk seat mapping</h4>
-                    <p className="text-xs text-zinc-500 mt-1">
+                    <h4 className="text-ui-base font-semibold text-zinc-100">Desk seat mapping</h4>
+                    <p className="text-ui-sm text-zinc-500 mt-1">
                         Pin a custom actor name to one of the 8 desk-view roles so it lands on a colored cap
                         instead of the wing fan-out. The default 8 names (Macro, Technical, Risk, …) are
                         already mapped by name; only override the names that don't auto-resolve.
@@ -161,7 +161,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                                         aria-label={`Remove override for ${name}`}
                                         className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-rose-300"
                                     >
-                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                 </li>
                             );
@@ -195,7 +195,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     disabled={!draftName.trim()}
                     className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
                 >
-                    <Plus className="h-3.5 w-3.5" /> Add
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add
                 </button>
                 {entries.length > 0 && (
                     <button
@@ -205,7 +205,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                         data-testid="desk-mapping-reset"
                         className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-400 hover:text-rose-300"
                     >
-                        <RotateCcw className="h-3.5 w-3.5" /> Reset
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
                     </button>
                 )}
             </div>

@@ -38,7 +38,7 @@ export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis
                         <span className="ui-kicker">Setup lifecycle</span>
                         <span className="rounded-md border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-200">{lifecycle.label}</span>
                     </div>
-                    <p className="mt-1 text-xs text-zinc-300">{lifecycle.summary}</p>
+                    <p className="mt-1 text-ui-sm text-zinc-300">{lifecycle.summary}</p>
                 </div>
                 {!compact && <span className="shrink-0 text-ui-xs text-zinc-500">Advisory only</span>}
             </div>

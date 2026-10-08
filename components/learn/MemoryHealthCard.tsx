@@ -93,7 +93,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
         return (
             <div className="p-4" data-testid="memory-health-error">
                 <div className="flex items-start gap-2 text-ui-dense leading-4 text-rose-300">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <div className="min-w-0 flex-1">
                         <p className="font-semibold">Could not read memory health.</p>
                         {/* The message is the diagnosis — this card exists to say
@@ -117,7 +117,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
     if (!report) {
         return (
             <div className="flex items-center gap-2 p-4 text-ui-dense text-zinc-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading memory…
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Reading memory…
             </div>
         );
     }
@@ -127,7 +127,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
     return (
         <div className="overflow-hidden rounded-control border border-zinc-800/80 bg-zinc-900" data-testid="memory-health-card">
             <div className="flex items-center gap-2 px-3 py-2">
-                <Activity className="h-3.5 w-3.5 text-cyan-300" />
+                <Activity className="h-3.5 w-3.5 text-cyan-300" aria-hidden="true" />
                 <span className="text-ui-sm font-semibold text-zinc-100">Memory health</span>
                 {report.notebook.writeFailure
                     ? <StatusPill tone="down" kicker className="ml-auto">not saving</StatusPill>
@@ -140,7 +140,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                 <ul className="space-y-1 border-t border-zinc-800/80 px-3 py-2">
                     {report.flags.map(f => (
                         <li key={f} className="flex items-start gap-1.5 text-ui-dense leading-4 text-amber-300/90">
-                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
                             <span>{f}</span>
                         </li>
                     ))}
@@ -300,7 +300,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                 {hygieneError && (
                     <p role="alert" data-testid="memory-hygiene-error"
                         className="mt-1.5 flex items-start gap-1.5 text-ui-xs leading-4 text-rose-300">
-                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
                         {/* Deliberately not claiming the pass changed nothing —
                             a partial run is possible and the log above is the
                             only record of what it got through. What IS certain
@@ -313,7 +313,7 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                     <ul className="mt-1.5 space-y-0.5 border-t border-zinc-800/80 pt-1.5">
                         {report.hygiene.slice(1, 6).map(l => (
                             <li key={`${l.atMs}-${l.text}`} className="flex items-start gap-1.5 text-ui-xs leading-4 text-zinc-600">
-                                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500/70" />
+                                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500/70" aria-hidden="true" />
                                 <span>{l.text}</span>
                             </li>
                         ))}

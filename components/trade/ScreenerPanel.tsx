@@ -94,7 +94,7 @@ const ScreenerRowView = React.memo<ScreenerRowViewProps>(({
                 onClick={ev => { ev.stopPropagation(); onLearn(symbol); }}
                 className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-cyan-300"
             >
-                <BrainCircuit className="h-3.5 w-3.5" />
+                <BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
         </td>
         <td className="px-3 py-1.5 font-mono tabular-nums text-zinc-300">{price > 0 ? fmtPrice(price) : '—'}</td>
@@ -283,7 +283,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                     </button>
                     <button type="button" onClick={onClose} aria-label="Close screener"
                         className="shrink-0 rounded p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">

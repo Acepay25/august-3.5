@@ -123,14 +123,14 @@ const TradeDetailView: React.FC<{
                 <div className="px-8 pt-2 pb-16 w-full max-w-4xl mx-auto">
                     <button
                         onClick={onBack}
-                        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-8"
+                        className="flex items-center gap-1.5 text-ui-base text-zinc-400 hover:text-zinc-100 transition-colors mb-8"
                         aria-label="Back to trade list"
                     >
-                        <ChevronLeftIcon className="w-4 h-4" /> Back
+                        <ChevronLeftIcon className="w-4 h-4" aria-hidden="true" /> Back
                     </button>
 
                     <h2 className="text-2xl font-semibold text-zinc-100 tracking-tight">{coinName}.md</h2>
-                    <p className="text-sm text-zinc-500 mt-2 mb-8">
+                    <p className="text-ui-base text-zinc-500 mt-2 mb-8">
                         {safeDirection}
                         {' · '}
                         {phtDayYear(timestamp)}
@@ -149,7 +149,7 @@ const TradeDetailView: React.FC<{
                                 compact
                                 iconVariant="subtle"
                                 align="start"
-                                icon={<FileTextIcon className="h-5 w-5" />}
+                                icon={<FileTextIcon className="h-5 w-5" aria-hidden="true" />}
                                 title="No post-mortem report yet"
                                 description="Log a WIN or LOSS with ensemble analysis to generate one."
                             />
@@ -158,7 +158,7 @@ const TradeDetailView: React.FC<{
 
                     {Array.isArray(postMortemImages) && postMortemImages.length > 0 && (
                         <div className="mt-8">
-                            <p className="text-sm text-zinc-500 mb-3">Evidence</p>
+                            <p className="text-ui-base text-zinc-500 mb-3">Evidence</p>
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {(postMortemImages || []).map((img, i) => (
                                     <img key={i} src={img} className="h-24 w-auto rounded-lg border border-zinc-800 cursor-pointer" onClick={() => setViewerImageUrl(img)} alt="" />
@@ -168,20 +168,20 @@ const TradeDetailView: React.FC<{
                     )}
 
                     <details className="mt-10 group">
-                        <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200 list-none flex items-center gap-2">
-                            <ChevronDownIcon className="w-4 h-4 transition-transform group-open:rotate-180" />
+                        <summary className="cursor-pointer text-ui-base text-zinc-400 hover:text-zinc-200 list-none flex items-center gap-2">
+                            <ChevronDownIcon className="w-4 h-4 transition-transform group-open:rotate-180" aria-hidden="true" />
                             Trade setup
                         </summary>
                         <div className={`mt-6 rounded-xl overflow-hidden ${containerClass}`}>
                         <div className="px-5 py-6 space-y-5">
                             <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact />
-                            <div className="grid grid-cols-2 gap-4 text-sm pt-2 font-mono tabular-nums">
+                            <div className="grid grid-cols-2 gap-4 text-ui-base pt-2 font-mono tabular-nums">
 
                                 {/* Trade Settings Row */}
                                 <div className="col-span-2 flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-1 flex-wrap gap-3">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 tracking-widest">Trade Parameters</span>
                                     <div className="flex items-center gap-2.5 flex-wrap">
-                                        <span className="text-xs text-zinc-400">Leverage:</span>
+                                        <span className="text-ui-sm text-zinc-400">Leverage:</span>
                                         <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700 px-2.5 py-1">
                                             <input
                                                 type="number"
@@ -189,9 +189,9 @@ const TradeDetailView: React.FC<{
                                                 onChange={(e) => setLocalLeverage(e.target.value)}
                                                 onBlur={handleLeverageBlur}
                                                 onKeyDown={(e) => e.key === 'Enter' && handleLeverageBlur()}
-                                                className="w-8 bg-transparent text-center font-mono font-bold text-zinc-200 outline-none text-sm"
+                                                className="w-8 bg-transparent text-center font-mono font-bold text-zinc-200 outline-none text-ui-base"
                                             />
-                                            <span className="text-zinc-600 text-xs">x</span>
+                                            <span className="text-zinc-600 text-ui-sm">x</span>
                                         </div>
 
                                         <div className="flex gap-1.5 ml-1 pl-3 border-l border-zinc-800">
@@ -310,12 +310,12 @@ const TradeDetailView: React.FC<{
 
                                 <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Entry Zone</span>
-                                    <span className="text-cyan-200 font-bold text-sm">{(entryPoints || [])[0]?.price || 'N/A'}</span>
+                                    <span className="text-cyan-200 font-bold text-ui-base">{(entryPoints || [])[0]?.price || 'N/A'}</span>
                                 </div>
                                 <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Stop Loss</span>
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-rose-300 font-bold text-sm">{stopLoss}</span>
+                                        <span className="text-rose-300 font-bold text-ui-base">{stopLoss}</span>
                                         {stopLossPercentage && <span className="text-rose-500/60 text-ui-2xs">{stopLossPercentage}</span>}
                                     </div>
                                 </div>
@@ -339,7 +339,7 @@ const TradeDetailView: React.FC<{
                                 {(trade.maxAdverseExcursion !== undefined || trade.maxFavorableExcursion !== undefined) && (
                                     <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800" data-testid="trade-excursions">
                                         <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Held Through</span>
-                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm tabular-nums">
+                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-ui-base tabular-nums">
                                             <span className="text-zinc-300 tabular-nums">
                                                 worst −{trade.maxAdverseExcursion !== undefined ? `${trade.maxAdverseExcursion.toFixed(1)}%` : '—'}
                                                 <span className="text-ui-2xs uppercase tracking-wider text-zinc-600"> against</span>
@@ -418,17 +418,17 @@ const TradeDetailView: React.FC<{
                                         <span className={`text-ui-2xs font-black uppercase tracking-widest flex items-center gap-1.5 ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
                                             {trade.patternMemoryGate.gateResult === 'HALT' ? (
                                                 <>
-                                                    <ShieldAlert className="h-3 w-3 shrink-0" />
+                                                    <ShieldAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
                                                     <span>Memory gate: halted</span>
                                                 </>
                                             ) : trade.patternMemoryGate.gateResult === 'REDUCE_SIZE' ? (
                                                 <>
-                                                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                                                    <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
                                                     <span>Memory gate: reduce size</span>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <Zap className="h-3 w-3 shrink-0" />
+                                                    <Zap className="h-3 w-3 shrink-0" aria-hidden="true" />
                                                     <span>Memory gate: warning</span>
                                                 </>
                                             )}
@@ -513,10 +513,10 @@ const TradeLogRowImpl: React.FC<{
                 />
             </div>
             <button type="button" onClick={() => onOpenDetail(trade.id)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
-                <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
+                <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" aria-hidden="true" />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-zinc-100 truncate">{coinName}.md</span>
+                        <span className="text-ui-base font-medium text-zinc-100 truncate">{coinName}.md</span>
                         <OutcomeBadge outcome={outcome} />
                         {analysis?.verdictReview && (
                             <StatusPill
@@ -529,14 +529,14 @@ const TradeLogRowImpl: React.FC<{
                         )}
                         {isInsight && <span className="text-ui-xs uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
-                    <p className="text-xs text-zinc-500 mt-1 truncate tabular-nums">
+                    <p className="text-ui-sm text-zinc-500 mt-1 truncate tabular-nums">
                         {direction}{tradeType ? ` · ${tradeType === 'scalp' ? '◆' : '◇'} ${tradeType}` : ''}{strategy ? ` · ${strategy}` : ''} · {phtDayYear(timestamp)}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
                         {alphaLabel ? ` · ${alphaLabel}` : ''}
                         {capLabel ? ` · ${capLabel}` : ''}
                     </p>
                 </div>
-                <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" aria-hidden="true" />
             </button>
         </div>
     );
@@ -677,7 +677,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                             key={type}
                             onClick={() => setTradeTypeFilter(type)}
                             aria-pressed={tradeTypeFilter === type}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                            className={`px-3 py-1.5 text-ui-sm font-medium rounded-full transition-colors ${
                                 tradeTypeFilter === type
                                     ? 'bg-zinc-800 text-zinc-100'
                                     : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'}`}
@@ -690,7 +690,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                         <button
                             key={o}
                             onClick={() => setOutcomeFilter(prev => prev === o ? 'all' : o)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                            className={`px-3 py-1.5 text-ui-sm font-medium rounded-full transition-colors ${
                                 outcomeFilter === o
                                     ? 'bg-zinc-800 text-zinc-100'
                                     : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
@@ -705,7 +705,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                             className="p-1 text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors"
                             aria-label="Clear outcome filter"
                         >
-                            <X className="h-3 w-3" />
+                            <X className="h-3 w-3" aria-hidden="true" />
                         </button>
                     )}
                 </div>
@@ -716,7 +716,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     <button
                         type="button"
                         onClick={askClearAll}
-                        className="hit-target text-xs text-zinc-500 hover:text-rose-400 transition-colors"
+                        className="hit-target text-ui-sm text-zinc-500 hover:text-rose-400 transition-colors"
                         title="Delete all logged trades (typed confirm)"
                     >
                         Clear all
@@ -726,7 +726,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
 
             {currentInsightIds.length > 0 && (
                 <div className="px-8 pb-4 shrink-0">
-                    <button onClick={handleSelectActiveInsights} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
+                    <button onClick={handleSelectActiveInsights} className="text-ui-sm text-zinc-400 hover:text-zinc-200 transition-colors">
                         Select {currentInsightIds.length} memory trades
                     </button>
                 </div>
@@ -739,12 +739,12 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                         <button
                             onClick={handleUpdateInsights}
                             disabled={isSummarizing || newCount === 0}
-                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
+                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-ui-sm tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
                                 ? 'bg-zinc-800 border border-zinc-700 text-zinc-500'
                                 : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-600'
                                 }`}
                         >
-                            {isSummarizing ? <LoadingIcon className="w-4 h-4" /> : <StarIcon className="w-4 h-4" />}
+                            {isSummarizing ? <LoadingIcon className="w-4 h-4" aria-hidden="true" /> : <StarIcon className="w-4 h-4" aria-hidden="true" />}
                             {isSummarizing ? 'Synthesizing...' :
                                 duplicateCount > 0
                                     ? `Add ${newCount} New (${duplicateCount} Duplicates)`
@@ -759,7 +759,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                                 }
                             </div>
                         )}
-                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-xs tracking-widest disabled:opacity-50">
+                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-ui-sm tracking-widest disabled:opacity-50">
                             <TrashIcon /> Delete Selected ({selectedIds.length})
                         </button>
                     </div>
@@ -771,7 +771,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                 {totalTrades === 0 && trades.length === 0 ? (
                     <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         <EmptyState
-                            icon={<Bookmark className="w-8 h-8" />}
+                            icon={<Bookmark className="w-8 h-8" aria-hidden="true" />}
                             title="No trades logged yet"
                             description="Run an analysis and log your first trade to start building your journal."
                             className="flex-1"
@@ -779,7 +779,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     </div>
                 ) : totalTrades === 0 && tradeTypeFilter !== 'all' && classifiedCount === 0 ? (
                     <EmptyState
-                        icon={<Bookmark className="w-8 h-8" />}
+                        icon={<Bookmark className="w-8 h-8" aria-hidden="true" />}
                         title="Nothing is classified yet"
                         description={`None of the ${trades.length} logged ${trades.length === 1 ? 'trade has' : 'trades have'} a scalp/swing label. Verdicts are classified when they finalize, so these predate that — an empty list here says nothing about how you traded.`}
                         action={
@@ -787,7 +787,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                                 type="button"
                                 data-testid="journal-clear-type-filter"
                                 onClick={() => setTradeTypeFilter('all')}
-                                className="px-3 py-1.5 text-xs font-medium rounded-full bg-zinc-800 text-zinc-100 hover:bg-zinc-700 transition-colors"
+                                className="px-3 py-1.5 text-ui-sm font-medium rounded-full bg-zinc-800 text-zinc-100 hover:bg-zinc-700 transition-colors"
                             >
                                 Show all trades
                             </button>
@@ -796,7 +796,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     />
                 ) : totalTrades === 0 ? (
                     <EmptyState
-                        icon={<Bookmark className="w-8 h-8" />}
+                        icon={<Bookmark className="w-8 h-8" aria-hidden="true" />}
                         title="No matching trades"
                         description="Nothing matches the current filters."
                         className="h-full"

@@ -21,7 +21,7 @@ export const RetryChip: React.FC<{ onRetry: () => void; className?: string }> = 
         aria-label="Retry this message"
         title="Retry — regenerate the answer"
         className={`flex items-center hit-target rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
-        <RotateCcw className="h-3 w-3" />
+        <RotateCcw className="h-3 w-3" aria-hidden="true" />
     </button>
 );
 
@@ -32,7 +32,7 @@ export const CopyChip: React.FC<{ text: string; className?: string }> = ({ text,
             onClick={() => { void copyText(text).then(ok => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1400); } }); }}
             aria-label="Copy message" title={copied ? 'Copied' : 'Copy this message'}
             className={`flex items-center gap-1 hit-target rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-zinc-200 focus:opacity-100 group-hover/msg:opacity-100 ${className}`.trim()}>
-            {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            {copied ? <Check className="h-3 w-3 text-emerald-400" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
             <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
     );
@@ -52,7 +52,7 @@ export const PinChip: React.FC<{ pinned: boolean; onToggle: () => void }> = ({ p
         className={`flex items-center gap-1 hit-target rounded-control px-1.5 py-0.5 text-ui-xs transition-opacity hover:bg-white/[0.06] focus:opacity-100 ${
             pinned ? 'text-zinc-100' : 'text-zinc-500 opacity-0 hover:text-zinc-200 group-hover/msg:opacity-100'
         }`}>
-        <Pin className="h-3 w-3" />
+        <Pin className="h-3 w-3" aria-hidden="true" />
         <span>{pinned ? 'Pinned' : 'Pin'}</span>
     </button>
 );

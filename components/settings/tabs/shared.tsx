@@ -58,7 +58,7 @@ const SettingsRow: React.FC<{
 const SettingsPageHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
     <header className="border-b border-white/[0.06] pb-3.5">
         <h3 className="text-lg font-semibold tracking-tight text-zinc-100">{title}</h3>
-        {description && <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>}
+        {description && <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">{description}</p>}
     </header>
 );
 

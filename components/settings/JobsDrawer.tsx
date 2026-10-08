@@ -86,14 +86,14 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                 <p className="text-ui-dense font-bold uppercase tracking-widest text-zinc-400">Activity</p>
                 <button type="button" onClick={onClose} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors" aria-label="Close activity">
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-4 py-3">
                 {!hasContent && (
                     <EmptyState
                         compact
-                        icon={<Inbox className="h-5 w-5" />}
+                        icon={<Inbox className="h-5 w-5" aria-hidden="true" />}
                         title="Nothing running"
                         description="Learning passes, evals and scheduled automations appear here."
                     />
@@ -130,7 +130,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                         title={`${a.name} — ${humanizeCron(a.schedule.cron)}`}
                                     >
                                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
-                                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-200">{a.name}</span>
+                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">{a.name}</span>
                                         <span className="shrink-0 text-ui-2xs text-zinc-600">{humanizeCron(a.schedule.cron)}</span>
                                     </button>
                                 ))
@@ -145,7 +145,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                             {jobs.map(job => (
                                 <div key={job.id} data-job-row className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
-                                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-200">
+                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">
                                             {JOB_LABEL[job.type] ?? job.type}
                                         </span>
                                         <span className={`rounded-md px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
@@ -169,7 +169,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                             {evaluated.map(({ name, meta }) => (
                                 <div key={name} data-eval-row className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
-                                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-zinc-200">{name}</span>
+                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">{name}</span>
                                         {meta.evalVerdict && (
                                             <span className={`rounded-md px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${VERDICT_STYLE[meta.evalVerdict] ?? 'bg-zinc-800 text-zinc-400'}`}>
                                                 {meta.evalVerdict}

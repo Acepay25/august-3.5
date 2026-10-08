@@ -59,10 +59,10 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
     <div className="border-t border-zinc-800 mt-4 pt-1">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 py-3 text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors"
+        className="w-full flex items-center gap-2 py-3 text-ui-base font-medium text-zinc-400 hover:text-zinc-100 transition-colors"
         aria-label={isExpanded ? 'Collapse reasoning' : 'Expand reasoning'}
       >
-        <Brain className="w-3.5 h-3.5" />
+        <Brain className="w-3.5 h-3.5" aria-hidden="true" />
         <span>Model Reasoning ({records.length || '?'} records)</span>
         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
         {outcome && (
@@ -76,11 +76,11 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
         <div className="pb-3 space-y-2 animate-fade-in">
           {isLoading ? (
             <div className="flex items-center gap-2 py-4 justify-center text-zinc-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-xs">Loading reasoning...</span>
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              <span className="text-ui-sm">Loading reasoning...</span>
             </div>
           ) : records.length === 0 ? (
-            <p className="text-xs text-zinc-600 py-2 text-center">
+            <p className="text-ui-sm text-zinc-600 py-2 text-center">
               No reasoning records stored for this trade.
             </p>
           ) : (
@@ -104,15 +104,15 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
               {/* Debate turns (collapsible) */}
               {debateTurns.length > 0 && (
                 <details className="rounded-lg border border-white/5 bg-zinc-800 p-2">
-                  <summary className="cursor-pointer text-xs font-medium text-zinc-500 hover:text-zinc-300 flex items-center gap-2">
-                    <MessageSquare className="w-3 h-3" />
+                  <summary className="cursor-pointer text-ui-sm font-medium text-zinc-500 hover:text-zinc-300 flex items-center gap-2">
+                    <MessageSquare className="w-3 h-3" aria-hidden="true" />
                     Debate Transcript ({debateTurns.length} turns)
                   </summary>
                   <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar">
                     {debateTurns.map((turn, idx) => {
                       const colors = getProviderColor(turn.provider);
                       return (
-                        <div key={turn.id} className="text-xs">
+                        <div key={turn.id} className="text-ui-sm">
                           <span className={`font-bold ${colors.text}`}>{turn.debateTurnSpeaker || turn.provider}:</span>{' '}
                           <span className="text-zinc-500">{(turn.finalOutput || turn.reasoning).slice(0, 200)}{(turn.finalOutput || turn.reasoning).length > 200 && '...'}</span>
                         </div>

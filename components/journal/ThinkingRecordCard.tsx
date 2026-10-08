@@ -41,10 +41,10 @@ const roleLabel = (record: ThinkingRecord): string => {
 const Section: React.FC<{ title: string; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, children, defaultOpen = false }) => (
   <details className="rounded-md border border-white/5 bg-black/20" open={defaultOpen}>
     <summary className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 text-ui-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 select-none">
-      <ChevronDown className="w-3 h-3 transition-transform" />
+      <ChevronDown className="w-3 h-3 transition-transform" aria-hidden="true" />
       {title}
     </summary>
-    <div className="px-2.5 pb-2.5 pt-1 text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto custom-scrollbar">
+    <div className="px-2.5 pb-2.5 pt-1 text-ui-sm text-zinc-400 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto custom-scrollbar">
       {children}
     </div>
   </details>
@@ -69,7 +69,7 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
           ) : (
             <Brain className={`w-3.5 h-3.5 ${colors.text}`} />
           )}
-          <span className={`text-xs font-bold ${colors.text} uppercase tracking-wider`}>
+          <span className={`text-ui-sm font-bold ${colors.text} uppercase tracking-wider`}>
             {roleLabel(record)}
             {!isTurn && record.provider !== 'moderator' && (
               <span className="ml-2 normal-case text-ui-xs font-mono text-zinc-500">{record.provider}</span>
@@ -114,7 +114,7 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
           {parts.output && <Section title="Final output" defaultOpen>{parts.output}</Section>}
           {parts.raw && <Section title="Raw chain-of-thought">{parts.raw}</Section>}
           {record.analysisJson && <Section title="Analysis JSON">{(() => { try { return JSON.stringify(JSON.parse(record.analysisJson), null, 2); } catch { return record.analysisJson; } })()}</Section>}
-          {!parts.thinking && !parts.output && !parts.raw && !record.analysisJson && <p className="text-sm italic text-zinc-600">No detailed thinking was stored for this analyst.</p>}
+          {!parts.thinking && !parts.output && !parts.raw && !record.analysisJson && <p className="text-ui-base italic text-zinc-600">No detailed thinking was stored for this analyst.</p>}
         </div>
       </ThinkingModal>
     </div>

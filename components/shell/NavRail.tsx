@@ -91,7 +91,7 @@ const AccountRow: React.FC<{
                         aria-label="Settings"
                         className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                     >
-                        <Settings className="h-4 w-4" />
+                        <Settings className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </Tip>
             </div>
@@ -112,11 +112,11 @@ const AccountRow: React.FC<{
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:cursor-default disabled:hover:bg-transparent"
                 disabled={!onSwitchUser}
             >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold uppercase text-zinc-300">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-ui-sm font-bold uppercase text-zinc-300">
                     {/* The person's initial, not a bot glyph — this row is the one
                         place the rail says who is signed in (the references all use
                         an initials block here). */}
-                    {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" />}
+                    {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
                 </span>
                 <span className="min-w-0 flex-1">
                     <span className="block truncate text-ui-caption text-zinc-300">{activeUsername || 'No profile'}</span>
@@ -131,7 +131,7 @@ const AccountRow: React.FC<{
                     aria-label="Settings"
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="h-4 w-4" aria-hidden="true" />
                 </button>
             </Tip>
         </div>
@@ -210,7 +210,7 @@ const NavRail: React.FC<NavRailProps> = ({
                     aria-controls="nav-rail-panel"
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
-                    <PanelLeftClose className="h-4 w-4" />
+                    <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
                 </button>
             </div>
 

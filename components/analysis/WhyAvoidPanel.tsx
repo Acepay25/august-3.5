@@ -39,7 +39,7 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
         return (
             <div className="rounded-control border border-rose-500/15 bg-rose-500/[0.03] px-3 py-2">
                 <div className="text-ui-xs font-semibold uppercase tracking-widest text-rose-300">Why no trade</div>
-                <p className="mt-1 text-sm leading-6 text-zinc-300">{explainNoTrade(analysis)}</p>
+                <p className="mt-1 text-ui-base leading-6 text-zinc-300">{explainNoTrade(analysis)}</p>
             </div>
         );
     }
@@ -53,7 +53,7 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
                     <div className="text-ui-xs uppercase tracking-widest text-rose-400/80">Hard blockers — do not enter</div>
                     <ul className="mt-1 space-y-1">
                         {basis.hard.map(item => (
-                            <li key={item.text} className="text-sm leading-5 text-rose-200/90">{item.text}</li>
+                            <li key={item.text} className="text-ui-base leading-5 text-rose-200/90">{item.text}</li>
                         ))}
                     </ul>
                 </div>
@@ -64,14 +64,14 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
                     <div className="text-ui-xs uppercase tracking-widest text-amber-300/80">Confidence downgrades — watch, not dead</div>
                     <ul className="mt-1 space-y-1">
                         {basis.downgrades.map(item => (
-                            <li key={item.text} className="text-sm leading-5 text-zinc-300">{item.text}</li>
+                            <li key={item.text} className="text-ui-base leading-5 text-zinc-300">{item.text}</li>
                         ))}
                     </ul>
                 </div>
             )}
 
             {trigger && (
-                <p className="mt-2 text-xs leading-5 text-zinc-400">
+                <p className="mt-2 text-ui-sm leading-5 text-zinc-400">
                     <span className="font-medium uppercase tracking-widest text-zinc-500">Would be valid if </span>
                     {trigger.text}
                     {trigger.level ? ` — at ${trigger.level}` : ''}.
@@ -83,7 +83,7 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
                     <div className="text-ui-xs uppercase tracking-widest text-zinc-500">Confidence timeline</div>
                     <ol className="mt-1 space-y-1">
                         {steps.map((step, index) => (
-                            <li key={`${step.label}-${index}`} className="flex items-start gap-2 text-xs leading-5">
+                            <li key={`${step.label}-${index}`} className="flex items-start gap-2 text-ui-sm leading-5">
                                 <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dotTone(step.tone)}`} />
                                 <span className="min-w-0">
                                     <span className="text-zinc-500">{step.label}: </span>
@@ -109,7 +109,7 @@ export const WaitForConfirmationBanner: React.FC<{ analysis: TradeAnalysis }> = 
     return (
         <div className="rounded-control border border-amber-500/15 bg-amber-500/[0.03] px-3 py-2">
             <div className="text-ui-xs font-semibold uppercase tracking-widest text-amber-300">Wait for confirmation</div>
-            <p className="mt-1 text-sm leading-6 text-zinc-300">
+            <p className="mt-1 text-ui-base leading-6 text-zinc-300">
                 This setup is a watch, not a no-trade. Enter when {trigger.text}
                 {trigger.level ? ` (${trigger.level})` : ''}.
             </p>

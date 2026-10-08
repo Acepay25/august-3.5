@@ -70,11 +70,11 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Compare analyses" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
-            <div className="text-xs font-medium text-zinc-200">Compare runs</div>
+            <div className="text-ui-sm font-medium text-zinc-200">Compare runs</div>
             <div className="text-ui-xs text-zinc-500">This run vs the previous analysis in the thread</div>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 

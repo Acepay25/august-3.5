@@ -67,10 +67,7 @@ type TabId = 'log' | 'analytics' | 'saved';
 interface TabConfig {
     id: TabId;
     label: string;
-    shortLabel: string;
     icon: React.ReactNode;
-    color: string;
-    activeColor: string;
 }
 
 /** Dead tabs fold to the ledger. 'performance' predates this file's tab
@@ -81,9 +78,9 @@ const resolveTab = (tab: string): TabId =>
     tab === 'analytics' || tab === 'saved' ? (tab as TabId) : 'log';
 
 const TABS: TabConfig[] = [
-    { id: 'log', label: 'History', shortLabel: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
-    { id: 'saved', label: 'Saved', shortLabel: 'Saved', icon: <BookmarkIcon className="w-4 h-4 shrink-0" />, color: 'text-zinc-500', activeColor: 'text-zinc-100' },
+    { id: 'log', label: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
+    { id: 'analytics', label: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
+    { id: 'saved', label: 'Saved', icon: <BookmarkIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
 ];
 
 /** CSV + printable-report export. The journal has TWO headers (the embedded
@@ -167,7 +164,6 @@ const JournalInner: React.FC<JournalProps> = ({
         }
     }, [isVisible, initialTab, openNonce]);
 
-    const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
 
     // Roving-tabindex arrow navigation for the embedded tab strip.
     const tabListRef = useRef<HTMLDivElement>(null);
@@ -230,7 +226,7 @@ const JournalInner: React.FC<JournalProps> = ({
                         />
                     ) : (
                         <EmptyState
-                            icon={<BookmarkIcon className="w-8 h-8" />}
+                            icon={<BookmarkIcon className="w-8 h-8" aria-hidden="true" />}
                             title="Saved analyses are not wired"
                             description="App did not hand the journal a saved-analyses store."
                         />
@@ -250,7 +246,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 <div className="min-w-0">
                     <h2 className="font-serif text-3xl tracking-tight text-zinc-100">Journal</h2>
                     {!documentOpen && (
-                        <p className="text-sm text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
+                        <p className="text-ui-base text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
                     )}
                 </div>
                 {/* CSV / printable-report export — these buttons used to
@@ -276,7 +272,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             aria-controls={`journal-panel-${activeTab}`}
                             tabIndex={isActive ? 0 : -1}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+                            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-ui-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
                                 isActive
                                     ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                                     : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
@@ -304,7 +300,7 @@ const JournalInner: React.FC<JournalProps> = ({
 const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = ({ label, value, sub }) => (
   <div className="min-w-0">
     <div className="text-ui-xs uppercase tracking-wider text-zinc-500 mb-1">{label}</div>
-    <div className="text-base font-semibold text-zinc-100 truncate">{value}</div>
+    <div className="text-ui-lg font-semibold text-zinc-100 truncate">{value}</div>
     {sub && <div className="text-ui-dense text-zinc-500 truncate mt-0.5">{sub}</div>}
   </div>
 );

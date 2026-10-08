@@ -139,17 +139,17 @@ export const VersionHistoryDashboard: React.FC = () => {
                         <div className={`p-2 rounded-2xl bg-zinc-800 ${config.split(' ').pop()} group-hover:scale-110 transition-transform duration-[150ms] ease-[var(--ease-snappy)]`}>
                             {icon}
                         </div>
-                        {large && <div className="text-xs font-mono text-white/30 uppercase tracking-widest">Live Monitor</div>}
+                        {large && <div className="text-ui-sm font-mono text-white/30 uppercase tracking-widest">Live Monitor</div>}
                     </div>
 
-                    <h3 className="text-sm font-medium text-white/60 mb-1">{title}</h3>
+                    <h3 className="text-ui-base font-medium text-white/60 mb-1">{title}</h3>
 
                     {children ? (
                         <div className="mt-2 flex-1 flex flex-col min-w-0">{children}</div>
                     ) : (
                         <>
                             <div className="text-3xl font-light text-white tracking-tight">{value}</div>
-                            <div className="text-xs text-white/40 mt-2 font-light">{subtitle}</div>
+                            <div className="text-ui-sm text-white/40 mt-2 font-light">{subtitle}</div>
                         </>
                     )}
                 </div>
@@ -190,17 +190,17 @@ export const VersionHistoryDashboard: React.FC = () => {
                             ) : (
                                 <div className="h-48 w-full min-w-0 flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 text-center">
                                     <Icons.Chart className="h-6 w-6 text-emerald-500/60" />
-                                    <p className="text-sm font-medium text-zinc-200">No feedback yet</p>
+                                    <p className="text-ui-base font-medium text-zinc-200">No feedback yet</p>
                                     <p className="max-w-[240px] text-ui-dense leading-relaxed text-zinc-500">Resolved trades will create the first reinforcement signal.</p>
                                 </div>
                             )}
                             <div className="flex justify-between items-end mt-4">
                                 <div className="text-2xl font-light text-emerald-400">
                                     {signals.length > 0 ? (signals.reduce((a, b) => a + b.rewardScore, 0) / signals.length).toFixed(2) : '—'}
-                                    <span className="text-sm text-emerald-500/50 ml-2">Avg Reward</span>
+                                    <span className="text-ui-base text-emerald-500/50 ml-2">Avg Reward</span>
                                 </div>
                                 <div className="flex flex-col items-end">
-                                    <div className="text-xs text-emerald-500/40 font-mono">Real-time Feedback</div>
+                                    <div className="text-ui-sm text-emerald-500/40 font-mono">Real-time Feedback</div>
                                     <div className="text-ui-xs text-zinc-500">{signals.length > 0 ? `Last: ${phtClockSeconds(signals[signals.length - 1].timestamp)}` : 'Awaiting first resolved trade'}</div>
                                 </div>
                             </div>
@@ -210,7 +210,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                         <ModernCard title="Skill Library" accent="purple" icon={<Icons.Brain className="w-5 h-5" />}>
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-2xl font-light text-white">{rules.length}</div>
-                                <div className="text-xs text-white/40">Active Skills</div>
+                                <div className="text-ui-sm text-white/40">Active Skills</div>
                             </div>
 
                             {rules.length > 0 ? (
@@ -219,7 +219,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                         <select
                                             value={selectedRuleIndex}
                                             onChange={(e) => setSelectedRuleIndex(Number(e.target.value))}
-                                            className="hit-target w-full bg-transparent text-xs text-zinc-300 focus:outline-none cursor-pointer"
+                                            className="hit-target w-full bg-transparent text-ui-sm text-zinc-300 focus:outline-none cursor-pointer"
                                         >
                                             {rules.map((s, idx) => (
                                                 <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
@@ -240,7 +240,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="mt-auto text-xs text-white/30 italic">No active skills yet.</div>
+                                <div className="mt-auto text-ui-sm text-white/30 italic">No active skills yet.</div>
                             )}
                         </ModernCard>
 
@@ -257,7 +257,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                         <ModernCard title="Knowledge Base" accent="amber" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-2xl font-light text-white">{insights.length}</div>
-                                <div className="text-xs text-white/40">Stored Insights</div>
+                                <div className="text-ui-sm text-white/40">Stored Insights</div>
                             </div>
 
                             {insights.length > 0 ? (
@@ -266,7 +266,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                         <select
                                             value={selectedInsightIndex}
                                             onChange={(e) => setSelectedInsightIndex(Number(e.target.value))}
-                                            className="w-full bg-transparent text-xs text-amber-300 focus:outline-none cursor-pointer"
+                                            className="w-full bg-transparent text-ui-sm text-amber-300 focus:outline-none cursor-pointer"
                                         >
                                             {insights.map((insight, idx) => (
                                                 <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
@@ -291,7 +291,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                                 title="Mark helpful"
                                                 aria-label="Mark helpful"
                                             >
-                                                <ThumbsUp className="h-3 w-3" />
+                                                <ThumbsUp className="h-3 w-3" aria-hidden="true" />
                                             </button>
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, false)}
@@ -299,13 +299,13 @@ export const VersionHistoryDashboard: React.FC = () => {
                                                 title="Mark not helpful"
                                                 aria-label="Mark not helpful"
                                             >
-                                                <ThumbsDown className="h-3 w-3" />
+                                                <ThumbsDown className="h-3 w-3" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="mt-auto text-xs text-white/30 italic">No insights stored yet.</div>
+                                <div className="mt-auto text-ui-sm text-white/30 italic">No insights stored yet.</div>
                             )}
 
                             {/* By-provider breakdown: which AI produced the
@@ -346,18 +346,18 @@ export const VersionHistoryDashboard: React.FC = () => {
                         <ModernCard title="Unified Storage" accent="blue" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="mt-1">
                                 <span className="text-3xl font-light text-white">{storageCount}</span>
-                                <span className="text-xs text-zinc-400 ml-2">Items</span>
+                                <span className="text-ui-sm text-zinc-400 ml-2">Items</span>
                             </div>
-                            <div className="mt-2 text-xs text-white/40">Across IndexedDB & Local</div>
+                            <div className="mt-2 text-ui-sm text-white/40">Across IndexedDB & Local</div>
                         </ModernCard>
 
                         {/* 3.3 Job Queue - Real Output */}
                         <ModernCard title="Job Queue" accent="emerald" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="mt-1 flex items-baseline">
                                 <span className={`text-3xl font-light ${queueSize > 0 ? 'text-emerald-400 animate-pulse' : 'text-white'}`}>{queueSize}</span>
-                                <span className="text-xs text-emerald-400/60 ml-2">Pending Jobs</span>
+                                <span className="text-ui-sm text-emerald-400/60 ml-2">Pending Jobs</span>
                             </div>
-                            <div className="mt-2 text-xs text-white/40">{queueSize === 0 ? 'Workers Idle' : 'Processing...'}</div>
+                            <div className="mt-2 text-ui-sm text-white/40">{queueSize === 0 ? 'Workers Idle' : 'Processing...'}</div>
                         </ModernCard>
                         {/* "Schema Version v2.0.0" and "Rule Engine: Unified" cards are
                             deleted — hardcoded strings that measured nothing. */}

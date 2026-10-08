@@ -65,7 +65,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                 className={`ml-0.5 flex h-6 w-6 items-center justify-center rounded-control transition-colors ${
                     open ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                 }`}>
-                <Settings className="h-3.5 w-3.5" />
+                <Settings className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
             {open && (
                 <>
@@ -87,7 +87,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                                             isShown ? 'text-zinc-100' : 'text-zinc-500'
                                         }`}>
                                         {tf}
-                                        <span aria-hidden>{isShown ? <Check className="h-3 w-3 text-cyan-400" /> : null}</span>
+                                        <span aria-hidden>{isShown ? <Check className="h-3 w-3 text-cyan-400" aria-hidden="true" /> : null}</span>
                                     </button>
                                 );
                             })}

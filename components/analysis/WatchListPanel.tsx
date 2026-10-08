@@ -55,11 +55,11 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
             <button type="button" className="absolute inset-0 cursor-default" aria-label="Close pinned signals overlay" onClick={onClose} />
             <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                    <PinIcon className="h-4 w-4 text-zinc-300" />
-                    <h2 className="text-sm font-semibold text-zinc-100">Pinned signals</h2>
+                    <PinIcon className="h-4 w-4 text-zinc-300" aria-hidden="true" />
+                    <h2 className="text-ui-base font-semibold text-zinc-100">Pinned signals</h2>
                     <span className="text-ui-dense text-zinc-500">{openCount} open</span>
                     <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close pinned signals">
-                        <CloseIcon className="h-4 w-4" />
+                        <CloseIcon className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
                 <div className="flex gap-1 border-b border-white/10 px-4 py-2">
@@ -96,7 +96,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                         return (
                             <div key={signal.messageId} className=" rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                                 <div className="flex flex-wrap items-baseline gap-2">
-                                    <span className="text-xs font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
+                                    <span className="text-ui-sm font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
                                     <span className="text-ui-dense font-medium text-zinc-300">{dir}</span>
                                     <span className="text-ui-xs text-zinc-600">{signal.conversationTitle}</span>
                                     {!pending && (

@@ -159,18 +159,18 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <div className="flex items-center gap-3">
                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${colors.border} ${colors.bg}`}>
                             {isWin ? (
-                                <TrendingUp className="h-5 w-5 text-emerald-400" />
+                                <TrendingUp className="h-5 w-5 text-emerald-400" aria-hidden="true" />
                             ) : outcome === TradeOutcome.ENTRY_NOT_HIT ? (
-                                <Clock className="h-5 w-5 text-amber-400" />
+                                <Clock className="h-5 w-5 text-amber-400" aria-hidden="true" />
                             ) : (
-                                <TrendingDown className="h-5 w-5 text-rose-400" />
+                                <TrendingDown className="h-5 w-5 text-rose-400" aria-hidden="true" />
                             )}
                         </div>
                         <div>
-                            <h3 className={`text-base font-bold ${colors.text}`}>
+                            <h3 className={`text-ui-lg font-bold ${colors.text}`}>
                                 {content.title}
                             </h3>
-                            <p className="text-xs text-zinc-400 mt-0.5 font-mono">
+                            <p className="text-ui-sm text-zinc-400 mt-0.5 font-mono">
                                 <span className="text-white font-semibold">{coinName}</span>
                             </p>
                         </div>
@@ -182,7 +182,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <div className="space-y-4">
                         {/* Main P/L Input */}
                         <div>
-                            <label htmlFor="pnl-amount" className="block text-sm font-medium text-zinc-300 mb-2">
+                            <label htmlFor="pnl-amount" className="block text-ui-base font-medium text-zinc-300 mb-2">
                                 {content.pnlLabel} <span className="text-rose-400">*</span>
                             </label>
                             <div className="relative">
@@ -198,14 +198,14 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 />
                             </div>
                             {pnl && !isPnlValid && (
-                                <p className="mt-1.5 text-xs text-rose-400">Please enter a valid positive number</p>
+                                <p className="mt-1.5 text-ui-sm text-rose-400">Please enter a valid positive number</p>
                             )}
                         </div>
 
                         {/* Entry Point Selector - shown when multiple entries exist */}
                         {hasMultipleEntries && (
                             <div className="pt-3 border-t border-white/5">
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                <label className="block text-ui-base font-medium text-zinc-300 mb-2">
                                      Which entry was triggered?
                                 </label>
                                 <div className="space-y-2 pl-1">
@@ -226,17 +226,17 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                                 }}
                                                 className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-cyan-600 focus-visible:ring-cyan-500"
                                             />
-                                            <span className="ml-3 text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
+                                            <span className="ml-3 text-ui-base font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
                                                 <span className="text-zinc-500">Entry {idx + 1}:</span>{' '}
                                                 <span className="font-mono text-white">${entry.price}</span>
                                                 {entry.description && (
-                                                    <span className="text-zinc-500 text-xs ml-2">({entry.description})</span>
+                                                    <span className="text-zinc-500 text-ui-sm ml-2">({entry.description})</span>
                                                 )}
                                             </span>
                                         </label>
                                     ))}
                                 </div>
-                                <p className="mt-2 text-xs text-zinc-500">
+                                <p className="mt-2 text-ui-sm text-zinc-500">
                                     Select which entry price(s) were filled. This helps with accurate backtesting.
                                 </p>
                             </div>
@@ -251,7 +251,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     onChange={() => setIsAdvanced(!isAdvanced)}
                                     className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-cyan-600 focus-visible:ring-cyan-500"
                                 />
-                                <span className="ml-3 text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
+                                <span className="ml-3 text-ui-base font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">
                                     {content.advancedToggle}
                                 </span>
                             </label>
@@ -260,7 +260,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         {/* Advanced Input */}
                         {isAdvanced && (
                             <div className="animate-fade-in pl-7">
-                                <label htmlFor="corrected-value" className="block text-sm font-medium text-zinc-400 mb-1.5">
+                                <label htmlFor="corrected-value" className="block text-ui-base font-medium text-zinc-400 mb-1.5">
                                     {content.advancedLabel}
                                 </label>
                                 <input
@@ -269,9 +269,9 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                     value={correctedValue}
                                     onChange={e => setCorrectedValue(e.target.value)}
                                     placeholder={content.advancedPlaceholder}
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-white text-ui-base focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
                                 />
-                                <p className="mt-1.5 text-xs text-zinc-500">{content.advancedHelp}</p>
+                                <p className="mt-1.5 text-ui-sm text-zinc-500">{content.advancedHelp}</p>
                             </div>
                         )}
                     </div>
@@ -279,7 +279,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
 
                 {/* Data Capture Options - only enabled when P/L is valid */}
                 <div className={`p-5 space-y-3 ${!isPnlValid ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-3">
+                    <p className="text-ui-sm text-zinc-500 uppercase tracking-widest font-bold mb-3">
                         Choose how to capture trade data
                     </p>
 
@@ -303,7 +303,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                <div className="text-ui-sm text-zinc-400 mt-1 leading-relaxed">
                                     {isCapturing
                                         ? 'Fetching market data from Binance...'
                                         : 'Instantly fetch current market data. Trade will be logged after capture completes.'
@@ -325,7 +325,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
                                     Upload Screenshot & Log
                                 </div>
-                                <div className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                                <div className="text-ui-sm text-zinc-500 mt-1 leading-relaxed">
                                     Manually upload a screenshot. Trade will be logged after upload.
                                 </div>
                             </div>
@@ -338,7 +338,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         disabled={isCapturing || !isPnlValid}
                         className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <span className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors">
+                        <span className="text-ui-base text-zinc-500 hover:text-zinc-400 transition-colors">
                             Log without data capture →
                         </span>
                     </button>
@@ -417,7 +417,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                             }`}
                                         >
                                             <span aria-hidden className="flex items-center">
-                                                {checklistChecked.has(item.id) ? <CheckSquare className="h-3.5 w-3.5 text-cyan-400 shrink-0" /> : <Square className="h-3.5 w-3.5 text-zinc-500 shrink-0" />}
+                                                {checklistChecked.has(item.id) ? <CheckSquare className="h-3.5 w-3.5 text-cyan-400 shrink-0" aria-hidden="true" /> : <Square className="h-3.5 w-3.5 text-zinc-500 shrink-0" aria-hidden="true" />}
                                             </span>
                                             {item.label}
                                         </button>
@@ -437,7 +437,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         <button
                             onClick={onClose}
                             disabled={isCapturing}
-                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50"
+                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-ui-base disabled:opacity-50"
                         >
                             Cancel
                         </button>

@@ -30,12 +30,12 @@ import type { SkillIngestResult } from '../../services/learning/SkillMemoryServi
 import { getActiveUsername } from '../../utils/activeUser';
 
 const PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
-    idle: <ShieldCheck className="h-3.5 w-3.5" />,
-    reviewing: <Search className="h-3.5 w-3.5" />,
-    verifying: <ShieldCheck className="h-3.5 w-3.5" />,
-    enhancing: <Brain className="h-3.5 w-3.5" />,
-    deciding: <Gavel className="h-3.5 w-3.5" />,
-    learning: <Brain className="h-3.5 w-3.5" />,
+    idle: <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />,
+    reviewing: <Search className="h-3.5 w-3.5" aria-hidden="true" />,
+    verifying: <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />,
+    enhancing: <Brain className="h-3.5 w-3.5" aria-hidden="true" />,
+    deciding: <Gavel className="h-3.5 w-3.5" aria-hidden="true" />,
+    learning: <Brain className="h-3.5 w-3.5" aria-hidden="true" />,
 };
 
 const VERDICT_STYLE: Record<string, string> = {
@@ -183,7 +183,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="supervisor-stream">
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
-                <ListChecks className="h-4 w-4 text-cyan-300" />
+                <ListChecks className="h-4 w-4 text-cyan-300" aria-hidden="true" />
                 <span className="text-ui-caption font-semibold text-zinc-100">Skill supervisor</span>
                 {snap.modelName && (
                     <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-400">
@@ -193,7 +193,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                 {onClose && (
                     <button type="button" onClick={onClose} aria-label="Close supervisor panel"
                         className="ml-auto rounded-control p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 )}
             </div>
@@ -204,7 +204,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                     className={`flex items-center gap-1 rounded-control border px-2 py-1 text-ui-xs font-semibold transition-colors ${
                         snap.autoEnabled ? 'border-emerald-500/30 text-emerald-300' : 'border-white/10 text-zinc-400'
                     }`}>
-                    {snap.autoEnabled ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    {snap.autoEnabled ? <Pause className="h-3 w-3" aria-hidden="true" /> : <Play className="h-3 w-3" aria-hidden="true" />}
                     {snap.autoEnabled ? 'Auto — on' : 'Auto — paused'}
                 </button>
                 <button type="button" onClick={() => void runSupervisorNow()} disabled={snap.running}

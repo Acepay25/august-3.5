@@ -109,7 +109,7 @@ export const AmendmentsInbox: React.FC = () => {
                             data-testid={`approve-amendment-${a.id}`}
                             className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
                         >
-                            <Check className="h-3 w-3" /> {a.kind === 'supersede' ? 'Append correction' : 'Apply replacement'}
+                            <Check className="h-3 w-3" aria-hidden="true" /> {a.kind === 'supersede' ? 'Append correction' : 'Apply replacement'}
                         </button>
                         <button
                             type="button"
@@ -117,7 +117,7 @@ export const AmendmentsInbox: React.FC = () => {
                             onClick={() => { void resolve(a, false); }}
                             className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
                         >
-                            <X className="h-3 w-3" /> Reject
+                            <X className="h-3 w-3" aria-hidden="true" /> Reject
                         </button>
                     </div>
                 </div>

@@ -272,11 +272,11 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             <div className="flex items-start justify-between gap-4 shrink-0 mb-8">
                 <div>
                     <h3 className="text-3xl font-semibold text-zinc-100 tracking-tight">Memory</h3>
-                    <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
+                    <p className="text-ui-base text-zinc-500 mt-2 leading-relaxed">
                         Notebook files the model reads. Skills, diaries, and rules live here.
                     </p>
                 </div>
-                <span className="shrink-0 text-xs text-zinc-500 pt-2">
+                <span className="shrink-0 text-ui-sm text-zinc-500 pt-2">
                     {stats.enabledCount} enabled · {stats.charCount.toLocaleString()} chars
                 </span>
             </div>
@@ -288,12 +288,12 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                 {memoryConfig && (
                     <div className="pb-2">
                         <span className="text-ui-xs uppercase tracking-widest text-zinc-600">Managed by </span>
-                        <span className="text-xs text-zinc-400">{memoryConfig.selectedModel || memoryConfig.name || 'memory model'}</span>
+                        <span className="text-ui-sm text-zinc-400">{memoryConfig.selectedModel || memoryConfig.name || 'memory model'}</span>
                     </div>
                 )}
                 {setIsGlobalMemoryEnabled && (
                     <div className="flex items-center gap-3 pb-2 ml-auto">
-                        <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">Global memory</span>
+                        <span className="text-ui-sm font-medium uppercase tracking-widest text-zinc-500">Global memory</span>
                         <ToggleSwitch
                             checked={!!isGlobalMemoryEnabled}
                             onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)}
@@ -311,7 +311,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                         onChange={e => setNewFolderName(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') void handleCreateFolder(); if (e.key === 'Escape') { setIsCreatingFolder(false); setNewFolderName(''); } }}
                         placeholder="new-folder"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-ui-base text-zinc-100 outline-none focus:border-zinc-600"
                     />
                 </div>
             )}
@@ -321,9 +321,9 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     <button
                         type="button"
                         onClick={() => setShowSuggestions(false)}
-                        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
+                        className="flex items-center gap-1.5 text-ui-base text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
                     >
-                        <ChevronLeftIcon className="w-4 h-4" /> Back
+                        <ChevronLeftIcon className="w-4 h-4" aria-hidden="true" /> Back
                     </button>
                     <div className="flex items-start justify-between gap-3 mb-2">
                         <h4 className="text-lg font-medium text-zinc-100 tracking-tight">Suggestions</h4>
@@ -331,25 +331,25 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             type="button"
                             onClick={() => { void handleRunReview(); }}
                             disabled={isReviewing}
-                            className="px-3 py-1.5 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-100 transition-colors"
+                            className="px-3 py-1.5 rounded-lg text-ui-base bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-100 transition-colors"
                         >
                             {isReviewing ? 'Reviewing…' : 'Review now'}
                         </button>
                     </div>
-                    <p className="text-sm text-zinc-500 mb-8">
+                    <p className="text-ui-base text-zinc-500 mb-8">
                         Memory model review of your notebook. Not injected into analyses.
                     </p>
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isReviewing ? (
-                            <div className="flex-1 flex items-center justify-center gap-2 text-sm text-zinc-500">
-                                <Loader2 className="w-4 h-4 animate-spin" /> Reviewing notebook…
+                            <div className="flex-1 flex items-center justify-center gap-2 text-ui-base text-zinc-500">
+                                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Reviewing notebook…
                             </div>
                         ) : suggestionsFile?.content.trim() ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
                                 <MarkdownContent content={suggestionsFile.content} className="text-ui-lede leading-8" />
                             </div>
                         ) : (
-                            <p className="text-sm text-zinc-500 text-center py-16 px-8">
+                            <p className="text-ui-base text-zinc-500 text-center py-16 px-8">
                                 No suggestions yet. After notebook files change, the Memory model reviews them here. You can also tap Review now.
                             </p>
                         )}
@@ -359,9 +359,9 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                 <div className="flex-1 min-h-0 flex flex-col">
                     <button
                         onClick={() => { void goBackToList(); }}
-                        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
+                        className="flex items-center gap-1.5 text-ui-base text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
                     >
-                        <ChevronLeftIcon className="w-4 h-4" /> Back
+                        <ChevronLeftIcon className="w-4 h-4" aria-hidden="true" /> Back
                     </button>
                     <div className="flex items-start justify-between gap-3 mb-2">
                         <h4 className="text-lg font-medium text-zinc-100 tracking-tight font-mono">
@@ -375,27 +375,27 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             />
                             <button
                                 onClick={() => setIsPreview(v => !v)}
-                                className="px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
+                                className="px-3 py-1.5 rounded-lg text-ui-base text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
                             >
                                 {isPreview ? 'Write' : 'Preview'}
                             </button>
                             <button
                                 onClick={() => { void handleSave(); }}
                                 disabled={!isDirty}
-                                className="px-3 py-1.5 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 transition-colors"
+                                className="px-3 py-1.5 rounded-lg text-ui-base bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 transition-colors"
                             >
                                 Save
                             </button>
                             <button
                                 onClick={() => { void handleDeleteFile(selectedFile); }}
-                                className=" px-3 py-1.5 rounded-lg text-sm text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                className=" px-3 py-1.5 rounded-lg text-ui-base text-rose-400 hover:bg-rose-500/10 transition-colors"
                             >
                                 Delete
                             </button>
                         </div>
                     </div>
                     <div className="flex items-center justify-between gap-3 mb-8 flex-wrap">
-                        <p className="text-sm text-zinc-500">
+                        <p className="text-ui-base text-zinc-500">
                             {folders.find(f => f.id === selectedFile.folderId)?.name ?? selectedFile.folderId}
                             {selectedFile.autoManaged ? ' · auto-maintained' : ''}
                             {' · '}{draft.length.toLocaleString()} chars
@@ -441,9 +441,9 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                 <div className="flex-1 min-h-0 flex flex-col">
                     <button
                         onClick={() => { void goBackToFolders(); }}
-                        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
+                        className="flex items-center gap-1.5 text-ui-base text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
                     >
-                        <ChevronLeftIcon className="w-4 h-4" /> Back
+                        <ChevronLeftIcon className="w-4 h-4" aria-hidden="true" /> Back
                     </button>
                     <h4 className="text-lg font-medium text-zinc-100 tracking-tight font-mono mb-8">
                         {selectedFolder.name}
@@ -453,7 +453,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             <button
                                 type="button"
                                 onClick={() => { setIsCreatingFile(v => !v); setIsCreatingFolder(false); }}
-                                className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors"
+                                className="text-ui-sm text-zinc-400 hover:text-zinc-100 transition-colors"
                             >
                                 New file
                             </button>
@@ -466,13 +466,13 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                     onChange={e => setNewFileName(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') void handleCreateFile(); if (e.key === 'Escape') { setIsCreatingFile(false); setNewFileName(''); } }}
                                     placeholder="my-note.md"
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-ui-base text-zinc-100 outline-none focus:border-zinc-600"
                                 />
                             </div>
                         )}
                         <div className="flex-1 overflow-y-auto custom-scrollbar">
                             {visibleFiles.length === 0 ? (
-                                <p className="text-sm text-zinc-500 text-center py-16">
+                                <p className="text-ui-base text-zinc-500 text-center py-16">
                                     This folder is empty. Create the first file.
                                 </p>
                             ) : (
@@ -483,8 +483,8 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                         onClick={() => { void handleFileSwitch(file); }}
                                         className="w-full flex items-center gap-3 px-5 py-4 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
                                     >
-                                        <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
-                                        <span className="flex-1 min-w-0 font-mono text-sm text-zinc-100 truncate">
+                                        <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" aria-hidden="true" />
+                                        <span className="flex-1 min-w-0 font-mono text-ui-base text-zinc-100 truncate">
                                             {file.name}
                                         </span>
                                         {file.autoManaged && (
@@ -493,7 +493,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                         {!file.enabled && (
                                             <span className="text-ui-xs uppercase tracking-widest text-zinc-600 shrink-0">off</span>
                                         )}
-                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" aria-hidden="true" />
                                     </button>
                                 ))
                             )}
@@ -506,7 +506,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                         <button
                             type="button"
                             onClick={() => { setIsCreatingFolder(v => !v); setIsCreatingFile(false); }}
-                            className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors"
+                            className="text-ui-sm text-zinc-400 hover:text-zinc-100 transition-colors"
                         >
                             New folder
                         </button>
@@ -522,20 +522,20 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors text-left"
                         >
                             <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
-                                <FileText className="w-4 h-4 text-zinc-400" />
+                                <FileText className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                             </span>
                             <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-medium text-zinc-100 truncate">Suggestions</span>
-                                <span className="block text-xs text-zinc-500 mt-0.5 truncate">
+                                <span className="block text-ui-base font-medium text-zinc-100 truncate">Suggestions</span>
+                                <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">
                                     {suggestionsFile?.content.trim()
                                         ? `Updated ${phtStamp(suggestionsFile.updatedAt)}`
                                         : 'Memory model review — tap to open'}
                                 </span>
                             </span>
-                            <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                            <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" aria-hidden="true" />
                         </button>
                         {folders.length === 0 ? (
-                            <p className="text-sm text-zinc-500 text-center py-16">No folders yet.</p>
+                            <p className="text-ui-base text-zinc-500 text-center py-16">No folders yet.</p>
                         ) : (
                             [...folders].sort((a, b) => a.order - b.order).map((folder, index, sorted) => {
                                 const count = files.filter(f => f.folderId === folder.id && f.name !== SUGGESTIONS_FILE_NAME).length;
@@ -563,13 +563,13 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                         className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left group/folder"
                                     >
                                         <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
-                                            <FolderIcon className="w-4 h-4 text-zinc-400" />
+                                            <FolderIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
                                         <span className="flex-1 min-w-0">
-                                            <span className="block text-sm font-medium text-zinc-100 truncate">
+                                            <span className="block text-ui-base font-medium text-zinc-100 truncate">
                                                 {folder.name}
                                             </span>
-                                            <span className="block text-xs text-zinc-500 mt-0.5 truncate">
+                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">
                                                 {count} {count === 1 ? 'file' : 'files'} · {formatFolderUpdated(folder.id)}
                                             </span>
                                         </span>
@@ -582,7 +582,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 onClick={e => { e.stopPropagation(); void handleMove(-1); }}
                                                 className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
                                             >
-                                                <ChevronUpIcon className="h-4 w-4" />
+                                                <ChevronUpIcon className="h-4 w-4" aria-hidden="true" />
                                             </button>
                                             <button
                                                 type="button"
@@ -592,10 +592,10 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 onClick={e => { e.stopPropagation(); void handleMove(1); }}
                                                 className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
                                             >
-                                                <ChevronDownIcon className="h-4 w-4" />
+                                                <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
                                             </button>
                                         </span>
-                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0 group-hover/folder:hidden" />
+                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0 group-hover/folder:hidden" aria-hidden="true" />
                                     </button>
                                 );
                             })

@@ -2,46 +2,49 @@
  * SupervisorIndicator — the Chart AI header's live view of the skill
  * supervisor.
  *
- * The icon always tells the truth about which phase the supervising model is
- * in, and it pulses only while a call is actually in flight. Extracted from
- * TradeChatPanel unchanged; the detail panel it opens is
- * `components/trade/SupervisorPanel`.
+ * It used to carry six different glyphs, one per phase: Eye, Search,
+ * ShieldCheck, Zap, Gavel, Brain. Nothing on screen said which was which, so a
+ * trader had to memorise a shape vocabulary for one fact — and the shape that
+ * changed while the model worked was the least reliable signal in the header.
+ * The reference clients put a WORD where a state matters and reserve the icon
+ * for identity. So: one glyph that means "the supervisor is watching", colour
+ * and pulse for whether it is busy, and the phase written out in the one place
+ * there is room to read it (the expanded header). The title attribute still
+ * carries the model and the activity line for a hover.
  */
 
 import React, { useSyncExternalStore } from 'react';
-import { Brain, Eye, Gavel, Search, ShieldCheck, Zap } from '../../shared/Icons';
+import { Eye } from '../../shared/Icons';
 import * as supervisorStore from '../../../services/learning/supervisorStore';
 import type { SupervisorPhase } from '../../../services/learning/supervisorStore';
 
-/** One glyph per meaning, everywhere.
- *  This sat in every chat header while a different glyph marked Studio in the
- *  NavRail — two stars meaning different things read as one feature with two
- *  names. The app no longer uses that glyph at all, and Studio's identity is
- *  its own, so the rule that earns its keep here is the general one: a status
- *  icon must not double as a product marker. */
-const PHASE_ICON: Record<SupervisorPhase, React.ReactNode> = {
-    idle: <Eye className="h-4 w-4" />,
-    reviewing: <Search className="h-4 w-4" />,
-    verifying: <ShieldCheck className="h-4 w-4" />,
-    enhancing: <Zap className="h-4 w-4" />,
-    deciding: <Gavel className="h-4 w-4" />,
-    learning: <Brain className="h-4 w-4" />,
+/** What the supervising model is doing, in the words the stream already uses. */
+const PHASE_WORD: Record<SupervisorPhase, string> = {
+    idle: 'watching',
+    reviewing: 'reviewing',
+    verifying: 'verifying',
+    enhancing: 'enhancing',
+    deciding: 'deciding',
+    learning: 'learning',
 };
 
 const SupervisorIndicator: React.FC<{ onOpen: () => void; compact?: boolean }> = ({ onOpen, compact = false }) => {
     const snap = useSyncExternalStore(supervisorStore.subscribe, supervisorStore.getSnapshot, supervisorStore.getSnapshot);
     const active = snap.running;
-    const Icon = PHASE_ICON[snap.phase] ?? PHASE_ICON.idle;
+    const word = PHASE_WORD[snap.phase] ?? PHASE_WORD.idle;
     return (
         <button
             type="button"
             onClick={onOpen}
             data-testid="supervisor-indicator"
-            aria-label="Skill supervisor"
+            aria-label={`Skill supervisor — ${word}`}
             title={active ? `${snap.modelName ? `${snap.modelName} — ` : ''}${snap.activity || 'supervising…'}` : 'Skill supervisor — watching the queues (click to open)'}
-            className={`shrink-0 rounded-control transition-colors ${active ? 'animate-pulse text-cyan-300' : 'text-zinc-600 hover:text-zinc-300'} ${compact ? 'p-1' : 'p-1.5'}`}
+            className={`inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-control px-1 transition-colors ${
+                active ? 'animate-pulse text-cyan-300' : 'text-zinc-600 hover:text-zinc-300'
+            } ${compact ? 'py-1' : 'py-1.5 text-ui-sm font-semibold'}`}
         >
-            {Icon}
+            <Eye className="h-4 w-4" aria-hidden="true" />
+            {!compact ? <span data-testid="supervisor-phase-word">{word}</span> : null}
         </button>
     );
 };

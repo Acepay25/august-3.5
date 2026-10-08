@@ -83,7 +83,7 @@ export const deleteSkillFile = async (s: SkillCardData): Promise<void> => {
 const MetaField: React.FC<{ label: string; value: string; wide?: boolean }> = ({ label, value, wide }) => (
     <div className={wide ? 'col-span-2' : ''}>
         <p className="text-ui-xs uppercase tracking-widest text-zinc-600">{label}</p>
-        <p className="mt-0.5 text-xs font-medium text-zinc-300">{value}</p>
+        <p className="mt-0.5 text-ui-sm font-medium text-zinc-300">{value}</p>
     </div>
 );
 
@@ -203,7 +203,7 @@ const SkillDetail: React.FC<{
             <button
                 type="button"
                 onClick={onBack}
-                className="flex items-center gap-1.5 self-start pb-5 text-sm text-zinc-400 transition-colors hover:text-zinc-100"
+                className="flex items-center gap-1.5 self-start pb-5 text-ui-base text-zinc-400 transition-colors hover:text-zinc-100"
             >
                 ← {backLabel}
             </button>
@@ -211,7 +211,7 @@ const SkillDetail: React.FC<{
             <div className="flex items-start justify-between gap-4 pb-5">
                 <div className="min-w-0">
                     <h3 className="truncate text-xl font-bold tracking-tight text-zinc-100">{skill.name}</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+                    <p className="mt-1 text-ui-base leading-relaxed text-zinc-500">
                         {meta?.description || descriptionOf(skill.body) || 'No description.'}
                     </p>
                 </div>
@@ -331,7 +331,7 @@ const SkillDetail: React.FC<{
                         title="Replay the coin's candle history and report this behavior's first-touch win-rate"
                         className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        <History className="h-3.5 w-3.5" />
+                        <History className="h-3.5 w-3.5" aria-hidden="true" />
                         {proofState === 'running' ? 'Checking history…' : 'Prove on history'}
                     </button>
                     {proofState === 'done' && proofResult?.status === 'ok' && (
@@ -372,7 +372,7 @@ const SkillDetail: React.FC<{
                         title={!memoryConfig ? 'Configure a memory model first (Settings → Memory model)' : 'Run a with-skill vs without-skill A/B over matched trades'}
                         className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        <FlaskConical className="h-3.5 w-3.5" />
+                        <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" />
                         {evalState === 'running' ? 'Evaluating…' : 'Run A/B eval'}
                     </button>
                     {evalState === 'done' && evalResult && (
@@ -392,7 +392,7 @@ const SkillDetail: React.FC<{
             </div>
 
             <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-                <div className="shrink-0 border-b border-zinc-800 px-4 py-3 text-xs font-bold text-zinc-300">
+                <div className="shrink-0 border-b border-zinc-800 px-4 py-3 text-ui-sm font-bold text-zinc-300">
                     Instructions
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5">

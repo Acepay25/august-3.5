@@ -55,7 +55,7 @@ export const LevelAccuracyBadge: React.FC<Props> = ({ drawings, candles, classNa
 
     return (
         <div
-            className={`flex items-center gap-2 text-xs ${className}`}
+            className={`flex items-center gap-2 text-ui-sm ${className}`}
             data-testid="level-accuracy-badge"
             title="Of the levels this model drew, how many did price actually reach. A level price never returned to was not read from the chart."
         >

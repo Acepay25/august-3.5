@@ -39,7 +39,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                             <h3 className="text-lg font-bold text-cyan-400">
                                 Entry Not Hit - Capture Data
                             </h3>
-                            <p className="text-sm text-zinc-400 mt-0.5">
+                            <p className="text-ui-base text-zinc-400 mt-0.5">
                                 <span className="text-white font-semibold">{coinName}</span>
                                 {correctedEntry && (
                                     <span className="text-zinc-500 ml-2">
@@ -55,10 +55,10 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 <div className="p-5 border-b border-white/5 bg-zinc-800">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
                         <div>
-                            <p className="text-sm text-zinc-300">
+                            <p className="text-ui-base text-zinc-300">
                                 Trade recorded as <span className="text-cyan-400 font-semibold">Entry Not Hit</span>
                             </p>
-                            <p className="text-xs text-zinc-500 mt-1">
+                            <p className="text-ui-sm text-zinc-500 mt-1">
                                 The AI will analyze why the entry was missed and learn from this setup.
                             </p>
                         </div>
@@ -67,7 +67,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
 
                 {/* Data Capture Options */}
                 <div className="p-5 space-y-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-3">
+                    <p className="text-ui-sm text-zinc-500 uppercase tracking-widest font-bold mb-3">
                         Choose how to capture current market data
                     </p>
 
@@ -91,7 +91,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                <div className="text-ui-sm text-zinc-400 mt-1 leading-relaxed">
                                     {isCapturing
                                         ? 'Fetching market data from Binance...'
                                         : 'Instantly fetch current market data to analyze why entry was missed.'
@@ -113,7 +113,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                                 <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
                                     Upload Screenshot
                                 </div>
-                                <div className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                                <div className="text-ui-sm text-zinc-500 mt-1 leading-relaxed">
                                     Manually upload a chart screenshot for detailed analysis.
                                 </div>
                             </div>
@@ -126,7 +126,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                         disabled={isCapturing}
                         className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <span className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors">
+                        <span className="text-ui-base text-zinc-500 hover:text-zinc-400 transition-colors">
                             Skip data capture →
                         </span>
                     </button>
@@ -141,7 +141,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                         <button
                             onClick={onClose}
                             disabled={isCapturing}
-                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50"
+                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-ui-base disabled:opacity-50"
                         >
                             Cancel
                         </button>

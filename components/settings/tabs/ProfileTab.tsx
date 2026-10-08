@@ -83,7 +83,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
                     {initial}
                 </span>
                 <div className="min-w-0 flex-1">
-                    <div className="truncate text-base font-semibold text-zinc-100">{username || 'Trader'}</div>
+                    <div className="truncate text-ui-lg font-semibold text-zinc-100">{username || 'Trader'}</div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-ui-dense text-zinc-500">
                         <span>
                             {APP_NAME} v{APP_VERSION}
@@ -122,7 +122,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
 
             <SettingsGroup title="Account">
                 <SettingsRow
-                    icon={<User className="h-4 w-4" />}
+                    icon={<User className="h-4 w-4" aria-hidden="true" />}
                     title="Trading journal"
                     description="Trade log, pattern memory, model performance and reasoning history."
                     control={
@@ -137,7 +137,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
                 />
                 {onExportData && (
                     <SettingsRow
-                        icon={<Database className="h-4 w-4" />}
+                        icon={<Database className="h-4 w-4" aria-hidden="true" />}
                         title="Export this profile"
                         description="Download trades, analyses and memory as a JSON archive."
                         control={
@@ -152,7 +152,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
                     />
                 )}
                 <SettingsRow
-                    icon={<HardDrive className="h-4 w-4" />}
+                    icon={<HardDrive className="h-4 w-4" aria-hidden="true" />}
                     title="Backups & usage"
                     description="Auto-backups run every 30 minutes while a profile is open."
                     control={

@@ -262,7 +262,7 @@ const Row: React.FC<{
                     <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
                         working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
                     }`}>
-                        <Icon className="h-3 w-3" />
+                        <Icon className="h-3 w-3" aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1">
@@ -294,7 +294,7 @@ const Row: React.FC<{
                                 className={`hit-target rounded p-0.5 transition-opacity ${
                                     pinned ? 'text-zinc-400 opacity-100' : 'text-zinc-600 opacity-0 group-hover:opacity-100'
                                 }`}>
-                                <Pin className="h-3 w-3" />
+                                <Pin className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
                         <span className="opacity-0 transition-opacity group-hover:opacity-100">{manage}</span>
@@ -306,7 +306,7 @@ const Row: React.FC<{
                                     setMenuAt(m => m ? null : { x: r.right - MENU_W, y: r.bottom + 4 });
                                 }}
                                 className="hit-target rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
-                                <Ellipsis className="h-3 w-3" />
+                                <Ellipsis className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
                     </span>
@@ -360,7 +360,7 @@ const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
             {/* Progressive disclosure for the forensic audit */}
             <details className="group/audit mt-2" open>
                 <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 font-mono text-ui-2xs uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300 list-none">
-                    <ChevronDown className="h-3 w-3 transition-transform group-open/audit:rotate-180" />
+                    <ChevronDown className="h-3 w-3 transition-transform group-open/audit:rotate-180" aria-hidden="true" />
                     <span>Inspect debate audit & evidence</span>
                 </summary>
                 <div className="mt-1.5 border-t border-zinc-800/60 pt-1.5">
@@ -684,14 +684,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             <button type="button" aria-label={`Rename ${r.bot.name}`} data-testid="rail-rename"
                                 onClick={() => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); }}
                                 className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
-                                <Pencil className="h-3 w-3" />
+                                <Pencil className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
                         {onDeleteBot && (
                             <button type="button" aria-label={`Delete ${r.bot.name}`}
                                 onClick={() => onDeleteBot(r.bot.id)}
                                 className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
                     </>
@@ -700,7 +700,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <button type="button" onClick={() => setOpenRoutines(open ? null : r.bot.id)}
                         aria-expanded={open} data-testid="row-routines"
                         className="flex items-center gap-1 rounded-full border border-zinc-800 px-1.5 py-0.5 text-ui-2xs text-zinc-500 transition-colors hover:text-zinc-300">
-                        <Timer className="h-3 w-3" />{routines.length}
+                        <Timer className="h-3 w-3" aria-hidden="true" />{routines.length}
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </button>
                 ) : undefined}>
@@ -791,7 +791,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 data-testid="agents-rail">
                 <div className="flex shrink-0 items-center gap-1.5 p-2 pb-1.5">
                     <div className="relative min-w-0 flex-1">
-                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" aria-hidden="true" />
                         <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search conversations..."
                             aria-label="Search conversations" data-testid="rail-search"
                             className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-8 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
@@ -804,7 +804,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <button type="button" onClick={() => setCollapsed(true)} data-testid="rail-collapse"
                         aria-label="Collapse conversations" title="Collapse the conversation rail"
                         className="hidden shrink-0 rounded-control border border-zinc-800/80 p-1.5 text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-200 md:block">
-                        <PanelLeftClose className="h-3.5 w-3.5" />
+                        <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                 </div>
 
@@ -816,7 +816,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             setNewMenuAt(m => m ? null : { x: r.left, y: r.bottom + 4 });
                         }}
                         className="flex items-center gap-1 hit-target rounded-full border border-zinc-700/80 bg-zinc-800/60 px-2 py-0.5 text-ui-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 hover:text-white">
-                        <Plus className="h-3 w-3" /> New
+                        <Plus className="h-3 w-3" aria-hidden="true" /> New
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${newMenuAt ? 'rotate-180' : ''}`} />
                     </button>
                     {newMenuAt && createPortal(
@@ -855,7 +855,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
                                     aria-label="Sort conversations"
                                     className="ml-auto rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
-                                    <ArrowUpDown className="h-3 w-3" />
+                                    <ArrowUpDown className="h-3 w-3" aria-hidden="true" />
                                 </button>
                             )}
                         </div>
@@ -889,14 +889,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             <button type="button" aria-label={`Edit ${groupDisplayName(g, bots)}`}
                                                 onClick={() => onEditGroup(g.id)} data-testid="rail-edit-group"
                                                 className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
-                                                <Pencil className="h-3 w-3" />
+                                                <Pencil className="h-3 w-3" aria-hidden="true" />
                                             </button>
                                         )}
                                         {onDeleteGroup && (
                                             <button type="button" aria-label={`Delete ${groupDisplayName(g, bots)}`}
                                                 onClick={() => onDeleteGroup(g.id)} data-testid="rail-delete-group"
                                                 className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
-                                                <Trash2 className="h-3 w-3" />
+                                                <Trash2 className="h-3 w-3" aria-hidden="true" />
                                             </button>
                                         )}
                                     </>
@@ -925,7 +925,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                 <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
                                                     active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
                                                 }`}>
-                                                    <MessageSquare className="h-3 w-3" />
+                                                    <MessageSquare className="h-3 w-3" aria-hidden="true" />
                                                 </span>
                                                 <span className="min-w-0 flex-1">
                                                     <span className="block truncate text-ui-sm font-semibold text-zinc-200">{r.title}</span>
@@ -944,7 +944,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                         setConvMenuAt(m => m?.id === r.id ? null : { id: r.id, x: rect.right - MENU_W, y: rect.bottom + 4 });
                                                     }}
                                                     className="absolute right-1.5 top-1.5 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
-                                                    <Ellipsis className="h-3 w-3" />
+                                                    <Ellipsis className="h-3 w-3" aria-hidden="true" />
                                                 </button>
                                             )}
                                         </div>
@@ -1008,13 +1008,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 <button type="button" onClick={() => setRailOpen(true)}
                                     aria-label="Open conversations" data-testid="rail-open"
                                     className="shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:hidden">
-                                    <Users className="h-3.5 w-3.5" />
+                                    <Users className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
                                 {collapsed && (
                                     <button type="button" onClick={() => setCollapsed(false)} data-testid="rail-expand"
                                         aria-label="Show conversations" title="Show the conversation rail"
                                         className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
-                                        <PanelLeftOpen className="h-3.5 w-3.5" />
+                                        <PanelLeftOpen className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                 )}
                                 <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200">
@@ -1073,7 +1073,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         <div ref={scroller} onScroll={onScrollerScroll} className="h-full overflow-y-auto custom-scrollbar">
                             {thread.length === 0 ? (
                                 <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">
-                                    <Bot className="mb-3 h-8 w-8 text-zinc-500" />
+                                    <Bot className="mb-3 h-8 w-8 text-zinc-500" aria-hidden="true" />
                                     <h2 className="font-serif text-3xl font-normal tracking-tight text-zinc-100">{greeting(username || 'trader')}</h2>
                                     <p className="mt-2 max-w-md text-ui-sm leading-relaxed text-zinc-500">
                                         {activeBot
@@ -1148,13 +1148,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             : 'Attach an image'}
                                         disabled={!!activeBot}
                                         className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-zinc-400">
-                                        <Paperclip className="h-3.5 w-3.5" />
+                                        <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                     {modelPicker}
                                     <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
                                         aria-label="Send" data-testid="composer-send"
                                         className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-opacity hover:opacity-90 disabled:opacity-30">
-                                        <ArrowUp className="h-4 w-4" />
+                                        <ArrowUp className="h-4 w-4" aria-hidden="true" />
                                     </button>
                                 </div>
                             </div>

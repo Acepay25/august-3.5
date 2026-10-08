@@ -16,7 +16,7 @@ export const TaskItemFile = ({
 }: TaskItemFileProps) => (
   <div
     className={cn(
-      'text-xs inline-flex items-center gap-1 px-1.5 py-0.5 text-zinc-100 border border-zinc-700 bg-zinc-800 rounded-md',
+      'text-ui-sm inline-flex items-center gap-1 px-1.5 py-0.5 text-zinc-100 border border-zinc-700 bg-zinc-800 rounded-md',
       className,
     )}
     {...props}
@@ -28,7 +28,7 @@ export const TaskItemFile = ({
 export type TaskItemProps = ComponentProps<'div'>;
 
 export const TaskItem = ({ children, className, ...props }: TaskItemProps) => (
-  <div className={cn('text-sm text-zinc-400', className)} {...props}>
+  <div className={cn('text-ui-base text-zinc-400', className)} {...props}>
     {children}
   </div>
 );
@@ -63,9 +63,9 @@ export const TaskTrigger = ({
   <CollapsibleTrigger asChild className={cn('group', className)} {...props}>
     {children ?? (
       <div className="flex items-center gap-2 text-zinc-400 cursor-pointer hover:text-zinc-100 transition-colors">
-        <SearchIcon className="size-4" />
-        <p className="text-sm">{title}</p>
-        <ChevronDownIcon className="size-4 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]:rotate-180" />
+        <SearchIcon className="size-4" aria-hidden="true" />
+        <p className="text-ui-base">{title}</p>
+        <ChevronDownIcon className="size-4 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]:rotate-180" aria-hidden="true" />
       </div>
     )}
   </CollapsibleTrigger>

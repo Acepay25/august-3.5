@@ -89,7 +89,7 @@ export const PostTradeUploadModal: React.FC<{
         <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Enhance post-mortem analysis">
             <div className="bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-white/10 animate-fade-in max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold text-cyan-400 mb-2">Enhance Post-Mortem Analysis?</h3>
-                <p className="text-sm text-zinc-400 mb-4">
+                <p className="text-ui-base text-zinc-400 mb-4">
                     Uploading screenshots of what happened <strong className="text-cyan-300">after</strong> the trade was called will significantly improve the AI's learning and future accuracy.
                 </p>
                 

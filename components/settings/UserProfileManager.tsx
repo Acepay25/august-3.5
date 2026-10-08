@@ -109,18 +109,18 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                   </div>
               </div>
               <h1 className="text-3xl font-black text-white tracking-tight mb-2">August Trading</h1>
-              <p className="text-zinc-400 text-sm font-medium">Advanced Trading Intelligence Terminal</p>
+              <p className="text-zinc-400 text-ui-base font-medium">Advanced Trading Intelligence Terminal</p>
             </div>
             <p className="max-w-sm text-center text-ui-2xs leading-4 text-zinc-600">
               {DISCLAIMER_FIRST_RUN}
             </p>
 
           <div className="p-8 space-y-8">
-             {isBusy && <p role="status" className="text-sm text-zinc-300">{selectedUser ? `Loading profile ${selectedUser}…` : 'Profile operation in progress…'}</p>}
+             {isBusy && <p role="status" className="text-ui-base text-zinc-300">{selectedUser ? `Loading profile ${selectedUser}…` : 'Profile operation in progress…'}</p>}
              {/* Existing Users */}
              {existingUsers.length > 0 && (
                  <div className="space-y-3">
-                     <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest pl-1 block">Continue Session</label>
+                     <label className="text-ui-sm font-bold text-zinc-500 uppercase tracking-widest pl-1 block">Continue Session</label>
                      <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                          {existingUsers.map(user => (
                              <div key={user} className="flex items-center gap-1 rounded-xl bg-zinc-800 border border-white/5 pr-2">
@@ -136,7 +136,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                                          <UserIcon />
                                      </span>
                                      <span className="flex-1 truncate font-medium text-zinc-200 group-hover:text-white">{user}</span>
-                                     {isBusy && selectedUser === user && <span className="text-xs text-zinc-400">Loading…</span>}
+                                     {isBusy && selectedUser === user && <span className="text-ui-sm text-zinc-400">Loading…</span>}
                                  </button>
                                  <button
                                     type="button"
@@ -168,7 +168,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                         aria-invalid={!!formError}
                         aria-describedby={formError ? 'username-error' : undefined}
                     />
-                    {formError && <p id="username-error" className="mt-2 text-xs text-rose-400" role="alert">{formError}</p>}
+                    {formError && <p id="username-error" className="mt-2 text-ui-sm text-rose-400" role="alert">{formError}</p>}
                     <button 
                         type="submit" 
                         disabled={isBusy || !newUsername.trim()}
@@ -193,7 +193,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                     type="button"
                     disabled={isBusy}
                     onClick={handleImportClick} 
-                    className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-cyan-400 uppercase tracking-widest transition-colors py-2 px-4 rounded-lg hover:bg-zinc-800"
+                    className="flex items-center gap-2 text-ui-sm font-bold text-zinc-500 hover:text-cyan-400 uppercase tracking-widest transition-colors py-2 px-4 rounded-lg hover:bg-zinc-800"
                  >
                      <UploadIcon /> Import Backup Data
                  </button>

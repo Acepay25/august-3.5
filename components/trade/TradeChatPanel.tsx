@@ -255,7 +255,7 @@ export const ChartAiDockRail: React.FC<{
             aria-label="Expand Chart AI"
             className="rounded-control p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
         >
-            <PanelRightOpen className="h-4 w-4" />
+            <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
         </button>
         <span className="select-none text-ui-xs font-bold uppercase tracking-widest text-zinc-500 lg:[writing-mode:vertical-rl]">Chart AI</span>
         {/* `live` only, not `busy`: busy is derived from the chat store's
@@ -865,7 +865,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 isDeskSceneOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-zinc-400'
                             }`}
                         >
-                            <LayoutGrid className="h-3.5 w-3.5" />
+                            <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
                             {hasDeskSceneMessage && !isDeskSceneOpen && (
                                 <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-cyan-400 ring-2 ring-zinc-900 animate-pulse" />
                             )}
@@ -875,18 +875,18 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     <div className="flex items-center rounded-control border border-white/[0.04] bg-white/[0.02] p-0.5">
                         <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
                             className="hit-target rounded p-1 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
-                            <Plus className="h-3.5 w-3.5" />
+                            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                         <button type="button" onClick={() => { setHistoryOpen(v => !v); setHistoryQuery(''); setHistorySel(0); setHistoryShowAll(false); }}
                             aria-label="Past conversations" aria-expanded={historyOpen} title="Past conversations"
                             className={`hit-target rounded p-1 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.08] text-zinc-100' : 'text-zinc-400'}`}>
-                            <History className="h-3.5 w-3.5" />
+                            <History className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                     </div>
                     <div className="relative">
                         <button type="button" onClick={() => setShowNewMenu(v => !v)} aria-label="Customization" aria-expanded={showNewMenu} title="Customization"
                             className={`rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${showNewMenu ? 'bg-white/[0.06] text-zinc-100' : 'text-zinc-400'}`}>
-                            <MoreHorizontal className="h-3.5 w-3.5" />
+                            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                         {showNewMenu && (
                             <>
@@ -983,7 +983,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     {onToggleCollapsed && (
                         <button type="button" onClick={onToggleCollapsed} aria-label="Collapse Chart AI" title="Collapse"
                             className="rounded-control p-1.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                     )}
                 </div>
@@ -1020,7 +1020,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                 {m.botId && <span className="text-ui-2xs uppercase tracking-widest text-zinc-500">agent</span>}
                                 <button type="button" aria-label={`Remove ${panelSeatKey(m)}`}
                                     onClick={() => setPanelModels(panelPickerFor, (sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).filter((x: PanelSeatRef) => panelSeatKey(x) !== panelSeatKey(m)))}
-                                    className="text-zinc-500 hover:text-rose-400"><X className="h-3 w-3" /></button>
+                                    className="text-zinc-500 hover:text-rose-400"><X className="h-3 w-3" aria-hidden="true" /></button>
                             </span>
                         ))}
                         {(sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0) < PANEL_MAX_MODELS && (

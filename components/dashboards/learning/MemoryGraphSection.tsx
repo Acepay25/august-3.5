@@ -41,8 +41,8 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
     return (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Brain className="h-3.5 w-3.5 text-cyan-400" /> Memory Graph
+                <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Brain className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" /> Memory Graph
                 </h4>
                 <div className="flex items-center gap-1">
                     {(['all', 'used', 'learned'] as const).map(t => (
@@ -74,7 +74,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
             )}
             {graphTab === 'used' && (
                 learnedSkills.length === 0
-                    ? <p className="text-xs text-zinc-600 italic">Nothing used yet — skills appear here once injected into an analysis.</p>
+                    ? <p className="text-ui-sm text-zinc-600 italic">Nothing used yet — skills appear here once injected into an analysis.</p>
                     : <div className="space-y-1.5">
                         {learnedSkills.slice(0, 8).map(s => (
                             <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
@@ -86,7 +86,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
             )}
             {graphTab === 'learned' && (
                 notebookSkills.length === 0
-                    ? <p className="text-xs text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow skill memory.</p>
+                    ? <p className="text-ui-sm text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow skill memory.</p>
                     : <div className="space-y-1.5">
                         {notebookSkills.slice(0, 10).map(s => (
                             <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">

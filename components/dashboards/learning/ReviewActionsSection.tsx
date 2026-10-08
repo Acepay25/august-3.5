@@ -24,14 +24,14 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
 
     return (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-            <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Scale className="h-3.5 w-3.5 text-cyan-400" /> Skill Review — Apply
+            <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Scale className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" /> Skill Review — Apply
             </h4>
             <p className="text-ui-xs text-zinc-600 mb-2">
                 Causal verdicts (A/B eval + lift) outrank outcome correlation. Evidence still has the final say on the next closed trade.
             </p>
             {actionableReviews.length === 0
-                ? <p className="text-xs text-zinc-600 italic">No actions recommended — every skill is where its evidence says it belongs.</p>
+                ? <p className="text-ui-sm text-zinc-600 italic">No actions recommended — every skill is where its evidence says it belongs.</p>
                 : <div className="space-y-1.5">
                     {actionableReviews.slice(0, 8).map(r => (
                         <div key={r.fileId} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center gap-2">

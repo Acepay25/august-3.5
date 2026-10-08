@@ -122,7 +122,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         aria-label="Close new group dialog"
                         className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
                     >
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
 
@@ -145,7 +145,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                                 checked ? 'border-zinc-200 bg-zinc-200' : 'border-zinc-600'
                                             }`}
                                         >
-                                            {checked && <Check className="h-3 w-3 text-zinc-900 stroke-[3]" />}
+                                            {checked && <Check className="h-3 w-3 text-zinc-900 stroke-[3]" aria-hidden="true" />}
                                         </span>
                                         <BotAvatar bot={bot} size={30} />
                                         <span className="min-w-0 flex-1">

@@ -72,7 +72,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
       <TaskTrigger title="">
         <div className="flex items-center gap-2 cursor-pointer group/trigger py-1">
           <StepStatusIcon status={step.status} isPostMortem={isPostMortem} />
-          <span className={`text-sm transition-colors ${presentation.text}`}>
+          <span className={`text-ui-base transition-colors ${presentation.text}`}>
             {step.title}
           </span>
           {failed && (
@@ -89,7 +89,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
             </span>
           )}
           {hasSubSteps && (
-            <ChevronDownIcon className="size-3.5 text-zinc-600 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]/trigger:rotate-180" />
+            <ChevronDownIcon className="size-3.5 text-zinc-600 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]/trigger:rotate-180" aria-hidden="true" />
           )}
         </div>
       </TaskTrigger>
@@ -106,7 +106,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
             </TaskItem>
           )}
           {step.subSteps?.map((sub, idx) => (
-            <TaskItem key={idx} className="flex items-center gap-2 text-xs">
+            <TaskItem key={idx} className="flex items-center gap-2 text-ui-sm">
               <span className="text-zinc-500">{sub.label}</span>
               {sub.detail && <span className="text-zinc-600 truncate">{sub.detail}</span>}
               {sub.filename && (
@@ -194,12 +194,12 @@ const CompletionSummaryBar: React.FC<{
     <Collapsible defaultOpen={outcome.open}>
       <CollapsibleTrigger asChild>
         <button className="group w-full flex items-center gap-2 py-2 px-1 cursor-pointer rounded-lg hover:bg-zinc-800 transition-colors">
-          <ChevronDownIcon className="size-4 text-zinc-500 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]:rotate-180" />
-          <span className={`text-sm font-bold ${outcome.text}`}>
+          <ChevronDownIcon className="size-4 text-zinc-500 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]:rotate-180" aria-hidden="true" />
+          <span className={`text-ui-base font-bold ${outcome.text}`}>
             {outcome.title}
           </span>
-          <span className="text-xs text-zinc-500">{outcome.detail}</span>
-          <span className="ml-auto text-xs font-mono text-zinc-600">
+          <span className="text-ui-sm text-zinc-500">{outcome.detail}</span>
+          <span className="ml-auto text-ui-sm font-mono text-zinc-600">
             {(totalElapsed / 1000).toFixed(0)}s
           </span>
         </button>
@@ -267,17 +267,17 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
             {isPostMortemInProgress && onOpenPostMortem && (
               <button
                 onClick={onOpenPostMortem}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-colors"
               >
-                <EyeIcon className="size-3.5" />
+                <EyeIcon className="size-3.5" aria-hidden="true" />
                 View Post-Mortem
               </button>
             )}
             <button
               onClick={onCancel}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
             >
-              <SkipIcon className="size-3.5" />
+              <SkipIcon className="size-3.5" aria-hidden="true" />
               Stop generating
             </button>
           </div>

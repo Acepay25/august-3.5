@@ -78,7 +78,7 @@ const PatternMemoryCard: React.FC<PatternMemoryCardProps> = ({ trades, finalSumm
                     and recurring patterns it found across your logged trades.
                 </p>
                 <div className="rounded-control border border-zinc-800 bg-zinc-950 px-4 py-4 lg:px-6 lg:py-5">
-                    <MarkdownContent content={markdown} className="text-sm text-zinc-200 leading-7" />
+                    <MarkdownContent content={markdown} className="text-ui-base text-zinc-200 leading-7" />
                 </div>
             </div>
         </section>

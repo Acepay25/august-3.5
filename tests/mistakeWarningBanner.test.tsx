@@ -24,8 +24,6 @@ describe('MistakeWarningBanner', () => {
     render(
       <MistakeWarningBanner
         tradeLog={[{ id: 't1' } as any]}
-        currentCoin="BTC"
-        currentDirection="Long"
       />
     );
 

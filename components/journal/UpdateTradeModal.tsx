@@ -73,13 +73,13 @@ export const UpdateTradeModal: React.FC<{
                 <div className="p-5 border-b border-white/5 bg-cyan-500/10">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
-                            <UpdateIcon className="w-5 h-5 text-cyan-400" />
+                            <UpdateIcon className="w-5 h-5 text-cyan-400" aria-hidden="true" />
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-cyan-400">
                                 Update Trade Setup
                             </h3>
-                            <p className="text-sm text-zinc-400 mt-0.5">
+                            <p className="text-ui-base text-zinc-400 mt-0.5">
                                 Re-evaluate <span className="text-white font-semibold">{coinName}</span>
                             </p>
                         </div>
@@ -109,7 +109,7 @@ export const UpdateTradeModal: React.FC<{
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                    <div className="text-ui-sm text-zinc-400 mt-1 leading-relaxed">
                                         {isCapturing
                                             ? 'Fetching current market data from Binance...'
                                             : 'Instantly fetch current market data via Hybrid Intelligence.'
@@ -135,7 +135,7 @@ export const UpdateTradeModal: React.FC<{
                             value={updateText}
                             onChange={(e) => setUpdateText(e.target.value)}
                             placeholder="Describe market changes..."
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 min-h-[80px] resize-none"
+                            className="w-full bg-zinc-800 border border-white/10 rounded-xl p-3 text-ui-base text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 min-h-[80px] resize-none"
                             disabled={isCapturing}
                         />
                     </div>
@@ -159,7 +159,7 @@ export const UpdateTradeModal: React.FC<{
                     <button
                         onClick={onClose}
                         disabled={isCapturing}
-                        className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50"
+                        className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-ui-base disabled:opacity-50"
                     >
                         Cancel
                     </button>

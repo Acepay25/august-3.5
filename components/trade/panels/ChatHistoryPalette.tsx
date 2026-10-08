@@ -84,7 +84,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                         {canDelete && (
                             <button type="button" onClick={() => onDelete(s.id)} aria-label={`Delete session ${s.title}`}
                                 className="shrink-0 text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-400">
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                         )}
                     </div>

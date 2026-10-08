@@ -43,7 +43,7 @@ const AutomationRunCard: React.FC<{
     const statusBadge = run.status === 'complete' ? (
         <StatusPill tone="up" kicker>Complete</StatusPill>
     ) : run.status === 'running' ? (
-        <StatusPill tone="info" kicker icon={<LoadingIcon className="w-3 h-3 animate-spin" />}>Running</StatusPill>
+        <StatusPill tone="info" kicker icon={<LoadingIcon className="w-3 h-3 animate-spin" aria-hidden="true" />}>Running</StatusPill>
     ) : run.status === 'error' ? (
         <StatusPill tone="down" kicker>Failed</StatusPill>
     ) : (
@@ -80,9 +80,9 @@ const AutomationRunCard: React.FC<{
     }, [isBotReply, run.status, run.error, run.message?.text, analysis, snapshot]);
 
     const outcomeActions: { key: RunOutcomeConfirm; label: string; className: string }[] = [
-        { key: 'win', label: 'Win', className: ' rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
-        { key: 'loss', label: 'Loss', className: ' rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25' },
-        { key: 'entry_not_hit', label: 'Entry not hit', className: 'rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-200 transition-colors hover:bg-zinc-700' },
+        { key: 'win', label: 'Win', className: ' rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-ui-sm font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
+        { key: 'loss', label: 'Loss', className: ' rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-ui-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/25' },
+        { key: 'entry_not_hit', label: 'Entry not hit', className: 'rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-ui-sm font-bold text-zinc-200 transition-colors hover:bg-zinc-700' },
     ];
 
     return (
@@ -91,13 +91,13 @@ const AutomationRunCard: React.FC<{
             <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                     {statusBadge}
-                    <span className={`font-black text-sm tracking-wider uppercase ${directionColor}`}>{direction}</span>
-                    {analysis?.coinName && <span className="font-mono text-xs font-bold text-zinc-300">{analysis.coinName}</span>}
+                    <span className={`font-black text-ui-base tracking-wider uppercase ${directionColor}`}>{direction}</span>
+                    {analysis?.coinName && <span className="font-mono text-ui-sm font-bold text-zinc-300">{analysis.coinName}</span>}
                     <span className="ml-auto text-ui-xs font-mono text-zinc-500">{time}</span>
                 </div>
 
                 {run.status === 'error' && run.error && (
-                    <div className="px-3 py-2.5 bg-rose-500/5 border border-rose-500/15 rounded-lg text-xs text-rose-300/90 leading-relaxed mb-3">
+                    <div className="px-3 py-2.5 bg-rose-500/5 border border-rose-500/15 rounded-lg text-ui-sm text-rose-300/90 leading-relaxed mb-3">
                         {run.error}
                     </div>
                 )}

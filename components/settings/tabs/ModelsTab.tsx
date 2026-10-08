@@ -72,8 +72,8 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
             />
             {providerConfigsLoaded && readyConfigProviders.length === 0 && (
                 <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-4">
-                    <h3 className="text-sm font-semibold text-zinc-100">Connect an AI service to get started</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    <h3 className="text-ui-base font-semibold text-zinc-100">Connect an AI service to get started</h3>
+                    <p className="mt-1 text-ui-sm leading-relaxed text-zinc-400">
                         Add a provider below, paste its key, pick a model, then use Test before running your first analysis.
                     </p>
                 </div>
@@ -163,7 +163,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
                     onDirtyChange={setIsDirty}
                 />
             ) : (
-                <p className="text-xs text-zinc-500">Provider configuration loading…</p>
+                <p className="text-ui-sm text-zinc-500">Provider configuration loading…</p>
             )}
         </div>
     );

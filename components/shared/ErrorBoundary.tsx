@@ -77,7 +77,7 @@ class ErrorBoundary extends Component<Props, State> {
             if (this.props.compact) {
                 // Inline fallback — one bad message must not take down the app.
                 return (
-                    <div className=" rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                    <div className=" rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-ui-sm text-rose-300">
                         <div className="font-bold uppercase tracking-widest text-ui-2xs mb-1">This message failed to render</div>
                         <div className="text-rose-300/70 truncate">{this.state.error?.message || 'Unknown error'}</div>
                         <button
@@ -99,13 +99,13 @@ class ErrorBoundary extends Component<Props, State> {
                         </h1>
 
                         {/* Description */}
-                        <p className="text-zinc-400 text-sm">
+                        <p className="text-zinc-400 text-ui-base">
                             The app encountered an unexpected error. This sometimes happens
                             when processing trade data. Your data is safe.
                         </p>
 
                         {/* Error Details (Collapsed) */}
-                        <details className="text-left bg-zinc-800 rounded-lg p-3 text-xs">
+                        <details className="text-left bg-zinc-800 rounded-lg p-3 text-ui-sm">
                             <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
                                 Technical Details
                             </summary>
@@ -124,14 +124,14 @@ class ErrorBoundary extends Component<Props, State> {
                             </button>
                             <button
                                 onClick={this.handleClearAndReload}
-                                className="w-full py-2 px-4 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+                                className="w-full py-2 px-4 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-ui-base rounded-lg transition-colors"
                             >
                                 Clear Session &amp; Reload
                             </button>
                         </div>
 
                         {/* Help Text */}
-                        <p className="text-zinc-600 text-xs">
+                        <p className="text-zinc-600 text-ui-sm">
                             If this keeps happening, try switching users or exporting your data.
                         </p>
                     </div>

@@ -87,7 +87,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
             <SettingsGroup title="Analysis modes">
                 {isEnsembleEnabled !== undefined && onToggleEnsemble && (
                     <SettingsRow
-                        icon={<Users className="h-4 w-4" />}
+                        icon={<Users className="h-4 w-4" aria-hidden="true" />}
                         title="Team analysis"
                         description={isEnsembleEnabled
                             ? 'On — sends run the analyst ensemble (multi-seat debate) before the verdict.'
@@ -96,7 +96,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                     />
                 )}
                 <SettingsRow
-                    icon={<ShieldCheck className="h-4 w-4" />}
+                    icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />}
                     title="Accuracy Mode"
                     description={isAccuracyModeEnabled
                         ? (accuracySubMode === 'original'
@@ -107,7 +107,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                 />
                 {isAccuracyModeEnabled && setAccuracySubMode && (
                     <SettingsRow
-                        icon={<Layers className="h-4 w-4" />}
+                        icon={<Layers className="h-4 w-4" aria-hidden="true" />}
                         title="Strictness"
                         description="Which protocol runs while Accuracy Mode is on."
                         control={
@@ -124,7 +124,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                     />
                 )}
                 <SettingsRow
-                    icon={<Activity className="h-4 w-4" />}
+                    icon={<Activity className="h-4 w-4" aria-hidden="true" />}
                     title="Hybrid Intelligence"
                     description="Adds real-time market data (price, RSI, MACD, EMAs) so the models reason over live context."
                     control={
@@ -138,7 +138,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
 
             <SettingsGroup title="Analyst desk">
                 <SettingsRow
-                    icon={<Wrench className="h-4 w-4" />}
+                    icon={<Wrench className="h-4 w-4" aria-hidden="true" />}
                     title="Desk Tools"
                     description="Lets analysts and the moderator call live tools anytime — web search, funding/OI, order book, liquidations, BTC context, session timing."
                     control={
@@ -154,7 +154,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                     }
                 />
                 <SettingsRow
-                    icon={<Activity className="h-4 w-4" />}
+                    icon={<Activity className="h-4 w-4" aria-hidden="true" />}
                     title="Desk idle motion"
                     description="Subtle micro-motion on the pixel seats (breath, cap-tilt, eye-blink while thinking, moderator sway). Turning this off makes the desk perfectly still."
                     control={

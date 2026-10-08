@@ -128,7 +128,7 @@ const LearnView: React.FC<LearnViewProps> = ({
                                     ? 'border-zinc-100 text-zinc-100'
                                     : 'border-transparent text-zinc-500 hover:text-zinc-300'
                             }`}>
-                            <Icon className="h-3.5 w-3.5" />
+                            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                             {label}
                             {id === 'coach' && coachCount > 0 && (
                                 <span className="rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950">

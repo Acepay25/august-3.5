@@ -24,15 +24,15 @@ export interface ToolActionsRowProps {
 }
 
 const ICON_OK: Record<string, React.ReactNode> = {
-    amend_memory: <Brain className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    forge_tool: <Wrench className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    skill_draft: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    skill_ingest: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    propose_skill: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    revise_skill: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    write_memory_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    notebook_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
-    custom: <FilePlus2 className="h-3.5 w-3.5 shrink-0 text-zinc-500" />,
+    amend_memory: <Brain className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    forge_tool: <Wrench className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    skill_draft: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    skill_ingest: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    propose_skill: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    revise_skill: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    write_memory_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    notebook_note: <NotebookPen className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
+    custom: <FilePlus2 className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />,
 };
 
 /** Human label per tool class — where it lands and who reviews it. */
@@ -191,7 +191,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                             >
                                 ▸
                             </span>
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden="true" />
                             <span className="min-w-0 flex-1 truncate">
                                 <span className="font-semibold">Blocked</span>
                                 {' — '}

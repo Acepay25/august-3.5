@@ -393,7 +393,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             <button
                 onClick={handleToggle}
                 className={`flex items-center gap-1.5 rounded-lg text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white ${
-                    compact ? 'px-2 py-1 text-ui-dense' : 'px-2.5 py-1.5 text-sm font-medium'
+                    compact ? 'px-2 py-1 text-ui-dense' : 'px-2.5 py-1.5 text-ui-base font-medium'
                 }`}
             >
                 <span className="truncate max-w-[180px]">{getDisplayText()}</span>
@@ -464,7 +464,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             aria-label="Refresh models"
                         >
                             {justRefreshed ? (
-                                <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                                <Check className="h-3 w-3 text-emerald-400 shrink-0" aria-hidden="true" />
                             ) : (
                                 <RotateCw className={`h-3 w-3 shrink-0 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
                             )}
@@ -482,12 +482,12 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                         className="w-48 min-h-0 overflow-y-auto border-r border-zinc-800 py-1 custom-scrollbar overscroll-contain"
                     >
                         {readyProviders.length === 0 ? (
-                            <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
+                            <div className="px-3 py-4 text-ui-sm text-zinc-600 italic text-center">
                                 No providers configured
                             </div>
                         ) : isSearching && readyProviders.every(pr => !pr.models.some(
                             m => m.toLowerCase().includes(query.trim().toLowerCase()))) ? (
-                            <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
+                            <div className="px-3 py-4 text-ui-sm text-zinc-600 italic text-center">
                                 No provider offers “{query.trim()}”
                             </div>
                         ) : (
@@ -512,10 +512,10 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                     >
                                         <span className="truncate">{provider.name}</span>
                                         {mode !== 'provider-only' && (
-                                            <ChevronRightIcon className="w-3 h-3 text-zinc-600 shrink-0" />
+                                            <ChevronRightIcon className="w-3 h-3 text-zinc-600 shrink-0" aria-hidden="true" />
                                         )}
                                         {mode === 'provider-only' && isCurrentProvider && (
-                                            <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />
+                                            <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" aria-hidden="true" />
                                         )}
                                     </button>
                                 );
@@ -536,7 +536,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             data-testid="model-picker-results"
                         >
                             {searchHits.length === 0 ? (
-                                <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
+                                <div className="px-3 py-4 text-ui-sm text-zinc-600 italic text-center">
                                     No model matches “{query.trim()}”
                                 </div>
                             ) : (
@@ -567,7 +567,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                                     {providerId}
                                                 </span>
                                             )}
-                                            {isCurrent && <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />}
+                                            {isCurrent && <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" aria-hidden="true" />}
                                         </button>
                                     );
                                 })
@@ -579,7 +579,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             className="w-56 min-h-0 overflow-y-auto py-1 custom-scrollbar overscroll-contain"
                         >
                             {visibleModels.length === 0 ? (
-                                <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
+                                <div className="px-3 py-4 text-ui-sm text-zinc-600 italic text-center">
                                     {freeOnly && hoveredModels.length > 0
                                         ? 'No free models in this provider'
                                         : 'No models available'}
@@ -606,7 +606,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                         >
                                             <span className="truncate" title={model}>{formatModelDisplayName(model)}</span>
                                             {isCurrent && (
-                                                <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />
+                                                <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" aria-hidden="true" />
                                             )}
                                         </button>
                                     );

@@ -473,7 +473,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     placeholder="Search playbooks, coins, families…"
-                    className="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
+                    className="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-sm text-zinc-200 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
                 />
                 <label
                     className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
@@ -540,7 +540,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
 
             <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
                 {rows.length === 0 ? (
-                    <p className="text-xs italic text-zinc-600">
+                    <p className="text-ui-sm italic text-zinc-600">
                         {skills.length === 0
                             ? 'No playbooks yet — they form automatically from your post-mortems, or import skill .md files above.'
                             : 'No playbooks match — clear the filters, or close trades with post-mortems to grow skill memory.'}
@@ -621,8 +621,8 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                         <span aria-hidden="true"
                                             className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
                                             {meta.kind === 'avoid'
-                                                ? <PowerOff className="h-4 w-4" />
-                                                : <RotateCcw className="h-4 w-4" />}
+                                                ? <PowerOff className="h-4 w-4" aria-hidden="true" />
+                                                : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                             <div className="truncate text-ui-base font-semibold text-zinc-100" title={title}>{title}</div>

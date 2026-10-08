@@ -82,7 +82,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 shadow-xl">
                 <p className="text-ui-xs text-zinc-400 uppercase tracking-wider mb-1">{label}</p>
                 {payload.map((entry: any, index: number) => (
-                    <p key={index} className="text-sm font-bold" style={{ color: entry.color }}>
+                    <p key={index} className="text-ui-base font-bold" style={{ color: entry.color }}>
                         {entry.name}: {entry.value}{entry.name === 'winRate' ? '%' : ''}
                     </p>
                 ))}
@@ -169,7 +169,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
     if (tradesWithOutcomes.length < 3) {
         return (
             <EmptyState
-                icon={<BarChart3 className="w-8 h-8" />}
+                icon={<BarChart3 className="w-8 h-8" aria-hidden="true" />}
                 title="Not enough data"
                 description="Log at least 3 trades with outcomes to see win rate analytics."
                 className="h-full"
@@ -184,7 +184,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 sm:gap-3">
                         <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#399ef7]"></div>
-                        <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
+                        <h2 className="text-ui-lg sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
                     <span className="text-ui-xs text-zinc-500 font-mono tabular-nums">
                         {filteredTrades.length} trades
@@ -435,7 +435,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         </ResponsiveContainer>
                     </div>
                 ) : (
-                    <div className="h-32 flex items-center justify-center text-zinc-600 text-sm">
+                    <div className="h-32 flex items-center justify-center text-zinc-600 text-ui-base">
                         Need more data to show trends
                     </div>
                 )}
@@ -518,15 +518,15 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 <div key={coin.coin} className="flex items-center justify-between p-2 bg-zinc-800 rounded-lg">
                                     <div className="flex items-center gap-2">
                                         <span className="text-ui-xs text-zinc-600 font-mono tabular-nums w-4">#{idx + 1}</span>
-                                        <span className="font-bold text-sm text-white">{coin.coin}</span>
+                                        <span className="font-bold text-ui-base text-white">{coin.coin}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         {coin.pnl !== 0 ? (
-                                            <span className={`text-xs font-mono tabular-nums ${coin.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <span className={`text-ui-sm font-mono tabular-nums ${coin.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {coin.pnl >= 0 ? '+' : ''}{coin.pnl.toFixed(0)}
                                             </span>
                                         ) : coin.pnlPercent !== 0 ? (
-                                            <span className={`text-xs font-mono tabular-nums ${coin.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <span className={`text-ui-sm font-mono tabular-nums ${coin.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {coin.pnlPercent >= 0 ? '+' : ''}{fmtPercent(coin.pnlPercent, 1)}
                                             </span>
                                         ) : null}
@@ -556,7 +556,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             borderColor: streakData.currentStreak.type === 'win' ? `${COLORS.emerald}30` : streakData.currentStreak.type === 'loss' ? `${COLORS.rose}30` : `${COLORS.zinc}30`,
                             borderWidth: 1
                         }}>
-                            <span className="text-xs text-zinc-400 uppercase tracking-wider">Current</span>
+                            <span className="text-ui-sm text-zinc-400 uppercase tracking-wider">Current</span>
                             <span className={`text-lg font-black ${streakData.currentStreak.type === 'win' ? 'text-emerald-400' : streakData.currentStreak.type === 'loss' ? 'text-rose-400' : 'text-zinc-400'}`}>
                                 {streakData.currentStreak.count > 0 ? (
                                     <>
@@ -585,13 +585,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-emerald-600 uppercase font-bold tracking-widest mb-1">Avg Win</div>
-                    <div className="text-base sm:text-xl font-mono font-bold text-emerald-400">
+                    <div className="text-ui-lg sm:text-xl font-mono font-bold text-emerald-400">
                         +{overallStats.avgWinSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>
                 </div>
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-rose-600 uppercase font-bold tracking-widest mb-1">Avg Loss</div>
-                    <div className="text-base sm:text-xl font-mono font-bold text-rose-400">
+                    <div className="text-ui-lg sm:text-xl font-mono font-bold text-rose-400">
                         -{overallStats.avgLossSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>
                 </div>

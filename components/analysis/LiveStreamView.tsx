@@ -79,7 +79,7 @@ const AnalystPanel: React.FC<{
       <div className={`absolute top-0 left-0 w-full h-1 ${colorClasses.accent} opacity-50`}></div>
       <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-zinc-800">
         <div>
-          <h4 className={`font-bold text-base sm:text-lg tracking-tight ${colorClasses.title}`}>{title}</h4>
+          <h4 className={`font-bold text-ui-lg sm:text-lg tracking-tight ${colorClasses.title}`}>{title}</h4>
           {modelName && <div className="text-ui-xs font-mono text-zinc-500 mt-1 uppercase tracking-wider">{modelName}</div>}
         </div>
         <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border border-white/10 bg-zinc-800 ${colorClasses.title}`}>
@@ -114,7 +114,7 @@ const AnalystPanel: React.FC<{
         {showLoadingState ? (
           <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-3 animate-pulse">
             <LoadingIcon className={`w-6 h-6 ${colorClasses.text}`} />
-            <span className="text-xs font-mono uppercase tracking-widest">{output === null ? loadingIdle : loadingStreaming}</span>
+            <span className="text-ui-sm font-mono uppercase tracking-widest">{output === null ? loadingIdle : loadingStreaming}</span>
           </div>
         ) : (
           <div className="animate-fade-in">
@@ -195,7 +195,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
               <span className={`w-3 h-3 rounded-full ${config.dotColor} animate-pulse ${config.dotShadow}`}></span>
               {config.title}
             </h2>
-            <p className="text-zinc-500 text-xs sm:text-sm mt-1 font-medium">{config.subtitle}</p>
+            <p className="text-zinc-500 text-ui-sm sm:text-ui-base mt-1 font-medium">{config.subtitle}</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)]" aria-label="Close live view">
             <CloseIcon />

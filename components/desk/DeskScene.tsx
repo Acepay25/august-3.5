@@ -550,7 +550,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             title={zoom ? 'Restore' : 'Expand'}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                         >
-                            {zoom ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                            {zoom ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
                         </button>
                         <button
                             type="button"
@@ -558,7 +558,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             aria-label="Close desk view"
                             className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                         >
-                            <X className="h-4 w-4" />
+                            <X className="h-4 w-4" aria-hidden="true" />
                         </button>
                     </div>
                 </div>

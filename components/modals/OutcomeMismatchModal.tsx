@@ -39,11 +39,11 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                 {/* Header */}
                 <div className="bg-amber-500/10 p-5 border-b border-amber-500/20 flex items-start gap-4">
                     <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 text-amber-500">
-                        <AlertTriangleIcon className="w-6 h-6" />
+                        <AlertTriangleIcon className="w-6 h-6" aria-hidden="true" />
                     </div>
                     <div>
                         <h3 className="text-lg font-bold text-amber-500">Outcome Discrepancy</h3>
-                        <p className="text-zinc-400 text-xs mt-1">
+                        <p className="text-zinc-400 text-ui-sm mt-1">
                             Price data conflicts with your logged outcome.
                         </p>
                     </div>
@@ -69,9 +69,9 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                         </div>
                     </div>
 
-                    <div className="p-4 rounded-xl bg-zinc-800 border border-white/10 text-sm text-zinc-300 space-y-2">
+                    <div className="p-4 rounded-xl bg-zinc-800 border border-white/10 text-ui-base text-zinc-300 space-y-2">
                         <p className="font-semibold text-white">Analysis:</p>
-                        <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
+                        <ul className="list-disc pl-4 space-y-1 text-ui-sm sm:text-ui-base">
                             {tpFirstTime && (
                                 <li>
                                     <span className="text-emerald-400 font-bold">TP Hit</span> at {new Date(tpFirstTime).toLocaleTimeString()}
@@ -83,14 +83,14 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                                 </li>
                             )}
                         </ul>
-                        <p className="text-xs text-amber-500/80 mt-2 bg-amber-500/10 p-2 rounded-lg">
+                        <p className="text-ui-sm text-amber-500/80 mt-2 bg-amber-500/10 p-2 rounded-lg">
                             {tpHitFirst
                                 ? 'The Take Profit was reached <strong>BEFORE</strong> the Stop Loss.'
                                 : 'The Stop Loss was touched <strong>BEFORE</strong> any Take Profit was reached.'}
                         </p>
                     </div>
 
-                    <p className="text-center text-sm text-zinc-400">
+                    <p className="text-center text-ui-base text-zinc-400">
                         Which outcome should be used for analysis?
                     </p>
 

@@ -43,9 +43,9 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
 
     return (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-            <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Top Lessons (outcome-weighted)</h4>
+            <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Top Lessons (outcome-weighted)</h4>
             {topLessons.length === 0 ? (
-                <p className="text-xs text-zinc-600 italic">Log at least 2 trades on the same coin + direction to see clusters.</p>
+                <p className="text-ui-sm text-zinc-600 italic">Log at least 2 trades on the same coin + direction to see clusters.</p>
             ) : (
                 <div className="space-y-1.5">
                     {topLessons.map((l, i) => {
@@ -53,19 +53,19 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                         const isOpen = expandedLesson === i;
                         return (
                             <div key={i} className="rounded-lg border border-white/5 bg-zinc-950/40 px-2.5 py-2">
-                                <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center justify-between text-ui-base">
                                     <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5">
                                         {l.kind === 'loss' ? (
-                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden="true" />
                                         ) : (
-                                            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                                            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden="true" />
                                         )}
                                         {l.label}
                                         <span className="text-ui-xs text-zinc-500">×{l.count}</span>
                                     </span>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {l.avgPnl !== null && (
-                                            <span className={`text-xs font-bold ${l.avgPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <span className={`text-ui-sm font-bold ${l.avgPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {l.avgPnl > 0 ? '+' : ''}{l.avgPnl.toFixed(1)}%
                                             </span>
                                         )}

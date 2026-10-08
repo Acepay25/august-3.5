@@ -63,8 +63,8 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                     className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
                 >
                     <div className="flex items-center justify-between w-full">
-                        <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Trade Log</span>
-                        <ArrowUpRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                        <span className="font-semibold text-ui-sm text-zinc-200 group-hover:text-cyan-400 transition-colors">Trade Log</span>
+                        <ArrowUpRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" aria-hidden="true" />
                     </div>
                     <p className="mt-1.5 text-ui-dense text-zinc-400">View and manage all recorded trades, outcomes, and screenshots.</p>
                 </button>
@@ -78,8 +78,8 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                     className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
                 >
                     <div className="flex items-center justify-between w-full">
-                        <span className="font-semibold text-xs text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>
-                        <Brain className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                        <span className="font-semibold text-ui-sm text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>
+                        <Brain className="h-3.5 w-3.5 text-zinc-500 group-hover:text-cyan-400 transition-colors" aria-hidden="true" />
                     </div>
                     <p className="mt-1.5 text-ui-dense text-zinc-400">Review lessons learned and recurring patterns identified across your trades.</p>
                 </button>
@@ -96,7 +96,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                 description="How the journal writes its own review text."
             >
                 <SettingsRow
-                    icon={<Activity className="h-4 w-4" />}
+                    icon={<Activity className="h-4 w-4" aria-hidden="true" />}
                     title="Algorithmic summary"
                     description="Instant calculation from the trade ledger instead of a model call."
                     control={
@@ -108,7 +108,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                     }
                 />
                 <SettingsRow
-                    icon={<BrainCircuit className="h-4 w-4" />}
+                    icon={<BrainCircuit className="h-4 w-4" aria-hidden="true" />}
                     title="Algorithmic pattern insights"
                     description="Extract insights with local heuristics alongside AI pattern memory."
                     control={
@@ -121,7 +121,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                 />
                 {props.onUpdateSummaryCharLimit && (
                     <SettingsRow
-                        icon={<FileText className="h-4 w-4" />}
+                        icon={<FileText className="h-4 w-4" aria-hidden="true" />}
                         title="Summary character limit"
                         description="Maximum length for AI-generated journal review summaries."
                         control={
@@ -130,7 +130,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                                 value={props.summaryCharLimit ?? 1000}
                                 onChange={e => props.onUpdateSummaryCharLimit?.(Number(e.target.value))}
                                 aria-label="Summary character limit"
-                                className="w-24 rounded-control border border-white/[0.08] bg-zinc-900 px-3 py-1.5 text-right font-mono text-xs text-zinc-200 focus:border-cyan-500 focus:outline-none"
+                                className="w-24 rounded-control border border-white/[0.08] bg-zinc-900 px-3 py-1.5 text-right font-mono text-ui-sm text-zinc-200 focus:border-cyan-500 focus:outline-none"
                                 min={200}
                                 max={5000}
                                 step={100}

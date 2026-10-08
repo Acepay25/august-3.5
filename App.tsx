@@ -2856,14 +2856,14 @@ const App: React.FC = () => {
                                 </span>
                                 <button type="button" onClick={() => setIsPipelineCollapsed(false)} className="text-ui-dense text-zinc-400 transition-colors hover:text-zinc-100" title="Show pipeline steps">Show</button>
                                 <button type="button" onClick={() => setIsPipelineDismissed(true)} className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200" title="Hide for this run" aria-label="Dismiss analysis progress">
-                                    <CloseIcon className="h-3.5 w-3.5" />
+                                    <CloseIcon className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
                             </div>
                         ) : (
                         <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-3 custom-scrollbar" aria-label="Analysis progress">
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
-                                    <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>
+                                    <h2 className="text-ui-base font-medium text-zinc-200">Analysis</h2>
                                     <p className="mt-0.5 text-ui-dense text-zinc-500">Pipeline</p>
                                 </div>
                                 <span className="ml-auto flex shrink-0 items-center gap-1">
@@ -2881,7 +2881,7 @@ const App: React.FC = () => {
                                         title="Collapse"
                                         aria-label="Collapse analysis progress"
                                     >
-                                        <ChevronDownIcon className="h-4 w-4" />
+                                        <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
                                     </button>
                                     <button
                                         type="button"
@@ -2890,7 +2890,7 @@ const App: React.FC = () => {
                                         title="Hide for this run"
                                         aria-label="Dismiss analysis progress"
                                     >
-                                        <CloseIcon className="h-4 w-4" />
+                                        <CloseIcon className="h-4 w-4" aria-hidden="true" />
                                     </button>
                                 </span>
                             </div>
@@ -2907,14 +2907,14 @@ const App: React.FC = () => {
                                     />
                             ) : (
                                 <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
-                                    <div className="flex items-center gap-2 text-sm text-zinc-300" aria-live="polite">
+                                    <div className="flex items-center gap-2 text-ui-base text-zinc-300" aria-live="polite">
                                         <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                         {loadingMessage || 'Analysis in progress'}
                                     </div>
                                     <button
                                         type="button"
                                         onClick={handleCancelAnalysis}
-                                        className=" mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+                                        className=" mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-ui-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
                                     >
                                         Stop generating
                                     </button>

@@ -97,7 +97,7 @@ export const ToolForgeManager: React.FC = () => {
                                     data-testid={`approve-forged-${tool.id}`}
                                     className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800"
                                 >
-                                    <Check className="h-3 w-3" /> Approve network access
+                                    <Check className="h-3 w-3" aria-hidden="true" /> Approve network access
                                 </button>
                             )}
                             {tool.status === 'confirmed' && (
@@ -106,7 +106,7 @@ export const ToolForgeManager: React.FC = () => {
                                     onClick={() => act(() => retireForgedTool(tool.id))}
                                     className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                                 >
-                                    <Ban className="h-3 w-3" /> Retire
+                                    <Ban className="h-3 w-3" aria-hidden="true" /> Retire
                                 </button>
                             )}
                             <button
@@ -115,7 +115,7 @@ export const ToolForgeManager: React.FC = () => {
                                 aria-label={`Delete ${tool.id}`}
                                 className="ml-auto rounded p-1 text-zinc-600 hover:bg-zinc-800 hover:text-rose-300"
                             >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="h-3 w-3" aria-hidden="true" />
                             </button>
                         </div>
                     </div>
