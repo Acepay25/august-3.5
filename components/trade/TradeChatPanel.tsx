@@ -1089,6 +1089,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 <ChatTranscriptList
                     entries={entries}
                     send={send}
+                    setDraftText={setDraft}
                     analysisMessageIds={analysisMessageIds}
                     getAnalysisMessage={getAnalysisMessage}
                     symbol={symbol}

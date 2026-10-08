@@ -70,6 +70,14 @@ export interface StoredChatEntry {
      *  what the seat saw and the id is where the bytes are — two questions, and
      *  the renderer zips them by position. */
     toolIds?: string[];
+    /** This run was interrupted (explicit Stop, or a failure mid-turn). An ENTRY
+     *  field, not a session one, for the same asymmetry reason as `workedMs`: a
+     *  new session field would be stripped by `loadSessions`' explicit rebuild on
+     *  the next write, while a new entry field survives with no loader change.
+     *  The row renders an in-flow "Run stopped" notice offering Edit prompt /
+     *  Try again — a stopped turn is a half-written answer with no way forward,
+     *  not a failure to be hidden. */
+    interrupted?: boolean;
 }
 
 export type SessionKind = 'solo' | 'panel' | 'group';
