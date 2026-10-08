@@ -21,6 +21,8 @@
 
 import { LoggedTrade } from '../../types';
 import { clipNote } from '../../utils/harnessMarks';
+import { normalizeSkillSlug } from '../../utils/followedSkills';
+import { projectSkillCard } from './skillDocument';
 import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { regimeRankFactor } from '../../utils/regimeSentinel';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
@@ -49,10 +51,7 @@ import {
     skillStatusAt,
     type SkillMeta,
 } from './SkillMemoryService';
-import {
-    type MemoryRetrievalQuery,
-    type WalkedMemoryHit,
-} from './MemoryGraph';
+import { type MemoryRetrievalQuery } from './MemoryGraph';
 import { charsForTokens, windowBudgetTokens } from '../../utils/tokenEstimate';
 
 export type { MemoryRetrievalQuery };
@@ -126,14 +125,6 @@ export interface RetrievedMemorySource {
  */
 export type MemoryStage = 'opening' | 'rebuttal' | 'verdict';
 
-const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
-    if (hit.node.kind === 'identity') return 'identity';
-    if (hit.node.kind === 'skill') return 'skill';
-    if (hit.node.path?.startsWith('trader-diary/')) return 'diary';
-    if (hit.node.kind === 'rule' || hit.node.path?.startsWith('rules/')) return 'rules';
-    return 'playbook';
-};
-
 /** Enabled, non-retired skills matching this setup, ranked by graph score:
  *  status weight × setup-dimension overlap × evidence freshness decay
  *  (the memory graph's semantics now drive production retrieval,
@@ -200,13 +191,8 @@ const rankedMatchedSkills = (
         // reaches a seat's prompt without a human yes — status, evidence and
         // `enabled` are not consent. The starter library's shelf toggle is the one
         // explicit exception, evaluated inside the predicate, not here.
-        if (!isApprovedSkill(meta)) continue;
-        // THE ACTIVATION GATE. Nothing reaches a seat's prompt unless a human said
-        // yes to this rule (or it predates the gate / rides the starter-library
-        // toggle) — `enabled` was never an approval, it only means "not retired,
-        // not suspended, not user-disabled", which is how a model-authored rule
-        // could inject itself from birth. Enforcement reads the same predicate, so
-        // a row cannot be silenced here and still veto a trade there.
+        // Enforcement reads the same predicate, so a row cannot be silenced
+        // here and still veto a trade there.
         if (!isApprovedSkill(meta)) continue;
         // Point-in-time: a skill created (or retired) after the cutoff is
         // invisible — an older run must not learn from a lesson the future
@@ -880,9 +866,36 @@ export function handleRecallTool(
             // verdict slice; the model asked for the PROCEDURE, not the
             // bookkeeping YAML.
             const body = substituteSkillContext(skillBody(m.file.content), query);
-            const capped = body.length > RECALL_SKILL_BODY_MAX ? `${body.slice(0, RECALL_SKILL_BODY_MAX).trimEnd()}\n…` : body;
+            const slug = normalizeSkillSlug(m.file.name);
+            // Projected, not sliced. `body.slice(0, 700)` cut in whatever order
+            // the prose arrived, so a long skill could spend its whole budget on
+            // the trigger and inputs and never show a step — and a seat could
+            // not tell a short skill from a truncated one. A body that fits the
+            // budget is served whole; only a larger one is re-ordered into
+            // priority (rule, trigger, when-NOT, pitfall, verification, plan,
+            // procedure), and the omission is marked in the app's one clipping
+            // voice, with numbers.
+            const card = projectSkillCard(body, {
+                ifCondition: m.meta.ifCondition,
+                thenAction: m.meta.thenAction,
+                budget: RECALL_SKILL_BODY_MAX,
+            });
+            const shown = card.clipped
+                ? `${card.text}
+${clipNote({
+                    source: 'skill procedure',
+                    kept: card.chars,
+                    total: card.chars + card.droppedChars,
+                    guidance: `the rest is in skills/${slug}.md — ask for it again if the `
+                        + 'procedure above stops before a step you need',
+                })}`
+                : card.text;
+            // The slug is in the header because the clip note tells the model to
+            // ask for the rest by name — an instruction pointing at an address it
+            // was never given is not actionable.
             sections.push(
-                `SKILL ${m.meta.status.toUpperCase()} (${Math.round(m.meta.wins)}W/${Math.round(m.meta.losses)}L · ${evidenceFreshness(m.meta)}):\n${capped}`
+                `SKILL ${slug} ${m.meta.status.toUpperCase()} (${Math.round(m.meta.wins)}W/${Math.round(m.meta.losses)}L · ${evidenceFreshness(m.meta)}):
+${shown}`
             );
         } else {
             sections.push(`SKILL (also matches) ${skillIndexLine(m.file.name, m.meta)}`);
