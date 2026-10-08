@@ -8,10 +8,23 @@ wrong and one stage shrank because of it.
 Approved framing (unchanged): copy literally; expanders are never density-gated; no
 system-telemetry HUD. A UI must not advertise a gesture that isn't wired, so each copied
 control ships with its implementation in the same stage. Four copied controls have zero
-backing repo-wide — `speechSynthesis`, `MediaRecorder`, `thumbsUp`, `feedbackRating`,
+backing repo-wide — `MediaRecorder`, `thumbsUp`, `feedbackRating`,
 `webkitSpeechRecognition` return **zero matches** (re-checked: only `ThumbsUp`/`Mic`
 icon exports in `components/shared/Icons.tsx:168,198`). Anything unbuildable renders
 disabled with a tooltip naming the reason.
+
+---
+
+## Status (2026-10-09)
+
+Stages 1-5 have SHIPPED: `c8c659c` (1), `ba30848` (2), `2064771` (3),
+`6a49b3b` (4), `34077ea` (5.1, 5.2, 5.4, 5.5). Stage 5.3 (thumbs + the rating
+store) was deliberately NOT built — it stayed flagged for review before build and
+it stays flagged. Read-aloud is no longer "missing": `SpeakChip`
+(`components/shared/chatChips.tsx:54-101`) exists now. The stage sections below
+keep their original numbering; **C10-C15** record what a post-build review of this
+plan found and how the remaining stages changed because of it. The Stage 6
+section is a full rewrite — read C10 before reading it.
 
 ---
 
@@ -73,6 +86,69 @@ neither fits nor smuggles cleanly through them. No configured provider has a
 transcription shape today, so this is a **new wire format**, not a call reuse. It is
 now explicitly flagged for review before build.
 
+**C10 — Stage 6's data source does not exist.** This was the review's blocking
+finding and it survives every re-check. The stage said "Data source is real, not
+invented: `Message.toolActions` already persists each file creation with a human
+`label` and a `review` destination." But `ToolAction` (`types/message.ts:398-413`)
+is exactly `{ at, speaker, tool, ok, verb, label, review }` — **no bytes, no path,
+no mime, no content, no filename**. It is a ledger entry describing that a
+side-effect happened, not a file handle. And the trail is proposal-class only:
+the writers (`useAnalysisPipeline.ts:1855,2311,2662`, `usePostMortem.ts`,
+`notebookQuickSave.ts:70-74`, `verdictFinalizer.ts:543`) emit `forge_tool`
+("DECLARATIVE — no code execution, ever"), `amend_memory`, `skill_draft`,
+`skill_ingest`, `notebook_note` — none creates a PDF or a DOCX. Repo-wide, zero
+PDF/DOCX generation exists (the only `application/pdf` hit is an `accept=`
+attribute on a file input, `StrategiesManager.tsx:260`). So the column as written
+builds cards whose thumbnails, `Document · PDF` subtitles, previews and downloads
+have nothing behind them — a fabricated surface, i.e. the decorative-empty-state
+defect this repo has already rejected once. **Stage 6 is rewritten below as a
+review-destinations column.** The one honest file-like surface that does exist —
+`notebook_note` labels like `lessons/reclaim-fades` whose bytes live in
+`MemoryFilesService` — is the one card that opens real content, deep-linked by
+name. The PDF/DOCX badges, the paged PDF preview and the file "Download all" are
+**cut**, not deferred: they cannot be honestly built on data this app does not
+have.
+
+**C11 — `register` alone renders nothing.** Stage 7.1 said "register through the
+existing `useRightPanel().register` contract". `register` (`useRightPanel.ts:130-132`)
+only appends to the `docks` registry; the panel is rendered from `openIds`
+(`RightPanel.tsx:62`; `open()` at `useRightPanel.ts:134-141`). A dock that is
+registered but never opened mounts nothing — and every test would still pass.
+Stage 7 now names both calls.
+
+**C12 — the all-pinned byte ceiling was undefined.** Stage 8.4 protects a pinned
+session from the three deletion paths, but nothing says what happens when every
+session is pinned and the store is STILL over `MAX_STORED_CHARS`. `fitToByteBudget`
+Pass 3 stops at `work.length > 1` (`chatSessions.ts:284-288`), so the natural
+implementation of "never shift a pinned session" reaches a state where it cannot
+trim anything, the save throws, and the transcript the user is looking at is the
+one that gets lost. The stage now defines the last resort and the notice that
+makes it visible.
+
+**C13 — Stage 9's host surface was never named, and the gate follows the host.**
+The stage listed `SkillsTab`, `LearnView` and `SkillDetail` without saying which
+surface hosts the catalog, and render-probe's "every control is live" sweep covers
+Learn and Journal only (`scripts/render-probe.cjs:1571,1611`). The reference
+screenshots show the catalog under **Customize → Skills**, which in August is the
+Skills settings tab (`components/settings/tabs/SkillsTab.tsx`). So the host is
+named, and the probe gets a Skills sweep in the same commit — otherwise the
+stage's central rule ("never an empty decorative group") is gated by nothing.
+
+**C14 — Stage 10 bundled a capability with a fix.** 10.3 (dictation, flagged for
+review, the most expensive item in the plan) and 10.4 (interrupted-run notice, a
+small clear win reusing `retryOf`) shared a commit. The flagged product decision
+dragged a fix behind it. They are separate stages now: 10.1+10.2+10.4 ship;
+10.3 waits on the decision.
+
+**C15 — the sticky payload write failure had no reader.** Stage 2.6 built
+`getPayloadWriteFailure()` correctly modelled on `getNotebookWriteFailure()` — but
+nothing reads it. The row-level "full result not kept · N chars" line
+(`ToolActivityRow.tsx:119-122`) covers a CLIPPED result; a payload refused for
+budget or quota leaves no id at all and degrades to the generic line, with the
+quota/budget/streak record invisible. `memoryHealth.ts:281` is what makes the
+notebook failure visible; the payload store now needs its equivalent — added as
+Stage 2.11.
+
 ---
 
 ## What already exists (re-verified, so we reuse rather than rebuild)
@@ -90,8 +166,8 @@ now explicitly flagged for review before build.
 | Relative time | `panels/ChatHistoryPalette.tsx:18` `relTime` (exported, shared with the dock header) |
 | Segmented tabs, card grids | `Journal.tsx:290`, `TradeView.tsx:974`, `grid-cols-2` in `AgentsView.tsx:354` |
 | Skill fields for a catalog | `SkillMeta`: `kind`, `family`, `coin`, `direction`, `regime`, `status`, `wins/losses/netR`, `enabled` via `skillEnabledFlag` |
-| Blob download | `ExportService.ts:162-174` |
-| PDF page → canvas | `infrastructure/pdfTextExtractor.ts:44-56` (⟵ reused, not rewritten) |
+| Blob download | `ExportService.ts:163` |
+| PDF page → canvas | `infrastructure/pdfTextExtractor.ts:44-56` — private `renderPageToDataUrl`. **No PDF to feed it** (⟵ C10): kept for the upload/extract path only, NOT reused by Stage 6. |
 | Icons | `Plus, Search, ArrowUpDown, Eye, Code, Download, Maximize2, FileText, FolderOpen, Mic, Copy, RotateCcw, Pencil, X, ThumbsUp, ThumbsDown` (`Icons.tsx:168,198`) |
 | Honest-refusal row precedent | `ChatTranscriptList.tsx:130,138` — `imageOmitted` stub: "image not backed up (mime, KB)" |
 | Hit-target floor | `index.css:351` `@utility hit-target` (24px min, enforced by render-probe) |
@@ -187,6 +263,31 @@ read-aloud, a rating store, and a session list for Chart AI.
     `NODE_OPTIONS=--no-experimental-webstorage` (see `HANDOFF_LEARNING_LOOP.md:281`),
     so the quota-refusal path is actually exercised rather than silently succeeding on
     a real `localStorage`.
+11. ⟵ **ADDED (C15)** — **read** `getPayloadWriteFailure()` somewhere a trader sees,
+    or the record is invisible and the guard is decoration. One honest line in the
+    work timeline (`components/trade/panels/ChatWorkTimeline.tsx`) when a sticky
+    failure exists: "Recent tool output was not kept — the store is full." A refused
+    payload otherwise degrades to the generic "full result not kept" and nobody can
+    tell a clip from a filled disk. Same commit as the store, not a follow-up.
+
+### Stage 2R — the rollback story (closes the review's "missing" list)
+
+The store is one new key, so there is no schema to migrate — but an UPGRADE into a
+corrupt or over-quota store is a real path and it has to be defined, not
+discovered:
+
+1. **Corrupt payload store.** `readAll` (`toolPayloadStore.ts:81-95`) drops bad rows
+   rather than throwing — keep that, and add a test that a hand-corrupted key (a
+   string, an array of nulls, an array of objects without `toolCallId`) reads as
+   empty and does NOT throw inside the streaming loop.
+2. **Over-quota on first write.** The quota catch records and rethrows
+   (`:159-170`). Verify the caller's handler (`chatTurnRunner`'s existing
+   try/catch) survives a throwing `saveToolPayload` with the transcript write
+   intact — the exact scenario 2.9 guards, pinned by test, not by assertion.
+3. **The user-visible escape hatch.** Settings → Data already exports the key
+   (`RAW_LOCAL_STORAGE_PREFIXES`, `EXPORT_KEY_CAPS`); state in the commit that the
+   supported recovery is export → clear → import, and that `clearToolPayloads()`
+   (`:184`) exists for it. Silence here is how a store becomes unfixable.
 
 ---
 
@@ -262,37 +363,58 @@ relative time.
 
 ---
 
-## Stage 6 — Artifacts column, Content tiles, paged PDF preview, Download all
+## Stage 6 — the review-destinations column ⟵ FULLY REWRITTEN (C10)
 
-new `components/shell/ArtifactColumn.tsx`,
-`components/modals/ImageViewerModal.tsx` (reuse),
-`services/infrastructure/ExportService.ts`, `pdfjs-dist`
+new `components/chat/ArtifactColumn.tsx`,
+`services/trade/toolPayloadStore.ts` (one shared read path),
+`services/learning/MemoryFilesService.ts` (read-only lookup),
+`components/modals/ImageViewerModal.tsx` — **not used, dropped from this stage**
 
-1. Data source is real, not invented: `Message.toolActions` (`types/message.ts:355`)
-   persists each file creation with a human `label` and a `review` destination; notebook
-   writes and `forge_tool`/`amend_memory` land there. ⟵ It is capped at
-   `MAX_TOOL_ACTIONS = 50` per message (`utils/toolActions.ts:10`, applied `:23`), so
-   **the column is a partial trail by design** — say that in its empty state rather than
-   implying it lists every file ever made.
-2. Artifact card per screenshot 171126: thumbnail tile, two-line label with a
-   `Document · PDF` subtitle, folder icon, selected state (tinted border + tile).
-   Subtitle from the file's real kind; identity is the human label, never the path.
-3. Content tiles: square card, rendered first-page preview, bottom-left badge chip
-   (`PDF` / `DOCX` / `MD`). ⟵ **C7** — **extract** `renderPageToDataUrl`
-   (`pdfTextExtractor.ts:44-56`) into a shared helper rather than writing a second
-   renderer; two PDF page renderers is how the two drift. Reuse its existing
-   downscale-to-1400px (`:46`) so tiles and OCR pages render identically. Add the
-   `Page N / M` badge and the full-height viewer from batch-one screenshots 6-7.
-4. **Download all** is a real action. ⟵ **C8** — no zip library is present
-   (`package.json`: no `jszip`/`archiver`/`fflate`/`zip`), and the draft correctly
-   forbade adding one without checking. So: **sequential blob downloads** off the
-   existing pattern at `ExportService.ts:162-174`. Chromium throttles programmatic
-   multi-downloads after a handful of files — cap the batch, name the cap in the
-   tooltip, and don't pretend 40 files will save in one gesture. Rendered in both places
-   the reference shows it: column header and transcript.
-5. DOCX gets an honest tile (icon + badge + size), not a fake preview — August cannot
-   render a Word page, and a blank preview claiming to be one is the
-   decorative-empty-state defect already rejected once.
+The reference screenshot shows an Artifacts column of file cards with `PDF` / `DOCX`
+badges, thumbnail previews, a paged viewer and a **Download all**. **August cannot
+build any of that honestly** — see C10: `ToolAction` carries label + review
+destination, no bytes; nothing in this app creates a PDF or a DOCX; the only
+`application/pdf` in the repo is a file-input filter. So this stage copies the
+reference's *shape* and *density* over the trail that does exist. **The cut list is
+part of the stage, not a deferral:** no PDF/DOCX badges, no thumbnail or first-page
+preview, no `Page N / M` viewer, no file Download all. A badge over nothing is the
+decorative-empty-state defect this repo has already rejected once.
+
+1. **Data source (the real one).** `Message.toolActions` (`types/message.ts:355`) —
+    aggregated across the active conversation's entries. Every field is real: `tool`,
+    `verb`, `label`, `review`. The ledger is a partial trail by design
+    (`MAX_TOOL_ACTIONS = 50` per message, `utils/toolActions.ts:10`); the empty state
+    says so rather than implying a complete file list.
+2. **Card, copied from the reference's geometry:** icon tile (tool class), bold human
+    `label` on line one, `verb · review destination` on line two (real data — this is
+    the "Document · PDF" subtitle's honest analogue), folder icon = "open where a
+    human reviews this", selected state = tinted border + tile. Identity is the human
+    label, never a path or a fake filename.
+3. **The one card that opens real content.** A `notebook_note` action's label
+    (`lessons/reclaim-fades`, `notebookQuickSave.ts:73`) names a real file in
+    `MemoryFilesService`. Look it up by name and **open the actual notebook text** —
+    this is the only surface in the column with bytes behind it, and it earns its
+    preview honestly. If the file cannot be resolved (renamed, pruned), the card says
+    so: "notebook file not found — review it in Settings → Memory". Never an empty
+    box that looks like content.
+4. **Tool rows re-use ONE read path.** `ToolActivityRow.resolvePayload` (payload →
+    live artifact → honest refusal, `:107-123`) is module-private; **extract it to
+    `services/trade/toolPayloadStore.ts` as `resolveToolPayload(toolCallId)`** and
+    have both callers use it. A second resolution path is how the transcript and the
+    column start disagreeing about what was kept.
+5. **Download, only where bytes exist.** Per-card, and only for a resolved payload or
+    notebook note: save the real text as `.txt`/`.md` via the existing blob pattern
+    (`ExportService.ts:162-174`). The reference's "Download all" is cut — there is no
+    set of files to download. If the per-card download cannot be wired honestly in
+    this stage, cut it and let the card open the content instead; a download button
+    that saves a fabricated file is worse than none.
+6. **Proposal-class cards** (`forge_tool`, `amend_memory`, `skill_draft`) route to
+    their `review` destination when that route exists (Settings → AI Models / Memory /
+    Skills); where it does not, the destination text on the card IS the answer — a
+    dead button is not.
+7. Accessibility: the column is a listbox of cards; arrow keys move selection, Enter
+    opens; focus order follows the reference's reading order; hit-target floor on
+    every card (`index.css:351`).
 
 ---
 
@@ -302,17 +424,24 @@ new `components/shell/ArtifactColumn.tsx`,
 `components/shared/FileDetailView.tsx`, `components/skills/SkillDetail.tsx`,
 `components/trade/TradeChatPanel.tsx`
 
-1. Register through the existing `useRightPanel().register` contract; no second overlay
-   mechanism.
+1. ⟵ **FIXED (C11)** — register is not enough. `register` only adds the dock to the
+   registry (`useRightPanel.ts:130-132`); the panel renders from `openIds`
+   (`RightPanel.tsx:62`). This stage therefore calls **both**: `register(dock)` on
+   mount and `open(dock.id)` when an artifact/notebook card is opened from Stage 6's
+   column, plus `close()` on the column's deselect. No second overlay mechanism.
 2. Toolbar: `[preview|source]` toggle · human-readable title · `Copy` · `Maximize2` ·
    `X`. Preview = `MarkdownRenderer` (it already owns the math/money rewriting);
    source = `<pre>`. Reuse `SkillDetail`'s body rendering where it exists.
-3. A third column is sanctioned: chart · conversation · detail, sized off `--panel-w`
-   (`RightPanel.tsx:75`) and the `dockExpanded → lg:!w-1/2 xl:!w-7/12` rung at
-   `TradeView.tsx:1112`. Below `lg` it degrades to the fullscreen presentation the
-   shell already implements, so mobile never gets a third column it cannot fit.
+3. ⟵ **FIXED (C12 geometry)** — the third column's space comes out of exactly one
+   pane: **the chart**. The dock is `shrink-0` with `--panel-w` (`TradeView.tsx:1112`,
+   `lg:min-w-[300px]`), so the detail panel joins it as the second `shrink-0` column
+   (width from the same var family, clamped 320-480px), and the chart is the only
+   flexible pane (`min-w-0`). **The floor is a test, not a hope:** with both panels
+   open at `lg`, the chart keeps ≥ 320px and the document never scrolls sideways;
+   below that the detail panel takes the shell's existing fullscreen presentation
+   (`useRightPanel.ts:126-127`) rather than squeezing the chart to nothing.
    ⟵ `tests/dockExpandedLayout.test.ts:71,88,91` already pins this contract — keep it
-   green rather than rewriting it.
+   green rather than rewriting it, and add the two-panel floor case beside those.
 
 ---
 
@@ -328,24 +457,41 @@ new `components/shell/ArtifactColumn.tsx`,
    entry's `text`, `relTime(s.updatedAt)`, working = any `streaming` entry.
 3. Pin **without a schema change**: reuse `agent_pins_v1_<user>` (`AgentsView.tsx:151`,
    bare ids) — `s-…` ids slot in. A `ChatSession.pinned` field would be stripped by
-   `loadSessions`' explicit rebuild (`:179-193`) on the next write. Prune dangling ids,
-   and confirm the Agents rail tolerates foreign `s-…` ids in its own pin list rather
-   than choking on them (it filters by its own roster today).
-4. ⟵ **FIXED (C4)** — this was a one-of-three fix, not the fix. Two of the three
+   `loadSessions`' explicit rebuild (`:179-193`) on the next write. Verified since the
+   review flagged it: the round-trip is a bare `JSON.parse`/`JSON.stringify`
+   (`:153-155`, `:502`), so a foreign id survives untouched. What was NOT verified —
+   and now must be, by test — is that the Agents rail tolerates the mixed list: its
+   rows filter by their own roster today, so add a test rendering the rail with
+   `['a-bot-id', 's-…', 'garbage']` in its pin list and assert every bot row still
+   renders and no foreign id crashes the row menu. Prune dangling `s-…` ids on load.
+4. ⟵ **FIXED (C4, C12)** — this was a one-of-three fix, not the fix. Two of the three
    deletion paths are in `fitToByteBudget` (`:233-271`), not `trimForStorage`:
-   - `trimForStorage` (`:199-201`) `slice(-MAX_SESSIONS)` drops the oldest — after
+   - `trimForStorage` (`:218-220`) `slice(-MAX_SESSIONS)` drops the oldest — after
      pinning, precisely the chats the user chose to keep. Replace with
-     `fitToMaxSessions`: every pinned session plus the newest unpinned to 12, the
-     pinned set itself capped at 10 so `MAX_STORED_CHARS` stays the real ceiling, and
-     a pin that cannot be honoured **says so in the rail** rather than silently
-     deleting a chat.
-   - Pass 2 (`:257-263`) shaves the oldest entries of **every** session down to 10.
-   - Pass 3 (`:266-269`) shifts whole oldest sessions.
+     `fitToMaxSessions`: every pinned session plus the newest unpinned sessions up to
+     `MAX_SESSIONS = 12` (`:118`).
+   - Pass 2 (`:275-282`) shaves the oldest entries of **every** session down to 10.
+   - Pass 3 (`:284-288`) shifts whole oldest sessions, stopping at `length > 1`.
    
-   So pin-protection must be a **predicate both functions consult**: a pinned session
-   is never the one Pass 2 shaves and never the one Pass 3 shifts. `fitToMaxSessions`
-   alone still lets a pinned chat lose its history. Test: pin a session, exceed the
-   byte budget, assert the pinned session still has its entries.
+   So pin-protection must be a **predicate both functions consult**, and the whole
+   ceiling needs a defined order of sacrifice — because "never touch a pinned chat"
+   without a last resort dead-ends at a throwing `setItem` that loses the live
+   transcript:
+
+   **Count.** The pinned set is capped at **10** — the derivation is `MAX_SESSIONS
+   (12)` minus 2, so the newest two unpinned sessions always survive a pin spree. An
+   11th pin is refused **in the rail** ("up to 10 pinned chats"), never silent.
+   **Chars.** `MAX_STORED_CHARS = 3.5M` (`:239`) stays the real ceiling. Sacrifice
+   order: (1) oldest screenshots of ANY session — an image can be re-taken, an
+   argument cannot, which is Pass 1's existing doctrine (`:259-273`); (2) oldest
+   entries of unpinned sessions; (3) whole oldest unpinned sessions; (4) **only when
+   nothing unpinned remains**: the oldest entries of the OLDEST PINNED session — and
+   the rail then says a pinned chat was trimmed to fit the cap. A pinned chat may be
+   shaved, but never silently, and never wiped whole: Pass 3 keeps at least one
+   session exactly as it does today.
+   Test: pin a session, exceed the byte budget, assert the pinned session still has
+   its entries; pin everything, exceed the budget, assert exactly one row appears
+   naming the trim and the pinned session keeps its newest 10 entries.
 5. Search matches `title` + `symbol`; sort reuses `sortByName`'s recency↔name semantics
    (`AgentsView.tsx:441,855`). No unread/archived affordances until those fields exist.
 
@@ -355,19 +501,35 @@ new `components/shell/ArtifactColumn.tsx`,
 
 `components/settings/tabs/SkillsTab.tsx` (2.9 KB today — thin),
 `components/learn/LearnView.tsx`, `components/skills/SkillDetail.tsx`,
-`services/learning/SkillMemoryService.ts`
+`services/learning/SkillMemoryService.ts`, `scripts/render-probe.cjs`
 
-1. Layout per screenshots 171304/171311: category column with a search icon · big serif
-   title + one-line subtitle · top row of search field, refresh, gear, filled `Add`
-   pill · `Installed` section label on a hairline rule running to the right edge ·
-   two-column card grid · segmented collection tabs below that swap the grid.
+⟵ **FIXED (C13) — the host surface is named: the Skills SETTINGS tab.** The
+reference is the Customize → Skills screen, and August's only skills catalog is
+`components/settings/tabs/SkillsTab.tsx`. `LearnView` hosts the *approval inbox*,
+not the catalog — it must not become a second skill browser. And because the host
+is Settings, **this stage must teach the gate to see it**: render-probe's
+"every control is live" sweep covers Learn and Journal only
+(`scripts/render-probe.cjs:1571,1611`), so add the matching Skills sweep
+(`sweepSurface('Skills', n)`) and give the Skills nav entry a real `expect` root in
+the same commit. Without that, the stage's central rule is ungated.
+
+1. Layout per the 2026-10-09 references: big serif title + one-line subtitle · top row
+   of search field, refresh, gear, filled `Add` pill · `Installed` section label on a
+   hairline rule running to the right edge · two-column card grid · segmented
+   collection tabs below that swap the grid (reference shows `Agentic-Trading` /
+   `System`).
 2. Card = icon tile, bold name, one-line description truncated with an ellipsis **and a
    real recourse** (the last audit counted 138 `truncate` sites against 272 `title=`),
    trailing checkmark.
 3. Every field already exists: checkmark ← `enabled` via `skillEnabledFlag`
    (suspension is `enabled:false` + `meta.suspendedAt`, **not** a fourth `SkillStatus` —
-   do not derive it a second way). Collection tabs ← `SkillMeta.family` (or `kind`) as
-   a real partition of the roster, so a tab is never an empty decorative group.
+   do not derive it a second way). Collection tabs ← `SkillMeta.family`
+   (`SkillMemoryService.ts:93`). ⟵ **The empty-tab rule is now structural, not a
+   promise**: tabs are COMPUTED from the family values actually present in the live
+   roster, so an empty decorative group cannot be constructed. A family with one
+   member is real data and still renders — the defect this avoids is a tab with
+   ZERO skills, not a tab with one. Measure the roster first and say in the commit
+   what the real family spread is.
 4. Refresh reuses `hooks/useCatalogReconcile.ts:16`; gear routes to the existing Skills
    settings; `Add` opens the real skill-draft path that `skill-approval-probe` drives —
    it must not become a sixth place to approve a draft, the exact IA defect the
@@ -375,30 +537,41 @@ new `components/shell/ArtifactColumn.tsx`,
 
 ---
 
-## Stage 10 — composer pill, dictation, interrupted notice
+## Stage 10 — composer pill, footer, interrupted-run notice ⟵ SPLIT (C14)
 
-`components/trade/panels/ChatComposer.tsx`, `electron/preload.cjs`,
-`services/providers/GenericProviderService.ts`,
-`components/shared/ChatTranscriptRow.tsx`
+`components/trade/panels/ChatComposer.tsx`,
+`components/shared/ChatTranscriptRow.tsx`, `services/trade/chatTurnRunner.ts`
 
 1. Leading `+` exists as the attach menu (`:167`) — keep its two real items and match
    the reference's pill geometry (`rounded-bubble` 12px, hairline border, no shadow).
 2. Footer line under the input: disclaimer left, model chip right. `StatusBar` already
    resolves the label — do not compute a second one.
-3. **Mic needs a real decision at build time.** In Electron `webkitSpeechRecognition` is
-   unreliable without Google endpoints, so dictation is `MediaRecorder` capture → a
-   transcription call through `GenericProviderService`. ⟵ **C9** — **state the cost
-   honestly**: that service implements three wire formats (`chat_completions`,
-   `messages`, `responses`), all text. Audio has no path through any of them, so this
-   is a **new wire format** (multipart or base64 audio input), not a reuse of an
-   existing call, and no configured provider has a transcription shape today. It is the
-   most expensive item in the plan and the only one with no local fallback. If the
-   configured provider has no audio path, the mic renders **disabled with a tooltip
-   naming the reason** — a wired control that explains itself, never a dead one.
-4. Interrupted/failed run becomes an **in-flow** notice row with `Edit prompt` and
-   `Try again`, reusing the `retryOf` re-dispatch (`chatTurnRunner.ts:759-771`);
-   `ChatTranscriptRow.tsx:130`'s post-mortem retry is the precedent. The hover
-   `RetryChip` stays for successful rows.
+3. Interrupted/failed run becomes an **in-flow** notice row — the reference's
+   "Claude's response was interrupted." with `Edit prompt` / `Try again` — reusing the
+   `retryOf` re-dispatch (`chatTurnRunner.ts:808-824`; the plan's old `:759-771`
+   citation drifted as that file grew); `ChatTranscriptRow.tsx:130`'s post-mortem retry
+   is the precedent. `Edit prompt` restores the last user message into the composer's
+   draft (name the composer's real setter when writing it — if the composer has no
+   draft API yet, that is this stage's work, not an assumption); `Try again` calls the
+   same re-dispatch the hover `RetryChip` uses. The hover `RetryChip` stays for
+   successful rows. This is a FIX, not a capability — it ships on its own commit and
+   does not wait on anything below.
+
+## Stage 10M — dictation ⟵ FLAGGED, NOT BUILDING (C9, C14)
+
+`electron/preload.cjs`, `services/providers/GenericProviderService.ts`,
+`components/trade/panels/ChatComposer.tsx`
+
+**Held for a product decision.** In Electron `webkitSpeechRecognition` is unreliable
+without Google endpoints, so dictation would be `MediaRecorder` capture → a
+transcription call. The cost is stated plainly: `GenericProviderService` implements
+three wire formats (`chat_completions`, `messages`, `responses`), all text. Audio has
+no path through any of them, so this is a **new wire format** (multipart or base64
+audio input), not a reuse — the most expensive item in this plan and the only one with
+no local fallback. If and when it is approved: if the configured provider has no audio
+path, the mic renders **disabled with a tooltip naming the reason** — a wired control
+that explains itself, never a dead one — and `npm run typecheck:electron` is part of
+the gate, because Stage 10M edits `preload.cjs` and tsc cannot see `.cjs`.
 
 ---
 
@@ -406,53 +579,87 @@ new `components/shell/ArtifactColumn.tsx`,
 
 - `npm run typecheck && npm run lint && npm run test`. ⟵ **C6** — add
   `npm run typecheck:electron` (`node --check` on `main.cjs`, `preload.cjs`,
-  `sseParser.cjs`); Stage 10.3 edits `preload.cjs` and tsc cannot see `.cjs` files.
+  `sseParser.cjs`); Stage 10M edits `preload.cjs` and tsc cannot see `.cjs` files.
 - New suites:
   - `tests/toolPayloadStore.test.ts` — budget refuses rather than evicts; the failure
     record survives a reload; `saveSessions`→`loadSessions` keeps `toolIds` and
     `workedMs`; and (⟵ 2.10) the refusal path under
-    `NODE_OPTIONS=--no-experimental-webstorage`.
+    `NODE_OPTIONS=--no-experimental-webstorage`. ⟵ **2R adds**: a hand-corrupted key
+    (string / nulls / missing `toolCallId`) reads empty without throwing, and a
+    throwing `saveToolPayload` never takes the transcript write down.
   - a fold case in the existing `pairToolLines` suite that also asserts the calling→done
     state flip still holds (`ToolActivityRow.tsx:50-53`).
   - a receipt-extractor case in `tests/harnessMarks.test.ts`.
   - a `fitToMaxSessions` case proving **both** deletion paths respect a pin: a pinned
     session is neither the one dropped by count nor the one shaved/shifted by the byte
-    budget, and it keeps its entries after a budget overflow (⟵ C4).
+    budget, and it keeps its entries after a budget overflow (⟵ C4) — plus the
+    all-pinned ceiling case (⟵ C12): every session pinned, still over budget, exactly
+    one rail notice, the oldest pinned chat keeps its newest 10 entries.
+  - a `resolveToolPayload` case (⟵ Stage 6.4): payload text wins, live artifact second,
+    refusal line last — the SAME answers the transcript rows show, from one function.
   - a dock-path reload case proving `workedMs` survives with no `runStats` writer on the
     Chat rail (⟵ C3).
+  - ⟵ **Stage 8.3**: the Agents rail renders with `['a-bot-id', 's-…', 'garbage']` in
+    its pin list.
 - `npm run render-probe` — the only gate that sees a rendered row. Counts rows per
   conversation, sweeps all six nav surfaces, asserts **every Learn and Journal control
-  is live** (each press must change text, open an overlay, or route), so Stage 9's cards
-  and Stage 5's action row are directly gated by it. Run it **alone** on an idle
-  machine. ⟵ Stage 4 is now a tune, so row counts are not evidence about the table —
-  compare Stage 4 against its screenshot instead.
+  is live** (each press must change text, open an overlay, or route). ⟵ **C13** —
+  Stage 9 adds the Skills sweep in the same commit. Stage 6's column is a new
+  interactive surface on the Trade dock and must be swept the same way: select a
+  card, assert the detail opens — a card that cannot open is the dead control the
+  probe exists to catch. Run it **alone** on an idle machine. Stage 4 was a tune, so
+  row counts are not evidence about the table — compare Stage 4 against its
+  screenshot instead.
+- **Accessibility pass (⟵ closes the review's "missing" list).** Stage 6's column,
+  the tool-row expanders, Stage 7's detail panel and Stage 10's notice row are four
+  new interactive surfaces. Each needs: a named control (`aria-label` naming what it
+  does), keyboard operation (Enter/Space, arrow keys in the column's listbox), a
+  focus-visible indicator that survives Tab focus, and screen-reader text that says
+  what happened ("opened notebook note lessons/reclaim-fades"). render-probe already
+  reads back the computed focus indicator on editable fields — extend the same read
+  to the column's cards.
 - Settings → Data backup/export/import runs inside render-probe, so Stage 2.8's new key
   is covered there — but do the payload-store round-trip by hand once too, since the
   probe asserts the export succeeded, not that a 900 KB payload store survived it.
-  ⟵ Same for Stage 5.3's `answerFeedback` key (C5).
+  ⟵ Same for Stage 5.3's `answerFeedback` key (C5) if it is ever built.
 - `npm run e2e` and `npm run skill-approval-probe` must stay green; Stage 9 touches the
   approval path the latter drives byte-for-byte.
 - Manual in `npm run dev` with a real provider: run one desk-tool analysis, watch the
   block collapse at settle, **reload the page**, confirm the block is still there with
   its duration and that a tool row opens onto the actual payload. Then trigger a
-  clipped result and confirm a receipt row pages through `readToolArtifact`. Open an
-  artifact from the column and check the PDF preview's `Page N / M` against the real
-  page count.
+  clipped result and confirm a receipt row pages through `readToolArtifact`. Open a
+  `notebook_note` card and confirm it opens the REAL notebook text (or the honest
+  "not found" line) — that is Stage 6's whole bar.
 - One heavy gate at a time.
 - Because this is a visual copy, static gates are not sufficient evidence. Each of
-  Stages 4, 6, 7, 9 ends with a screenshot of the real app compared against its
-  reference, reporting which specific differences remain rather than declaring a match.
+  Stages 6, 7, 9 ends with a screenshot of the real app compared against its
+  reference, reporting which specific differences remain rather than declaring a match
+  — and for Stage 6 that means reporting the **cut list as a difference**: no
+  PDF/DOCX badges, no page previews, no file Download all, because there are no files.
 
 ---
 
 ## Commit shape
 
-Ten commits, one per stage, each gated on its changed files before it lands. Stage 2 is
-the first writing new persistent bytes, so it lands alone with the export round-trip
-proven before Stage 3 starts. **Stage 5.3 is the second** (⟵ C5) and gets the same
-export-discipline treatment in its own commit.
+Stages 1-5 shipped as five commits (`c8c659c`, `ba30848`, `2064771`, `6a49b3b`,
+`34077ea`). **Stage 5.3 was never built and stays flagged.** Remaining, one commit
+each, gated on its changed files:
+
+1. **2.11 + 2R** — the payload-failure line the trader can see, and the rollback
+   story (corrupt key, quota rethrow, export→clear→import). Small; lands first so
+   Stage 6 builds on a store whose failure mode is visible.
+2. **6** — the reframed review-destinations column, `resolveToolPayload` extracted to
+   the one read path, a11y contract, render-probe sweep, screenshot vs the reference
+   with the cut list named.
+3. **7** — the detail panel (register + open + the chart floor test).
+4. **8** — `fitToMaxSessions` + the pin predicate in both byte passes + the mixed
+   pin-list rail test.
+5. **9** — the Skills settings catalog + the probe's Skills sweep.
+6. **10** — composer pill, footer, interrupted-run notice.
+7. **10M** — held. Not to be committed until the product decision on a new audio wire
+   format is made.
 
 Flagged for your review **before build**, because they are product decisions wearing UI
 clothes:
 - **Stage 5.3** — a rating store, and its linkage into confidence calibration.
-- **Stage 10.3** — a new audio wire format through `GenericProviderService` (⟵ C9).
+- **Stage 10M** — a new audio wire format through `GenericProviderService` (⟵ C9).
