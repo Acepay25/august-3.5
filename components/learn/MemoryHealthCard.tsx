@@ -167,6 +167,19 @@ const MemoryHealthCard: React.FC<MemoryHealthCardProps> = ({ username, refreshKe
                 <Row label="graveyard" value={q.graveyard} />
             </Section>
 
+            {report.gateThrottled.length > 0 && (
+                <Section title={`Worth-gate held back (${report.gateThrottled.length})`}>
+                    <p className="mb-1 text-ui-xs leading-4 text-zinc-600">
+                        Clusters with enough evidence to judge, that the gate could not run on. Each retries on its own
+                        once the cluster gains a trade the gate has not seen — this is the throttle, not a failure.
+                    </p>
+                    {report.gateThrottled.map(g => (
+                        <Row key={g.key} label={g.key}
+                            value={`${g.attempts} attempt${g.attempts === 1 ? '' : 's'} · ${g.lastAt.slice(0, 10)}`} />
+                    ))}
+                </Section>
+            )}
+
             <Section title="Notebook">
                 <Row label="files enabled / total" value={`${report.notebook.enabled} / ${report.notebook.files}`} />
                 <Row label="stored characters" value={report.notebook.chars.toLocaleString()} />

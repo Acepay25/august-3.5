@@ -154,3 +154,77 @@ describe('annotateVerdictCitations — stem, title, and IF-clause joins', () => 
         expect(adherence).toBe('followed');
     });
 });
+
+describe('annotateVerdictCitations — the declared followed-skills line', () => {
+    beforeEach(async () => {
+        store = {};
+        await initMemoryFiles(USER);
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(
+            skills.id,
+            SKILL_FILE,
+            serializeSkill(skillMeta, 'BTC reclaim paraphrase test'),
+            USER,
+            true,
+        );
+        await recordMemoryInjection(USER, {
+            stage: 'verdict',
+            audience: 'moderator',
+            coin: 'BTCUSDT',
+            sources: [{ path: `skills/${SKILL_FILE}`, kind: 'skill', chars: 320 }],
+            runId: RUN_ID,
+        });
+    });
+
+    it('cites a skill the verdict NAMED even when no words overlap', async () => {
+        // The whole point: a verdict that follows the rule without reusing its
+        // nouns used to read as `overridden` and the skill lost its credit.
+        const { cited, adherence } = await stampAndRead(
+            `Position sizing stays flat.\nfollowed-skills: ${SKILL_FILE.replace(/\.md$/, '')}`,
+        );
+        expect(cited).toBe(true);
+        expect(adherence).toBe('followed');
+    });
+
+    it('does NOT cite a skill the verdict left out of a present line', async () => {
+        // An explicit `none` is an ANSWER, not a missing line. The word-overlap
+        // fallback must not resurrect a citation the model declined to make —
+        // this verdict shares the title words that used to be enough.
+        const { cited, adherence } = await stampAndRead(
+            'The paraphrase test we logged says skip this one.\nfollowed-skills: none',
+        );
+        expect(cited).toBe(false);
+        expect(adherence).toBe('overridden');
+    });
+
+    it('falls back to word overlap when the line is absent (older transcripts)', async () => {
+        // A verdict written before the line existed must still be joinable —
+        // otherwise every historical transcript silently reads as "followed
+        // nothing" and the evidence ledger goes dark.
+        const { cited } = await stampAndRead(
+            'The paraphrase test we logged says skip this one.',
+        );
+        expect(cited).toBe(true);
+    });
+
+    it('accepts the slug shapes a model actually writes', async () => {
+        for (const shape of [
+            `skills/${SKILL_FILE}`,
+            SKILL_FILE,
+            SKILL_FILE.replace(/\.md$/, '').toUpperCase(),
+        ]) {
+            store = {};
+            await initMemoryFiles(USER);
+            const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+            await createMemoryFile(skills.id, SKILL_FILE,
+                serializeSkill(skillMeta, 'BTC reclaim paraphrase test'), USER, true);
+            await recordMemoryInjection(USER, {
+                stage: 'verdict', audience: 'moderator', coin: 'BTCUSDT',
+                sources: [{ path: `skills/${SKILL_FILE}`, kind: 'skill', chars: 320 }],
+                runId: RUN_ID,
+            });
+            const { cited } = await stampAndRead(`Unrelated prose.\nfollowed-skills: ${shape}`);
+            expect(cited, `shape "${shape}" must resolve`).toBe(true);
+        }
+    });
+});

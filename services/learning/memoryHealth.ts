@@ -32,7 +32,7 @@ import { readSettledBeliefs } from './settledBeliefs';
 import { BELIEF_FLAG_FINGERPRINT_PREFIX } from './beliefChallenge';
 import { listTombstones } from './skillGraveyard';
 import { listSuspendedSkills } from './skillIdleLifecycle';
-import { listSkillDrafts } from '../../utils/skillDrafts';
+import { listSkillDrafts, listWorthGateAttempts } from '../../utils/skillDrafts';
 import { listLearningProposals } from '../../utils/learningQueue';
 import { listAmendments } from './memoryAmendments';
 import { loadForgedTools } from '../tools/toolForge';
@@ -122,6 +122,11 @@ export interface MemoryHealthReport {
     queues: HealthQueue;
     diary: { files: number; entries: number };
     bots: BotLearningStat[];
+    /** Clusters the worth gate could not judge, held back by the attempt
+     *  throttle. These are skills the loop KNOWS it should be learning and
+     *  cannot, so they are visible rather than silent. The throttle lifts by
+     *  itself when the cluster gains a trade the gate has not judged. */
+    gateThrottled: Array<{ key: string; attempts: number; lastAt: string }>;
     /** One-line entries the weekly hygiene pass writes; newest first. */
     hygiene: HygieneLine[];
     /** Plain-English problems worth showing the user, empty when healthy. */
@@ -262,6 +267,11 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
 
     const diaryFiles = files.filter(f => folderName.get(f.folderId) === 'trader-diary');
     const skills = bucketSkills(metas);
+    // P1-4: clusters the worth gate could not judge. Reading the ledger is how
+    // "the loop stopped learning new skills" becomes visible instead of
+    // looking like "there was nothing to learn".
+    const gateThrottled = listWorthGateAttempts(username)
+        .map(a => ({ key: a.key, attempts: a.attempts, lastAt: a.lastAt }));
     // Suspension is its own fact (`suspendedAt`), not `!enabled` — a
     // user-retired file is also disabled, and reporting that as "the app
     // stopped using it" would be a lie. Counted by the lifecycle module itself
@@ -323,6 +333,15 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
     if (notebookSize && notebookSize.pressure !== 'ok') {
         flags.push(describePressure(notebookSize));
     }
+    // P1-4: the loop wanted to judge a new skill and could not. Without this
+    // line the throttle is invisible — the inbox simply stays empty, which
+    // reads as "nothing to learn" rather than "learning is blocked".
+    if (gateThrottled.length > 0) {
+        const n = gateThrottled.length;
+        flags.push(`${n} cluster${n === 1 ? '' : 's'} the skill worth-gate could not judge`
+            + ` — no memory model is configured, or the last attempt saw no new evidence.`
+            + ` Retries by itself when the cluster gains a trade; configure a memory model to judge now.`);
+    }
 
     return {
         generatedAt: Date.now(),
@@ -352,6 +371,7 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
             entries: diaryFiles.reduce((n, f) => n + (f.content.split('\n## ').length - 1), 0),
         },
         bots: loadBotLearningStats(),
+        gateThrottled,
         hygiene: await loadHygieneLog(username),
         flags,
     };
