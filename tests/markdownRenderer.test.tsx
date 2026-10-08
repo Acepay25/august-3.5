@@ -88,6 +88,34 @@ describe('MarkdownRenderer', () => {
         expect(pre!.textContent).toContain('next support');
     });
 
+    it('renders the reference table shape: no outer box, header fill, hairline rows', () => {
+        // remark-gfm has always PARSED tables; what was wrong was the skin.
+        // The reference draws a header row plus hairline separators with NO outer
+        // border — a rounded border around the table reads as a widget rather
+        // than as tabular prose.
+        const { container } = render(<MarkdownRenderer content={'| h1 | h2 |\n| --- | --- |\n| a | b |'} />);
+        const wrapper = container.querySelector('table')!.parentElement as HTMLElement;
+        expect(wrapper.className).not.toMatch(/rounded|border/);
+        const th = container.querySelector('th') as HTMLElement;
+        expect(th.className).toContain('bg-zinc-800');
+        expect(th.className).toContain('text-ui-2xs');
+        expect(th.className).toContain('border-zinc-700');
+        const td = container.querySelector('td') as HTMLElement;
+        expect(td.className).toContain('border-zinc-700/60');
+    });
+
+    it('keeps a wide table scrollable rather than shrinking its columns away', () => {
+        // The wrapper must still overflow: a wide table keeps its natural
+        // columns and scrolls, instead of squeezing cells until extra columns
+        // vanish — the "many columns don't display" bug. Removing the box must
+        // not remove the scroll container.
+        const { container } = render(<MarkdownRenderer content={'| a | b | c | d | e | f |\n| --- | --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 | 6 |'} />);
+        const wrapper = container.querySelector('table')!.parentElement as HTMLElement;
+        expect(wrapper.className).toContain('overflow-x-auto');
+        expect(wrapper.className).toContain('custom-scrollbar');
+        expect((container.querySelector('table') as HTMLElement).className).toContain('w-max');
+    });
+
     it('keeps the pill on real inline code, which is what it was for', () => {
         const { container } = render(<MarkdownRenderer content={'stop is `65000` here'} />);
         expect(container.querySelector('pre')).toBeNull();

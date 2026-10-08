@@ -134,19 +134,24 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             );
           },
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto overscroll-x-contain custom-scrollbar rounded-control border border-white/[0.06]">
+            <div className="my-3 overflow-x-auto overscroll-x-contain custom-scrollbar">
               {/* w-max, not w-full: a wide table keeps its natural columns and
                   OVERFLOWS the wrapper (scrollable, with the always-visible
                   custom-scrollbar thumb) instead of shrinking cells until the
-                  extra columns vanish — the "many columns don't display" bug. */}
+                  extra columns vanish — the "many columns don't display" bug.
+
+                  Scroll container, NOT a box: the reference table is a header
+                  row plus hairline separators with no outer border, and a
+                  rounded border around it reads as a widget rather than as
+                  tabular prose. The overflow wrapper stays; its frame goes. */}
               <table className="w-max min-w-full text-left text-ui-sm border-collapse tabular-nums">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="whitespace-nowrap border-b border-white/10 bg-zinc-900/60 px-3 py-1.5 text-ui-xs font-mono uppercase tracking-wider text-zinc-400 text-left">{children}</th>
+            <th className="whitespace-nowrap border-b border-zinc-700 bg-zinc-800 px-3 py-1.5 text-ui-2xs font-mono uppercase tracking-wider text-zinc-400 text-left">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-white/[0.04] px-3 py-1.5 text-ui-caption text-zinc-300 align-middle leading-snug">{children}</td>
+            <td className="border-b border-zinc-700/60 px-3 py-1.5 text-ui-caption text-zinc-300 align-middle leading-snug">{children}</td>
           ),
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-white/20 pl-3.5 text-zinc-400 italic">{children}</blockquote>
