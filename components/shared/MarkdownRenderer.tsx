@@ -148,7 +148,14 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             </div>
           ),
           th: ({ children }) => (
-            <th className="whitespace-nowrap border-b border-zinc-700 bg-zinc-800 px-3 py-1.5 text-ui-2xs font-mono uppercase tracking-wider text-zinc-400 text-left">{children}</th>
+            // NORMAL CASE, body size, weight 500 — the reference table header is
+            // NOT an uppercase micro-label. The plan specified
+            // `text-ui-2xs uppercase tracking-wider` on the strength of
+            // index.css:250 ("reserved for table headers"), but that token's one
+            // real use is a `kbd` micro-label (index.css:1139) and the reference
+            // header reads as body-weight emphasis, not a shrunken label. Sizing
+            // it down made a 5-row table's header the smallest thing on screen.
+            <th className="whitespace-nowrap border-b border-zinc-700 bg-zinc-800 px-3 py-1.5 text-ui-caption font-medium text-zinc-200 text-left">{children}</th>
           ),
           td: ({ children }) => (
             <td className="border-b border-zinc-700/60 px-3 py-1.5 text-ui-caption text-zinc-300 align-middle leading-snug">{children}</td>
